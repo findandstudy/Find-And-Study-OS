@@ -2243,7 +2243,14 @@
     "leadUnassigned": "Aday ataması kaldırıldı",
     "errorTitle": "Hata",
     "followUpScheduled": "Takip planlandı",
-    "followUpUpdated": "Takip güncellendi"
+    "followUpUpdated": "Takip güncellendi",
+    "tableFile": "Dosya",
+    "tableType": "Tür",
+    "tableSize": "Boyut",
+    "tableUploaded": "Yüklenme",
+    "tableActions": "İşlemler",
+    "preview": "Önizle",
+    "download": "İndir"
   },
   "studentDetailPage": {
     "profile": "Profil",

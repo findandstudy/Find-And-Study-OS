@@ -2078,7 +2078,14 @@
     "documentUploaded": "تم رفع المستند",
     "noDocTypes": "لم تُعرَّف أنواع مستندات. يمكنك إضافتها من الإعدادات > المستندات.",
     "interestedUniversity": "الجامعة المهتم بها",
-    "interestedUniversityLabel": "الجامعة المهتم بها"
+    "interestedUniversityLabel": "الجامعة المهتم بها",
+    "tableFile": "الملف",
+    "tableType": "النوع",
+    "tableSize": "الحجم",
+    "tableUploaded": "تاريخ الرفع",
+    "tableActions": "الإجراءات",
+    "preview": "معاينة",
+    "download": "تنزيل"
   },
   "studentDetailPage": {
     "profile": "الملف الشخصي",

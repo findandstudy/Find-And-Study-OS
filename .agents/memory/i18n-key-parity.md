@@ -26,3 +26,12 @@ ALL keys, not just letter-bearing ones) reports them missing.
   CV, WhatsApp, Min/Max, Agent) and acceptable.
 - Validate with a flatten + `enStrKeys.filter(k => !(k in localeFlat))` check per
   locale, not a letter-filtered one.
+
+**Namespace-duplication trap:** `leadDetailPage` and `studentDetailPage` are
+SEPARATE namespaces with near-identical doc-table keys (`tableFile`, `tableType`,
+`tableUploaded`, `preview`, `download`). A grep for `tableFile`/`preview` returns
+BOTH; the first match is usually `studentDetailPage`, not `leadDetailPage`. When
+adding a key for `t("leadDetailPage.X")`, confirm the namespace boundary (find the
+nearest `^  "<ns>": {` opener above the insert line) before editing — inserting in
+the wrong namespace renders the raw key. To get correct per-locale values cheaply,
+copy them from the sibling namespace that already has them (e.g. studentDetailPage).

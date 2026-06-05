@@ -2078,7 +2078,14 @@
     "documentUploaded": "Документ загружен",
     "noDocTypes": "Типы документов не заданы. Их можно добавить в разделе «Настройки» > «Документы».",
     "interestedUniversity": "Интересующий университет",
-    "interestedUniversityLabel": "Интересующий университет"
+    "interestedUniversityLabel": "Интересующий университет",
+    "tableFile": "Файл",
+    "tableType": "Тип",
+    "tableSize": "Размер",
+    "tableUploaded": "Загружено",
+    "tableActions": "Действия",
+    "preview": "Просмотр",
+    "download": "Скачать"
   },
   "studentDetailPage": {
     "profile": "Профиль",

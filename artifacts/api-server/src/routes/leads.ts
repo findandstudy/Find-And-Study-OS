@@ -515,6 +515,7 @@ router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...A
     sizeBytes: documentsTable.sizeBytes,
     fileUrl: documentsTable.fileUrl,
     fileData: documentsTable.fileData,
+    fileKey: documentsTable.fileKey,
     studentId: documentsTable.studentId,
     applicationId: documentsTable.applicationId,
     leadId: documentsTable.leadId,

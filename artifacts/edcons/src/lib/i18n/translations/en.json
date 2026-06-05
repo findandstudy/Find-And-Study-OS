@@ -2302,7 +2302,14 @@
     "leadUnassigned": "Lead unassigned",
     "errorTitle": "Error",
     "followUpScheduled": "Follow-up scheduled",
-    "followUpUpdated": "Follow-up updated"
+    "followUpUpdated": "Follow-up updated",
+    "tableFile": "File",
+    "tableType": "Type",
+    "tableSize": "Size",
+    "tableUploaded": "Uploaded",
+    "tableActions": "Actions",
+    "preview": "Preview",
+    "download": "Download"
   },
   "studentDetailPage": {
     "profile": "Profile",

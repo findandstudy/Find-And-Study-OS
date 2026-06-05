@@ -2027,7 +2027,14 @@
     "documentUploaded": "Documento subido",
     "noDocTypes": "No hay tipos de documento definidos. Puedes añadirlos en Configuración > Documentos.",
     "interestedUniversity": "Universidad de interés",
-    "interestedUniversityLabel": "Universidad de interés"
+    "interestedUniversityLabel": "Universidad de interés",
+    "tableFile": "Archivo",
+    "tableType": "Tipo",
+    "tableSize": "Tamaño",
+    "tableUploaded": "Subido",
+    "tableActions": "Acciones",
+    "preview": "Vista previa",
+    "download": "Descargar"
   },
   "studentDetailPage": {
     "profile": "Perfil",

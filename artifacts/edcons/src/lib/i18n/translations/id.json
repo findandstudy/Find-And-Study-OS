@@ -2027,7 +2027,14 @@
     "documentUploaded": "Dokumen diunggah",
     "noDocTypes": "Tidak ada tipe dokumen yang ditentukan. Anda dapat menambahkannya di Pengaturan > Dokumen.",
     "interestedUniversity": "Universitas yang Diminati",
-    "interestedUniversityLabel": "Universitas yang Diminati"
+    "interestedUniversityLabel": "Universitas yang Diminati",
+    "tableFile": "Berkas",
+    "tableType": "Tipe",
+    "tableSize": "Ukuran",
+    "tableUploaded": "Diunggah",
+    "tableActions": "Tindakan",
+    "preview": "Pratinjau",
+    "download": "Unduh"
   },
   "studentDetailPage": {
     "profile": "Profil",

@@ -1320,7 +1320,12 @@ function downloadLeadDoc(doc: any, firstName: string, lastName: string) {
   const fullName = `${firstName} ${lastName}`.trim() || "lead";
   const baseName = `${fullName} - ${label}`.replace(/[\\/:*?"<>|]/g, "_");
   const filename = baseName.endsWith(ext) ? baseName : `${baseName}${ext}`;
-  if (doc.fileData) {
+  if (doc.fileKey) {
+    const link = document.createElement("a");
+    link.href = `${BASE}/api/documents/${doc.id}/download?filename=${encodeURIComponent(filename)}`;
+    link.download = filename;
+    link.click();
+  } else if (doc.fileData) {
     const link = document.createElement("a");
     link.href = `data:${mimeType};base64,${doc.fileData}`;
     link.download = filename;
@@ -1340,6 +1345,10 @@ function downloadLeadDoc(doc: any, firstName: string, lastName: string) {
 // it directly without relying on the per-document download endpoint (which is
 // not accessible to all roles for lead-only documents).
 function openLeadDocPreview(doc: any) {
+  if (doc.fileKey) {
+    window.open(`${BASE}/api/documents/${doc.id}/download?disposition=inline`, "_blank", "noopener,noreferrer");
+    return;
+  }
   if (doc.fileData) {
     try {
       const mime = doc.mimeType || "application/octet-stream";
@@ -1364,7 +1373,7 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
   firstName: string;
   lastName: string;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   if (!docs || docs.length === 0) {
     return (
       <div className="bg-card rounded-2xl border shadow-sm p-12 text-center text-muted-foreground">
@@ -1379,22 +1388,22 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
       <table className="w-full text-sm">
         <thead className="bg-secondary/50">
           <tr>
-            <th className="text-left px-4 py-3 font-semibold text-foreground">Dosya</th>
-            <th className="text-left px-4 py-3 font-semibold text-foreground">Tür</th>
-            <th className="text-left px-4 py-3 font-semibold text-foreground">Boyut</th>
-            <th className="text-left px-4 py-3 font-semibold text-foreground">Yüklenme</th>
-            <th className="text-right px-4 py-3 font-semibold text-foreground">Aksiyonlar</th>
+            <th className="text-left px-4 py-3 font-semibold text-foreground">{t("leadDetailPage.tableFile")}</th>
+            <th className="text-left px-4 py-3 font-semibold text-foreground">{t("leadDetailPage.tableType")}</th>
+            <th className="text-left px-4 py-3 font-semibold text-foreground">{t("leadDetailPage.tableSize")}</th>
+            <th className="text-left px-4 py-3 font-semibold text-foreground">{t("leadDetailPage.tableUploaded")}</th>
+            <th className="text-right px-4 py-3 font-semibold text-foreground">{t("leadDetailPage.tableActions")}</th>
           </tr>
         </thead>
         <tbody>
           {docs.map((doc: any) => {
-            const canPreview = !!(doc.fileData || doc.fileUrl);
+            const canPreview = !!(doc.fileKey || doc.fileData || doc.fileUrl);
             return (
               <tr key={doc.id} className="border-t hover:bg-primary/5 transition-colors" data-testid={`lead-doc-row-${doc.id}`}>
                 <td className="px-4 py-3 font-medium">{doc.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{LEAD_DOC_TYPE_LABELS[doc.type] || doc.type}</td>
                 <td className="px-4 py-3 text-muted-foreground">{formatBytes(doc.sizeBytes)}</td>
-                <td className="px-4 py-3 text-muted-foreground">{formatDate(doc.createdAt, "tr", "dateShort")}</td>
+                <td className="px-4 py-3 text-muted-foreground">{formatDate(doc.createdAt, lang, "dateShort")}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-2">
                     {canPreview && (
@@ -1403,7 +1412,7 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
                         className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
                         data-testid={`lead-doc-preview-${doc.id}`}
                       >
-                        <Eye className="w-3.5 h-3.5" /> Önizle
+                        <Eye className="w-3.5 h-3.5" /> {t("leadDetailPage.preview")}
                       </button>
                     )}
                     {canPreview && (
@@ -1412,7 +1421,7 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
                         className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
                         data-testid={`lead-doc-download-${doc.id}`}
                       >
-                        <Download className="w-3.5 h-3.5" /> İndir
+                        <Download className="w-3.5 h-3.5" /> {t("leadDetailPage.download")}
                       </button>
                     )}
                   </div>

@@ -2027,7 +2027,14 @@
     "documentUploaded": "文件已上传",
     "noDocTypes": "尚未定义文件类型。您可以在“设置 > 文件”中添加。",
     "interestedUniversity": "意向大学",
-    "interestedUniversityLabel": "意向大学"
+    "interestedUniversityLabel": "意向大学",
+    "tableFile": "文件",
+    "tableType": "类型",
+    "tableSize": "大小",
+    "tableUploaded": "上传时间",
+    "tableActions": "操作",
+    "preview": "预览",
+    "download": "下载"
   },
   "studentDetailPage": {
     "profile": "个人资料",

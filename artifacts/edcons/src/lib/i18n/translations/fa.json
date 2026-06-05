@@ -2027,7 +2027,14 @@
     "documentUploaded": "مدرک بارگذاری شد",
     "noDocTypes": "هیچ نوع مدرکی تعریف نشده است. می‌توانید آن‌ها را از مسیر تنظیمات > مدارک اضافه کنید.",
     "interestedUniversity": "دانشگاه موردعلاقه",
-    "interestedUniversityLabel": "دانشگاه موردعلاقه"
+    "interestedUniversityLabel": "دانشگاه موردعلاقه",
+    "tableFile": "فایل",
+    "tableType": "نوع",
+    "tableSize": "اندازه",
+    "tableUploaded": "بارگذاری‌شده",
+    "tableActions": "عملیات",
+    "preview": "پیش‌نمایش",
+    "download": "دانلود"
   },
   "studentDetailPage": {
     "profile": "پروفایل",

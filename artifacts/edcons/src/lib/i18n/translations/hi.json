@@ -2027,7 +2027,14 @@
     "documentUploaded": "दस्तावेज़ अपलोड किया गया",
     "noDocTypes": "कोई दस्तावेज़ प्रकार परिभाषित नहीं है। आप उन्हें सेटिंग्स > दस्तावेज़ के अंतर्गत जोड़ सकते हैं।",
     "interestedUniversity": "रुचि वाला विश्वविद्यालय",
-    "interestedUniversityLabel": "रुचि वाला विश्वविद्यालय"
+    "interestedUniversityLabel": "रुचि वाला विश्वविद्यालय",
+    "tableFile": "फ़ाइल",
+    "tableType": "प्रकार",
+    "tableSize": "आकार",
+    "tableUploaded": "अपलोड किया गया",
+    "tableActions": "क्रियाएँ",
+    "preview": "पूर्वावलोकन",
+    "download": "डाउनलोड करें"
   },
   "studentDetailPage": {
     "profile": "प्रोफ़ाइल",

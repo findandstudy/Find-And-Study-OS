@@ -2078,7 +2078,14 @@
     "documentUploaded": "Document téléversé",
     "noDocTypes": "Aucun type de document défini. Vous pouvez en ajouter dans Paramètres > Documents.",
     "interestedUniversity": "Université d'intérêt",
-    "interestedUniversityLabel": "Université d'intérêt"
+    "interestedUniversityLabel": "Université d'intérêt",
+    "tableFile": "Fichier",
+    "tableType": "Type",
+    "tableSize": "Taille",
+    "tableUploaded": "Téléversé",
+    "tableActions": "Actions",
+    "preview": "Aperçu",
+    "download": "Télécharger"
   },
   "studentDetailPage": {
     "profile": "Profil",
