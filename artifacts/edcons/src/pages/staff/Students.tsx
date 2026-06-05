@@ -2372,7 +2372,7 @@ export default function StudentsPage() {
               moveLabel="Move Status"
             />
             {isAdmin && (
-              <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); a.href = `${BASE_URL}/api/export/students?season=${encodeURIComponent(season || "")}`; a.click(); }}>
+              <Button variant="outline" size="sm" className="rounded-full h-8 gap-1.5" onClick={() => { const a = document.createElement("a"); const idsParam = selectedIds.size > 0 ? `&ids=${Array.from(selectedIds).join(",")}` : ""; a.href = `${BASE_URL}/api/export/students?season=${encodeURIComponent(season || "")}${idsParam}`; a.click(); }}>
                 <Download className="w-3.5 h-3.5" /> Excel
               </Button>
             )}

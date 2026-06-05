@@ -14,6 +14,15 @@ function formatDate(d: Date | string | null | undefined): string {
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+// Parse a comma-separated `ids` query param into a list of numeric ids. When a
+// selection is present the export is narrowed to exactly those rows; when empty
+// the caller exports the full (season-filtered) set.
+function parseIds(req: any): number[] {
+  const raw = (req.query?.ids as string) || "";
+  if (!raw) return [];
+  return raw.split(",").map((s: string) => parseInt(s.trim(), 10)).filter((n: number) => Number.isFinite(n));
+}
+
 function sendExcel(res: any, data: Record<string, any>[], filename: string, sheetName: string) {
   const ws = XLSX.utils.json_to_sheet(data);
   const colWidths = Object.keys(data[0] || {}).map(key => {
@@ -36,6 +45,8 @@ router.get("/export/leads", requireAuth, requireRole(...ADMIN_ROLES), async (req
   const { season } = req.query as Record<string, string>;
   const conditions: any[] = [];
   if (season) conditions.push(eq(leadsTable.season, season));
+  const ids = parseIds(req);
+  if (ids.length > 0) conditions.push(inArray(leadsTable.id, ids));
 
   const rows = await db
     .select({
@@ -97,6 +108,8 @@ router.get("/export/students", requireAuth, requireRole(...ADMIN_ROLES), async (
   const { season } = req.query as Record<string, string>;
   const conditions: any[] = [isNull(studentsTable.deletedAt)];
   if (season) conditions.push(eq(studentsTable.season, season));
+  const ids = parseIds(req);
+  if (ids.length > 0) conditions.push(inArray(studentsTable.id, ids));
 
   const rows = await db
     .select({
@@ -147,6 +160,8 @@ router.get("/export/applications", requireAuth, requireRole(...ADMIN_ROLES), asy
   const { season } = req.query as Record<string, string>;
   const conditions: any[] = [isNull(applicationsTable.deletedAt)];
   if (season) conditions.push(eq(applicationsTable.season, season));
+  const ids = parseIds(req);
+  if (ids.length > 0) conditions.push(inArray(applicationsTable.id, ids));
 
   const rows = await db
     .select({
