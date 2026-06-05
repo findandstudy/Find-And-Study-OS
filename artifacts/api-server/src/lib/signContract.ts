@@ -4,7 +4,6 @@ import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOL
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
 import { writeAudit } from "./auditLog";
-import { buildSignedContractEmail, sendEmail, getAppBaseUrl } from "./email";
 
 const objectStorage = new ObjectStorageService();
 
@@ -116,22 +115,13 @@ export async function finalizeSign(opts: {
   if (!outcome.ok) return outcome;
   const signed = outcome.row;
 
-  // Email the signed PDF copy. Best-effort. Skipped when no signer email
-  // exists (e.g. a self-fill link created without an email address).
-  if (session.signerEmail) {
-    try {
-      const downloadUrl = opts.pdfDownloadUrl || `${getAppBaseUrl()}/api/contracts/signed/${signed.id}/pdf`;
-      const email = await buildSignedContractEmail({
-        signerName: finalSignerName,
-        templateName: template.name,
-        pdfDownloadUrl: downloadUrl,
-      });
-      await sendEmail(session.signerEmail, email);
-      await db.update(signedContractsTable).set({ emailedAt: new Date() }).where(eq(signedContractsTable.id, signed.id));
-    } catch (emailErr) {
-      console.error("[signContract] failed to email signed PDF:", emailErr);
-    }
-  }
+  // NOTE: PDF delivery (rendering the signed PDF, emailing it as an attachment
+  // to the signer AND all admins, and populating agents.contractUrl) is handled
+  // out-of-band by the signed-contract delivery worker (see
+  // lib/signedContractDelivery.ts). We deliberately leave emailedAt = NULL here
+  // so the worker picks this row up. Keeping delivery off the sign hot path
+  // avoids running headless Chromium on a user-blocking request, which OOM-kills
+  // the autoscale instance and surfaces as an opaque edge-proxy 403.
 
   await writeAudit({
     userId: opts.triggerUserId ?? session.createdByUserId ?? null,
@@ -155,7 +145,7 @@ export async function finalizeSign(opts: {
   return { ok: true, signedContractId: signed.id };
 }
 
-async function readObjectBuffer(key: string): Promise<Buffer | null> {
+export async function readObjectBuffer(key: string): Promise<Buffer | null> {
   try {
     let p = key;
     if (p.startsWith("/objects/")) p = p.slice("/objects/".length);

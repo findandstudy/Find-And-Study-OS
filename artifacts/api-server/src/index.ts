@@ -487,6 +487,12 @@ async function seedClaudeIntegration() {
     // these columns and they are backfilled on first PDF access. Idempotent.
     await pool.query(`ALTER TABLE signed_contracts ALTER COLUMN pdf_object_key DROP NOT NULL`);
     await pool.query(`ALTER TABLE signed_contracts ALTER COLUMN evidence_hash DROP NOT NULL`);
+    // Lease column used by the signed-contract delivery worker to claim a row
+    // for processing without two instances double-sending. Distinct from
+    // emailed_at (which marks successful delivery), so a crash after claiming
+    // does not permanently lose the delivery — the lease expires and the row
+    // is reclaimed. Idempotent.
+    await pool.query(`ALTER TABLE signed_contracts ADD COLUMN IF NOT EXISTS delivery_claimed_at TIMESTAMPTZ`);
 
     // Backfill the new contract permissions for the default admin role.
     const newPerms = [
@@ -733,6 +739,8 @@ async function seedClaudeIntegration() {
     startOfferExpiryChecker();
     const { startUniversityContractChecker } = await import("./lib/universityContractChecker");
     startUniversityContractChecker();
+    const { startSignedContractDeliveryWorker } = await import("./lib/signedContractDelivery");
+    startSignedContractDeliveryWorker();
   }
 
   serveStaticFrontend();

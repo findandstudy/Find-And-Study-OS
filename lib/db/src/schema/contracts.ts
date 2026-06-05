@@ -61,6 +61,7 @@ export const signedContractsTable = pgTable("signed_contracts", {
   signerUserAgent: text("signer_user_agent"),
   signedAt: timestamp("signed_at", { withTimezone: true }).notNull().defaultNow(),
   emailedAt: timestamp("emailed_at", { withTimezone: true }),
+  deliveryClaimedAt: timestamp("delivery_claimed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("signed_contracts_session_id_unique").on(table.signingSessionId),
