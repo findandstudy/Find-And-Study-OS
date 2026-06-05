@@ -67,6 +67,16 @@ tables with an explicit column list **omitting file_data** (json_populate_record
 leaves the missing key NULL); records/metadata/`file_key`/`file_url` come over,
 blobs don't. Tell the user dev downloads of those files won't work.
 
+**Targeted recovery (a few specific docs):** when the user needs preview/download
+to actually work in dev for specific document rows, ferry just those `file_data`
+blobs back: read from prod in fixed-size chunks via `substr(file_data, start, len)`
+(1-indexed) — ~100k chars/chunk reads back losslessly through `executeSql.output` —
+concat in JS, verify the assembled string's md5 == prod `md5(file_data)`, then write
+to dev with a parameterized `UPDATE documents SET file_data=$1 WHERE id=$2` (bound
+param has no argv-size limit). Apply to every row sharing that content (app-level +
+profile-mirror copies). Symptom that triggers this: dev lead/student Documents tab
+shows rows but no Preview/Download buttons because `canPreview` keys off file_data.
+
 ## Live-drift residual
 Prod is live: after a copy, append/activity tables (`audit_logs`, `notes`, etc.)
 can be off by ±1–few vs prod simply because prod kept changing during the copy.
