@@ -27,7 +27,7 @@ const router: IRouter = Router();
 const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "avatarUrl", "startDate", "homeAddress", "passportNumber", "contractUrl", "passportUrl", "emergencyContactName", "emergencyContactPhone"];
 const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive", "permissionOverrides"];
 
-router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const asStr = (v: unknown): string => (Array.isArray(v) ? v.join(",") : v == null ? "" : String(v));
   const role = asStr(req.query.role);
   const roles = asStr(req.query.roles);
@@ -53,25 +53,46 @@ router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(usersTable).where(whereClause);
 
-  const data = await db
-    .select({
-      id: usersTable.id,
-      email: usersTable.email,
-      firstName: usersTable.firstName,
-      lastName: usersTable.lastName,
-      role: usersTable.role,
-      phone: usersTable.phone,
-      language: usersTable.language,
-      isActive: usersTable.isActive,
-      avatarUrl: usersTable.avatarUrl,
-      permissionOverrides: usersTable.permissionOverrides,
-      createdAt: usersTable.createdAt,
-    })
-    .from(usersTable)
-    .where(whereClause)
-    .orderBy(desc(usersTable.createdAt), desc(usersTable.id))
-    .limit(pageParams.limit)
-    .offset(pageParams.offset);
+  // Non-manager staff (staff/consultant/editor/accountant) may read a minimal
+  // directory — id, name, role, active flag, avatar — so they can see WHO a
+  // lead/student/application is assigned to. Contact details (email, phone) and
+  // permission settings remain restricted to managers/admins.
+  const isManager = MANAGER_ROLES.includes(req.user!.role);
+  const data = isManager
+    ? await db
+        .select({
+          id: usersTable.id,
+          email: usersTable.email,
+          firstName: usersTable.firstName,
+          lastName: usersTable.lastName,
+          role: usersTable.role,
+          phone: usersTable.phone,
+          language: usersTable.language,
+          isActive: usersTable.isActive,
+          avatarUrl: usersTable.avatarUrl,
+          permissionOverrides: usersTable.permissionOverrides,
+          createdAt: usersTable.createdAt,
+        })
+        .from(usersTable)
+        .where(whereClause)
+        .orderBy(desc(usersTable.createdAt), desc(usersTable.id))
+        .limit(pageParams.limit)
+        .offset(pageParams.offset)
+    : await db
+        .select({
+          id: usersTable.id,
+          email: usersTable.email,
+          firstName: usersTable.firstName,
+          lastName: usersTable.lastName,
+          role: usersTable.role,
+          isActive: usersTable.isActive,
+          avatarUrl: usersTable.avatarUrl,
+        })
+        .from(usersTable)
+        .where(whereClause)
+        .orderBy(desc(usersTable.createdAt), desc(usersTable.id))
+        .limit(pageParams.limit)
+        .offset(pageParams.offset);
 
   res.json({ data, meta: buildPageMeta(Number(count), pageParams) });
 });
