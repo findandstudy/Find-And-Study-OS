@@ -149,15 +149,16 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const [noteText, setNoteText] = useState("");
   const { data: generalNotes = [] } = useQuery<any[]>({
     queryKey: [`/api/students/${id}/notes`, "general"],
-    queryFn: () => fetch(`${BASE_URL}/api/students/${id}/notes?internal=false`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE_URL}/api/students/${id}/notes?internal=false`, { credentials: "include" }).then(r => r.json()).then(j => Array.isArray(j) ? j : []),
     enabled: !!id,
   });
   const { data: internalNotes = [] } = useQuery<any[]>({
     queryKey: [`/api/students/${id}/notes`, "internal"],
-    queryFn: () => fetch(`${BASE_URL}/api/students/${id}/notes?internal=true`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE_URL}/api/students/${id}/notes?internal=true`, { credentials: "include" }).then(r => r.json()).then(j => Array.isArray(j) ? j : []),
     enabled: !!id && !!isStaffUser,
   });
-  const activeNotes = noteTab === "internal" ? internalNotes : generalNotes;
+  const selectedNotes = noteTab === "internal" ? internalNotes : generalNotes;
+  const activeNotes = Array.isArray(selectedNotes) ? selectedNotes : [];
 
   async function handleAddNote() {
     if (!noteText.trim()) return;
