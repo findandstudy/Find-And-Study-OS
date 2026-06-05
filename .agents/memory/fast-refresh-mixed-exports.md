@@ -23,3 +23,16 @@ util functions, types, and context objects into their own non-component module
 has zero external importers, just drop the `export` keyword (e.g. CookieBanner
 `getConsent`). To verify a fix: edit the file, then confirm the vite log shows
 `hmr update` for it with NO new `Could not Fast Refresh` line.
+
+**Phantom "Invalid hook call" / "more than one copy of React":** a SYNTAX error
+earlier in the same dev session (e.g. a duplicate `const`/declaration) can leave
+the BROWSER holding a half-applied/stale module graph. After you fix the source,
+the browser may KEEP crashing with `Invalid hook call ... in <SomeComponent>` +
+empty `[ErrorBoundary]{}` in a reload loop — even though tsc is clean, there is a
+single React install, and every hook is structurally correct. Do NOT chase a
+code bug; there isn't one. **Recovery:** fix the source, `rm -rf
+node_modules/.vite` (the artifact's, not root), restart the vite workflow, then
+let the browser do ONE full reload — the new `?v=<hash>` on optimized deps forces
+fresh modules and the error clears (confirmed by a clean `APP INIT` with no hook
+error after the reload). If you can't trigger the user's browser reload, tell
+them to hard-refresh (Ctrl+Shift+R).
