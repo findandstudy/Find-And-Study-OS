@@ -8,6 +8,25 @@ import { buildSignedContractEmail, sendEmail, getAppBaseUrl } from "./email";
 
 const objectStorage = new ObjectStorageService();
 
+// Hard ceiling on PDF rendering. buildSignedPdf launches headless Chromium and
+// waits on network idle; a hung launch or a stalled subresource would otherwise
+// leave the HTTP request open until the edge proxy kills it and returns its own
+// opaque "403 Forbidden" HTML page to the agent. Racing a timeout converts any
+// such hang into a clean JSON error the client can display. Normal renders
+// finish in well under 10s, so 30s only fires on a genuine stall.
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms}ms`)),
+      ms,
+    );
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 export type FinalizeSignResult =
   | { ok: true; signedContractId: number; pdfObjectKey: string; evidenceHash: string }
   | { ok: false; status: number; error: string };
@@ -65,15 +84,28 @@ export async function finalizeSign(opts: {
   const placeholder = SIG_PLACEHOLDER[template.language] || SIG_PLACEHOLDER.en;
   const renderedHtml = cleanupSignatureImages(renderTemplate(template.bodyHtml, ctx), placeholder);
 
-  const { pdfBytes, evidenceHash } = await buildSignedPdf({
-    templateName: template.name,
-    bodyHtml: renderedHtml,
-    signerEmail: session.signerEmail,
-    signerName: finalSignerName,
-    signerIp: opts.signerIp,
-    signerUserAgent: opts.signerUserAgent,
-    signedAt,
-  });
+  let pdfBytes: Uint8Array;
+  let evidenceHash: string;
+  try {
+    const built = await withTimeout(
+      buildSignedPdf({
+        templateName: template.name,
+        bodyHtml: renderedHtml,
+        signerEmail: session.signerEmail,
+        signerName: finalSignerName,
+        signerIp: opts.signerIp,
+        signerUserAgent: opts.signerUserAgent,
+        signedAt,
+      }),
+      30_000,
+      "Contract PDF render",
+    );
+    pdfBytes = built.pdfBytes;
+    evidenceHash = built.evidenceHash;
+  } catch (err) {
+    console.error("[signContract] PDF render failed:", err);
+    return { ok: false, status: 500, error: "Sözleşme PDF'i oluşturulamadı. Lütfen tekrar deneyin." };
+  }
 
   let pdfObjectKey = "";
   let signatureObjectKey: string | null = null;

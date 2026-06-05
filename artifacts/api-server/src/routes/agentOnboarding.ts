@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import express, { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { getRateLimitIp } from "../lib/clientIp";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, signingSessionsTable, signedContractsTable, contractTemplatesTable, settingsTable, emailVerificationCodesTable } from "@workspace/db";
@@ -17,6 +17,12 @@ import { createSession, SESSION_COOKIE, SESSION_TTL, type SessionData, type Sess
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 
 const router: IRouter = Router();
+
+// Contract signing carries the signer's signature as a base64 PNG (drawn or
+// uploaded). app.ts skips the global 1 MB JSON parser for the sign paths, so the
+// sign routes must install their own parser. 3 MB comfortably covers the route's
+// own 2 MB (2_000_000 char) signature validation plus the JSON envelope.
+const signBodyParser = express.json({ limit: "3mb" });
 
 const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
 
@@ -588,7 +594,7 @@ router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response)
  * POST /api/contracts/me/sign — agent draws their signature in the dashboard
  * and finalizes the primary onboarding session (no token).
  */
-router.post("/contracts/me/sign", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/contracts/me/sign", signBodyParser, requireAuth, async (req: Request, res: Response): Promise<void> => {
   const agent = await loadAgentForUser(req.user!.id, req.user!.role);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
   const session = await loadOnboardingSession(agent.id);
@@ -610,14 +616,25 @@ router.post("/contracts/me/sign", requireAuth, async (req: Request, res: Respons
   const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;
   const ua = (req.headers["user-agent"] as string) || null;
 
-  const result = await finalizeSign({
-    sessionId: session.id,
-    signatureImagePngBase64,
-    signerName: signerName ? String(signerName) : (session.signerName || null),
-    signerIp,
-    signerUserAgent: ua,
-    triggerUserId: req.user!.id,
-  });
+  let result;
+  try {
+    result = await finalizeSign({
+      sessionId: session.id,
+      signatureImagePngBase64,
+      signerName: signerName ? String(signerName) : (session.signerName || null),
+      signerIp,
+      signerUserAgent: ua,
+      triggerUserId: req.user!.id,
+    });
+  } catch (err) {
+    // Without this, an unexpected throw in finalizeSign would become an
+    // unhandled rejection: the request hangs and the edge proxy eventually
+    // returns its own opaque "403 Forbidden" HTML page instead of a usable
+    // error. Convert it into a clean JSON 500 so the agent sees a real message.
+    console.error("[contracts/sign] finalizeSign threw:", err);
+    res.status(500).json({ error: "Sözleşme imzalanamadı. Lütfen tekrar deneyin." });
+    return;
+  }
   if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
   res.json({ data: { signedContractId: result.signedContractId } });
 });
@@ -732,7 +749,7 @@ router.get("/contracts/me/session/:id", requireAuth, async (req: Request, res: R
  * POST /api/contracts/me/session/:id/sign — agent draws their signature in the
  * dashboard and finalizes one of their own non-onboarding signing sessions.
  */
-router.post("/contracts/me/session/:id/sign", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/contracts/me/session/:id/sign", signBodyParser, requireAuth, async (req: Request, res: Response): Promise<void> => {
   const agent = await loadAgentForUser(req.user!.id, req.user!.role);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
   const sid = parseInt(req.params.id, 10);
@@ -750,14 +767,25 @@ router.post("/contracts/me/session/:id/sign", requireAuth, async (req: Request, 
   }
   const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;
   const ua = (req.headers["user-agent"] as string) || null;
-  const result = await finalizeSign({
-    sessionId: session.id,
-    signatureImagePngBase64,
-    signerName: signerName ? String(signerName) : (session.signerName || null),
-    signerIp,
-    signerUserAgent: ua,
-    triggerUserId: req.user!.id,
-  });
+  let result;
+  try {
+    result = await finalizeSign({
+      sessionId: session.id,
+      signatureImagePngBase64,
+      signerName: signerName ? String(signerName) : (session.signerName || null),
+      signerIp,
+      signerUserAgent: ua,
+      triggerUserId: req.user!.id,
+    });
+  } catch (err) {
+    // Without this, an unexpected throw in finalizeSign would become an
+    // unhandled rejection: the request hangs and the edge proxy eventually
+    // returns its own opaque "403 Forbidden" HTML page instead of a usable
+    // error. Convert it into a clean JSON 500 so the agent sees a real message.
+    console.error("[contracts/sign] finalizeSign threw:", err);
+    res.status(500).json({ error: "Sözleşme imzalanamadı. Lütfen tekrar deneyin." });
+    return;
+  }
   if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
   res.json({ data: { signedContractId: result.signedContractId } });
 });

@@ -133,6 +133,11 @@ const LARGE_BODY_PATHS = [
   // Route handlers install their own 2 MB parser; bypass the 1 MB global cap.
   "/api/embed/widgets/import",
   "/api/website/forms/import",
+  // Contract signing carries the signer's signature as a base64 PNG (drawn or
+  // uploaded). The global 1 MB cap rejected larger images with a generic 413
+  // long before the route's own 2 MB validation could run. The primary
+  // onboarding sign route installs its own 3 MB parser.
+  "/api/contracts/me/sign",
 ];
 // Stage-document uploads send the file as base64 inside a JSON body. A 1MB
 // file balloons to ~1.4MB after base64 + JSON envelope, so the global 1MB
@@ -140,6 +145,9 @@ const LARGE_BODY_PATHS = [
 // /api/applications/:id/stage-documents installs its own 25MB parser.
 const LARGE_BODY_PATH_REGEXES: RegExp[] = [
   /^\/api\/applications\/\d+\/stage-documents(\/|$)/,
+  // Admin-driven (non-onboarding) contract signing also carries a base64
+  // signature image; the route installs its own 3 MB parser.
+  /^\/api\/contracts\/me\/session\/\d+\/sign$/,
 ];
 function isLargeBodyPath(path: string): boolean {
   for (const p of LARGE_BODY_PATHS) {
