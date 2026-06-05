@@ -15,3 +15,4 @@
 - [Lifted child submit/readiness](lifted-child-submit-ref.md) — moving a child's action button to a parent footer via ref+state stale-enables across mounts; clean up on unmount + reset on view change.
 - [Public sign email verification](public-sign-email-verification.md) — signer-email 6-digit gate: bind codes to the link via hashToken in the `token` column; render verify widget in BOTH intake (self_fill) and sign (admin_driven) steps.
 - [Document preview in new tab](document-preview-newtab.md) — preview opens new tab; lead-only docs use client-side blob URL (agents 403 on /api/documents/:id/download w/o studentId); data: URLs unreliable for window.open.
+- [api-server unreachable = empty lists](api-server-unreachable-empty-lists.md) — list shows 0 despite DB data + no console error = vite /api proxy 502 (api-server down); frontend renders [] not error. Restart api-server.
