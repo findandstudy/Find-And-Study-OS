@@ -5,6 +5,7 @@
 - [Custom dropdown closes on scrollbar drag](dropdown-scrollbar-dismiss.md) — outside-close must listen to "click" not "mousedown"; preserve selected value as fallback option when filtering option lists.
 - [Contract PDF rendering](contract-pdf-rendering.md) — templates are designed for browser-to-PDF; signed/preview PDF must render real HTML via headless Chromium (playwright-core+Nix), inject signer sig into {{signature}}, SSRF-filter subresources. Never pdf-lib text.
 - [universities endpoint limit cap](edcons-universities-limit-cap.md) — GET /api/universities silently caps limit at 100; selectors needing the full list must paginate, not request one big limit.
+- [staff picker role filtering](edcons-staff-picker-roles.md) — assign/staff dropdowns must fetch /api/users?roles=<csv> server-side; unfiltered fetch + client whitelist silently truncates (students dominate the first page).
 - [Active-program-only country/uni lists](edcons-active-program-filters.md) — for Course Finder parity (exclude empty destinations) source dropdowns from /api/course-finder/filters, NOT /api/universities*.
 - [Prod→Dev data copy](prod-to-dev-data-copy.md) — prod read-only via executeSql, no prod creds in dev; base64-JSON + json_populate_recordset + replica role; always verify per-table count(*), bulk copy silently skips tables.
 - [Notification template dispatch](notification-template-dispatch.md) — multilingual templates: field-level fallback (lang→top-level→en→tr), escape vars in HTML email bodies, per-channel try/catch, await the error-safe dispatch.

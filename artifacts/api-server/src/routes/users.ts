@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, usersTable, rolesTable, studentsTable, softDelete } from "@workspace/db";
-import { eq, ilike, or, sql, and, isNull, desc } from "drizzle-orm";
+import { eq, ilike, or, sql, and, isNull, desc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -28,11 +28,18 @@ const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "langua
 const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive", "permissionOverrides"];
 
 router.get("/users", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { role, search } = req.query as Record<string, string>;
+  const asStr = (v: unknown): string => (Array.isArray(v) ? v.join(",") : v == null ? "" : String(v));
+  const role = asStr(req.query.role);
+  const roles = asStr(req.query.roles);
+  const search = asStr(req.query.search);
   const pageParams = parsePaginationParams(req, { defaultLimit: 50, maxLimit: "small" });
 
   const conditions = [isNull(usersTable.deletedAt)];
   if (role) conditions.push(eq(usersTable.role, role));
+  if (roles) {
+    const roleList = roles.split(",").map((r) => r.trim()).filter(Boolean);
+    if (roleList.length > 0) conditions.push(inArray(usersTable.role, roleList));
+  }
   if (search) {
     conditions.push(
       or(

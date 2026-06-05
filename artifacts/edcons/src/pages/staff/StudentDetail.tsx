@@ -112,7 +112,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
   const { data: staffUsersData } = useQuery<any>({
     queryKey: ["/api/users"],
-    queryFn: () => customFetch("/api/users"),
+    queryFn: () => customFetch("/api/users?roles=super_admin,admin,manager,staff,consultant,accountant,editor&limit=100"),
     enabled: !!isAdmin,
     staleTime: 5 * 60_000,
   });

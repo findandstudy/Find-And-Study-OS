@@ -1459,7 +1459,7 @@ export default function ApplicationsPage() {
 
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
-    queryFn: () => apiFetch(`${BASE_URL}/api/users`),
+    queryFn: () => apiFetch(`${BASE_URL}/api/users?roles=super_admin,admin,manager,staff,consultant,accountant,editor&limit=100`),
     staleTime: 5 * 60 * 1000,
   });
   const staffUsers = staffUsersData

@@ -2143,7 +2143,7 @@ export default function StudentsPage() {
 
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
-    queryFn: () => customFetch("/api/users") as Promise<any>,
+    queryFn: () => customFetch("/api/users?roles=super_admin,admin,manager,staff,consultant,accountant,editor&limit=100") as Promise<any>,
     staleTime: 5 * 60 * 1000,
     enabled: isAdmin,
   });
