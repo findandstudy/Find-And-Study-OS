@@ -124,6 +124,7 @@ export default function AgentDashboard() {
           </div>
         </div>
 
+        <OnboardingContractBanner />
         <PendingContractsCard />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -432,32 +433,20 @@ interface PendingContract {
 }
 
 /**
- * Non-blocking warning card for admin-sent contracts the agent still needs to
- * sign. Shows a live countdown to the 14-day signing deadline and a "Sign now"
- * action that opens the in-panel signing flow. After the deadline the backend
- * suspends the account, so this card reminds on every dashboard visit.
+ * Presentational reminder banner (the amber "Contract awaiting your signature"
+ * card). Self-contained live countdown. Reused by both the admin-sent contracts
+ * card and the primary onboarding reminder so they stay visually identical.
  */
-function PendingContractsCard() {
+function ContractReminderCard({ templateName, expiresAt, onSign }: { templateName: string | null; expiresAt: string; onSign: () => void; }) {
   const { t } = useI18n();
-  const qc = useQueryClient();
-  const [signing, setSigning] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const { data } = useQuery<{ data: PendingContract[] }>({
-    queryKey: ["/api/contracts/me/pending"],
-    queryFn: () => fetch(`${BASE}/api/contracts/me/pending`, { credentials: "include" }).then(r => r.json()),
-  });
-  const pending = data?.data || [];
-
   useEffect(() => {
-    if (pending.length === 0) return;
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
-  }, [pending.length]);
+  }, []);
 
-  if (pending.length === 0) return null;
-
-  function countdown(expiresAt: string) {
+  function countdown() {
     const diff = new Date(expiresAt).getTime() - now;
     if (diff <= 0) return t("agentDash.pendingContract.expired") || "Expired";
     const days = Math.floor(diff / 86_400_000);
@@ -470,39 +459,110 @@ function PendingContractsCard() {
     return parts.join(" ");
   }
 
+  const dateLabel = new Date(expiresAt).toLocaleString();
+  return (
+    <Card className="p-5 border border-amber-500/30 bg-amber-500/5 shadow-md shadow-black/5">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+          <AlertTriangle className="w-5 h-5 text-amber-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-display font-bold text-foreground">{t("agentDash.pendingContract.title")}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t("agentDash.pendingContract.body")}
+            {templateName ? ` — ${templateName}` : ""}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+            <span className="text-muted-foreground">
+              {t("agentDash.pendingContract.deadlineLabel")}: <strong className="text-foreground">{dateLabel}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
+              <Clock className="w-3.5 h-3.5" /> {countdown()}
+            </span>
+          </div>
+          <p className="text-[11px] text-amber-700/80 mt-1">{t("agentDash.pendingContract.warning")}</p>
+        </div>
+        <Button className="shrink-0 gap-2" onClick={onSign}>
+          <FileSignature className="w-4 h-4" /> {t("agentDash.pendingContract.signNow")}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Reminder for the agent's PRIMARY onboarding contract. The onboarding modal is
+ * dismissible ("Later") before the deadline day; once dismissed the dashboard
+ * is shown, so this banner keeps the contract visible with a "Sign now" action.
+ * The signing flow is opened WITHOUT a sessionId so the onboarding intake step
+ * ("Agency Information") is collected, mirroring AgentOnboardingGuard.
+ */
+function OnboardingContractBanner() {
+  const qc = useQueryClient();
+  const [signing, setSigning] = useState(false);
+
+  const { data } = useQuery<{ data: { status: string; expiresAt: string; template: { name: string | null } | null } | null }>({
+    queryKey: ["/api/contracts/me"],
+    queryFn: () => fetch(`${BASE}/api/contracts/me`, { credentials: "include" }).then(r => r.json()),
+  });
+  const sess = data?.data || null;
+  const pending = !!sess && (sess.status === "intake_pending" || sess.status === "review_pending");
+
+  if (!pending || !sess) return null;
+
   return (
     <>
-      {pending.map((c) => {
-        const dateLabel = new Date(c.expiresAt).toLocaleString();
-        return (
-          <Card key={c.sessionId} className="p-5 border border-amber-500/30 bg-amber-500/5 shadow-md shadow-black/5">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-display font-bold text-foreground">{t("agentDash.pendingContract.title")}</p>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {t("agentDash.pendingContract.body")}
-                  {c.templateName ? ` — ${c.templateName}` : ""}
-                </p>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
-                  <span className="text-muted-foreground">
-                    {t("agentDash.pendingContract.deadlineLabel")}: <strong className="text-foreground">{dateLabel}</strong>
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
-                    <Clock className="w-3.5 h-3.5" /> {countdown(c.expiresAt)}
-                  </span>
-                </div>
-                <p className="text-[11px] text-amber-700/80 mt-1">{t("agentDash.pendingContract.warning")}</p>
-              </div>
-              <Button className="shrink-0 gap-2" onClick={() => setSigning(c.sessionId)}>
-                <FileSignature className="w-4 h-4" /> {t("agentDash.pendingContract.signNow")}
-              </Button>
-            </div>
-          </Card>
-        );
-      })}
+      <ContractReminderCard
+        templateName={sess.template?.name ?? null}
+        expiresAt={sess.expiresAt}
+        onSign={() => setSigning(true)}
+      />
+      {signing && (
+        <SignContract
+          asModal
+          onClose={() => setSigning(false)}
+          onSigned={() => {
+            setSigning(false);
+            void qc.invalidateQueries({ queryKey: ["/api/contracts/me"] });
+            // Reload so AgentOnboardingGuard (which caches onboarding-status per
+            // mount, outside react-query) re-evaluates and clears any stale
+            // pending state after the primary onboarding contract is signed.
+            window.location.reload();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Non-blocking warning cards for admin-sent contracts the agent still needs to
+ * sign. Shows a live countdown to the signing deadline and a "Sign now" action
+ * that opens the in-panel signing flow. After the deadline the backend suspends
+ * the account, so these cards remind on every dashboard visit.
+ */
+function PendingContractsCard() {
+  const qc = useQueryClient();
+  const [signing, setSigning] = useState<number | null>(null);
+
+  const { data } = useQuery<{ data: PendingContract[] }>({
+    queryKey: ["/api/contracts/me/pending"],
+    queryFn: () => fetch(`${BASE}/api/contracts/me/pending`, { credentials: "include" }).then(r => r.json()),
+  });
+  const pending = data?.data || [];
+
+  if (pending.length === 0) return null;
+
+  return (
+    <>
+      {pending.map((c) => (
+        <ContractReminderCard
+          key={c.sessionId}
+          templateName={c.templateName}
+          expiresAt={c.expiresAt}
+          onSign={() => setSigning(c.sessionId)}
+        />
+      ))}
       {signing !== null && (
         <SignContract
           asModal
