@@ -1107,7 +1107,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           </TabsContent>
 
           <TabsContent value="documents" className="mt-4 space-y-4">
-            <ApplicationStageDocumentsSection studentId={id} basePath={basePath} />
             <StudentDocumentsSection
               studentId={id}
               student={student}
@@ -1117,6 +1116,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               openUpload={openUpload}
               qc={qc}
             />
+            <ApplicationStageDocumentsSection studentId={id} basePath={basePath} />
           </TabsContent>
 
           {isStaffUser && (
@@ -2003,11 +2003,9 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                   </th>
                 )}
                 <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableName")}</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableType")}</th>
                 <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableStatus")}</th>
                 <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableUploaded")}</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableFile")}</th>
-                <th className="text-left px-4 py-3 font-semibold text-foreground"></th>
+                <th className="text-right px-4 py-3 font-semibold text-foreground">{t("studentDetailPage.tableFile")}</th>
               </tr>
             </thead>
             <tbody>
@@ -2025,8 +2023,10 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                       )}
                     </td>
                   )}
-                  <td className="px-4 py-3 font-medium">{doc.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground capitalize">{DETAIL_DOC_TYPE_LABELS[doc.type] || doc.type}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium">{doc.name}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{DETAIL_DOC_TYPE_LABELS[doc.type] || doc.type}</p>
+                  </td>
                   <td className="px-4 py-3">
                     <Badge className="capitalize text-xs px-2 py-0.5 border-0 rounded-full bg-secondary text-secondary-foreground">
                       {doc.status}
@@ -2036,7 +2036,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                     {new Date(doc.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-end gap-3">
                       {(doc.fileKey || doc.fileData || doc.fileUrl) && getPreviewKind(doc.mimeType) !== "other" && (
                         <button
                           onClick={() => openDocPreview(doc)}
@@ -2063,22 +2063,21 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                           {t("studentDetailPage.view")}
                         </a>
                       )}
+                      <button
+                        onClick={async () => {
+                          if (!confirm(t("studentDetailPage.deleteConfirm"))) return;
+                          const resp = await apiFetch(`${BASE_URL}/api/documents/${doc.id}`, { method: "DELETE" });
+                          if (resp.ok) {
+                            await qc.invalidateQueries({ predicate: (q: any) => q.queryKey.some((k: any) => typeof k === "string" && (k.includes("document") || k.includes("student"))) });
+                          }
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                        title={t("studentDetailPage.deleteTooltip")}
+                        aria-label={`Delete ${doc.name}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={async () => {
-                        if (!confirm(t("studentDetailPage.deleteConfirm"))) return;
-                        const resp = await apiFetch(`${BASE_URL}/api/documents/${doc.id}`, { method: "DELETE" });
-                        if (resp.ok) {
-                          await qc.invalidateQueries({ predicate: (q: any) => q.queryKey.some((k: any) => typeof k === "string" && (k.includes("document") || k.includes("student"))) });
-                        }
-                      }}
-                      className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
-                      title={t("studentDetailPage.deleteTooltip")}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </td>
                 </tr>
               ))}
@@ -2205,6 +2204,10 @@ function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: 
     link.rel = "noopener";
     link.click();
   };
+
+  // Hide this whole section when there are no stage documents so the
+  // page doesn't show an empty placeholder block.
+  if (!isLoading && docs.length === 0) return null;
 
   return (
     <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">

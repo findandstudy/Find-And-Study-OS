@@ -620,7 +620,9 @@
     "signOut": "Çıkış yap",
     "uploading": "Yükleniyor...",
     "current": "Geçerli",
-    "later": "Daha sonra"
+    "later": "Daha sonra",
+    "applicationSpecificDocuments": "Başvuruya Özel Belgeler",
+    "applicationSpecificDocumentsHint": "Belirli bir başvuru için yüklenmiş, öğrencinin profil belgelerinden ayrı tutulan belgeler."
   },
   "seo": {
     "homeTitle": "Küresel Eğitim Danışmanlığı",

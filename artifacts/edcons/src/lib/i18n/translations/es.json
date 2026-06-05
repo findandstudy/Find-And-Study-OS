@@ -620,7 +620,9 @@
     "leadNoDocsDesc": "Cuando el prospecto envíe documentos a través del formulario de solicitud, aparecerán aquí.",
     "open": "Abrir",
     "signOut": "Cerrar sesión",
-    "later": "Más tarde"
+    "later": "Más tarde",
+    "applicationSpecificDocuments": "Documentos específicos de la solicitud",
+    "applicationSpecificDocumentsHint": "Subidos para una solicitud específica, mantenidos separados de los documentos del perfil del estudiante."
   },
   "seo": {
     "homeTitle": "Consultoría de educación global",

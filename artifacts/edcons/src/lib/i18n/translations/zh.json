@@ -620,7 +620,9 @@
     "leadNoDocsDesc": "当潜在客户通过申请表提交文件后，将在此处显示。",
     "open": "打开",
     "signOut": "退出登录",
-    "later": "稍后"
+    "later": "稍后",
+    "applicationSpecificDocuments": "申请专属文件",
+    "applicationSpecificDocumentsHint": "为特定申请上传，与学生档案文件分开保存。"
   },
   "seo": {
     "homeTitle": "全球教育咨询",

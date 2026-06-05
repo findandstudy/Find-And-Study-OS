@@ -620,7 +620,9 @@
     "signOut": "Sign out",
     "uploading": "Uploading...",
     "current": "Current",
-    "later": "Later"
+    "later": "Later",
+    "applicationSpecificDocuments": "Application-Specific Documents",
+    "applicationSpecificDocumentsHint": "Uploaded for a specific application, kept separate from the student's profile documents."
   },
   "seo": {
     "homeTitle": "Global Education Consultancy",

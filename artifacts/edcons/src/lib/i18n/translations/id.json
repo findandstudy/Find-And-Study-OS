@@ -620,7 +620,9 @@
     "leadNoDocsDesc": "Ketika prospek mengirimkan dokumen melalui formulir aplikasi, dokumen akan muncul di sini.",
     "open": "Buka",
     "signOut": "Keluar",
-    "later": "Nanti"
+    "later": "Nanti",
+    "applicationSpecificDocuments": "Dokumen Khusus Aplikasi",
+    "applicationSpecificDocumentsHint": "Diunggah untuk aplikasi tertentu, disimpan terpisah dari dokumen profil siswa."
   },
   "seo": {
     "homeTitle": "Konsultasi Pendidikan Global",
