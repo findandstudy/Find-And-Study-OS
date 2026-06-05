@@ -8,25 +8,6 @@ import { buildSignedContractEmail, sendEmail, getAppBaseUrl } from "./email";
 
 const objectStorage = new ObjectStorageService();
 
-// Hard ceiling on PDF rendering. buildSignedPdf launches headless Chromium and
-// waits on network idle; a hung launch or a stalled subresource would otherwise
-// leave the HTTP request open until the edge proxy kills it and returns its own
-// opaque "403 Forbidden" HTML page to the agent. Racing a timeout converts any
-// such hang into a clean JSON error the client can display. Normal renders
-// finish in well under 10s, so 30s only fires on a genuine stall.
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`${label} timed out after ${ms}ms`)),
-      ms,
-    );
-    p.then(
-      (v) => { clearTimeout(timer); resolve(v); },
-      (e) => { clearTimeout(timer); reject(e); },
-    );
-  });
-}
-
 // Serialize all headless-Chromium PDF renders across the instance. Chromium is
 // memory-heavy; two or more concurrent renders multiply RSS and were OOM-killing
 // the resource-constrained autoscale instance mid-request. A crashed process
@@ -39,21 +20,6 @@ function withRenderLock<T>(fn: () => Promise<T>): Promise<T> {
   // Keep the chain alive regardless of outcome, without leaking rejections.
   renderChain = run.then(() => undefined, () => undefined);
   return run;
-}
-
-/**
- * Fire-and-forget pre-warm of a signed contract's PDF. Called right after a
- * successful sign so the heavy headless-Chromium render happens OFF the
- * user-facing request path: by the time the agent opens/downloads the contract
- * the PDF is already cached, so the download returns instantly instead of
- * blocking ~15s on an inline render that can crash the autoscale instance and
- * surface as an opaque "403 Forbidden". Idempotent and error-safe — never
- * throws into its caller.
- */
-export function schedulePdfRender(signedContractId: number): void {
-  void ensureSignedContractPdf(signedContractId).catch((err) => {
-    console.error(`[schedulePdfRender] background render failed for signed_contract ${signedContractId}:`, err);
-  });
 }
 
 export type FinalizeSignResult =
@@ -180,13 +146,12 @@ export async function finalizeSign(opts: {
     ipAddress: opts.signerIp,
   });
 
-  // Pre-warm the signed PDF off the request path. Rendering it here (after the
-  // status flip has already committed) means the agent's subsequent open/download
-  // hits a cached PDF instead of triggering a ~15s inline headless-Chromium
-  // render — the inline render is what crashes the autoscale instance and
-  // surfaces to the agent as an opaque edge-proxy "403 Forbidden".
-  schedulePdfRender(signed.id);
-
+  // NOTE: we deliberately do NOT render the PDF here. The sign hot path must
+  // stay lightweight (signature upload + DB commit). Headless Chromium is run
+  // lazily on the first download via ensureSignedContractPdf(). Autoscale does
+  // not support fire-and-forget background work after the response is sent — a
+  // post-response Chromium render destabilizes the instance and made the sign
+  // POST itself surface as an opaque edge-proxy "403 Forbidden".
   return { ok: true, signedContractId: signed.id };
 }
 
@@ -261,28 +226,27 @@ export async function ensureSignedContractPdf(
   const renderedHtml = cleanupSignatureImages(renderTemplate(template.bodyHtml, ctx), placeholder);
 
   // Serialize the heavy render: only one headless Chromium runs at a time across
-  // the instance (see withRenderLock). The lock also lets a concurrent caller —
-  // e.g. the post-sign pre-warm racing the agent's download — skip the work once
-  // the winner has finished, by re-checking the stored key inside the lock.
+  // the instance (see withRenderLock). The lock also lets concurrent downloads of
+  // the same contract skip the work once the winner has finished, by re-checking
+  // the stored key inside the lock.
   return withRenderLock(async () => {
     const [latest] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, row.id));
     if (latest?.pdfObjectKey && latest.evidenceHash) {
       return { pdfObjectKey: latest.pdfObjectKey, evidenceHash: latest.evidenceHash };
     }
 
-    const built = await withTimeout(
-      buildSignedPdf({
-        templateName: template.name,
-        bodyHtml: renderedHtml,
-        signerEmail: row.signerEmail,
-        signerName: row.signerName,
-        signerIp: row.signerIp,
-        signerUserAgent: row.signerUserAgent,
-        signedAt,
-      }),
-      30_000,
-      "Contract PDF render",
-    );
+    // buildSignedPdf self-bounds its render with an internal timeout that closes
+    // the browser on expiry, so the lock is held only until Chromium has actually
+    // exited — a timed-out render frees its memory before the next one starts.
+    const built = await buildSignedPdf({
+      templateName: template.name,
+      bodyHtml: renderedHtml,
+      signerEmail: row.signerEmail,
+      signerName: row.signerName,
+      signerIp: row.signerIp,
+      signerUserAgent: row.signerUserAgent,
+      signedAt,
+    });
 
     const pdfObjectKey = await objectStorage.uploadBuffer({
       subdir: "signed-contracts",

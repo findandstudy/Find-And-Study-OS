@@ -188,6 +188,24 @@ async function renderHtmlToPdf(browser: any, html: string): Promise<Uint8Array> 
  * renders a human-readable evidence page printing that hash. The hash binds to
  * the content PDF (excluding the evidence page) exactly as before.
  */
+// Hard ceiling on a single render. On expiry we throw, and the finally block
+// below closes the browser — terminating the in-flight Chromium render so its
+// memory is freed BEFORE the serialization lock (in signContract.ts) releases
+// and the next render starts. Without this, a timed-out render would keep
+// running in the background, overlap the next one, multiply RSS, and re-introduce
+// the OOM that crashes the autoscale instance and surfaces as an opaque proxy
+// "403 Forbidden". Normal renders finish in well under 10s.
+const RENDER_TIMEOUT_MS = 30_000;
+function renderWithTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfResult> {
   const { chromium } = await import("playwright-core");
   const executablePath = resolveChromiumPath();
@@ -201,8 +219,14 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
     ],
   });
 
+  const deadline = Date.now() + RENDER_TIMEOUT_MS;
+  const remainingMs = () => Math.max(1, deadline - Date.now());
   try {
-    const contentBytes = await renderHtmlToPdf(browser, documentShell(params.bodyHtml));
+    const contentBytes = await renderWithTimeout(
+      renderHtmlToPdf(browser, documentShell(params.bodyHtml)),
+      remainingMs(),
+      "Contract PDF content render",
+    );
 
     const hasher = crypto.createHash("sha256");
     hasher.update(Buffer.from(contentBytes));
@@ -214,9 +238,10 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
     hasher.update(params.signedAt.toISOString());
     const evidenceHash = hasher.digest("hex");
 
-    const evidenceBytes = await renderHtmlToPdf(
-      browser,
-      documentShell(evidencePageHtml(params, evidenceHash)),
+    const evidenceBytes = await renderWithTimeout(
+      renderHtmlToPdf(browser, documentShell(evidencePageHtml(params, evidenceHash))),
+      remainingMs(),
+      "Contract PDF evidence render",
     );
 
     // Merge content + evidence into a single document. pdf-lib copies page
