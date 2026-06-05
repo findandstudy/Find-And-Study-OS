@@ -450,6 +450,76 @@ The link and code expire in 15 minutes. After verifying, you'll set a password a
   return { subject, html, text };
 }
 
+/**
+ * Agent credentials email — sent when an admin creates a new agent account.
+ * The account is provisioned active + email-verified with a system-generated
+ * password, so this email hands the agent their login email, that password,
+ * and a direct link to the login page. The agent can change the password
+ * later from their own panel.
+ */
+export async function buildAgentCredentialsEmail(params: {
+  firstName: string;
+  email: string;
+  password: string;
+  loginUrl: string;
+}): Promise<{ subject: string; html: string; text: string }> {
+  const { firstName, email, password, loginUrl } = params;
+  const brand = await getEmailBranding();
+  const subject = `Giriş bilgileriniz / Your ${brand.companyName} login details`;
+
+  const body = `
+      <h2 style="margin:0 0 12px;color:#111827;font-size:20px;">Hesabınız hazır / Your account is ready</h2>
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+        Merhaba ${escapeNotifText(firstName)}, ${escapeNotifText(brand.companyName)} acente hesabınız oluşturuldu. Aşağıdaki bilgilerle giriş yapın, ardından sözleşmenizi imzalamak için yönlendirileceksiniz.
+      </p>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.6;">
+        Hi ${escapeNotifText(firstName)}, your ${escapeNotifText(brand.companyName)} agent account has been created. Log in with the details below; you'll then be guided to sign your contract.
+      </p>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:0 0 24px;">
+        <p style="margin:0 0 4px;color:#6b7280;font-size:13px;font-weight:600;">E-posta / Email</p>
+        <p style="margin:0 0 12px;color:#111827;font-size:15px;font-weight:700;">${escapeNotifText(email)}</p>
+        <p style="margin:0 0 4px;color:#6b7280;font-size:13px;font-weight:600;">Şifre / Password</p>
+        <p style="margin:0;color:#111827;font-size:15px;font-weight:700;font-family:monospace;letter-spacing:1px;">${escapeNotifText(password)}</p>
+      </div>
+      ${emailButton("Giriş yap / Log in", loginUrl, brand.buttonColor)}
+      <p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-align:center;word-break:break-all;">
+        Buton çalışmıyorsa: <a href="${loginUrl}" style="color:${brand.buttonColor};">${loginUrl}</a>
+      </p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+      <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
+        Güvenliğiniz için giriş yaptıktan sonra panelinizden şifrenizi değiştirmenizi öneririz.<br/>
+        For your security, we recommend changing your password from your panel after logging in.
+      </p>`;
+
+  const html = emailShell(brand, "Agent Onboarding · Acente Kayıt", body);
+
+  const text = `Merhaba ${firstName},
+
+${brand.companyName} acente hesabınız oluşturuldu.
+
+E-posta: ${email}
+Şifre: ${password}
+
+Giriş yapın: ${loginUrl}
+
+Güvenliğiniz için giriş yaptıktan sonra panelinizden şifrenizi değiştirmenizi öneririz.
+
+—
+
+Hi ${firstName},
+
+Your ${brand.companyName} agent account has been created.
+
+Email: ${email}
+Password: ${password}
+
+Log in: ${loginUrl}
+
+For your security, we recommend changing your password from your panel after logging in. After logging in you'll be guided to sign your contract.`;
+
+  return { subject, html, text };
+}
+
 export async function buildExistingAccountEmail(params: {
   firstName: string;
   loginUrl: string;

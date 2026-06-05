@@ -3,9 +3,24 @@ import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useI18n } from "@/hooks/use-i18n";
-import { Loader2, FileSignature, Eraser, AlertCircle, LogOut } from "lucide-react";
+import { Loader2, FileSignature, Eraser, AlertCircle, LogOut, Upload, X, Lock } from "lucide-react";
+
+const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const CURRENT_YEAR = String(new Date().getFullYear());
+
+interface IntakeField {
+  key: string;
+  label: string;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+  options?: string[];
+}
 
 interface SessionData {
   sessionId: number;
@@ -13,7 +28,15 @@ interface SessionData {
   expiresAt: string;
   signerEmail: string;
   signerName: string | null;
-  template: { id: number; name: string; language: string; entityType: string } | null;
+  mode?: string;
+  intakeData?: Record<string, string> | null;
+  template: {
+    id: number;
+    name: string;
+    language: string;
+    entityType: string;
+    intakeSchema?: IntakeField[] | null;
+  } | null;
   previewHtml: string | null;
 }
 
@@ -32,39 +55,124 @@ interface Props {
   onClose?: () => void;
 }
 
+// ── Field-detection heuristics (mirror the public self-fill flow) ──
+const NAME_FIELD_PATTERNS = [
+  /full[\s_-]?name/i, /signer[\s_-]?name/i, /contact[\s_-]?(person|name)/i,
+  /\bname\b/i, /isim|ad\s*soyad|ad\s+soyad/i, /الاسم/i, /имя/i, /nom\s+complet/i,
+];
+function isNameLikeField(f: IntakeField): boolean {
+  const haystack = `${f.key || ""} ${f.label || ""}`;
+  return NAME_FIELD_PATTERNS.some(rx => rx.test(haystack));
+}
+const EMAIL_FIELD_PATTERNS = [
+  /e-?mail/i, /eposta|e-posta/i, /البريد/i, /почт|эл\.?\s*адрес/i, /courriel|correo/i,
+];
+function isEmailLikeField(f: IntakeField): boolean {
+  if (f.type === "email") return true;
+  const haystack = `${f.key || ""} ${f.label || ""}`;
+  return EMAIL_FIELD_PATTERNS.some(rx => rx.test(haystack));
+}
+function isYearLikeField(f: IntakeField): boolean {
+  const haystack = `${f.key || ""} ${f.label || ""}`;
+  return /year|yıl|yil|سنة|год|année|año/i.test(haystack) || f.type === "number";
+}
+function isFileLikeField(f: IntakeField): boolean {
+  if (f.type === "file") return true;
+  const haystack = `${f.key || ""} ${f.label || ""}`;
+  return /logo|görsel|gorsel|image|upload|dosya|file/i.test(haystack);
+}
+
+async function uploadFileToStorage(file: File): Promise<string> {
+  const urlRes = await customFetch<any>(`/api/storage/uploads/request-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+  });
+  if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
+  const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+  if (!putRes.ok) throw new Error("Upload failed");
+  const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
+  return `${BASE_URL}/api/storage/objects${strippedPath}`;
+}
+
 /**
  * Authenticated agent signing flow. By default it signs the primary onboarding
  * contract (session resolved from /api/contracts/me). When `sessionId` is given
  * it signs that specific admin-sent contract via the agent-scoped session
  * endpoints, and `onClose` makes the modal dismissible (non-blocking).
+ *
+ * For the primary onboarding contract, when the template defines an intake
+ * schema the flow opens with a "Your Details" (Agency Information) step before
+ * Review → Sign. The agent's email is pre-filled and locked (no verification).
  */
 export default function SignContract({ onSigned, asModal = false, sessionId, onClose }: Props) {
   const { t } = useI18n();
   const dismissible = !!onClose;
+  // Intake is only collected for the primary onboarding session.
+  const isOnboarding = !sessionId;
   const loadUrl = sessionId ? `/api/contracts/me/session/${sessionId}` : "/api/contracts/me";
   const signUrl = sessionId ? `/api/contracts/me/session/${sessionId}/sign` : "/api/contracts/me/sign";
   const [data, setData] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [step, setStep] = useState<"review" | "sign">("review");
+  const [step, setStep] = useState<"details" | "review" | "sign">("review");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [signerName, setSignerName] = useState("");
   const [confirmed, setConfirmed] = useState(false);
 
-  useEffect(() => {
-    (async () => {
+  // Intake ("Your Details") state.
+  const [intake, setIntake] = useState<Record<string, string>>({});
+
+  function loadData(initial: boolean) {
+    return (async () => {
       try {
         const r: any = await customFetch(loadUrl);
         if (!r.data) { setError(t("agentOnboarding.sign.notFound") || "No onboarding contract found. Contact your administrator."); return; }
-        setData(r.data);
-        setSignerName(r.data.signerName || "");
+        const d: SessionData = r.data;
+        setData(d);
+        setSignerName(d.signerName || "");
+        if (initial) {
+          const schema = (isOnboarding && d.template?.intakeSchema) || [];
+          // Seed intake answers: existing data, then locked email + year defaults.
+          const seed: Record<string, string> = { ...(d.intakeData || {}) };
+          for (const f of schema) {
+            if (isEmailLikeField(f)) seed[f.key] = d.signerEmail || seed[f.key] || "";
+            else if (isYearLikeField(f) && !seed[f.key]) seed[f.key] = CURRENT_YEAR;
+          }
+          setIntake(seed);
+          const needsIntake = isOnboarding && d.status === "intake_pending" && schema.length > 0;
+          setStep(needsIntake ? "details" : "review");
+        }
       } catch (err: any) {
         setError(err?.body?.error || err?.message || "Failed to load contract.");
       }
-      setLoading(false);
+      if (initial) setLoading(false);
     })();
+  }
+
+  useEffect(() => {
+    loadData(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadUrl]);
+
+  const intakeFields: IntakeField[] = (isOnboarding && data?.template?.intakeSchema) || [];
+
+  async function submitIntake() {
+    setSubmitting(true); setError("");
+    try {
+      await customFetch("/api/contracts/me/intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intake }),
+      });
+      // Reload so the preview HTML reflects the entered information.
+      await loadData(false);
+      setStep("review");
+    } catch (err: any) {
+      setError(err?.body?.error || err?.message || t("agentOnboarding.sign.failed") || "Failed to save your details.");
+    }
+    setSubmitting(false);
+  }
 
   async function submitSignature(b64: string) {
     if (!data) return;
@@ -81,6 +189,13 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
     }
     setSubmitting(false);
   }
+
+  // Required non-email fields must be filled before continuing.
+  const canContinueIntake = intakeFields.every(f => {
+    if (!f.required) return true;
+    if (isEmailLikeField(f)) return true; // auto-filled + locked
+    return (intake[f.key] || "").trim().length > 0;
+  });
 
   const loadingNode = (
     <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -100,6 +215,12 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
     </div>
   );
 
+  const exitButton = dismissible ? (
+    <Button variant="ghost" onClick={onClose}>{t("common.later") || "Later"}</Button>
+  ) : (
+    <Button variant="ghost" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+  );
+
   const innerContent = data ? (
     <>
       <div className="text-center mb-6">
@@ -110,15 +231,71 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
         </p>
       </div>
       <div className="bg-card border rounded-2xl shadow-sm p-6">
-        {step === "review" ? (
+        {step === "details" ? (
+          <div className="space-y-5">
+            <div>
+              <h2 className="text-lg font-semibold">{t("agentOnboarding.intake.title") || "Agency Information"}</h2>
+              <p className="text-sm text-muted-foreground">{t("agentOnboarding.intake.subtitle") || "Fill in your agency details before reviewing the contract."}</p>
+            </div>
+            <div className="space-y-4">
+              {intakeFields.map(f => (
+                <div key={f.key}>
+                  <Label className="flex items-center gap-1.5">
+                    {f.label}{f.required ? <span className="text-destructive">*</span> : null}
+                    {isEmailLikeField(f) ? <Lock className="w-3 h-3 text-muted-foreground" /> : null}
+                  </Label>
+                  <div className="mt-1.5">
+                    {isEmailLikeField(f) ? (
+                      <Input type="email" value={data.signerEmail || ""} readOnly disabled className="bg-muted text-muted-foreground cursor-not-allowed" />
+                    ) : f.type === "textarea" ? (
+                      <Textarea placeholder={f.placeholder} value={intake[f.key] || ""} onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))} rows={3} />
+                    ) : f.type === "select" ? (
+                      <SearchableSelect
+                        value={intake[f.key] || ""}
+                        onValueChange={v => setIntake(s => ({ ...s, [f.key]: v }))}
+                        options={(f.options || []).map(o => ({ value: o, label: o }))}
+                        placeholder={f.placeholder || (t("common.select") || "Select...")}
+                      />
+                    ) : isYearLikeField(f) ? (
+                      <Input type="text" value={intake[f.key] || CURRENT_YEAR} readOnly disabled className="bg-muted text-muted-foreground cursor-not-allowed" aria-readonly="true" />
+                    ) : f.type === "tel" ? (
+                      <PhoneInput value={intake[f.key] || ""} onChange={v => setIntake(s => ({ ...s, [f.key]: v }))} />
+                    ) : isFileLikeField(f) ? (
+                      <LogoUpload value={intake[f.key] || ""} onChange={v => setIntake(s => ({ ...s, [f.key]: v }))} onError={setError} />
+                    ) : (
+                      <Input
+                        placeholder={f.placeholder}
+                        type={f.type === "date" ? "date" : "text"}
+                        value={intake[f.key] || ""}
+                        onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))}
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {error && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> <span>{error}</span>
+              </div>
+            )}
+            <div className="flex justify-between pt-2">
+              {exitButton}
+              <Button onClick={submitIntake} disabled={!canContinueIntake || submitting}>
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                {t("common.continue") || "Continue"}
+              </Button>
+            </div>
+          </div>
+        ) : step === "review" ? (
           <>
             <div className="prose prose-sm dark:prose-invert max-w-none border rounded-lg p-6 bg-card max-h-[60vh] overflow-y-auto"
               dangerouslySetInnerHTML={{ __html: data.previewHtml || "" }} />
             <div className="flex justify-between mt-6">
-              {dismissible ? (
-                <Button variant="ghost" onClick={onClose}>{t("common.later") || "Later"}</Button>
+              {intakeFields.length > 0 && isOnboarding ? (
+                <Button variant="outline" onClick={() => { setError(""); setStep("details"); }}>{t("common.back") || "Back"}</Button>
               ) : (
-                <Button variant="ghost" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+                exitButton
               )}
               <Button onClick={() => setStep("sign")}>
                 <FileSignature className="w-4 h-4 mr-2" /> {t("agentOnboarding.sign.proceed") || "Proceed to sign"}
@@ -154,7 +331,7 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
             <DialogTitle>{t("agentOnboarding.sign.title") || "Sign your agency contract"}</DialogTitle>
             <DialogDescription>{data?.template?.name || ""}</DialogDescription>
           </DialogHeader>
-          {loading ? loadingNode : (error || !data) ? errorNode : innerContent}
+          {loading ? loadingNode : (error && !data) ? errorNode : innerContent}
         </DialogContent>
       </Dialog>
     );
@@ -163,13 +340,51 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
-  if (error || !data) {
+  if (error && !data) {
     return <div className="min-h-screen flex items-center justify-center bg-background">{errorNode}</div>;
   }
 
   return (
     <div className="min-h-screen bg-secondary/30 py-8 px-4">
       <div className="max-w-3xl mx-auto">{innerContent}</div>
+    </div>
+  );
+}
+
+function LogoUpload({ value, onChange, onError }: { value: string; onChange: (v: string) => void; onError: (m: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { onError("Please upload an image file."); return; }
+    setUploading(true);
+    try {
+      const url = await uploadFileToStorage(file);
+      onChange(url);
+    } catch (err: any) {
+      onError(err?.message || "Upload failed.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      {value ? (
+        <div className="relative">
+          <img src={value} alt="" className="w-16 h-16 rounded-lg object-cover border" />
+          <button type="button" onClick={() => onChange("")} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center shadow">
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      ) : null}
+      <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => inputRef.current?.click()} className="gap-2">
+        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+        {value ? "Change" : "Upload"}
+      </Button>
+      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
     </div>
   );
 }

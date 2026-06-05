@@ -449,7 +449,15 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
       isPrimaryOnboarding: session.isPrimaryOnboarding,
       signerEmail: session.signerEmail,
       signerName: session.signerName,
-      template: template ? { id: template.id, name: template.name, language: template.language, entityType: template.entityType } : null,
+      mode: session.mode,
+      intakeData: session.intakeData || null,
+      template: template ? {
+        id: template.id,
+        name: template.name,
+        language: template.language,
+        entityType: template.entityType,
+        intakeSchema: template.intakeSchema || null,
+      } : null,
       previewHtml,
       // Agent-scoped download endpoint — the admin /api/contracts/signed/:id/pdf
       // requires contracts.view (manager+ only), which agents lack.
@@ -457,6 +465,67 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
       signedAt: signedContract?.signedAt ?? null,
     },
   });
+});
+
+/**
+ * POST /api/contracts/me/intake — the authenticated agent submits their
+ * pre-contract "Agency Information" answers for their primary onboarding
+ * session and advances it from intake_pending → review_pending. The email is
+ * always forced to the agent's own account address (any client-supplied email
+ * is ignored), and there is NO separate email verification step. Operates only
+ * on the agent's own session.
+ */
+router.post("/contracts/me/intake", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const agent = await loadAgentForUser(req.user!.id, req.user!.role);
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  let session = await loadOnboardingSession(agent.id);
+  if (!session) { res.status(404).json({ error: "No onboarding session found" }); return; }
+  session = await lazyExpire(session);
+  if (session.status === "signed" || session.status === "revoked") {
+    res.status(409).json({ error: "Session already finalized" }); return;
+  }
+  if (session.status === "expired") {
+    res.status(410).json({ error: "This contract link has expired", code: "expired" }); return;
+  }
+
+  const intakeRaw = req.body?.intake;
+  if (!intakeRaw || typeof intakeRaw !== "object" || Array.isArray(intakeRaw)) {
+    res.status(400).json({ error: "intake object is required" }); return;
+  }
+  // Cap field count and value length to prevent abuse (mirrors public intake).
+  const cleaned: Record<string, string> = {};
+  let count = 0;
+  for (const [k, v] of Object.entries(intakeRaw)) {
+    if (count >= 50) break;
+    const key = String(k).slice(0, 80);
+    const val = v == null ? "" : String(v).slice(0, 2000);
+    cleaned[key] = val;
+    count++;
+  }
+  // Force the contact email to the agent's own account address — agents never
+  // verify or edit it in this flow.
+  const ownEmail = (session.signerEmail || agent.email || "").toLowerCase().trim();
+  if (ownEmail) {
+    for (const k of Object.keys(cleaned)) {
+      if (/email/i.test(k)) cleaned[k] = ownEmail;
+    }
+  }
+
+  await db.update(signingSessionsTable).set({
+    intakeData: cleaned,
+    status: "review_pending",
+    signerName: cleaned.signerName || cleaned.fullName || cleaned.contactName || session.signerName,
+  }).where(eq(signingSessionsTable.id, session.id));
+
+  await writeAudit({
+    userId: req.user!.id,
+    action: "agent.contract_intake_submitted",
+    resource: "signing_session",
+    resourceId: session.id,
+    changes: { agentId: agent.id, fields: Object.keys(cleaned) },
+    ipAddress: req.ip,
+  });
+  res.json({ data: { success: true } });
 });
 
 /**
@@ -507,6 +576,12 @@ router.post("/contracts/me/sign", requireAuth, async (req: Request, res: Respons
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
   const session = await loadOnboardingSession(agent.id);
   if (!session) { res.status(404).json({ error: "No onboarding session found" }); return; }
+  // The agency-information intake must be completed first: a session that still
+  // carries intake_pending may not be signed (otherwise a direct API call could
+  // skip the "Your Details" step the template requires).
+  if (session.status === "intake_pending") {
+    res.status(409).json({ error: "Please complete the agency information step before signing", code: "intake_required" }); return;
+  }
 
   const { signatureImagePngBase64, signerName } = req.body || {};
   if (!signatureImagePngBase64 || typeof signatureImagePngBase64 !== "string") {

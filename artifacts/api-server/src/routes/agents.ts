@@ -22,10 +22,10 @@ import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, bran
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
-import { sendEmail } from "../lib/email";
+import { sendEmail, buildAgentCredentialsEmail, getAppBaseUrl } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
 import { ONBOARDING_HELPERS } from "./agentOnboarding";
-import { STAFF_ROLES, MANAGER_ROLES } from "../lib/roles";
+import { STAFF_ROLES, MANAGER_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getVisibleBranchIds, isAgentInScope } from "../lib/branchScope";
 import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
@@ -37,6 +37,28 @@ import { setAgencyStaff, getAgencyStaff, getAgencyStaffWithLegacy, getAgencyStaf
 import { validatePassword } from "../lib/passwordPolicy";
 
 const router: IRouter = Router();
+
+/**
+ * Generate a random login password that satisfies the password policy
+ * (min 8 chars, at least one uppercase letter and one digit). Used when an
+ * admin creates an agent so the account can be provisioned with credentials
+ * emailed to the agent. The agent can change it later from their panel.
+ */
+function generateAgentPassword(): string {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghijkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const all = upper + lower + digits;
+  const pick = (set: string) => set[crypto.randomInt(0, set.length)];
+  // Guarantee policy coverage, then fill to length 12 and shuffle.
+  const chars = [pick(upper), pick(digits), pick(lower)];
+  while (chars.length < 12) chars.push(pick(all));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+}
 
 const AGENT_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone",
@@ -1089,22 +1111,40 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   // lookup as well so legacy mixed-case rows are still matched.
   const normalizedAccountEmail = String(email).toLowerCase().trim();
 
+  // Auto-generate a login password for the new agent. The account is
+  // provisioned active + email-verified immediately (no 6-digit code step);
+  // the agent receives these credentials by email and signs in directly,
+  // then is guided to sign their contract. They can change the password
+  // later from their own panel.
+  const generatedPassword = generateAgentPassword();
+  const generatedPasswordHash = await bcrypt.hash(generatedPassword, 10);
+
   let userId: number | null = null;
   {
     const [existingUser] = await db.select().from(usersTable).where(ilike(usersTable.email, normalizedAccountEmail));
     if (existingUser) {
+      // Only reuse an existing account when it already belongs to the agent
+      // family. Refuse to take over (and silently reset the password of) an
+      // internal/staff/student account that merely shares this email — doing
+      // so would let agent creation reset credentials and reactivate
+      // unrelated accounts.
+      if (!AGENT_ROLES.includes(existingUser.role)) {
+        res.status(409).json({ error: "An account with this email already exists and is not an agent account. Use a different email." });
+        return;
+      }
       userId = existingUser.id;
-      // Force email re-verification for the onboarding flow, and normalize
-      // the stored address while we have the row so future lookups match.
+      // Provision the existing agent account for direct login: normalize the
+      // stored address, mark email verified + active, and (re)set a fresh
+      // password so the credentials email is valid.
       await db.update(usersTable)
-        .set({ emailVerified: false, email: normalizedAccountEmail })
+        .set({ email: normalizedAccountEmail, emailVerified: true, isActive: true, passwordHash: generatedPasswordHash })
         .where(eq(usersTable.id, existingUser.id));
     } else {
       const role = parentAgentId ? "sub_agent" : "agent";
       const [newUser] = await db.insert(usersTable).values({
         email: normalizedAccountEmail, firstName, lastName, role,
         phone: phone || null, phoneE164: toE164(phone || null),
-        emailVerified: false, isActive: true,
+        emailVerified: true, isActive: true, passwordHash: generatedPasswordHash,
       }).returning();
       userId = newUser.id;
     }
@@ -1178,26 +1218,28 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
       .onConflictDoNothing();
   }
 
-  // ── Onboarding: 6-digit verification code + admin-driven signing session ──
+  // ── Onboarding: credentials email + admin-driven signing session ──
   try {
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = normalizedAccountEmail;
+    // Invalidate any stale verification codes for this address (legacy flow).
     await db.update(emailVerificationCodesTable)
       .set({ used: true })
       .where(and(eq(emailVerificationCodesTable.email, normalizedEmail), eq(emailVerificationCodesTable.used, false)));
-    const code = ONBOARDING_HELPERS.generateVerificationCode();
-    const token = ONBOARDING_HELPERS.generateOnboardingToken();
-    await db.insert(emailVerificationCodesTable).values({
-      email: normalizedEmail, code, token, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-    });
+
     try {
-      const emailContent = await ONBOARDING_HELPERS.buildOnboardingVerificationCodeEmail(firstName, code, normalizedEmail, token);
+      const emailContent = await buildAgentCredentialsEmail({
+        firstName,
+        email: normalizedEmail,
+        password: generatedPassword,
+        loginUrl: `${getAppBaseUrl()}/login`,
+      });
       await sendEmail(normalizedEmail, emailContent);
     } catch (err) {
-      console.error("[agents POST] failed to send verification email:", err);
+      console.error("[agents POST] failed to send credentials email:", err);
     }
     await writeAudit({
       userId: req.user!.id,
-      action: "agent.email_verification_sent",
+      action: "agent.credentials_sent",
       resource: "user",
       resourceId: userId,
       changes: { agentId: agent.id, initial: true },
@@ -1209,12 +1251,15 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
     const { tokenHash } = createSigningToken();
     const signerName = `${firstName} ${lastName}`.trim() || businessName || null;
+    // Start at the intake ("Your Details") step when the template defines an
+    // intake schema; otherwise jump straight to review.
+    const hasIntake = Array.isArray(template.intakeSchema) && (template.intakeSchema as any[]).length > 0;
     const [session] = await db.insert(signingSessionsTable).values({
       templateId: template.id,
       agentId: agent.id,
       tokenHash,
       mode: "admin_driven",
-      status: "review_pending",
+      status: hasIntake ? "intake_pending" : "review_pending",
       intakeData: null,
       signerEmail: normalizedEmail,
       signerName,
