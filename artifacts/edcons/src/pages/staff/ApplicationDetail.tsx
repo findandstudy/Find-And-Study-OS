@@ -283,6 +283,16 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           <div className="flex-1 min-w-0">
             {isLoading ? (
               <Skeleton className="h-8 w-48" />
+            ) : app?.studentId ? (
+              <h1
+                role="link"
+                tabIndex={0}
+                onClick={() => setLocation(`${basePath}/students/${app.studentId}`)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLocation(`${basePath}/students/${app.studentId}`); } }}
+                className="text-2xl font-display font-bold text-foreground truncate cursor-pointer hover:text-primary hover:underline transition-colors"
+              >
+                {app?.studentFirstName} {app?.studentLastName}
+              </h1>
             ) : (
               <h1 className="text-2xl font-display font-bold text-foreground truncate">
                 {app?.studentFirstName} {app?.studentLastName}
