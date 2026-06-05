@@ -5,7 +5,9 @@ import { eq, isNull, and, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
+import { getCsrfCookieOptions } from "./lib/cookieOptions";
 import { getCurrentSeason } from "./lib/season";
 import { seedDocumentTypes } from "./scripts/seedDocumentTypes";
 import { seedCurrencies } from "./scripts/seedCurrencies";
@@ -159,6 +161,17 @@ function serveStaticFrontend() {
 
   app.get("/{*splat}", (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.path.startsWith("/api")) return next();
+    // Guarantee the SPA always carries a CSRF cookie before it issues ANY
+    // unsafe (POST/PUT/PATCH/DELETE) request. Otherwise a freshly-loaded
+    // client that hasn't yet made a cookie-setting /api GET — e.g. an agent
+    // landing straight on the contract-signing screen from a cached session —
+    // would POST without the double-submit token and get a silent 403. The
+    // client (customFetch / csrfSetup) only attaches x-csrf-token when this
+    // cookie is readable, so it must exist by the time the page renders.
+    if (!(req as any).cookies?.csrf_token) {
+      const token = crypto.randomBytes(32).toString("hex");
+      res.cookie("csrf_token", token, getCsrfCookieOptions(req, 7 * 24 * 60 * 60 * 1000));
+    }
     const indexPath = path.join(distPath, "index.html");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.sendFile(indexPath);

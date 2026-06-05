@@ -198,6 +198,23 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     const cookieToken = req.cookies[CSRF_COOKIE];
     const headerToken = req.headers[CSRF_HEADER];
     if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+      // Production returns this 403 silently, which is why CSRF failures (e.g.
+      // an agent whose browser had no csrf_token cookie at contract-signing
+      // time) produced "no log". Emit a structured line so the exact cause —
+      // missing cookie vs missing header vs mismatch — is visible in prod logs.
+      console.warn(
+        "[csrf] rejected " +
+          JSON.stringify({
+            method: req.method,
+            path: req.path,
+            cookiePresent: Boolean(cookieToken),
+            headerPresent: Boolean(headerToken),
+            match: Boolean(cookieToken && headerToken && cookieToken === headerToken),
+            userId: (req as any).user?.id ?? null,
+            role: (req as any).user?.role ?? null,
+            ua: req.headers["user-agent"] || null,
+          }),
+      );
       res.status(403).json({ error: "CSRF token missing or invalid" });
       return;
     }
