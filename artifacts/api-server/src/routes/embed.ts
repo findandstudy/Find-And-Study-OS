@@ -1,7 +1,7 @@
 import express, { Router, type IRouter, json } from "express";
 import crypto from "crypto";
 import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
-import { eq, ilike, sql, and, desc, inArray, isNotNull, isNull } from "drizzle-orm";
+import { eq, ilike, sql, and, or, desc, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
@@ -553,7 +553,7 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
 
   const presetFilters = (widget.presetFilters || {}) as Record<string, any>;
   const lockedFilters = (widget.lockedFilters || []) as string[];
-  const { country, city, universityType, universityId, level, language, search, feeMin, feeMax, page = "1", limit = "24" } = req.query as Record<string, string>;
+  const { country, city, universityType, universityId, level, language, field, search, feeMin, feeMax, page = "1", limit = "24" } = req.query as Record<string, string>;
 
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
@@ -576,6 +576,12 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
   applyFilter("universityId", universityId, v => conditions.push(eq(programsTable.universityId, parseInt(v, 10))));
   applyFilter("level", level, v => conditions.push(ilike(programsTable.degree, `%${v}%`)));
   applyFilter("language", language, v => conditions.push(ilike(programsTable.language, v)));
+  // Field of study supports comma-separated multi-values (e.g. "Engineering,Medicine").
+  applyFilter("field", field, v => {
+    const vals = v.split(",").map(s => s.trim()).filter(Boolean);
+    if (vals.length === 1) conditions.push(ilike(programsTable.field, vals[0]));
+    else if (vals.length > 1) conditions.push(or(...vals.map(fv => ilike(programsTable.field, fv)))!);
+  });
 
   if (feeMin) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${parseInt(feeMin, 10)}`);
   if (feeMax) conditions.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) <= ${parseInt(feeMax, 10)}`);
@@ -645,7 +651,7 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
     const userParams = req.query as Record<string, string | undefined>;
     const join = eq(programsTable.universityId, universitiesTable.id);
 
-    type FacetKey = "country" | "city" | "universityType" | "universityId" | "level" | "language" | "fee";
+    type FacetKey = "country" | "city" | "universityType" | "universityId" | "level" | "language" | "field" | "fee";
     function buildWhere(excludeKey?: FacetKey) {
       const c = [eq(programsTable.isActive, true)];
 
@@ -657,6 +663,7 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
       if (presetFilters.universityId) c.push(eq(programsTable.universityId, parseInt(String(presetFilters.universityId), 10)));
       if (presetFilters.level) c.push(ilike(programsTable.degree, `%${presetFilters.level}%`));
       if (presetFilters.language) c.push(ilike(programsTable.language, String(presetFilters.language)));
+      if (presetFilters.field) c.push(ilike(programsTable.field, String(presetFilters.field)));
 
       // Visitor selections — exclude the facet's own key so its dropdown
       // still shows every choice.
@@ -688,6 +695,11 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
         const vals = userParams.language.split(",").map(s => s.trim()).filter(Boolean);
         if (vals.length === 1) c.push(ilike(programsTable.language, vals[0]));
       }
+      if (excludeKey !== "field" && !presetFilters.field && userParams.field) {
+        const vals = userParams.field.split(",").map(s => s.trim()).filter(Boolean);
+        if (vals.length === 1) c.push(ilike(programsTable.field, vals[0]));
+        else if (vals.length > 1) c.push(or(...vals.map(fv => ilike(programsTable.field, fv)))!);
+      }
       if (excludeKey !== "fee") {
         const feeMin = userParams.feeMin ? parseInt(userParams.feeMin, 10) : NaN;
         if (Number.isFinite(feeMin) && feeMin >= 0) c.push(sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) >= ${feeMin}`);
@@ -697,13 +709,14 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
       return and(...c);
     }
 
-    const [countries, cities, universityTypes, universities, degrees, languages, feeRange] = await Promise.all([
+    const [countries, cities, universityTypes, universities, degrees, languages, fields, feeRange] = await Promise.all([
       db.selectDistinct({ country: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, join).where(and(buildWhere("country"), sql`${universitiesTable.country} IS NOT NULL`)).orderBy(universitiesTable.country),
       db.selectDistinct({ city: universitiesTable.city }).from(universitiesTable).innerJoin(programsTable, join).where(and(buildWhere("city"), sql`${universitiesTable.city} IS NOT NULL`)).orderBy(universitiesTable.city),
       db.selectDistinct({ type: universitiesTable.universityType }).from(universitiesTable).innerJoin(programsTable, join).where(and(buildWhere("universityType"), sql`${universitiesTable.universityType} IS NOT NULL`)).orderBy(universitiesTable.universityType),
       db.selectDistinct({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable).innerJoin(programsTable, join).where(buildWhere("universityId")).orderBy(universitiesTable.name),
       db.selectDistinct({ degree: programsTable.degree }).from(programsTable).innerJoin(universitiesTable, join).where(and(buildWhere("level"), sql`${programsTable.degree} IS NOT NULL`)).orderBy(programsTable.degree),
       db.selectDistinct({ language: programsTable.language }).from(programsTable).innerJoin(universitiesTable, join).where(and(buildWhere("language"), sql`${programsTable.language} IS NOT NULL`)).orderBy(programsTable.language),
+      db.selectDistinct({ field: programsTable.field }).from(programsTable).innerJoin(universitiesTable, join).where(and(buildWhere("field"), sql`${programsTable.field} IS NOT NULL AND ${programsTable.field} != ''`)).orderBy(programsTable.field),
       db.select({ min: sql<number>`MIN(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`, max: sql<number>`MAX(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))` }).from(programsTable).innerJoin(universitiesTable, join).where(and(buildWhere("fee"), sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) IS NOT NULL`)),
     ]);
 
@@ -714,6 +727,7 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
       universities: universities.map(r => ({ id: r.id, name: r.name })),
       degrees: degrees.map(r => r.degree).filter(Boolean),
       languages: languages.map(r => r.language).filter(Boolean),
+      fields: fields.map(r => r.field).filter(Boolean),
       feeRange: { min: feeRange[0]?.min ?? 0, max: feeRange[0]?.max ?? 100000 },
     });
   } catch (err: any) {
@@ -2007,7 +2021,8 @@ function pruneStaleSelections(){
     ['universityType',(filters.universityTypes||[]).reduce(function(s,v){s[v]=1;return s;},{})],
     ['universityId',(filters.universities||[]).reduce(function(s,u){s[String(u.id)]=1;return s;},{})],
     ['level',(filters.degrees||[]).reduce(function(s,v){s[v]=1;return s;},{})],
-    ['language',(filters.languages||[]).reduce(function(s,v){s[v]=1;return s;},{})]
+    ['language',(filters.languages||[]).reduce(function(s,v){s[v]=1;return s;},{})],
+    ['field',(filters.fields||[]).reduce(function(s,v){s[v]=1;return s;},{})]
   ];
   checks.forEach(function(pair){
     var k=pair[0],valid=pair[1];
@@ -2095,6 +2110,11 @@ function renderFilters(){
   if(!hidden.includes('language')&&!pf.language){
     h+='<div class="ew-filter-group"><label>Language</label><select id="ew-f-language"'+(locked.includes('language')?' disabled':'')+'><option value="">All Languages</option>';
     (filters.languages||[]).forEach(function(l){h+='<option value="'+esc(l)+'"'+(userFilters.language===l?' selected':'')+'>'+esc(l)+'</option>'});
+    h+='</select></div>';
+  }
+  if(!hidden.includes('field')&&!pf.field){
+    h+='<div class="ew-filter-group"><label>Field of study</label><select id="ew-f-field"'+(locked.includes('field')?' disabled':'')+'><option value="">All Fields</option>';
+    (filters.fields||[]).forEach(function(f){h+='<option value="'+esc(f)+'"'+(userFilters.field===f?' selected':'')+'>'+esc(f)+'</option>'});
     h+='</select></div>';
   }
 
@@ -3133,7 +3153,7 @@ function bindEvents(){
       },400);
     });
   }
-  ['country','universityType','universityId','level','language'].forEach(function(f){
+  ['country','universityType','universityId','level','language','field'].forEach(function(f){
     var sel=$('#ew-f-'+f);
     if(sel)sel.addEventListener('change',function(e){
       userFilters[f]=e.target.value;currentPage=1;loadPrograms();

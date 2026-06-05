@@ -30,7 +30,7 @@ import { ExportImportToolbar } from "@/components/admin/ExportImportToolbar";
 const BASE_URL = import.meta.env.BASE_URL || "/";
 const API_BASE = `${BASE_URL}api`.replace(/\/+/g, "/");
 
-const FILTER_KEYS = ["country", "city", "universityType", "universityId", "level", "language"];
+const FILTER_KEYS = ["country", "city", "universityType", "universityId", "level", "language", "field"];
 
 type Widget = {
   id: number;
@@ -382,6 +382,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
   const [presetUniversityId, setPresetUniversityId] = useState("");
   const [presetLevel, setPresetLevel] = useState("");
   const [presetLanguage, setPresetLanguage] = useState("");
+  const [presetField, setPresetField] = useState("");
 
   const { data: filterOptions } = useQuery({
     queryKey: ["course-finder-filters"],
@@ -392,6 +393,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       universities: { id: number; name: string }[];
       degrees: string[];
       languages: string[];
+      fields: string[];
     }>,
     staleTime: 5 * 60 * 1000,
   });
@@ -419,6 +421,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setPresetUniversityId(pf.universityId ? String(pf.universityId) : "");
       setPresetLevel(pf.level || "");
       setPresetLanguage(pf.language || "");
+      setPresetField(pf.field || "");
       setLocked(widget.lockedFilters || []);
       setHidden(widget.hiddenFilters || []);
       setDomains((widget.allowedDomains || []).join(", "));
@@ -429,7 +432,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setIsActive(widget.isActive);
     } else {
       setName(""); setSlug(""); setMode("combined");
-      setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setPresetUniversityId(""); setPresetLevel(""); setPresetLanguage("");
+      setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setPresetUniversityId(""); setPresetLevel(""); setPresetLanguage(""); setPresetField("");
       setLocked([]); setHidden([]); setDomains("");
       setPrimaryColor("#2563eb"); setButtonColor("#2563eb"); setBorderRadius("8px");
       setIsActive(true);
@@ -449,6 +452,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
     if (presetUniversityId) presetFilters.universityId = parseInt(presetUniversityId, 10);
     if (presetLevel) presetFilters.level = presetLevel;
     if (presetLanguage) presetFilters.language = presetLanguage;
+    if (presetField) presetFilters.field = presetField;
 
     const body = {
       name: name.trim(),
@@ -597,6 +601,18 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
                       <SelectItem value="__none__">All Languages</SelectItem>
                       {(filterOptions?.languages || []).map(l => (
                         <SelectItem key={l} value={l}>{l}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium">Field of study</label>
+                  <Select value={presetField || "__none__"} onValueChange={v => setPresetField(v === "__none__" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="All Fields" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">All Fields</SelectItem>
+                      {(filterOptions?.fields || []).map(f => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
