@@ -18,7 +18,7 @@ import {
   toAgentInsertValues,
   type AgentCatalog,
 } from "../lib/exportImportExcel";
-import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable } from "@workspace/db";
+import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
@@ -1443,6 +1443,35 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   res.json(agent);
 });
 
+/**
+ * Delete login users together with their agent profiles, clearing the foreign
+ * keys that would otherwise block the `users` delete. Most user references use
+ * ON DELETE SET NULL / CASCADE, but a handful do not and would throw a 23503
+ * FK violation:
+ *   - conversations.createdById, messages.senderId, broadcasts.sentById,
+ *     messageTemplates.createdById  → nullable, no ON DELETE rule → set NULL
+ *   - notes.authorId, applicationStageDocuments.uploadedBy → NOT NULL +
+ *     ON DELETE RESTRICT → reassign authorship/upload to the acting admin so
+ *     the content (notes, uploaded application documents) is preserved.
+ * Runs inside the caller's transaction so agent + user removal is atomic and a
+ * mid-way FK error can no longer leave the agent deleted while the user lingers
+ * (the partial state behind the "error but it deleted anyway" report).
+ */
+async function clearUserReferencesAndDelete(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userIds: number[],
+  actingUserId: number,
+): Promise<void> {
+  if (userIds.length === 0) return;
+  await tx.update(conversationsTable).set({ createdById: null }).where(inArray(conversationsTable.createdById, userIds));
+  await tx.update(messagesTable).set({ senderId: null }).where(inArray(messagesTable.senderId, userIds));
+  await tx.update(broadcastsTable).set({ sentById: null }).where(inArray(broadcastsTable.sentById, userIds));
+  await tx.update(messageTemplatesTable).set({ createdById: null }).where(inArray(messageTemplatesTable.createdById, userIds));
+  await tx.update(notesTable).set({ authorId: actingUserId }).where(inArray(notesTable.authorId, userIds));
+  await tx.update(applicationStageDocumentsTable).set({ uploadedBy: actingUserId }).where(inArray(applicationStageDocumentsTable.uploadedBy, userIds));
+  await tx.delete(usersTable).where(inArray(usersTable.id, userIds));
+}
+
 router.delete("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (!(await isAgentInScope(req.user!.id, req.user!.role, id))) {
@@ -1452,12 +1481,17 @@ router.delete("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (
   // Match the parent-deletes-sub-agent path (line ~325): when an agent has a
   // linked login user, remove that user too. Without this the admin "Delete
   // agent" action left an orphan `users` row with role=agent and no profile,
-  // diverging from the sub-agent delete behaviour.
-  const [agent] = await db.delete(agentsTable).where(eq(agentsTable.id, id)).returning();
-  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-  if (agent.userId) {
-    await db.delete(usersTable).where(eq(usersTable.id, agent.userId));
-  }
+  // diverging from the sub-agent delete behaviour. Wrapped in a transaction so
+  // the agent row and its user are removed atomically.
+  const deletedAgent = await db.transaction(async (tx) => {
+    const [agent] = await tx.delete(agentsTable).where(eq(agentsTable.id, id)).returning();
+    if (!agent) return null;
+    if (agent.userId) {
+      await clearUserReferencesAndDelete(tx, [agent.userId], req.user!.id);
+    }
+    return agent;
+  });
+  if (!deletedAgent) { res.status(404).json({ error: "Agent not found" }); return; }
   res.json({ success: true });
 });
 
@@ -1472,13 +1506,15 @@ router.post("/agents/bulk-delete", requireAuth, requireRole(...MANAGER_ROLES), a
     res.status(400).json({ error: "No valid IDs provided" });
     return;
   }
-  const deleted = await db.delete(agentsTable).where(inArray(agentsTable.id, numIds)).returning();
-  // Same cascade as the single-delete handler above — keep `users` and
-  // `agents` in sync so admin bulk-delete doesn't leave orphan login rows.
-  const userIdsToRemove = deleted.map(a => a.userId).filter((u): u is number => u !== null && u !== undefined);
-  if (userIdsToRemove.length > 0) {
-    await db.delete(usersTable).where(inArray(usersTable.id, userIdsToRemove));
-  }
+  const deleted = await db.transaction(async (tx) => {
+    const rows = await tx.delete(agentsTable).where(inArray(agentsTable.id, numIds)).returning();
+    // Same cascade as the single-delete handler above — keep `users` and
+    // `agents` in sync (and clear blocking FKs) so admin bulk-delete doesn't
+    // leave orphan login rows or 500 on a dependent record.
+    const userIdsToRemove = rows.map(a => a.userId).filter((u): u is number => u !== null && u !== undefined);
+    await clearUserReferencesAndDelete(tx, userIdsToRemove, req.user!.id);
+    return rows;
+  });
   res.json({ success: true, count: deleted.length });
 });
 
