@@ -622,7 +622,8 @@
     "signOut": "Se déconnecter",
     "later": "Plus tard",
     "applicationSpecificDocuments": "Documents spécifiques à la candidature",
-    "applicationSpecificDocumentsHint": "Téléchargés pour une candidature spécifique, conservés séparément des documents de profil de l'étudiant."
+    "applicationSpecificDocumentsHint": "Téléchargés pour une candidature spécifique, conservés séparément des documents de profil de l'étudiant.",
+    "preview": "Aperçu"
   },
   "seo": {
     "homeTitle": "Conseil en éducation mondiale",

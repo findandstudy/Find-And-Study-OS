@@ -622,7 +622,8 @@
     "signOut": "Cerrar sesión",
     "later": "Más tarde",
     "applicationSpecificDocuments": "Documentos específicos de la solicitud",
-    "applicationSpecificDocumentsHint": "Subidos para una solicitud específica, mantenidos separados de los documentos del perfil del estudiante."
+    "applicationSpecificDocumentsHint": "Subidos para una solicitud específica, mantenidos separados de los documentos del perfil del estudiante.",
+    "preview": "Vista previa"
   },
   "seo": {
     "homeTitle": "Consultoría de educación global",

@@ -622,7 +622,8 @@
     "signOut": "خروج",
     "later": "بعداً",
     "applicationSpecificDocuments": "مدارک مخصوص درخواست",
-    "applicationSpecificDocumentsHint": "برای یک درخواست خاص بارگذاری شده و جدا از مدارک پروفایل دانشجو نگهداری می‌شود."
+    "applicationSpecificDocumentsHint": "برای یک درخواست خاص بارگذاری شده و جدا از مدارک پروفایل دانشجو نگهداری می‌شود.",
+    "preview": "پیش‌نمایش"
   },
   "seo": {
     "homeTitle": "مشاوره آموزش جهانی",

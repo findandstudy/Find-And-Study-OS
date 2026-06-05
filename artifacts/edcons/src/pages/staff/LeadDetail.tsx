@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useDocumentPreview, getPreviewKind, type PreviewTarget } from "@/components/DocumentPreviewDialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, User, Mail, Phone, Globe, BookOpen, MapPin, MessageSquare, RefreshCw, DollarSign, CalendarClock, Clock, CheckCircle2, Plus, UserCheck2, UserPlus, Pencil, ChevronDown, X, GraduationCap, Power, Trash2, FileText, Download, Eye, Upload, Loader2 } from "lucide-react";
@@ -471,7 +472,6 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
             )}
             <LeadDocumentsTab
               docs={leadDocs}
-              onPreview={(d) => openLeadDocPreview(d)}
               firstName={lead?.firstName || ""}
               lastName={lead?.lastName || ""}
             />
@@ -1340,40 +1340,63 @@ function downloadLeadDoc(doc: any, firstName: string, lastName: string) {
   }
 }
 
-// Open a lead document inline in a new browser tab (replaces the in-app preview
-// dialog). Base64 file data is turned into a blob URL so the new tab can render
-// it directly without relying on the per-document download endpoint (which is
-// not accessible to all roles for lead-only documents).
-function openLeadDocPreview(doc: any) {
-  if (doc.fileKey) {
-    window.open(`${BASE}/api/documents/${doc.id}/download?disposition=inline`, "_blank", "noopener,noreferrer");
-    return;
-  }
-  if (doc.fileData) {
-    try {
-      const mime = doc.mimeType || "application/octet-stream";
-      const byteChars = atob(doc.fileData);
-      const bytes = new Uint8Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
-      const blob = new Blob([bytes], { type: mime });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch {
-      /* ignore malformed base64 */
-    }
-  } else if (doc.fileUrl) {
-    window.open(doc.fileUrl, "_blank", "noopener,noreferrer");
-  }
-}
-
-function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
+function LeadDocumentsTab({ docs, firstName, lastName }: {
   docs: any[];
-  onPreview: (d: any) => void;
   firstName: string;
   lastName: string;
 }) {
   const { t, lang } = useI18n();
+  const { getTriggerProps, dialog } = useDocumentPreview();
+
+  // Track every blob: URL we create so they can be revoked on unmount. We revoke
+  // only on unmount (not when `docs` changes) so a blob that is still being shown
+  // in the open modal or a freshly opened background tab is never invalidated.
+  const createdBlobUrls = useRef<string[]>([]);
+
+  // Pre-build preview targets. Lead-only documents stored as base64 are turned
+  // into blob: URLs because the per-document download endpoint is not accessible
+  // to all roles for leads (no studentId). A real href lets a middle click open
+  // the file in a background tab without navigating away from the page.
+  const previewTargets = useMemo(() => {
+    const map = new Map<number, PreviewTarget>();
+    for (const d of docs || []) {
+      const kind = getPreviewKind(d.mimeType);
+      if (d.fileKey) {
+        map.set(d.id, {
+          href: `${BASE}/api/documents/${d.id}/download?disposition=inline`,
+          downloadHref: `${BASE}/api/documents/${d.id}/download`,
+          kind,
+          name: d.name,
+        });
+      } else if (d.fileData) {
+        try {
+          const mime = d.mimeType || "application/octet-stream";
+          const byteChars = atob(d.fileData);
+          const bytes = new Uint8Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+          const blob = new Blob([bytes], { type: mime });
+          const url = URL.createObjectURL(blob);
+          createdBlobUrls.current.push(url);
+          map.set(d.id, { href: url, downloadHref: url, kind, name: d.name });
+        } catch {
+          /* ignore malformed base64 */
+        }
+      } else if (d.fileUrl) {
+        map.set(d.id, { href: d.fileUrl, downloadHref: d.fileUrl, kind, name: d.name });
+      }
+    }
+    return map;
+  }, [docs]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of createdBlobUrls.current) {
+        try { URL.revokeObjectURL(url); } catch { /* noop */ }
+      }
+      createdBlobUrls.current = [];
+    };
+  }, []);
+
   if (!docs || docs.length === 0) {
     return (
       <div className="bg-card rounded-2xl border shadow-sm p-12 text-center text-muted-foreground">
@@ -1385,6 +1408,7 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
   }
   return (
     <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
+      {dialog}
       <table className="w-full text-sm">
         <thead className="bg-secondary/50">
           <tr>
@@ -1398,6 +1422,7 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
         <tbody>
           {docs.map((doc: any) => {
             const canPreview = !!(doc.fileKey || doc.fileData || doc.fileUrl);
+            const previewTarget = previewTargets.get(doc.id);
             return (
               <tr key={doc.id} className="border-t hover:bg-primary/5 transition-colors" data-testid={`lead-doc-row-${doc.id}`}>
                 <td className="px-4 py-3 font-medium">{doc.name}</td>
@@ -1406,14 +1431,14 @@ function LeadDocumentsTab({ docs, onPreview, firstName, lastName }: {
                 <td className="px-4 py-3 text-muted-foreground">{formatDate(doc.createdAt, lang, "dateShort")}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-2">
-                    {canPreview && (
-                      <button
-                        onClick={() => onPreview(doc)}
+                    {previewTarget && (
+                      <a
+                        {...getTriggerProps(previewTarget)}
                         className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
                         data-testid={`lead-doc-preview-${doc.id}`}
                       >
                         <Eye className="w-3.5 h-3.5" /> {t("leadDetailPage.preview")}
-                      </button>
+                      </a>
                     )}
                     {canPreview && (
                       <button

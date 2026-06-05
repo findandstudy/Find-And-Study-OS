@@ -622,7 +622,8 @@
     "signOut": "साइन आउट करें",
     "later": "बाद में",
     "applicationSpecificDocuments": "आवेदन-विशिष्ट दस्तावेज़",
-    "applicationSpecificDocumentsHint": "किसी विशिष्ट आवेदन के लिए अपलोड किए गए, छात्र के प्रोफ़ाइल दस्तावेज़ों से अलग रखे गए।"
+    "applicationSpecificDocumentsHint": "किसी विशिष्ट आवेदन के लिए अपलोड किए गए, छात्र के प्रोफ़ाइल दस्तावेज़ों से अलग रखे गए।",
+    "preview": "पूर्वावलोकन"
   },
   "seo": {
     "homeTitle": "वैश्विक शिक्षा परामर्श",

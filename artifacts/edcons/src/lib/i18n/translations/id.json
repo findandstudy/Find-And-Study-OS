@@ -622,7 +622,8 @@
     "signOut": "Keluar",
     "later": "Nanti",
     "applicationSpecificDocuments": "Dokumen Khusus Aplikasi",
-    "applicationSpecificDocumentsHint": "Diunggah untuk aplikasi tertentu, disimpan terpisah dari dokumen profil siswa."
+    "applicationSpecificDocumentsHint": "Diunggah untuk aplikasi tertentu, disimpan terpisah dari dokumen profil siswa.",
+    "preview": "Pratinjau"
   },
   "seo": {
     "homeTitle": "Konsultasi Pendidikan Global",

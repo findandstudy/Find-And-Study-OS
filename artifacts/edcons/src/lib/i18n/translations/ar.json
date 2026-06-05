@@ -622,7 +622,8 @@
     "signOut": "تسجيل الخروج",
     "later": "لاحقًا",
     "applicationSpecificDocuments": "مستندات خاصة بالطلب",
-    "applicationSpecificDocumentsHint": "تم رفعها لطلب معيّن، ويتم الاحتفاظ بها منفصلة عن مستندات ملف الطالب."
+    "applicationSpecificDocumentsHint": "تم رفعها لطلب معيّن، ويتم الاحتفاظ بها منفصلة عن مستندات ملف الطالب.",
+    "preview": "معاينة"
   },
   "seo": {
     "homeTitle": "استشارات التعليم العالمي",

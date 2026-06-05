@@ -622,7 +622,8 @@
     "current": "Geçerli",
     "later": "Daha sonra",
     "applicationSpecificDocuments": "Başvuruya Özel Belgeler",
-    "applicationSpecificDocumentsHint": "Belirli bir başvuru için yüklenmiş, öğrencinin profil belgelerinden ayrı tutulan belgeler."
+    "applicationSpecificDocumentsHint": "Belirli bir başvuru için yüklenmiş, öğrencinin profil belgelerinden ayrı tutulan belgeler.",
+    "preview": "Önizleme"
   },
   "seo": {
     "homeTitle": "Küresel Eğitim Danışmanlığı",

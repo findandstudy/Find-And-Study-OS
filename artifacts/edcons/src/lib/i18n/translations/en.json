@@ -622,7 +622,8 @@
     "current": "Current",
     "later": "Later",
     "applicationSpecificDocuments": "Application-Specific Documents",
-    "applicationSpecificDocumentsHint": "Uploaded for a specific application, kept separate from the student's profile documents."
+    "applicationSpecificDocumentsHint": "Uploaded for a specific application, kept separate from the student's profile documents.",
+    "preview": "Preview"
   },
   "seo": {
     "homeTitle": "Global Education Consultancy",

@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock, Copy, Check, Eye } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/apiFetch";
+import { useDocumentPreview, getPreviewKind } from "@/components/DocumentPreviewDialog";
 import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1799,13 +1800,6 @@ const DETAIL_DOC_TYPE_LABELS: Record<string, string> = {
   diploma_recognition: "Diploma Recognition",
 };
 
-function getPreviewKind(mimeType: string | undefined | null): "image" | "pdf" | "other" {
-  if (!mimeType) return "other";
-  if (mimeType.startsWith("image/")) return "image";
-  if (mimeType === "application/pdf") return "pdf";
-  return "other";
-}
-
 function StudentDocumentsSection({ studentId, student, documents, applications, basePath, openUpload, qc }: {
   studentId: number;
   student: any;
@@ -1823,13 +1817,20 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
   const [mergingPdf, setMergingPdf] = useState(false);
   const [selectedForMerge, setSelectedForMerge] = useState<number[]>([]);
 
-  // Open the document inline in a new browser tab (replaces the in-app preview modal).
-  const openDocPreview = (d: any) => {
-    const url = (d.fileKey || d.fileData)
+  const { getTriggerProps: getPreviewTriggerProps, dialog: previewDialog } = useDocumentPreview();
+
+  // Build the in-app preview target for a document. Student documents are
+  // student-scoped, so the inline download endpoint renders them directly.
+  const previewTargetFor = (d: any) => ({
+    href: (d.fileKey || d.fileData)
       ? `${BASE_URL}/api/documents/${d.id}/download?disposition=inline`
-      : d.fileUrl;
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
-  };
+      : d.fileUrl,
+    downloadHref: (d.fileKey || d.fileData)
+      ? `${BASE_URL}/api/documents/${d.id}/download`
+      : d.fileUrl,
+    kind: getPreviewKind(d.mimeType),
+    name: d.name,
+  });
 
   const downloadDoc = (d: any) => {
     if (d.fileKey || d.fileData) {
@@ -1961,6 +1962,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
   return (
     <>
     <>
+      {previewDialog}
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <p className="text-sm text-muted-foreground">{t("common.documentsCount", { n: profileDocs.length })}</p>
         <div className="flex items-center gap-2 flex-wrap">
@@ -2038,8 +2040,8 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-3">
                       {(doc.fileKey || doc.fileData || doc.fileUrl) && getPreviewKind(doc.mimeType) !== "other" && (
-                        <button
-                          onClick={() => openDocPreview(doc)}
+                        <a
+                          {...getPreviewTriggerProps(previewTargetFor(doc))}
                           className="flex items-center gap-1.5 text-xs text-foreground/80 hover:text-primary font-medium transition-colors"
                           title="Preview"
                           aria-label={`Preview ${doc.name}`}
@@ -2047,7 +2049,7 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                         >
                           <Eye className="w-3.5 h-3.5" />
                           {t("studentDetailPage.preview")}
-                        </button>
+                        </a>
                       )}
                       {(doc.fileKey || doc.fileData) && (
                         <button
@@ -2148,8 +2150,10 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
                         </p>
                       </div>
                       {(doc.fileKey || doc.fileData || doc.fileUrl) && getPreviewKind(doc.mimeType) !== "other" && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDocPreview(doc)} title={t("studentDetailPage.preview")}>
-                          <Eye className="w-4 h-4" />
+                        <Button asChild variant="ghost" size="icon" className="h-8 w-8" title={t("studentDetailPage.preview")}>
+                          <a {...getPreviewTriggerProps(previewTargetFor(doc))} aria-label={`Preview ${doc.name}`}>
+                            <Eye className="w-4 h-4" />
+                          </a>
                         </Button>
                       )}
                       {(doc.fileKey || doc.fileData || doc.fileUrl) && (
