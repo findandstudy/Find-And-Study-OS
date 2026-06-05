@@ -16,3 +16,4 @@
 - [Public sign email verification](public-sign-email-verification.md) — signer-email 6-digit gate: bind codes to the link via hashToken in the `token` column; render verify widget in BOTH intake (self_fill) and sign (admin_driven) steps.
 - [Document preview](document-preview-newtab.md) — shared useDocumentPreview hook: left-click=in-app modal, middle-click=background tab via real <a> (window.open=foreground, fails). Lead docs need blob href; revoke only on unmount.
 - [api-server unreachable = empty lists](api-server-unreachable-empty-lists.md) — list shows 0 despite DB data + no console error = vite /api proxy 502 (api-server down); frontend renders [] not error. Restart api-server.
+- [Agent bulk Excel import vs onboarding](edcons-bulk-import-vs-onboarding.md) — bulk import inserts agent rows directly (no email/user/signing); match email exact lower() scoped to visible branches, link default branch on create.

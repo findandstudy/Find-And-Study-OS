@@ -644,6 +644,228 @@ export function formFieldColumns(): readonly ColumnSpec[] {
 
 // --- Lossless coercion (cell -> DB row) -----------------------------------
 
+// --- Agents schema --------------------------------------------------------
+
+export const AGENTS_KIND = "agents";
+
+export const AGENT_STATUSES = ["active", "inactive"] as const;
+export const AGENT_ENTITY_TYPES = ["company", "individual"] as const;
+
+// Catalog of currently-valid references sampled from the live DB so admins
+// don't have to guess numeric IDs (parent agent, contract template) or the
+// allowed contract languages when filling in the template.
+export interface AgentCatalog {
+  languages: readonly string[];
+  contractTemplates: ReadonlyArray<{ id: number; name: string; language: string | null; entityType: string | null }>;
+  parentAgents: ReadonlyArray<{ id: number; name: string; company: string | null }>;
+}
+
+export function agentColumns(catalog?: AgentCatalog): readonly ColumnSpec[] {
+  const langOptions = catalog && catalog.languages.length > 0 ? catalog.languages : undefined;
+  return [
+    { key: "firstName", header: "First name", kind: "string", required: true, width: 20 },
+    { key: "lastName", header: "Last name", kind: "string", required: true, width: 20 },
+    { key: "email", header: "Email", kind: "string", width: 28,
+      note: "Used to match existing agents on import (case-insensitive)." },
+    { key: "phone", header: "Phone", kind: "string", width: 18 },
+    { key: "status", header: "Status", kind: "enum", options: AGENT_STATUSES, width: 12,
+      note: "Blank defaults to active." },
+    { key: "entityType", header: "Entity type", kind: "enum", options: AGENT_ENTITY_TYPES, width: 14,
+      note: "Blank defaults to company." },
+    { key: "companyName", header: "Company name", kind: "string", width: 26 },
+    { key: "businessName", header: "Business name", kind: "string", width: 26 },
+    { key: "agencyCode", header: "Agency code", kind: "string", width: 16 },
+    { key: "category", header: "Category", kind: "string", width: 16 },
+    { key: "country", header: "Country", kind: "string", width: 18 },
+    { key: "state", header: "State", kind: "string", width: 16 },
+    { key: "city", header: "City", kind: "string", width: 16 },
+    { key: "address", header: "Address", kind: "string", width: 30 },
+    { key: "taxNumber", header: "Tax number", kind: "string", width: 18 },
+    { key: "preferredContractLanguage", header: "Contract language",
+      kind: langOptions ? "enum" : "string", options: langOptions, width: 16,
+      note: "Two-letter code, e.g. en, tr, fr. Blank defaults to en." },
+    { key: "commissionRate", header: "Commission rate (%)", kind: "number", width: 18 },
+    { key: "subAgentCommissionRate", header: "Sub-agent commission rate (%)", kind: "number", width: 26 },
+    { key: "hideServiceFees", header: "Hide service fees", kind: "boolean", width: 16,
+      note: "Blank defaults to FALSE." },
+    { key: "canManageStaff", header: "Can manage staff", kind: "boolean", width: 16,
+      note: "Blank defaults to TRUE." },
+    { key: "branch", header: "Branch", kind: "string", width: 18 },
+    { key: "notes", header: "Notes", kind: "string", width: 36 },
+    { key: "contractStartDate", header: "Contract start date", kind: "string", width: 18,
+      note: "Format YYYY-MM-DD." },
+    { key: "contractEndDate", header: "Contract end date", kind: "string", width: 18,
+      note: "Format YYYY-MM-DD." },
+    { key: "parentAgentId", header: "Parent agent ID", kind: "number", width: 16,
+      note: "Optional. Set to make this a sub-agent. See the 'Parent agents' sheet for IDs." },
+    { key: "assignedContractTemplateId", header: "Contract template ID", kind: "number", width: 20,
+      note: "Optional. See the 'Contract templates' sheet for IDs." },
+  ];
+}
+
+function toIsoDate(v: unknown): string | null {
+  if (v === null || v === undefined || v === "") return null;
+  const d = v instanceof Date ? v : new Date(String(v));
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+// Map a DB agent row to the flat export shape (one key per column).
+export function agentExportRows(
+  rows: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return rows.map((r) => ({
+    firstName: r.firstName,
+    lastName: r.lastName,
+    email: r.email,
+    phone: r.phone,
+    status: r.status,
+    entityType: r.entityType,
+    companyName: r.companyName,
+    businessName: r.businessName,
+    agencyCode: r.agencyCode,
+    category: r.category,
+    country: r.country,
+    state: r.state,
+    city: r.city,
+    address: r.address,
+    taxNumber: r.taxNumber,
+    preferredContractLanguage: r.preferredContractLanguage,
+    commissionRate: r.commissionRate,
+    subAgentCommissionRate: r.subAgentCommissionRate,
+    hideServiceFees: r.hideServiceFees,
+    canManageStaff: r.canManageStaff,
+    branch: r.branch,
+    notes: r.notes,
+    contractStartDate: toIsoDate(r.contractStartDate),
+    contractEndDate: toIsoDate(r.contractEndDate),
+    parentAgentId: r.parentAgentId,
+    assignedContractTemplateId: r.assignedContractTemplateId,
+  }));
+}
+
+// Read-only reference sheets bundled into the agents template/export so
+// admins can look up valid IDs and language codes. The parser ignores
+// these on re-import.
+export function buildAgentReferenceSheets(
+  catalog: AgentCatalog,
+): Array<SheetSpec<Record<string, unknown>>> {
+  const simple = (name: string, header: string, values: readonly string[]): SheetSpec<Record<string, unknown>> => ({
+    name,
+    columns: [{ key: "value", header, kind: "string", width: 40 }],
+    rows: values.length ? values.map((v) => ({ value: v })) : [{ value: "(no values yet)" }],
+  });
+
+  const templateRows: Array<Record<string, unknown>> = catalog.contractTemplates.length
+    ? catalog.contractTemplates.map((t) => ({
+        id: t.id, name: t.name, language: t.language ?? "", entityType: t.entityType ?? "",
+      }))
+    : [{ id: null, name: "(no templates yet)", language: "", entityType: "" }];
+
+  const parentRows: Array<Record<string, unknown>> = catalog.parentAgents.length
+    ? catalog.parentAgents.map((p) => ({ id: p.id, name: p.name, company: p.company ?? "" }))
+    : [{ id: null, name: "(no parent agents yet)", company: "" }];
+
+  return [
+    simple("Statuses", "Status (paste into the Status cell)", AGENT_STATUSES),
+    simple("Entity types", "Entity type (paste into the Entity type cell)", AGENT_ENTITY_TYPES),
+    simple("Languages", "Contract language code", catalog.languages),
+    {
+      name: "Contract templates",
+      columns: [
+        { key: "id", header: "ID (Contract template ID)", kind: "number", width: 22 },
+        { key: "name", header: "Template name", kind: "string", width: 40 },
+        { key: "language", header: "Language", kind: "string", width: 14 },
+        { key: "entityType", header: "Entity type", kind: "string", width: 16 },
+      ],
+      rows: templateRows,
+    },
+    {
+      name: "Parent agents",
+      columns: [
+        { key: "id", header: "ID (Parent agent ID)", kind: "number", width: 20 },
+        { key: "name", header: "Agent name", kind: "string", width: 30 },
+        { key: "company", header: "Company", kind: "string", width: 30 },
+      ],
+      rows: parentRows,
+    },
+  ];
+}
+
+// Coerce one parsed Excel row into agent insert values. Throws
+// ImportValidationError on invalid enum / number values. Does not set
+// userId, phoneE164, or embedToken — the route adds those.
+export function toAgentInsertValues(
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const str = (v: unknown): string | null => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    return s === "" ? null : s;
+  };
+  const num = (v: unknown, label: string): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(n)) throw new ImportValidationError(`Invalid number for ${label}: "${String(v)}"`);
+    return n;
+  };
+  const intId = (v: unknown, label: string): number | null => {
+    const n = num(v, label);
+    if (n === null) return null;
+    if (!Number.isInteger(n) || n <= 0) throw new ImportValidationError(`Invalid ID for ${label}: "${String(v)}"`);
+    return n;
+  };
+  const date = (v: unknown): Date | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const d = v instanceof Date ? v : new Date(String(v));
+    if (isNaN(d.getTime())) throw new ImportValidationError(`Invalid date: "${String(v)}"`);
+    return d;
+  };
+
+  const firstName = str(row.firstName);
+  const lastName = str(row.lastName);
+  if (!firstName) throw new ImportValidationError("First name is required");
+  if (!lastName) throw new ImportValidationError("Last name is required");
+
+  const statusRaw = str(row.status);
+  if (statusRaw && !(AGENT_STATUSES as readonly string[]).includes(statusRaw)) {
+    throw new ImportValidationError(`Invalid status "${statusRaw}". Allowed: ${AGENT_STATUSES.join(", ")}.`);
+  }
+  const entityRaw = str(row.entityType);
+  if (entityRaw && !(AGENT_ENTITY_TYPES as readonly string[]).includes(entityRaw)) {
+    throw new ImportValidationError(`Invalid entity type "${entityRaw}". Allowed: ${AGENT_ENTITY_TYPES.join(", ")}.`);
+  }
+
+  return {
+    firstName,
+    lastName,
+    email: str(row.email),
+    phone: str(row.phone),
+    status: statusRaw ?? "active",
+    entityType: entityRaw ?? "company",
+    companyName: str(row.companyName),
+    businessName: str(row.businessName),
+    agencyCode: str(row.agencyCode),
+    category: str(row.category),
+    country: str(row.country),
+    state: str(row.state),
+    city: str(row.city),
+    address: str(row.address),
+    taxNumber: str(row.taxNumber),
+    preferredContractLanguage: str(row.preferredContractLanguage) ?? "en",
+    commissionRate: num(row.commissionRate, "commission rate"),
+    subAgentCommissionRate: num(row.subAgentCommissionRate, "sub-agent commission rate"),
+    hideServiceFees: row.hideServiceFees === true,
+    canManageStaff: row.canManageStaff === false ? false : true,
+    branch: str(row.branch),
+    notes: str(row.notes),
+    contractStartDate: date(row.contractStartDate),
+    contractEndDate: date(row.contractEndDate),
+    parentAgentId: intId(row.parentAgentId, "parent agent ID"),
+    assignedContractTemplateId: intId(row.assignedContractTemplateId, "contract template ID"),
+  };
+}
+
 export function toEmbedInsertValues(
   row: Record<string, unknown>,
   validModes: readonly string[],

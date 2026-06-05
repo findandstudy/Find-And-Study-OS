@@ -21,6 +21,7 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
+import { ExportImportToolbar } from "@/components/admin/ExportImportToolbar";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { ColumnHeader } from "@/components/ui/column-header";
 import { useI18n } from "@/hooks/use-i18n";
@@ -1013,9 +1014,19 @@ export default function AgentsPage() {
                   </Select>
                 </div>
                 {isManager && (
-                  <Button onClick={() => openCreate(false)} className="rounded-xl gap-2">
-                    <Plus className="w-4 h-4" /> {t("staffAgents.newAgent")}
-                  </Button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <ExportImportToolbar
+                      exportPath="/api/agents/export"
+                      importPath="/api/agents/import"
+                      templatePath="/api/agents/template"
+                      downloadName="agents"
+                      selectedIds={Array.from(selectedIds)}
+                      onImported={() => { setSelectedIds(new Set()); fetchAgents(); }}
+                    />
+                    <Button onClick={() => openCreate(false)} className="rounded-xl gap-2">
+                      <Plus className="w-4 h-4" /> {t("staffAgents.newAgent")}
+                    </Button>
+                  </div>
                 )}
               </div>
               {loading ? (

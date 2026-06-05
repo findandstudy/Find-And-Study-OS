@@ -1,5 +1,23 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, json, raw } from "express";
 import crypto from "crypto";
+import {
+  emptySummary,
+  tallyResult,
+  isValidConflictStrategy,
+  ImportValidationError,
+  type ConflictStrategy,
+} from "../lib/exportImport";
+import {
+  buildWorkbookBuffer,
+  parseWorkbookBuffer,
+  XLSX_CONTENT_TYPE,
+  AGENTS_KIND,
+  agentColumns,
+  agentExportRows,
+  buildAgentReferenceSheets,
+  toAgentInsertValues,
+  type AgentCatalog,
+} from "../lib/exportImportExcel";
 import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable } from "@workspace/db";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
@@ -64,6 +82,241 @@ router.get("/agents/contract-alerts", requireAuth, requireRole(...STAFF_ROLES), 
     res.status(500).json({ error: e.message });
   }
 });
+
+// ── Excel export / import / template ─────────────────────────────────────
+// Registered before the `/agents/:id` routes so "export"/"import"/"template"
+// are never parsed as an :id. Restricted to managers — bulk creation and
+// data export are administrative operations.
+
+// `visible` is the caller's visible branch IDs (null = sees everything).
+// Parent-agent suggestions are scoped to that visibility so branch-limited
+// managers don't see cross-branch agent names/companies in the reference
+// sheet. Contract templates are org-wide config shared by all managers.
+async function loadAgentCatalog(visible: number[] | null): Promise<AgentCatalog> {
+  const parentConditions: SQL[] = [isNull(agentsTable.parentAgentId), isNull(agentsTable.deletedAt)];
+  if (visible !== null) {
+    if (visible.length === 0) parentConditions.push(sql`false`);
+    else parentConditions.push(sql`${agentsTable.id} IN (SELECT agent_id FROM agent_branches WHERE branch_id = ANY(${visible}))`);
+  }
+  const [templates, parents] = await Promise.all([
+    db.select({
+      id: contractTemplatesTable.id,
+      name: contractTemplatesTable.name,
+      language: contractTemplatesTable.language,
+      entityType: contractTemplatesTable.entityType,
+    }).from(contractTemplatesTable)
+      .where(and(isNull(contractTemplatesTable.deletedAt), eq(contractTemplatesTable.isActive, true)))
+      .orderBy(contractTemplatesTable.name),
+    db.select({
+      id: agentsTable.id,
+      firstName: agentsTable.firstName,
+      lastName: agentsTable.lastName,
+      companyName: agentsTable.companyName,
+    }).from(agentsTable)
+      .where(and(...parentConditions))
+      .orderBy(agentsTable.firstName),
+  ]);
+  const languages = Array.from(
+    new Set(templates.map(t => (t.language ?? "").trim()).filter(Boolean)),
+  ).sort();
+  return {
+    languages,
+    contractTemplates: templates,
+    parentAgents: parents.map(p => ({
+      id: p.id,
+      name: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
+      company: p.companyName,
+    })),
+  };
+}
+
+router.post("/agents/export", requireAuth, requireRole(...MANAGER_ROLES), json({ limit: "64kb" }), async (req, res): Promise<void> => {
+  const { ids } = (req.body || {}) as { ids?: unknown };
+  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+  const conditions: SQL[] = [isNull(agentsTable.deletedAt)];
+  if (visible !== null) {
+    conditions.push(visible.length === 0
+      ? sql`false`
+      : sql`${agentsTable.id} IN (SELECT agent_id FROM agent_branches WHERE branch_id = ANY(${visible}))`);
+  }
+  if (Array.isArray(ids) && ids.length > 0) {
+    const numericIds = ids.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0);
+    if (numericIds.length === 0) { res.status(400).json({ error: "ids must be a non-empty array of positive integers" }); return; }
+    conditions.push(inArray(agentsTable.id, numericIds));
+  }
+  const rows = await db.select().from(agentsTable).where(and(...conditions)).orderBy(agentsTable.firstName);
+  const catalog = await loadAgentCatalog(visible);
+  const buf = await buildWorkbookBuffer({
+    sheets: [
+      { name: "Agents", columns: agentColumns(catalog), rows: agentExportRows(rows as Array<Record<string, unknown>>) },
+      ...buildAgentReferenceSheets(catalog),
+    ],
+    meta: { kind: AGENTS_KIND, version: "1", exportedAt: new Date().toISOString() },
+  });
+  await logAudit(req.user!.id, "export_agents", "agent", undefined, { count: rows.length }, req.ip);
+  res.setHeader("Content-Type", XLSX_CONTENT_TYPE);
+  res.setHeader("Content-Disposition", `attachment; filename="agents-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.send(buf);
+});
+
+router.get("/agents/template", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+  const catalog = await loadAgentCatalog(visible);
+  const exampleRows = [
+    {
+      firstName: "EXAMPLE — delete this row",
+      lastName: "Agent",
+      email: "agent@example.com",
+      phone: "+15551234567",
+      status: "active",
+      entityType: "company",
+      companyName: "Example Agency Ltd",
+      country: "Turkey",
+      city: "Istanbul",
+      preferredContractLanguage: catalog.languages[0] ?? "en",
+      commissionRate: 10,
+      hideServiceFees: false,
+      canManageStaff: true,
+    },
+  ];
+  const buf = await buildWorkbookBuffer({
+    sheets: [
+      { name: "Agents", columns: agentColumns(catalog), rows: exampleRows as Array<Record<string, unknown>> },
+      ...buildAgentReferenceSheets(catalog),
+    ],
+    meta: { kind: AGENTS_KIND, version: "1", exportedAt: new Date().toISOString() },
+  });
+  res.setHeader("Content-Type", XLSX_CONTENT_TYPE);
+  res.setHeader("Content-Disposition", `attachment; filename="agents-template.xlsx"`);
+  res.send(buf);
+});
+
+router.post(
+  "/agents/import",
+  requireAuth,
+  requireRole(...MANAGER_ROLES),
+  raw({ type: XLSX_CONTENT_TYPE, limit: "2mb" }),
+  async (req, res): Promise<void> => {
+    const conflict: ConflictStrategy = isValidConflictStrategy(req.query.conflict) ? req.query.conflict : "skip";
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({ error: "Upload an .xlsx file with Content-Type " + XLSX_CONTENT_TYPE });
+      return;
+    }
+    const columns = agentColumns();
+    let parsed;
+    try {
+      parsed = await parseWorkbookBuffer(req.body, { expectedKind: AGENTS_KIND }, { Agents: columns });
+    } catch (err) {
+      const e = err as ImportValidationError;
+      res.status(e.status || 400).json({ error: e.message });
+      return;
+    }
+    const rawItems = parsed.sheets.get("Agents")?.rows ?? [];
+    const summary = emptySummary(rawItems.length);
+
+    // Caller's visible branches (null = super_admin, sees all). Used to (a)
+    // restrict which existing agents an import may match/overwrite, and (b)
+    // assign a default branch link so created agents appear in scoped lists —
+    // mirroring POST /agents.
+    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    const defaultBranchIds: number[] = visible && visible.length > 0 ? [visible[0]] : [];
+    const scopeSql = visible !== null
+      ? (visible.length === 0
+          ? sql`false`
+          : sql`${agentsTable.id} IN (SELECT agent_id FROM agent_branches WHERE branch_id = ANY(${visible}))`)
+      : null;
+
+    async function linkDefaultBranches(agentId: number): Promise<void> {
+      if (defaultBranchIds.length === 0) return;
+      await db.insert(agentBranchesTable)
+        .values(defaultBranchIds.map(bid => ({ agentId, branchId: bid })))
+        .onConflictDoNothing();
+    }
+
+    for (let i = 0; i < rawItems.length; i++) {
+      const item = rawItems[i];
+      // Surface a human-friendly identifier in the per-row result.
+      const label = typeof item.email === "string" && item.email.trim()
+        ? item.email.trim()
+        : `${typeof item.firstName === "string" ? item.firstName : ""} ${typeof item.lastName === "string" ? item.lastName : ""}`.trim() || null;
+      try {
+        const values = toAgentInsertValues(item);
+
+        // Validate optional foreign keys so we never persist dangling refs.
+        // Parent agent must be within the caller's scope.
+        if (values.parentAgentId) {
+          if (!(await isAgentInScope(req.user!.id, req.user!.role, values.parentAgentId as number))) {
+            throw new Error(`Parent agent ID ${values.parentAgentId} not found or out of scope`);
+          }
+        }
+        // Contract template must exist, be active and not deleted (matches the
+        // reference sheet shown in the template/export workbook).
+        if (values.assignedContractTemplateId) {
+          const [tpl] = await db.select({ id: contractTemplatesTable.id }).from(contractTemplatesTable)
+            .where(and(
+              eq(contractTemplatesTable.id, values.assignedContractTemplateId as number),
+              eq(contractTemplatesTable.isActive, true),
+              isNull(contractTemplatesTable.deletedAt),
+            ));
+          if (!tpl) throw new Error(`Contract template ID ${values.assignedContractTemplateId} not found, inactive, or deleted`);
+        }
+
+        const insertValues: any = {
+          ...values,
+          phoneE164: toE164((values.phone as string | null) ?? null),
+          embedToken: crypto.randomUUID(),
+        };
+
+        const email = values.email as string | null;
+        // Match existing agents by EXACT case-insensitive email, restricted to
+        // the caller's visible branches. Exact equality (not ILIKE) prevents
+        // wildcard characters in the cell from matching unintended rows. Rows
+        // without an email can never conflict, so they are always created.
+        const matchConditions: SQL[] = [
+          sql`lower(${agentsTable.email}) = lower(${email})`,
+          isNull(agentsTable.deletedAt),
+        ];
+        if (scopeSql) matchConditions.push(scopeSql);
+        const existing = email
+          ? (await db.select().from(agentsTable).where(and(...matchConditions)).orderBy(agentsTable.id))[0]
+          : undefined;
+
+        if (existing) {
+          if (conflict === "skip") {
+            tallyResult(summary, { index: i, slug: label, status: "skipped" });
+            continue;
+          }
+          if (conflict === "overwrite") {
+            const { embedToken, ...updateValues } = insertValues;
+            await db.update(agentsTable).set(updateValues).where(eq(agentsTable.id, existing.id));
+            await linkDefaultBranches(existing.id);
+            tallyResult(summary, { index: i, slug: label, status: "updated" });
+            continue;
+          }
+          // "rename" → import as a new record (duplicate email allowed; the
+          // schema does not enforce email uniqueness).
+          const [created] = await db.insert(agentsTable).values(insertValues).returning({ id: agentsTable.id });
+          await linkDefaultBranches(created.id);
+          tallyResult(summary, { index: i, slug: label, status: "renamed" });
+          continue;
+        }
+
+        const [created] = await db.insert(agentsTable).values(insertValues).returning({ id: agentsTable.id });
+        await linkDefaultBranches(created.id);
+        tallyResult(summary, { index: i, slug: label, status: "created" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        tallyResult(summary, { index: i, slug: label, status: "error", error: msg });
+      }
+    }
+
+    await logAudit(req.user!.id, "import_agents", "agent", undefined, {
+      total: summary.total, created: summary.created, updated: summary.updated,
+      renamed: summary.renamed, skipped: summary.skipped, errors: summary.errors, conflict,
+    }, req.ip);
+    res.json(summary);
+  },
+);
 
 router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
