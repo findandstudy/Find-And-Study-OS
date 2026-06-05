@@ -400,10 +400,15 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
   error: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [drawing, setDrawing] = useState(false);
   const [hasInk, setHasInk] = useState(false);
+  const [mode, setMode] = useState<"draw" | "upload">("draw");
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+  const [uploadErr, setUploadErr] = useState("");
 
   useEffect(() => {
+    if (mode !== "draw") return;
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext("2d"); if (!ctx) return;
     const ratio = window.devicePixelRatio || 1;
@@ -414,7 +419,8 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.strokeStyle = "#0f172a";
-  }, []);
+    setHasInk(false);
+  }, [mode]);
 
   function pos(e: React.PointerEvent) {
     const c = canvasRef.current!;
@@ -439,9 +445,59 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
     ctx.clearRect(0, 0, c.width, c.height);
     setHasInk(false);
   }
+  function handleFile(file: File | undefined | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setUploadErr("Lütfen bir resim dosyası seçin (PNG, JPG)."); return; }
+    if (file.size > 5 * 1024 * 1024) { setUploadErr("Dosya boyutu 5MB'tan küçük olmalı."); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        // Bound BOTH dimensions and keep the encoded data URL safely under the
+        // backend's 2,000,000-char cap (else submit fails with 413). Re-encode
+        // at a smaller scale if a tall/high-entropy image is still too large.
+        const LIMIT = 1_900_000;
+        const encode = (s: number): string | null => {
+          const w = Math.max(1, Math.round(img.width * s));
+          const h = Math.max(1, Math.round(img.height * s));
+          const cv = document.createElement("canvas");
+          cv.width = w; cv.height = h;
+          const ctx = cv.getContext("2d");
+          if (!ctx) return null;
+          ctx.drawImage(img, 0, 0, w, h);
+          return cv.toDataURL("image/png");
+        };
+        let scale = Math.min(1, 600 / img.width, 300 / img.height);
+        let url = encode(scale);
+        for (let i = 0; i < 5 && url && url.length > LIMIT; i++) {
+          scale *= 0.7;
+          url = encode(scale);
+        }
+        if (!url) { setUploadErr("Resim işlenemedi."); return; }
+        if (url.length > LIMIT) { setUploadErr("İmza görseli çok büyük, lütfen daha sade bir görsel deneyin."); return; }
+        setUploadedUrl(url);
+        setUploadErr("");
+      };
+      img.onerror = () => setUploadErr("Resim yüklenemedi, lütfen başka bir dosya deneyin.");
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => setUploadErr("Dosya okunamadı.");
+    reader.readAsDataURL(file);
+  }
+  function clearUpload() {
+    setUploadedUrl(null);
+    setUploadErr("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+  const hasSignature = mode === "draw" ? hasInk : !!uploadedUrl;
   function submit() {
-    if (!hasInk) return;
-    onSubmit(canvasRef.current!.toDataURL("image/png"));
+    if (mode === "draw") {
+      if (!hasInk) return;
+      onSubmit(canvasRef.current!.toDataURL("image/png"));
+    } else {
+      if (!uploadedUrl) return;
+      onSubmit(uploadedUrl);
+    }
   }
 
   return (
@@ -451,14 +507,49 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
         <Input value={signerName} onChange={e => onChangeName(e.target.value)} />
       </div>
       <div>
-        <Label>İmzanız *</Label>
-        <div className="border rounded-lg bg-white relative" style={{ height: 200 }}>
-          <canvas ref={canvasRef} className="w-full h-full touch-none rounded-lg"
-            onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} />
-          <button type="button" onClick={clear} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
-            <Eraser className="w-3 h-3" /> Temizle
-          </button>
+        <div className="flex items-center justify-between mb-1">
+          <Label>İmzanız *</Label>
+          <div className="inline-flex rounded-lg border p-0.5 bg-muted/40">
+            <button type="button" onClick={() => { setMode("draw"); setUploadErr(""); }}
+              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${mode === "draw" ? "bg-white shadow-sm font-medium" : "text-muted-foreground"}`}>
+              Çiz
+            </button>
+            <button type="button" onClick={() => setMode("upload")}
+              className={`text-xs px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${mode === "upload" ? "bg-white shadow-sm font-medium" : "text-muted-foreground"}`}>
+              <Upload className="w-3 h-3" /> Yükle
+            </button>
+          </div>
         </div>
+        {mode === "draw" ? (
+          <div className="border rounded-lg bg-white relative" style={{ height: 200 }}>
+            <canvas ref={canvasRef} className="w-full h-full touch-none rounded-lg"
+              onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} />
+            <button type="button" onClick={clear} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
+              <Eraser className="w-3 h-3" /> Temizle
+            </button>
+          </div>
+        ) : (
+          <div className="border rounded-lg bg-white relative flex items-center justify-center" style={{ height: 200 }}>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+              onChange={e => handleFile(e.target.files?.[0])} />
+            {uploadedUrl ? (
+              <>
+                <img src={uploadedUrl} alt="İmza" className="max-h-full max-w-full object-contain p-2" />
+                <button type="button" onClick={clearUpload} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
+                  <X className="w-3 h-3" /> Kaldır
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                className="flex flex-col items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Upload className="w-6 h-6" />
+                <span>İmza görselini yüklemek için tıklayın</span>
+                <span className="text-xs">PNG veya JPG, en fazla 5MB</span>
+              </button>
+            )}
+          </div>
+        )}
+        {uploadErr && <p className="text-xs text-destructive mt-1">{uploadErr}</p>}
       </div>
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" />
@@ -471,7 +562,7 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
       )}
       <div className="flex justify-between">
         <Button variant="outline" onClick={onCancel}>Geri</Button>
-        <Button onClick={submit} disabled={!hasInk || !confirmed || !signerName.trim() || submitting}>
+        <Button onClick={submit} disabled={!hasSignature || !confirmed || !signerName.trim() || submitting}>
           {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileSignature className="w-4 h-4 mr-2" />}
           İmzala ve gönder
         </Button>
