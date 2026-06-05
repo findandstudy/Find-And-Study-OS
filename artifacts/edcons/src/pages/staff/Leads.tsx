@@ -1233,7 +1233,7 @@ export default function LeadsPage() {
 
   // Persist the user's "Assigned to" choice locally (per user), like column prefs.
   const [persistedAssignment, setPersistedAssignment] = usePersistedFilterValue(
-    "leads-table", "assignment", DEFAULT_LEAD_FILTERS.assignment, user?.id,
+    "leads-table", "assignment_v2", DEFAULT_LEAD_FILTERS.assignment, user?.id,
   );
   useEffect(() => {
     setFilters(f => f.assignment === persistedAssignment ? f : { ...f, assignment: persistedAssignment });

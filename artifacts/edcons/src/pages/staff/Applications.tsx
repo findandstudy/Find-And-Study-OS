@@ -1394,17 +1394,23 @@ export default function ApplicationsPage() {
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
   // Persist the user's "Assigned to" choice locally (per user), like column prefs.
   const [persistedAssignedTo, setPersistedAssignedTo] = usePersistedFilterValue(
-    "applications-table", "assignedTo", DEFAULT_FILTERS.assignedTo, user?.id,
+    "applications-table", "assignedTo_v2", canViewOthers ? "all" : DEFAULT_FILTERS.assignedTo, user?.id,
   );
   const [filters, setFilters] = useState<AppFilters>({ ...DEFAULT_FILTERS, assignedTo: persistedAssignedTo });
   // Restore saved value into filters once auth (and thus the per-user key) resolves.
   useEffect(() => {
     setFilters(f => f.assignedTo === persistedAssignedTo ? f : { ...f, assignedTo: persistedAssignedTo });
   }, [persistedAssignedTo]);
-  // Persist whenever the user changes the choice.
+  // Persist whenever the user changes the choice. Use a ref for the setter so this
+  // only fires on an actual assignedTo change — depending on setPersistedAssignedTo
+  // (whose identity changes when the userId-scoped key resolves) would re-fire on
+  // key change and clobber the freshly-restored value with stale pre-auth state.
+  const persistAssignedToRef = useRef(setPersistedAssignedTo);
+  persistAssignedToRef.current = setPersistedAssignedTo;
   useEffect(() => {
-    setPersistedAssignedTo(filters.assignedTo);
-  }, [filters.assignedTo, setPersistedAssignedTo]);
+    persistAssignedToRef.current(filters.assignedTo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.assignedTo]);
   const [colFilters, setColFilters] = useState({ student: "", program: "", level: "all", intake: "" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "date", dir: "desc" });

@@ -2122,7 +2122,13 @@ export default function StudentsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
-  const [filters, setFilters] = useState<StuFilters>({ ...DEFAULT_STU_FILTERS });
+  const [filters, setFilters] = useState<StuFilters>(() => ({ ...DEFAULT_STU_FILTERS, assignment: canViewOthers ? "all" : DEFAULT_STU_FILTERS.assignment }));
+  const stuAssignInitRef = useRef(false);
+  useEffect(() => {
+    if (!user || stuAssignInitRef.current) return;
+    stuAssignInitRef.current = true;
+    if (canViewOthers) setFilters(f => (f.assignment === DEFAULT_STU_FILTERS.assignment ? { ...f, assignment: "all" } : f));
+  }, [user, canViewOthers]);
   const [colFilters, setColFilters] = useState({ name: "", email: "", passport: "" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
