@@ -89,16 +89,83 @@ function autoFromAgent(agent: any | null): Record<string, string> {
   };
 }
 
+/**
+ * Default values for the "Agency Information" intake step, derived from the
+ * agent record the admin filled in at agent creation. Keyed by the intake field
+ * keys our templates use (plus common aliases) so the signing UI can
+ * pre-populate the form. The agent can edit these; their saved edits become
+ * intakeData and override the agent record everywhere (see buildAgentContext).
+ * Empty values are omitted so they never clobber a saved answer on the client.
+ */
+export function agentIntakeDefaults(agent: any | null): Record<string, string> {
+  if (!agent) return {};
+  const fullName = [agent.firstName, agent.lastName].filter(Boolean).join(" ").trim();
+  const company = agent.businessName || agent.companyName || "";
+  const tax = agent.taxNumber || "";
+  const address = agent.address || "";
+  const out: Record<string, string> = {
+    fullName, fullname: fullName, contactName: fullName, signerName: fullName,
+    companyName: company, company, tradeName: company, legalName: company, agencyName: company,
+    taxNumber: tax, taxNo: tax, taxId: tax,
+    address,
+  };
+  for (const k of Object.keys(out)) if (!out[k]) delete out[k];
+  return out;
+}
+
 export function buildAgentContext(agent: any | null, intake: Record<string, any> | null, contract: { date?: string; signerEmail?: string; signerName?: string; number?: string } = {}): Ctx {
   const dateStr = contract.date || new Date().toISOString().slice(0, 10);
   const yearStr = String(new Date(dateStr).getUTCFullYear());
 
+  // Bridge the signer's camelCase intake answers onto the canonical snake_case
+  // template variables. Intake form keys are camelCase (fullName, companyName,
+  // taxNumber) while standard template variables are snake_case, so without this
+  // bridge name/company/tax would keep showing the admin-entered agent record.
+  // (`address` already collides by name and reflects via the raw intake spread.)
+  //
+  // Guards keep this strictly additive and safe for public/admin templates:
+  //   - We only fill a canonical key when the signer did NOT already supply that
+  //     exact snake_case key in intake (raw spread handles those, and distinct
+  //     `agency_name` vs `agency_legal_name` values are preserved as-is).
+  //   - `signer_name` is intentionally left to `contract.signerName` (the name
+  //     captured at the signature step) and never overwritten from intake.
+  //   - Empty answers are skipped so they fall back to the agent record.
+  const intakeObj = (intake || {}) as Record<string, any>;
+  const val = (k: string): string => {
+    const v = intakeObj[k];
+    return typeof v === "string" ? v.trim() : "";
+  };
+  const firstVal = (...keys: string[]): string => {
+    for (const k of keys) { const v = val(k); if (v) return v; }
+    return "";
+  };
+  const intakeCanonical: Record<string, string> = {};
+  if (!val("contact_person_name")) {
+    const inName = firstVal("fullName", "fullname", "contactName", "signerName");
+    if (inName) {
+      intakeCanonical.contact_person_name = inName;
+      const parts = inName.split(/\s+/);
+      if (!val("contact_person_first_name")) intakeCanonical.contact_person_first_name = parts[0] || "";
+      if (!val("contact_person_last_name")) intakeCanonical.contact_person_last_name = parts.slice(1).join(" ");
+    }
+  }
+  const inCompany = firstVal("companyName", "company", "tradeName", "legalName", "agencyName");
+  if (inCompany) {
+    if (!val("agency_name")) intakeCanonical.agency_name = inCompany;
+    if (!val("agency_legal_name")) intakeCanonical.agency_legal_name = inCompany;
+  }
+  if (!val("tax_number")) {
+    const inTax = firstVal("taxNumber", "taxNo", "taxId");
+    if (inTax) intakeCanonical.tax_number = inTax;
+  }
+
   // Auto-mapped standard template variables (snake_case). Order of precedence
   // for unqualified placeholders such as `{{agency_name}}`:
-  //   1. intake (highest — explicit value entered by signer)
-  //   2. autoFromAgent (system-known agent fields)
-  //   3. contract metadata (sign_date / contract_number)
-  // Achieved by spreading intake LAST so it wins on key collisions.
+  //   1. raw intake keys (signer's explicit snake_case answer)
+  //   2. intake canonical bridge (camelCase form answers, only where 1 is empty)
+  //   3. autoFromAgent (system-known agent fields)
+  //   4. contract metadata (sign_date / contract_number)
+  // Achieved by spreading intake (then its canonical bridge) LAST so they win.
   const auto = {
     ...autoFromAgent(agent),
     contract_number: contract.number || "",
@@ -111,6 +178,7 @@ export function buildAgentContext(agent: any | null, intake: Record<string, any>
     signature: "",
     main_agency_signature: "",
     ...(intake || {}),
+    ...intakeCanonical,
   };
 
   return {

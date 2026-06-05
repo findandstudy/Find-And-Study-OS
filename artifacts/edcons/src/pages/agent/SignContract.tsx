@@ -30,6 +30,7 @@ interface SessionData {
   signerName: string | null;
   mode?: string;
   intakeData?: Record<string, string> | null;
+  intakeDefaults?: Record<string, string> | null;
   template: {
     id: number;
     name: string;
@@ -133,8 +134,9 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
         setSignerName(d.signerName || "");
         if (initial) {
           const schema = (isOnboarding && d.template?.intakeSchema) || [];
-          // Seed intake answers: existing data, then locked email + year defaults.
-          const seed: Record<string, string> = { ...(d.intakeData || {}) };
+          // Seed intake answers: agent-record defaults first, then the agent's
+          // own saved answers (their last edit wins), then locked email + year.
+          const seed: Record<string, string> = { ...(d.intakeDefaults || {}), ...(d.intakeData || {}) };
           for (const f of schema) {
             if (isEmailLikeField(f)) seed[f.key] = d.signerEmail || seed[f.key] || "";
             else if (isYearLikeField(f) && !seed[f.key]) seed[f.key] = CURRENT_YEAR;

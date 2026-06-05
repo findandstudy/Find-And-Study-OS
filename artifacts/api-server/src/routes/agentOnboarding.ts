@@ -9,6 +9,7 @@ import { writeAudit } from "../lib/auditLog";
 import { sendEmail, buildContractSignRequestEmail, buildAgentOnboardingEmail, getAppBaseUrl } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
 import { finalizeSign, ensureSignedContractPdf } from "../lib/signContract";
+import { agentIntakeDefaults } from "../lib/contractRenderer";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
@@ -474,6 +475,9 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
       signerName: session.signerName,
       mode: session.mode,
       intakeData: session.intakeData || null,
+      // Defaults from the agent record so the intake form opens pre-filled. The
+      // client seeds each field as: saved intake answer ?? agent default.
+      intakeDefaults: agentIntakeDefaults(agent),
       template: template ? {
         id: template.id,
         name: template.name,
