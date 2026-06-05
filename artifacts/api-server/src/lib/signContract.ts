@@ -27,6 +27,35 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
+// Serialize all headless-Chromium PDF renders across the instance. Chromium is
+// memory-heavy; two or more concurrent renders multiply RSS and were OOM-killing
+// the resource-constrained autoscale instance mid-request. A crashed process
+// makes the edge proxy return its own opaque "403 Forbidden" HTML page instead
+// of completing the request. This chain guarantees at most ONE render runs at a
+// time, keeping peak memory bounded to a single browser instance.
+let renderChain: Promise<unknown> = Promise.resolve();
+function withRenderLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = renderChain.then(fn, fn);
+  // Keep the chain alive regardless of outcome, without leaking rejections.
+  renderChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+/**
+ * Fire-and-forget pre-warm of a signed contract's PDF. Called right after a
+ * successful sign so the heavy headless-Chromium render happens OFF the
+ * user-facing request path: by the time the agent opens/downloads the contract
+ * the PDF is already cached, so the download returns instantly instead of
+ * blocking ~15s on an inline render that can crash the autoscale instance and
+ * surface as an opaque "403 Forbidden". Idempotent and error-safe — never
+ * throws into its caller.
+ */
+export function schedulePdfRender(signedContractId: number): void {
+  void ensureSignedContractPdf(signedContractId).catch((err) => {
+    console.error(`[schedulePdfRender] background render failed for signed_contract ${signedContractId}:`, err);
+  });
+}
+
 export type FinalizeSignResult =
   | { ok: true; signedContractId: number }
   | { ok: false; status: number; error: string };
@@ -151,6 +180,13 @@ export async function finalizeSign(opts: {
     ipAddress: opts.signerIp,
   });
 
+  // Pre-warm the signed PDF off the request path. Rendering it here (after the
+  // status flip has already committed) means the agent's subsequent open/download
+  // hits a cached PDF instead of triggering a ~15s inline headless-Chromium
+  // render — the inline render is what crashes the autoscale instance and
+  // surfaces to the agent as an opaque edge-proxy "403 Forbidden".
+  schedulePdfRender(signed.id);
+
   return { ok: true, signedContractId: signed.id };
 }
 
@@ -224,39 +260,50 @@ export async function ensureSignedContractPdf(
   const placeholder = SIG_PLACEHOLDER[template.language] || SIG_PLACEHOLDER.en;
   const renderedHtml = cleanupSignatureImages(renderTemplate(template.bodyHtml, ctx), placeholder);
 
-  const built = await withTimeout(
-    buildSignedPdf({
-      templateName: template.name,
-      bodyHtml: renderedHtml,
-      signerEmail: row.signerEmail,
-      signerName: row.signerName,
-      signerIp: row.signerIp,
-      signerUserAgent: row.signerUserAgent,
-      signedAt,
-    }),
-    30_000,
-    "Contract PDF render",
-  );
-
-  const pdfObjectKey = await objectStorage.uploadBuffer({
-    subdir: "signed-contracts",
-    filename: `contract-${row.signingSessionId}.pdf`,
-    buffer: Buffer.from(built.pdfBytes),
-    contentType: "application/pdf",
-  });
-  // Compare-and-set: only the first concurrent generator wins. If a parallel
-  // request already filled pdfObjectKey, this update affects 0 rows; we then
-  // return the winner's key and discard our freshly uploaded duplicate object.
-  const updated = await db.update(signedContractsTable)
-    .set({ pdfObjectKey, evidenceHash: built.evidenceHash })
-    .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.pdfObjectKey)))
-    .returning({ id: signedContractsTable.id });
-  if (updated.length === 0) {
-    const [fresh] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, row.id));
-    if (fresh?.pdfObjectKey && fresh.evidenceHash) {
-      console.warn(`[ensureSignedContractPdf] race for signed_contract ${row.id}; discarding duplicate object ${pdfObjectKey}`);
-      return { pdfObjectKey: fresh.pdfObjectKey, evidenceHash: fresh.evidenceHash };
+  // Serialize the heavy render: only one headless Chromium runs at a time across
+  // the instance (see withRenderLock). The lock also lets a concurrent caller —
+  // e.g. the post-sign pre-warm racing the agent's download — skip the work once
+  // the winner has finished, by re-checking the stored key inside the lock.
+  return withRenderLock(async () => {
+    const [latest] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, row.id));
+    if (latest?.pdfObjectKey && latest.evidenceHash) {
+      return { pdfObjectKey: latest.pdfObjectKey, evidenceHash: latest.evidenceHash };
     }
-  }
-  return { pdfObjectKey, evidenceHash: built.evidenceHash };
+
+    const built = await withTimeout(
+      buildSignedPdf({
+        templateName: template.name,
+        bodyHtml: renderedHtml,
+        signerEmail: row.signerEmail,
+        signerName: row.signerName,
+        signerIp: row.signerIp,
+        signerUserAgent: row.signerUserAgent,
+        signedAt,
+      }),
+      30_000,
+      "Contract PDF render",
+    );
+
+    const pdfObjectKey = await objectStorage.uploadBuffer({
+      subdir: "signed-contracts",
+      filename: `contract-${row.signingSessionId}.pdf`,
+      buffer: Buffer.from(built.pdfBytes),
+      contentType: "application/pdf",
+    });
+    // Compare-and-set: only the first concurrent generator wins. If a parallel
+    // request already filled pdfObjectKey, this update affects 0 rows; we then
+    // return the winner's key and discard our freshly uploaded duplicate object.
+    const updated = await db.update(signedContractsTable)
+      .set({ pdfObjectKey, evidenceHash: built.evidenceHash })
+      .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.pdfObjectKey)))
+      .returning({ id: signedContractsTable.id });
+    if (updated.length === 0) {
+      const [fresh] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, row.id));
+      if (fresh?.pdfObjectKey && fresh.evidenceHash) {
+        console.warn(`[ensureSignedContractPdf] race for signed_contract ${row.id}; discarding duplicate object ${pdfObjectKey}`);
+        return { pdfObjectKey: fresh.pdfObjectKey, evidenceHash: fresh.evidenceHash };
+      }
+    }
+    return { pdfObjectKey, evidenceHash: built.evidenceHash };
+  });
 }
