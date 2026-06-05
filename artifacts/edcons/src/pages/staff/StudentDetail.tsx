@@ -315,17 +315,24 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const [appProgramId, setAppProgramId] = useState("");
   const [appIntake, setAppIntake] = useState("");
   const [appSubmitting, setAppSubmitting] = useState(false);
+  const [deletingAppId, setDeletingAppId] = useState<number | null>(null);
+  const canDeleteApplication = !!isAdmin || hasPermission("applications.delete");
 
-  const { data: countriesList } = useQuery({
-    queryKey: ["app-countries"],
-    queryFn: () => customFetch("/api/universities/countries") as Promise<string[]>,
+  // Source the New Application country + university lists from the Course Finder
+  // filters endpoint so they only show destinations that actually have active
+  // programs — matching the Course Finder filter exactly (no empty countries
+  // like Australia/France that have a university record but no active programs).
+  const { data: appFiltersData } = useQuery({
+    queryKey: ["app-filters"],
+    queryFn: () => customFetch("/api/course-finder/filters") as Promise<{ countries: string[] }>,
     staleTime: 10 * 60 * 1000,
     enabled: showNewApp,
   });
+  const countriesList = appFiltersData?.countries;
 
   const { data: universitiesData } = useQuery({
     queryKey: ["app-universities", appCountry],
-    queryFn: () => customFetch(`/api/universities?country=${encodeURIComponent(appCountry)}&limit=100`) as Promise<any>,
+    queryFn: () => customFetch(`/api/course-finder/filters?country=${encodeURIComponent(appCountry)}`) as Promise<{ universities: { id: number; name: string }[] }>,
     staleTime: 5 * 60 * 1000,
     enabled: showNewApp && !!appCountry,
   });
@@ -338,7 +345,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   });
 
   const filteredUniversities: any[] = useMemo(() => {
-    return universitiesData?.data || [];
+    return universitiesData?.universities || [];
   }, [universitiesData]);
 
   const filteredPrograms: any[] = useMemo(() => {
@@ -378,6 +385,15 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       return appLevel === selectedLevel;
     });
   }, [appProgramId, filteredPrograms, applications]);
+
+  const stageSummary = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const a of (applications as any[])) {
+      const s = a.stage || "unknown";
+      counts[s] = (counts[s] || 0) + 1;
+    }
+    return Object.entries(counts);
+  }, [applications]);
 
   useEffect(() => { setAppUniversityId(""); setAppProgramId(""); setAppIntake(""); }, [appCountry]);
   useEffect(() => { setAppProgramId(""); setAppIntake(""); }, [appUniversityId]);
@@ -439,6 +455,25 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       setAppSubmitting(false);
     }
   }
+  async function handleDeleteApplication(app: any) {
+    const label = app.universityName ? `\n\n${app.universityName}${app.programName ? ` \u2013 ${app.programName}` : ""}` : "";
+    if (!window.confirm(`Delete this application?${label}\n\nThis action will be recorded in the audit log.`)) return;
+    setDeletingAppId(app.id);
+    try {
+      await customFetch(`/api/applications/${app.id}`, { method: "DELETE" });
+      toast({ title: "Application deleted" });
+      await qc.refetchQueries({ queryKey: ["/api/applications"] });
+    } catch (err: any) {
+      toast({
+        title: "Failed to delete",
+        description: err?.data?.error || err?.message || "Could not delete application",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingAppId(null);
+    }
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -987,53 +1022,88 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               </div>
             )}
 
-            <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
-              {applications.length === 0 ? (
-                <div className="p-12 text-center text-muted-foreground">
-                  <GraduationCap className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p>No applications yet.</p>
+            {applications.length === 0 ? (
+              <div className="bg-card rounded-2xl border shadow-sm">
+                <div className="px-6 py-14 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <GraduationCap className="w-7 h-7 text-primary" />
+                  </div>
+                  <p className="font-medium text-foreground">No applications yet</p>
+                  <p className="text-sm text-muted-foreground mt-1">Create the first application for this student to get started.</p>
+                  <Button size="sm" className="mt-5" onClick={() => setShowNewApp(true)}>
+                    <Plus className="w-4 h-4 mr-1" />
+                    New Application
+                  </Button>
                 </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-secondary/50">
-                    <tr>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground">University</th>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground">Program</th>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground">Stage</th>
-                      <th className="text-left px-4 py-3 font-semibold text-foreground">Created</th>
-                      <th className="px-4 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {applications.map((app: any) => (
-                      <tr key={app.id} className="border-t hover:bg-primary/5 transition-colors">
-                        <td className="px-4 py-3 font-medium">{app.universityName ?? app.universityId ?? "\u2014"}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{app.programName ?? app.programId ?? "\u2014"}</td>
-                        <td className="px-4 py-3">
-                          <Badge
-                            className={`capitalize text-xs px-2 py-0.5 border-0 rounded-full ${STAGE_COLORS[app.stage] ?? "bg-gray-100 text-gray-600"}`}
-                          >
-                            {app.stage?.replace(/_/g, " ")}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {new Date(app.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3">
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {stageSummary.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {stageSummary.map(([stage, count]) => (
+                      <div key={stage} className="bg-card rounded-xl border shadow-sm px-4 py-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-2xl font-semibold tabular-nums text-foreground">{count}</span>
+                          <span className={`shrink-0 w-2.5 h-2.5 rounded-full ${(STAGE_COLORS[stage] ?? "bg-gray-300 text-gray-600").split(" ")[0]}`} />
+                        </div>
+                        <p className="mt-1 text-xs font-medium capitalize text-muted-foreground">{stage.replace(/_/g, " ")}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="bg-card rounded-2xl border shadow-sm divide-y overflow-hidden">
+                  {applications.map((app: any) => (
+                    <div
+                      key={app.id}
+                      className="flex items-center gap-3 sm:gap-4 px-4 py-3 hover:bg-primary/5 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                        <GraduationCap className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground truncate">{app.universityName ?? app.universityId ?? "\u2014"}</p>
+                        <p className="text-sm text-muted-foreground truncate">{app.programName ?? app.programId ?? "\u2014"}</p>
+                      </div>
+                      <Badge
+                        className={`capitalize text-xs px-2 py-0.5 border-0 rounded-full shrink-0 ${STAGE_COLORS[app.stage] ?? "bg-gray-100 text-gray-600"}`}
+                      >
+                        {app.stage?.replace(/_/g, " ")}
+                      </Badge>
+                      <div className="hidden md:block w-24 text-right text-xs text-muted-foreground shrink-0">
+                        {new Date(app.createdAt).toLocaleDateString()}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setLocation(`${basePath}/applications/${app.id}`)}
+                        >
+                          View
+                        </Button>
+                        {canDeleteApplication && (
                           <Button
                             variant="ghost"
-                            size="sm"
-                            onClick={() => setLocation(`${basePath}/applications/${app.id}`)}
+                            size="icon"
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            disabled={deletingAppId === app.id}
+                            title="Delete application"
+                            aria-label="Delete application"
+                            onClick={() => handleDeleteApplication(app)}
                           >
-                            View
+                            {deletingAppId === app.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
                           </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="documents" className="mt-4 space-y-4">
