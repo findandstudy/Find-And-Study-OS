@@ -1250,46 +1250,22 @@ export default function AgentsPage() {
                 </div>
               </div>
 
-              {/* Contract identity (used for auto-template matching) */}
-              <div className="grid sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <Label>{t("agentsPage.entityType")}</Label>
-                  <Select value={form.entityType} onValueChange={v => setForm(f => ({ ...f, entityType: v }))}>
-                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="company">{t("agentsPage.company")}</SelectItem>
-                      <SelectItem value="individual">{t("agentsPage.individual")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              {/* Contract identity */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <ContractTemplatePicker
+                  value={form.assignedContractTemplateId}
+                  showCreateNote={!editingAgent}
+                  onChange={(id, tpl) => setForm(f => ({
+                    ...f,
+                    assignedContractTemplateId: id,
+                    ...(tpl ? { entityType: tpl.entityType, preferredContractLanguage: tpl.language } : {}),
+                  }))}
+                />
                 <div className="space-y-1.5">
                   <Label>Tax / ID Number</Label>
                   <Input value={form.taxNumber} onChange={e => setForm(f => ({ ...f, taxNumber: e.target.value }))} className="rounded-xl" placeholder="VKN / TCKN" />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>{t("agentsPage.contractLanguage")}</Label>
-                  <Select value={form.preferredContractLanguage || "__auto__"} onValueChange={v => setForm(f => ({ ...f, preferredContractLanguage: v === "__auto__" ? "" : v, assignedContractTemplateId: "" }))}>
-                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__auto__">{t("agentsPage.autoLang")}</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="tr">Türkçe</SelectItem>
-                      <SelectItem value="ar">العربية</SelectItem>
-                      <SelectItem value="fr">Français</SelectItem>
-                      <SelectItem value="ru">Русский</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
-
-              {!editingAgent && (
-                <ContractTemplatePicker
-                  entityType={form.entityType || "company"}
-                  language={form.preferredContractLanguage}
-                  value={form.assignedContractTemplateId}
-                  onChange={v => setForm(f => ({ ...f, assignedContractTemplateId: v }))}
-                />
-              )}
 
               {/* Commission */}
               <div className="grid sm:grid-cols-2 gap-4">
@@ -1619,11 +1595,10 @@ export default function AgentsPage() {
   );
 }
 
-function ContractTemplatePicker({ entityType, language, value, onChange }: {
-  entityType: string;
-  language: string;
+function ContractTemplatePicker({ value, onChange, showCreateNote }: {
   value: string;
-  onChange: (v: string) => void;
+  onChange: (id: string, tpl?: { entityType: string; language: string }) => void;
+  showCreateNote: boolean;
 }) {
   const [templates, setTemplates] = useState<Array<{ id: number; name: string; language: string; entityType: string; version: number; isActive: boolean }>>([]);
   const [loading, setLoading] = useState(true);
@@ -1636,39 +1611,48 @@ function ContractTemplatePicker({ entityType, language, value, onChange }: {
     }).catch(() => setLoading(false));
   }, []);
 
-  const filtered = templates.filter(t => t.isActive && t.entityType === entityType && (!language || t.language === language));
+  const active = templates.filter(t => t.isActive);
 
-  // Auto-select if exactly one match and nothing chosen.
+  // If nothing is chosen and there is exactly one active template, select it.
   useEffect(() => {
-    if (!value && filtered.length === 1) onChange(String(filtered[0].id));
-    if (value && !filtered.find(t => String(t.id) === value)) onChange("");
+    if (!value && active.length === 1) {
+      onChange(String(active[0].id), { entityType: active[0].entityType, language: active[0].language });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered.map(t => t.id).join(",")]);
+  }, [active.map(t => t.id).join(",")]);
 
   return (
     <div className="space-y-1.5">
       <Label>Contract Template <span className="text-red-500">*</span></Label>
       {loading ? (
         <div className="text-xs text-muted-foreground">Loading templates…</div>
-      ) : filtered.length === 0 ? (
+      ) : active.length === 0 ? (
         <div className="text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 border border-amber-200 dark:border-amber-800">
-          No active template matches entity type <strong>{entityType}</strong>{language ? <> and language <strong>{language}</strong></> : null}. Create one in the Contract Templates section first.
+          No active templates available. Create one in the Contract Templates section first.
         </div>
       ) : (
-        <Select value={value} onValueChange={onChange}>
+        <Select
+          value={value}
+          onValueChange={v => {
+            const tpl = active.find(t => String(t.id) === v);
+            onChange(v, tpl ? { entityType: tpl.entityType, language: tpl.language } : undefined);
+          }}
+        >
           <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select a template" /></SelectTrigger>
           <SelectContent>
-            {filtered.map(t => (
+            {active.map(t => (
               <SelectItem key={t.id} value={String(t.id)}>
-                {t.name} — {t.language.toUpperCase()} v{t.version}
+                {t.name} — {t.language.toUpperCase()} · {t.entityType === "individual" ? "Individual" : "Company"} v{t.version}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       )}
-      <p className="text-xs text-muted-foreground">
-        On create, a 6-digit verification code is emailed and an admin-driven signing session is opened. The agent must verify their email and sign before accessing the dashboard.
-      </p>
+      {showCreateNote && (
+        <p className="text-xs text-muted-foreground">
+          On create, a 6-digit verification code is emailed and an admin-driven signing session is opened. The agent must verify their email and sign before accessing the dashboard.
+        </p>
+      )}
     </div>
   );
 }
