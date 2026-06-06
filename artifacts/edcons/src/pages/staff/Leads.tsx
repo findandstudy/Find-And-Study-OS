@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
@@ -1235,12 +1235,21 @@ export default function LeadsPage() {
   const [persistedAssignment, setPersistedAssignment] = usePersistedFilterValue(
     "leads-table", "assignment_v2", DEFAULT_LEAD_FILTERS.assignment, user?.id,
   );
+  // One-directional sync: adopt the persisted "Assigned to" choice into the
+  // active filter whenever it is (re)stored — e.g. once auth resolves and the
+  // per-user storage key becomes known. The guard keeps the filter object's
+  // identity stable when nothing changed so dependent effects don't churn.
+  // Persisting back to storage happens explicitly on user changes (see
+  // changeAssignment / the FilterPopover handler) instead of via a second
+  // mirroring effect — that removes the previous filter<->storage ping-pong.
   useEffect(() => {
-    setFilters(f => f.assignment === persistedAssignment ? f : { ...f, assignment: persistedAssignment });
+    setFilters(f => (f.assignment === persistedAssignment ? f : { ...f, assignment: persistedAssignment }));
   }, [persistedAssignment]);
-  useEffect(() => {
-    setPersistedAssignment(filters.assignment);
-  }, [filters.assignment, setPersistedAssignment]);
+
+  const changeAssignment = useCallback((value: string) => {
+    setFilters(f => (f.assignment === value ? f : { ...f, assignment: value }));
+    setPersistedAssignment(value);
+  }, [setPersistedAssignment]);
 
   const { season } = useSeason();
   const { data, isLoading } = useListLeads({ search, season, limit: 200 } as any);
@@ -1561,7 +1570,7 @@ export default function LeadsPage() {
                 className="pl-9 bg-white dark:bg-black/20 border-border rounded-full"
               />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} columns={columns} staffUsers={staffUsers} currentUserId={user?.id} leads={allLeads} />
+            <FilterPopover filters={filters} onChange={(next: LeadFilters) => { if (next.assignment !== filters.assignment) setPersistedAssignment(next.assignment); setFilters(next); }} columns={columns} staffUsers={staffUsers} currentUserId={user?.id} leads={allLeads} />
 
             <div className="flex items-center border rounded-full overflow-hidden">
               <button
@@ -1725,7 +1734,7 @@ export default function LeadsPage() {
                       filter={{
                         type: "select",
                         value: filters.assignment,
-                        onChange: v => setFilters(f => ({ ...f, assignment: v })),
+                        onChange: changeAssignment,
                         options: [
                           { value: "mine", label: t("leadsPage.me") },
                           { value: "unassigned", label: t("leadsPage.unassigned") },

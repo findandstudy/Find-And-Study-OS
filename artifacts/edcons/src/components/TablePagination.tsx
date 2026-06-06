@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
@@ -128,6 +128,7 @@ export function TablePagination({
 export function useTablePagination(defaultPageSize = 25) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeRaw] = useState(defaultPageSize);
+  const totalRef = useRef(0);
 
   function setPageSize(size: number) {
     setPageSizeRaw(size);
@@ -140,12 +141,25 @@ export function useTablePagination(defaultPageSize = 25) {
 
   function paginate<T>(items: T[]): { paged: T[]; total: number } {
     const total = items.length;
+    totalRef.current = total;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const safePage = Math.min(page, totalPages);
-    if (safePage !== page) setPage(safePage);
     const start = (safePage - 1) * pageSize;
     return { paged: items.slice(start, start + pageSize), total };
   }
+
+  // Clamp an out-of-range page (e.g. the data shrank while we were on a later
+  // page) AFTER the render commits — never during it. The previous version
+  // called setPage() inside paginate(), which runs in the render phase, so it
+  // scheduled a state update mid-render; under certain prod data/render timings
+  // that can trip React's update-depth guard (minified error #185). Doing the
+  // clamp in an effect keeps behaviour identical (the page still snaps back into
+  // range) while staying loop-safe: once page is within range the condition is
+  // false and no further update is scheduled.
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRef.current / pageSize));
+    if (page > totalPages) setPage(totalPages);
+  });
 
   return { page, pageSize, setPage, setPageSize, resetPage, paginate };
 }

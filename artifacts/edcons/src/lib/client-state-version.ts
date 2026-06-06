@@ -21,7 +21,7 @@
  */
 
 const VERSION_KEY = "edcons_client_state_version";
-const CURRENT_VERSION = "2026-06-05";
+const CURRENT_VERSION = "2026-06-06";
 
 export function ensureClientStateVersion(): void {
   try {

@@ -33,7 +33,20 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
     let left = r.left;
     if (left + MENU_WIDTH > window.innerWidth - 8) left = window.innerWidth - MENU_WIDTH - 8;
     if (left < 8) left = 8;
-    setCoords({ left, triggerTop: r.top, triggerBottom: r.bottom, openUp });
+    // Skip the update when nothing actually moved. Reposition runs on every
+    // scroll/resize event; emitting a fresh object each time would re-render the
+    // portal continuously and, if a reposition itself nudges scroll, could feed
+    // back into an update loop (React #185). Returning the previous object on a
+    // no-op keeps identity stable and breaks any such feedback.
+    setCoords(prev =>
+      prev &&
+      prev.left === left &&
+      prev.triggerTop === r.top &&
+      prev.triggerBottom === r.bottom &&
+      prev.openUp === openUp
+        ? prev
+        : { left, triggerTop: r.top, triggerBottom: r.bottom, openUp },
+    );
   }
 
   useLayoutEffect(() => {

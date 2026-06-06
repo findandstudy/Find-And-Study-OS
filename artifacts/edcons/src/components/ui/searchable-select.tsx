@@ -60,12 +60,19 @@ export function SearchableSelect({
       const rect = ref.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const up = spaceBelow < 320;
-      setOpenUp(up);
-      setPos({
-        top: up ? rect.top + window.scrollY : rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      });
+      const top = up ? rect.top + window.scrollY : rect.bottom + window.scrollY;
+      const left = rect.left + window.scrollX;
+      const width = rect.width;
+      // Bail out when nothing moved. This runs on every scroll/resize; emitting
+      // a fresh pos object each tick would re-render the portal continuously and
+      // could feed back into an update loop (React #185). Stable identity on a
+      // no-op breaks that feedback.
+      setOpenUp(prev => (prev === up ? prev : up));
+      setPos(prev =>
+        prev && prev.top === top && prev.left === left && prev.width === width
+          ? prev
+          : { top, left, width },
+      );
     }
     update();
     window.addEventListener("scroll", update, true);
