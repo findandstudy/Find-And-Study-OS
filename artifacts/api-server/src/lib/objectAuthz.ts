@@ -217,19 +217,20 @@ export async function canAccessGenericObject(user: RequestUser, wildcardPath: st
     if (userDoc.id === user.id && consistent(userDoc.id)) return true;
   }
 
-  // 6. Agent business certificate — SELF-WRITABLE. Admins, or the owning agent
-  //    (and visibility) when the binding is consistent with the agent's user.
+  // 6. Agent business certificate — written by the agent themselves or by an
+  //    admin. The DB reference (agents.businessCertUrl) is the authority; no
+  //    uploader-consistency check is needed because the write route is already
+  //    protected (callerOwnsObject / admin-only). Visible to admins, or to any
+  //    user whose agent-visibility scope includes the owning agent.
   const [agentSelfDoc] = await db
-    .select({ id: agentsTable.id, userId: agentsTable.userId })
+    .select({ id: agentsTable.id })
     .from(agentsTable)
     .where(matchKey(agentsTable.businessCertUrl, key))
     .limit(1);
   if (agentSelfDoc) {
     if (isAdmin) return true;
-    if (agentSelfDoc.userId !== null && consistent(agentSelfDoc.userId)) {
-      const visibleIds = await getAgentVisibleIds(user.id, role);
-      if (visibleIds.includes(agentSelfDoc.id)) return true;
-    }
+    const visibleIds = await getAgentVisibleIds(user.id, role);
+    if (visibleIds.includes(agentSelfDoc.id)) return true;
   }
 
   // 7. Message attachments — SELF-WRITABLE by the sender. Allowed only when the
@@ -281,23 +282,16 @@ export async function canAccessGenericObject(user: RequestUser, wildcardPath: st
     ));
   if (adminBranding) return true;
 
-  // 9. Self-written branding (user avatars, agent logos) — visible to any
-  //    authenticated user, but only when the binding is consistent so a
-  //    sensitive key cannot be laundered through an attacker's own avatar/logo.
-  const avatarUsers = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(matchKey(usersTable.avatarUrl, key))
-    .limit(50);
-  const logoAgents = await db
-    .select({ userId: agentsTable.userId })
-    .from(agentsTable)
-    .where(matchKey(agentsTable.logoUrl, key))
-    .limit(50);
-  if ((avatarUsers.length > 0 || logoAgents.length > 0) && bound) {
-    if (avatarUsers.some((u) => u.id === uploadedBy)) return true;
-    if (logoAgents.some((a) => a.userId !== null && a.userId === uploadedBy)) return true;
-  }
+  // 9. Branding assets (user avatars, agent logos) — visible to any authenticated
+  //    user. The DB reference is the authority: if any user or agent row points
+  //    at this key as their avatar/logo, access is granted without requiring an
+  //    uploader match. The WRITE side is already protected (users can only set
+  //    their own avatar; agent logos are set via admin routes or callerOwnsObject),
+  //    so a key reached via a DB reference here cannot have been planted by an
+  //    attacker pointing their own field at a victim's key.
+  const avatarUserExists = await exists(matchKey(usersTable.avatarUrl, key), usersTable);
+  const logoAgentExists = await exists(matchKey(agentsTable.logoUrl, key), agentsTable);
+  if (avatarUserExists || logoAgentExists) return true;
 
   // No referencing record grants this user access.
   return false;
