@@ -996,7 +996,9 @@
     "noUpdates": "لا توجد تحديثات حديثة.",
     "notifications": "الإشعارات",
     "noNotifications": "لا توجد إشعارات.",
-    "viewAll": "عرض الكل"
+    "viewAll": "عرض الكل",
+    "followUpCreatedBy": "أنشأه: {name}",
+    "followUpLastEditedBy": "آخر تعديل بواسطة: {name}"
   },
   "agentDash": {
     "title": "بوابة الوكيل",
@@ -1227,7 +1229,9 @@
     "notifications": "الإشعارات",
     "noNotifications": "لا توجد إشعارات.",
     "upcomingFollowUps": "المتابعات القادمة",
-    "noFollowUps": "لا توجد متابعات قادمة."
+    "noFollowUps": "لا توجد متابعات قادمة.",
+    "followUpCreatedBy": "أنشأه: {name}",
+    "followUpLastEditedBy": "آخر تعديل بواسطة: {name}"
   },
   "staffSettings": {
     "title": "الإعدادات",

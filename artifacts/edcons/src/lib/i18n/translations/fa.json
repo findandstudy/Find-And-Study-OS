@@ -996,7 +996,9 @@
     "noUpdates": "به‌روزرسانی اخیری وجود ندارد.",
     "notifications": "اعلان‌ها",
     "noNotifications": "اعلانی وجود ندارد.",
-    "viewAll": "مشاهده‌ی همه"
+    "viewAll": "مشاهده‌ی همه",
+    "followUpCreatedBy": "ایجادشده توسط: {name}",
+    "followUpLastEditedBy": "آخرین ویرایش توسط: {name}"
   },
   "agentDash": {
     "title": "پورتال نماینده",
@@ -1227,7 +1229,9 @@
     "notifications": "اعلان‌ها",
     "noNotifications": "اعلانی وجود ندارد.",
     "upcomingFollowUps": "پیگیری‌های پیش‌رو",
-    "noFollowUps": "هیچ پیگیری پیش‌رویی وجود ندارد."
+    "noFollowUps": "هیچ پیگیری پیش‌رویی وجود ندارد.",
+    "followUpCreatedBy": "ایجادشده توسط: {name}",
+    "followUpLastEditedBy": "آخرین ویرایش توسط: {name}"
   },
   "staffSettings": {
     "title": "تنظیمات",

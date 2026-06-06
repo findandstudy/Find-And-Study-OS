@@ -996,7 +996,9 @@
     "noUpdates": "No hay novedades recientes.",
     "notifications": "Notificaciones",
     "noNotifications": "No hay notificaciones.",
-    "viewAll": "Ver todo"
+    "viewAll": "Ver todo",
+    "followUpCreatedBy": "Creado por: {name}",
+    "followUpLastEditedBy": "Última edición por: {name}"
   },
   "agentDash": {
     "title": "Portal de agentes",
@@ -1227,7 +1229,9 @@
     "notifications": "Notificaciones",
     "noNotifications": "No hay notificaciones.",
     "upcomingFollowUps": "Próximos seguimientos",
-    "noFollowUps": "No hay seguimientos próximos."
+    "noFollowUps": "No hay seguimientos próximos.",
+    "followUpCreatedBy": "Creado por: {name}",
+    "followUpLastEditedBy": "Última edición por: {name}"
   },
   "staffSettings": {
     "title": "Configuración",

@@ -996,7 +996,9 @@
     "noUpdates": "暂无最新动态。",
     "notifications": "通知",
     "noNotifications": "暂无通知。",
-    "viewAll": "查看全部"
+    "viewAll": "查看全部",
+    "followUpCreatedBy": "创建者：{name}",
+    "followUpLastEditedBy": "最后编辑者：{name}"
   },
   "agentDash": {
     "title": "代理门户",
@@ -1227,7 +1229,9 @@
     "notifications": "通知",
     "noNotifications": "暂无通知。",
     "upcomingFollowUps": "即将到来的跟进",
-    "noFollowUps": "暂无即将到来的跟进。"
+    "noFollowUps": "暂无即将到来的跟进。",
+    "followUpCreatedBy": "创建者：{name}",
+    "followUpLastEditedBy": "最后编辑者：{name}"
   },
   "staffSettings": {
     "title": "设置",

@@ -996,7 +996,9 @@
     "noUpdates": "Tidak ada pembaruan terbaru.",
     "notifications": "Notifikasi",
     "noNotifications": "Tidak ada notifikasi.",
-    "viewAll": "Lihat Semua"
+    "viewAll": "Lihat Semua",
+    "followUpCreatedBy": "Dibuat oleh: {name}",
+    "followUpLastEditedBy": "Terakhir diedit oleh: {name}"
   },
   "agentDash": {
     "title": "Portal Agen",
@@ -1227,7 +1229,9 @@
     "notifications": "Notifikasi",
     "noNotifications": "Tidak ada notifikasi.",
     "upcomingFollowUps": "Tindak Lanjut Mendatang",
-    "noFollowUps": "Tidak ada tindak lanjut mendatang."
+    "noFollowUps": "Tidak ada tindak lanjut mendatang.",
+    "followUpCreatedBy": "Dibuat oleh: {name}",
+    "followUpLastEditedBy": "Terakhir diedit oleh: {name}"
   },
   "staffSettings": {
     "title": "Pengaturan",

@@ -431,7 +431,7 @@ export default function AdminDashboard() {
                       </p>
                       {(fu.updatedByName ?? fu.createdByName) && (
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {fu.updatedByName ? `Son düzenleyen: ${fu.updatedByName}` : `Oluşturan: ${fu.createdByName}`}
+                          {fu.updatedByName ? t("adminDash.followUpLastEditedBy", { name: fu.updatedByName }) : t("adminDash.followUpCreatedBy", { name: fu.createdByName })}
                         </p>
                       )}
                     </div>

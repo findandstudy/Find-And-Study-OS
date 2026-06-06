@@ -996,7 +996,9 @@
     "noUpdates": "No recent updates.",
     "notifications": "Notifications",
     "noNotifications": "No notifications.",
-    "viewAll": "View All"
+    "viewAll": "View All",
+    "followUpCreatedBy": "Created by: {name}",
+    "followUpLastEditedBy": "Last edited by: {name}"
   },
   "agentDash": {
     "title": "Agent Portal",
@@ -1227,7 +1229,9 @@
     "notifications": "Notifications",
     "noNotifications": "No notifications.",
     "upcomingFollowUps": "Upcoming Follow-ups",
-    "noFollowUps": "No upcoming follow-ups."
+    "noFollowUps": "No upcoming follow-ups.",
+    "followUpCreatedBy": "Created by: {name}",
+    "followUpLastEditedBy": "Last edited by: {name}"
   },
   "staffSettings": {
     "title": "Settings",

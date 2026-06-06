@@ -996,7 +996,9 @@
     "noUpdates": "Недавних обновлений нет.",
     "notifications": "Уведомления",
     "noNotifications": "Уведомлений нет.",
-    "viewAll": "Показать все"
+    "viewAll": "Показать все",
+    "followUpCreatedBy": "Создано: {name}",
+    "followUpLastEditedBy": "Последнее изменение: {name}"
   },
   "agentDash": {
     "title": "Портал агента",
@@ -1227,7 +1229,9 @@
     "notifications": "Уведомления",
     "noNotifications": "Уведомлений нет.",
     "upcomingFollowUps": "Предстоящие напоминания",
-    "noFollowUps": "Предстоящих напоминаний нет."
+    "noFollowUps": "Предстоящих напоминаний нет.",
+    "followUpCreatedBy": "Создано: {name}",
+    "followUpLastEditedBy": "Последнее изменение: {name}"
   },
   "staffSettings": {
     "title": "Настройки",

@@ -260,7 +260,7 @@ export default function StaffDashboard() {
                       </p>
                       {(fu.updatedByName ?? fu.createdByName) && (
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {fu.updatedByName ? `Son düzenleyen: ${fu.updatedByName}` : `Oluşturan: ${fu.createdByName}`}
+                          {fu.updatedByName ? t("staffDash.followUpLastEditedBy", { name: fu.updatedByName }) : t("staffDash.followUpCreatedBy", { name: fu.createdByName })}
                         </p>
                       )}
                     </div>

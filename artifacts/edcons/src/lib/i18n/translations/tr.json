@@ -937,7 +937,9 @@
     "noUpdates": "Son güncelleme yok.",
     "notifications": "Bildirimler",
     "noNotifications": "Bildirim yok.",
-    "viewAll": "Tümünü Gör"
+    "viewAll": "Tümünü Gör",
+    "followUpCreatedBy": "Oluşturan: {name}",
+    "followUpLastEditedBy": "Son düzenleyen: {name}"
   },
   "agentDash": {
     "title": "Acente Portalı",
@@ -1168,7 +1170,9 @@
     "notifications": "Bildirimler",
     "noNotifications": "Bildirim yok.",
     "upcomingFollowUps": "Yaklaşan Takipler",
-    "noFollowUps": "Yaklaşan takip yok."
+    "noFollowUps": "Yaklaşan takip yok.",
+    "followUpCreatedBy": "Oluşturan: {name}",
+    "followUpLastEditedBy": "Son düzenleyen: {name}"
   },
   "staffSettings": {
     "title": "Ayarlar",

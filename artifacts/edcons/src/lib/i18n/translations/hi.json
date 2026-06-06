@@ -996,7 +996,9 @@
     "noUpdates": "कोई हाल का अपडेट नहीं।",
     "notifications": "सूचनाएँ",
     "noNotifications": "कोई सूचना नहीं।",
-    "viewAll": "सभी देखें"
+    "viewAll": "सभी देखें",
+    "followUpCreatedBy": "बनाने वाले: {name}",
+    "followUpLastEditedBy": "अंतिम संपादक: {name}"
   },
   "agentDash": {
     "title": "एजेंट पोर्टल",
@@ -1227,7 +1229,9 @@
     "notifications": "सूचनाएँ",
     "noNotifications": "कोई सूचना नहीं।",
     "upcomingFollowUps": "आगामी फ़ॉलो-अप",
-    "noFollowUps": "कोई आगामी फ़ॉलो-अप नहीं।"
+    "noFollowUps": "कोई आगामी फ़ॉलो-अप नहीं।",
+    "followUpCreatedBy": "बनाने वाले: {name}",
+    "followUpLastEditedBy": "अंतिम संपादक: {name}"
   },
   "staffSettings": {
     "title": "सेटिंग्स",

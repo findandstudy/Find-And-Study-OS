@@ -996,7 +996,9 @@
     "noUpdates": "Aucune mise à jour récente.",
     "notifications": "Notifications",
     "noNotifications": "Aucune notification.",
-    "viewAll": "Tout voir"
+    "viewAll": "Tout voir",
+    "followUpCreatedBy": "Créé par : {name}",
+    "followUpLastEditedBy": "Dernière modification par : {name}"
   },
   "agentDash": {
     "title": "Portail agent",
@@ -1227,7 +1229,9 @@
     "notifications": "Notifications",
     "noNotifications": "Aucune notification.",
     "upcomingFollowUps": "Relances à venir",
-    "noFollowUps": "Aucune relance à venir."
+    "noFollowUps": "Aucune relance à venir.",
+    "followUpCreatedBy": "Créé par : {name}",
+    "followUpLastEditedBy": "Dernière modification par : {name}"
   },
   "staffSettings": {
     "title": "Paramètres",
