@@ -18,6 +18,7 @@ import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { buildDocNameFromParts } from "../lib/docNaming";
+import { callerOwnsObject } from "../lib/objectAuthz";
 
 const router: IRouter = Router();
 
@@ -608,6 +609,17 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
     const httpStatus = bufferError.type === "size_exceeded" ? 413 : 400;
     res.status(httpStatus).json({ error: bufferError.message });
     return;
+  }
+
+  // Ownership guard: agent callers may only attach storage objects they
+  // uploaded themselves. Staff are trusted and bypass this check.
+  if (isAgentRole(user.role)) {
+    const owned = await callerOwnsObject(user.id, fileKey);
+    if (!owned) {
+      console.warn(`[LEADS] fileKey ownership violation: userId=${user.id} role=${user.role} key=${fileKey}`);
+      res.status(403).json({ error: "You can only attach files that you have uploaded" });
+      return;
+    }
   }
 
   const safeName = buildDocNameFromParts(lead.firstName, lead.lastName, type, mimeType);

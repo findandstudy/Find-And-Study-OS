@@ -10,6 +10,7 @@ import { buildDocNameFromParts } from "../lib/docNaming";
 import { loadDocumentBytes, streamDocumentToResponse } from "../lib/documentBytes";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
+import { callerOwnsObject } from "../lib/objectAuthz";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
 
@@ -223,6 +224,19 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
       }
       const httpStatus = bufferError.type === "size_exceeded" ? 413 : 400;
       res.status(httpStatus).json({ error: bufferError.message });
+      return;
+    }
+  }
+
+  // Ownership guard: non-staff callers (students and agents) may only attach
+  // storage objects they uploaded themselves. This closes the IDOR where an
+  // attacker supplies a victim's object key to exfiltrate private files via
+  // the document download endpoint. Staff are trusted and bypass this check.
+  if (fileKey && !isStaff) {
+    const owned = await callerOwnsObject(user.id, fileKey);
+    if (!owned) {
+      console.warn(`[DOCUMENTS] fileKey ownership violation: userId=${user.id} role=${user.role} key=${fileKey}`);
+      res.status(403).json({ error: "You can only attach files that you have uploaded" });
       return;
     }
   }

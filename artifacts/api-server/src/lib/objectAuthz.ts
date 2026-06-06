@@ -140,6 +140,19 @@ export async function recordObjectOwner(keyOrPath: string, userId: number | null
   }
 }
 
+/**
+ * Returns true only when `userId` is recorded as the uploader of `fileKey`.
+ * Used by document-creation routes to prevent non-staff callers from attaching
+ * storage objects they did not upload themselves (IDOR via fileKey cross-reference).
+ * Staff callers should bypass this check entirely.
+ */
+export async function callerOwnsObject(userId: number, fileKey: string): Promise<boolean> {
+  const key = canonicalizeKey(fileKey);
+  if (!key) return false;
+  const { bound, uploadedBy } = await lookupOwner(key);
+  return bound && uploadedBy === userId;
+}
+
 export async function canAccessGenericObject(user: RequestUser, wildcardPath: string): Promise<boolean> {
   const key = canonicalizeKey(wildcardPath);
   if (!key) return false;
