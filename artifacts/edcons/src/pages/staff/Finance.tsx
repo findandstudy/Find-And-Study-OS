@@ -884,6 +884,11 @@ export default function FinancePage() {
   const [commExporting, setCommExporting] = useState(false);
   const [uniExporting, setUniExporting] = useState(false);
   const [feeExporting, setFeeExporting] = useState(false);
+  const [uniSort, setUniSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "asc" });
+  const [uniFilter, setUniFilter] = useState("");
+  const [feeSort, setFeeSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "asc" });
+  const [feeUniFilter, setFeeUniFilter] = useState("");
+  const [feeStatusFilter, setFeeStatusFilter] = useState("all");
   const commPg = useTablePagination(25);
   const feePg = useTablePagination(25);
 
@@ -971,7 +976,45 @@ export default function FinancePage() {
     });
   }, [commissions, commSort]);
   const { paged: pagedCommissions, total: totalCommissions } = commPg.paginate(sortedCommissions);
-  const { paged: pagedFees, total: totalFees } = feePg.paginate(fees);
+
+  const sortedUniBreakdown = useMemo(() => {
+    let rows = uniFilter
+      ? uniBreakdown.filter((u: any) => (u.universityName || "").toLowerCase().includes(uniFilter.toLowerCase()))
+      : uniBreakdown;
+    if (!uniSort.key) return rows;
+    const dir = uniSort.dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      switch (uniSort.key) {
+        case "universityName": return dir * ((a.universityName || "").localeCompare(b.universityName || ""));
+        case "totalCommission": return dir * (toNum(a.totalCommission) - toNum(b.totalCommission));
+        case "totalCollected": return dir * (toNum(a.totalCollected) - toNum(b.totalCollected));
+        case "totalRemaining": return dir * (toNum(a.totalRemaining) - toNum(b.totalRemaining));
+        case "totalAgentPaid": return dir * (toNum(a.totalAgentPaid) - toNum(b.totalAgentPaid));
+        case "netIncome": return dir * (toNum(a.netIncome) - toNum(b.netIncome));
+        case "studentCount": return dir * (toNum(a.studentCount) - toNum(b.studentCount));
+        default: return 0;
+      }
+    });
+  }, [uniBreakdown, uniSort, uniFilter]);
+
+  const sortedFilteredFees = useMemo(() => {
+    let rows = fees;
+    if (feeUniFilter) rows = rows.filter((f: any) => (f.universityName || "").toLowerCase().includes(feeUniFilter.toLowerCase()));
+    if (feeStatusFilter !== "all") rows = rows.filter((f: any) => f.status === feeStatusFilter);
+    if (!feeSort.key) return rows;
+    const dir = feeSort.dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      switch (feeSort.key) {
+        case "studentName": return dir * ((a.studentName || "").localeCompare(b.studentName || ""));
+        case "universityName": return dir * ((a.universityName || "").localeCompare(b.universityName || ""));
+        case "totalAmount": return dir * (toNum(a.totalAmount) - toNum(b.totalAmount));
+        case "status": return dir * ((a.status || "").localeCompare(b.status || ""));
+        default: return 0;
+      }
+    });
+  }, [fees, feeSort, feeUniFilter, feeStatusFilter]);
+
+  const { paged: pagedFees, total: totalFees } = feePg.paginate(sortedFilteredFees);
 
   async function deleteCommission(id: number) {
     setDeleting(id);
@@ -1088,6 +1131,14 @@ export default function FinancePage() {
 
   function handleCommSort(key: string) {
     setCommSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+  }
+
+  function handleUniSort(key: string) {
+    setUniSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+  }
+
+  function handleFeeSort(key: string) {
+    setFeeSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
   }
 
   async function markInstallment(fee: any, installment: 1 | 2) {
@@ -1678,23 +1729,81 @@ export default function FinancePage() {
                       <tr>
                         <th className="px-3 py-3 w-[40px]">
                           <Checkbox
-                            checked={uniBreakdown.length > 0 && uniBreakdown.every((u: any) => uniSelected.has(u.universityName)) ? true : uniBreakdown.some((u: any) => uniSelected.has(u.universityName)) ? ("indeterminate" as any) : false}
-                            onCheckedChange={() => toggleUniSelectAll(uniBreakdown.map((u: any) => u.universityName))}
+                            checked={sortedUniBreakdown.length > 0 && sortedUniBreakdown.every((u: any) => uniSelected.has(u.universityName)) ? true : sortedUniBreakdown.some((u: any) => uniSelected.has(u.universityName)) ? ("indeterminate" as any) : false}
+                            onCheckedChange={() => toggleUniSelectAll(sortedUniBreakdown.map((u: any) => u.universityName))}
                             aria-label="Select all"
                           />
                         </th>
-                        <th className="text-left px-4 py-3 font-semibold text-slate-600">{t("financePage.university")}</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.totalCommission")}</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.collected")}</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.remaining")}</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.agentPayout")}</th>
-                        <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.netIncome")}</th>
-                        <th className="text-center px-4 py-3 font-semibold text-slate-600">Collection %</th>
-                        <th className="text-center px-4 py-3 font-semibold text-slate-600">{t("financePage.students")}</th>
+                        {([
+                          { key: "universityName", label: t("financePage.university"), align: "text-left", hasFilter: true },
+                          { key: "totalCommission", label: t("financePage.totalCommission"), align: "text-right" },
+                          { key: "totalCollected", label: t("financePage.collected"), align: "text-right" },
+                          { key: "totalRemaining", label: t("financePage.remaining"), align: "text-right" },
+                          { key: "totalAgentPaid", label: t("financePage.agentPayout"), align: "text-right" },
+                          { key: "netIncome", label: t("financePage.netIncome"), align: "text-right" },
+                          { key: "", label: "Collection %", align: "text-center", noSort: true },
+                          { key: "studentCount", label: t("financePage.students"), align: "text-center" },
+                        ] as const).map((col: any) => {
+                          const active = uniSort.key === col.key && !col.noSort;
+                          const isUni = col.hasFilter;
+                          const uniFilterActive = uniFilter.trim().length > 0;
+                          return (
+                            <th
+                              key={col.key || col.label}
+                              className={`${col.align} px-4 py-3 font-semibold text-slate-600 select-none ${!col.noSort ? "hover:bg-slate-100" : ""} transition-colors`}
+                            >
+                              <div className={`flex items-center gap-1 ${col.align === "text-right" ? "justify-end" : col.align === "text-center" ? "justify-center" : ""}`}>
+                                <span className={!col.noSort ? "cursor-pointer" : ""} onClick={() => !col.noSort && handleUniSort(col.key)}>
+                                  {col.label}
+                                </span>
+                                {!col.noSort && (
+                                  <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => handleUniSort(col.key)}>
+                                    {active ? (uniSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3" />}
+                                  </button>
+                                )}
+                                {isUni && (
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <button
+                                        type="button"
+                                        title={uniFilterActive ? "Filter active — click to edit" : "Filter by university"}
+                                        className={`relative inline-flex items-center justify-center transition-colors ${uniFilterActive ? "text-primary" : "text-slate-400 hover:text-slate-700"}`}
+                                      >
+                                        <FilterIcon className={`w-3 h-3 ${uniFilterActive ? "fill-primary/20" : ""}`} />
+                                        {uniFilterActive && (
+                                          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />
+                                        )}
+                                      </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-56 p-3">
+                                      <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <Label className="text-xs font-semibold">{t("financePage.university")}</Label>
+                                          {uniFilterActive && (
+                                            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setUniFilter("")}>
+                                              <X className="w-3 h-3 mr-1" /> Clear
+                                            </Button>
+                                          )}
+                                        </div>
+                                        <Input
+                                          className="h-8 text-sm"
+                                          placeholder="Search university..."
+                                          value={uniFilter}
+                                          onChange={e => setUniFilter(e.target.value)}
+                                          autoFocus
+                                        />
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
+                                )}
+                              </div>
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {uniBreakdown.map((u: any) => {
+                      {sortedUniBreakdown.map((u: any) => {
                         const collPct = pct(u.totalCollected, u.totalCommission);
                         const isOverdue = u.oldestUnpaid && ((Date.now() - new Date(u.oldestUnpaid).getTime()) / (1000 * 60 * 60 * 24) > 90);
                         return (
@@ -1754,7 +1863,7 @@ export default function FinancePage() {
                     <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                       <tr>
                         <td className="px-3 py-3" />
-                        <td className="px-4 py-3 text-slate-600">{uniBreakdown.length} Universities</td>
+                        <td className="px-4 py-3 text-slate-600">{sortedUniBreakdown.length} Universities{uniFilter ? ` (filtered from ${uniBreakdown.length})` : ""}</td>
                         <td className="px-4 py-3 text-right text-blue-700 tabular-nums">{fmt(uniTotals.totalCommission)}</td>
                         <td className="px-4 py-3 text-right text-green-700 tabular-nums">{fmt(uniTotals.totalCollected)}</td>
                         <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{fmt(uniTotals.totalRemaining)}</td>
@@ -1852,12 +1961,104 @@ export default function FinancePage() {
                           aria-label="Select all"
                         />
                       </th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">Student / University</th>
-                      <th className="text-left px-4 py-3 font-semibold text-slate-600">{t("financePage.payer")}</th>
-                      <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.total")}</th>
-                      <th className="text-center px-4 py-3 font-semibold text-slate-600">1st Installment (50%)</th>
-                      <th className="text-center px-4 py-3 font-semibold text-slate-600">2nd Installment (50%)</th>
-                      <th className="text-center px-4 py-3 font-semibold text-slate-600">{t("financePage.statusLabel")}</th>
+                      {([
+                        { key: "studentName", label: t("financePage.student"), align: "text-left" },
+                        { key: "universityName", label: t("financePage.university"), align: "text-left", hasUniFilter: true },
+                        { key: "", label: t("financePage.payer"), align: "text-left", noSort: true },
+                        { key: "totalAmount", label: t("financePage.total"), align: "text-right" },
+                        { key: "", label: "1st Installment (50%)", align: "text-center", noSort: true },
+                        { key: "", label: "2nd Installment (50%)", align: "text-center", noSort: true },
+                        { key: "status", label: t("financePage.statusLabel"), align: "text-center", hasStatusFilter: true },
+                      ] as const).map((col: any) => {
+                        const active = feeSort.key === col.key && !col.noSort && col.key !== "";
+                        const feeUniActive = feeUniFilter.trim().length > 0;
+                        const feeStatusActive = feeStatusFilter !== "all";
+                        return (
+                          <th
+                            key={col.key || col.label}
+                            className={`${col.align} px-4 py-3 font-semibold text-slate-600 select-none ${!col.noSort && col.key ? "hover:bg-slate-100" : ""} transition-colors`}
+                          >
+                            <div className={`flex items-center gap-1 ${col.align === "text-right" ? "justify-end" : col.align === "text-center" ? "justify-center" : ""}`}>
+                              <span className={!col.noSort && col.key ? "cursor-pointer" : ""} onClick={() => !col.noSort && col.key && handleFeeSort(col.key)}>
+                                {col.label}
+                              </span>
+                              {!col.noSort && col.key && (
+                                <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => handleFeeSort(col.key)}>
+                                  {active ? (feeSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3" />}
+                                </button>
+                              )}
+                              {col.hasUniFilter && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      title={feeUniActive ? "Filter active — click to edit" : "Filter by university"}
+                                      className={`relative inline-flex items-center justify-center transition-colors ${feeUniActive ? "text-primary" : "text-slate-400 hover:text-slate-700"}`}
+                                    >
+                                      <FilterIcon className={`w-3 h-3 ${feeUniActive ? "fill-primary/20" : ""}`} />
+                                      {feeUniActive && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />}
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent align="start" className="w-56 p-3">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">{t("financePage.university")}</Label>
+                                        {feeUniActive && (
+                                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setFeeUniFilter("")}>
+                                            <X className="w-3 h-3 mr-1" /> Clear
+                                          </Button>
+                                        )}
+                                      </div>
+                                      <Input
+                                        className="h-8 text-sm"
+                                        placeholder="Search university..."
+                                        value={feeUniFilter}
+                                        onChange={e => setFeeUniFilter(e.target.value)}
+                                        autoFocus
+                                      />
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                              {col.hasStatusFilter && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      title={feeStatusActive ? "Filter active — click to edit" : "Filter by status"}
+                                      className={`relative inline-flex items-center justify-center transition-colors ${feeStatusActive ? "text-primary" : "text-slate-400 hover:text-slate-700"}`}
+                                    >
+                                      <FilterIcon className={`w-3 h-3 ${feeStatusActive ? "fill-primary/20" : ""}`} />
+                                      {feeStatusActive && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />}
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent align="end" className="w-56 p-3">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">{t("financePage.statusLabel")}</Label>
+                                        {feeStatusActive && (
+                                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setFeeStatusFilter("all")}>
+                                            <X className="w-3 h-3 mr-1" /> Clear
+                                          </Button>
+                                        )}
+                                      </div>
+                                      <Select value={feeStatusFilter} onValueChange={setFeeStatusFilter}>
+                                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="all">{t("financePage.allStatuses")}</SelectItem>
+                                          {Object.entries(FEE_STATUS).map(([v, m]) => (
+                                            <SelectItem key={v} value={v}>{m.label}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
                       <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.actions")}</th>
                     </tr>
                   </thead>
@@ -1876,11 +2077,11 @@ export default function FinancePage() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-slate-800">{f.studentName || "—"}</div>
-                            <div className="text-xs text-slate-500">{f.universityName || "—"}</div>
                             {f.isStateUniversity && (
                               <Badge className="text-xs mt-0.5 bg-violet-100 text-violet-700 border-violet-200">{t("financePage.state")}</Badge>
                             )}
                           </td>
+                          <td className="px-4 py-3 text-slate-600 text-sm">{f.universityName || "—"}</td>
                           <td className="px-4 py-3 text-slate-600 capitalize">{f.payerType}</td>
                           <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-800">
                             {fmt(f.totalAmount, f.currency)}
@@ -1967,7 +2168,7 @@ export default function FinancePage() {
                   <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                     <tr>
                       <td className="px-3 py-3" />
-                      <td colSpan={2} className="px-4 py-3 text-slate-600">Totals ({fees.length})</td>
+                      <td colSpan={3} className="px-4 py-3 text-slate-600">Totals ({sortedFilteredFees.length}{sortedFilteredFees.length !== fees.length ? ` of ${fees.length}` : ""})</td>
                       <td className="px-4 py-3 text-right text-slate-800 tabular-nums">
                         {fmt(feeSummary.totalServiceFees || 0)}
                       </td>
