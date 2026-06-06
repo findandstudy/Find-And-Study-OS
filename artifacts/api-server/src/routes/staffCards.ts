@@ -23,6 +23,7 @@ import {
 } from "@workspace/db";
 import { and, eq, gte, lte, sql, desc, isNull, ilike, or, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { userHasPermission } from "../lib/permissions";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { Readable } from "stream";
 
@@ -372,12 +373,15 @@ router.post("/staff-cards/:userId/assigned-students", requireAuth, requireStaffC
   const [s] = await db.update(studentsTable).set({ assignedToId: userId }).where(eq(studentsTable.id, studentId)).returning();
   if (!s) { res.status(404).json({ error: "Student not found" }); return; }
   logAudit(req.user!.id, "staff_card.assigned_student.add", "user", userId, { studentId }, req.ip);
-  cascadeStudentAssignment({
-    studentId,
-    newAssignedToId: userId,
-    actorUserId: req.user!.id,
-    ipAddress: req.ip,
-  }).catch(() => {});
+  const canCascadeAdd = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
+  if (canCascadeAdd) {
+    cascadeStudentAssignment({
+      studentId,
+      newAssignedToId: userId,
+      actorUserId: req.user!.id,
+      ipAddress: req.ip,
+    }).catch(() => {});
+  }
   res.json({ success: true });
 });
 
@@ -387,12 +391,15 @@ router.delete("/staff-cards/:userId/assigned-students/:studentId", requireAuth, 
   await db.update(studentsTable).set({ assignedToId: null })
     .where(and(eq(studentsTable.id, studentId), eq(studentsTable.assignedToId, userId)));
   logAudit(req.user!.id, "staff_card.assigned_student.remove", "user", userId, { studentId }, req.ip);
-  cascadeStudentAssignment({
-    studentId,
-    newAssignedToId: null,
-    actorUserId: req.user!.id,
-    ipAddress: req.ip,
-  }).catch(() => {});
+  const canCascadeRemove = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
+  if (canCascadeRemove) {
+    cascadeStudentAssignment({
+      studentId,
+      newAssignedToId: null,
+      actorUserId: req.user!.id,
+      ipAddress: req.ip,
+    }).catch(() => {});
+  }
   res.sendStatus(204);
 });
 

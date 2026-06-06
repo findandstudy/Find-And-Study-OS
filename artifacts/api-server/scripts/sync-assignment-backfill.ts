@@ -33,7 +33,7 @@ async function main() {
   let updatedApps = 0;
 
   for (const student of students) {
-    const [lead] = await db
+    const leads = await db
       .select({ id: leadsTable.id, assignedToId: leadsTable.assignedToId })
       .from(leadsTable)
       .where(and(eq(leadsTable.convertedStudentId, student.id), isNull(leadsTable.deletedAt)));
@@ -44,7 +44,14 @@ async function main() {
       .where(and(eq(applicationsTable.studentId, student.id), isNull(applicationsTable.deletedAt)));
 
     let canonical: number | null = student.assignedToId ?? null;
-    if (canonical === null && (lead?.assignedToId ?? null) !== null) canonical = lead!.assignedToId;
+    if (canonical === null) {
+      for (const lead of leads) {
+        if (lead.assignedToId !== null && lead.assignedToId !== undefined) {
+          canonical = lead.assignedToId;
+          break;
+        }
+      }
+    }
     if (canonical === null) {
       for (const app of apps) {
         if (app.assignedToId !== null && app.assignedToId !== undefined) {
@@ -67,15 +74,17 @@ async function main() {
       updatedStudents++;
     }
 
-    if (lead && (lead.assignedToId ?? null) !== canonical) {
-      console.log(`  lead id=${lead.id}: ${lead.assignedToId ?? "null"} → ${canonical}`);
-      if (!DRY_RUN) {
-        await db.update(leadsTable)
-          .set({ assignedToId: canonical })
-          .where(eq(leadsTable.id, lead.id));
-        logAudit(null, "assignment.backfill", "lead", lead.id, { from: lead.assignedToId ?? null, to: canonical });
+    for (const lead of leads) {
+      if ((lead.assignedToId ?? null) !== canonical) {
+        console.log(`  lead id=${lead.id}: ${lead.assignedToId ?? "null"} → ${canonical}`);
+        if (!DRY_RUN) {
+          await db.update(leadsTable)
+            .set({ assignedToId: canonical })
+            .where(eq(leadsTable.id, lead.id));
+          logAudit(null, "assignment.backfill", "lead", lead.id, { from: lead.assignedToId ?? null, to: canonical });
+        }
+        updatedLeads++;
       }
-      updatedLeads++;
     }
 
     for (const app of apps) {
