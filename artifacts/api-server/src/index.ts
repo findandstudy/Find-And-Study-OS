@@ -769,6 +769,26 @@ async function seedClaudeIntegration() {
     console.error("[migrate] branches columns:", err);
   }
 
+  // Idempotent fix: agent_staff and sub_agent users provisioned before this
+  // change had emailVerified left at false (DB default). Because they are
+  // added by a trusted agent (not via public self-registration) they should
+  // never be blocked by the 6-digit verification screen. Set emailVerified=true
+  // for all such users who are still stuck on false.
+  try {
+    const fixRes = await pool.query(`
+      UPDATE users
+      SET email_verified = TRUE
+      WHERE role IN ('agent_staff', 'sub_agent')
+        AND email_verified = FALSE
+    `);
+    const fixed = fixRes.rowCount || 0;
+    if (fixed > 0) {
+      console.log(`[migrate] Set email_verified=true for ${fixed} agent_staff/sub_agent user(s) blocked on verification screen`);
+    }
+  } catch (err) {
+    console.error("[migrate] agent_staff/sub_agent emailVerified fix:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

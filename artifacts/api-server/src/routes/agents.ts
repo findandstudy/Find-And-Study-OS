@@ -507,7 +507,7 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
       res.status(400).json({ error: "A user with this email already exists" });
       return;
     }
-    const userValues: any = { email, firstName, lastName, role: "sub_agent", phone: phone || null, phoneE164: toE164(phone || null) };
+    const userValues: any = { email, firstName, lastName, role: "sub_agent", phone: phone || null, phoneE164: toE164(phone || null), emailVerified: true };
     if (password) {
       const pwd = validatePassword(password);
       if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
@@ -822,6 +822,7 @@ router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), 
     managingAgentId: agent.id,
     agentStaffPermissions: validPerms,
     isActive: true,
+    emailVerified: true,
   }).returning();
 
   res.status(201).json({
