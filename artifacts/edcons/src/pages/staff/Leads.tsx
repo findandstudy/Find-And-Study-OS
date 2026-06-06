@@ -348,7 +348,7 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
 
 /* ── FilterPopover ────────────────────────────────────────── */
 type LeadFilters = { source: string; status: string; appSource: string; assignment: string; nationality: string; agent: string; dateRange: string; followupRange: string; originType: string };
-const DEFAULT_LEAD_FILTERS: LeadFilters = { source: "all", status: "all", appSource: "all", assignment: "all", nationality: "all", agent: "all", dateRange: "all", followupRange: "all", originType: "all" };
+const DEFAULT_LEAD_FILTERS: LeadFilters = { source: "all", status: "all", appSource: "all", assignment: "mine_unassigned", nationality: "all", agent: "all", dateRange: "all", followupRange: "all", originType: "all" };
 
 function leadIsDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -477,6 +477,7 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
               <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
               <SelectItem value="mine">{t("leadsPage.me")}</SelectItem>
               <SelectItem value="unassigned">{t("leadsPage.unassigned")}</SelectItem>
+              <SelectItem value="mine_unassigned">{t("leadsPage.meUnassigned")}</SelectItem>
               {staffUsers.filter(u => u.id !== currentUserId).map((u: any) => (
                 <SelectItem key={u.id} value={String(u.id)}>
                   {`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
@@ -1327,7 +1328,8 @@ export default function LeadsPage() {
     if (filters.appSource === "staff" && l.agentId) return false;
     if (filters.assignment === "mine" && l.assignedToId !== user?.id) return false;
     if (filters.assignment === "unassigned" && l.assignedToId != null) return false;
-    if (filters.assignment !== "all" && filters.assignment !== "mine" && filters.assignment !== "unassigned" && l.assignedToId !== Number(filters.assignment)) return false;
+    if (filters.assignment === "mine_unassigned" && !(l.assignedToId === user?.id || l.assignedToId == null)) return false;
+    if (filters.assignment !== "all" && filters.assignment !== "mine" && filters.assignment !== "unassigned" && filters.assignment !== "mine_unassigned" && !isNaN(Number(filters.assignment)) && l.assignedToId !== Number(filters.assignment)) return false;
     if (filters.nationality !== "all" && (l.nationality || "") !== filters.nationality) return false;
     if (filters.agent !== "all") {
       if (filters.agent === "none") { if (l.agentId) return false; }
@@ -1738,6 +1740,7 @@ export default function LeadsPage() {
                         options: [
                           { value: "mine", label: t("leadsPage.me") },
                           { value: "unassigned", label: t("leadsPage.unassigned") },
+                          { value: "mine_unassigned", label: t("leadsPage.meUnassigned") },
                           ...staffUsersList.filter((u: any) => u.id !== user?.id).map((u: any) => ({ value: String(u.id), label: u.name })),
                         ],
                         label: t("leadsPage.assignedTo"),

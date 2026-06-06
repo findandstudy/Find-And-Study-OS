@@ -2431,6 +2431,7 @@
     "searchLeads": "Search leads...",
     "addNewLead": "Add New Lead",
     "me": "Me",
+    "meUnassigned": "Me + Unassigned",
     "assignedTo": "Assigned to",
     "assigned": "Assigned",
     "noContactInfo": "No contact info",

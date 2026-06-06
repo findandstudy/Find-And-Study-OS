@@ -2042,8 +2042,9 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
               {canViewOthers && <SelectItem value="all">{t("studentsPage.all")}</SelectItem>}
-              <SelectItem value="mine_unassigned">{t("studentsPage.meUnassigned")}</SelectItem>
+              <SelectItem value="mine">{t("studentsPage.me")}</SelectItem>
               {canViewUnassigned && <SelectItem value="unassigned">{t("studentsPage.unassigned")}</SelectItem>}
+              <SelectItem value="mine_unassigned">{t("studentsPage.meUnassigned")}</SelectItem>
               {canViewOthers && staffUsers.filter((u: any) => u.id !== currentUserId).map((u: any) => (
                 <SelectItem key={u.id} value={String(u.id)}>{`${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email}</SelectItem>
               ))}
@@ -2125,13 +2126,7 @@ export default function StudentsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
-  const [filters, setFilters] = useState<StuFilters>(() => ({ ...DEFAULT_STU_FILTERS, assignment: canViewOthers ? "all" : DEFAULT_STU_FILTERS.assignment }));
-  const stuAssignInitRef = useRef(false);
-  useEffect(() => {
-    if (!user || stuAssignInitRef.current) return;
-    stuAssignInitRef.current = true;
-    if (canViewOthers) setFilters(f => (f.assignment === DEFAULT_STU_FILTERS.assignment ? { ...f, assignment: "all" } : f));
-  }, [user, canViewOthers]);
+  const [filters, setFilters] = useState<StuFilters>({ ...DEFAULT_STU_FILTERS });
   const [colFilters, setColFilters] = useState({ name: "", email: "", passport: "" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
@@ -2204,9 +2199,10 @@ export default function StudentsPage() {
     if (filters.status !== "all" && s.status !== filters.status) return false;
     if (filters.appSource === "agent" && !s.agentId) return false;
     if (filters.appSource === "staff" && s.agentId) return false;
+    if (filters.assignment === "mine" && s.assignedToId !== user?.id) return false;
     if (filters.assignment === "mine_unassigned" && !(s.assignedToId === user?.id || s.assignedToId == null)) return false;
     if (filters.assignment === "unassigned" && s.assignedToId != null) return false;
-    if (filters.assignment !== "all" && filters.assignment !== "mine_unassigned" && filters.assignment !== "unassigned" && !isNaN(Number(filters.assignment)) && s.assignedToId !== Number(filters.assignment)) return false;
+    if (filters.assignment !== "all" && filters.assignment !== "mine" && filters.assignment !== "mine_unassigned" && filters.assignment !== "unassigned" && !isNaN(Number(filters.assignment)) && s.assignedToId !== Number(filters.assignment)) return false;
     if (filters.nationality !== "all" && (s.nationality || "") !== filters.nationality) return false;
     if (filters.agent !== "all") {
       if (filters.agent === "none") { if (s.agentId) return false; }
@@ -2463,8 +2459,9 @@ export default function StudentsPage() {
                         value: filters.assignment,
                         onChange: v => setFilters(f => ({ ...f, assignment: v })),
                         options: [
-                          { value: "mine_unassigned", label: t("studentsPage.meUnassigned") },
+                          { value: "mine", label: t("studentsPage.me") },
                           ...(canViewUnassigned ? [{ value: "unassigned", label: t("studentsPage.unassigned") }] : []),
+                          { value: "mine_unassigned", label: t("studentsPage.meUnassigned") },
                         ],
                         allLabel: t("studentsPage.all"),
                         hideAll: !canViewOthers,

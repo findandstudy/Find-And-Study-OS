@@ -1144,8 +1144,9 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canVie
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
               {canViewOthers && <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>}
-              <SelectItem value="mine_unassigned">{t("applicationsPage.meUnassigned")}</SelectItem>
+              <SelectItem value="mine">{t("applicationsPage.me")}</SelectItem>
               {canViewUnassigned && <SelectItem value="unassigned">{t("applicationsPage.unassigned")}</SelectItem>}
+              <SelectItem value="mine_unassigned">{t("applicationsPage.meUnassigned")}</SelectItem>
               {canViewOthers && staffUsersList.filter(u => u.id !== currentUserId).map(u => (
                 <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
               ))}
@@ -1398,7 +1399,7 @@ export default function ApplicationsPage() {
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
   // Persist the user's "Assigned to" choice locally (per user), like column prefs.
   const [persistedAssignedTo, setPersistedAssignedTo] = usePersistedFilterValue(
-    "applications-table", "assignedTo_v2", canViewOthers ? "all" : DEFAULT_FILTERS.assignedTo, user?.id,
+    "applications-table", "assignedTo_v2", DEFAULT_FILTERS.assignedTo, user?.id,
   );
   const [filters, setFilters] = useState<AppFilters>({ ...DEFAULT_FILTERS, assignedTo: persistedAssignedTo });
   // Restore saved value into filters once auth (and thus the per-user key) resolves.
@@ -1521,9 +1522,10 @@ export default function ApplicationsPage() {
       if (filters.agent === "none") { if (a.agentId) return false; }
       else if (String(a.agentId) !== filters.agent) return false;
     }
+    if (filters.assignedTo === "mine" && a.assignedToId !== user?.id) return false;
     if (filters.assignedTo === "mine_unassigned" && !(a.assignedToId === user?.id || a.assignedToId == null)) return false;
     if (filters.assignedTo === "unassigned" && a.assignedToId != null) return false;
-    if (filters.assignedTo !== "all" && filters.assignedTo !== "mine_unassigned" && filters.assignedTo !== "unassigned" && !isNaN(Number(filters.assignedTo)) && a.assignedToId !== Number(filters.assignedTo)) return false;
+    if (filters.assignedTo !== "all" && filters.assignedTo !== "mine" && filters.assignedTo !== "mine_unassigned" && filters.assignedTo !== "unassigned" && !isNaN(Number(filters.assignedTo)) && a.assignedToId !== Number(filters.assignedTo)) return false;
     if (filters.originType !== "all" && (a.originType || "direct") !== filters.originType) return false;
     if (filters.dateRange !== "all" && a.createdAt && !isDateInRange(a.createdAt, filters.dateRange)) return false;
     if (search) {
@@ -1971,8 +1973,9 @@ export default function ApplicationsPage() {
                             value: filters.assignedTo,
                             onChange: v => setFilters(f => ({ ...f, assignedTo: v })),
                             options: [
-                              { value: "mine_unassigned", label: t("applicationsPage.meUnassigned") },
+                              { value: "mine", label: t("applicationsPage.me") },
                               ...(canViewUnassigned ? [{ value: "unassigned", label: t("applicationsPage.unassigned") }] : []),
+                              { value: "mine_unassigned", label: t("applicationsPage.meUnassigned") },
                             ],
                             allLabel: t("applicationsPage.all"),
                             hideAll: !canViewOthers,
