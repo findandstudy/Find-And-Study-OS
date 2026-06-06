@@ -31,7 +31,7 @@ const SETTINGS_PATCH_FIELDS = [
   "emailSenderName", "emailSenderEmail", "emailReplyTo",
   "emailFooterText", "emailSignatureBlock", "emailButtonColor", "emailDisclaimerText",
   "pdfHeaderText", "pdfFooterText", "pdfWatermarkText", "pdfSignatureLabel",
-  "pdfSealImageUrl", "pdfPrimaryColor",
+  "pdfSealImageUrl", "pdfPrimaryColor", "pdfAccentColor",
   "sitemapUrl", "robotsTxtContent", "customHeadScript", "customBodyEndScript",
   "linkedinInsightTag", "clarityId", "recaptchaSiteKey",
   "whatsappWidgetNumber", "liveChatScript", "featureFlags",

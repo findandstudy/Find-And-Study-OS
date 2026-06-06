@@ -106,6 +106,7 @@ export const settingsTable = pgTable("settings", {
   pdfSignatureLabel: text("pdf_signature_label"),
   pdfSealImageUrl: text("pdf_seal_image_url"),
   pdfPrimaryColor: text("pdf_primary_color"),
+  pdfAccentColor: text("pdf_accent_color"),
 
   // Season Years — supports legacy `number[]` and new detailed `{ year, startDate, endDate }[]`
   availableYears: jsonb("available_years").$type<Array<number | { year: number; startDate: string; endDate: string }>>(),

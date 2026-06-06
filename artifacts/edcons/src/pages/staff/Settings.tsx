@@ -1077,6 +1077,9 @@ export default function SettingsPage() {
               <div>
                 <ColorField label="Document Primary Color" description="Accent color for PDF headers, borders, and highlights" value={s.pdfPrimaryColor || ""} onChange={v => updateSettings({ pdfPrimaryColor: v })} defaultColor="#143591" />
               </div>
+              <div>
+                <ColorField label="Proposal PDF Accent Color" description="Controls header gradient, card colors, numbered badges, and page number in the program proposal PDF. Falls back to navy/blue if unset." value={s.pdfAccentColor || ""} onChange={v => updateSettings({ pdfAccentColor: v })} defaultColor="#1e40af" />
+              </div>
             </div>
           </div>
         </Card>
@@ -1117,6 +1120,7 @@ export default function SettingsPage() {
           pdfFooterText: s.pdfFooterText || null, pdfWatermarkText: s.pdfWatermarkText || null,
           pdfSignatureLabel: s.pdfSignatureLabel || null, pdfSealImageUrl: s.pdfSealImageUrl || null,
           pdfPrimaryColor: s.pdfPrimaryColor || null,
+          pdfAccentColor: s.pdfAccentColor || null,
         })} saving={sectionSaving === "documents"} label="Save Document Settings" />
       </div>
     );

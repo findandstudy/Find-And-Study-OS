@@ -320,7 +320,7 @@ export default function CourseFinder() {
     }
   }
 
-  const { data: settings } = useQuery<{ companyName?: string; companyEmail?: string; companyPhone?: string; companyWebsite?: string; logoUrl?: string | null }>({
+  const { data: settings } = useQuery<{ companyName?: string; companyEmail?: string; companyPhone?: string; companyWebsite?: string; logoUrl?: string | null; pdfAccentColor?: string | null }>({
     queryKey: ["settings-for-pdf"],
     queryFn: () => apiFetch(`${BASE_URL}/api/settings`),
     staleTime: 10 * 60_000,
@@ -390,6 +390,7 @@ export default function CourseFinder() {
         agentShareRate: agentShareRate ?? null,
         serviceFeeMarkup: pdfMarkup !== 0 ? pdfMarkup : undefined,
         hideServiceFee,
+        accentColor: settings?.pdfAccentColor || undefined,
       });
       toast({ title: t("courseFinderPage.pdfGenerated"), description: t("courseFinderPage.proposalDownloaded", { n: selected.length }) });
     } catch (err: any) {

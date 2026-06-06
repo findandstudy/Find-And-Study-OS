@@ -33,6 +33,7 @@ type ProposalOptions = {
   agentShareRate?: number | null;
   serviceFeeMarkup?: number;
   hideServiceFee?: boolean;
+  accentColor?: string | null;
 };
 
 function fmt(amount: number | null | undefined, currency = "USD"): string {
@@ -85,6 +86,16 @@ const BLUE_MID    = [37,  99,  235] as const;
 const BLUE_DARK   = [30,  64,  175] as const;
 const NAVY        = [15,  23,  42 ] as const;
 const NAVY_HDR    = [17,  24,  39 ] as const;
+
+function hexToRgb(hex: string): readonly [number, number, number] | null {
+  const clean = hex.replace(/^#/, "");
+  if (clean.length !== 6) return null;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+  return [r, g, b];
+}
 const DARK        = [30,  41,  59 ] as const;
 const BODY        = [71,  85,  105] as const;
 const SUBTLE      = [148, 163, 184] as const;
@@ -110,7 +121,10 @@ export async function generateProposalPdf(options: ProposalOptions) {
     companyWebsite,
     hideServiceFee = false,
     serviceFeeMarkup = 0,
+    accentColor,
   } = options;
+
+  const ACCENT: readonly [number, number, number] = (accentColor && hexToRgb(accentColor)) || BLUE_DARK;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = 210;
@@ -150,7 +164,7 @@ export async function generateProposalPdf(options: ProposalOptions) {
   }
 
   function drawHeader(isFirst: boolean) {
-    drawGradientRect(0, 0, pageW, HEADER_H, NAVY_HDR, BLUE_DARK);
+    drawGradientRect(0, 0, pageW, HEADER_H, NAVY_HDR, ACCENT);
 
     setF(AMBER);
     doc.rect(0, HEADER_H - 1.2, pageW, 1.2, "F");
@@ -214,7 +228,7 @@ export async function generateProposalPdf(options: ProposalOptions) {
       y + 8.5
     );
 
-    setF(BLUE_DARK);
+    setF(ACCENT);
     const chevX = pageW - mx - 16;
     const chevY = y + BANNER_H / 2 - 2;
     for (let sq = 0; sq < 3; sq++) {
@@ -235,7 +249,7 @@ export async function generateProposalPdf(options: ProposalOptions) {
     setC(BODY);
     doc.text(`${dateStr}  ${timeStr}`, pageW / 2, FOOTER_Y + 4, { align: "center" });
 
-    setC(BLUE_DARK);
+    setC(ACCENT);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.5);
     doc.text(`Page ${pageNum} of ${totalPages}`, pageW - mx, FOOTER_Y + 4, { align: "right" });
@@ -291,10 +305,10 @@ export async function generateProposalPdf(options: ProposalOptions) {
     doc.setLineWidth(0.18);
     doc.roundedRect(cardX, cardY, cardW, cardH, 3, 3, "S");
 
-    drawGradientRect(cardX, cardY, cardW, TOP_H, [22, 30, 55], [30, 58, 138]);
+    drawGradientRect(cardX, cardY, cardW, TOP_H, [22, 30, 55], ACCENT);
     setF([22, 30, 55]);
     doc.rect(cardX, cardY, cardW, 3, "F");
-    setF([30, 58, 138]);
+    setF(ACCENT);
     doc.rect(cardX, cardY + TOP_H - 3, cardW, 3, "F");
 
     const logoSize = 11;
@@ -322,7 +336,7 @@ export async function generateProposalPdf(options: ProposalOptions) {
     const badgeW = doc.getTextWidth(badgeText) + 4;
     const badgeX = logoX + logoSize - badgeW + 1;
     const badgeY = logoY - 3.5;
-    setF(BLUE);
+    setF(ACCENT);
     doc.roundedRect(badgeX, badgeY, badgeW, 4, 1, 1, "F");
     setC(WHITE);
     doc.text(badgeText, badgeX + badgeW / 2, badgeY + 2.9, { align: "center" });
@@ -449,7 +463,7 @@ export async function generateProposalPdf(options: ProposalOptions) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
       doc.text("Intakes", innerLeft, iy);
-      setC(BLUE);
+      setC(ACCENT);
       doc.setFont("helvetica", "bold");
       doc.text(p.intakes, innerRight, iy, { align: "right" });
       iy += 6.5;
