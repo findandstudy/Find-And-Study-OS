@@ -34,6 +34,20 @@ import { useCatalogCurrencies } from "@/hooks/use-catalog-currencies";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
+async function downloadExcel(url: string, filename: string): Promise<void> {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) throw new Error("Export failed");
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
 const toNum = (v: any) => parseFloat(String(v ?? 0)) || 0;
 const fmt = (v: any, currency: string | null | undefined = "USD") =>
   formatMoney(v, currency);
@@ -867,6 +881,9 @@ export default function FinancePage() {
   const [uniSelected, setUniSelected] = useState<Set<string>>(new Set());
   const [uniBulkDeleting, setUniBulkDeleting] = useState(false);
   const [commSort, setCommSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "asc" });
+  const [commExporting, setCommExporting] = useState(false);
+  const [uniExporting, setUniExporting] = useState(false);
+  const [feeExporting, setFeeExporting] = useState(false);
   const commPg = useTablePagination(25);
   const feePg = useTablePagination(25);
 
@@ -1244,6 +1261,27 @@ export default function FinancePage() {
                 </SelectContent>
               </Select>
               <div className="ml-auto flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={commExporting}
+                  onClick={async () => {
+                    setCommExporting(true);
+                    try {
+                      const params = new URLSearchParams({ season });
+                      if (commSearch) params.set("search", commSearch);
+                      if (commStatus !== "all") params.set("status", commStatus);
+                      await downloadExcel(
+                        `${BASE}/api/finance/export/commissions?${params}`,
+                        `commissions_${season}_${new Date().toISOString().slice(0, 10)}.xlsx`
+                      );
+                    } catch { toast({ title: t("financePage.exportExcel"), description: "Export failed", variant: "destructive" }); }
+                    finally { setCommExporting(false); }
+                  }}
+                >
+                  {commExporting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Download className="w-4 h-4 mr-1" />}
+                  {t("financePage.exportExcel")}
+                </Button>
                 <Button variant="outline" onClick={() => setTxModal({ open: true, type: "collection" })}>
                   <Landmark className="w-4 h-4 mr-1" /> Record Collection
                 </Button>
@@ -1558,6 +1596,27 @@ export default function FinancePage() {
 
           {/* UNIVERSITY BREAKDOWN TAB */}
           <TabsContent value="universities" className="mt-4 space-y-4">
+            <div className="flex items-center justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={uniExporting}
+                onClick={async () => {
+                  setUniExporting(true);
+                  try {
+                    const params = new URLSearchParams({ season });
+                    await downloadExcel(
+                      `${BASE}/api/finance/export/university-breakdown?${params}`,
+                      `university_breakdown_${season}_${new Date().toISOString().slice(0, 10)}.xlsx`
+                    );
+                  } catch { toast({ title: t("financePage.exportExcel"), description: "Export failed", variant: "destructive" }); }
+                  finally { setUniExporting(false); }
+                }}
+              >
+                {uniExporting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Download className="w-4 h-4 mr-1" />}
+                {t("financePage.exportExcel")}
+              </Button>
+            </div>
             {uniSelected.size > 0 && (
               <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
                 <span className="text-sm font-medium text-foreground">
@@ -1722,7 +1781,26 @@ export default function FinancePage() {
                   | Potential: {fmt(feeSummary.potentialTotal)} · Confirmed: {fmt(feeSummary.confirmedTotal)}
                 </div>
               )}
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={feeExporting}
+                  onClick={async () => {
+                    setFeeExporting(true);
+                    try {
+                      const params = new URLSearchParams({ season });
+                      await downloadExcel(
+                        `${BASE}/api/finance/export/service-fees?${params}`,
+                        `service_fees_${season}_${new Date().toISOString().slice(0, 10)}.xlsx`
+                      );
+                    } catch { toast({ title: t("financePage.exportExcel"), description: "Export failed", variant: "destructive" }); }
+                    finally { setFeeExporting(false); }
+                  }}
+                >
+                  {feeExporting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Download className="w-4 h-4 mr-1" />}
+                  {t("financePage.exportExcel")}
+                </Button>
                 <Button onClick={() => setFeeModal({ open: true })}>
                   <Plus className="w-4 h-4 mr-1" /> New Service Fee
                 </Button>

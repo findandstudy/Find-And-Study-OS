@@ -7,6 +7,7 @@ import { getAgentRecord } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { getCurrentSeason } from "../lib/season";
 import { loadCurrencyCatalog } from "../lib/currencyCatalog";
+import * as XLSX from "xlsx";
 
 const router: IRouter = Router();
 
@@ -1017,6 +1018,160 @@ router.get("/agent/service-fees", requireAuth, requireRole(...AGENT_ROLES), requ
   const byCurrency = buildAgentFeeByCurrency(allRows);
 
   res.json({ data, byCurrency, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+});
+
+/* ─── EXCEL EXPORT HELPERS & ENDPOINTS ──────────────────────── */
+
+function sendXlsx(res: any, data: Record<string, any>[], filename: string, sheetName: string) {
+  const empty = data.length === 0;
+  const rows = empty ? [{ "No Data": "No records found" }] : data;
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const colWidths = Object.keys(rows[0] || {}).map(key => {
+    const maxLen = Math.max(key.length, ...rows.map(row => String(row[key] ?? "").length));
+    return { wch: Math.min(maxLen + 2, 50) };
+  });
+  ws["!cols"] = colWidths;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(Buffer.from(buf));
+}
+
+function xlsxDate(v: any): string {
+  if (!v) return "";
+  const d = typeof v === "string" ? new Date(v) : v;
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB");
+}
+
+router.get("/finance/export/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const { status, season, search } = req.query as Record<string, string>;
+  const conditions: any[] = [sql`${commissionsTable.status} != 'excluded'`];
+  if (status && status !== "all") conditions.push(eq(commissionsTable.status, status));
+  if (season) conditions.push(eq(commissionsTable.season, season));
+  if (search) {
+    conditions.push(sql`(${commissionsTable.studentName} ilike ${"%" + search + "%"} OR ${commissionsTable.universityName} ilike ${"%" + search + "%"})`);
+  }
+
+  const rows = await db.select().from(commissionsTable).where(and(...conditions)).orderBy(desc(commissionsTable.createdAt));
+
+  const data = rows.map(c => ({
+    "Student": c.studentName || "",
+    "University": c.universityName || "",
+    "Program": c.programName || "",
+    "Season": c.season || "",
+    "Currency": c.currency || "",
+    "Program Fee": c.programFee ?? "",
+    "Univ. Commission Rate (%)": c.universityCommissionRate ?? "",
+    "Univ. Commission": c.universityCommissionAmount ?? "",
+    "Collected from Univ.": c.universityCollected ?? "",
+    "Agent Rate (%)": c.agentCommissionRate ?? "",
+    "Agent Commission": c.agentCommissionAmount ?? "",
+    "Agent Paid": c.agentPaid ?? "",
+    "Sub-Agent Commission": c.subAgentCommissionAmount ?? "",
+    "Sub-Agent Paid": c.subAgentPaid ?? "",
+    "Net Income": (toNum(c.universityCommissionAmount) - toNum(c.agentCommissionAmount)).toFixed(2),
+    "Status": c.status || "",
+    "State University": c.isStateUniversity ? "Yes" : "No",
+    "Offset Amount": c.offsetAmount ?? "",
+    "Notes": c.notes || "",
+    "Confirmed At": xlsxDate(c.confirmedAt),
+    "Created": xlsxDate(c.createdAt),
+  }));
+
+  sendXlsx(res, data, `commissions_${season || "all"}_${new Date().toISOString().slice(0, 10)}.xlsx`, "Commissions");
+});
+
+router.get("/finance/export/university-breakdown", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const { season } = req.query as Record<string, string>;
+  const conditions: any[] = [sql`${commissionsTable.status} != 'excluded'`];
+  if (season) conditions.push(eq(commissionsTable.season, season));
+
+  const allComm = await db.select().from(commissionsTable).where(and(...conditions));
+
+  const uniMap: Record<string, {
+    universityName: string;
+    commissionCount: number;
+    studentCount: number;
+    totalCommission: number;
+    totalCollected: number;
+    totalRemaining: number;
+    totalAgentCommission: number;
+    totalAgentPaid: number;
+    netIncome: number;
+  }> = {};
+
+  const studentKeys = new Set<string>();
+  for (const c of allComm) {
+    const name = c.universityName || "Unknown";
+    if (!uniMap[name]) {
+      uniMap[name] = { universityName: name, commissionCount: 0, studentCount: 0, totalCommission: 0, totalCollected: 0, totalRemaining: 0, totalAgentCommission: 0, totalAgentPaid: 0, netIncome: 0 };
+    }
+    const u = uniMap[name];
+    const uAmt = toNum(c.universityCommissionAmount);
+    const uColl = toNum(c.universityCollected);
+    const aAmt = toNum(c.agentCommissionAmount);
+    const aPaid = toNum(c.agentPaid);
+    u.totalCommission += uAmt;
+    u.totalCollected += uColl;
+    u.totalRemaining += uAmt - uColl;
+    u.totalAgentCommission += aAmt;
+    u.totalAgentPaid += aPaid;
+    u.netIncome += uColl - aPaid;
+    u.commissionCount++;
+    if (c.studentName) {
+      const key = `${name}::${c.studentName}`;
+      if (!studentKeys.has(key)) { studentKeys.add(key); u.studentCount++; }
+    }
+  }
+
+  const breakdown = Object.values(uniMap).sort((a, b) => b.totalCommission - a.totalCommission);
+
+  const data = breakdown.map(u => ({
+    "University": u.universityName,
+    "Commissions": u.commissionCount,
+    "Students": u.studentCount,
+    "Total Commission": u.totalCommission.toFixed(2),
+    "Collected": u.totalCollected.toFixed(2),
+    "Remaining": u.totalRemaining.toFixed(2),
+    "Agent Commission": u.totalAgentCommission.toFixed(2),
+    "Agent Paid": u.totalAgentPaid.toFixed(2),
+    "Net Income": u.netIncome.toFixed(2),
+    "Collection %": u.totalCommission > 0 ? Math.round((u.totalCollected / u.totalCommission) * 100) + "%" : "0%",
+  }));
+
+  sendXlsx(res, data, `university_breakdown_${season || "all"}_${new Date().toISOString().slice(0, 10)}.xlsx`, "University Breakdown");
+});
+
+router.get("/finance/export/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const { season, status, financeStatus } = req.query as Record<string, string>;
+  const conditions: any[] = [sql`${serviceFeesTable.financeStatus} != 'excluded'`];
+  if (season) conditions.push(eq(serviceFeesTable.season, season));
+  if (status && status !== "all") conditions.push(eq(serviceFeesTable.status, status));
+  if (financeStatus && financeStatus !== "all") conditions.push(eq(serviceFeesTable.financeStatus, financeStatus));
+
+  const rows = await db.select().from(serviceFeesTable).where(and(...conditions)).orderBy(desc(serviceFeesTable.createdAt));
+
+  const data = rows.map(f => ({
+    "Student": f.studentName || "",
+    "University": f.universityName || "",
+    "Payer": f.payerType || "",
+    "Season": f.season || "",
+    "Currency": f.currency || "",
+    "Total Amount": f.totalAmount ?? "",
+    "1st Installment": f.firstInstallmentAmount ?? "",
+    "1st Paid At": xlsxDate(f.firstInstallmentPaidAt),
+    "2nd Installment": f.secondInstallmentAmount ?? "",
+    "2nd Paid At": xlsxDate(f.secondInstallmentPaidAt),
+    "Status": f.status || "",
+    "Finance Status": f.financeStatus || "",
+    "State University": f.isStateUniversity ? "Yes" : "No",
+    "Notes": f.notes || "",
+    "Created": xlsxDate(f.createdAt),
+  }));
+
+  sendXlsx(res, data, `service_fees_${season || "all"}_${new Date().toISOString().slice(0, 10)}.xlsx`, "Service Fees");
 });
 
 export default router;

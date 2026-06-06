@@ -1889,7 +1889,8 @@
     "includesServiceFee": "Incluye cobros de tarifas de servicio",
     "cancel": "Cancelar",
     "total": "Total",
-    "currentDays": "Actual (0-30 días)"
+    "currentDays": "Actual (0-30 días)",
+    "exportExcel": "Exportar Excel"
   },
   "studentsPage": {
     "addNewStudent": "Agregar estudiante",

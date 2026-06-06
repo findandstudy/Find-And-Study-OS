@@ -2119,7 +2119,8 @@
     "includesServiceFee": "Hizmet bedeli tahsilatları dahil",
     "cancel": "İptal",
     "total": "Toplam",
-    "currentDays": "Güncel (0-30 gün)"
+    "currentDays": "Güncel (0-30 gün)",
+    "exportExcel": "Excel İndir"
   },
   "studentsPage": {
     "addNewStudent": "Yeni Öğrenci Ekle",

@@ -2178,7 +2178,8 @@
     "includesServiceFee": "Includes service fee collections",
     "cancel": "Cancel",
     "total": "Total",
-    "currentDays": "Current (0-30 days)"
+    "currentDays": "Current (0-30 days)",
+    "exportExcel": "Export Excel"
   },
   "studentsPage": {
     "addNewStudent": "Add New Student",

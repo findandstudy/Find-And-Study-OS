@@ -1889,7 +1889,8 @@
     "includesServiceFee": "包含服务费收款",
     "cancel": "取消",
     "total": "总计",
-    "currentDays": "当前 (0-30 天)"
+    "currentDays": "当前 (0-30 天)",
+    "exportExcel": "导出 Excel"
   },
   "studentsPage": {
     "addNewStudent": "添加新学生",

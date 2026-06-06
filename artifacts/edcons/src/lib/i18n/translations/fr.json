@@ -1940,7 +1940,8 @@
     "includesServiceFee": "Inclut les frais de service encaissés",
     "cancel": "Annuler",
     "total": "Total",
-    "currentDays": "Actuel (0-30 jours)"
+    "currentDays": "Actuel (0-30 jours)",
+    "exportExcel": "Exporter Excel"
   },
   "studentsPage": {
     "addNewStudent": "Ajouter un étudiant",

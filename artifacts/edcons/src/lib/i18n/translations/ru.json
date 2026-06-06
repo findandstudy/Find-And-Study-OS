@@ -1940,7 +1940,8 @@
     "includesServiceFee": "Включает сборы сервисных платежей",
     "cancel": "Отмена",
     "total": "Итого",
-    "currentDays": "Текущий (0-30 дней)"
+    "currentDays": "Текущий (0-30 дней)",
+    "exportExcel": "Экспорт в Excel"
   },
   "studentsPage": {
     "addNewStudent": "Добавить студента",

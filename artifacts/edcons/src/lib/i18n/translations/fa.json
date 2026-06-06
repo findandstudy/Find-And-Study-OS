@@ -1889,7 +1889,8 @@
     "includesServiceFee": "شامل وصول‌های هزینه خدمات",
     "cancel": "لغو",
     "total": "کل",
-    "currentDays": "جاری (۰-۳۰ روز)"
+    "currentDays": "جاری (۰-۳۰ روز)",
+    "exportExcel": "خروجی اکسل"
   },
   "studentsPage": {
     "addNewStudent": "افزودن دانشجوی جدید",

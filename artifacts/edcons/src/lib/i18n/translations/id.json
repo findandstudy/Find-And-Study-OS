@@ -1889,7 +1889,8 @@
     "includesServiceFee": "Termasuk penagihan biaya layanan",
     "cancel": "Batal",
     "total": "Total",
-    "currentDays": "Saat ini (0-30 hari)"
+    "currentDays": "Saat ini (0-30 hari)",
+    "exportExcel": "Ekspor Excel"
   },
   "studentsPage": {
     "addNewStudent": "Tambah Siswa Baru",

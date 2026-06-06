@@ -1940,7 +1940,8 @@
     "includesServiceFee": "يشمل تحصيلات رسوم الخدمة",
     "cancel": "إلغاء",
     "total": "الإجمالي",
-    "currentDays": "حالي (0-30 يوماً)"
+    "currentDays": "حالي (0-30 يوماً)",
+    "exportExcel": "تصدير إلى Excel"
   },
   "studentsPage": {
     "addNewStudent": "إضافة طالب جديد",
