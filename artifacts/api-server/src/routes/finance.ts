@@ -368,6 +368,19 @@ router.post("/commissions/bulk-delete", requireAuth, requireRole(...FINANCE_ROLE
   res.json({ deleted: numericIds.length });
 });
 
+router.post("/commissions/bulk-delete-by-university", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const { universityNames } = req.body;
+  if (!Array.isArray(universityNames) || universityNames.length === 0) {
+    res.status(400).json({ error: "universityNames array is required" });
+    return;
+  }
+  const names = (universityNames as any[]).filter((n: any) => typeof n === "string" && n.trim());
+  if (names.length === 0) { res.status(400).json({ error: "No valid university names" }); return; }
+  await db.delete(commissionsTable).where(inArray(commissionsTable.universityName, names));
+  await logAudit(req.user!.id, "bulk_delete_commissions_by_university", "commission", null as any, { count: names.length, universityNames: names }, req.ip);
+  res.json({ deleted: names.length });
+});
+
 router.delete("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -496,6 +509,19 @@ router.patch("/service-fees/:id", requireAuth, requireRole(...FINANCE_ROLES), as
   const [fee] = await db.update(serviceFeesTable).set(updates).where(eq(serviceFeesTable.id, id)).returning();
   await logAudit(req.user!.id, "update_service_fee", "service_fee", id, updates, req.ip);
   res.json(fee);
+});
+
+router.post("/service-fees/bulk-delete", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids array is required" });
+    return;
+  }
+  const numericIds = ids.map((id: any) => parseInt(id, 10)).filter((id: number) => !isNaN(id));
+  if (numericIds.length === 0) { res.status(400).json({ error: "No valid ids" }); return; }
+  await db.delete(serviceFeesTable).where(inArray(serviceFeesTable.id, numericIds));
+  await logAudit(req.user!.id, "bulk_delete_service_fees", "service_fee", null as any, { count: numericIds.length, ids: numericIds }, req.ip);
+  res.json({ deleted: numericIds.length });
 });
 
 router.delete("/service-fees/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {

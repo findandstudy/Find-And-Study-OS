@@ -862,6 +862,10 @@ export default function FinancePage() {
   const [deleting, setDeleting] = useState<number | null>(null);
   const [commSelected, setCommSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [feeSelected, setFeeSelected] = useState<Set<number>>(new Set());
+  const [feeBulkDeleting, setFeeBulkDeleting] = useState(false);
+  const [uniSelected, setUniSelected] = useState<Set<string>>(new Set());
+  const [uniBulkDeleting, setUniBulkDeleting] = useState(false);
   const [commSort, setCommSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "asc" });
   const commPg = useTablePagination(25);
   const feePg = useTablePagination(25);
@@ -1008,6 +1012,61 @@ export default function FinancePage() {
       toast({ title: `${ids.length} commission${ids.length > 1 ? "s" : ""} deleted` });
     } catch { toast({ title: t("financePage.errorDeletingCommissions"), variant: "destructive" }); }
     finally { setBulkDeleting(false); }
+  }
+
+  function toggleFeeSelect(id: number) {
+    setFeeSelected(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+  function toggleFeeSelectAll(ids: number[]) {
+    const allIn = ids.length > 0 && ids.every(id => feeSelected.has(id));
+    setFeeSelected(allIn ? new Set() : new Set(ids));
+  }
+  async function bulkDeleteServiceFees() {
+    const ids = Array.from(feeSelected);
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} selected service fee${ids.length > 1 ? "s" : ""}?`)) return;
+    setFeeBulkDeleting(true);
+    try {
+      await fetch(`${BASE}/api/service-fees/bulk-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids }),
+      });
+      setFeeSelected(new Set());
+      qc.invalidateQueries({ queryKey: ["service-fees"] });
+      qc.invalidateQueries({ queryKey: ["finance-summary"] });
+      toast({ title: `${ids.length} service fee${ids.length > 1 ? "s" : ""} deleted` });
+    } catch { toast({ title: t("financePage.errorDeleting"), variant: "destructive" }); }
+    finally { setFeeBulkDeleting(false); }
+  }
+
+  function toggleUniSelect(name: string) {
+    setUniSelected(prev => { const next = new Set(prev); if (next.has(name)) next.delete(name); else next.add(name); return next; });
+  }
+  function toggleUniSelectAll(names: string[]) {
+    const allIn = names.length > 0 && names.every(n => uniSelected.has(n));
+    setUniSelected(allIn ? new Set() : new Set(names));
+  }
+  async function bulkDeleteUniversities() {
+    const names = Array.from(uniSelected);
+    if (names.length === 0) return;
+    if (!confirm(`Delete all commissions for ${names.length} selected universit${names.length > 1 ? "ies" : "y"}?`)) return;
+    setUniBulkDeleting(true);
+    try {
+      await fetch(`${BASE}/api/commissions/bulk-delete-by-university`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ universityNames: names }),
+      });
+      setUniSelected(new Set());
+      qc.invalidateQueries({ queryKey: ["commissions"] });
+      qc.invalidateQueries({ queryKey: ["finance-summary"] });
+      qc.invalidateQueries({ queryKey: ["university-breakdown"] });
+      toast({ title: `${names.length} universit${names.length > 1 ? "ies" : "y"}'s commissions deleted` });
+    } catch { toast({ title: t("financePage.errorDeleting"), variant: "destructive" }); }
+    finally { setUniBulkDeleting(false); }
   }
 
   function handleCommSort(key: string) {
@@ -1499,6 +1558,26 @@ export default function FinancePage() {
 
           {/* UNIVERSITY BREAKDOWN TAB */}
           <TabsContent value="universities" className="mt-4 space-y-4">
+            {uniSelected.size > 0 && (
+              <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
+                <span className="text-sm font-medium text-foreground">
+                  {uniSelected.size} universit{uniSelected.size > 1 ? "ies" : "y"} selected
+                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={bulkDeleteUniversities}
+                  disabled={uniBulkDeleting}
+                  className="ml-auto"
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  {uniBulkDeleting ? "Deleting..." : `Delete All Commissions (${uniSelected.size})`}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setUniSelected(new Set())}>
+                  Clear Selection
+                </Button>
+              </div>
+            )}
             {uniBreakdown.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 <Building2 className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -1536,6 +1615,13 @@ export default function FinancePage() {
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
+                        <th className="px-3 py-3 w-[40px]">
+                          <Checkbox
+                            checked={uniBreakdown.length > 0 && uniBreakdown.every((u: any) => uniSelected.has(u.universityName)) ? true : uniBreakdown.some((u: any) => uniSelected.has(u.universityName)) ? ("indeterminate" as any) : false}
+                            onCheckedChange={() => toggleUniSelectAll(uniBreakdown.map((u: any) => u.universityName))}
+                            aria-label="Select all"
+                          />
+                        </th>
                         <th className="text-left px-4 py-3 font-semibold text-slate-600">{t("financePage.university")}</th>
                         <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.totalCommission")}</th>
                         <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.collected")}</th>
@@ -1551,7 +1637,14 @@ export default function FinancePage() {
                         const collPct = pct(u.totalCollected, u.totalCommission);
                         const isOverdue = u.oldestUnpaid && ((Date.now() - new Date(u.oldestUnpaid).getTime()) / (1000 * 60 * 60 * 24) > 90);
                         return (
-                          <tr key={u.universityName} className="hover:bg-slate-50 transition-colors">
+                          <tr key={u.universityName} className={`hover:bg-slate-50 transition-colors ${uniSelected.has(u.universityName) ? "bg-blue-50/50" : ""}`}>
+                            <td className="px-3 py-3">
+                              <Checkbox
+                                checked={uniSelected.has(u.universityName)}
+                                onCheckedChange={() => toggleUniSelect(u.universityName)}
+                                aria-label={`Select ${u.universityName}`}
+                              />
+                            </td>
                             <td className="px-4 py-3">
                               <div className="font-medium text-slate-800 flex items-center gap-2">
                                 <Building2 className="w-4 h-4 text-slate-400" />
@@ -1599,6 +1692,7 @@ export default function FinancePage() {
                     </tbody>
                     <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                       <tr>
+                        <td className="px-3 py-3" />
                         <td className="px-4 py-3 text-slate-600">{uniBreakdown.length} Universities</td>
                         <td className="px-4 py-3 text-right text-blue-700 tabular-nums">{fmt(uniTotals.totalCommission)}</td>
                         <td className="px-4 py-3 text-right text-green-700 tabular-nums">{fmt(uniTotals.totalCollected)}</td>
@@ -1635,6 +1729,27 @@ export default function FinancePage() {
               </div>
             </div>
 
+            {feeSelected.size > 0 && (
+              <div className="flex items-center gap-3 px-4 py-3 bg-destructive/5 border border-destructive/20 rounded-xl">
+                <span className="text-sm font-medium text-foreground">
+                  {feeSelected.size} service fee{feeSelected.size > 1 ? "s" : ""} selected
+                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={bulkDeleteServiceFees}
+                  disabled={feeBulkDeleting}
+                  className="ml-auto"
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  {feeBulkDeleting ? "Deleting..." : `Delete Selected (${feeSelected.size})`}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setFeeSelected(new Set())}>
+                  Clear Selection
+                </Button>
+              </div>
+            )}
+
             {feeLoading ? (
               <div className="text-center py-12 text-slate-400">
                 <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />Loading...
@@ -1649,6 +1764,13 @@ export default function FinancePage() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
+                      <th className="px-3 py-3 w-[40px]">
+                        <Checkbox
+                          checked={pagedFees.length > 0 && pagedFees.every((f: any) => feeSelected.has(f.id)) ? true : pagedFees.some((f: any) => feeSelected.has(f.id)) ? ("indeterminate" as any) : false}
+                          onCheckedChange={() => toggleFeeSelectAll(pagedFees.map((f: any) => f.id))}
+                          aria-label="Select all"
+                        />
+                      </th>
                       <th className="text-left px-4 py-3 font-semibold text-slate-600">Student / University</th>
                       <th className="text-left px-4 py-3 font-semibold text-slate-600">{t("financePage.payer")}</th>
                       <th className="text-right px-4 py-3 font-semibold text-slate-600">{t("financePage.total")}</th>
@@ -1663,7 +1785,14 @@ export default function FinancePage() {
                       const status = FEE_STATUS[f.status] || FEE_STATUS.pending;
                       const half = toNum(f.totalAmount) / 2;
                       return (
-                        <tr key={f.id} className="hover:bg-slate-50 transition-colors">
+                        <tr key={f.id} className={`hover:bg-slate-50 transition-colors ${feeSelected.has(f.id) ? "bg-blue-50/50" : ""}`}>
+                          <td className="px-3 py-3">
+                            <Checkbox
+                              checked={feeSelected.has(f.id)}
+                              onCheckedChange={() => toggleFeeSelect(f.id)}
+                              aria-label={`Select ${f.studentName}`}
+                            />
+                          </td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-slate-800">{f.studentName || "—"}</div>
                             <div className="text-xs text-slate-500">{f.universityName || "—"}</div>
@@ -1756,6 +1885,7 @@ export default function FinancePage() {
                   </tbody>
                   <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
                     <tr>
+                      <td className="px-3 py-3" />
                       <td colSpan={2} className="px-4 py-3 text-slate-600">Totals ({fees.length})</td>
                       <td className="px-4 py-3 text-right text-slate-800 tabular-nums">
                         {fmt(feeSummary.totalServiceFees || 0)}
