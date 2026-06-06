@@ -206,109 +206,6 @@ export default function StaffDashboard() {
           </Card>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
-            <h3 className="font-display font-bold text-lg mb-6">{t("staffDash.growthOverview")}</h3>
-            <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    itemStyle={{ color: 'hsl(var(--foreground))' }}
-                  />
-                  <Area type="monotone" dataKey="leads" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#colorLeads)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          <Card className="p-6 border-none shadow-lg shadow-black/5">
-            <div className="flex items-center gap-2 mb-6">
-              <CalendarClock className="w-5 h-5 text-primary" />
-              <h3 className="font-display font-bold text-lg">{t("staffDash.upcomingFollowUps")}</h3>
-            </div>
-            <div className="space-y-3">
-              {(upcomingFollowUps as any[]).length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("staffDash.noFollowUps")}</p>
-              ) : (
-                (upcomingFollowUps as any[]).slice(0, 6).map((fu: any) => (
-                  <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : fu.studentId ? `/staff/students/${fu.studentId}` : "#"}>
-                    <div className={`p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-transform ${
-                      isOverdue(fu.scheduledAt) ? "bg-red-50 border-red-200" : "bg-secondary/30 border-border"
-                    }`}>
-                      <div className="flex items-start justify-between">
-                        <p className="text-sm font-medium text-foreground line-clamp-1">{fu.title}</p>
-                        <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
-                      </div>
-                      {fu.leadName && (
-                        <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>
-                      )}
-                      <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
-                        {new Date(fu.scheduledAt).toLocaleDateString(dateLoc, { day: "2-digit", month: "2-digit", year: "numeric" })}
-                        {" "}
-                        {new Date(fu.scheduledAt).toLocaleTimeString(dateLoc, { hour: "2-digit", minute: "2-digit" })}
-                        {isOverdue(fu.scheduledAt) && ` — ${t("common.overdue")}`}
-                      </p>
-                      {(fu.updatedByName ?? fu.createdByName) && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {fu.updatedByName ? t("staffDash.followUpLastEditedBy", { name: fu.updatedByName }) : t("staffDash.followUpCreatedBy", { name: fu.createdByName })}
-                        </p>
-                      )}
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {quickLinks.length > 0 && (
-          <Card className="p-6 border-none shadow-lg shadow-black/5">
-            <div className="flex items-center gap-2 mb-5">
-              <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                <LinkIcon className="w-4 h-4 text-violet-500" />
-              </div>
-              <h3 className="font-display font-bold text-base">{t("staffDash.quickLinks")}</h3>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {quickLinks.map((link: any) => (
-                <a
-                  key={link.id}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-3 rounded-xl border border-border/60 hover:bg-primary/5 hover:border-primary/30 transition-all group"
-                >
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold overflow-hidden"
-                    style={{ backgroundColor: link.logoUrl ? "transparent" : (link.color || "#6366f1") }}
-                  >
-                    {link.logoUrl ? (
-                      <img src={link.logoUrl} alt={link.title} className="w-full h-full object-contain" />
-                    ) : (
-                      link.icon || link.title.charAt(0).toUpperCase()
-                    )}
-                  </div>
-                  <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{link.title}</span>
-                </a>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {showOfferDeadlines && (
-          <OfferDeadlinesWidget detailHrefPrefix="/staff/applications" />
-        )}
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="p-6 border-none shadow-lg shadow-black/5">
             <div className="flex items-center gap-2 mb-5">
@@ -445,6 +342,110 @@ export default function StaffDashboard() {
             </div>
           </Card>
         </div>
+
+        <div className="grid lg:grid-cols-3 gap-8">
+          <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
+            <h3 className="font-display font-bold text-lg mb-6">{t("staffDash.growthOverview")}</h3>
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    itemStyle={{ color: 'hsl(var(--foreground))' }}
+                  />
+                  <Area type="monotone" dataKey="leads" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#colorLeads)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-6">
+              <CalendarClock className="w-5 h-5 text-primary" />
+              <h3 className="font-display font-bold text-lg">{t("staffDash.upcomingFollowUps")}</h3>
+            </div>
+            <div className="space-y-3">
+              {(upcomingFollowUps as any[]).length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("staffDash.noFollowUps")}</p>
+              ) : (
+                (upcomingFollowUps as any[]).slice(0, 6).map((fu: any) => (
+                  <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : fu.studentId ? `/staff/students/${fu.studentId}` : "#"}>
+                    <div className={`p-3 rounded-xl border cursor-pointer hover:scale-[1.02] transition-transform ${
+                      isOverdue(fu.scheduledAt) ? "bg-red-50 border-red-200" : "bg-secondary/30 border-border"
+                    }`}>
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium text-foreground line-clamp-1">{fu.title}</p>
+                        <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+                      </div>
+                      {fu.leadName && (
+                        <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>
+                      )}
+                      <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+                        {new Date(fu.scheduledAt).toLocaleDateString(dateLoc, { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        {" "}
+                        {new Date(fu.scheduledAt).toLocaleTimeString(dateLoc, { hour: "2-digit", minute: "2-digit" })}
+                        {isOverdue(fu.scheduledAt) && ` — ${t("common.overdue")}`}
+                      </p>
+                      {(fu.updatedByName ?? fu.createdByName) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {fu.updatedByName ? t("staffDash.followUpLastEditedBy", { name: fu.updatedByName }) : t("staffDash.followUpCreatedBy", { name: fu.createdByName })}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {quickLinks.length > 0 && (
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                <LinkIcon className="w-4 h-4 text-violet-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">{t("staffDash.quickLinks")}</h3>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {quickLinks.map((link: any) => (
+                <a
+                  key={link.id}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-border/60 hover:bg-primary/5 hover:border-primary/30 transition-all group"
+                >
+                  <div
+                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold overflow-hidden"
+                    style={{ backgroundColor: link.logoUrl ? "transparent" : (link.color || "#6366f1") }}
+                  >
+                    {link.logoUrl ? (
+                      <img src={link.logoUrl} alt={link.title} className="w-full h-full object-contain" />
+                    ) : (
+                      link.icon || link.title.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <span className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{link.title}</span>
+                </a>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {showOfferDeadlines && (
+          <OfferDeadlinesWidget detailHrefPrefix="/staff/applications" />
+        )}
+
       </div>
   );
 }
