@@ -33,7 +33,7 @@ interface RowActionsMenuProps {
   canReassign?: boolean;
   userId?: number | null;
   onEdit: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   onAssign?: (userId: number) => void;
   onRefresh?: () => void;
 }
@@ -148,10 +148,14 @@ export function RowActionsMenu({
             </>
           )}
 
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-            <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-          </DropdownMenuItem>
+          {onDelete && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

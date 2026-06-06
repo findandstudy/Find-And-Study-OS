@@ -20,7 +20,7 @@ interface StaffOption {
 
 interface BulkActionBarProps {
   selectedCount: number;
-  onDelete: () => void;
+  onDelete?: () => void;
   onAssign: (userId: number) => void;
   onMove: (stageKey: string) => void;
   stages: StageOption[];
@@ -50,9 +50,11 @@ export function BulkActionBar({
         {selectedCount} selected
       </span>
 
-      <Button variant="destructive" size="sm" className="rounded-full h-8 gap-1.5" onClick={onDelete}>
-        <Trash2 className="w-3.5 h-3.5" /> Delete
-      </Button>
+      {onDelete && (
+        <Button variant="destructive" size="sm" className="rounded-full h-8 gap-1.5" onClick={onDelete}>
+          <Trash2 className="w-3.5 h-3.5" /> Delete
+        </Button>
+      )}
 
       {staffUsers.length > 0 && (
         <Popover open={assignOpen} onOpenChange={setAssignOpen}>

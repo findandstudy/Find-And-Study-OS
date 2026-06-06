@@ -2374,7 +2374,7 @@ export default function StudentsPage() {
             </div>
             <BulkActionBar
               selectedCount={selectedIds.size}
-              onDelete={() => setDeleteOpen(true)}
+              onDelete={isAdmin ? () => setDeleteOpen(true) : undefined}
               onAssign={handleBulkAssign}
               onMove={handleBulkMoveStatus}
               stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
@@ -2387,9 +2387,11 @@ export default function StudentsPage() {
                 <Download className="w-3.5 h-3.5" /> Excel
               </Button>
             )}
-            <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
-              <FileUp className="w-4 h-4" /> Bulk Import
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
+                <FileUp className="w-4 h-4" /> Bulk Import
+              </Button>
+            )}
             <Button className="rounded-full shadow-lg shadow-primary/20" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> Add Student
             </Button>
@@ -2559,7 +2561,7 @@ export default function StudentsPage() {
                           canReassign={canReassign}
                           userId={student.userId}
                           onEdit={() => setEditStudent(student)}
-                          onDelete={() => { setSelectedIds(new Set([student.id])); setDeleteOpen(true); }}
+                          onDelete={isAdmin ? () => { setSelectedIds(new Set([student.id])); setDeleteOpen(true); } : undefined}
                           onAssign={(uid) => handleAssign(student.id, uid)}
                           onRefresh={() => queryClient.invalidateQueries({ queryKey: ["/api/students"] })}
                         />

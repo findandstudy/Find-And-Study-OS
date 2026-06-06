@@ -1812,7 +1812,7 @@ export default function ApplicationsPage() {
             </div>
             <BulkActionBar
               selectedCount={selectedIds.size}
-              onDelete={() => setDeleteOpen(true)}
+              onDelete={isAdmin ? () => setDeleteOpen(true) : undefined}
               onAssign={handleBulkAssign}
               onMove={handleBulkMoveStage}
               stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
@@ -2202,7 +2202,7 @@ export default function ApplicationsPage() {
                                 canAssign={canAssign}
                                 canReassign={canReassign}
                                 onEdit={() => setEditApp(app)}
-                                onDelete={() => { setSelectedIds(new Set([app.id])); setDeleteOpen(true); }}
+                                onDelete={isAdmin ? () => { setSelectedIds(new Set([app.id])); setDeleteOpen(true); } : undefined}
                                 onAssign={(uid) => handleAssign(app.id, uid)}
                                 onRefresh={() => queryClient.invalidateQueries({ queryKey: ["applications"] })}
                               />
