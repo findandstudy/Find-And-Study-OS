@@ -256,3 +256,59 @@ export async function cascadeStudentAssignment(opts: {
     console.error("[cascadeStudentAssignment] failed:", err?.message || err);
   }
 }
+
+/**
+ * Cascade an application's assigned-staff change up to its student and that
+ * student's source lead(s). Used when an Application's `assignedToId` changes.
+ *
+ * Like the other cascade helpers it is best-effort (swallows errors so it
+ * never breaks the calling application-update flow) and skips records already
+ * pointing at the new staff. Each upstream change is written to the audit log.
+ */
+export async function cascadeApplicationAssignment(opts: {
+  applicationId: number;
+  studentId: number;
+  newAssignedToId: number | null;
+  actorUserId: number | null;
+  ipAddress?: string;
+}): Promise<void> {
+  const { applicationId, studentId, newAssignedToId, actorUserId, ipAddress } = opts;
+  try {
+    const [student] = await db
+      .select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId })
+      .from(studentsTable)
+      .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+
+    if (student && student.assignedToId !== newAssignedToId) {
+      await db.update(studentsTable)
+        .set({ assignedToId: newAssignedToId })
+        .where(eq(studentsTable.id, student.id));
+      logAudit(actorUserId, "assignment.cascade", "student", student.id, {
+        from: student.assignedToId ?? null,
+        to: newAssignedToId ?? null,
+        source: "application",
+        sourceId: applicationId,
+      }, ipAddress);
+    }
+
+    const leads = await db
+      .select({ id: leadsTable.id, assignedToId: leadsTable.assignedToId })
+      .from(leadsTable)
+      .where(and(eq(leadsTable.convertedStudentId, studentId), isNull(leadsTable.deletedAt)));
+
+    for (const lead of leads) {
+      if (lead.assignedToId === newAssignedToId) continue;
+      await db.update(leadsTable)
+        .set({ assignedToId: newAssignedToId })
+        .where(eq(leadsTable.id, lead.id));
+      logAudit(actorUserId, "assignment.cascade", "lead", lead.id, {
+        from: lead.assignedToId ?? null,
+        to: newAssignedToId ?? null,
+        source: "application",
+        sourceId: applicationId,
+      }, ipAddress);
+    }
+  } catch (err: any) {
+    console.error("[cascadeApplicationAssignment] failed:", err?.message || err);
+  }
+}

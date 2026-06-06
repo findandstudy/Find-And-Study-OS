@@ -854,9 +854,26 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), asyn
     updated = await softDelete(leadsTable, numericIds, { actorUserId: req.user!.id });
     for (const id of numericIds) logAudit(req.user!.id, "delete_lead", "lead", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
-    const result = await db.update(leadsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(inArray(leadsTable.id, numericIds));
+    const newAssignedToId = assignedToId ? Number(assignedToId) : null;
+    const affectedLeads = await db.select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
+      .from(leadsTable)
+      .where(inArray(leadsTable.id, numericIds));
+    const result = await db.update(leadsTable).set({ assignedToId: newAssignedToId }).where(inArray(leadsTable.id, numericIds));
     updated = result.rowCount ?? numericIds.length;
     await logAudit(req.user!.id, "bulk_assign_leads", "lead", null, { ids: numericIds, assignedToId }, req.ip);
+    const canCascadeLeads = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
+    if (canCascadeLeads) {
+      for (const l of affectedLeads) {
+        if (!l.convertedStudentId) continue;
+        await cascadeLeadAssignment({
+          leadId: l.id,
+          convertedStudentId: l.convertedStudentId,
+          newAssignedToId,
+          actorUserId: req.user!.id,
+          ipAddress: req.ip,
+        });
+      }
+    }
   } else if (action === "move" && status) {
     const result = await db.update(leadsTable).set({ status }).where(inArray(leadsTable.id, numericIds));
     updated = result.rowCount ?? numericIds.length;

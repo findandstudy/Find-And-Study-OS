@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { cascadeStudentAssignment } from "../lib/leadAssignment";
 import { z } from "zod";
 import {
   db,
@@ -371,6 +372,12 @@ router.post("/staff-cards/:userId/assigned-students", requireAuth, requireStaffC
   const [s] = await db.update(studentsTable).set({ assignedToId: userId }).where(eq(studentsTable.id, studentId)).returning();
   if (!s) { res.status(404).json({ error: "Student not found" }); return; }
   logAudit(req.user!.id, "staff_card.assigned_student.add", "user", userId, { studentId }, req.ip);
+  cascadeStudentAssignment({
+    studentId,
+    newAssignedToId: userId,
+    actorUserId: req.user!.id,
+    ipAddress: req.ip,
+  }).catch(() => {});
   res.json({ success: true });
 });
 
@@ -380,6 +387,12 @@ router.delete("/staff-cards/:userId/assigned-students/:studentId", requireAuth, 
   await db.update(studentsTable).set({ assignedToId: null })
     .where(and(eq(studentsTable.id, studentId), eq(studentsTable.assignedToId, userId)));
   logAudit(req.user!.id, "staff_card.assigned_student.remove", "user", userId, { studentId }, req.ip);
+  cascadeStudentAssignment({
+    studentId,
+    newAssignedToId: null,
+    actorUserId: req.user!.id,
+    ipAddress: req.ip,
+  }).catch(() => {});
   res.sendStatus(204);
 });
 

@@ -5,7 +5,8 @@ import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
-import { getEffectivePermissionSet, canAccessAssignedRecord } from "../lib/permissions";
+import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
+import { cascadeApplicationAssignment } from "../lib/leadAssignment";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { or as orFn } from "drizzle-orm";
@@ -1184,6 +1185,23 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }).catch(() => {});
   }
 
+  const appAssignmentChanged =
+    Object.prototype.hasOwnProperty.call(updates, "assignedToId") &&
+    preUpdateApp &&
+    updates.assignedToId !== preUpdateApp.assignedToId;
+  if (appAssignmentChanged) {
+    const canCascade = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
+    if (canCascade) {
+      await cascadeApplicationAssignment({
+        applicationId: app.id,
+        studentId: app.studentId,
+        newAssignedToId: typeof app.assignedToId === "number" ? app.assignedToId : null,
+        actorUserId: req.user!.id,
+        ipAddress: req.ip,
+      });
+    }
+  }
+
   if (updates.agentId !== undefined && preUpdateApp && updates.agentId !== preUpdateApp.agentId) {
     const [studentRec5] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
     const sName5 = studentRec5 ? `${studentRec5.firstName || ""} ${studentRec5.lastName || ""}`.trim() : "student";
@@ -1231,9 +1249,25 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
     }
     for (const id of liveIds) logAudit(req.user!.id, "delete_application", "application", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
-    const result = await db.update(applicationsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    const newAssignedToId = assignedToId ? Number(assignedToId) : null;
+    const affectedApps = await db.select({ id: applicationsTable.id, studentId: applicationsTable.studentId })
+      .from(applicationsTable)
+      .where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
+    const result = await db.update(applicationsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
     await logAudit(req.user!.id, "bulk_assign_applications", "application", null, { ids: numericIds, assignedToId }, req.ip);
+    const canCascadeApps = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
+    if (canCascadeApps) {
+      for (const a of affectedApps) {
+        await cascadeApplicationAssignment({
+          applicationId: a.id,
+          studentId: a.studentId,
+          newAssignedToId,
+          actorUserId: req.user!.id,
+          ipAddress: req.ip,
+        });
+      }
+    }
   } else if (action === "move" && stage) {
     const allApps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     // Task #269 — bulk move cannot prompt a per-application document

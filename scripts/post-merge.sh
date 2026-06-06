@@ -9,3 +9,6 @@ pnpm --filter @workspace/api-server exec tsx ./scripts/cleanup-embed-duplicates.
 # /public/lead (source=website), /public/lead/:token (source=web_form),
 # and /website-form/:slug (source=website-form:*). Idempotent. See task #169.
 pnpm --filter @workspace/api-server exec tsx ./scripts/cleanup-public-lead-duplicates.ts || echo "[post-merge] cleanup-public-lead-duplicates failed (non-fatal)"
+# Sync assignedToId across Lead → Student → Application triplets. Student is
+# the canonical source; lead and applications are updated to match. Idempotent.
+pnpm --filter @workspace/api-server exec tsx ./scripts/sync-assignment-backfill.ts || echo "[post-merge] sync-assignment-backfill failed (non-fatal)"
