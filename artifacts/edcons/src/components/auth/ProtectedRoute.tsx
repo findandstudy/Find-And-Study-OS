@@ -24,8 +24,8 @@ function PendingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-background">
       <div className="text-center max-w-md p-8">
-        <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
-          <Clock className="w-8 h-8 text-amber-600" />
+        <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center mx-auto mb-4">
+          <Clock className="w-8 h-8 text-amber-600 dark:text-amber-400" />
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-2">Account Pending Activation</h1>
         <p className="text-muted-foreground mb-6">

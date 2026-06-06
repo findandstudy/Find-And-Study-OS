@@ -92,7 +92,7 @@ function SocialPreview({ title, description, image, siteName }: { title: string;
     <>
     <div className="bg-white rounded-xl border border-border overflow-hidden">
       <p className="text-xs text-muted-foreground font-medium px-4 pt-3 pb-2 flex items-center gap-1"><Globe className="w-3 h-3" /> Social Share Preview</p>
-      <div className="bg-gray-100 h-36 flex items-center justify-center">
+      <div className="bg-gray-100 dark:bg-gray-800/60 h-36 flex items-center justify-center">
         {image ? (
           <img src={image} alt="OG" className="w-full h-full object-cover" />
         ) : (
@@ -202,7 +202,7 @@ export default function WebsiteSeoOverrides() {
                 <Card key={page.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => openEditor(page)}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${score.score >= 75 ? "bg-green-100" : score.score >= 50 ? "bg-yellow-100" : "bg-red-100"}`}>
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${score.score >= 75 ? "bg-green-100 dark:bg-green-900/40" : score.score >= 50 ? "bg-yellow-100 dark:bg-yellow-900/40" : "bg-red-100 dark:bg-red-900/40"}`}>
                         {score.score >= 75 ? <CheckCircle2 className="w-5 h-5 text-green-600" /> : <AlertTriangle className="w-5 h-5 text-yellow-600" />}
                       </div>
                       <div className="min-w-0">

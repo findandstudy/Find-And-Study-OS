@@ -202,7 +202,7 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {result.unknownDocColumns.map(col => (
-                  <code key={col} className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-xs font-mono break-all">
+                  <code key={col} className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-xs font-mono break-all dark:bg-amber-900/40 dark:text-amber-200">
                     {col}
                   </code>
                 ))}

@@ -96,17 +96,17 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 const STAGE_COLORS = [
-  "bg-slate-100 text-slate-700 border-slate-200",
-  "bg-blue-100 text-blue-700 border-blue-200",
-  "bg-violet-100 text-violet-700 border-violet-200",
-  "bg-amber-100 text-amber-700 border-amber-200",
-  "bg-orange-100 text-orange-700 border-orange-200",
-  "bg-cyan-100 text-cyan-700 border-cyan-200",
-  "bg-teal-100 text-teal-700 border-teal-200",
-  "bg-indigo-100 text-indigo-700 border-indigo-200",
+  "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/50",
+  "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60",
+  "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700/60",
+  "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60",
+  "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-700/60",
+  "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-700/60",
+  "bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-700/60",
+  "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:border-indigo-700/60",
 ];
-const WON_COLOR = "bg-green-100 text-green-700 border-green-200";
-const LOST_COLOR = "bg-rose-100 text-rose-700 border-rose-200";
+const WON_COLOR = "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60";
+const LOST_COLOR = "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60";
 
 function getStageColor(stage: PipelineStage, index: number): string {
   if (stage.variant === "won") return WON_COLOR;
@@ -319,7 +319,7 @@ function UniversityInfoPopup({ universityId, onClose }: { universityId: number; 
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {uni.universityType && <Badge variant="secondary" className="text-xs">{uni.universityType}</Badge>}
                     {uni.status && (
-                      <Badge variant="outline" className={`text-xs ${uni.status === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-amber-300 text-amber-700 bg-amber-50"}`}>
+                      <Badge variant="outline" className={`text-xs ${uni.status === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700/60" : "border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/60"}`}>
                         {uni.status === "open" ? "Open" : "Closed"}
                       </Badge>
                     )}
@@ -406,7 +406,7 @@ function ProgramInfoPopup({ programId, onClose, canSeeCommission }: { programId:
                   <div className="flex gap-1.5 mt-1.5">
                     {p.degree && <Badge variant="secondary" className="text-xs">{p.degree}</Badge>}
                     {p.universityStatus && (
-                      <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-amber-300 text-amber-700 bg-amber-50"}`}>
+                      <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700/60" : "border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/60"}`}>
                         {p.universityStatus}
                       </Badge>
                     )}
@@ -469,9 +469,9 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
 
   const isDirect = !app.originType || app.originType === "direct";
   const cardBg =
-    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
-    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" :
-    isDirect ? "bg-blue-50 border-blue-200 hover:border-blue-300 hover:shadow-md" :
+    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300 dark:bg-emerald-900/20 dark:border-emerald-700/40 dark:hover:border-emerald-600/60" :
+    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300 dark:bg-rose-900/20 dark:border-rose-700/40 dark:hover:border-rose-600/60" :
+    isDirect ? "bg-blue-50 border-blue-200 hover:border-blue-300 hover:shadow-md dark:bg-blue-900/20 dark:border-blue-700/40 dark:hover:border-blue-600/60" :
     "bg-card border-border hover:shadow-md";
 
   function openContact(ch: "email" | "whatsapp" | "internal") {
@@ -524,7 +524,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       {app.agentName && (
         <div className="px-4 pb-1.5">
           <span
-            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors max-w-full truncate"
+            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium cursor-pointer hover:bg-amber-100 hover:border-amber-300 transition-colors max-w-full truncate dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50 dark:hover:bg-amber-900/50"
             onClick={(e) => { e.stopPropagation(); setLoc(`/staff/agents/${app.agentId}`); }}
             title={`Agent: ${app.agentName}`}
           >
@@ -608,23 +608,23 @@ function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap
   const totalRevenue = apps.reduce((sum, a) => sum + (parseFloat(a.commissionAmount) || 0), 0);
 
   const colBg =
-    v === "won" ? "bg-emerald-50/60 border-emerald-200/50" :
-    v === "lost" ? "bg-rose-50/60 border-rose-200/50" :
+    v === "won" ? "bg-emerald-50/60 border-emerald-200/50 dark:bg-emerald-900/20 dark:border-emerald-700/30" :
+    v === "lost" ? "bg-rose-50/60 border-rose-200/50 dark:bg-rose-900/20 dark:border-rose-700/30" :
     "bg-secondary/50 border-border/50";
 
   const headerBg =
-    v === "won" ? "bg-emerald-100/80 border-emerald-200/70" :
-    v === "lost" ? "bg-rose-100/80 border-rose-200/70" :
+    v === "won" ? "bg-emerald-100/80 border-emerald-200/70 dark:bg-emerald-900/40 dark:border-emerald-700/50" :
+    v === "lost" ? "bg-rose-100/80 border-rose-200/70 dark:bg-rose-900/40 dark:border-rose-700/50" :
     "bg-card/50 border-border/50";
 
   const badgeBg =
-    v === "won" ? "bg-emerald-200/60 text-emerald-800 border-emerald-300/50" :
-    v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50" :
+    v === "won" ? "bg-emerald-200/60 text-emerald-800 border-emerald-300/50 dark:bg-emerald-800/40 dark:text-emerald-200 dark:border-emerald-600/40" :
+    v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50 dark:bg-rose-800/40 dark:text-rose-200 dark:border-rose-600/40" :
     "bg-background text-muted-foreground border shadow-sm";
 
   const dropBg =
-    v === "won" ? (isOver ? "bg-emerald-100/60" : "") :
-    v === "lost" ? (isOver ? "bg-rose-100/60" : "") :
+    v === "won" ? (isOver ? "bg-emerald-100/60 dark:bg-emerald-900/30" : "") :
+    v === "lost" ? (isOver ? "bg-rose-100/60 dark:bg-rose-900/30" : "") :
     (isOver ? "bg-primary/5" : "");
 
   const emptyBorder =
@@ -919,7 +919,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             <Label className="flex items-center gap-2">
               <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
               Tuition Fee (USD)
-              {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Discounted</span>}
+              {hasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50">Discounted</span>}
             </Label>
             <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} />
             {selectedProgForFee && (selectedProgForFee.tuitionFee != null || selectedProgForFee.discountedFee != null || selectedProgForFee.commissionRate != null) && (
@@ -1332,7 +1332,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
               <Label className="font-semibold flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
                 Tuition Fee (USD)
-                {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Discounted</span>}
+                {addHasDiscountedFee && <span className="text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50">Discounted</span>}
               </Label>
               <Input type="number" min="0" step="100" value={form.tuitionFee} onChange={e => setForm({ ...form, tuitionFee: e.target.value })} placeholder="e.g. 15000" className="rounded-xl" />
               {addSelProgForFee && (addSelProgForFee.tuitionFee != null || addSelProgForFee.discountedFee != null || addSelProgForFee.commissionRate != null) && (

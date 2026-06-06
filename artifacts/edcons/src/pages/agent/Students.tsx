@@ -59,22 +59,22 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 const STATUS_COLORS_DEFAULT: Record<string, string> = {
-  active: "bg-green-100 text-green-700 border-green-200",
-  inactive: "bg-gray-100 text-gray-600 border-gray-200",
-  graduated: "bg-blue-100 text-blue-700 border-blue-200",
-  suspended: "bg-red-100 text-red-700 border-red-200",
+  active: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60",
+  inactive: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50",
+  graduated: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60",
+  suspended: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700/60",
 };
 
 const STU_STAGE_COLORS = [
-  "bg-green-100 text-green-700 border-green-200",
-  "bg-gray-100 text-gray-600 border-gray-200",
-  "bg-blue-100 text-blue-700 border-blue-200",
-  "bg-amber-100 text-amber-700 border-amber-200",
-  "bg-violet-100 text-violet-700 border-violet-200",
-  "bg-cyan-100 text-cyan-700 border-cyan-200",
+  "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60",
+  "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50",
+  "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60",
+  "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60",
+  "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700/60",
+  "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-700/60",
 ];
-const STU_WON_COLOR = "bg-blue-100 text-blue-700 border-blue-200";
-const STU_LOST_COLOR = "bg-red-100 text-red-700 border-red-200";
+const STU_WON_COLOR = "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60";
+const STU_LOST_COLOR = "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700/60";
 
 function getStuStageColor(stage: PipelineStage, index: number): string {
   if (stage.variant === "won") return STU_WON_COLOR;
@@ -106,10 +106,10 @@ type LevelDoc = { key: string; label: string; icon: string; accept: string; requ
 type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
 
 const LEVELS: { key: AppLevel; label: string; badge: string; color: string; dbLevel: string }[] = [
-  { key: "pathway",       label: "Language / Prep",     badge: "Pathway",       color: "bg-teal-100 text-teal-700 border-teal-200",      dbLevel: "Associate" },
-  { key: "undergraduate", label: "Bachelor / Associate", badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200",      dbLevel: "Bachelor" },
-  { key: "graduate",      label: "Master's Degree",     badge: "Graduate",      color: "bg-violet-100 text-violet-700 border-violet-200", dbLevel: "Master" },
-  { key: "doctorate",     label: "Doctorate (PhD)",     badge: "Doctorate",     color: "bg-amber-100 text-amber-700 border-amber-200",    dbLevel: "Ph.D" },
+  { key: "pathway",       label: "Language / Prep",     badge: "Pathway",       color: "bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-700/60",      dbLevel: "Associate" },
+  { key: "undergraduate", label: "Bachelor / Associate", badge: "Undergraduate", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60",      dbLevel: "Bachelor" },
+  { key: "graduate",      label: "Master's Degree",     badge: "Graduate",      color: "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700/60", dbLevel: "Master" },
+  { key: "doctorate",     label: "Doctorate (PhD)",     badge: "Doctorate",     color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60",    dbLevel: "Ph.D" },
 ];
 
 const DOC_TYPE_META: Record<string, { label: string; icon: string; accept: string }> = {
@@ -308,8 +308,8 @@ function DropZone({
   );
 
   const requiredBadge = docType.required
-    ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200">Required</span>
-    : <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200">Optional</span>;
+    ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60">Required</span>
+    : <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50">Optional</span>;
 
   if (uploaded) {
     return (
@@ -363,7 +363,7 @@ function DropZone({
 }
 
 function AiBadge() {
-  return <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>;
+  return <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI ✓</span>;
 }
 
 function FormField({
@@ -912,19 +912,19 @@ function AddStudentModal({
           {step === "review" && (
             <div className="space-y-6">
               {ef.size > 0 && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2 dark:bg-emerald-900/20 dark:border-emerald-700/40">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-emerald-700">
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300">
                     <strong>AI extracted {ef.size} field{ef.size !== 1 ? "s" : ""} automatically.</strong>{" "}
-                    Fields marked <span className="bg-emerald-100 text-emerald-700 px-1 rounded font-semibold text-[10px]">AI ✓</span> were filled from documents. Review and complete any missing fields below.
+                    Fields marked <span className="bg-emerald-100 text-emerald-700 px-1 rounded font-semibold text-[10px] dark:bg-emerald-900/40 dark:text-emerald-300">AI ✓</span> were filled from documents. Review and complete any missing fields below.
                   </p>
                 </div>
               )}
 
               {analysisError && (
-                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-2">
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-2 dark:bg-rose-900/20 dark:border-rose-700/40">
                   <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-                  <p className="text-xs text-rose-700">
+                  <p className="text-xs text-rose-700 dark:text-rose-300">
                     AI could not read the documents: {analysisError}. Please fill the form manually.
                   </p>
                 </div>
@@ -982,7 +982,7 @@ function AddStudentModal({
                     </select>
                   </div>
                   <div>
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality<span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI ✓</span>}</Label>
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nationality<span className="text-destructive ml-0.5">*</span>{ef.has("nationality") && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI ✓</span>}</Label>
                     <div className="mt-1">
                       <NationalityCombobox value={form.nationality} onChange={field("nationality")} countries={allCountries} />
                     </div>
@@ -1211,8 +1211,8 @@ function DraggableStudentCard({ student, onView, variant }: { student: any; onVi
   const style = { transform: CSS.Transform.toString(transform), transition };
 
   const cardBg =
-    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
-    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" :
+    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300 dark:bg-emerald-900/20 dark:border-emerald-700/50 dark:hover:border-emerald-600" :
+    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300 dark:bg-rose-900/20 dark:border-rose-700/50 dark:hover:border-rose-600" :
     "bg-card border-border hover:shadow-md";
 
   return (
@@ -1249,13 +1249,13 @@ function DroppableStuColumn({ status, label, variant, students, onView }: { stat
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const v = variant as StuColVariant;
 
-  const colBg = v === "won" ? "bg-emerald-50/60 border-emerald-200/50" : v === "lost" ? "bg-rose-50/60 border-rose-200/50" : "bg-secondary/50 border-border/50";
-  const headerBg = v === "won" ? "bg-emerald-100/80 border-emerald-200/70" : v === "lost" ? "bg-rose-100/80 border-rose-200/70" : "bg-card/50 border-border/50";
-  const badgeBg = v === "won" ? "bg-emerald-200/60 text-emerald-800 border-emerald-300/50" : v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50" : "bg-background text-muted-foreground border shadow-sm";
+  const colBg = v === "won" ? "bg-emerald-50/60 border-emerald-200/50 dark:bg-emerald-900/15 dark:border-emerald-700/30" : v === "lost" ? "bg-rose-50/60 border-rose-200/50 dark:bg-rose-900/15 dark:border-rose-700/30" : "bg-secondary/50 border-border/50";
+  const headerBg = v === "won" ? "bg-emerald-100/80 border-emerald-200/70 dark:bg-emerald-900/30 dark:border-emerald-700/40" : v === "lost" ? "bg-rose-100/80 border-rose-200/70 dark:bg-rose-900/30 dark:border-rose-700/40" : "bg-card/50 border-border/50";
+  const badgeBg = v === "won" ? "bg-emerald-200/60 text-emerald-800 border-emerald-300/50 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700/40" : v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/40" : "bg-background text-muted-foreground border shadow-sm";
 
   const dropBg =
-    v === "won" ? (isOver ? "bg-emerald-100/60" : "") :
-    v === "lost" ? (isOver ? "bg-rose-100/60" : "") :
+    v === "won" ? (isOver ? "bg-emerald-100/60 dark:bg-emerald-900/25" : "") :
+    v === "lost" ? (isOver ? "bg-rose-100/60 dark:bg-rose-900/25" : "") :
     (isOver ? "bg-primary/5" : "");
 
   const emptyBorder =

@@ -46,16 +46,16 @@ function formatCurrency(v: number | string | null | undefined) {
 
 function getStageColor(stageKey: string) {
   const colors: Record<string, string> = {
-    inquiry: "bg-gray-100 text-gray-700",
-    documents_collected: "bg-blue-100 text-blue-700",
-    submitted: "bg-purple-100 text-purple-700",
-    offer_received: "bg-amber-100 text-amber-700",
-    visa_applied: "bg-orange-100 text-orange-700",
-    visa_approved: "bg-teal-100 text-teal-700",
-    enrolled: "bg-green-100 text-green-700",
-    rejected: "bg-red-100 text-red-700",
+    inquiry: "bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-300",
+    documents_collected: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+    submitted: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+    offer_received: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+    visa_applied: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+    visa_approved: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
+    enrolled: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+    rejected: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
   };
-  return colors[stageKey] || "bg-gray-100 text-gray-700";
+  return colors[stageKey] || "bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-300";
 }
 
 interface Props {

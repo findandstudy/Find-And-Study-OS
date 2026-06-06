@@ -78,7 +78,7 @@ export function StageDocsIncompleteDialog({
                       {m.isCustom ? t("stageDocRequest.customBadge") : t("stageDocRequest.catalogBadge")}
                     </Badge>
                     {m.respondedAt && (
-                      <Badge className="text-[10px] gap-1 bg-amber-100 text-amber-700 border-0">
+                      <Badge className="text-[10px] gap-1 bg-amber-100 text-amber-700 border-0 dark:bg-amber-900/40 dark:text-amber-300">
                         <Clock className="w-3 h-3" /> {t("stageDocsIncomplete.awaitingReview")}
                       </Badge>
                     )}

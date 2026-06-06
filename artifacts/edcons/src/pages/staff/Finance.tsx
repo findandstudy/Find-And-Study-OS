@@ -44,24 +44,24 @@ const currentYear = String(new Date().getFullYear());
 const seasons = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - 2 + i));
 
 const COMM_STATUS: Record<string, { label: string; color: string }> = {
-  potential:       { label: "statusPotential", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  confirmed:       { label: "statusConfirmed", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  collected_partial: { label: "statusPartCollected", color: "bg-indigo-100 text-indigo-700 border-indigo-200" },
-  collected_full:  { label: "statusCollected", color: "bg-green-100 text-green-700 border-green-200" },
-  settled:         { label: "statusSettled", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-  excluded:        { label: "statusExcluded", color: "bg-slate-100 text-slate-500 border-slate-200" },
+  potential:       { label: "statusPotential", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60" },
+  confirmed:       { label: "statusConfirmed", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60" },
+  collected_partial: { label: "statusPartCollected", color: "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:border-indigo-700/60" },
+  collected_full:  { label: "statusCollected", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60" },
+  settled:         { label: "statusSettled", color: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700/60" },
+  excluded:        { label: "statusExcluded", color: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/50" },
 };
 
 const FEE_STATUS: Record<string, { label: string; color: string }> = {
-  pending: { label: "statusPending", color: "bg-rose-100 text-rose-700 border-rose-200" },
-  partial: { label: "1st Paid", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  paid:    { label: "statusPaid", color: "bg-green-100 text-green-700 border-green-200" },
+  pending: { label: "statusPending", color: "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60" },
+  partial: { label: "1st Paid", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60" },
+  paid:    { label: "statusPaid", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60" },
 };
 
 const FEE_FINANCE_STATUS: Record<string, { label: string; color: string }> = {
-  potential:  { label: "statusPotential", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  confirmed:  { label: "statusConfirmed", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  excluded:   { label: "statusExcluded", color: "bg-slate-100 text-slate-500 border-slate-200" },
+  potential:  { label: "statusPotential", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60" },
+  confirmed:  { label: "statusConfirmed", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60" },
+  excluded:   { label: "statusExcluded", color: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/50" },
 };
 
 function StatCard({ icon: Icon, label, value, sub, color = "text-indigo-600" }: {
@@ -71,13 +71,13 @@ function StatCard({ icon: Icon, label, value, sub, color = "text-indigo-600" }: 
     <>
     <Card>
       <CardContent className="p-4 flex items-start gap-3">
-        <div className={`p-2 rounded-lg bg-slate-50 ${color}`}>
+        <div className={`p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 ${color}`}>
           <Icon className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">{label}</p>
-          <p className="text-lg font-bold text-slate-800">{value}</p>
-          {sub && <p className="text-xs text-slate-400">{sub}</p>}
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">{label}</p>
+          <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{value}</p>
+          {sub && <p className="text-xs text-slate-400 dark:text-slate-500">{sub}</p>}
         </div>
       </CardContent>
     </Card>
@@ -93,16 +93,16 @@ function FinanceStatCard({ icon: Icon, label, rows, color = "text-indigo-600", b
     <Card className={`border-t-2 ${borderColor}`}>
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-3">
-          <div className={`p-1.5 rounded-md bg-slate-50 ${color}`}>
+          <div className={`p-1.5 rounded-md bg-slate-50 dark:bg-slate-800/60 ${color}`}>
             <Icon className="w-4 h-4" />
           </div>
-          <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">{label}</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">{label}</p>
         </div>
         <div className="space-y-2">
           {rows.map((row, i) => (
             <div key={i} className="flex items-center justify-between">
-              <span className="text-xs text-slate-500">{row.label}</span>
-              <span className="text-sm font-bold text-slate-800">{row.value}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{row.label}</span>
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{row.value}</span>
             </div>
           ))}
         </div>
@@ -116,7 +116,7 @@ function ProgressBar({ value, max, color = "bg-blue-500" }: { value: number; max
   const p = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
     <>
-    <div className="w-full bg-slate-100 rounded-full h-2 mt-1">
+    <div className="w-full bg-slate-100 dark:bg-slate-700/50 rounded-full h-2 mt-1">
       <div className={`h-2 rounded-full transition-all ${color}`} style={{ width: `${p}%` }} />
     </div>
     </>
@@ -323,7 +323,7 @@ function CommissionModal({
             </Select>
           </div>
 
-          <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 grid grid-cols-4 gap-3">
+          <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 grid grid-cols-4 gap-3 dark:border-slate-700/60 dark:bg-slate-800/50">
             <div>
               <Label>Program Fee ({form.currency})</Label>
               <Input type="number" value={form.programFee} onChange={set("programFee")} placeholder="0" />
@@ -360,23 +360,23 @@ function CommissionModal({
             )}
             {uAmt > 0 && (
               <div className={`col-span-4 grid ${saAmt > 0 ? "grid-cols-4" : "grid-cols-3"} gap-2 pt-1 text-sm`}>
-                <div className="rounded bg-blue-50 border border-blue-200 p-2 text-center">
-                  <div className="text-xs text-blue-600 font-medium">{t("financePage.universityPaysAgency")}</div>
-                  <div className="font-bold text-blue-700">{fmt(uAmt, form.currency)}</div>
+                <div className="rounded bg-blue-50 border border-blue-200 p-2 text-center dark:bg-blue-900/20 dark:border-blue-700/40">
+                  <div className="text-xs text-blue-600 font-medium dark:text-blue-400">{t("financePage.universityPaysAgency")}</div>
+                  <div className="font-bold text-blue-700 dark:text-blue-300">{fmt(uAmt, form.currency)}</div>
                 </div>
-                <div className="rounded bg-amber-50 border border-amber-200 p-2 text-center">
-                  <div className="text-xs text-amber-600 font-medium">{t("financePage.agencyPaysAgent")}</div>
-                  <div className="font-bold text-amber-700">{fmt(aAmt, form.currency)}</div>
+                <div className="rounded bg-amber-50 border border-amber-200 p-2 text-center dark:bg-amber-900/20 dark:border-amber-700/40">
+                  <div className="text-xs text-amber-600 font-medium dark:text-amber-400">{t("financePage.agencyPaysAgent")}</div>
+                  <div className="font-bold text-amber-700 dark:text-amber-300">{fmt(aAmt, form.currency)}</div>
                 </div>
                 {saAmt > 0 && (
-                  <div className="rounded bg-purple-50 border border-purple-200 p-2 text-center">
-                    <div className="text-xs text-purple-600 font-medium">{t("financePage.agentPaysSubAgent")}</div>
-                    <div className="font-bold text-purple-700">{fmt(saAmt, form.currency)}</div>
+                  <div className="rounded bg-purple-50 border border-purple-200 p-2 text-center dark:bg-purple-900/20 dark:border-purple-700/40">
+                    <div className="text-xs text-purple-600 font-medium dark:text-purple-400">{t("financePage.agentPaysSubAgent")}</div>
+                    <div className="font-bold text-purple-700 dark:text-purple-300">{fmt(saAmt, form.currency)}</div>
                   </div>
                 )}
-                <div className="rounded bg-emerald-50 border border-emerald-200 p-2 text-center">
-                  <div className="text-xs text-emerald-600 font-medium">{t("financePage.netIncome")}</div>
-                  <div className="font-bold text-emerald-700">{fmt(netAgency, form.currency)}</div>
+                <div className="rounded bg-emerald-50 border border-emerald-200 p-2 text-center dark:bg-emerald-900/20 dark:border-emerald-700/40">
+                  <div className="text-xs text-emerald-600 font-medium dark:text-emerald-400">{t("financePage.netIncome")}</div>
+                  <div className="font-bold text-emerald-700 dark:text-emerald-300">{fmt(netAgency, form.currency)}</div>
                 </div>
               </div>
             )}
@@ -805,8 +805,8 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
           ) : (
             <div className="space-y-2">
               {transactions.map((tx: any) => (
-                <div key={tx.id} className="flex items-start gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50">
-                  <div className={`p-1.5 rounded ${tx.type === "collection" ? "bg-blue-100 text-blue-600" : tx.type === "sub_agent_payment" ? "bg-purple-100 text-purple-600" : "bg-amber-100 text-amber-600"}`}>
+                <div key={tx.id} className="flex items-start gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50 dark:border-slate-700/50 dark:bg-slate-800/50">
+                  <div className={`p-1.5 rounded ${tx.type === "collection" ? "bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300" : tx.type === "sub_agent_payment" ? "bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300" : "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300"}`}>
                     {tx.type === "collection" ? <Landmark className="w-3.5 h-3.5" /> : <CreditCard className="w-3.5 h-3.5" />}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1120,11 +1120,11 @@ export default function FinancePage() {
         </div>
 
         {offSummary.availableForOffset > 0 && (
-          <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex items-start gap-3">
-            <ArrowUpRight className="w-5 h-5 text-violet-600 mt-0.5 shrink-0" />
+          <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex items-start gap-3 dark:bg-violet-900/20 dark:border-violet-700/40">
+            <ArrowUpRight className="w-5 h-5 text-violet-600 mt-0.5 shrink-0 dark:text-violet-400" />
             <div>
-              <p className="font-semibold text-violet-800 text-sm">Article 6 Commission Offset Available</p>
-              <p className="text-violet-600 text-sm mt-0.5">
+              <p className="font-semibold text-violet-800 text-sm dark:text-violet-200">Article 6 Commission Offset Available</p>
+              <p className="text-violet-600 text-sm mt-0.5 dark:text-violet-400">
                 Up to <strong>{fmt(offSummary.availableForOffset)}</strong> of confirmed commissions can offset service fees
                 for state universities ({offSummary.maxOffsetRate}% max).
                 Already used: {fmt(offSummary.totalOffsetUsed)}.
@@ -1134,13 +1134,13 @@ export default function FinancePage() {
         )}
 
         {overdueCommissions.length > 0 && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 flex items-start gap-3 dark:bg-rose-900/20 dark:border-rose-700/40">
+            <AlertTriangle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0 dark:text-rose-400" />
             <div>
-              <p className="font-semibold text-rose-800 text-sm">
+              <p className="font-semibold text-rose-800 text-sm dark:text-rose-200">
                 {overdueCommissions.length} Overdue Collection{overdueCommissions.length > 1 ? "s" : ""} (90+ days)
               </p>
-              <p className="text-rose-600 text-sm mt-0.5">
+              <p className="text-rose-600 text-sm mt-0.5 dark:text-rose-400">
                 Total overdue: <strong>{fmt(overdueCommissions.reduce((s, c) => s + toNum(c.universityCommissionAmount) - toNum(c.universityCollected), 0))}</strong>
                 {" "} — {overdueCommissions.map(c => c.universityName).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(", ")}
               </p>
@@ -1507,28 +1507,28 @@ export default function FinancePage() {
             ) : (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <Card className="bg-blue-50 border-blue-200">
+                  <Card className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-700/40">
                     <CardContent className="p-4 text-center">
-                      <p className="text-xs text-blue-600 font-medium uppercase">{t("financePage.totalReceivable")}</p>
-                      <p className="text-xl font-bold text-blue-700">{fmt(uniTotals.totalCommission)}</p>
+                      <p className="text-xs text-blue-600 font-medium uppercase dark:text-blue-400">{t("financePage.totalReceivable")}</p>
+                      <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{fmt(uniTotals.totalCommission)}</p>
                     </CardContent>
                   </Card>
-                  <Card className="bg-green-50 border-green-200">
+                  <Card className="bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-700/40">
                     <CardContent className="p-4 text-center">
-                      <p className="text-xs text-green-600 font-medium uppercase">{t("financePage.totalCollected")}</p>
-                      <p className="text-xl font-bold text-green-700">{fmt(uniTotals.totalCollected)}</p>
+                      <p className="text-xs text-green-600 font-medium uppercase dark:text-green-400">{t("financePage.totalCollected")}</p>
+                      <p className="text-xl font-bold text-green-700 dark:text-green-300">{fmt(uniTotals.totalCollected)}</p>
                     </CardContent>
                   </Card>
-                  <Card className="bg-amber-50 border-amber-200">
+                  <Card className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700/40">
                     <CardContent className="p-4 text-center">
-                      <p className="text-xs text-amber-600 font-medium uppercase">{t("financePage.agentPayouts")}</p>
-                      <p className="text-xl font-bold text-amber-700">{fmt(uniTotals.totalAgentPaid)}</p>
+                      <p className="text-xs text-amber-600 font-medium uppercase dark:text-amber-400">{t("financePage.agentPayouts")}</p>
+                      <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{fmt(uniTotals.totalAgentPaid)}</p>
                     </CardContent>
                   </Card>
-                  <Card className="bg-emerald-50 border-emerald-200">
+                  <Card className="bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700/40">
                     <CardContent className="p-4 text-center">
-                      <p className="text-xs text-emerald-600 font-medium uppercase">{t("financePage.netIncome")}</p>
-                      <p className="text-xl font-bold text-emerald-700">{fmt(uniTotals.totalNetIncome)}</p>
+                      <p className="text-xs text-emerald-600 font-medium uppercase dark:text-emerald-400">{t("financePage.netIncome")}</p>
+                      <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{fmt(uniTotals.totalNetIncome)}</p>
                     </CardContent>
                   </Card>
                 </div>

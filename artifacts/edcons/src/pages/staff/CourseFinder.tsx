@@ -1105,7 +1105,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
                         {formatCurrency(hasDiscount ? p.discountedFee : p.tuitionFee, cur)}
                       </span>
                       {hasDiscount && (
-                        <Badge className="text-[9px] px-1 py-0 h-3.5 bg-emerald-100 text-emerald-700 border-0 rounded-full ml-1">
+                        <Badge className="text-[9px] px-1 py-0 h-3.5 bg-emerald-100 text-emerald-700 border-0 rounded-full ml-1 dark:bg-emerald-900/40 dark:text-emerald-300">
                           -{Math.round(((p.tuitionFee! - p.discountedFee!) / p.tuitionFee!) * 100)}%
                         </Badge>
                       )}
@@ -1304,7 +1304,7 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
                 {formatCurrency(hasDiscount ? p.discountedFee : p.tuitionFee, cur)}
               </span>
               {hasDiscount && (
-                <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-100 text-emerald-700 border-0 rounded-full">
+                <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-100 text-emerald-700 border-0 rounded-full dark:bg-emerald-900/40 dark:text-emerald-300">
                   SAVE {formatCurrency((p.tuitionFee ?? 0) - (p.discountedFee ?? 0), cur)}
                 </Badge>
               )}
@@ -1589,7 +1589,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
               <DialogTitle className="text-lg">{p.name}</DialogTitle>
               <div className="flex gap-1.5 mt-1.5">
                 {p.degree && <Badge variant="secondary" className="text-xs">{p.degree}</Badge>}
-                {hasDiscount && <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-200">Discounted</Badge>}
+                {hasDiscount && <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700/60">Discounted</Badge>}
                 {p.universityStatus && (
                   <Badge variant="outline" className={`text-xs ${p.universityStatus === "open" ? "border-emerald-300 text-emerald-700" : "border-amber-300 text-amber-700"}`}>
                     {p.universityStatus}
@@ -1769,10 +1769,10 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
   }
 
   const requiredBadge = onFile
-    ? <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold border border-green-200">On file</span>
+    ? <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold border border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60">On file</span>
     : docType.required
-    ? <span className="text-[9px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200">Required</span>
-    : <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200">Optional</span>;
+    ? <span className="text-[9px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60">Required</span>
+    : <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium border border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50">Optional</span>;
 
   return (
     <>
@@ -2178,13 +2178,13 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <Badge variant="outline" className="text-xs">{p.feeType}</Badge>
                 )}
                 {p.scholarship != null && p.scholarship > 0 && (
-                  <Badge className="text-xs bg-emerald-100 text-emerald-700 border-0">Scholarship: {formatCurrency(p.scholarship, cur)}</Badge>
+                  <Badge className="text-xs bg-emerald-100 text-emerald-700 border-0 dark:bg-emerald-900/40 dark:text-emerald-300">Scholarship: {formatCurrency(p.scholarship, cur)}</Badge>
                 )}
                 {!isStudentUser && commissionAmount != null && (
-                  <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0">Commission: {formatCurrency(commissionAmount, cur)}</Badge>
+                  <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0 dark:bg-indigo-900/40 dark:text-indigo-300">Commission: {formatCurrency(commissionAmount, cur)}</Badge>
                 )}
                 {!isStudentUser && p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
-                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0">Service Fee: {formatCurrency(p.serviceFeeAmount, cur)}</Badge>
+                  <Badge className="text-xs bg-amber-100 text-amber-700 border-0 dark:bg-amber-900/40 dark:text-amber-300">Service Fee: {formatCurrency(p.serviceFeeAmount, cur)}</Badge>
                 )}
               </div>
             </div>
@@ -2372,7 +2372,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       {t("courseFinderPage.firstName")} <span className="text-destructive ml-0.5">*</span>
-                      {reviewExtracted.has("firstName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("firstName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <Input value={reviewForm.firstName} onChange={e => setReviewForm(f => ({ ...f, firstName: e.target.value }))}
                       placeholder={t("courseFinderPage.firstNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("firstName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
@@ -2380,7 +2380,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       {t("courseFinderPage.lastName")} <span className="text-destructive ml-0.5">*</span>
-                      {reviewExtracted.has("lastName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("lastName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <Input value={reviewForm.lastName} onChange={e => setReviewForm(f => ({ ...f, lastName: e.target.value }))}
                       placeholder={t("courseFinderPage.lastNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("lastName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
@@ -2391,7 +2391,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       {t("courseFinderPage.motherName")}
-                      {reviewExtracted.has("motherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("motherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <Input value={reviewForm.motherName} onChange={e => setReviewForm(f => ({ ...f, motherName: e.target.value }))}
                       placeholder={t("courseFinderPage.motherNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("motherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
@@ -2399,7 +2399,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       {t("courseFinderPage.fatherName")}
-                      {reviewExtracted.has("fatherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("fatherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <Input value={reviewForm.fatherName} onChange={e => setReviewForm(f => ({ ...f, fatherName: e.target.value }))}
                       placeholder={t("courseFinderPage.fatherNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("fatherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
@@ -2410,7 +2410,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       Nationality
-                      {reviewExtracted.has("nationality") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("nationality") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <select value={reviewForm.nationality} onChange={e => setReviewForm(f => ({ ...f, nationality: e.target.value }))}
                       className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${reviewExtracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
@@ -2423,7 +2423,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       Date of Birth
-                      {reviewExtracted.has("dateOfBirth") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("dateOfBirth") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <Input type="date" value={reviewForm.dateOfBirth} onChange={e => setReviewForm(f => ({ ...f, dateOfBirth: e.target.value }))}
                       className={`rounded-xl ${reviewExtracted.has("dateOfBirth") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
@@ -2434,7 +2434,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       {t("courseFinderPage.passportNumber")}
-                      {reviewExtracted.has("passportNumber") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("passportNumber") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <Input value={reviewForm.passportNumber} onChange={e => setReviewForm(f => ({ ...f, passportNumber: e.target.value }))}
                       placeholder={t("courseFinderPage.passportNumberPlaceholder")} className={`rounded-xl ${reviewExtracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
@@ -2442,7 +2442,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       {t("courseFinderPage.gpa")}
-                      {reviewExtracted.has("gpa") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("gpa") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <Input value={reviewForm.gpa} onChange={e => setReviewForm(f => ({ ...f, gpa: e.target.value }))}
                       placeholder="e.g. 3.50" className={`rounded-xl ${reviewExtracted.has("gpa") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
@@ -2453,7 +2453,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       {t("courseFinderPage.highSchool")}
-                      {reviewExtracted.has("highSchool") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("highSchool") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <Input value={reviewForm.highSchool} onChange={e => setReviewForm(f => ({ ...f, highSchool: e.target.value }))}
                       placeholder={t("courseFinderPage.highSchoolPlaceholder")} className={`rounded-xl ${reviewExtracted.has("highSchool") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
@@ -2461,7 +2461,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold flex items-center">
                       {t("courseFinderPage.graduationYear")}
-                      {reviewExtracted.has("graduationYear") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                      {reviewExtracted.has("graduationYear") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                     </Label>
                     <Input value={reviewForm.graduationYear} onChange={e => setReviewForm(f => ({ ...f, graduationYear: e.target.value }))}
                       placeholder="e.g. 2024" className={`rounded-xl ${reviewExtracted.has("graduationYear") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
@@ -2471,7 +2471,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                 <div className="space-y-1.5">
                   <Label className="text-sm font-semibold flex items-center">
                     {t("courseFinderPage.address")}
-                    {reviewExtracted.has("address") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">AI</span>}
+                    {reviewExtracted.has("address") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
                   </Label>
                   <Input value={reviewForm.address} onChange={e => setReviewForm(f => ({ ...f, address: e.target.value }))}
                     placeholder={t("courseFinderPage.addressPlaceholder")} className={`rounded-xl ${reviewExtracted.has("address") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />

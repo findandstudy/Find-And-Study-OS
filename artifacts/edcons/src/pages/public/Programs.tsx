@@ -263,7 +263,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
       <p className="text-xs font-semibold text-foreground">{docType.label ?? t(docType.labelKey)}</p>
       {docType.subtitleKey && <span className="text-[10px] text-muted-foreground">{t(docType.subtitleKey)}</span>}
       {docType.required
-        ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold">{t("apply.required")}</span>
+        ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold dark:bg-rose-900/40 dark:text-rose-300">{t("apply.required")}</span>
         : <span className="text-[10px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 px-1.5 py-0.5 rounded-full font-medium">{t("apply.optional")}</span>
       }
       <input ref={inputRef} type="file" accept={docType.accept} className="hidden"

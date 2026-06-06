@@ -62,17 +62,17 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 const STAGE_COLORS = [
-  "bg-slate-100 text-slate-700 border-slate-200",
-  "bg-blue-100 text-blue-700 border-blue-200",
-  "bg-violet-100 text-violet-700 border-violet-200",
-  "bg-amber-100 text-amber-700 border-amber-200",
-  "bg-orange-100 text-orange-700 border-orange-200",
-  "bg-cyan-100 text-cyan-700 border-cyan-200",
-  "bg-teal-100 text-teal-700 border-teal-200",
-  "bg-indigo-100 text-indigo-700 border-indigo-200",
+  "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-600/50",
+  "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60",
+  "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700/60",
+  "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60",
+  "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-700/60",
+  "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-700/60",
+  "bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-700/60",
+  "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:border-indigo-700/60",
 ];
-const WON_COLOR = "bg-green-100 text-green-700 border-green-200";
-const LOST_COLOR = "bg-rose-100 text-rose-700 border-rose-200";
+const WON_COLOR = "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60";
+const LOST_COLOR = "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60";
 
 function getStageColor(stage: PipelineStage, index: number): string {
   if (stage.variant === "won") return WON_COLOR;
@@ -204,8 +204,8 @@ function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: num
   const style = { transform: CSS.Transform.toString(transform), transition };
 
   const cardBg =
-    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
-    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" :
+    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300 dark:bg-emerald-900/20 dark:border-emerald-700/50 dark:hover:border-emerald-600" :
+    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300 dark:bg-rose-900/20 dark:border-rose-700/50 dark:hover:border-rose-600" :
     "bg-card border-border hover:shadow-md";
 
   return (
@@ -257,23 +257,23 @@ function DroppableAppColumn({ stage, label, variant, apps, onView }: {
   const totalRevenue = apps.reduce((sum, a) => sum + (parseFloat(a.commissionAmount) || 0), 0);
 
   const colBg =
-    v === "won" ? "bg-emerald-50/60 border-emerald-200/50" :
-    v === "lost" ? "bg-rose-50/60 border-rose-200/50" :
+    v === "won" ? "bg-emerald-50/60 border-emerald-200/50 dark:bg-emerald-900/15 dark:border-emerald-700/30" :
+    v === "lost" ? "bg-rose-50/60 border-rose-200/50 dark:bg-rose-900/15 dark:border-rose-700/30" :
     "bg-secondary/50 border-border/50";
 
   const headerBg =
-    v === "won" ? "bg-emerald-100/80 border-emerald-200/70" :
-    v === "lost" ? "bg-rose-100/80 border-rose-200/70" :
+    v === "won" ? "bg-emerald-100/80 border-emerald-200/70 dark:bg-emerald-900/30 dark:border-emerald-700/40" :
+    v === "lost" ? "bg-rose-100/80 border-rose-200/70 dark:bg-rose-900/30 dark:border-rose-700/40" :
     "bg-card/50 border-border/50";
 
   const badgeBg =
-    v === "won" ? "bg-emerald-200/60 text-emerald-800 border-emerald-300/50" :
-    v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50" :
+    v === "won" ? "bg-emerald-200/60 text-emerald-800 border-emerald-300/50 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700/40" :
+    v === "lost" ? "bg-rose-200/60 text-rose-800 border-rose-300/50 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/40" :
     "bg-background text-muted-foreground border shadow-sm";
 
   const dropBg =
-    v === "won" ? (isOver ? "bg-emerald-100/60" : "") :
-    v === "lost" ? (isOver ? "bg-rose-100/60" : "") :
+    v === "won" ? (isOver ? "bg-emerald-100/60 dark:bg-emerald-900/25" : "") :
+    v === "lost" ? (isOver ? "bg-rose-100/60 dark:bg-rose-900/25" : "") :
     (isOver ? "bg-primary/5" : "");
 
   const emptyBorder =

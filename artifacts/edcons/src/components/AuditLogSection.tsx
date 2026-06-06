@@ -72,18 +72,18 @@ const ACTION_META: Record<string, ActionMeta> = {
 
 const TONE_BADGE: Record<ActionMeta["tone"], string> = {
   neutral: "bg-muted text-foreground/80",
-  positive: "bg-emerald-100 text-emerald-700",
-  warning: "bg-amber-100 text-amber-700",
-  danger: "bg-rose-100 text-rose-700",
-  info: "bg-sky-100 text-sky-700",
+  positive: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  warning: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  danger: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+  info: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
 };
 
 const TONE_ICON: Record<ActionMeta["tone"], string> = {
   neutral: "text-muted-foreground bg-muted",
-  positive: "text-emerald-600 bg-emerald-50",
-  warning: "text-amber-600 bg-amber-50",
-  danger: "text-rose-600 bg-rose-50",
-  info: "text-sky-600 bg-sky-50",
+  positive: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400",
+  warning: "text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400",
+  danger: "text-rose-600 bg-rose-50 dark:bg-rose-900/30 dark:text-rose-400",
+  info: "text-sky-600 bg-sky-50 dark:bg-sky-900/30 dark:text-sky-400",
 };
 
 const FIELD_LABELS: Record<string, string> = {

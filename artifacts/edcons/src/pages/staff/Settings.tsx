@@ -1599,10 +1599,10 @@ const TARGET_LABELS: Record<string, string> = {
 };
 
 const TARGET_COLORS: Record<string, string> = {
-  agent: "bg-blue-500/10 text-blue-700",
-  sub_agent: "bg-purple-500/10 text-purple-700",
-  staff: "bg-emerald-500/10 text-emerald-700",
-  student: "bg-amber-500/10 text-amber-700",
+  agent: "bg-blue-500/10 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  sub_agent: "bg-purple-500/10 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  staff: "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+  student: "bg-amber-500/10 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
 };
 
 const PRESET_COLORS = [
@@ -1883,7 +1883,7 @@ function QuickLinksTab() {
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-sm text-foreground">{link.title}</p>
                     {(link.target || "").split(",").map((t: string) => (
-                      <Badge key={t} className={`text-[10px] ${TARGET_COLORS[t] || "bg-gray-100 text-gray-600"}`}>
+                      <Badge key={t} className={`text-[10px] ${TARGET_COLORS[t] || "bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-300"}`}>
                         {TARGET_LABELS[t] || t}
                       </Badge>
                     ))}

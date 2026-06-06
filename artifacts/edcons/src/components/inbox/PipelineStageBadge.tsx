@@ -12,13 +12,13 @@ interface PipelineStageBadgeProps {
 function variantClasses(variant: string | null | undefined): string {
   switch (variant) {
     case "success":
-      return "bg-green-100 text-green-800 border-green-300";
+      return "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60";
     case "warning":
-      return "bg-amber-100 text-amber-900 border-amber-300";
+      return "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60";
     case "destructive":
-      return "bg-red-100 text-red-800 border-red-300";
+      return "bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700/60";
     case "info":
-      return "bg-blue-100 text-blue-800 border-blue-300";
+      return "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60";
     default:
       return "bg-secondary text-secondary-foreground border-transparent";
   }

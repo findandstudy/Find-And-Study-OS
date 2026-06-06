@@ -183,11 +183,11 @@ export default function AgentCommissions() {
                         <td className="px-5 py-4 text-sm font-medium text-green-600">{commPaid && Number(commPaid) > 0 ? formatMoney(commPaid, c.currency, { maximumFractionDigits: 2 }) : "—"}</td>
                         <td className="px-5 py-4">
                           <Badge className={
-                            c.status === "potential" ? "bg-gray-100 text-gray-600 border-gray-200" :
-                            c.status === "confirmed" ? "bg-blue-100 text-blue-700 border-blue-200" :
-                            c.status === "collected_partial" ? "bg-amber-100 text-amber-700 border-amber-200" :
-                            c.status === "collected_full" ? "bg-green-100 text-green-700 border-green-200" :
-                            "bg-gray-100 text-gray-700 border-gray-200"
+                            c.status === "potential" ? "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50" :
+                            c.status === "confirmed" ? "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60" :
+                            c.status === "collected_partial" ? "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60" :
+                            c.status === "collected_full" ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60" :
+                            "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50"
                           }>
                             {c.status?.replace(/_/g, " ")}
                           </Badge>
@@ -268,9 +268,9 @@ export default function AgentCommissions() {
                         </td>
                         <td className="px-5 py-4">
                           <Badge className={
-                            f.status === "paid" ? "bg-green-100 text-green-700 border-green-200" :
-                            f.status === "partial" ? "bg-amber-100 text-amber-700 border-amber-200" :
-                            "bg-gray-100 text-gray-600 border-gray-200"
+                            f.status === "paid" ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60" :
+                            f.status === "partial" ? "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60" :
+                            "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50"
                           }>
                             {f.status}
                           </Badge>

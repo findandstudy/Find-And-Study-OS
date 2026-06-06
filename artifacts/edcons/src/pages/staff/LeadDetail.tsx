@@ -77,12 +77,12 @@ function useCountries() {
 const STATUS_OPTIONS = ["new", "contacted", "interested", "qualified", "converted", "lost"];
 
 const STATUS_COLORS: Record<string, string> = {
-  new: "bg-blue-100 text-blue-700",
-  contacted: "bg-purple-100 text-purple-700",
-  interested: "bg-amber-100 text-amber-700",
-  qualified: "bg-green-100 text-green-700",
-  converted: "bg-emerald-100 text-emerald-700",
-  lost: "bg-red-100 text-red-700",
+  new: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  contacted: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  interested: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  qualified: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  converted: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  lost: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";

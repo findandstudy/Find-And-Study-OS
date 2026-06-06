@@ -106,42 +106,48 @@
 }
 
 .dark {
-  --background: 222 47% 11%;
+  --background: 222 47% 10%;
   --foreground: 210 40% 98%;
-  
-  --card: 217 33% 17%;
+
+  /* card slightly above background (was 17% = same as muted/border → invisible) */
+  --card: 217 33% 16%;
   --card-foreground: 210 40% 98%;
-  --card-border: 217 33% 25%;
-  
-  --popover: 222 47% 11%;
+  --card-border: 217 33% 26%;
+
+  /* popover darker than card so it floats visually */
+  --popover: 217 33% 13%;
   --popover-foreground: 210 40% 98%;
-  --popover-border: 217 33% 17%;
-  
+  --popover-border: 217 33% 26%; /* was 17% = popover bg → border invisible */
+
   --primary: 217 91% 60%;
   --primary-foreground: 222 47% 11%;
-  
-  --secondary: 217 33% 17%;
+
+  --secondary: 217 33% 22%; /* was 17% = bg → secondary elements invisible */
   --secondary-foreground: 210 40% 98%;
-  
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20.2% 65.1%;
-  
-  --accent: 217 83% 20%;
+
+  --muted: 217 33% 16%;
+  --muted-foreground: 215 20% 72%; /* was 65.1% → too dim, increased legibility */
+
+  --accent: 217 83% 23%; /* was 20% → too dark, accent areas barely visible */
   --accent-foreground: 210 40% 98%;
-  
-  --destructive: 0 62.8% 30.6%;
+
+  /* was 30.6% lightness → danger text/badges nearly invisible in dark */
+  --destructive: 0 70% 52%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
-  --ring: 224 71.4% 4.1%;
+  /* was 17% = same as card/muted → ALL dividing borders invisible */
+  --border: 217 33% 24%;
+  /* was 17% → inputs blended into surrounding containers */
+  --input: 217 33% 21%;
+  /* was 224 71.4% 4.1% (near-black) → focus rings completely invisible */
+  --ring: 217 91% 60%;
 
-  --sidebar-background: 222 47% 8%;
+  --sidebar-background: 222 47% 7%;
   --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  
-  --elevate-1: rgba(255,255,255, 0.04);
-  --elevate-2: rgba(255,255,255, 0.09);
+  --sidebar-border: 217 33% 20%;
+
+  --elevate-1: rgba(255,255,255, 0.05);
+  --elevate-2: rgba(255,255,255, 0.11);
 }
 
 @layer base {

@@ -90,16 +90,16 @@ function formatDate(dateStr: string | null | undefined): string {
 }
 
 const LEAD_STAGE_COLORS = [
-  "bg-blue-100 text-blue-700 border-blue-200",
-  "bg-amber-100 text-amber-700 border-amber-200",
-  "bg-purple-100 text-purple-700 border-purple-200",
-  "bg-cyan-100 text-cyan-700 border-cyan-200",
-  "bg-indigo-100 text-indigo-700 border-indigo-200",
-  "bg-teal-100 text-teal-700 border-teal-200",
-  "bg-orange-100 text-orange-700 border-orange-200",
+  "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/60",
+  "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60",
+  "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700/60",
+  "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-700/60",
+  "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:border-indigo-700/60",
+  "bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-700/60",
+  "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-700/60",
 ];
-const LEAD_WON_COLOR = "bg-emerald-100 text-emerald-700 border-emerald-200";
-const LEAD_LOST_COLOR = "bg-rose-100 text-rose-700 border-rose-200";
+const LEAD_WON_COLOR = "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700/60";
+const LEAD_LOST_COLOR = "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60";
 
 function getLeadStageColor(stage: PipelineStage, index: number): string {
   if (stage.variant === "won") return LEAD_WON_COLOR;
@@ -115,8 +115,8 @@ function LeadCard({ lead, onView, showRevenue, variant }: {
   const style = { transform: CSS.Transform.toString(transform), transition };
 
   const cardBg =
-    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300" :
-    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300" :
+    variant === "won" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-300 dark:bg-emerald-900/20 dark:border-emerald-700/50 dark:hover:border-emerald-600" :
+    variant === "lost" ? "bg-rose-50 border-rose-200 hover:border-rose-300 dark:bg-rose-900/20 dark:border-rose-700/50 dark:hover:border-rose-600" :
     "bg-card border-border hover:shadow-md";
 
   return (
@@ -176,18 +176,18 @@ function DroppableColumn({ col, leads, showRevenue, onView }: {
   const v = col.variant ?? "default";
 
   const headerBg =
-    v === "won" ? "bg-emerald-100/80 border-emerald-200/70" :
-    v === "lost" ? "bg-rose-100/80 border-rose-200/70" :
+    v === "won" ? "bg-emerald-100/80 border-emerald-200/70 dark:bg-emerald-900/30 dark:border-emerald-700/40" :
+    v === "lost" ? "bg-rose-100/80 border-rose-200/70 dark:bg-rose-900/30 dark:border-rose-700/40" :
     "bg-card/50 border-border/50";
 
   const colBg =
-    v === "won" ? "bg-emerald-50/60 border-emerald-200/50" :
-    v === "lost" ? "bg-rose-50/60 border-rose-200/50" :
+    v === "won" ? "bg-emerald-50/60 border-emerald-200/50 dark:bg-emerald-900/15 dark:border-emerald-700/30" :
+    v === "lost" ? "bg-rose-50/60 border-rose-200/50 dark:bg-rose-900/15 dark:border-rose-700/30" :
     "bg-secondary/50 border-border/50";
 
   const dropBg =
-    v === "won" ? (isOver ? "bg-emerald-100/60" : "") :
-    v === "lost" ? (isOver ? "bg-rose-100/60" : "") :
+    v === "won" ? (isOver ? "bg-emerald-100/60 dark:bg-emerald-900/25" : "") :
+    v === "lost" ? (isOver ? "bg-rose-100/60 dark:bg-rose-900/25" : "") :
     (isOver ? "bg-primary/5" : "");
 
   const badgeBg =
@@ -1137,7 +1137,7 @@ export default function AgentLeadsPage() {
                       <TableCell className="cursor-pointer" onClick={() => setLocation(`/agent/leads/${lead.id}`)}>
                         {(() => {
                           const sm = leadStageMap[lead.status];
-                          const color = sm ? getLeadStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200";
+                          const color = sm ? getLeadStageColor(sm, sm._index) : "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50";
                           return <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${color}`}>{sm?.label || lead.status}</span>;
                         })()}
                       </TableCell>
