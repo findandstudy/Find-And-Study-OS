@@ -60,7 +60,7 @@ export default function ContractsPage() {
       const [s, sc, a]: any = await Promise.all([
         customFetch(`/api/contracts/sessions?mode=admin_driven`),
         customFetch(`/api/contracts/signed`),
-        customFetch(`/api/agents`),
+        customFetch(`/api/agents?type=agent`),
       ]);
       setSessions(s.data || []);
       setSigned(sc.data || []);
