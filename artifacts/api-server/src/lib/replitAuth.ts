@@ -139,6 +139,26 @@ export async function deleteSession(sid: string): Promise<void> {
   await db.delete(sessionsTable).where(eq(sessionsTable.sid, sid));
 }
 
+/**
+ * Revoke every server-side session that authenticates AS the given user,
+ * optionally preserving one session (the caller's current session).
+ *
+ * Matches both ordinary sessions (where the `user_id` column is set) and
+ * impersonation sessions (where `user_id` is null but the session payload's
+ * `user.id` identifies the impersonated account), so a password change/reset
+ * truly closes the recovery boundary and a stolen cookie cannot survive it.
+ */
+export async function deleteSessionsForUser(
+  userId: number,
+  exceptSid?: string,
+): Promise<void> {
+  const matchesUser = sql`(${sessionsTable.userId} = ${userId} OR (${sessionsTable.sess}->'user'->>'id')::int = ${userId})`;
+  const where = exceptSid
+    ? and(matchesUser, sql`${sessionsTable.sid} <> ${exceptSid}`)
+    : matchesUser;
+  await db.delete(sessionsTable).where(where);
+}
+
 export async function clearSession(
   res: Response,
   sid?: string,

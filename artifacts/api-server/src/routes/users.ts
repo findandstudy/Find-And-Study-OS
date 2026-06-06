@@ -4,7 +4,7 @@ import { eq, ilike, or, sql, and, isNull, desc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
-import { createSession, SESSION_TTL, SESSION_COOKIE, type SessionData } from "../lib/replitAuth";
+import { createSession, deleteSessionsForUser, getSessionId, SESSION_TTL, SESSION_COOKIE, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { validatePassword } from "../lib/passwordPolicy";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
@@ -266,6 +266,7 @@ router.post("/users/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES),
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   const hash = await bcrypt.hash(pwd.value, 10);
   await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, id));
+  await deleteSessionsForUser(id);
   await logAudit(req.user!.id, "auth.set_password", "user", id, { adminInitiated: true }, req.ip);
   res.json({ success: true });
 });
@@ -300,6 +301,10 @@ router.post("/users/me/change-password", requireAuth, async (req, res): Promise<
   }
   const hash = await bcrypt.hash(pwd.value, 10);
   await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, req.user!.id));
+  // Revoke every OTHER session for this user so a changed password logs out any
+  // other device (or a stolen cookie). Keep the caller's current session so the
+  // user who just changed their password stays signed in.
+  await deleteSessionsForUser(req.user!.id, getSessionId(req));
   await logAudit(req.user!.id, "auth.change_password", "user", req.user!.id, {}, req.ip);
   res.json({ success: true });
 });

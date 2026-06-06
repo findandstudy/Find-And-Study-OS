@@ -28,7 +28,7 @@ import { ONBOARDING_HELPERS } from "./agentOnboarding";
 import { STAFF_ROLES, MANAGER_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getVisibleBranchIds, isAgentInScope } from "../lib/branchScope";
 import bcrypt from "bcryptjs";
-import { createSession, getSession, deleteSession, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
+import { createSession, getSession, deleteSession, deleteSessionsForUser, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { toE164 } from "../lib/inbox/phone";
@@ -628,6 +628,7 @@ router.post("/agents/me/sub-agents/:id/set-password", requireAuth, requireRole("
   if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
   const hash = await bcrypt.hash(pwd.value, 10);
   await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, subAgent.userId));
+  await deleteSessionsForUser(subAgent.userId);
   res.json({ success: true });
 });
 
@@ -874,6 +875,9 @@ router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agen
   }
 
   const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, staffId)).returning();
+  if (updates.passwordHash) {
+    await deleteSessionsForUser(staffId);
+  }
   res.json({
     id: updated.id,
     firstName: updated.firstName,
@@ -1592,6 +1596,7 @@ router.post("/agents/:id/set-password", requireAuth, async (req, res, next): Pro
   }
   const hash = await bcrypt.hash(password, 10);
   await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, agent.userId));
+  await deleteSessionsForUser(agent.userId);
   res.json({ success: true });
 });
 

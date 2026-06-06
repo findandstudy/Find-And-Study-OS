@@ -14,7 +14,8 @@ import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import { validatePassword } from "../lib/passwordPolicy";
-import { createSession, SESSION_COOKIE, SESSION_TTL, type SessionData, type SessionUser } from "../lib/replitAuth";
+import { createSession, deleteSessionsForUser, getSessionId, SESSION_COOKIE, SESSION_TTL, type SessionData, type SessionUser } from "../lib/replitAuth";
+import { isTrustedOrigin } from "../lib/requestOrigin";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 
 const router: IRouter = Router();
@@ -254,6 +255,18 @@ router.post("/agents/onboarding/verify-with-link", async (req: Request, res: Res
     return;
   }
 
+  // This endpoint is intentionally unauthenticated and CSRF-exempt (it is hit
+  // before any session/CSRF cookie exists) yet it MINTS a logged-in session.
+  // Without an origin check that combination allows login CSRF: a cross-site
+  // auto-submitting form could silently bind the victim's browser to the
+  // attacker's account. Require a trusted same-site Origin/Referer before
+  // doing any work. The legitimate flow always runs from the app's own page,
+  // so the header is present and matches.
+  if (!isTrustedOrigin(req)) {
+    res.status(403).json({ error: "Invalid request origin" });
+    return;
+  }
+
   const ip = getRateLimitIp(req);
   try {
     await rateLimiter.consume(`agent-verify-link:${ip}`);
@@ -423,6 +436,10 @@ router.post("/agents/me/set-password", requireAuth, async (req: Request, res: Re
   }
   const hash = await bcrypt.hash(pwd.value, 10);
   await db.update(usersTable).set({ passwordHash: hash, isActive: true }).where(eq(usersTable.id, user.id));
+  // Setting a password is a credential change: revoke every other session for
+  // this user so a previously-stolen cookie cannot survive it. Keep the
+  // caller's current session so the agent stays logged in to finish onboarding.
+  await deleteSessionsForUser(user.id, getSessionId(req));
   await writeAudit({
     userId: user.id, action: "auth.set_password", resource: "user", resourceId: user.id,
     changes: { via: "agent_onboarding" }, ipAddress: req.ip,

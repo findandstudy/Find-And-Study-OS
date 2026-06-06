@@ -16,6 +16,7 @@ import {
   getSession,
   getSessionId,
   createSession,
+  deleteSessionsForUser,
   SESSION_COOKIE,
   SESSION_TTL,
   type SessionData,
@@ -550,6 +551,13 @@ router.post("/auth/set-password", async (req: Request, res: Response) => {
       ...(user.emailVerified ? { isActive: true } : {}),
     })
     .where(eq(usersTable.id, user.id));
+
+  // Password reset is the account-recovery boundary after a suspected
+  // compromise. Revoke ALL existing sessions for this user so any session a
+  // thief still holds is killed; the user re-authenticates with the new
+  // password. The reset itself is unauthenticated (email-link driven), so
+  // there is no current session to preserve.
+  await deleteSessionsForUser(user.id);
 
   logAudit(user.id, "auth.set_password", "user", user.id, {}, req.ip);
   logAudit(user.id, "auth.password_reset.complete", "user", user.id, {}, req.ip);

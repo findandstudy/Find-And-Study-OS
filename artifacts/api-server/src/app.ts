@@ -6,29 +6,12 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { getCsrfCookieOptions } from "./lib/cookieOptions";
+import { getAllowedOrigins } from "./lib/requestOrigin";
 import router from "./routes";
 import webhooksRouter from "./routes/webhooks";
 
 const app: Express = express();
 app.set("trust proxy", 1);
-
-function getAllowedOrigins(): string[] {
-  const origins: string[] = [];
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    origins.push(`https://${process.env.REPLIT_DEV_DOMAIN}`);
-  }
-  if (process.env.REPLIT_DOMAINS) {
-    process.env.REPLIT_DOMAINS.split(",").forEach(d => origins.push(`https://${d.trim()}`));
-  }
-  if (process.env.ALLOWED_ORIGINS) {
-    process.env.ALLOWED_ORIGINS.split(",").forEach(d => origins.push(d.trim()));
-  }
-  if (process.env.NODE_ENV !== "production") {
-    origins.push("http://localhost:25197");
-    origins.push("http://localhost:5173");
-  }
-  return origins;
-}
 
 const cspDirectives = {
   defaultSrc: ["'self'"],
