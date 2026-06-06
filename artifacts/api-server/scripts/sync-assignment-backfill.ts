@@ -13,20 +13,43 @@
  * differ from canonical, so no updates are issued).
  *
  * Dry-run: DRY_RUN=1 prints what would change without writing anything.
+ *
+ * Optional filter: pass `studentIds` to restrict the backfill to a specific
+ * subset of students (useful for targeted repairs and integration tests).
  */
 import { db, leadsTable, studentsTable, applicationsTable } from "@workspace/db";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { logAudit } from "../src/lib/auth";
+import { fileURLToPath } from "url";
 
-const DRY_RUN = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
+export interface BackfillResult {
+  studentsScanned: number;
+  studentsUpdated: number;
+  leadsUpdated: number;
+  appsUpdated: number;
+}
 
-async function main() {
-  console.log(`[sync-assignment-backfill] starting (DRY_RUN=${DRY_RUN})`);
+/**
+ * Run the assignment backfill, optionally restricted to specific students.
+ *
+ * @param opts.studentIds  When provided, only backfill these student IDs.
+ * @param opts.dryRun      When true, count changes but do not write to DB.
+ */
+export async function runBackfill(opts?: {
+  studentIds?: number[];
+  dryRun?: boolean;
+}): Promise<BackfillResult> {
+  const dryRun = opts?.dryRun ?? false;
+
+  const where =
+    opts?.studentIds && opts.studentIds.length > 0
+      ? and(isNull(studentsTable.deletedAt), inArray(studentsTable.id, opts.studentIds))
+      : isNull(studentsTable.deletedAt);
 
   const students = await db
     .select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId })
     .from(studentsTable)
-    .where(isNull(studentsTable.deletedAt));
+    .where(where);
 
   let updatedStudents = 0;
   let updatedLeads = 0;
@@ -43,6 +66,7 @@ async function main() {
       .from(applicationsTable)
       .where(and(eq(applicationsTable.studentId, student.id), isNull(applicationsTable.deletedAt)));
 
+    // Determine canonical assignee — student wins, then lead, then first app.
     let canonical: number | null = student.assignedToId ?? null;
     if (canonical === null) {
       for (const lead of leads) {
@@ -61,11 +85,13 @@ async function main() {
       }
     }
 
+    // Entire triplet is unassigned — nothing to sync.
     if (canonical === null) continue;
 
     if ((student.assignedToId ?? null) !== canonical) {
-      console.log(`  student id=${student.id}: ${student.assignedToId ?? "null"} → ${canonical}`);
-      if (!DRY_RUN) {
+      if (dryRun) {
+        console.log(`  [DRY] student id=${student.id}: ${student.assignedToId ?? "null"} → ${canonical}`);
+      } else {
         await db.update(studentsTable)
           .set({ assignedToId: canonical })
           .where(eq(studentsTable.id, student.id));
@@ -76,8 +102,9 @@ async function main() {
 
     for (const lead of leads) {
       if ((lead.assignedToId ?? null) !== canonical) {
-        console.log(`  lead id=${lead.id}: ${lead.assignedToId ?? "null"} → ${canonical}`);
-        if (!DRY_RUN) {
+        if (dryRun) {
+          console.log(`  [DRY] lead id=${lead.id}: ${lead.assignedToId ?? "null"} → ${canonical}`);
+        } else {
           await db.update(leadsTable)
             .set({ assignedToId: canonical })
             .where(eq(leadsTable.id, lead.id));
@@ -89,8 +116,9 @@ async function main() {
 
     for (const app of apps) {
       if ((app.assignedToId ?? null) !== canonical) {
-        console.log(`  application id=${app.id}: ${app.assignedToId ?? "null"} → ${canonical}`);
-        if (!DRY_RUN) {
+        if (dryRun) {
+          console.log(`  [DRY] application id=${app.id}: ${app.assignedToId ?? "null"} → ${canonical}`);
+        } else {
           await db.update(applicationsTable)
             .set({ assignedToId: canonical })
             .where(eq(applicationsTable.id, app.id));
@@ -101,16 +129,45 @@ async function main() {
     }
   }
 
+  return {
+    studentsScanned: students.length,
+    studentsUpdated: updatedStudents,
+    leadsUpdated: updatedLeads,
+    appsUpdated: updatedApps,
+  };
+}
+
+// ── CLI entry point ──────────────────────────────────────────────────────────
+// Guard: only run main() when this file is the Node.js entry point, not when
+// it is imported as a module (e.g. by the test suite). We check both the
+// resolved __filename (ESM) and a tsx source-map suffix so the guard works
+// whether tsx transpiles on-the-fly or the file is compiled to .js first.
+
+async function main() {
+  const DRY_RUN = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
+  console.log(`[sync-assignment-backfill] starting (DRY_RUN=${DRY_RUN})`);
+
+  const result = await runBackfill({ dryRun: DRY_RUN });
+
   console.log(
     `[sync-assignment-backfill] done.` +
-    ` students=${updatedStudents} leads=${updatedLeads} apps=${updatedApps}` +
+    ` students=${result.studentsUpdated} leads=${result.leadsUpdated} apps=${result.appsUpdated}` +
     (DRY_RUN ? " (DRY RUN — no writes)" : "")
   );
 
   await new Promise(r => setTimeout(r, 500));
 }
 
-main().catch(e => {
-  console.error("[sync-assignment-backfill] FATAL:", e?.message || e);
-  process.exit(1);
-});
+const __filename = fileURLToPath(import.meta.url);
+const entryArg = process.argv[1] ?? "";
+const isDirectlyInvoked =
+  entryArg === __filename ||
+  entryArg.endsWith("sync-assignment-backfill.ts") ||
+  entryArg.endsWith("sync-assignment-backfill.js");
+
+if (isDirectlyInvoked) {
+  main().catch(e => {
+    console.error("[sync-assignment-backfill] FATAL:", e?.message || e);
+    process.exit(1);
+  });
+}
