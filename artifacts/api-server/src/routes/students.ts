@@ -17,6 +17,7 @@ import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "..
 import { toE164 } from "../lib/inbox/phone";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import bcrypt from "bcryptjs";
+import { deleteSessionsForUser } from "../lib/replitAuth";
 import { getCurrentSeason } from "../lib/season";
 
 const router: IRouter = Router();
@@ -847,7 +848,8 @@ router.post("/students/:id/set-password", requireAuth, requireRole(...ADMIN_ROLE
   const hash = await bcrypt.hash(password, 10);
 
   if (student.userId) {
-    await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, student.userId));
+    await db.update(usersTable).set({ passwordHash: hash, passwordResetToken: null, passwordResetExpires: null }).where(eq(usersTable.id, student.userId));
+    await deleteSessionsForUser(student.userId);
     await logAudit(req.user!.id, "set_password", "student", id, { userId: student.userId }, req.ip);
     res.json({ success: true, userId: student.userId });
   } else {
@@ -861,7 +863,8 @@ router.post("/students/:id/set-password", requireAuth, requireRole(...ADMIN_ROLE
         res.status(409).json({ error: "This email is already in use by a non-student account. Cannot link." });
         return;
       }
-      await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, existingUser.id));
+      await db.update(usersTable).set({ passwordHash: hash, passwordResetToken: null, passwordResetExpires: null }).where(eq(usersTable.id, existingUser.id));
+      await deleteSessionsForUser(existingUser.id);
       await db.update(studentsTable).set({ userId: existingUser.id }).where(eq(studentsTable.id, id));
       await logAudit(req.user!.id, "set_password", "student", id, { userId: existingUser.id, linkedExisting: true }, req.ip);
       res.json({ success: true, userId: existingUser.id });

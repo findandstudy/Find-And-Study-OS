@@ -627,7 +627,7 @@ router.post("/agents/me/sub-agents/:id/set-password", requireAuth, requireRole("
   const pwd = validatePassword(password);
   if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
   const hash = await bcrypt.hash(pwd.value, 10);
-  await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, subAgent.userId));
+  await db.update(usersTable).set({ passwordHash: hash, passwordResetToken: null, passwordResetExpires: null }).where(eq(usersTable.id, subAgent.userId));
   await deleteSessionsForUser(subAgent.userId);
   res.json({ success: true });
 });
@@ -1595,7 +1595,7 @@ router.post("/agents/:id/set-password", requireAuth, async (req, res, next): Pro
     return;
   }
   const hash = await bcrypt.hash(password, 10);
-  await db.update(usersTable).set({ passwordHash: hash }).where(eq(usersTable.id, agent.userId));
+  await db.update(usersTable).set({ passwordHash: hash, passwordResetToken: null, passwordResetExpires: null }).where(eq(usersTable.id, agent.userId));
   await deleteSessionsForUser(agent.userId);
   res.json({ success: true });
 });

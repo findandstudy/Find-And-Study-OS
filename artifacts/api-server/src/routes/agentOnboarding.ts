@@ -435,7 +435,7 @@ router.post("/agents/me/set-password", requireAuth, async (req: Request, res: Re
     return;
   }
   const hash = await bcrypt.hash(pwd.value, 10);
-  await db.update(usersTable).set({ passwordHash: hash, isActive: true }).where(eq(usersTable.id, user.id));
+  await db.update(usersTable).set({ passwordHash: hash, isActive: true, passwordResetToken: null, passwordResetExpires: null }).where(eq(usersTable.id, user.id));
   // Setting a password is a credential change: revoke every other session for
   // this user so a previously-stolen cookie cannot survive it. Keep the
   // caller's current session so the agent stays logged in to finish onboarding.
