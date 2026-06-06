@@ -2127,6 +2127,12 @@ export default function StudentsPage() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
   const [filters, setFilters] = useState<StuFilters>({ ...DEFAULT_STU_FILTERS });
+  useEffect(() => {
+    if (user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager") {
+      setFilters(f => f.assignment === "mine_unassigned" ? { ...f, assignment: "all" } : f);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
   const [colFilters, setColFilters] = useState({ name: "", email: "", passport: "" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });

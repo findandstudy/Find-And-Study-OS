@@ -1399,7 +1399,9 @@ export default function ApplicationsPage() {
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
   // Persist the user's "Assigned to" choice locally (per user), like column prefs.
   const [persistedAssignedTo, setPersistedAssignedTo] = usePersistedFilterValue(
-    "applications-table", "assignedTo_v2", DEFAULT_FILTERS.assignedTo, user?.id,
+    "applications-table", "assignedTo_v2",
+    (user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager") ? "all" : DEFAULT_FILTERS.assignedTo,
+    user?.id,
   );
   const [filters, setFilters] = useState<AppFilters>({ ...DEFAULT_FILTERS, assignedTo: persistedAssignedTo });
   // Restore saved value into filters once auth (and thus the per-user key) resolves.
