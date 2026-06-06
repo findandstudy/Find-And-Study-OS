@@ -4,7 +4,8 @@ import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull, ne } from "driz
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
-import { getEffectivePermissionSet, canAccessAssignedRecord } from "../lib/permissions";
+import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
+import { cascadeStudentAssignment } from "../lib/leadAssignment";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
@@ -623,6 +624,26 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     }
   }
 
+  // Cascade assignment up to the source lead(s) and across the student's
+  // applications so the same person shows one owner across Leads, Students and
+  // Applications. Mirrors the lead-side cascade and is gated by the same
+  // `records.cascade_assignment` permission. Detect via hasOwnProperty so an
+  // explicit unassign (null) also propagates.
+  const studentAssignmentChanged =
+    Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
+    existing.assignedToId !== student.assignedToId;
+  if (studentAssignmentChanged) {
+    const canCascade = await userHasPermission({ id: req.user!.id, role }, "records.cascade_assignment");
+    if (canCascade) {
+      await cascadeStudentAssignment({
+        studentId: id,
+        newAssignedToId: student.assignedToId,
+        actorUserId: req.user!.id,
+        ipAddress: req.ip,
+      });
+    }
+  }
+
   if (updates.status && updates.status !== existing.status) {
     const recipientIds: number[] = [];
     if (student.assignedToId) recipientIds.push(student.assignedToId);
@@ -697,9 +718,23 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
     }
     for (const id of deleteIds) await logAudit(req.user!.id, "delete_student", "student", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
-    const result = await db.update(studentsTable).set({ assignedToId: assignedToId ? Number(assignedToId) : null }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
+    const newAssignedToId = assignedToId ? Number(assignedToId) : null;
+    const affected = await db.select({ id: studentsTable.id }).from(studentsTable)
+      .where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
+    const result = await db.update(studentsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
     await logAudit(req.user!.id, "bulk_assign_students", "student", null, { ids: numericIds, assignedToId }, req.ip);
+    const canCascade = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
+    if (canCascade) {
+      for (const s of affected) {
+        await cascadeStudentAssignment({
+          studentId: s.id,
+          newAssignedToId,
+          actorUserId: req.user!.id,
+          ipAddress: req.ip,
+        });
+      }
+    }
   } else if (action === "move" && status) {
     const result = await db.update(studentsTable).set({ status }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;

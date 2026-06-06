@@ -196,3 +196,63 @@ export async function cascadeLeadAssignment(opts: {
     console.error("[cascadeLeadAssignment] failed:", err?.message || err);
   }
 }
+
+/**
+ * Cascade a student's assigned-staff change up to its source lead(s) and across
+ * the student's applications. The reverse of `cascadeLeadAssignment`: used when
+ * a Student's `assignedToId` is reassigned AND the acting user holds the
+ * `records.cascade_assignment` permission, so ownership of the same person stays
+ * consistent across Leads, Students and Applications.
+ *
+ * Like the lead-side cascade it intentionally OVERWRITES already-assigned
+ * downstream/upstream records, is best-effort (swallows errors so it never
+ * breaks the calling student-update flow), and skips records already pointing at
+ * the new staff. Each change is written to the audit log.
+ */
+export async function cascadeStudentAssignment(opts: {
+  studentId: number;
+  newAssignedToId: number | null;
+  actorUserId: number | null;
+  ipAddress?: string;
+}): Promise<void> {
+  const { studentId, newAssignedToId, actorUserId, ipAddress } = opts;
+  try {
+    const leads = await db
+      .select({ id: leadsTable.id, assignedToId: leadsTable.assignedToId })
+      .from(leadsTable)
+      .where(and(eq(leadsTable.convertedStudentId, studentId), isNull(leadsTable.deletedAt)));
+
+    for (const lead of leads) {
+      if (lead.assignedToId === newAssignedToId) continue;
+      await db.update(leadsTable)
+        .set({ assignedToId: newAssignedToId })
+        .where(eq(leadsTable.id, lead.id));
+      logAudit(actorUserId, "assignment.cascade", "lead", lead.id, {
+        from: lead.assignedToId ?? null,
+        to: newAssignedToId ?? null,
+        source: "student",
+        sourceId: studentId,
+      }, ipAddress);
+    }
+
+    const apps = await db
+      .select({ id: applicationsTable.id, assignedToId: applicationsTable.assignedToId })
+      .from(applicationsTable)
+      .where(and(eq(applicationsTable.studentId, studentId), isNull(applicationsTable.deletedAt)));
+
+    for (const app of apps) {
+      if (app.assignedToId === newAssignedToId) continue;
+      await db.update(applicationsTable)
+        .set({ assignedToId: newAssignedToId })
+        .where(eq(applicationsTable.id, app.id));
+      logAudit(actorUserId, "assignment.cascade", "application", app.id, {
+        from: app.assignedToId ?? null,
+        to: newAssignedToId ?? null,
+        source: "student",
+        sourceId: studentId,
+      }, ipAddress);
+    }
+  } catch (err: any) {
+    console.error("[cascadeStudentAssignment] failed:", err?.message || err);
+  }
+}
