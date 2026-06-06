@@ -1612,34 +1612,25 @@ function ContractTemplatePicker({ value, onChange, showCreateNote }: {
   }, []);
 
   const active = templates.filter(t => t.isActive);
-
-  // If nothing is chosen and there is exactly one active template, select it.
-  useEffect(() => {
-    if (!value && active.length === 1) {
-      onChange(String(active[0].id), { entityType: active[0].entityType, language: active[0].language });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active.map(t => t.id).join(",")]);
+  const NO_CONTRACT = "__none__";
 
   return (
     <div className="space-y-1.5">
-      <Label>Contract Template <span className="text-red-500">*</span></Label>
+      <Label>Contract Template <span className="text-muted-foreground font-normal">(optional)</span></Label>
       {loading ? (
         <div className="text-xs text-muted-foreground">Loading templates…</div>
-      ) : active.length === 0 ? (
-        <div className="text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 border border-amber-200 dark:border-amber-800">
-          No active templates available. Create one in the Contract Templates section first.
-        </div>
       ) : (
         <Select
-          value={value}
+          value={value || NO_CONTRACT}
           onValueChange={v => {
+            if (v === NO_CONTRACT) { onChange(""); return; }
             const tpl = active.find(t => String(t.id) === v);
             onChange(v, tpl ? { entityType: tpl.entityType, language: tpl.language } : undefined);
           }}
         >
-          <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select a template" /></SelectTrigger>
+          <SelectTrigger className="rounded-xl"><SelectValue placeholder="No contract" /></SelectTrigger>
           <SelectContent>
+            <SelectItem value={NO_CONTRACT}>No contract</SelectItem>
             {active.map(t => (
               <SelectItem key={t.id} value={String(t.id)}>
                 {t.name} — {t.language.toUpperCase()} · {t.entityType === "individual" ? "Individual" : "Company"} v{t.version}
@@ -1648,9 +1639,14 @@ function ContractTemplatePicker({ value, onChange, showCreateNote }: {
           </SelectContent>
         </Select>
       )}
+      {!loading && active.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          No active templates available. Leave this as "No contract", or create one in the Contract Templates section.
+        </p>
+      )}
       {showCreateNote && (
         <p className="text-xs text-muted-foreground">
-          On create, a 6-digit verification code is emailed and an admin-driven signing session is opened. The agent must verify their email and sign before accessing the dashboard.
+          If a template is selected, the agent is emailed login credentials and an admin-driven signing session is opened — they must sign before the deadline. Choose "No contract" to let the agent use the system without signing.
         </p>
       )}
     </div>

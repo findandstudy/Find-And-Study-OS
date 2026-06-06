@@ -462,18 +462,26 @@ export async function buildAgentCredentialsEmail(params: {
   email: string;
   password: string;
   loginUrl: string;
+  hasContract?: boolean;
 }): Promise<{ subject: string; html: string; text: string }> {
-  const { firstName, email, password, loginUrl } = params;
+  const { firstName, email, password, loginUrl, hasContract = true } = params;
   const brand = await getEmailBranding();
   const subject = `Giriş bilgileriniz / Your ${brand.companyName} login details`;
+
+  const trNextStep = hasContract
+    ? "Aşağıdaki bilgilerle giriş yapın, ardından sözleşmenizi imzalamak için yönlendirileceksiniz."
+    : "Aşağıdaki bilgilerle giriş yaparak panelinizi kullanmaya başlayabilirsiniz.";
+  const enNextStep = hasContract
+    ? "Log in with the details below; you'll then be guided to sign your contract."
+    : "Log in with the details below to start using your panel.";
 
   const body = `
       <h2 style="margin:0 0 12px;color:#111827;font-size:20px;">Hesabınız hazır / Your account is ready</h2>
       <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
-        Merhaba ${escapeNotifText(firstName)}, ${escapeNotifText(brand.companyName)} acente hesabınız oluşturuldu. Aşağıdaki bilgilerle giriş yapın, ardından sözleşmenizi imzalamak için yönlendirileceksiniz.
+        Merhaba ${escapeNotifText(firstName)}, ${escapeNotifText(brand.companyName)} acente hesabınız oluşturuldu. ${trNextStep}
       </p>
       <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.6;">
-        Hi ${escapeNotifText(firstName)}, your ${escapeNotifText(brand.companyName)} agent account has been created. Log in with the details below; you'll then be guided to sign your contract.
+        Hi ${escapeNotifText(firstName)}, your ${escapeNotifText(brand.companyName)} agent account has been created. ${enNextStep}
       </p>
       <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:0 0 24px;">
         <p style="margin:0 0 4px;color:#6b7280;font-size:13px;font-weight:600;">E-posta / Email</p>
@@ -515,7 +523,7 @@ Password: ${password}
 
 Log in: ${loginUrl}
 
-For your security, we recommend changing your password from your panel after logging in. After logging in you'll be guided to sign your contract.`;
+For your security, we recommend changing your password from your panel after logging in.${hasContract ? " After logging in you'll be guided to sign your contract." : ""}`;
 
   return { subject, html, text };
 }

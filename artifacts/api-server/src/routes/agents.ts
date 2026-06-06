@@ -1072,31 +1072,39 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     return;
   }
 
-  // Required: a contract template must be selected so the agent can be sent
-  // their primary onboarding sign request as part of account creation.
-  const tplId = assignedContractTemplateId ? parseInt(String(assignedContractTemplateId), 10) : null;
-  if (!tplId || isNaN(tplId)) {
-    res.status(400).json({ error: "assignedContractTemplateId is required" });
-    return;
-  }
-  const [template] = await db.select().from(contractTemplatesTable).where(and(
-    eq(contractTemplatesTable.id, tplId),
-    isNull(contractTemplatesTable.deletedAt),
-    eq(contractTemplatesTable.isActive, true),
-  ));
-  if (!template) {
-    res.status(404).json({ error: "Selected contract template not found or inactive" });
-    return;
-  }
-  // Validate template language/entityType match the agent metadata when provided.
+  // A contract template is OPTIONAL. When one is selected, the agent is
+  // auto-assigned an admin-driven onboarding signing session and must sign.
+  // When omitted, no contract/signing session is created and the agent can use
+  // the system without signing.
   const ent = entityType === "individual" ? "individual" : "company";
-  if (template.entityType !== ent) {
-    res.status(400).json({ error: `Template entityType (${template.entityType}) does not match agent entityType (${ent})` });
+  const tplId = assignedContractTemplateId ? parseInt(String(assignedContractTemplateId), 10) : null;
+  // A provided-but-unparseable id is a malformed request, not a "no contract"
+  // choice — reject it rather than silently dropping the contract.
+  if (assignedContractTemplateId && (tplId === null || isNaN(tplId))) {
+    res.status(400).json({ error: "assignedContractTemplateId is invalid" });
     return;
   }
-  if (preferredContractLanguage && template.language !== preferredContractLanguage) {
-    res.status(400).json({ error: `Template language (${template.language}) does not match agent preferredContractLanguage (${preferredContractLanguage})` });
-    return;
+  let template: typeof contractTemplatesTable.$inferSelect | null = null;
+  if (tplId && !isNaN(tplId)) {
+    const [tpl] = await db.select().from(contractTemplatesTable).where(and(
+      eq(contractTemplatesTable.id, tplId),
+      isNull(contractTemplatesTable.deletedAt),
+      eq(contractTemplatesTable.isActive, true),
+    ));
+    if (!tpl) {
+      res.status(404).json({ error: "Selected contract template not found or inactive" });
+      return;
+    }
+    template = tpl;
+    // Validate template language/entityType match the agent metadata when provided.
+    if (template.entityType !== ent) {
+      res.status(400).json({ error: `Template entityType (${template.entityType}) does not match agent entityType (${ent})` });
+      return;
+    }
+    if (preferredContractLanguage && template.language !== preferredContractLanguage) {
+      res.status(400).json({ error: `Template language (${template.language}) does not match agent preferredContractLanguage (${preferredContractLanguage})` });
+      return;
+    }
   }
   if (!email) {
     res.status(400).json({ error: "Email is required to send onboarding verification" });
@@ -1155,8 +1163,8 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     firstName, lastName, status,
     entityType: ent,
     taxNumber: taxNumber || null,
-    preferredContractLanguage: preferredContractLanguage || template.language,
-    assignedContractTemplateId: template.id,
+    preferredContractLanguage: preferredContractLanguage || template?.language || "en",
+    assignedContractTemplateId: template?.id ?? null,
     email: email || null,
     phone: phone || null,
     phoneE164: toE164(phone || null),
@@ -1232,6 +1240,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
         email: normalizedEmail,
         password: generatedPassword,
         loginUrl: `${getAppBaseUrl()}/login`,
+        hasContract: !!template,
       });
       await sendEmail(normalizedEmail, emailContent);
     } catch (err) {
@@ -1246,35 +1255,40 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
       ipAddress: req.ip,
     });
 
-    const [s] = await db.select({ days: settingsTable.defaultSigningDeadlineDays }).from(settingsTable);
-    const days = Math.max(1, Math.min(365, s?.days || 14));
-    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-    const { tokenHash } = createSigningToken();
-    const signerName = `${firstName} ${lastName}`.trim() || businessName || null;
-    // Start at the intake ("Your Details") step when the template defines an
-    // intake schema; otherwise jump straight to review.
-    const hasIntake = Array.isArray(template.intakeSchema) && (template.intakeSchema as any[]).length > 0;
-    const [session] = await db.insert(signingSessionsTable).values({
-      templateId: template.id,
-      agentId: agent.id,
-      tokenHash,
-      mode: "admin_driven",
-      status: hasIntake ? "intake_pending" : "review_pending",
-      intakeData: null,
-      signerEmail: normalizedEmail,
-      signerName,
-      expiresAt,
-      isPrimaryOnboarding: true,
-      createdByUserId: req.user!.id,
-    }).returning();
-    await writeAudit({
-      userId: req.user!.id,
-      action: "agent.contract_auto_assigned",
-      resource: "signing_session",
-      resourceId: session.id,
-      changes: { agentId: agent.id, templateId: template.id, expiresAt: expiresAt.toISOString(), days },
-      ipAddress: req.ip,
-    });
+    // Only open an admin-driven signing session when a contract template was
+    // selected. With no template the agent has no onboarding contract and is
+    // granted full portal access immediately (no signing gate).
+    if (template) {
+      const [s] = await db.select({ days: settingsTable.defaultSigningDeadlineDays }).from(settingsTable);
+      const days = Math.max(1, Math.min(365, s?.days || 14));
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+      const { tokenHash } = createSigningToken();
+      const signerName = `${firstName} ${lastName}`.trim() || businessName || null;
+      // Start at the intake ("Your Details") step when the template defines an
+      // intake schema; otherwise jump straight to review.
+      const hasIntake = Array.isArray(template.intakeSchema) && (template.intakeSchema as any[]).length > 0;
+      const [session] = await db.insert(signingSessionsTable).values({
+        templateId: template.id,
+        agentId: agent.id,
+        tokenHash,
+        mode: "admin_driven",
+        status: hasIntake ? "intake_pending" : "review_pending",
+        intakeData: null,
+        signerEmail: normalizedEmail,
+        signerName,
+        expiresAt,
+        isPrimaryOnboarding: true,
+        createdByUserId: req.user!.id,
+      }).returning();
+      await writeAudit({
+        userId: req.user!.id,
+        action: "agent.contract_auto_assigned",
+        resource: "signing_session",
+        resourceId: session.id,
+        changes: { agentId: agent.id, templateId: template.id, expiresAt: expiresAt.toISOString(), days },
+        ipAddress: req.ip,
+      });
+    }
   } catch (err) {
     console.error("[agents POST] onboarding setup failed:", err);
   }
