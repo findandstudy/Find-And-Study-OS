@@ -1369,8 +1369,8 @@ export default function ApplicationsPage() {
   const { season } = useSeason();
   const { user, hasPermission } = useAuth(true, ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant"]);
   const canSeeCommission = hasPermission("applications.view_commission");
-  const canViewOthers = hasPermission("n_others");
-  const canViewUnassigned = hasPermission("n_unassigned");
+  const canViewOthers = hasPermission("records.view_others");
+  const canViewUnassigned = hasPermission("records.view_unassigned");
 
   const {
     prefs: colPrefs,

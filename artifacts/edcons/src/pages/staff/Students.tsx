@@ -2120,8 +2120,8 @@ export default function StudentsPage() {
   const canMoveCards = isAdmin || hasPermission("records.move_cards");
   const canAssign = isAdmin || hasPermission("records.assign_button");
   const canReassign = isAdmin || hasPermission("records.change_assigned");
-  const canViewOthers = hasPermission("n_others");
-  const canViewUnassigned = hasPermission("n_unassigned");
+  const canViewOthers = hasPermission("records.view_others");
+  const canViewUnassigned = hasPermission("records.view_unassigned");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
