@@ -258,6 +258,11 @@ export default function StaffDashboard() {
                         {new Date(fu.scheduledAt).toLocaleTimeString(dateLoc, { hour: "2-digit", minute: "2-digit" })}
                         {isOverdue(fu.scheduledAt) && ` — ${t("common.overdue")}`}
                       </p>
+                      {(fu.updatedByName ?? fu.createdByName) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {fu.updatedByName ? `Son düzenleyen: ${fu.updatedByName}` : `Oluşturan: ${fu.createdByName}`}
+                        </p>
+                      )}
                     </div>
                   </Link>
                 ))

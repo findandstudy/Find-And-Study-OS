@@ -429,6 +429,11 @@ export default function AdminDashboard() {
                         {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                         {isOverdue(fu.scheduledAt) && " — Overdue"}
                       </p>
+                      {(fu.updatedByName ?? fu.createdByName) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {fu.updatedByName ? `Son düzenleyen: ${fu.updatedByName}` : `Oluşturan: ${fu.createdByName}`}
+                        </p>
+                      )}
                     </div>
                   </Link>
                 ))
