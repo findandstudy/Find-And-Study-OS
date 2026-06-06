@@ -41,9 +41,8 @@ async function buildContractFilename(params: { agent: any | null; signedAt: Date
   return `${agentName} - ${brand} - ${ts}.pdf`;
 }
 
-import { buildSignedPdf } from "../lib/contractPdf";
 import { ObjectStorageService } from "../lib/objectStorage";
-import { ensureSignedContractPdf } from "../lib/signContract";
+import { ensureSignedContractPdf, finalizeSign } from "../lib/signContract";
 import { writeAudit } from "../lib/auditLog";
 import { buildSignedContractEmail, buildSignVerificationCodeEmail, buildSignedContractAdminEmail, sendEmail, getAppBaseUrl } from "../lib/email";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
@@ -385,7 +384,6 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
 
 router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<void> => {
   try {
-    const rawTokenForLink = req.params.token;
     const r = await resolveByToken(req.params.token);
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
     if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
@@ -407,175 +405,34 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
 
     const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;
     const signerUserAgent = (req.headers["user-agent"] as string) || null;
-    const signedAt = new Date();
     const finalSignerName = signerName ? String(signerName).slice(0, 200) : (r.session.signerName || null);
 
-    const ctx = buildAgentContext(r.agent, (r.session.intakeData as any) || null, {
-      signerEmail: r.session.signerEmail,
-      signerName: finalSignerName || undefined,
-      date: signedAt.toISOString().slice(0, 10),
-      number: contractNumber(r.session.id, signedAt),
-    });
-    // Inject the signer's drawn signature into the {{signature}} placeholder so
-    // it renders inside the designed signature box; remaining unfilled signature
-    // images (e.g. {{main_agency_signature}}) become styled placeholders.
-    ctx.signature = toSignatureDataUrl(signatureImagePngBase64);
-    const rendered = renderTemplate(r.template.bodyHtml, ctx);
-    const placeholder = SIG_PLACEHOLDER[r.template.language] || SIG_PLACEHOLDER.en;
-    const renderedHtml = cleanupSignatureImages(rendered, placeholder);
-
-    const { pdfBytes, evidenceHash } = await buildSignedPdf({
-      templateName: r.template.name,
-      bodyHtml: renderedHtml,
-      signerEmail: r.session.signerEmail,
+    // Lightweight hot path: signature image upload + atomic DB commit only.
+    // PDF rendering (headless Chromium) is deferred to the delivery worker which
+    // calls ensureSignedContractPdf() off the request path. Running Chromium here
+    // was OOM-crashing the autoscale instance and making the edge proxy return an
+    // opaque HTML "403 Forbidden" page to the signer instead of completing the
+    // signing. Decoupling guarantees signing succeeds without Chromium on the hot
+    // path; email + PDF attachment are delivered within ~30 s by the worker.
+    const result = await finalizeSign({
+      sessionId: r.session.id,
+      signatureImagePngBase64,
       signerName: finalSignerName,
       signerIp,
       signerUserAgent,
-      signedAt,
     });
-
-    let pdfObjectKey = "";
-    let signatureObjectKey: string | null = null;
-    try {
-      pdfObjectKey = await objectStorage.uploadBuffer({
-        subdir: "signed-contracts",
-        filename: `contract-${r.session.id}.pdf`,
-        buffer: Buffer.from(pdfBytes),
-        contentType: "application/pdf",
-      });
-      const sigBytes = Buffer.from(signatureImagePngBase64.replace(/^data:image\/[a-z]+;base64,/, ""), "base64");
-      signatureObjectKey = await objectStorage.uploadBuffer({
-        subdir: "signed-contracts",
-        filename: `signature-${r.session.id}.png`,
-        buffer: sigBytes,
-        contentType: "image/png",
-      });
-    } catch (uploadErr) {
-      console.error("[public-sign] object storage upload failed:", uploadErr);
-      res.status(500).json({ error: "Failed to store signed contract. Please try again." });
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
       return;
     }
 
-    // Atomic finalize: wrap status flip + signed_contracts insert in a single
-    // transaction so a mid-flight failure rolls back both. The conditional
-    // UPDATE ensures only the first concurrent request wins; UNIQUE(signing_
-    // session_id) on signed_contracts is a defensive backstop.
-    let signed: typeof signedContractsTable.$inferSelect;
-    type FinalizeOutcome =
-      | { ok: true; row: typeof signedContractsTable.$inferSelect }
-      | { ok: false; status: number; error: string };
-    let outcome: FinalizeOutcome;
-    try {
-      outcome = await db.transaction(async (tx): Promise<FinalizeOutcome> => {
-        const [statusUpdate] = await tx.update(signingSessionsTable).set({
-          status: "signed",
-          signedAt,
-          signerName: finalSignerName,
-        }).where(and(
-          eq(signingSessionsTable.id, r.session.id),
-          eq(signingSessionsTable.status, r.session.status),
-        )).returning({ id: signingSessionsTable.id });
-        if (!statusUpdate) {
-          return { ok: false, status: 409, error: "This session has already been signed or is no longer pending." };
-        }
-        const [row] = await tx.insert(signedContractsTable).values({
-          signingSessionId: r.session.id,
-          agentId: r.session.agentId,
-          templateId: r.template.id,
-          pdfObjectKey,
-          signatureImageObjectKey: signatureObjectKey,
-          evidenceHash,
-          signerEmail: r.session.signerEmail,
-          signerName: finalSignerName,
-          signerIp,
-          signerUserAgent,
-          signedAt,
-        }).returning();
-        return { ok: true, row };
-      });
-    } catch (txErr: any) {
-      if (txErr?.code === "23505") {
-        res.status(409).json({ error: "This session has already been signed." });
-        return;
-      }
-      console.error("[public-sign] finalize transaction failed:", txErr);
-      res.status(500).json({ error: "Failed to complete signing" });
-      return;
-    }
-    if (!outcome.ok) {
-      res.status(outcome.status).json({ error: outcome.error });
-      return;
-    }
-    signed = outcome.row;
-
-    // Deliver the signed PDF as a direct attachment (best-effort) to:
-    //  1. the signer's verified email, and
-    //  2. all active admin accounts (super_admin / admin).
-    // The download link is also kept in the body via the opaque token, which
-    // gates /api/public/sign/:token/pdf and only serves once status=signed —
-    // this is a fallback when the queued retry path (no attachment) runs.
-    try {
-      const downloadUrl = `${getAppBaseUrl()}/api/public/sign/${rawTokenForLink}/pdf`;
-      const portalUrl = `${getAppBaseUrl()}/login`;
-      const pdfAttachment = {
-        filename: `contract-${r.session.id}.pdf`,
-        content: Buffer.from(pdfBytes),
-        contentType: "application/pdf",
-      };
-      const signerEmail = r.session.verifiedEmail || r.session.signerEmail;
-      if (signerEmail) {
-        const email = await buildSignedContractEmail({
-          signerName: finalSignerName,
-          templateName: r.template.name,
-          pdfDownloadUrl: downloadUrl,
-          portalUrl,
-          language: r.template.language,
-        });
-        await sendEmail(signerEmail, email, { attachments: [pdfAttachment] });
-        await db.update(signedContractsTable).set({ emailedAt: new Date() }).where(eq(signedContractsTable.id, signed.id));
-      }
-
-      const adminEmails = await getAdminRecipientEmails(signerEmail);
-      if (adminEmails.length > 0) {
-        const adminEmail = await buildSignedContractAdminEmail({
-          signerName: finalSignerName,
-          signerEmail: signerEmail || "",
-          templateName: r.template.name,
-          pdfDownloadUrl: downloadUrl,
-        });
-        for (const to of adminEmails) {
-          try {
-            await sendEmail(to, adminEmail, { attachments: [pdfAttachment] });
-          } catch (adminErr) {
-            console.error(`[public-sign] failed to email admin ${to}:`, adminErr);
-          }
-        }
-      }
-    } catch (emailErr) {
-      console.error("[public-sign] failed to email signed PDF:", emailErr);
-    }
-
-    await writeAudit({
-      userId: r.session.createdByUserId ?? null,
-      action: "contract.signed",
-      resource: "signed_contract",
-      resourceId: signed.id,
-      changes: {
-        sessionId: r.session.id,
-        templateId: r.template.id,
-        agentId: r.session.agentId,
-        evidenceHash,
-        signerEmail: r.session.signerEmail,
-      },
-      ipAddress: signerIp,
-    });
-
-    res.json({ data: { signedContractId: signed.id, pdfObjectKey, evidenceHash } });
+    res.json({ data: { signedContractId: result.signedContractId } });
   } catch (err) {
     console.error("[public-sign] sign:", err);
     res.status(500).json({ error: "Failed to complete signing" });
   }
 });
+
 
 /**
  * Public PDF download. Authorised purely by possession of the signing token —

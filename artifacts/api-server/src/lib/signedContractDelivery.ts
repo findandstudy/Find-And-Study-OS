@@ -122,10 +122,13 @@ export async function deliverPendingSignedContracts(): Promise<void> {
         const storageUrl = objectKeyToStorageUrl(pdfObjectKey);
 
         // Populate the agent's Contract tile (parity with admin-uploaded
-        // contracts). Only set the start date if it is not already managed.
+        // contracts). Start date = signing date; end date = start + 1 year.
         if (row.agentId) {
+          const startDate = row.signedAt ?? new Date();
+          const endDate = new Date(startDate);
+          endDate.setFullYear(endDate.getFullYear() + 1);
           await db.update(agentsTable)
-            .set({ contractUrl: storageUrl, contractStartDate: row.signedAt ?? new Date() })
+            .set({ contractUrl: storageUrl, contractStartDate: startDate, contractEndDate: endDate })
             .where(eq(agentsTable.id, row.agentId));
         }
 
