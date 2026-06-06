@@ -3,6 +3,7 @@ import { db, auditLogsTable, usersTable, studentsTable, leadsTable, applications
 import { sql, desc, ilike, or, eq, and, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
+import { checkAssignmentConsistency } from "../lib/assignmentConsistencyChecker";
 
 const router: IRouter = Router();
 
@@ -275,6 +276,55 @@ router.get("/audit", requireAuth, async (req, res): Promise<void> => {
       totalPages: Math.ceil(Number(count) / limitNum),
     },
   });
+});
+
+router.get("/audit/assignment-inconsistencies", requireAuth, async (req, res): Promise<void> => {
+  const user = req.user!;
+  const isStrictAdmin = user.role === "super_admin" || user.role === "admin";
+  if (!isStrictAdmin) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  try {
+    const inconsistencies = await checkAssignmentConsistency();
+
+    const allUserIds = new Set<number>();
+    for (const inc of inconsistencies) {
+      if (inc.studentAssignedToId) allUserIds.add(inc.studentAssignedToId);
+      if (inc.leadAssignedToId) allUserIds.add(inc.leadAssignedToId);
+      if (inc.applicationAssignedToId) allUserIds.add(inc.applicationAssignedToId);
+    }
+
+    const userNames = new Map<number, string>();
+    if (allUserIds.size > 0) {
+      const users = await db
+        .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email })
+        .from(usersTable)
+        .where(inArray(usersTable.id, [...allUserIds]));
+      for (const u of users) {
+        const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `User #${u.id}`;
+        userNames.set(u.id, name);
+      }
+    }
+
+    const enriched = inconsistencies.map(inc => ({
+      ...inc,
+      studentAssignedToName: inc.studentAssignedToId ? (userNames.get(inc.studentAssignedToId) ?? null) : null,
+      leadAssignedToName: inc.leadAssignedToId != null ? (userNames.get(inc.leadAssignedToId) ?? null) : undefined,
+      applicationAssignedToName: inc.applicationAssignedToId != null ? (userNames.get(inc.applicationAssignedToId) ?? null) : undefined,
+    }));
+
+    res.json({
+      count: enriched.length,
+      leadMismatches: enriched.filter(i => i.type === "lead_mismatch").length,
+      appMismatches: enriched.filter(i => i.type === "application_mismatch").length,
+      data: enriched,
+    });
+  } catch (err: any) {
+    console.error("[audit] assignment-inconsistencies error:", err?.message || err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 export default router;

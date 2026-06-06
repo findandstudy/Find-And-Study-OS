@@ -803,6 +803,28 @@ async function seedClaudeIntegration() {
     await seedDocumentTypes(pool);
     await seedCurrencies(pool);
 
+    // Idempotent: ensure the assignment.inconsistency notification rule exists
+    // for environments seeded before this event was introduced.
+    try {
+      await pool.query(`
+        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
+        VALUES (
+          'assignment.inconsistency',
+          'Assignment Inconsistency Detected',
+          'Fired by the periodic consistency checker when a lead or application assignedToId does not match its student',
+          'system',
+          '["in_app", "email"]'::jsonb,
+          'role',
+          '["super_admin", "admin"]'::jsonb,
+          true,
+          '{}'::jsonb
+        )
+        ON CONFLICT (event) DO NOTHING
+      `);
+    } catch (err) {
+      console.error("[migrate] assignment.inconsistency notification rule:", err);
+    }
+
     // One-shot backfill: grant the three *.view_commission permission keys to
     // the roles that should see commission/earnings figures by default, for
     // environments that were seeded before these keys existed. Gated by a
@@ -887,6 +909,8 @@ async function seedClaudeIntegration() {
     startUniversityContractChecker();
     const { startSignedContractDeliveryWorker } = await import("./lib/signedContractDelivery");
     startSignedContractDeliveryWorker();
+    const { startAssignmentConsistencyChecker } = await import("./lib/assignmentConsistencyChecker");
+    startAssignmentConsistencyChecker();
   }
 
   serveStaticFrontend();
