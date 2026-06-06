@@ -583,26 +583,46 @@ export function IntegrationsManager() {
                 })()}
                 {editDef.key === "web_form" && editConfig.formId && (() => {
                   const secret = editConfig.secret || "YOUR_SECRET_TOKEN_HERE";
-                  const snippet = `<form action="${window.location.origin}/api/webhooks/web-form/${editConfig.formId}" method="POST">\n  <input type="hidden" name="secret_token" value="${secret}" />\n  <input name="firstName" placeholder="First name" required />\n  <input name="lastName" placeholder="Last name" required />\n  <input name="email" type="email" placeholder="Email" />\n  <input name="phone" placeholder="Phone" />\n  <textarea name="message" placeholder="Message"></textarea>\n  <input type="hidden" name="agent_ref" value="" />\n  <button type="submit">Send</button>\n</form>`;
+                  const endpoint = `${window.location.origin}/api/webhooks/web-form/${editConfig.formId}`;
+                  const publicForm = `<!-- Public HTML form: posts to YOUR OWN backend, never to the webhook directly. -->\n<form action="https://your-site.example/lead" method="POST">\n  <input name="firstName" placeholder="First name" required />\n  <input name="lastName" placeholder="Last name" required />\n  <input name="email" type="email" placeholder="Email" />\n  <input name="phone" placeholder="Phone" />\n  <textarea name="message" placeholder="Message"></textarea>\n  <input type="hidden" name="agent_ref" value="" />\n  <button type="submit">Send</button>\n</form>`;
+                  const serverForward = `# On YOUR server, forward the submission with the secret in a header.\n# Keep the token server-side only — never expose it in browser HTML.\ncurl -X POST "${endpoint}" \\\n  -H "Content-Type: application/json" \\\n  -H "X-Webform-Token: ${secret}" \\\n  -d '{"firstName":"Jane","lastName":"Doe","email":"jane@example.com","phone":"","message":"Hi","agent_ref":""}'`;
                   return (
                     <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
-                      <p className="text-xs font-semibold">Embed snippet</p>
+                      <p className="text-xs font-semibold">Integration snippet</p>
                       <p className="text-[11px] text-muted-foreground">
-                        Paste this HTML into your website. The hidden <code>secret_token</code> field
-                        authenticates submissions; rotate the secret to invalidate old embeds.
+                        The secret must stay on your server. Never place it in public HTML — anyone
+                        viewing the page could read it and forge submissions. Collect leads with a
+                        public form that posts to your own backend, then forward them to the webhook
+                        with the <code>X-Webform-Token</code> header (or an{" "}
+                        <code>X-Webform-Signature</code> HMAC).
                       </p>
+                      <p className="text-[11px] font-medium">1. Public form (no secret)</p>
                       <textarea
                         readOnly
-                        className="w-full h-32 text-[10px] font-mono p-2 rounded-lg bg-background border border-border resize-none"
-                        value={snippet}
+                        className="w-full h-28 text-[10px] font-mono p-2 rounded-lg bg-background border border-border resize-none"
+                        value={publicForm}
                       />
                       <Button
                         size="sm"
                         variant="outline"
                         className="h-7 text-xs rounded-lg gap-1"
-                        onClick={() => copyToClipboard(snippet, "Snippet")}
+                        onClick={() => copyToClipboard(publicForm, "Public form")}
                       >
-                        <Copy className="w-3 h-3" /> Copy snippet
+                        <Copy className="w-3 h-3" /> Copy form
+                      </Button>
+                      <p className="text-[11px] font-medium pt-1">2. Server-to-server forward (secret in header)</p>
+                      <textarea
+                        readOnly
+                        className="w-full h-28 text-[10px] font-mono p-2 rounded-lg bg-background border border-border resize-none"
+                        value={serverForward}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs rounded-lg gap-1"
+                        onClick={() => copyToClipboard(serverForward, "Forward example")}
+                      >
+                        <Copy className="w-3 h-3" /> Copy example
                       </Button>
                     </div>
                   );

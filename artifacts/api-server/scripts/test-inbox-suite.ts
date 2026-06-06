@@ -712,18 +712,32 @@ async function testWebFormRouteRejectsBadToken(
           details,
         ) && ok;
 
-      // Body-field secret_token (preserved for backward compat) -> 200.
+      // Body-field secret_token is NO LONGER accepted as an authenticator
+      // (it ships inside public HTML and provides no real authentication) -> 401.
       const tokenInBody = JSON.stringify({ ...submission, secret_token: secret });
-      const okRes = await fetch(`${url}/api/webhooks/web-form`, {
+      const bodyTokRes = await fetch(`${url}/api/webhooks/web-form`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: tokenInBody,
+      });
+      ok =
+        assert(
+          bodyTokRes.status === 401,
+          `POST with secret_token in body returns 401 (got ${bodyTokRes.status})`,
+          details,
+        ) && ok;
+
+      // Valid X-Webform-Token header (server-to-server credential) -> 200.
+      const okRes = await fetch(`${url}/api/webhooks/web-form`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Webform-Token": secret },
+        body,
       });
       let okResStatusOk = okRes.status === 200;
       ok =
         assert(
           okResStatusOk,
-          `POST with secret_token in body returns 200 (got ${okRes.status})`,
+          `POST with valid X-Webform-Token header returns 200 (got ${okRes.status})`,
           details,
         ) && ok;
       let createdConvId = 0;

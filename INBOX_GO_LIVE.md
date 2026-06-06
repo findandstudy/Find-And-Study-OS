@@ -122,17 +122,23 @@ WHERE action='webhook_auth_failed' AND created_at > NOW() - INTERVAL '10 minutes
 4. Optionally fill **After-submit Redirect URL** so HTML form posts land on a
    thank-you page (e.g. `https://findandstudy.com/thanks`).
 
-### 2b. Copy the embed snippet
+### 2b. Copy the integration snippet
 
-The dialog shows a ready-to-paste HTML `<form>` with:
+The secret is a **server-to-server credential** and must never appear in public
+website HTML — anyone viewing the page could read it and forge submissions.
+The dialog therefore shows two parts:
 
-- `action="https://<your-domain>/api/webhooks/web-form/<formId>"`
-- hidden `secret_token` with the generated secret
-- standard fields: firstName, lastName, email, phone, message
-- hidden `agent_ref` (leave value empty for organic leads; sub-agents
-  embed it pre-filled with their `agencyCode` to attribute the lead)
+1. **Public form (no secret)** — standard fields firstName, lastName, email,
+   phone, message, plus hidden `agent_ref` (empty for organic leads; sub-agents
+   pre-fill it with their `agencyCode` to attribute the lead). This form posts to
+   the customer's **own backend**, not directly to the webhook.
+2. **Server-to-server forward (secret in header)** — the customer's backend
+   forwards the submission to
+   `https://<your-domain>/api/webhooks/web-form/<formId>` with the secret in the
+   `X-Webform-Token` header (or an HMAC `X-Webform-Signature`). The webhook no
+   longer accepts a secret supplied in the request body.
 
-Click **Copy snippet** and paste into the customer-site CMS.
+Click **Copy form** / **Copy example** and hand them to the customer's web team.
 
 ### 2c. Round-trip dry run
 
@@ -173,7 +179,7 @@ FROM leads WHERE source LIKE 'web_form:%' ORDER BY id DESC LIMIT 5;
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `401 Invalid or missing webhook secret` | snippet missing `secret_token`, or secret rotated | Re-copy snippet from Settings; the secret in the panel is the source of truth |
+| `401 Invalid or missing webhook secret` | request missing the `X-Webform-Token` header / valid `X-Webform-Signature`, or secret rotated (a `secret_token` body field is no longer accepted) | Send the secret in the `X-Webform-Token` header from your server; the secret in the panel is the source of truth |
 | `404 Unknown form id` | `formId` in URL doesn't match the saved one | Re-copy snippet; the URL is auto-built from the saved formId |
 | `200 ignored: integration disabled` | Web Form toggle is off | Enable in Settings |
 | Submission lands but no email reply when staff respond | SMTP integration not configured | Settings → Integrations → Email (SMTP) → Configure & Test |

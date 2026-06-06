@@ -230,31 +230,32 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
   }
 
   // Mandatory secret enforcement when a secret is configured.
-  // Accepts either:
+  // Authenticators are accepted ONLY via request headers, which a server-to-server
+  // caller controls but a public browser embed cannot supply without exposing the
+  // secret. Accepts either:
   //   - HMAC-SHA256 signature in X-Webform-Signature (raw hex digest of the raw body), OR
-  //   - shared token in X-Webform-Token header / body field `secret_token` / body field `secret`.
-  // All comparisons are constant-time.
+  //   - shared token in the X-Webform-Token header.
+  // The secret is deliberately NOT read from the request body (e.g. `secret_token`
+  // or `secret` fields): a body field that ships inside public website HTML is
+  // visible to every visitor and provides no real authentication. All comparisons
+  // are constant-time.
   if (cfg.secret) {
     const sig = req.headers["x-webform-signature"] as string | undefined;
     const raw = (req as RequestWithRawBody).rawBody;
     const tokenHeader = (req.headers["x-webform-token"] as string | undefined) || undefined;
-    const body: Record<string, unknown> = (req.body && typeof req.body === "object") ? (req.body as Record<string, unknown>) : {};
-    const tokenBody = (body.secret_token || body.secret) as string | undefined;
 
     const sigOk = sig ? verifyWebFormSignature(raw ?? Buffer.alloc(0), sig, cfg.secret) : false;
-    const tokenOk = timingSafeEq(tokenHeader || tokenBody, cfg.secret);
+    const tokenOk = timingSafeEq(tokenHeader, cfg.secret);
     if (!sigOk && !tokenOk) {
       logAudit(null, "webhook_auth_failed", "webhook:web_form", undefined, {
         reason: "invalid_or_missing_secret",
         formId: formIdParam || cfg.formId || null,
         hasSig: Boolean(sig),
         hasTokenHeader: Boolean(tokenHeader),
-        hasTokenBody: Boolean(tokenBody),
       }, req.ip);
       console.warn("[WEBHOOK] web_form auth failed", {
         hasSig: Boolean(sig),
         hasTokenHeader: Boolean(tokenHeader),
-        hasTokenBody: Boolean(tokenBody),
       });
       res.status(401).json({ error: "Invalid or missing webhook secret" });
       return;

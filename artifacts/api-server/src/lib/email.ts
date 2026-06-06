@@ -55,16 +55,24 @@ function buildConfigHash(host: string, port: number, user: string, pass: string)
 }
 
 export async function createSmtpTransporter(config: SmtpConfig): Promise<Transporter> {
+  const secure = config.port === 465;
   return nodemailer.createTransport({
     host: config.host,
     port: config.port,
-    secure: config.port === 465,
+    secure,
+    // Force STARTTLS on non-implicit-TLS ports so credentials and message
+    // bodies are never sent over a plaintext connection.
+    ...(secure ? {} : { requireTLS: true }),
     auth: {
       user: config.username,
       pass: config.password,
     },
     tls: {
-      rejectUnauthorized: false,
+      // Validate the mail server's X.509 certificate to prevent
+      // man-in-the-middle interception of credentials and sensitive
+      // links (password reset, verification, contract signing).
+      rejectUnauthorized: true,
+      minVersion: "TLSv1.2",
     },
   });
 }
