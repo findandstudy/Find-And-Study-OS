@@ -129,12 +129,12 @@ export default function AgentDashboard() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: t("agentDash.totalStudents"), value: s.totalStudents || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
-            { label: t("agentDash.activeApplications"), value: s.activeApplications || 0, icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" },
-            { label: t("agentDash.enrolled"), value: s.enrolledStudents || 0, icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10" },
-            { label: t("agentDash.totalLeads"), value: s.totalLeads || 0, icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-500/10" },
+            { label: t("agentDash.totalStudents"), value: s.totalStudents || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10", href: "/agent/students" },
+            { label: t("agentDash.activeApplications"), value: s.activeApplications || 0, icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10", href: "/agent/applications" },
+            { label: t("agentDash.enrolled"), value: s.enrolledStudents || 0, icon: CheckCircle, color: "text-green-500", bg: "bg-green-500/10", href: "/agent/students" },
+            { label: t("agentDash.totalLeads"), value: s.totalLeads || 0, icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-500/10", href: "/agent/leads" },
           ].map((st, i) => (
-            <Card key={i} className="p-5 border-none shadow-md shadow-black/5 hover:-translate-y-1 transition-transform">
+            <Card key={i} className="p-5 border-none shadow-md shadow-black/5 hover:-translate-y-1 transition-transform cursor-pointer" onClick={() => setLocation(st.href)}>
               <div className={`w-10 h-10 rounded-xl ${st.bg} flex items-center justify-center mb-3`}>
                 <st.icon className={`w-5 h-5 ${st.color}`} />
               </div>
@@ -142,6 +142,143 @@ export default function AgentDashboard() {
               <p className="text-2xl font-display font-bold text-foreground mt-1">{statsLoading ? "..." : st.value}</p>
             </Card>
           ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <GraduationCap className="w-4 h-4 text-green-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">{t("agentDash.latestStudents")}</h3>
+            </div>
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
+              {latestStudents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("agentDash.noStudents")}</p>
+              ) : (
+                latestStudents.map((st2: any, i: number) => (
+                  <Link key={st2.id} href="/agent/students">
+                    <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
+                        <img
+                          src={`${BASE}/api/students/${st2.id}/photo`}
+                          alt={`${st2.firstName} ${st2.lastName}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const el = e.target as HTMLImageElement;
+                            el.style.display = "none";
+                            el.parentElement!.textContent = getInitials(st2.firstName, st2.lastName);
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground truncate uppercase">
+                          {st2.firstName} {st2.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(st2.createdAt).toLocaleDateString(dateLoc, { day: "numeric", month: "short", year: "numeric" })}{", "}
+                          {new Date(st2.createdAt).toLocaleTimeString(dateLoc, { hour: "numeric", minute: "2-digit" })}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px] w-6 h-6 rounded-full p-0 flex items-center justify-center shrink-0 bg-primary/10 text-primary font-bold">
+                        {i + 1}
+                      </Badge>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Activity className="w-4 h-4 text-purple-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">{t("agentDash.latestUpdates")}</h3>
+            </div>
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
+              {latestUpdates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("agentDash.noUpdates")}</p>
+              ) : (
+                latestUpdates.map((u: any, i: number) => {
+                  const detailHref = u.resource && u.resourceId
+                    ? `/agent/${u.resource === "application" ? "applications" : u.resource === "student" ? "students" : u.resource === "lead" ? "leads" : ""}/${u.resourceId}`
+                    : null;
+                  const actionLabel = (u.action || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                  const resourceLabel = (u.resource || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                  const changes = u.data ? Object.entries(u.data).filter(([k]) => !["id", "updatedAt"].includes(k)).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(", ") : "";
+                  const Wrapper = detailHref ? Link : "div" as any;
+                  const wrapperProps = detailHref ? { href: detailHref } : {};
+                  return (
+                    <Wrapper key={u.id} {...wrapperProps}>
+                      <div className={`flex items-start gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors ${detailHref ? "cursor-pointer" : ""}`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]}`}>
+                          {u.userName ? u.userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "SY"}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {u.userName || t("common.system")}
+                          </p>
+                          <p className="text-xs text-foreground/80 font-medium mt-0.5">
+                            {actionLabel}{resourceLabel ? ` — ${resourceLabel}` : ""}
+                            {u.resourceId ? ` #${u.resourceId}` : ""}
+                          </p>
+                          {changes && (
+                            <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{changes}</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end shrink-0 mt-1">
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            {formatTimeAgo(lang, u.createdAt)}
+                          </span>
+                          {detailHref && <ArrowUpRight className="w-3 h-3 text-muted-foreground mt-1" />}
+                        </div>
+                      </div>
+                    </Wrapper>
+                  );
+                })
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Bell className="w-4 h-4 text-amber-500" />
+              </div>
+              <h3 className="font-display font-bold text-base">{t("agentDash.notifications")}</h3>
+            </div>
+            <div className="space-y-3 max-h-[320px] overflow-y-auto">
+              {latestNotifications.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("agentDash.noNotifications")}</p>
+              ) : (
+                latestNotifications.map((n: any) => {
+                  const NIcon = NOTIFICATION_ICONS[n.type] || Bell;
+                  return (
+                    <div key={n.id} className={`p-3 rounded-xl border transition-colors ${n.isRead ? "bg-secondary/20 border-border/50" : "bg-primary/5 border-primary/20"}`}>
+                      <div className="flex items-start gap-2.5">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${n.isRead ? "bg-muted/50" : "bg-primary/10"}`}>
+                          <NIcon className={`w-3.5 h-3.5 ${n.isRead ? "text-muted-foreground" : "text-primary"}`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-medium line-clamp-1 ${n.isRead ? "text-muted-foreground" : "text-foreground"}`}>
+                            {n.title}
+                          </p>
+                          {n.body && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
+                          {formatTimeAgo(lang, n.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Card>
         </div>
 
         <Card className="p-6 border-none shadow-lg shadow-black/5">
@@ -283,143 +420,6 @@ export default function AgentDashboard() {
         </div>
 
         <OfferDeadlinesWidget detailHrefPrefix="/agent/apps" />
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="p-6 border-none shadow-lg shadow-black/5">
-            <div className="flex items-center gap-2 mb-5">
-              <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
-                <GraduationCap className="w-4 h-4 text-green-500" />
-              </div>
-              <h3 className="font-display font-bold text-base">{t("agentDash.latestStudents")}</h3>
-            </div>
-            <div className="space-y-3 max-h-[320px] overflow-y-auto">
-              {latestStudents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("agentDash.noStudents")}</p>
-              ) : (
-                latestStudents.map((s: any, i: number) => (
-                  <Link key={s.id} href="/agent/students">
-                    <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
-                        <img
-                          src={`${BASE}/api/students/${s.id}/photo`}
-                          alt={`${s.firstName} ${s.lastName}`}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            const el = e.target as HTMLImageElement;
-                            el.style.display = "none";
-                            el.parentElement!.textContent = getInitials(s.firstName, s.lastName);
-                          }}
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-foreground truncate uppercase">
-                          {s.firstName} {s.lastName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(s.createdAt).toLocaleDateString(dateLoc, { day: "numeric", month: "short", year: "numeric" })}{", "}
-                          {new Date(s.createdAt).toLocaleTimeString(dateLoc, { hour: "numeric", minute: "2-digit" })}
-                        </p>
-                      </div>
-                      <Badge variant="secondary" className="text-[10px] w-6 h-6 rounded-full p-0 flex items-center justify-center shrink-0 bg-primary/10 text-primary font-bold">
-                        {i + 1}
-                      </Badge>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </Card>
-
-          <Card className="p-6 border-none shadow-lg shadow-black/5">
-            <div className="flex items-center gap-2 mb-5">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Activity className="w-4 h-4 text-purple-500" />
-              </div>
-              <h3 className="font-display font-bold text-base">{t("agentDash.latestUpdates")}</h3>
-            </div>
-            <div className="space-y-3 max-h-[320px] overflow-y-auto">
-              {latestUpdates.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("agentDash.noUpdates")}</p>
-              ) : (
-                latestUpdates.map((u: any, i: number) => {
-                  const detailHref = u.resource && u.resourceId
-                    ? `/agent/${u.resource === "application" ? "applications" : u.resource === "student" ? "students" : u.resource === "lead" ? "leads" : ""}/${u.resourceId}`
-                    : null;
-                  const actionLabel = (u.action || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-                  const resourceLabel = (u.resource || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-                  const changes = u.data ? Object.entries(u.data).filter(([k]) => !["id", "updatedAt"].includes(k)).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(", ") : "";
-                  const Wrapper = detailHref ? Link : "div" as any;
-                  const wrapperProps = detailHref ? { href: detailHref } : {};
-                  return (
-                    <Wrapper key={u.id} {...wrapperProps}>
-                      <div className={`flex items-start gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors ${detailHref ? "cursor-pointer" : ""}`}>
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]}`}>
-                          {u.userName ? u.userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "SY"}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-foreground truncate">
-                            {u.userName || t("common.system")}
-                          </p>
-                          <p className="text-xs text-foreground/80 font-medium mt-0.5">
-                            {actionLabel}{resourceLabel ? ` — ${resourceLabel}` : ""}
-                            {u.resourceId ? ` #${u.resourceId}` : ""}
-                          </p>
-                          {changes && (
-                            <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{changes}</p>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-end shrink-0 mt-1">
-                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                            {formatTimeAgo(lang, u.createdAt)}
-                          </span>
-                          {detailHref && <ArrowUpRight className="w-3 h-3 text-muted-foreground mt-1" />}
-                        </div>
-                      </div>
-                    </Wrapper>
-                  );
-                })
-              )}
-            </div>
-          </Card>
-
-          <Card className="p-6 border-none shadow-lg shadow-black/5">
-            <div className="flex items-center gap-2 mb-5">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Bell className="w-4 h-4 text-amber-500" />
-              </div>
-              <h3 className="font-display font-bold text-base">{t("agentDash.notifications")}</h3>
-            </div>
-            <div className="space-y-3 max-h-[320px] overflow-y-auto">
-              {latestNotifications.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("agentDash.noNotifications")}</p>
-              ) : (
-                latestNotifications.map((n: any) => {
-                  const NIcon = NOTIFICATION_ICONS[n.type] || Bell;
-                  return (
-                    <div key={n.id} className={`p-3 rounded-xl border transition-colors ${n.isRead ? "bg-secondary/20 border-border/50" : "bg-primary/5 border-primary/20"}`}>
-                      <div className="flex items-start gap-2.5">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${n.isRead ? "bg-muted/50" : "bg-primary/10"}`}>
-                          <NIcon className={`w-3.5 h-3.5 ${n.isRead ? "text-muted-foreground" : "text-primary"}`} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-sm font-medium line-clamp-1 ${n.isRead ? "text-muted-foreground" : "text-foreground"}`}>
-                            {n.title}
-                          </p>
-                          {n.body && (
-                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
-                          {formatTimeAgo(lang, n.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </Card>
-        </div>
 
       </div>
   );
