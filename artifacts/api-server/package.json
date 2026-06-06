@@ -45,12 +45,12 @@
     "google-auth-library": "^10.6.2",
     "helmet": "^8.1.0",
     "libphonenumber-js": "^1.12.42",
-    "nodemailer": "^8.0.3",
+    "nodemailer": "^8.0.10",
     "openid-client": "^6.8.2",
     "pdf-lib": "^1.17.1",
     "playwright-core": "^1.59.1",
     "rate-limiter-flexible": "^11.0.1",
-    "xlsx": "^0.18.5",
+    "xlsx": "npm:@e965/xlsx@^0.20.3",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -5,7 +5,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalog, loadDocCatalogKeySet } from "../lib/docCatalog";
 import { invalidateCurrencyCatalog } from "../lib/currencyCatalog";
-import * as XLSX from "xlsx/xlsx.js";
+import * as XLSX from "xlsx";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
 // (Excel imports). The global body limit is intentionally small (1mb) for

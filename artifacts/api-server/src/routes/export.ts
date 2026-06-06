@@ -3,7 +3,7 @@ import { db, leadsTable, studentsTable, applicationsTable, agentsTable, commissi
 import { eq, sql, and, desc, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
-import * as XLSX from "xlsx/xlsx.js";
+import * as XLSX from "xlsx";
 
 const router: IRouter = Router();
 
