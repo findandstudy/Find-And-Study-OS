@@ -2,8 +2,8 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
 import { z } from "zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
-import { ObjectPermission } from "../lib/objectAcl";
 import { requireAuth } from "../lib/auth";
+import { canAccessGenericObject, recordObjectOwner } from "../lib/objectAuthz";
 import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
 import { validateUploadedFile } from "../lib/fileUploadValidation";
 
@@ -85,6 +85,10 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
     const uploadURL = await objectStorageService.getObjectEntityUploadURL(prefix);
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
 
+    // Bind the object to its uploader so the generic download endpoint can
+    // authorize access without trusting self-writable reference fields.
+    await recordObjectOwner(objectPath, userId);
+
     res.json(
       RequestUploadUrlResponse.parse({
         uploadURL,
@@ -138,6 +142,18 @@ router.get("/storage/objects/*path", requireAuth, async (req: Request, res: Resp
 
     if (wildcardPath.includes("..") || wildcardPath.includes("\\")) {
       res.status(400).json({ error: "Invalid path" });
+      return;
+    }
+
+    // Object-level authorization: `requireAuth` alone allowed any logged-in
+    // user to fetch any object by key (IDOR). Reuse the access rules of the
+    // record that references this object; deny if none grants access.
+    const allowed = await canAccessGenericObject(
+      { id: req.user!.id, role: (req.user as { role?: string }).role ?? "" },
+      wildcardPath,
+    );
+    if (!allowed) {
+      res.status(403).json({ error: "Access denied" });
       return;
     }
 

@@ -398,6 +398,147 @@ async function seedClaudeIntegration() {
   const { ensureRateLimitsTable } = await import("./lib/pgRateLimiter");
   await ensureRateLimitsTable();
 
+  // Step 1b: Object ownership bindings for storage access control (Task #314).
+  // Records who uploaded each object so the generic download endpoint can
+  // authorize access without trusting self-writable reference fields (IDOR fix).
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS object_owners (
+        object_key TEXT PRIMARY KEY,
+        uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        source_priority INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    // Resumable backfill marker: a single completion row written only after the
+    // whole backfill finishes. Using a marker (instead of "table is empty")
+    // makes the backfill safe to resume — a run interrupted after partial
+    // inserts simply re-runs on the next boot (inserts are idempotent via
+    // ON CONFLICT DO NOTHING), so a partial run can never leave permanent gaps.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS object_owners_backfill (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    // Upgrade path: when source_priority is being added to a PRE-EXISTING table,
+    // its legacy rows have unknown provenance. Marking them with DEFAULT 0 would
+    // (wrongly) make them look like authoritative upload-time bindings that
+    // neither a backfill retry nor a real upload could ever correct. Instead,
+    // tag legacy rows as the weakest priority (INT_MAX) and clear the completion
+    // marker so the backfill re-runs once and supersedes them with properly
+    // ranked bindings. A fresh CREATE already has the column, so this DO block is
+    // a no-op there. Idempotent: the guard skips entirely once the column exists.
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'object_owners' AND column_name = 'source_priority'
+        ) THEN
+          ALTER TABLE object_owners ADD COLUMN source_priority INTEGER;
+          UPDATE object_owners SET source_priority = 2147483647 WHERE source_priority IS NULL;
+          ALTER TABLE object_owners ALTER COLUMN source_priority SET DEFAULT 0;
+          ALTER TABLE object_owners ALTER COLUMN source_priority SET NOT NULL;
+          DELETE FROM object_owners_backfill;
+        END IF;
+      END $$;
+    `);
+
+    // Backfill from authoritative references so EXISTING objects are protected
+    // too — the download endpoint denies self-writable references that lack a
+    // matching uploader binding, so every legitimately-referenced object must be
+    // bound. Highest-authority source wins per key. Runs until the completion
+    // marker is present.
+    const { rows: doneRows } = await pool.query(`SELECT 1 FROM object_owners_backfill LIMIT 1`);
+    if (doneRows.length === 0) {
+      const { canonicalizeKey } = await import("./lib/objectAuthz");
+      const owners = new Map<string, { owner: number | null; priority: number }>();
+      const add = (raw: string | null | undefined, ownerId: number | null, priority: number): void => {
+        if (!raw) return;
+        const key = canonicalizeKey(raw);
+        if (!key) return;
+        // First (highest-authority) source seen for a key wins within a run.
+        const cur = owners.get(key);
+        if (!cur || priority < cur.priority) owners.set(key, { owner: ownerId, priority });
+      };
+      // Priority order: trustworthy/sensitive references first.
+      const sources: Array<{ sql: string; owner: (r: any) => number | null; val: (r: any) => string | null }> = [
+        { sql: `SELECT object_path AS v, user_id AS o FROM staff_documents WHERE object_path IS NOT NULL AND deleted_at IS NULL`, val: (r) => r.v, owner: (r) => r.o },
+        { sql: `SELECT contract_url AS v, user_id AS o FROM agents WHERE contract_url IS NOT NULL`, val: (r) => r.v, owner: (r) => r.o },
+        { sql: `SELECT agent_id_proof_url AS v, user_id AS o FROM agents WHERE agent_id_proof_url IS NOT NULL`, val: (r) => r.v, owner: (r) => r.o },
+        { sql: `SELECT file_url AS v FROM financial_transactions WHERE file_url IS NOT NULL`, val: (r) => r.v, owner: () => null },
+        { sql: `SELECT metadata->'attachment'->>'fileUrl' AS v, sender_id AS o FROM messages WHERE metadata->'attachment'->>'fileUrl' IS NOT NULL`, val: (r) => r.v, owner: (r) => r.o },
+        { sql: `SELECT contract_url AS v, id AS o FROM users WHERE contract_url IS NOT NULL`, val: (r) => r.v, owner: (r) => r.o },
+        { sql: `SELECT passport_url AS v, id AS o FROM users WHERE passport_url IS NOT NULL`, val: (r) => r.v, owner: (r) => r.o },
+        { sql: `SELECT business_cert_url AS v, user_id AS o FROM agents WHERE business_cert_url IS NOT NULL`, val: (r) => r.v, owner: (r) => r.o },
+        { sql: `SELECT logo_url AS v, user_id AS o FROM agents WHERE logo_url IS NOT NULL`, val: (r) => r.v, owner: (r) => r.o },
+        { sql: `SELECT avatar_url AS v, id AS o FROM users WHERE avatar_url IS NOT NULL`, val: (r) => r.v, owner: (r) => r.o },
+        { sql: `SELECT logo_url AS v FROM branches WHERE logo_url IS NOT NULL`, val: (r) => r.v, owner: () => null },
+        { sql: `SELECT logo_url AS v FROM universities WHERE logo_url IS NOT NULL`, val: (r) => r.v, owner: () => null },
+        { sql: `SELECT logo_url AS v, logo_dark_url AS v2, logo_square_url AS v3, email_logo_url AS v4, pdf_logo_url AS v5 FROM settings`, val: (r) => r.v, owner: () => null },
+      ];
+      let hadSourceFailure = false;
+      // Source priority: index + 1 so every backfill binding is strictly less
+      // authoritative than an upload-time binding (sourcePriority 0). Lower =
+      // more authoritative; earlier sources in the array win.
+      for (let p = 0; p < sources.length; p++) {
+        const src = sources[p];
+        const priority = p + 1;
+        try {
+          const { rows } = await pool.query(src.sql);
+          for (const r of rows) {
+            add(src.val(r), src.owner(r), priority);
+            // settings row carries multiple logo variants.
+            if (r.v2 !== undefined) {
+              add(r.v2, null, priority); add(r.v3, null, priority);
+              add(r.v4, null, priority); add(r.v5, null, priority);
+            }
+          }
+        } catch (e) {
+          hadSourceFailure = true;
+          console.error("[migrate] object_owners backfill source failed:", e);
+        }
+      }
+      if (owners.size > 0) {
+        const entries = Array.from(owners.entries());
+        const CHUNK = 500;
+        for (let i = 0; i < entries.length; i += CHUNK) {
+          const slice = entries.slice(i, i + CHUNK);
+          const values: string[] = [];
+          const params: any[] = [];
+          slice.forEach(([k, v], idx) => {
+            values.push(`($${idx * 3 + 1}, $${idx * 3 + 2}, $${idx * 3 + 3})`);
+            params.push(k, v.owner, v.priority);
+          });
+          // Precedence-aware upsert: overwrite only when the incoming binding is
+          // strictly more authoritative. This lets a retried backfill correct a
+          // weaker binding that a prior partial run inserted, while never
+          // clobbering an upload-time (priority 0) binding.
+          await pool.query(
+            `INSERT INTO object_owners (object_key, uploaded_by, source_priority) VALUES ${values.join(", ")}
+             ON CONFLICT (object_key) DO UPDATE
+               SET uploaded_by = EXCLUDED.uploaded_by, source_priority = EXCLUDED.source_priority
+               WHERE EXCLUDED.source_priority < object_owners.source_priority`,
+            params,
+          );
+        }
+        console.log(`[migrate] object_owners backfilled ${owners.size} object bindings`);
+      }
+      // Mark complete ONLY when every source query succeeded, so a transient
+      // source failure leaves the marker absent and the backfill resumes (and
+      // converges) on the next boot rather than locking in a permanent gap.
+      if (hadSourceFailure) {
+        console.error("[migrate] object_owners backfill incomplete (a source failed); will retry next boot");
+      } else {
+        await pool.query(`INSERT INTO object_owners_backfill (id) VALUES (1) ON CONFLICT DO NOTHING`);
+        console.log(`[migrate] object_owners backfill complete`);
+      }
+    }
+  } catch (err) {
+    console.error("[migrate] object_owners table/backfill:", err);
+  }
+
   // Step 2b: Idempotent migrations for offer-letter expiry feature.
   try {
     await pool.query(`ALTER TABLE application_stage_documents ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ`);

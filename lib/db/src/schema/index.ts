@@ -38,5 +38,6 @@ export * from "./universityContracts";
 export * from "./leadAssignmentRules";
 export * from "./agencyAssignedStaff";
 export * from "./staffCards";
+export * from "./objectOwners";
 export * from "./aiPersonas";
 export * from "./aiExtractors";
