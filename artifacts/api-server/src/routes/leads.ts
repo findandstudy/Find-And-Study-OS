@@ -114,7 +114,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     lcSource.startsWith("embed:") ||
     lcSource.startsWith("website-form:");
   const resolvedSource = isReservedSource ? "website" : rawSource;
-  const { lead } = await findOrUpsertPublicLead({
+  const { lead, created } = await findOrUpsertPublicLead({
     source: resolvedSource,
     uniqueKey: { kind: "emailSource" },
     fields: {
@@ -143,7 +143,13 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     },
     ip: req.ip,
   });
-  res.status(201).json({ success: true, message: "Inquiry submitted successfully", leadId: lead.id });
+  // SECURITY (Public Intake): only disclose the numeric lead ID for a lead
+  // this request actually created. Returning the ID of an already-existing
+  // (deduped) lead would let an unauthenticated caller recover the lead ID
+  // for any known email and target it elsewhere. The apply endpoint no
+  // longer trusts a client-supplied lead ID (it re-derives by email+source),
+  // so suppressing the existing-lead ID here is safe.
+  res.status(201).json({ success: true, message: "Inquiry submitted successfully", leadId: created ? lead.id : null });
 });
 
 router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<void> => {

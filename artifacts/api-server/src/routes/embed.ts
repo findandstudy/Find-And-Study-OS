@@ -774,7 +774,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
     // and refreshed with the latest payload. Prevents duplicates when
     // the visitor clicks Continue twice, refreshes, or reopens the
     // widget in another tab.
-    const { lead } = await findOrUpsertEmbedLead({
+    const { lead, created } = await findOrUpsertEmbedLead({
       slug: widget.slug,
       ip: req.ip,
       fields: {
@@ -792,7 +792,11 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
         utmContent: s(utmContent, 100),
       },
     });
-    res.status(201).json({ success: true, leadId: lead.id });
+    // SECURITY (Public Intake): only disclose the numeric lead ID for a
+    // freshly created lead, never for a deduped existing one — /apply
+    // re-derives the lead server-side, so the client never needs an
+    // existing lead's ID.
+    res.status(201).json({ success: true, leadId: created ? lead.id : null });
   } catch (err: any) {
     console.error("[embed/lead] failed:", err?.message || err);
     res.status(500).json({ error: "Failed to save lead" });
@@ -811,7 +815,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     return;
   }
 
-  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, aiExtractedData, leadId: incomingLeadId, motherName, fatherName, gender, dateOfBirth, passportNumber, passportIssueDate, passportExpiry, address, highSchool, graduationYear, gpa, languageScore } = req.body;
+  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, aiExtractedData, motherName, fatherName, gender, dateOfBirth, passportNumber, passportIssueDate, passportExpiry, address, highSchool, graduationYear, gpa, languageScore } = req.body;
 
   if (_hp) { res.json({ success: true }); return; }
 
@@ -863,68 +867,33 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     return;
   }
 
-  // Resolve the lead row: prefer the leadId already issued during Step 1
-  // (from POST /public/embed/:slug/lead). If absent or invalid, create a
-  // fresh lead now so direct submissions still work. We update the
-  // existing lead with the richer payload collected during the form.
-  //
-  // SECURITY: never trust a client-supplied leadId blindly — that would
-  // let an attacker overwrite or convert any lead in the system by
-  // guessing IDs (IDOR). Only reuse the lead when it was issued by the
-  // SAME widget slug AND the submitted email matches the original lead's
-  // email. Anything else falls back to inserting a fresh lead row.
-  const incomingLeadIdNum = incomingLeadId ? parseInt(String(incomingLeadId), 10) : null;
-  let leadRow: typeof leadsTable.$inferSelect | null = null;
-  if (incomingLeadIdNum && Number.isFinite(incomingLeadIdNum) && incomingLeadIdNum > 0) {
-    const [found] = await db.select().from(leadsTable).where(eq(leadsTable.id, incomingLeadIdNum));
-    if (found) {
-      const expectedSource = `embed:${widget.slug}`;
-      const submittedEmail = String(email || "").toLowerCase().trim();
-      const leadEmail = String(found.email || "").toLowerCase().trim();
-      if (found.source === expectedSource && submittedEmail && leadEmail && submittedEmail === leadEmail) {
-        leadRow = found;
-      } else {
-        console.warn(`[embed/apply] Rejected leadId=${incomingLeadIdNum} reuse — source/email mismatch (slug=${widget.slug})`);
-      }
-    }
-  }
-
+  // SECURITY (Public Intake / IDOR): the embed apply NEVER trusts a
+  // client-supplied leadId. A numeric lead ID is enumerable and the email is
+  // not a secret, so honoring a client-passed ID — even with a source+email
+  // match — is a broken-object-binding primitive that let an off-domain
+  // caller overwrite or convert an arbitrary lead row. Instead we always
+  // re-derive the lead deterministically on the server from
+  // (lower(email), source="embed:<slug>") via the dedup helper. This binds
+  // the write to THIS widget's own lead for this email, prevents a second
+  // row when Step-1 already created one, and preserves the lead-first ->
+  // auto-convert UX. Any client-supplied leadId is intentionally ignored.
   const result = await db.transaction(async (tx) => {
-    let lead;
-    if (leadRow) {
-      const [updated] = await tx.update(leadsTable).set({
+    const upsertResult = await findOrUpsertEmbedLead({
+      slug: widget.slug,
+      ip: req.ip,
+      tx,
+      fields: {
         firstName: tlu(firstName, 100)!,
         lastName: tlu(lastName, 100)!,
-        email: s(email, 255),
+        email: s(email, 255)!,
         phone: pn(phone, countryCode, 50),
         nationality: s(nationality, 100),
         interestedProgram: s(programName || desiredProgram, 255),
         interestedUniversity: s(universityName || preferredUniversity, 255),
         notes: s(message, 2000),
-      }).where(eq(leadsTable.id, leadRow.id)).returning();
-      lead = updated;
-    } else {
-      // No verified leadId from Step-1 (cookie cleared, new tab, etc.).
-      // Use the dedup helper so the same email submitting the same widget
-      // again does not create another row alongside the Step-1 lead that
-      // already exists.
-      const upsertResult = await findOrUpsertEmbedLead({
-        slug: widget.slug,
-        ip: req.ip,
-        tx,
-        fields: {
-          firstName: tlu(firstName, 100)!,
-          lastName: tlu(lastName, 100)!,
-          email: s(email, 255)!,
-          phone: pn(phone, countryCode, 50),
-          nationality: s(nationality, 100),
-          interestedProgram: s(programName || desiredProgram, 255),
-          interestedUniversity: s(universityName || preferredUniversity, 255),
-          notes: s(message, 2000),
-        },
-      });
-      lead = upsertResult.lead;
-    }
+      },
+    });
+    const lead = upsertResult.lead;
 
     const [submission] = await tx.insert(embedSubmissionsTable).values({
       widgetId: widget.id,

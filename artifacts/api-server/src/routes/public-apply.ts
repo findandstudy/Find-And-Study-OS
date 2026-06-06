@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response, json } from "express";
 import crypto from "crypto";
 import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
-import { eq, and, isNotNull, inArray, isNull, sql } from "drizzle-orm";
+import { eq, and, isNotNull, inArray, isNull, sql, desc } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import rateLimit from "express-rate-limit";
@@ -310,7 +310,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
 }
 
 router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, leadId: incomingLeadId, documents, reuseDocumentIds } = req.body;
+  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, documents, reuseDocumentIds } = req.body;
   let leadId: number | null = null;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality || !gender) {
@@ -334,21 +334,26 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  // SECURITY: never trust client-supplied leadId blindly — that would allow
-  // any caller to attach uploaded documents to (or convert) an arbitrary
-  // lead row (IDOR). Only honour the leadId when the row exists, isn't
-  // soft-deleted, and its email matches the submitted email.
-  if (incomingLeadId) {
-    const incomingLeadIdNum = parseInt(String(incomingLeadId), 10);
-    if (Number.isFinite(incomingLeadIdNum) && incomingLeadIdNum > 0) {
-      const [foundLead] = await db.select().from(leadsTable).where(eq(leadsTable.id, incomingLeadIdNum));
-      if (foundLead && !foundLead.deletedAt && (foundLead.email || "").toLowerCase().trim() === normalizedEmail) {
-        leadId = foundLead.id;
-      } else {
-        console.warn(`[public/apply] Rejected leadId=${incomingLeadIdNum} reuse — not found or email mismatch`);
-      }
-    }
-  }
+  // SECURITY (Public Intake / IDOR): never trust a client-supplied leadId.
+  // A numeric lead ID is an enumerable identifier and the submitted email is
+  // not a secret, so honoring a caller-supplied ID (even with an email match)
+  // is a broken-object-binding / IDOR primitive — it let a caller attach
+  // documents to, overwrite, or convert an arbitrary lead row, including
+  // leads owned by other public flows (embed widgets, agent web forms,
+  // website-builder forms). Instead we re-derive the target lead
+  // deterministically on the server from (lower(email), source="website") —
+  // the SAME dedup key the public website lead step (POST /public/lead) uses.
+  // This binds the conversion to this flow's own lead, can't be steered by
+  // the client, and preserves the lead-first -> auto-convert UX.
+  const [websiteLead] = await db.select().from(leadsTable)
+    .where(and(
+      sql`lower(${leadsTable.email}) = ${normalizedEmail}`,
+      eq(leadsTable.source, "website"),
+      isNull(leadsTable.deletedAt),
+    ))
+    .orderBy(desc(leadsTable.createdAt))
+    .limit(1);
+  if (websiteLead) leadId = websiteLead.id;
 
   const { getAppBaseUrl } = await import("../lib/email.js");
   const baseUrl = getAppBaseUrl();
@@ -359,10 +364,24 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
   try {
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
 
-    // Staff email conflict — block immediately. We never want a public
-    // submission to silently attach itself to an internal staff account.
+    // SECURITY (Public Intake — account/identity enumeration): the
+    // staff-email and passport-already-registered conflicts MUST return an
+    // identical, generic response. Distinct messages/codes let an
+    // unauthenticated attacker probe this public endpoint to confirm whether
+    // an email belongs to staff or whether a passport number is already on
+    // file. We still block the same way, but never disclose WHICH sensitive
+    // condition matched; the specific reason is logged server-side only for
+    // staff triage.
+    const genericConflict = {
+      error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
+      code: "ACCOUNT_CONFLICT",
+      loginUrl,
+    };
+
+    // Never let a public submission attach itself to an internal staff account.
     if (existingUser && existingUser.role !== "student") {
-      res.status(409).json({ error: "This email is already in use by a staff account. Please use a different email.", code: "EMAIL_STAFF_CONFLICT" });
+      console.warn(`[PUBLIC-APPLY] Blocked submission for staff-owned email (user #${existingUser.id})`);
+      res.status(409).json(genericConflict);
       return;
     }
 
@@ -370,14 +389,11 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       const [dupPassportStudent] = await db.select({ id: studentsTable.id, userId: studentsTable.userId })
         .from(studentsTable)
         .where(and(eq(studentsTable.passportNumber, trimmedPassport), isNull(studentsTable.deletedAt)));
-      // Passport mismatch with an existing student that belongs to a
-      // different user/email is suspicious — block and direct to login.
+      // Passport already linked to a different user — block with the same
+      // generic response so the passport's existence is never confirmed.
       if (dupPassportStudent && (!existingUser || dupPassportStudent.userId !== existingUser.id)) {
-        res.status(409).json({
-          error: `This passport number has already been used in our system. Please log in to your existing account to continue your application: ${loginUrl}`,
-          code: "PASSPORT_IN_USE",
-          loginUrl,
-        });
+        console.warn(`[PUBLIC-APPLY] Blocked submission — passport already linked to student #${dupPassportStudent.id}`);
+        res.status(409).json(genericConflict);
         return;
       }
     }
