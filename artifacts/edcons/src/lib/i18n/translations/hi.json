@@ -625,7 +625,12 @@
     "applicationSpecificDocumentsHint": "किसी विशिष्ट आवेदन के लिए अपलोड किए गए, छात्र के प्रोफ़ाइल दस्तावेज़ों से अलग रखे गए।",
     "preview": "पूर्वावलोकन",
     "continue": "जारी रखें",
-    "select": "चुनें..."
+    "select": "चुनें...",
+    "selectAll": "Select all",
+    "selectedCount": "{n} selected",
+    "deleteSelected": "Delete selected ({n})",
+    "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
   },
   "seo": {
     "homeTitle": "वैश्विक शिक्षा परामर्श",
@@ -3116,7 +3121,11 @@
     "templatePickHint": "अपने-आप मिलान के लिए स्वतः पर छोड़ें, या भेजने के लिए कोई विशिष्ट टेम्पलेट चुनें।",
     "templatesLoadError": "अनुबंध टेम्पलेट लोड करने में विफल",
     "cancel": "रद्द करें",
-    "send": "भेजें"
+    "send": "भेजें",
+    "confirmDeleteSession": "Delete this session? This cannot be undone.",
+    "cannotDeleteSigned": "Signed sessions cannot be deleted",
+    "sessionDeleted": "Session deleted",
+    "sessionsBulkDeleted": "Sessions deleted"
   },
   "contractTemplates": {
     "title": "अनुबंध टेम्पलेट",
@@ -3144,7 +3153,8 @@
     "updated": "टेम्पलेट अपडेट किया गया",
     "created": "टेम्पलेट बनाया गया",
     "confirmDelete": "क्या आप वाकई इस टेम्पलेट को हटाना चाहते हैं?",
-    "deleted": "हटा दिया गया"
+    "deleted": "हटा दिया गया",
+    "bulkDeleted": "Templates deleted"
   },
   "agentOnboarding": {
     "verifyEmail": {
@@ -3317,9 +3327,14 @@
     "toast": {
       "emailRequired": "ईमेल आवश्यक है",
       "linkCreated": "लिंक बनाया गया",
-      "resent": "लिंक पुनः भेजा गया"
+      "resent": "लिंक पुनः भेजा गया",
+      "signerUpdated": "Signer updated",
+      "deleted": "Session deleted",
+      "bulkDeleted": "Sessions deleted"
     },
-    "confirmRevoke": "इस लिंक को रद्द करें?"
+    "confirmRevoke": "इस लिंक को रद्द करें?",
+    "editSignerTitle": "Edit Signer Details",
+    "confirmDelete": "Delete this session? This cannot be undone."
   },
   "columnSettings": {
     "columns": "कॉलम",

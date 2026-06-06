@@ -625,7 +625,12 @@
     "applicationSpecificDocumentsHint": "Diunggah untuk aplikasi tertentu, disimpan terpisah dari dokumen profil siswa.",
     "preview": "Pratinjau",
     "continue": "Lanjutkan",
-    "select": "Pilih..."
+    "select": "Pilih...",
+    "selectAll": "Select all",
+    "selectedCount": "{n} selected",
+    "deleteSelected": "Delete selected ({n})",
+    "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
   },
   "seo": {
     "homeTitle": "Konsultasi Pendidikan Global",
@@ -3116,7 +3121,11 @@
     "templatePickHint": "Biarkan pada Otomatis untuk pencocokan otomatis, atau pilih templat tertentu untuk dikirim.",
     "templatesLoadError": "Gagal memuat templat kontrak",
     "cancel": "Batal",
-    "send": "Kirim"
+    "send": "Kirim",
+    "confirmDeleteSession": "Delete this session? This cannot be undone.",
+    "cannotDeleteSigned": "Signed sessions cannot be deleted",
+    "sessionDeleted": "Session deleted",
+    "sessionsBulkDeleted": "Sessions deleted"
   },
   "contractTemplates": {
     "title": "Templat Kontrak",
@@ -3144,7 +3153,8 @@
     "updated": "Templat diperbarui",
     "created": "Templat dibuat",
     "confirmDelete": "Apakah Anda yakin ingin menghapus templat ini?",
-    "deleted": "Dihapus"
+    "deleted": "Dihapus",
+    "bulkDeleted": "Templates deleted"
   },
   "agentOnboarding": {
     "verifyEmail": {
@@ -3317,9 +3327,14 @@
     "toast": {
       "emailRequired": "Email wajib diisi",
       "linkCreated": "Tautan dibuat",
-      "resent": "Tautan dikirim ulang"
+      "resent": "Tautan dikirim ulang",
+      "signerUpdated": "Signer updated",
+      "deleted": "Session deleted",
+      "bulkDeleted": "Sessions deleted"
     },
-    "confirmRevoke": "Cabut tautan ini?"
+    "confirmRevoke": "Cabut tautan ini?",
+    "editSignerTitle": "Edit Signer Details",
+    "confirmDelete": "Delete this session? This cannot be undone."
   },
   "columnSettings": {
     "columns": "Kolom",

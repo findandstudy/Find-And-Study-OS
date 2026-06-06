@@ -625,7 +625,12 @@
     "applicationSpecificDocumentsHint": "Téléchargés pour une candidature spécifique, conservés séparément des documents de profil de l'étudiant.",
     "preview": "Aperçu",
     "continue": "Continuer",
-    "select": "Sélectionner..."
+    "select": "Sélectionner...",
+    "selectAll": "Select all",
+    "selectedCount": "{n} selected",
+    "deleteSelected": "Delete selected ({n})",
+    "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
   },
   "seo": {
     "homeTitle": "Conseil en éducation mondiale",
@@ -3167,7 +3172,11 @@
     "templatePickHint": "Laissez sur Auto pour une sélection automatique, ou choisissez un modèle précis à envoyer.",
     "templatesLoadError": "Échec du chargement des modèles de contrat",
     "cancel": "Annuler",
-    "send": "Envoyer"
+    "send": "Envoyer",
+    "confirmDeleteSession": "Delete this session? This cannot be undone.",
+    "cannotDeleteSigned": "Signed sessions cannot be deleted",
+    "sessionDeleted": "Session deleted",
+    "sessionsBulkDeleted": "Sessions deleted"
   },
   "contractTemplates": {
     "title": "Modèles de contrat",
@@ -3195,7 +3204,8 @@
     "updated": "Modèle mis à jour",
     "created": "Modèle créé",
     "confirmDelete": "Voulez-vous vraiment supprimer ce modèle ?",
-    "deleted": "Supprimé"
+    "deleted": "Supprimé",
+    "bulkDeleted": "Templates deleted"
   },
   "agentOnboarding": {
     "verifyEmail": {
@@ -3317,9 +3327,14 @@
     "toast": {
       "emailRequired": "L'e-mail est obligatoire",
       "linkCreated": "Lien créé",
-      "resent": "Lien renvoyé"
+      "resent": "Lien renvoyé",
+      "signerUpdated": "Signer updated",
+      "deleted": "Session deleted",
+      "bulkDeleted": "Sessions deleted"
     },
-    "confirmRevoke": "Révoquer ce lien ?"
+    "confirmRevoke": "Révoquer ce lien ?",
+    "editSignerTitle": "Edit Signer Details",
+    "confirmDelete": "Delete this session? This cannot be undone."
   },
   "columnSettings": {
     "columns": "Colonnes",

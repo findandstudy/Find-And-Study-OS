@@ -291,6 +291,40 @@ async function gateSessionMutate(req: any, res: any, next: any) {
   return requirePermission(need)(req, res, next);
 }
 
+// Update signer details on a non-signed session (self_fill only; admin_driven identity is fixed after dispatch).
+router.patch("/contracts/sessions/:id", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const [existing] = await db.select({ status: signingSessionsTable.status, mode: signingSessionsTable.mode }).from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    if (existing.mode !== "self_fill") { res.status(409).json({ error: "Signer identity is fixed on admin-driven sessions and cannot be edited" }); return; }
+    if (existing.status === "signed") { res.status(409).json({ error: "Cannot edit a signed session" }); return; }
+    const { signerName, signerEmail } = req.body as { signerName?: string; signerEmail?: string };
+    const updates: Record<string, any> = {};
+    if (signerName !== undefined) updates.signerName = signerName || null;
+    if (signerEmail !== undefined) {
+      if (!signerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail)) {
+        res.status(400).json({ error: "Invalid signerEmail" }); return;
+      }
+      updates.signerEmail = signerEmail;
+    }
+    if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
+    const [row] = await db.update(signingSessionsTable).set(updates).where(eq(signingSessionsTable.id, id)).returning();
+    await writeAudit({
+      userId: (req as any).user?.id ?? null,
+      action: "contract.session_updated",
+      resource: "signing_session",
+      resourceId: id,
+      changes: updates,
+      ipAddress: req.ip,
+    });
+    res.json({ data: row });
+  } catch (err) {
+    console.error("[contracts] patch session:", err);
+    res.status(500).json({ error: "Failed to update session" });
+  }
+});
+
 router.post("/contracts/sessions/:id/revoke", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);

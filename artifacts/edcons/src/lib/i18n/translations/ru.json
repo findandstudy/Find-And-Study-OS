@@ -625,7 +625,12 @@
     "applicationSpecificDocumentsHint": "Загружены для конкретной заявки и хранятся отдельно от документов профиля студента.",
     "preview": "Предпросмотр",
     "continue": "Продолжить",
-    "select": "Выбрать..."
+    "select": "Выбрать...",
+    "selectAll": "Select all",
+    "selectedCount": "{n} selected",
+    "deleteSelected": "Delete selected ({n})",
+    "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
   },
   "seo": {
     "homeTitle": "Консалтинг в сфере образования",
@@ -3167,7 +3172,11 @@
     "templatePickHint": "Оставьте «Авто» для автоматического подбора или выберите конкретный шаблон для отправки.",
     "templatesLoadError": "Не удалось загрузить шаблоны договоров",
     "cancel": "Отмена",
-    "send": "Отправить"
+    "send": "Отправить",
+    "confirmDeleteSession": "Delete this session? This cannot be undone.",
+    "cannotDeleteSigned": "Signed sessions cannot be deleted",
+    "sessionDeleted": "Session deleted",
+    "sessionsBulkDeleted": "Sessions deleted"
   },
   "contractTemplates": {
     "title": "Шаблоны договоров",
@@ -3195,7 +3204,8 @@
     "updated": "Шаблон обновлён",
     "created": "Шаблон создан",
     "confirmDelete": "Вы уверены, что хотите удалить этот шаблон?",
-    "deleted": "Удалено"
+    "deleted": "Удалено",
+    "bulkDeleted": "Templates deleted"
   },
   "agentOnboarding": {
     "verifyEmail": {
@@ -3317,9 +3327,14 @@
     "toast": {
       "emailRequired": "Укажите эл. почту",
       "linkCreated": "Ссылка создана",
-      "resent": "Ссылка отправлена повторно"
+      "resent": "Ссылка отправлена повторно",
+      "signerUpdated": "Signer updated",
+      "deleted": "Session deleted",
+      "bulkDeleted": "Sessions deleted"
     },
-    "confirmRevoke": "Отозвать эту ссылку?"
+    "confirmRevoke": "Отозвать эту ссылку?",
+    "editSignerTitle": "Edit Signer Details",
+    "confirmDelete": "Delete this session? This cannot be undone."
   },
   "columnSettings": {
     "columns": "Столбцы",

@@ -625,7 +625,12 @@
     "applicationSpecificDocumentsHint": "Subidos para una solicitud específica, mantenidos separados de los documentos del perfil del estudiante.",
     "preview": "Vista previa",
     "continue": "Continuar",
-    "select": "Seleccionar..."
+    "select": "Seleccionar...",
+    "selectAll": "Select all",
+    "selectedCount": "{n} selected",
+    "deleteSelected": "Delete selected ({n})",
+    "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
   },
   "seo": {
     "homeTitle": "Consultoría de educación global",
@@ -3116,7 +3121,11 @@
     "templatePickHint": "Deja en Automático para asignarla automáticamente, o elige una plantilla específica para enviar.",
     "templatesLoadError": "Error al cargar las plantillas de contrato",
     "cancel": "Cancelar",
-    "send": "Enviar"
+    "send": "Enviar",
+    "confirmDeleteSession": "Delete this session? This cannot be undone.",
+    "cannotDeleteSigned": "Signed sessions cannot be deleted",
+    "sessionDeleted": "Session deleted",
+    "sessionsBulkDeleted": "Sessions deleted"
   },
   "contractTemplates": {
     "title": "Plantillas de contrato",
@@ -3144,7 +3153,8 @@
     "updated": "Plantilla actualizada",
     "created": "Plantilla creada",
     "confirmDelete": "¿Seguro que quieres eliminar esta plantilla?",
-    "deleted": "Eliminada"
+    "deleted": "Eliminada",
+    "bulkDeleted": "Templates deleted"
   },
   "agentOnboarding": {
     "verifyEmail": {
@@ -3317,9 +3327,14 @@
     "toast": {
       "emailRequired": "El correo electrónico es obligatorio",
       "linkCreated": "Enlace creado",
-      "resent": "Enlace reenviado"
+      "resent": "Enlace reenviado",
+      "signerUpdated": "Signer updated",
+      "deleted": "Session deleted",
+      "bulkDeleted": "Sessions deleted"
     },
-    "confirmRevoke": "¿Revocar este enlace?"
+    "confirmRevoke": "¿Revocar este enlace?",
+    "editSignerTitle": "Edit Signer Details",
+    "confirmDelete": "Delete this session? This cannot be undone."
   },
   "columnSettings": {
     "columns": "Columnas",

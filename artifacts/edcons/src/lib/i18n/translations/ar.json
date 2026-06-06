@@ -625,7 +625,12 @@
     "applicationSpecificDocumentsHint": "تم رفعها لطلب معيّن، ويتم الاحتفاظ بها منفصلة عن مستندات ملف الطالب.",
     "preview": "معاينة",
     "continue": "متابعة",
-    "select": "اختر..."
+    "select": "اختر...",
+    "selectAll": "Select all",
+    "selectedCount": "{n} selected",
+    "deleteSelected": "Delete selected ({n})",
+    "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
   },
   "seo": {
     "homeTitle": "استشارات التعليم العالمي",
@@ -3167,7 +3172,11 @@
     "templatePickHint": "اتركه على \"تلقائي\" للمطابقة التلقائية، أو اختر قالبًا محدّدًا للإرسال.",
     "templatesLoadError": "فشل تحميل قوالب العقود",
     "cancel": "إلغاء",
-    "send": "إرسال"
+    "send": "إرسال",
+    "confirmDeleteSession": "Delete this session? This cannot be undone.",
+    "cannotDeleteSigned": "Signed sessions cannot be deleted",
+    "sessionDeleted": "Session deleted",
+    "sessionsBulkDeleted": "Sessions deleted"
   },
   "contractTemplates": {
     "title": "قوالب العقود",
@@ -3195,7 +3204,8 @@
     "updated": "تم تحديث القالب",
     "created": "تم إنشاء القالب",
     "confirmDelete": "هل أنت متأكد من حذف هذا القالب؟",
-    "deleted": "تم الحذف"
+    "deleted": "تم الحذف",
+    "bulkDeleted": "Templates deleted"
   },
   "agentOnboarding": {
     "verifyEmail": {
@@ -3317,9 +3327,14 @@
     "toast": {
       "emailRequired": "البريد الإلكتروني مطلوب",
       "linkCreated": "تم إنشاء الرابط",
-      "resent": "تمت إعادة إرسال الرابط"
+      "resent": "تمت إعادة إرسال الرابط",
+      "signerUpdated": "Signer updated",
+      "deleted": "Session deleted",
+      "bulkDeleted": "Sessions deleted"
     },
-    "confirmRevoke": "إلغاء هذا الرابط؟"
+    "confirmRevoke": "إلغاء هذا الرابط؟",
+    "editSignerTitle": "Edit Signer Details",
+    "confirmDelete": "Delete this session? This cannot be undone."
   },
   "columnSettings": {
     "columns": "الأعمدة",

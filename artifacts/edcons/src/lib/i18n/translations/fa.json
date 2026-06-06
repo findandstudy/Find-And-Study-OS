@@ -625,7 +625,12 @@
     "applicationSpecificDocumentsHint": "برای یک درخواست خاص بارگذاری شده و جدا از مدارک پروفایل دانشجو نگهداری می‌شود.",
     "preview": "پیش‌نمایش",
     "continue": "ادامه",
-    "select": "انتخاب کنید..."
+    "select": "انتخاب کنید...",
+    "selectAll": "Select all",
+    "selectedCount": "{n} selected",
+    "deleteSelected": "Delete selected ({n})",
+    "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
   },
   "seo": {
     "homeTitle": "مشاوره آموزش جهانی",
@@ -3116,7 +3121,11 @@
     "templatePickHint": "برای تطبیق خودکار روی «خودکار» بگذارید، یا قالب مشخصی را برای ارسال انتخاب کنید.",
     "templatesLoadError": "بارگذاری قالب‌های قرارداد ناموفق بود",
     "cancel": "انصراف",
-    "send": "ارسال"
+    "send": "ارسال",
+    "confirmDeleteSession": "Delete this session? This cannot be undone.",
+    "cannotDeleteSigned": "Signed sessions cannot be deleted",
+    "sessionDeleted": "Session deleted",
+    "sessionsBulkDeleted": "Sessions deleted"
   },
   "contractTemplates": {
     "title": "قالب‌های قرارداد",
@@ -3144,7 +3153,8 @@
     "updated": "قالب به‌روزرسانی شد",
     "created": "قالب ایجاد شد",
     "confirmDelete": "آیا از حذف این قالب مطمئن هستید؟",
-    "deleted": "حذف شد"
+    "deleted": "حذف شد",
+    "bulkDeleted": "Templates deleted"
   },
   "agentOnboarding": {
     "verifyEmail": {
@@ -3317,9 +3327,14 @@
     "toast": {
       "emailRequired": "وارد کردن ایمیل الزامی است",
       "linkCreated": "پیوند ایجاد شد",
-      "resent": "پیوند مجدداً ارسال شد"
+      "resent": "پیوند مجدداً ارسال شد",
+      "signerUpdated": "Signer updated",
+      "deleted": "Session deleted",
+      "bulkDeleted": "Sessions deleted"
     },
-    "confirmRevoke": "این پیوند باطل شود؟"
+    "confirmRevoke": "این پیوند باطل شود؟",
+    "editSignerTitle": "Edit Signer Details",
+    "confirmDelete": "Delete this session? This cannot be undone."
   },
   "columnSettings": {
     "columns": "ستون‌ها",

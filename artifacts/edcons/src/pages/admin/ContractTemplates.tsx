@@ -71,11 +71,15 @@ export default function ContractTemplatesPage() {
     isActive: true,
   });
 
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   async function load() {
     setLoading(true);
     try {
       const res: any = await customFetch(`/api/contract-templates`);
       setRows(res.data || []);
+      setSelected(new Set());
     } catch (err: any) {
       toast({ title: t("contractTemplates.error"), description: err.message, variant: "destructive" });
     }
@@ -93,16 +97,16 @@ export default function ContractTemplatesPage() {
     setShowDialog(true);
   }
 
-  function openEdit(t: Template) {
-    setEditing(t);
+  function openEdit(tpl: Template) {
+    setEditing(tpl);
     setForm({
-      name: t.name,
-      language: t.language,
-      entityType: t.entityType,
-      version: t.version,
-      bodyHtml: t.bodyHtml,
-      intakeSchema: Array.isArray(t.intakeSchema) ? t.intakeSchema : STARTER_INTAKE,
-      isActive: t.isActive,
+      name: tpl.name,
+      language: tpl.language,
+      entityType: tpl.entityType,
+      version: tpl.version,
+      bodyHtml: tpl.bodyHtml,
+      intakeSchema: Array.isArray(tpl.intakeSchema) ? tpl.intakeSchema : STARTER_INTAKE,
+      isActive: tpl.isActive,
     });
     setShowDialog(true);
   }
@@ -137,6 +141,38 @@ export default function ContractTemplatesPage() {
     }
   }
 
+  function toggleSelect(id: number) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (rows.every(r => selected.has(r.id)) && rows.length > 0) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(rows.map(r => r.id)));
+    }
+  }
+
+  async function bulkDelete() {
+    if (!confirm(t("common.confirmBulkDelete", { n: selected.size }))) return;
+    setBulkDeleting(true);
+    let failed = 0;
+    for (const id of Array.from(selected)) {
+      try { await customFetch(`/api/contract-templates/${id}`, { method: "DELETE" }); }
+      catch { failed++; }
+    }
+    if (failed > 0) toast({ title: t("contractTemplates.error"), description: t("common.bulkDeletePartialFailure", { n: failed }), variant: "destructive" });
+    else toast({ title: t("contractTemplates.bulkDeleted") });
+    setBulkDeleting(false);
+    await load();
+  }
+
+  const allSelected = rows.length > 0 && rows.every(r => selected.has(r.id));
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -147,6 +183,16 @@ export default function ContractTemplatesPage() {
         <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> {t("contractTemplates.newTemplate")}</Button>
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-muted/60 rounded-lg border">
+          <span className="text-sm font-medium">{t("common.selectedCount", { n: selected.size })}</span>
+          <Button size="sm" variant="destructive" onClick={bulkDelete} disabled={bulkDeleting}>
+            {bulkDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Trash2 className="w-3.5 h-3.5 mr-1" />}
+            {t("common.deleteSelected", { n: selected.size })}
+          </Button>
+        </div>
+      )}
+
       <Card className="p-0 overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-muted-foreground"><Loader2 className="w-6 h-6 mx-auto animate-spin" /></div>
@@ -156,6 +202,9 @@ export default function ContractTemplatesPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr>
+                <th className="px-4 py-3 w-10">
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer" title={t("common.selectAll")} />
+                </th>
                 <th className="text-left px-4 py-3 font-medium">{t("contractTemplates.colName")}</th>
                 <th className="text-left px-4 py-3 font-medium">{t("contractTemplates.colLanguage")}</th>
                 <th className="text-left px-4 py-3 font-medium">{t("contractTemplates.colType")}</th>
@@ -167,6 +216,9 @@ export default function ContractTemplatesPage() {
             <tbody>
               {rows.map(tpl => (
                 <tr key={tpl.id} className="border-t">
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={selected.has(tpl.id)} onChange={() => toggleSelect(tpl.id)} className="cursor-pointer" />
+                  </td>
                   <td className="px-4 py-3 font-medium">{tpl.name}</td>
                   <td className="px-4 py-3 uppercase">{tpl.language}</td>
                   <td className="px-4 py-3">{tpl.entityType === "individual" ? t("contractTemplates.entityIndividual") : t("contractTemplates.entityCompany")}</td>

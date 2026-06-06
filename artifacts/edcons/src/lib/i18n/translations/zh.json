@@ -625,7 +625,12 @@
     "applicationSpecificDocumentsHint": "为特定申请上传，与学生档案文件分开保存。",
     "preview": "预览",
     "continue": "继续",
-    "select": "选择..."
+    "select": "选择...",
+    "selectAll": "Select all",
+    "selectedCount": "{n} selected",
+    "deleteSelected": "Delete selected ({n})",
+    "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
   },
   "seo": {
     "homeTitle": "全球教育咨询",
@@ -3116,7 +3121,11 @@
     "templatePickHint": "保持“自动”以自动匹配，或选择要发送的特定模板。",
     "templatesLoadError": "加载合同模板失败",
     "cancel": "取消",
-    "send": "发送"
+    "send": "发送",
+    "confirmDeleteSession": "Delete this session? This cannot be undone.",
+    "cannotDeleteSigned": "Signed sessions cannot be deleted",
+    "sessionDeleted": "Session deleted",
+    "sessionsBulkDeleted": "Sessions deleted"
   },
   "contractTemplates": {
     "title": "合同模板",
@@ -3144,7 +3153,8 @@
     "updated": "模板已更新",
     "created": "模板已创建",
     "confirmDelete": "确定要删除此模板吗？",
-    "deleted": "已删除"
+    "deleted": "已删除",
+    "bulkDeleted": "Templates deleted"
   },
   "agentOnboarding": {
     "verifyEmail": {
@@ -3317,9 +3327,14 @@
     "toast": {
       "emailRequired": "邮箱为必填项",
       "linkCreated": "链接已创建",
-      "resent": "链接已重新发送"
+      "resent": "链接已重新发送",
+      "signerUpdated": "Signer updated",
+      "deleted": "Session deleted",
+      "bulkDeleted": "Sessions deleted"
     },
-    "confirmRevoke": "撤销此链接？"
+    "confirmRevoke": "撤销此链接？",
+    "editSignerTitle": "Edit Signer Details",
+    "confirmDelete": "Delete this session? This cannot be undone."
   },
   "columnSettings": {
     "columns": "列",

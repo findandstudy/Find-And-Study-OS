@@ -625,7 +625,12 @@
     "applicationSpecificDocumentsHint": "Belirli bir başvuru için yüklenmiş, öğrencinin profil belgelerinden ayrı tutulan belgeler.",
     "preview": "Önizleme",
     "continue": "Devam et",
-    "select": "Seçin..."
+    "select": "Seçin...",
+    "selectAll": "Tümünü seç",
+    "selectedCount": "{n} seçildi",
+    "deleteSelected": "Seçilenleri sil ({n})",
+    "confirmBulkDelete": "{n} kayıt silinsin mi? Bu işlem geri alınamaz.",
+    "bulkDeletePartialFailure": "{n} kayıt silinemedi"
   },
   "seo": {
     "homeTitle": "Küresel Eğitim Danışmanlığı",
@@ -1481,7 +1486,11 @@
     "templatePickHint": "Otomatik bırakılırsa eşleşir; göndermek için belirli bir şablon seçin.",
     "templatesLoadError": "Sözleşme şablonları yüklenemedi",
     "cancel": "İptal",
-    "send": "Gönder"
+    "send": "Gönder",
+    "confirmDeleteSession": "Bu oturum silinsin mi? Bu işlem geri alınamaz.",
+    "cannotDeleteSigned": "İmzalı oturumlar silinemez",
+    "sessionDeleted": "Oturum silindi",
+    "sessionsBulkDeleted": "Oturumlar silindi"
   },
   "contractTemplates": {
     "title": "Sözleşme Şablonları",
@@ -1509,7 +1518,8 @@
     "updated": "Şablon güncellendi",
     "created": "Şablon oluşturuldu",
     "confirmDelete": "Şablonu silmek istediğinize emin misiniz?",
-    "deleted": "Silindi"
+    "deleted": "Silindi",
+    "bulkDeleted": "Şablonlar silindi"
   },
   "universityContracts": {
     "title": "Üniversite Sözleşmeleri",
@@ -1764,9 +1774,14 @@
     "toast": {
       "emailRequired": "E-posta gerekli",
       "linkCreated": "Bağlantı oluşturuldu",
-      "resent": "Yeniden gönderildi"
+      "resent": "Yeniden gönderildi",
+      "signerUpdated": "İmzacı güncellendi",
+      "deleted": "Oturum silindi",
+      "bulkDeleted": "Oturumlar silindi"
     },
-    "confirmRevoke": "Bu bağlantı iptal edilsin mi?"
+    "confirmRevoke": "Bu bağlantı iptal edilsin mi?",
+    "editSignerTitle": "İmzacı Bilgilerini Düzenle",
+    "confirmDelete": "Bu oturum silinsin mi? Bu işlem geri alınamaz."
   },
   "messagesPage": {
     "messages": "Mesajlar",

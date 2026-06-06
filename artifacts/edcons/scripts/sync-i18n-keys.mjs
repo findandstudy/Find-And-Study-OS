@@ -532,6 +532,32 @@ const NEW_KEYS_EN = {
     pageEditor: "Page Editor",
     pageEditorSub: "Edit page sections and content",
   },
+  common: {
+    selectAll: "Select all",
+    selectedCount: "{n} selected",
+    deleteSelected: "Delete selected ({n})",
+    confirmBulkDelete: "Delete {n} item(s)? This cannot be undone.",
+    bulkDeletePartialFailure: "{n} item(s) could not be deleted",
+    error: "Error",
+  },
+  selfFill: {
+    editSignerTitle: "Edit Signer Details",
+    confirmDelete: "Delete this session? This cannot be undone.",
+    toast: {
+      signerUpdated: "Signer updated",
+      deleted: "Session deleted",
+      bulkDeleted: "Sessions deleted",
+    },
+  },
+  contracts: {
+    confirmDeleteSession: "Delete this session? This cannot be undone.",
+    cannotDeleteSigned: "Signed sessions cannot be deleted",
+    sessionDeleted: "Session deleted",
+    sessionsBulkDeleted: "Sessions deleted",
+  },
+  contractTemplates: {
+    bulkDeleted: "Templates deleted",
+  },
 };
 
 const NEW_KEYS_TR = {
@@ -1060,6 +1086,32 @@ const NEW_KEYS_TR = {
     translationsSub: "Public site çevirilerini yönet",
     pageEditor: "Sayfa Düzenleyici",
     pageEditorSub: "Sayfa bölümlerini ve içeriği düzenle",
+  },
+  common: {
+    selectAll: "Tümünü seç",
+    selectedCount: "{n} seçildi",
+    deleteSelected: "Seçilenleri sil ({n})",
+    confirmBulkDelete: "{n} kayıt silinsin mi? Bu işlem geri alınamaz.",
+    bulkDeletePartialFailure: "{n} kayıt silinemedi",
+    error: "Hata",
+  },
+  selfFill: {
+    editSignerTitle: "İmzacı Bilgilerini Düzenle",
+    confirmDelete: "Bu oturum silinsin mi? Bu işlem geri alınamaz.",
+    toast: {
+      signerUpdated: "İmzacı güncellendi",
+      deleted: "Oturum silindi",
+      bulkDeleted: "Oturumlar silindi",
+    },
+  },
+  contracts: {
+    confirmDeleteSession: "Bu oturum silinsin mi? Bu işlem geri alınamaz.",
+    cannotDeleteSigned: "İmzalı oturumlar silinemez",
+    sessionDeleted: "Oturum silindi",
+    sessionsBulkDeleted: "Oturumlar silindi",
+  },
+  contractTemplates: {
+    bulkDeleted: "Şablonlar silindi",
   },
 };
 

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { Send, Loader2, FileSignature, RotateCw, Ban, Download } from "lucide-react";
+import { Send, Loader2, FileSignature, RotateCw, Ban, Download, Trash2 } from "lucide-react";
 
 type Session = {
   id: number; templateId: number; agentId: number | null; mode: string; status: string;
@@ -43,6 +43,9 @@ export default function ContractsPage() {
   const [templateId, setTemplateId] = useState<string>("auto");
   const [sending, setSending] = useState(false);
 
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   const STATUS_LABELS: Record<string, { label: string; tone: "default" | "secondary" | "destructive" | "outline" }> = {
     intake_pending: { label: t("contracts.statusIntakePending"), tone: "secondary" },
     review_pending: { label: t("contracts.statusReviewPending"), tone: "default" },
@@ -62,6 +65,7 @@ export default function ContractsPage() {
       setSessions(s.data || []);
       setSigned(sc.data || []);
       setAgents(a.data || a.agents || []);
+      setSelected(new Set());
       try {
         const tpls: any = await customFetch(`/api/contract-templates?isActive=true`);
         setTemplates(tpls.data || []);
@@ -82,7 +86,7 @@ export default function ContractsPage() {
     if (!aid) { toast({ title: t("contracts.selectAgent"), variant: "destructive" }); return; }
     setSending(true);
     try {
-      const res: any = await customFetch(`/api/contracts/admin-send`, {
+      await customFetch(`/api/contracts/admin-send`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ agentId: aid, templateId: templateId !== "auto" ? parseInt(templateId, 10) : undefined }),
       });
@@ -120,6 +124,51 @@ export default function ContractsPage() {
     } catch (err: any) { toast({ title: t("contracts.error"), description: err.message, variant: "destructive" }); }
   }
 
+  async function deleteSession(id: number) {
+    const session = sessions.find(s => s.id === id);
+    if (session?.status === "signed") return;
+    if (!confirm(t("contracts.confirmDeleteSession"))) return;
+    try {
+      await customFetch(`/api/contracts/sessions/${id}`, { method: "DELETE" });
+      toast({ title: t("contracts.sessionDeleted") });
+      await load();
+    } catch (err: any) { toast({ title: t("contracts.error"), description: err.message, variant: "destructive" }); }
+  }
+
+  function toggleSelect(id: number) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    const deletable = sessions.filter(s => s.status !== "signed" && s.status !== "revoked").map(s => s.id);
+    if (deletable.every(id => selected.has(id)) && deletable.length > 0) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(deletable));
+    }
+  }
+
+  async function bulkDelete() {
+    if (!confirm(t("common.confirmBulkDelete", { n: selected.size }))) return;
+    setBulkDeleting(true);
+    let failed = 0;
+    for (const id of Array.from(selected)) {
+      try { await customFetch(`/api/contracts/sessions/${id}`, { method: "DELETE" }); }
+      catch { failed++; }
+    }
+    if (failed > 0) toast({ title: t("common.error"), description: t("common.bulkDeletePartialFailure", { n: failed }), variant: "destructive" });
+    else toast({ title: t("contracts.sessionsBulkDeleted") });
+    setBulkDeleting(false);
+    await load();
+  }
+
+  const deletableSessions = sessions.filter(s => s.status !== "signed" && s.status !== "revoked");
+  const allDeletableSelected = deletableSessions.length > 0 && deletableSessions.every(s => selected.has(s.id));
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -131,13 +180,23 @@ export default function ContractsPage() {
       </div>
 
       <div className="flex gap-2 border-b">
-        <button onClick={() => setTab("sessions")} className={`px-4 py-2 text-sm font-medium ${tab === "sessions" ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
+        <button onClick={() => { setTab("sessions"); setSelected(new Set()); }} className={`px-4 py-2 text-sm font-medium ${tab === "sessions" ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
           {t("contracts.tabSessions")} ({sessions.length})
         </button>
-        <button onClick={() => setTab("signed")} className={`px-4 py-2 text-sm font-medium ${tab === "signed" ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
+        <button onClick={() => { setTab("signed"); setSelected(new Set()); }} className={`px-4 py-2 text-sm font-medium ${tab === "signed" ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
           {t("contracts.tabSigned")} ({signed.length})
         </button>
       </div>
+
+      {tab === "sessions" && selected.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-muted/60 rounded-lg border">
+          <span className="text-sm font-medium">{t("common.selectedCount", { n: selected.size })}</span>
+          <Button size="sm" variant="destructive" onClick={bulkDelete} disabled={bulkDeleting}>
+            {bulkDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Trash2 className="w-3.5 h-3.5 mr-1" />}
+            {t("common.deleteSelected", { n: selected.size })}
+          </Button>
+        </div>
+      )}
 
       <Card className="p-0 overflow-hidden">
         {loading ? (
@@ -149,6 +208,9 @@ export default function ContractsPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
                 <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" checked={allDeletableSelected} onChange={toggleAll} className="cursor-pointer" title={t("common.selectAll")} />
+                  </th>
                   <th className="text-left px-4 py-3">{t("contracts.colSigner")}</th>
                   <th className="text-left px-4 py-3">{t("contracts.colStatus")}</th>
                   <th className="text-left px-4 py-3">{t("contracts.colOpened")}</th>
@@ -157,33 +219,49 @@ export default function ContractsPage() {
                 </tr>
               </thead>
               <tbody>
-                {sessions.map(s => (
-                  <tr key={s.id} className="border-t">
-                    <td className="px-4 py-3">
-                      <div className="font-medium flex items-center gap-2">
-                        {s.signerName || "-"}
-                        {s.isPrimaryOnboarding && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{t("contracts.onboarding")}</Badge>}
-                      </div>
-                      <div className="text-xs text-muted-foreground">{s.signerEmail}</div>
-                    </td>
-                    <td className="px-4 py-3"><Badge variant={STATUS_LABELS[s.status]?.tone}>{STATUS_LABELS[s.status]?.label || s.status}</Badge></td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{s.openedAt ? new Date(s.openedAt).toLocaleString() : "-"}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(s.expiresAt).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right space-x-1">
-                      {s.status !== "signed" && s.status !== "revoked" && (
-                        <>
-                          <Button size="sm" variant="ghost" title={t("contracts.actionResend")} onClick={() => resend(s.id)}><RotateCw className="w-4 h-4" /></Button>
-                          <Button size="sm" variant="ghost" title={t("contracts.actionRevoke")} onClick={() => revoke(s.id)}><Ban className="w-4 h-4 text-red-500" /></Button>
-                        </>
-                      )}
-                      {s.isPrimaryOnboarding && (s.status === "expired" || s.status === "revoked") && s.agentId && (
-                        <Button size="sm" variant="outline" title={t("contracts.actionResendOnboarding")} onClick={() => resendOnboarding(s.agentId!)}>
-                          <RotateCw className="w-3.5 h-3.5 mr-1" /> {t("contracts.resendOnboardingShort")}
+                {sessions.map(s => {
+                  const canDelete = s.status !== "signed" && s.status !== "revoked";
+                  return (
+                    <tr key={s.id} className="border-t">
+                      <td className="px-4 py-3">
+                        {canDelete ? (
+                          <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleSelect(s.id)} className="cursor-pointer" />
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium flex items-center gap-2">
+                          {s.signerName || "-"}
+                          {s.isPrimaryOnboarding && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{t("contracts.onboarding")}</Badge>}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{s.signerEmail}</div>
+                      </td>
+                      <td className="px-4 py-3"><Badge variant={STATUS_LABELS[s.status]?.tone}>{STATUS_LABELS[s.status]?.label || s.status}</Badge></td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{s.openedAt ? new Date(s.openedAt).toLocaleString() : "-"}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(s.expiresAt).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right space-x-1">
+                        {s.status !== "signed" && s.status !== "revoked" && (
+                          <>
+                            <Button size="sm" variant="ghost" title={t("contracts.actionResend")} onClick={() => resend(s.id)}><RotateCw className="w-4 h-4" /></Button>
+                            <Button size="sm" variant="ghost" title={t("contracts.actionRevoke")} onClick={() => revoke(s.id)}><Ban className="w-4 h-4 text-red-500" /></Button>
+                          </>
+                        )}
+                        {s.isPrimaryOnboarding && (s.status === "expired" || s.status === "revoked") && s.agentId && (
+                          <Button size="sm" variant="outline" title={t("contracts.actionResendOnboarding")} onClick={() => resendOnboarding(s.agentId!)}>
+                            <RotateCw className="w-3.5 h-3.5 mr-1" /> {t("contracts.resendOnboardingShort")}
+                          </Button>
+                        )}
+                        <Button
+                          size="sm" variant="ghost"
+                          title={canDelete ? t("common.delete") : t("contracts.cannotDeleteSigned")}
+                          onClick={() => deleteSession(s.id)}
+                          disabled={!canDelete}
+                        >
+                          <Trash2 className={`w-4 h-4 ${canDelete ? "text-red-500" : "text-muted-foreground"}`} />
                         </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )
