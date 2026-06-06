@@ -537,7 +537,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
 
             {/* Navigation */}
-            <div className="px-3 pt-4 pb-4 flex-1 overflow-y-auto space-y-4 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:space-y-2 group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:items-center group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:flex group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:flex-col">
+            <div className="px-3 pt-4 pb-4 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden space-y-4 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:space-y-2 group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:items-center group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:flex group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:flex-col">
               {(() => {
                 const renderItem = (item: MenuItem, keyPrefix = "") => {
                   const isActive = item.url === location ||
