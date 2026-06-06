@@ -1593,7 +1593,7 @@ export default function LeadsPage() {
 
             <BulkActionBar
               selectedCount={selectedIds.size}
-              onDelete={isAdmin ? () => setDeleteOpen(true) : undefined}
+              onDelete={(isAdmin || hasPermission("leads.delete")) ? () => setDeleteOpen(true) : undefined}
               onAssign={handleBulkAssign}
               onMove={handleBulkMove}
               stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
@@ -1607,7 +1607,7 @@ export default function LeadsPage() {
                 <Download className="w-3.5 h-3.5" /> {t("leadsPage.excel")}
               </Button>
             )}
-            {isAdmin && (
+            {(isAdmin || hasPermission("leads.import")) && (
               <Button variant="outline" className="rounded-full gap-2 border-primary/30 text-primary hover:bg-primary/5" onClick={() => setBulkOpen(true)}>
                 <FileUp className="w-4 h-4" /> {t("leadsPage.bulkImport")}
               </Button>
@@ -1882,7 +1882,7 @@ export default function LeadsPage() {
                           canAssign={canAssign}
                           canReassign={canReassign}
                           onEdit={() => setEditLead(lead)}
-                          onDelete={isAdmin ? () => { setSelectedIds(new Set([lead.id])); setDeleteOpen(true); } : undefined}
+                          onDelete={(isAdmin || hasPermission("leads.delete")) ? () => { setSelectedIds(new Set([lead.id])); setDeleteOpen(true); } : undefined}
                           onAssign={(uid) => handleAssign(lead.id, uid)}
                           onRefresh={() => queryClient.invalidateQueries({ queryKey: ["/api/leads"] })}
                         />
