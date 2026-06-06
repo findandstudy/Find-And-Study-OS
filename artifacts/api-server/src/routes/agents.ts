@@ -1600,6 +1600,52 @@ router.post("/agents/:id/set-password", requireAuth, async (req, res, next): Pro
   res.json({ success: true });
 });
 
+router.post("/agents/:id/resend-credentials", requireAuth, async (req, res, next): Promise<void> => {
+  if (req.params.id === "me") { next(); return; }
+  if (!req.user || !MANAGER_ROLES.includes(req.user.role)) {
+    res.status(403).json({ error: "Unauthorised action: Only an administrator can perform this action." });
+    return;
+  }
+  const id = parseInt(req.params.id, 10);
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
+  if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!agent.userId) { res.status(400).json({ error: "Agent has no linked user account" }); return; }
+  const [user] = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, agent.userId));
+  if (!user?.email) { res.status(404).json({ error: "Agent user account not found" }); return; }
+
+  const newPassword = generateAgentPassword();
+  const newHash = await bcrypt.hash(newPassword, 10);
+  await db.update(usersTable)
+    .set({ passwordHash: newHash, passwordResetToken: null, passwordResetExpires: null })
+    .where(eq(usersTable.id, agent.userId));
+
+  let emailSent = false;
+  try {
+    const emailContent = await buildAgentCredentialsEmail({
+      firstName: agent.firstName,
+      email: user.email,
+      password: newPassword,
+      loginUrl: `${getAppBaseUrl()}/login`,
+      hasContract: !!agent.assignedContractTemplateId,
+    });
+    await sendEmail(user.email, emailContent);
+    emailSent = true;
+  } catch (err) {
+    console.error("[agents resend-credentials] failed to send email:", err);
+  }
+
+  await writeAudit({
+    userId: req.user!.id,
+    action: "agent.credentials_sent",
+    resource: "user",
+    resourceId: agent.userId,
+    changes: { agentId: id, initial: false, resent: true, emailSent },
+    ipAddress: req.ip,
+  });
+
+  res.json({ success: true, emailSent });
+});
+
 router.post("/agents/:id/impersonate", requireAuth, async (req, res, next): Promise<void> => {
   // Same defence as /agents/:id/set-password above — never let "me" fall
   // through to a `parseInt("me") = NaN` agents lookup. No agentOnboarding

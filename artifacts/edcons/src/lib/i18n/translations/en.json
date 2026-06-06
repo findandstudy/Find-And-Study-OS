@@ -1403,7 +1403,11 @@
     "notes": "Notes",
     "cancel": "Cancel",
     "update": "Update",
-    "createAgent": "Create Agent"
+    "createAgent": "Create Agent",
+    "resendCredentials": "Resend Credentials",
+    "resendCredentialsConfirm": "Resend login credentials to {name}? A new password will be generated and emailed.",
+    "resendCredentialsSent": "Credentials sent",
+    "resendCredentialsQueued": "Credentials queued — email will be delivered shortly"
   },
   "staffApplications": {
     "title": "Applications",

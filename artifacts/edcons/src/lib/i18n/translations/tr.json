@@ -1344,7 +1344,11 @@
     "notes": "Notlar",
     "cancel": "İptal",
     "update": "Güncelle",
-    "createAgent": "Acente Oluştur"
+    "createAgent": "Acente Oluştur",
+    "resendCredentials": "Giriş Bilgilerini Yeniden Gönder",
+    "resendCredentialsConfirm": "{name} için giriş bilgileri yeniden gönderilsin mi? Yeni şifre oluşturulup email ile iletilecek.",
+    "resendCredentialsSent": "Giriş bilgileri gönderildi",
+    "resendCredentialsQueued": "Giriş bilgileri kuyruğa alındı — email kısa süre içinde iletilecek"
   },
   "staffApplications": {
     "title": "Başvurular",

@@ -1403,7 +1403,11 @@
     "notes": "یادداشت‌ها",
     "cancel": "لغو",
     "update": "به‌روزرسانی",
-    "createAgent": "ایجاد نماینده"
+    "createAgent": "ایجاد نماینده",
+    "resendCredentials": "ارسال مجدد اطلاعات ورود",
+    "resendCredentialsConfirm": "اطلاعات ورود برای {name} مجدداً ارسال شود؟ رمز عبور جدیدی ایجاد و ایمیل می‌شود.",
+    "resendCredentialsSent": "اطلاعات ورود ارسال شد",
+    "resendCredentialsQueued": "اطلاعات ورود در صف قرار گرفت — ایمیل به زودی ارسال می‌شود"
   },
   "staffApplications": {
     "title": "پرونده‌ها",

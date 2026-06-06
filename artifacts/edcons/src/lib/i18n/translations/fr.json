@@ -1403,7 +1403,11 @@
     "notes": "Notes",
     "cancel": "Annuler",
     "update": "Mettre à jour",
-    "createAgent": "Créer un agent"
+    "createAgent": "Créer un agent",
+    "resendCredentials": "Renvoyer les identifiants",
+    "resendCredentialsConfirm": "Renvoyer les identifiants de connexion à {name} ? Un nouveau mot de passe sera généré et envoyé par e-mail.",
+    "resendCredentialsSent": "Identifiants envoyés",
+    "resendCredentialsQueued": "Identifiants en file d'attente — l'e-mail sera livré prochainement"
   },
   "staffApplications": {
     "title": "Candidatures",

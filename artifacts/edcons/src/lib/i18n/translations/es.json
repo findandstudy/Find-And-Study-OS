@@ -1403,7 +1403,11 @@
     "notes": "Notas",
     "cancel": "Cancelar",
     "update": "Actualizar",
-    "createAgent": "Crear agente"
+    "createAgent": "Crear agente",
+    "resendCredentials": "Reenviar credenciales",
+    "resendCredentialsConfirm": "¿Reenviar credenciales de acceso a {name}? Se generará una nueva contraseña y se enviará por correo electrónico.",
+    "resendCredentialsSent": "Credenciales enviadas",
+    "resendCredentialsQueued": "Credenciales en cola — el correo se entregará en breve"
   },
   "staffApplications": {
     "title": "Solicitudes",

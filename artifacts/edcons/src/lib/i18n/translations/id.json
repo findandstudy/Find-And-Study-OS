@@ -1403,7 +1403,11 @@
     "notes": "Catatan",
     "cancel": "Batal",
     "update": "Perbarui",
-    "createAgent": "Buat Agen"
+    "createAgent": "Buat Agen",
+    "resendCredentials": "Kirim Ulang Kredensial",
+    "resendCredentialsConfirm": "Kirim ulang kredensial login ke {name}? Kata sandi baru akan dibuat dan dikirim melalui email.",
+    "resendCredentialsSent": "Kredensial terkirim",
+    "resendCredentialsQueued": "Kredensial dalam antrian — email akan segera terkirim"
   },
   "staffApplications": {
     "title": "Aplikasi",

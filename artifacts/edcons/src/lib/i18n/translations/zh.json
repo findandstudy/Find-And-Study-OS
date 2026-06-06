@@ -1403,7 +1403,11 @@
     "notes": "备注",
     "cancel": "取消",
     "update": "更新",
-    "createAgent": "创建代理"
+    "createAgent": "创建代理",
+    "resendCredentials": "重新发送登录凭据",
+    "resendCredentialsConfirm": "重新向 {name} 发送登录凭据？将生成新密码并通过电子邮件发送。",
+    "resendCredentialsSent": "凭据已发送",
+    "resendCredentialsQueued": "凭据已加入队列 — 邮件将很快送达"
   },
   "staffApplications": {
     "title": "申请",

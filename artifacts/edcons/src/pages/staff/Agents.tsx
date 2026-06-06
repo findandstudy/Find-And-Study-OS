@@ -186,6 +186,7 @@ export default function AgentsPage() {
   const [passwordDialog, setPasswordDialog] = useState<{ agentId: number; agentName: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const [resendingCredentials, setResendingCredentials] = useState<Set<number>>(new Set());
 
   async function fetchCountries() {
     try {
@@ -555,6 +556,26 @@ export default function AgentsPage() {
     }
   }
 
+  async function handleResendCredentials(agent: Agent) {
+    if (!confirm(t("staffAgents.resendCredentialsConfirm", { name: `${agent.firstName} ${agent.lastName}` }))) return;
+    setResendingCredentials(prev => new Set(prev).add(agent.id));
+    try {
+      const res: any = await customFetch(`/api/agents/${agent.id}/resend-credentials`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.emailSent) {
+        toast({ title: t("staffAgents.resendCredentialsSent"), description: `${agent.firstName} ${agent.lastName}` });
+      } else {
+        toast({ title: t("staffAgents.resendCredentialsQueued"), description: `${agent.firstName} ${agent.lastName}`, variant: "default" });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setResendingCredentials(prev => { const s = new Set(prev); s.delete(agent.id); return s; });
+    }
+  }
+
   function toggleSelect(id: number, selected: Set<number>, setSelected: React.Dispatch<React.SetStateAction<Set<number>>>) {
     setSelected(prev => {
       const next = new Set(prev);
@@ -889,6 +910,13 @@ export default function AgentsPage() {
                         <DropdownMenuContent align="end" className="w-52">
                           <DropdownMenuItem onClick={() => { setPasswordDialog({ agentId: a.id, agentName: `${a.firstName} ${a.lastName}` }); setNewPassword(""); }}>
                             <KeyRound className="w-4 h-4 mr-2" /> Set Password
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={resendingCredentials.has(a.id)}
+                            onClick={() => handleResendCredentials(a)}
+                          >
+                            <Mail className="w-4 h-4 mr-2" />
+                            {resendingCredentials.has(a.id) ? "..." : t("staffAgents.resendCredentials")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleImpersonate(a)}>
                             <LogIn className="w-4 h-4 mr-2" /> Login as {a.firstName} {a.lastName}

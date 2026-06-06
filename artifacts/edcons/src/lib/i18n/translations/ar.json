@@ -1403,7 +1403,11 @@
     "notes": "ملاحظات",
     "cancel": "إلغاء",
     "update": "تحديث",
-    "createAgent": "إنشاء وكيل"
+    "createAgent": "إنشاء وكيل",
+    "resendCredentials": "إعادة إرسال بيانات الدخول",
+    "resendCredentialsConfirm": "إعادة إرسال بيانات الدخول إلى {name}؟ سيتم إنشاء كلمة مرور جديدة وإرسالها عبر البريد الإلكتروني.",
+    "resendCredentialsSent": "تم إرسال بيانات الدخول",
+    "resendCredentialsQueued": "بيانات الدخول في قائمة الانتظار — سيتم التسليم قريباً"
   },
   "staffApplications": {
     "title": "الطلبات",

@@ -1403,7 +1403,11 @@
     "notes": "नोट्स",
     "cancel": "रद्द करें",
     "update": "अपडेट",
-    "createAgent": "एजेंट बनाएं"
+    "createAgent": "एजेंट बनाएं",
+    "resendCredentials": "लॉगिन क्रेडेंशियल पुनः भेजें",
+    "resendCredentialsConfirm": "{name} को लॉगिन क्रेडेंशियल पुनः भेजें? एक नया पासवर्ड बनाया जाएगा और ईमेल किया जाएगा।",
+    "resendCredentialsSent": "क्रेडेंशियल भेज दिए गए",
+    "resendCredentialsQueued": "क्रेडेंशियल कतार में हैं — ईमेल जल्द ही वितरित होगा"
   },
   "staffApplications": {
     "title": "आवेदन",
