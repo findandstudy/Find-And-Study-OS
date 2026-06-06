@@ -30,41 +30,42 @@
 import { test, expect, request as pwRequest, type Page, type FrameLocator } from "@playwright/test";
 import { execSync } from "node:child_process";
 import path from "node:path";
+import fs from "node:fs";
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197";
 const EMBED_SLUG = "e2e-embed-test";
 
 /**
- * Allowlist-widget fixtures (seeded by
- * `artifacts/api-server/scripts/e2e-embed-fixtures.ts`). Keep these
- * constants in sync with the fixture script.
+ * Allowlist-widget slugs (seeded by
+ * `artifacts/api-server/scripts/e2e-embed-fixtures.ts`).
  *
- *   - PERMISSIVE: allowedDomains=["localhost","127.0.0.1"]. The Playwright
- *     dev server is at http://localhost:25197, so the iframe's same-origin
- *     /config + /programs fetches have Referer hostname=localhost — i.e.
- *     IN the allowlist. Used to assert the loader renders normally.
+ *   - PERMISSIVE: allowedDomains=["localhost","127.0.0.1"].  Tests proxy the
+ *     token request through page.route() to simulate a partner backend that
+ *     holds the embedApiKey server-side.
  *
- *   - STRICT: allowedDomains=["allowed.e2e.example.com"]. The iframe loaded
- *     from localhost is NOT in the allowlist, so /config returns 403 and
- *     the widget JS catches the error + renders its `.ew-empty`
- *     "Unable to load widget" state. Used to assert the loader refuses to
- *     render. Also used by the API-level allow/deny tests via explicit
- *     Origin/Referer headers.
+ *   - STRICT: allowedDomains=["allowed.e2e.example.com"].  A domain that is
+ *     never actually serving the test page, used for API-level rejection tests.
  */
 const EMBED_ALLOWLIST_PERMISSIVE_SLUG = "e2e-embed-test-allowlist-permissive";
 const EMBED_ALLOWLIST_STRICT_SLUG = "e2e-embed-test-allowlist-strict";
-const ALLOWED_ORIGIN = "https://allowed.e2e.example.com";
-const ALLOWED_REFERER = "https://allowed.e2e.example.com/programs";
-const DISALLOWED_ORIGIN = "https://attacker.e2e.example.com";
-const DISALLOWED_REFERER = "https://attacker.e2e.example.com/embed-page";
+
+/** Read embedApiKeys written by globalSetup into the fixture state file. */
+function getFixtureState(): { permissiveWidgetApiKey: string; strictWidgetApiKey: string } {
+  const stateFile = path.resolve(__dirname, "../../../e2e-embed-state.json");
+  return JSON.parse(fs.readFileSync(stateFile, "utf8"));
+}
 
 /**
- * The host page lives at /e2e-embed-host.html on the dev server domain so
- * that `window.parent.location.href` resolves cleanly inside the iframe.
- * We use a small dummy file under public/ that just loads the loader and
- * provides a tall scrollable area above the widget.
+ * Build the host page HTML.
+ * @param slug     Widget slug.
+ * @param tokenUrl Optional data-edcons-token-url (partner's backend endpoint).
+ *                 When omitted, embed.js calls /token directly (open widgets
+ *                 need no key; restricted widgets will get a 403 and show error state).
  */
-function buildHostHtml(slug: string = EMBED_SLUG): string {
+function buildHostHtml(slug: string = EMBED_SLUG, tokenUrl?: string): string {
+  const widgetAttr = tokenUrl
+    ? `data-edcons-widget="${slug}" data-edcons-token-url="${tokenUrl}"`
+    : `data-edcons-widget="${slug}"`;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -80,16 +81,16 @@ function buildHostHtml(slug: string = EMBED_SLUG): string {
 </head>
 <body>
 <div id="spacer-top">Top spacer (forces scroll above the widget).</div>
-<div id="widget-host"><div data-edcons-widget="${slug}"></div></div>
+<div id="widget-host"><div ${widgetAttr}></div></div>
 <div id="spacer-bottom">Bottom spacer.</div>
 <script src="${BASE_URL}/api/public/embed/embed.js"></script>
 </body>
 </html>`;
 }
 
-async function loadHost(page: Page, slug: string = EMBED_SLUG) {
+async function loadHost(page: Page, slug: string = EMBED_SLUG, tokenUrl?: string) {
   await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded" });
-  await page.setContent(buildHostHtml(slug), { waitUntil: "load" });
+  await page.setContent(buildHostHtml(slug, tokenUrl), { waitUntil: "load" });
   // Force the lazy-loaded iframe to start loading immediately, then reset
   // host scroll so individual tests start from a known position.
   const iframeLocator = page.locator("#widget-host iframe");
@@ -264,89 +265,97 @@ test.describe("embed widget — mobile", { tag: "@mobile" }, () => {
 });
 
 /**
- * Allowed-domains restriction.
+ * Allowed-domains restriction — backend-mediated API key model.
  *
- * Production widgets are typically created with a non-empty
- * `allowedDomains` list so a partner can't have someone else embed
- * their widget on a hostile site. The public API routes (`/config`,
- * `/programs`, `/apply`) gate on the request's `Origin` / `Referer`
- * headers via `validateDomain` in
- * `artifacts/api-server/src/routes/embed.ts`.
+ * Restricted widgets use a per-widget API key stored in the DB and NEVER
+ * placed in HTML.  Partners hold the key on their backend server and exchange
+ * it server-to-server (via X-Widget-Api-Key header) for a short-lived HMAC
+ * session token.  The browser calls the partner's own endpoint to get the token;
+ * the secret is never exposed to the browser.
+ *
+ * Security model:
+ *   - Correct X-Widget-Api-Key (server-to-server) → session token → data 200
+ *   - Missing or wrong X-Widget-Api-Key → /token 403
+ *   - Correct key + Origin not in allowedDomains (defense-in-depth) → 403
+ *   - No session token → data endpoints 403 (regardless of any Origin/Referer)
  *
  * Two angles of coverage:
  *
- *   1) Loader/iframe end-to-end (the user-facing flow): embed the
- *      widget on the test host page (served from localhost) and assert
- *      what the user actually sees.
- *        - PERMISSIVE widget (allowedDomains includes "localhost") ->
- *          program cards render.
- *        - STRICT widget (allowedDomains excludes localhost) -> the
- *          widget catches the 403 and shows the "Unable to load widget"
- *          empty state; no cards appear.
+ *   1) Loader/iframe end-to-end (user-facing flow):
+ *        - PERMISSIVE widget: page.route() simulates the partner backend.
+ *          Intercepts data-edcons-token-url, calls /token with the API key,
+ *          returns the session token → program cards render inside iframe.
+ *        - STRICT widget: no data-edcons-token-url → embed.js calls /token
+ *          without a key → 403 → widget shows "Unable to load widget".
  *
- *   2) Public-API direct (covers cases the loader-flow can't fake,
- *      because browsers control the Origin/Referer headers): drive the
- *      gate with explicit headers a real partner-side request would
- *      send.
- *        - allowed Origin/Referer -> 200, real config/programs payload
- *        - disallowed Origin/Referer -> 403 + "Domain not allowed"
- *        - missing both headers -> 403 (server-side cURL can't bypass)
+ *   2) Public-API direct (proves Origin/Referer cannot bypass the gate):
+ *        - Correct key → session token → 200
+ *        - Missing key → 403
+ *        - Wrong key → 403
+ *        - Correct key + wrong Origin → 403 (defense-in-depth)
+ *        - No session token + forged Origin/Referer → data 403
  *
- * Tagged @desktop so it only runs on the chromium-desktop project, not
- * on every mobile-viewport project (the restriction is independent of
- * viewport).
+ * Tagged @desktop so it only runs on the chromium-desktop project.
  */
 test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
-  test("loader iframe renders program cards when embedded on an allowed origin", async ({
+  test("loader iframe renders program cards when token-url simulates partner backend", async ({
     page,
   }) => {
-    // PERMISSIVE widget: allowedDomains=["localhost","127.0.0.1"]. The
-    // dev server runs at http://localhost:25197 so the iframe's
-    // same-origin /config + /programs fetches have Referer hostname=
-    // localhost — IN the allowlist — and the widget should render
-    // normally. This is the "renders normally on allowed origin"
-    // acceptance criterion expressed end-to-end.
-    await loadHost(page, EMBED_ALLOWLIST_PERMISSIVE_SLUG);
+    // PERMISSIVE widget: allowedDomains=["localhost","127.0.0.1"].
+    // Simulate the partner's backend: intercept the token-url call in the
+    // test process (page.route), add the API key header, call our /token.
+    const state = getFixtureState();
+    const apiKey = state.permissiveWidgetApiKey;
+    expect(apiKey, "permissiveWidgetApiKey must be in the fixture state file").toBeTruthy();
+
+    const fakeTokenUrl = `${BASE_URL}/api/e2e-partner-token-permissive`;
+    await page.route("**/api/e2e-partner-token-permissive", async (route) => {
+      const ctx = await pwRequest.newContext({
+        extraHTTPHeaders: { "X-Widget-Api-Key": apiKey },
+      });
+      const tokenRes = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_PERMISSIVE_SLUG}/token`);
+      const body = await tokenRes.json();
+      await ctx.dispose();
+      await route.fulfill({ json: body, contentType: "application/json" });
+    });
+
+    await loadHost(page, EMBED_ALLOWLIST_PERMISSIVE_SLUG, fakeTokenUrl);
     const widget = await getWidgetIframe(page, EMBED_ALLOWLIST_PERMISSIVE_SLUG);
 
-    // The seeded program (fixtures.ts -> EMBED_TEST_PROGRAM) is the
-    // only active record for the seeded university so at least one
-    // .ew-card is expected once /config + /programs both succeed.
     await expect(widget.locator(".ew-card").first()).toBeVisible({ timeout: 15_000 });
     await expect(widget.locator(".ew-empty")).toHaveCount(0);
   });
 
-  test("loader iframe shows the empty/error state when embedded on a disallowed origin", async ({
+  test("loader iframe shows error state when no token-url is provided for restricted widget", async ({
     page,
   }) => {
-    // STRICT widget: allowedDomains=["allowed.e2e.example.com"]. The
-    // iframe is loaded from localhost so its same-origin /config call
-    // has Referer hostname=localhost — NOT in the allowlist — and the
-    // server returns 403. The widget JS in `generateWidgetHTML`
-    // catches the failed fetch and renders
-    // `<div class="ew-empty"><p>Unable to load widget</p></div>`.
-    // This is the "refuses to render on disallowed origin" criterion.
+    // STRICT widget: allowedDomains=["allowed.e2e.example.com"].
+    // No data-edcons-token-url → embed.js calls /token directly without an API key.
+    // /token returns 403 → /config returns 403 → widget shows .ew-empty.
     await loadHost(page, EMBED_ALLOWLIST_STRICT_SLUG);
     const widget = await getWidgetIframe(page, EMBED_ALLOWLIST_STRICT_SLUG);
 
     await expect(widget.locator(".ew-empty")).toBeVisible({ timeout: 15_000 });
     await expect(widget.locator(".ew-empty p")).toContainText(/unable to load widget/i);
-    // No program cards must leak through — even momentarily — because
-    // /config failed before /programs was ever called.
     await expect(widget.locator(".ew-card")).toHaveCount(0);
   });
 
-  test("public /config returns 200 when called from an allowed origin", async () => {
+  // ── Public-API tests (server-to-server, no browser) ──────────────────────
+
+  test("public /token returns 200 and /config is accessible with correct X-Widget-Api-Key", async () => {
+    const state = getFixtureState();
+    const apiKey = state.strictWidgetApiKey;
+    expect(apiKey, "strictWidgetApiKey must be in the fixture state file").toBeTruthy();
     const ctx = await pwRequest.newContext({
-      extraHTTPHeaders: {
-        Origin: ALLOWED_ORIGIN,
-        Referer: ALLOWED_REFERER,
-      },
+      extraHTTPHeaders: { "X-Widget-Api-Key": apiKey },
     });
     try {
-      const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/config`,
-      );
+      const tokenRes = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/token`);
+      expect(tokenRes.status(), "correct API key must return 200").toBe(200);
+      const { token } = await tokenRes.json();
+      expect(token).toBeTruthy();
+
+      const res = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/config?t=${encodeURIComponent(token)}`);
       expect(res.status()).toBe(200);
       const body = await res.json();
       expect(body.slug).toBe(EMBED_ALLOWLIST_STRICT_SLUG);
@@ -356,17 +365,19 @@ test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
     }
   });
 
-  test("public /programs returns 200 when called from an allowed origin", async () => {
+  test("public /programs returns 200 with correct API key session token", async () => {
+    const state = getFixtureState();
+    const apiKey = state.strictWidgetApiKey;
+    expect(apiKey).toBeTruthy();
     const ctx = await pwRequest.newContext({
-      extraHTTPHeaders: {
-        Origin: ALLOWED_ORIGIN,
-        Referer: ALLOWED_REFERER,
-      },
+      extraHTTPHeaders: { "X-Widget-Api-Key": apiKey },
     });
     try {
-      const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/programs`,
-      );
+      const tokenRes = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/token`);
+      expect(tokenRes.status()).toBe(200);
+      const { token } = await tokenRes.json();
+
+      const res = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/programs?t=${encodeURIComponent(token)}`);
       expect(res.status()).toBe(200);
       const body = await res.json();
       expect(Array.isArray(body.data)).toBe(true);
@@ -376,87 +387,119 @@ test.describe("embed widget — allowed-domains", { tag: "@desktop" }, () => {
     }
   });
 
-  test("public /config is rejected with 403 from a disallowed origin", async () => {
-    const ctx = await pwRequest.newContext({
-      extraHTTPHeaders: {
-        Origin: DISALLOWED_ORIGIN,
-        Referer: DISALLOWED_REFERER,
-      },
-    });
-    try {
-      const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/config`,
-      );
-      expect(res.status()).toBe(403);
-      const body = await res.json();
-      expect(body.error).toMatch(/domain not allowed/i);
-    } finally {
-      await ctx.dispose();
-    }
-  });
-
-  test("public /programs is rejected with 403 from a disallowed origin", async () => {
-    const ctx = await pwRequest.newContext({
-      extraHTTPHeaders: {
-        Origin: DISALLOWED_ORIGIN,
-        Referer: DISALLOWED_REFERER,
-      },
-    });
-    try {
-      const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/programs`,
-      );
-      expect(res.status()).toBe(403);
-      const body = await res.json();
-      expect(body.error).toMatch(/domain not allowed/i);
-    } finally {
-      await ctx.dispose();
-    }
-  });
-
-  test("public /apply is rejected with 403 from a disallowed origin", async () => {
-    // Belt-and-suspenders: even a POST that would otherwise succeed
-    // (valid payload) must be blocked when the request comes from a
-    // host that isn't on the allowlist. The submission endpoint is the
-    // most important one to lock down because it writes leads.
-    const ctx = await pwRequest.newContext({
-      extraHTTPHeaders: {
-        Origin: DISALLOWED_ORIGIN,
-        Referer: DISALLOWED_REFERER,
-      },
-    });
-    try {
-      const res = await ctx.post(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/apply`,
-        {
-          data: {
-            firstName: "Disallowed",
-            lastName: "Origin",
-            email: "disallowed-origin@e2e.test",
-          },
-        },
-      );
-      expect(res.status()).toBe(403);
-      const body = await res.json();
-      expect(body.error).toMatch(/domain not allowed/i);
-    } finally {
-      await ctx.dispose();
-    }
-  });
-
-  test("public /config is rejected with 403 when no Origin/Referer is sent", async () => {
-    // Sanity check on `validateDomain`'s "no headers => block" branch:
-    // a populated allowedDomains list must not be bypassable by simply
-    // omitting both headers (e.g. a server-side cURL).
+  test("token endpoint rejects missing X-Widget-Api-Key (no key at all)", async () => {
+    // Key gate: restricted widget requires the API key header.
     const ctx = await pwRequest.newContext();
     try {
-      const res = await ctx.get(
-        `${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/config`,
-        { headers: { Referer: "" } },
-      );
+      const res = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/token`);
       expect(res.status()).toBe(403);
       const body = await res.json();
-      expect(body.error).toMatch(/domain not allowed/i);
+      expect(body.error).toMatch(/X-Widget-Api-Key header required/i);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("token endpoint rejects a wrong/forged X-Widget-Api-Key", async () => {
+    // A direct HTTP client with a fabricated key must not receive a session token.
+    const ctx = await pwRequest.newContext({
+      extraHTTPHeaders: { "X-Widget-Api-Key": "0".repeat(64) },
+    });
+    try {
+      const res = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/token`);
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/invalid widget api key/i);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("token endpoint rejects correct key from wrong Origin (defense-in-depth)", async () => {
+    // KEY SECURITY PROPERTY: even with a valid API key, a browser request whose
+    // Origin is not in allowedDomains must be rejected (prevents a stolen key
+    // being used from an unauthorized site via browser fetch).
+    const state = getFixtureState();
+    const apiKey = state.strictWidgetApiKey;
+    expect(apiKey).toBeTruthy();
+    const ctx = await pwRequest.newContext({
+      extraHTTPHeaders: {
+        "X-Widget-Api-Key": apiKey,
+        Origin: "https://unauthorized.attacker.example.com",
+      },
+    });
+    try {
+      const res = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/token`);
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/origin not in widget/i);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("public /config is rejected with 403 when no token is provided (forged Origin header ignored)", async () => {
+    // Forging Origin/Referer headers does NOT bypass the data endpoint gate —
+    // the server requires a valid HMAC session token regardless.
+    const ctx = await pwRequest.newContext({
+      extraHTTPHeaders: {
+        Origin: "https://allowed.e2e.example.com",
+        Referer: "https://allowed.e2e.example.com/programs",
+      },
+    });
+    try {
+      const res = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/config`);
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/invalid or expired embed token/i);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("public /programs is rejected with 403 when no token is provided", async () => {
+    const ctx = await pwRequest.newContext();
+    try {
+      const res = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/programs`);
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/invalid or expired embed token/i);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("public /apply is rejected with 403 when no token is provided", async () => {
+    // Submission endpoint writes leads — must be locked down without a valid token.
+    const ctx = await pwRequest.newContext({
+      extraHTTPHeaders: {
+        Origin: "https://attacker.e2e.example.com",
+        Referer: "https://attacker.e2e.example.com/embed-page",
+      },
+    });
+    try {
+      const res = await ctx.post(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/apply`, {
+        data: {
+          firstName: "Attacker",
+          lastName: "NoToken",
+          email: "attacker-notoken@e2e.test",
+        },
+      });
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/invalid or expired embed token/i);
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
+  test("public /config is rejected with 403 when no token is provided (no headers)", async () => {
+    const ctx = await pwRequest.newContext();
+    try {
+      const res = await ctx.get(`${BASE_URL}/api/public/embed/${EMBED_ALLOWLIST_STRICT_SLUG}/config`);
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expect(body.error).toMatch(/invalid or expired embed token/i);
     } finally {
       await ctx.dispose();
     }

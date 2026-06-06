@@ -43,6 +43,7 @@ type Widget = {
   visibleFilters: string[];
   theme: Record<string, any>;
   allowedDomains: string[];
+  embedApiKey?: string | null;
   isActive: boolean;
   createdAt: string;
 };
@@ -696,9 +697,41 @@ function EmbedCodeDialog({ widget, onClose }: { widget: Widget; onClose: () => v
   const domain = window.location.origin;
   const apiUrl = `${domain}${API_BASE}`;
 
-  const scriptCode = `<!-- EdCons Widget: ${widget.name} -->
-<div data-edcons-widget="${widget.slug}"></div>
-<script src="${apiUrl}/public/embed/embed.js"></script>`;
+  const isRestricted = (widget.allowedDomains || []).length > 0;
+  const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [currentApiKey, setCurrentApiKey] = useState<string | null>(widget.embedApiKey ?? null);
+
+  const rotateKey = async () => {
+    setRotating(true);
+    try {
+      const data = await customFetch(`${API_BASE}/embed/widgets/${widget.id}/rotate-key`, {
+        method: "POST",
+      } as any) as { embedApiKey: string };
+      setCurrentApiKey(data.embedApiKey);
+      setApiKeyVisible(true);
+      toast({ title: "API key rotated — update your backend with the new key" });
+    } catch (err: any) {
+      toast({ title: err?.message || "Failed to rotate API key", variant: "destructive" });
+    } finally {
+      setRotating(false);
+    }
+  };
+
+  const tokenUrl = `${apiUrl}/public/embed/${widget.slug}/token`;
+  const scriptCode = isRestricted
+    ? `<!-- EdCons Widget: ${widget.name} -->\n<!-- Your backend provides the token via data-edcons-token-url — the API key stays server-side only -->\n<div data-edcons-widget="${widget.slug}" data-edcons-token-url="/your-backend/edcons-token"></div>\n<script src="${apiUrl}/public/embed/embed.js"></script>`
+    : `<!-- EdCons Widget: ${widget.name} -->\n<div data-edcons-widget="${widget.slug}"></div>\n<script src="${apiUrl}/public/embed/embed.js"></script>`;
+
+  const partnerBackendExample = `// Node.js / Express example for your backend:
+// Store EDCONS_WIDGET_API_KEY in your environment — never in HTML!
+app.get('/your-backend/edcons-token', async (req, res) => {
+  const response = await fetch('${tokenUrl}', {
+    headers: { 'X-Widget-Api-Key': process.env.EDCONS_WIDGET_API_KEY },
+  });
+  const data = await response.json(); // { token, expiresIn }
+  res.json(data);
+});`;
 
   const iframeCode = `<iframe
   src="${apiUrl}/public/embed/${widget.slug}/widget"
@@ -774,6 +807,51 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
                 Paste this code into a WordPress Custom HTML block or anywhere in your HTML page.
                 The widget will auto-resize to fit its content.
               </p>
+              {isRestricted && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-3 space-y-3">
+                  <p className="text-xs font-medium text-blue-900">
+                    This widget is restricted to specific domains. Partners integrate using a server-side API key — the key is stored on their backend and never placed in HTML.
+                  </p>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-blue-800">Widget API Key (keep this secret — share with partner's backend team only):</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-xs bg-white border border-blue-200 rounded px-2 py-1 font-mono truncate">
+                        {currentApiKey
+                          ? (apiKeyVisible ? currentApiKey : "•".repeat(20) + currentApiKey.slice(-6))
+                          : "No key — will be generated on save"}
+                      </code>
+                      {currentApiKey && (
+                        <Button size="sm" variant="ghost" className="shrink-0 px-2 h-7 text-xs"
+                          onClick={() => setApiKeyVisible((v) => !v)}>
+                          {apiKeyVisible ? "Hide" : "Show"}
+                        </Button>
+                      )}
+                      {currentApiKey && (
+                        <Button size="sm" variant="ghost" className="shrink-0 px-2 h-7"
+                          onClick={() => copy(currentApiKey, "API key")}>
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                    <Button size="sm" variant="outline" onClick={rotateKey} disabled={rotating} className="text-xs">
+                      {rotating ? "Rotating…" : "Rotate API Key"}
+                    </Button>
+                    <p className="text-xs text-blue-700">
+                      Rotate only if the key is compromised — partners must update their backend immediately after rotation.
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-blue-800">Backend integration (add to your server — not your HTML):</p>
+                    <div className="relative">
+                      <pre className="bg-white border border-blue-100 rounded text-xs overflow-x-auto p-2 font-mono whitespace-pre-wrap">{partnerBackendExample}</pre>
+                      <Button size="sm" variant="ghost" className="absolute top-1 right-1 h-6 px-2 text-xs"
+                        onClick={() => copy(partnerBackendExample, "Backend example code")}>
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="relative">
                 <pre className="bg-muted rounded-lg p-4 text-xs overflow-x-auto whitespace-pre-wrap break-all font-mono">
                   {scriptCode}
@@ -783,6 +861,9 @@ curl "${programsEndpoint}?country=Turkey&level=Bachelor&language=English&page=1&
                   <Copy className="w-3 h-3 mr-1" /> Copy
                 </Button>
               </div>
+              {isRestricted && (
+                <p className="text-xs text-muted-foreground">Replace <code>/your-backend/edcons-token</code> with your actual backend endpoint URL.</p>
+              )}
             </div>
           </TabsContent>
 

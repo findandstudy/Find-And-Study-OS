@@ -417,46 +417,31 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
     let resultAppId: number | null = null;
 
     if (existingUser) {
-      // Existing student account — reuse it. We do not want to block the
-      // applicant with a 409 just because they (or someone with the same
-      // email) previously applied to a different program. Lead-only
-      // entries never reach this branch (leads do not create users).
+      // SECURITY (Public Intake — account takeover via email): an existing
+      // student account means someone already registered with this email.
+      // Accepting a public form submission as proof-of-ownership and
+      // attaching documents / applications to the account would let any
+      // unauthenticated caller who knows the email mutate real CRM records.
+      // The caller must authenticate (log in) to apply on behalf of an
+      // existing account. We only create new student accounts here; account
+      // holders must use the authenticated portal for subsequent applications.
+      //
+      // Exception: if the user row exists but the student row was hard-
+      // deleted (edge case), fall through to recreate a clean student record
+      // so the re-registering user is not permanently blocked.
       const [existingStudent] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
-      if (!existingStudent) {
-        // Edge case: the user row exists but the matching student row was
-        // hard-deleted. Fall through to the new-account path so we
-        // re-create a clean student record for them below.
-        console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
-      } else {
-        resultStudentId = existingStudent.id;
-        const reuseAppResult = await createApplicationForStudent(existingStudent.id, programIdNum, programName, universityName, existingStudent.gpa || gpa || null, existingStudent.languageScore || languageScore || null);
-        if (reuseAppResult.eligibilityErrors) {
-          res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: reuseAppResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
-          return;
-        }
-        if (reuseAppResult.quotaError) {
-          res.status(422).json({ error: reuseAppResult.quotaError, code: "QUOTA_FULL" });
-          return;
-        }
-        resultAppId = reuseAppResult.appId;
-
-        // Notify the existing account holder that a new application was
-        // received and remind them how to log in.
-        try {
-          const existingEmailContent = await buildExistingAccountEmail({
-            firstName: existingUser.firstName || existingStudent.firstName || "Student",
-            loginUrl,
-            programName: programName || undefined,
-            universityName: universityName || undefined,
-          });
-          await sendEmail(normalizedEmail, existingEmailContent);
-        } catch (e) {
-          console.error("[PUBLIC-APPLY] Failed to send existing-account notification:", e);
-        }
-
-        console.log(`[PUBLIC-APPLY] Reused existing student #${existingStudent.id} (${normalizedEmail}) — created application #${resultAppId}`);
+      if (existingStudent) {
+        console.warn(`[PUBLIC-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (${normalizedEmail})`);
+        res.status(409).json({
+          error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
+          code: "ACCOUNT_CONFLICT",
+          loginUrl,
+        });
+        return;
       }
+      // No live student row — fall through to the new-account path below.
+      console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
     }
 
     if (!existingUser || resultStudentId === null) {

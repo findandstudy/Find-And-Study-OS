@@ -17,6 +17,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import crypto from "node:crypto";
 import {
   db,
   universitiesTable,
@@ -24,6 +25,10 @@ import {
   embedWidgetsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
+
+function generateWidgetApiKey(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
 
 export const EMBED_TEST_SLUG = "e2e-embed-test";
 export const EMBED_TEST_UNIVERSITY = "E2E Embed Test University";
@@ -69,6 +74,8 @@ interface EmbedFixtureState {
   priorWidgetSnapshot: Record<string, unknown> | null;
   priorAllowlistPermissiveWidgetSnapshot: Record<string, unknown> | null;
   priorAllowlistStrictWidgetSnapshot: Record<string, unknown> | null;
+  permissiveWidgetApiKey: string | null;
+  strictWidgetApiKey: string | null;
 }
 
 async function main() {
@@ -83,6 +90,8 @@ async function main() {
     priorWidgetSnapshot: null,
     priorAllowlistPermissiveWidgetSnapshot: null,
     priorAllowlistStrictWidgetSnapshot: null,
+    permissiveWidgetApiKey: null,
+    strictWidgetApiKey: null,
   };
 
   const [existingUni] = await db
@@ -205,7 +214,7 @@ async function main() {
   }
 
   // ---- Permissive allowlist widget (loader-renders test) --------------
-  await ensureAllowlistWidget({
+  const permissiveApiKey = await ensureAllowlistWidget({
     slug: EMBED_TEST_ALLOWLIST_PERMISSIVE_SLUG,
     name: "E2E Embed Test Widget (Allowlist Permissive)",
     allowedDomains: ["localhost", "127.0.0.1"],
@@ -216,9 +225,10 @@ async function main() {
       state.priorAllowlistPermissiveWidgetSnapshot = snap;
     },
   });
+  state.permissiveWidgetApiKey = permissiveApiKey;
 
   // ---- Strict allowlist widget (loader-rejects + API tests) -----------
-  await ensureAllowlistWidget({
+  const strictApiKey = await ensureAllowlistWidget({
     slug: EMBED_TEST_ALLOWLIST_STRICT_SLUG,
     name: "E2E Embed Test Widget (Allowlist Strict)",
     allowedDomains: [EMBED_TEST_ALLOWED_DOMAIN],
@@ -229,6 +239,7 @@ async function main() {
       state.priorAllowlistStrictWidgetSnapshot = snap;
     },
   });
+  state.strictWidgetApiKey = strictApiKey;
 
   fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), "utf8");
   process.exit(0);
@@ -242,13 +253,17 @@ interface EnsureWidgetArgs {
   onReuse: (snapshot: Record<string, unknown>) => void;
 }
 
+/**
+ * Ensures a restricted allowlist widget exists and returns its embedApiKey.
+ * Generates a new API key if the widget doesn't already have one.
+ */
 async function ensureAllowlistWidget({
   slug,
   name,
   allowedDomains,
   onCreate,
   onReuse,
-}: EnsureWidgetArgs): Promise<void> {
+}: EnsureWidgetArgs): Promise<string> {
   const [existing] = await db
     .select()
     .from(embedWidgetsTable)
@@ -265,6 +280,8 @@ async function ensureAllowlistWidget({
       theme: existing.theme,
       allowedDomains: existing.allowedDomains,
     });
+    // Preserve existing API key or generate a fresh one if missing.
+    const apiKey = existing.embedApiKey ?? generateWidgetApiKey();
     await db
       .update(embedWidgetsTable)
       .set({
@@ -276,12 +293,15 @@ async function ensureAllowlistWidget({
         visibleFilters: [],
         theme: {},
         allowedDomains,
+        embedApiKey: apiKey,
       })
       .where(eq(embedWidgetsTable.id, existing.id));
     console.log(
       `[e2e-embed-setup] Reused allowlist widget slug=${slug} id=${existing.id} (snapshot saved, allowedDomains=[${allowedDomains.join(",")}])`,
     );
+    return apiKey;
   } else {
+    const apiKey = generateWidgetApiKey();
     const [created] = await db
       .insert(embedWidgetsTable)
       .values({
@@ -294,6 +314,7 @@ async function ensureAllowlistWidget({
         visibleFilters: [],
         theme: {},
         allowedDomains,
+        embedApiKey: apiKey,
         isActive: true,
       })
       .returning();
@@ -301,6 +322,7 @@ async function ensureAllowlistWidget({
     console.log(
       `[e2e-embed-setup] Created allowlist widget slug=${slug} id=${created.id} (allowedDomains=[${allowedDomains.join(",")}])`,
     );
+    return apiKey;
   }
 }
 

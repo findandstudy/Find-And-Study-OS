@@ -2197,9 +2197,7 @@ function LeadFormCodeDialog({ widget, onClose }: { widget: LeadFormWidget; onClo
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const apiBase = `${window.location.origin}/api`;
-  const scriptCode = `<!-- ${widget.name} -->
-<div data-edcons-widget="${widget.slug}"></div>
-<script src="${apiBase}/public/embed/embed.js"></script>`;
+  const scriptCode = `<!-- ${widget.name} -->\n<div data-edcons-widget="${widget.slug}"></div>\n<script src="${apiBase}/public/embed/embed.js"></script>`;
   const iframeCode = `<iframe
   src="${apiBase}/public/embed/${widget.slug}/widget"
   style="width:100%;min-height:520px;border:none;"

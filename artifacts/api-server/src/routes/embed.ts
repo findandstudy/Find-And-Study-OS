@@ -81,16 +81,141 @@ const embedSubmitLimiter = rateLimit({
   store: new PgRateLimitStore(EMBED_WINDOW_MS),
 });
 
-function validateDomain(widget: any, origin: string | undefined, referer: string | undefined): boolean {
-  const domains = widget.allowedDomains as string[];
-  if (!domains || domains.length === 0) return true;
-  const check = origin || referer || "";
-  if (!check) return false;
+// ─── Embed HMAC security helpers ─────────────────────────────────────────────
+// Two-layer security model (no Origin/Referer headers trusted at auth gates):
+//
+// 1. Widget API key (per-widget, randomly generated, stored in DB):
+//    A 256-bit random hex key stored in embed_widgets.embed_api_key.
+//    It is NEVER placed in HTML or the embed code snippet.  Admin gives this
+//    key to the partner's backend team out-of-band (e.g., dashboard copy
+//    button).  The partner's backend server calls
+//      GET /api/public/embed/:slug/token
+//    with the key in the X-Widget-Api-Key request header (server-to-server)
+//    to obtain a short-lived session token.  The partner's frontend code calls
+//    their own backend endpoint to get the session token — no secret ever
+//    touches the browser.
+//
+//    Defense-in-depth: if a browser does reach /token with an Origin header
+//    that is NOT in allowedDomains, the request is still rejected (even with
+//    a valid key).
+//
+//    Key rotation: POST /api/embed/widgets/:id/rotate-key (admin-authenticated).
+//
+// 2. Short-lived session token (1-hour, per-request):
+//    After the widget API key is validated, /token issues a slug-bound HMAC
+//    session token.  The partner's backend returns this to the browser, which
+//    passes it as ?t=<token> to all JSON data endpoints.  Open widgets (empty
+//    allowedDomains) get a free session token — no API key required.
+//
+// Fail-closed: getEmbedTokenSecret() throws if SESSION_SECRET is absent.
+// Restricted operations propagate this as HTTP 500 — no known-literal fallback.
+//
+// Session token format: base64url(JSON{slug,exp,jti}) + "." + base64url(HMAC)
+
+const EMBED_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour — session token lifetime
+
+function getEmbedTokenSecret(): string {
+  const s = process.env.SESSION_SECRET || process.env.EMBED_TOKEN_SECRET;
+  if (!s) {
+    // Fail closed: never fall back to a known literal.  Without a real secret,
+    // restricted widget operations return HTTP 500 rather than using a forgeable
+    // key.  Configure SESSION_SECRET (or EMBED_TOKEN_SECRET) to fix this.
+    throw new Error("[EMBED] SESSION_SECRET or EMBED_TOKEN_SECRET must be configured for embed widget security");
+  }
+  return `edcons-embed:${s}`;
+}
+
+/**
+ * Generates a fresh random widget API key (64 hex chars / 256 bits).
+ * This is called server-side only; the key is stored in the DB and given to
+ * the partner's backend team out-of-band.  It is NEVER placed in HTML or
+ * the public embed code.
+ */
+function generateWidgetApiKey(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function createEmbedToken(slug: string): string {
+  const exp = Date.now() + EMBED_TOKEN_TTL_MS;
+  const jti = crypto.randomBytes(8).toString("hex");
+  const payload = Buffer.from(JSON.stringify({ slug, exp, jti })).toString("base64url");
+  const sig = crypto.createHmac("sha256", getEmbedTokenSecret()).update(payload).digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+function verifyEmbedToken(token: string | undefined, slug: string): boolean {
+  if (!token || typeof token !== "string") return false;
   try {
-    const url = new URL(check);
-    return domains.some(d => url.hostname === d || url.hostname.endsWith(`.${d}`));
+    const dot = token.indexOf(".");
+    if (dot < 1) return false;
+    const payload = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    if (!sig) return false;
+    const expectedSig = crypto.createHmac("sha256", getEmbedTokenSecret()).update(payload).digest("base64url");
+    const sigBuf = Buffer.from(sig, "base64url");
+    const expBuf = Buffer.from(expectedSig, "base64url");
+    // Constant-time comparison prevents timing-oracle attacks.
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) return false;
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (parsed.slug !== slug) return false;
+    if (typeof parsed.exp !== "number" || Date.now() > parsed.exp) return false;
+    return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * checkEmbedAccess() is the authorization gate for the widget JSON endpoints.
+ *
+ * - Open widgets (empty allowedDomains): always pass — no restriction needed.
+ * - Restricted widgets: require a valid, non-expired, slug-bound HMAC token
+ *   supplied as the `t` query parameter.  Origin/Referer are NOT trusted for
+ *   these endpoints because they reflect the iframe's same-origin API server
+ *   URL, not the partner site.
+ */
+function checkEmbedAccess(widget: any, token: string | undefined): boolean {
+  const domains = widget.allowedDomains as string[];
+  if (!domains || domains.length === 0) return true;
+  return verifyEmbedToken(token, String(widget.slug));
+}
+
+const EMBED_TOKEN_WINDOW_MS = 15 * 60 * 1000;
+const embedTokenLimiter = rateLimit({
+  windowMs: EMBED_TOKEN_WINDOW_MS,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+  store: new PgRateLimitStore(EMBED_TOKEN_WINDOW_MS),
+});
+
+/**
+ * Set CORS headers for embed public routes.  CORS is defense-in-depth for
+ * browser clients; the primary auth gate is the widget-key → HMAC token chain.
+ *
+ * When allowedDomains is empty the widget is unrestricted → wildcard CORS.
+ * When non-empty we echo back the requesting Origin only if it matches an
+ * allowed domain; unmatched origins get no CORS header (browser blocks them).
+ * We always set Vary: Origin so CDN/proxy caches store per-origin responses.
+ */
+function setEmbedCors(res: any, widget: any, origin: string | undefined): void {
+  const domains = widget.allowedDomains as string[];
+  res.setHeader("Vary", "Origin");
+  if (!domains || domains.length === 0) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    return;
+  }
+  if (!origin) return;
+  try {
+    const url = new URL(origin);
+    const matched = domains.some(d => url.hostname === d || url.hostname.endsWith(`.${d}`));
+    if (matched) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    }
+    // No match → no ACAO header → browser enforces CORS block.
+  } catch {
+    // Unparseable origin → no ACAO header.
   }
 }
 
@@ -146,6 +271,7 @@ router.post("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (r
   const validMode = VALID_MODES.includes(mode) ? mode : "combined";
   const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
   try {
+    const isRestricted = Array.isArray(allowedDomains) && allowedDomains.length > 0;
     const [widget] = await db.insert(embedWidgetsTable).values({
       name,
       slug: cleanSlug,
@@ -156,6 +282,9 @@ router.post("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (r
       visibleFilters: visibleFilters || [],
       theme: theme || {},
       allowedDomains: allowedDomains || [],
+      // Auto-generate an API key for restricted widgets so it's ready immediately.
+      // Open widgets (no allowedDomains) don't need one.
+      embedApiKey: isRestricted ? generateWidgetApiKey() : null,
     }).returning();
     await logAudit(req.user!.id, "create_embed_widget", "embed_widget", widget.id, { name, slug: cleanSlug }, req.ip);
     res.status(201).json(widget);
@@ -188,6 +317,16 @@ router.patch("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), asy
   if (theme !== undefined) updates.theme = theme;
   if (allowedDomains !== undefined) updates.allowedDomains = allowedDomains;
   if (isActive !== undefined) updates.isActive = isActive;
+
+  // If the widget is being made restricted and doesn't yet have an API key,
+  // generate one automatically.
+  if (allowedDomains !== undefined && Array.isArray(allowedDomains) && allowedDomains.length > 0) {
+    const [current] = await db.select({ embedApiKey: embedWidgetsTable.embedApiKey })
+      .from(embedWidgetsTable).where(eq(embedWidgetsTable.id, id));
+    if (current && !current.embedApiKey) {
+      updates.embedApiKey = generateWidgetApiKey();
+    }
+  }
 
   try {
     const [widget] = await db.update(embedWidgetsTable).set(updates).where(eq(embedWidgetsTable.id, id)).returning();
@@ -483,6 +622,31 @@ router.delete("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), as
   res.sendStatus(204);
 });
 
+// ─── Widget API key rotation (admin-authenticated) ────────────────────────────
+// Partners hold the embedApiKey on their backend server — it is NEVER placed
+// in HTML.  Use this endpoint to issue a new key when a key may be compromised.
+// The old key is immediately invalidated.
+router.post("/embed/widgets/:id/rotate-key", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+  if (!/^\d+$/.test(req.params.id)) { next(); return; }
+  const id = parseInt(req.params.id, 10);
+  const [widget] = await db.select().from(embedWidgetsTable).where(eq(embedWidgetsTable.id, id));
+  if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
+
+  const domains = widget.allowedDomains as string[];
+  if (!Array.isArray(domains) || domains.length === 0) {
+    res.status(400).json({ error: "Widget is not restricted — only restricted widgets (those with allowedDomains set) use API keys" });
+    return;
+  }
+
+  const newKey = generateWidgetApiKey();
+  const [updated] = await db.update(embedWidgetsTable)
+    .set({ embedApiKey: newKey })
+    .where(eq(embedWidgetsTable.id, id))
+    .returning();
+  await logAudit(req.user!.id, "rotate_embed_widget_api_key", "embed_widget", id, {}, req.ip);
+  res.json({ embedApiKey: updated.embedApiKey });
+});
+
 router.get("/embed/widgets/:id/submissions", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
   if (!/^\d+$/.test(req.params.id)) { next(); return; }
   const widgetId = parseInt(req.params.id, 10);
@@ -514,17 +678,85 @@ router.get("/embed/submissions", requireAuth, requireRole(...STAFF_ROLES), async
   res.json({ data: rows, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
+// ─── Session token issuance endpoint ─────────────────────────────────────────
+// Issues short-lived HMAC session tokens that gate all restricted widget JSON
+// endpoints.  Security model:
+//
+// - Open widgets (empty allowedDomains): issue freely — no key required.
+//
+// - Restricted widgets: require X-Widget-Api-Key header matching the widget's
+//   stored embedApiKey.  This call is made by the PARTNER'S BACKEND server
+//   (server-to-server) — the secret never appears in browser HTML or embed code.
+//   Partners expose their own endpoint that calls here and returns the session
+//   token; the embed loader reads that URL from data-edcons-token-url.
+//
+//   Defense-in-depth: if req.headers.origin is present AND not in allowedDomains,
+//   the request is rejected even with a valid key, blocking browsers that somehow
+//   reach /token directly from an unauthorized domain.
+//
+// CORS: open-to-all on /token (the API key is the auth gate, not CORS).
+router.get("/public/embed/:slug/token", embedTokenLimiter, async (req, res): Promise<void> => {
+  const { slug } = req.params;
+  const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
+  if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
+
+  const domains = widget.allowedDomains as string[];
+  const isRestricted = Array.isArray(domains) && domains.length > 0;
+
+  if (isRestricted) {
+    const providedKey = req.headers["x-widget-api-key"] as string | undefined;
+    const storedKey = widget.embedApiKey;
+    if (!providedKey || !storedKey) {
+      res.status(403).json({ error: "X-Widget-Api-Key header required for restricted widgets" });
+      return;
+    }
+    let keyMatch = false;
+    try {
+      const provided = Buffer.from(providedKey);
+      const stored = Buffer.from(storedKey);
+      keyMatch = provided.length === stored.length && crypto.timingSafeEqual(provided, stored);
+    } catch { keyMatch = false; }
+    if (!keyMatch) {
+      res.status(403).json({ error: "Invalid widget API key" });
+      return;
+    }
+    // Defense-in-depth: if Origin header is present it must be in allowedDomains.
+    // Legitimate server-to-server calls from partner backends do not send Origin.
+    const requestOrigin = req.headers.origin as string | undefined;
+    if (requestOrigin) {
+      let originHostname = "";
+      try { originHostname = new URL(requestOrigin).hostname; } catch { /* ignore */ }
+      const inAllowed = domains.some((d: string) => originHostname === d || originHostname.endsWith(`.${d}`));
+      if (!inAllowed) {
+        res.status(403).json({ error: "Origin not in widget's allowedDomains" });
+        return;
+      }
+    }
+  }
+
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  let token: string;
+  try {
+    token = createEmbedToken(String(widget.slug));
+  } catch (err: any) {
+    console.error("[EMBED] Token issuance failed — SESSION_SECRET not configured:", err.message);
+    res.status(500).json({ error: "Embed security not configured on this server" });
+    return;
+  }
+  res.json({ token, expiresIn: Math.floor(EMBED_TOKEN_TTL_MS / 1000) });
+});
+
 router.get("/public/embed/:slug/config", async (req, res): Promise<void> => {
   const { slug } = req.params;
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
   const origin = req.headers.origin as string | undefined;
-  const referer = req.headers.referer as string | undefined;
-  if (!validateDomain(widget, origin, referer)) {
-    res.status(403).json({ error: "Domain not allowed" });
+  if (!checkEmbedAccess(widget, req.query.t as string | undefined)) {
+    res.status(403).json({ error: "Invalid or expired embed token" });
     return;
   }
+  setEmbedCors(res, widget, origin);
 
   res.json({
     id: widget.id,
@@ -545,11 +777,11 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
   const origin = req.headers.origin as string | undefined;
-  const referer = req.headers.referer as string | undefined;
-  if (!validateDomain(widget, origin, referer)) {
-    res.status(403).json({ error: "Domain not allowed" });
+  if (!checkEmbedAccess(widget, req.query.t as string | undefined)) {
+    res.status(403).json({ error: "Invalid or expired embed token" });
     return;
   }
+  setEmbedCors(res, widget, origin);
 
   const presetFilters = (widget.presetFilters || {}) as Record<string, any>;
   const lockedFilters = (widget.lockedFilters || []) as string[];
@@ -646,6 +878,15 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
     const { slug } = req.params;
     const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
     if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
+
+    // SECURITY: apply the same HMAC token gate that lead/apply/config/programs
+    // enforce. Without this check /filters was reachable from any origin.
+    const origin = req.headers.origin as string | undefined;
+    if (!checkEmbedAccess(widget, req.query.t as string | undefined)) {
+      res.status(403).json({ error: "Invalid or expired embed token" });
+      return;
+    }
+    setEmbedCors(res, widget, origin);
 
     const presetFilters = (widget.presetFilters || {}) as Record<string, any>;
     const userParams = req.query as Record<string, string | undefined>;
@@ -747,11 +988,11 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
   const origin = req.headers.origin as string | undefined;
-  const referer = req.headers.referer as string | undefined;
-  if (!validateDomain(widget, origin, referer)) {
-    res.status(403).json({ error: "Domain not allowed" });
+  if (!checkEmbedAccess(widget, req.query.t as string | undefined)) {
+    res.status(403).json({ error: "Invalid or expired embed token" });
     return;
   }
+  setEmbedCors(res, widget, origin);
 
   const { firstName, lastName, email, phone, countryCode, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp } = req.body;
   if (_hp) { res.json({ success: true, leadId: null }); return; }
@@ -809,11 +1050,11 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
   const origin = req.headers.origin as string | undefined;
-  const referer = req.headers.referer as string | undefined;
-  if (!validateDomain(widget, origin, referer)) {
-    res.status(403).json({ error: "Domain not allowed" });
+  if (!checkEmbedAccess(widget, req.query.t as string | undefined)) {
+    res.status(403).json({ error: "Invalid or expired embed token" });
     return;
   }
+  setEmbedCors(res, widget, origin);
 
   const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, aiExtractedData, motherName, fatherName, gender, dateOfBirth, passportNumber, passportIssueDate, passportExpiry, address, highSchool, graduationYear, gpa, languageScore } = req.body;
 
@@ -831,7 +1072,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   }
 
   let sourceWebsite: string | null = null;
-  try { sourceWebsite = origin || (referer ? new URL(referer).origin : null) || null; } catch {}
+  try { sourceWebsite = origin || (req.headers.referer ? new URL(req.headers.referer as string).origin : null) || null; } catch {}
 
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
 
@@ -941,24 +1182,30 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     const normalizedEmail = String(email).toLowerCase().trim();
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
 
+    // SECURITY (Public Intake — account takeover via email): do NOT write
+    // applications or documents to an existing verified student account
+    // without authentication. An unauthenticated caller who knows the victim's
+    // email and a widget slug could otherwise attach attacker-controlled data
+    // to that student's CRM records. The lead/submission row (captured above
+    // in the transaction) is still created — it is safe, low-sensitivity, and
+    // lets staff handle the conversion manually. Only brand-new accounts (no
+    // existing user row) get the automatic student+application creation path.
+    //
+    // `existingStudentBlocked` prevents the fallthrough new-account path from
+    // running (and failing on the unique-email constraint) when we skip here.
+    let existingStudentBlocked = false;
     if (existingUser && existingUser.role === "student") {
       const [existingStudent] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
       if (existingStudent) {
-        resultStudentId = existingStudent.id;
-        const reuseAppResult = await createApplicationForStudent(
-          existingStudent.id,
-          programId ? parseInt(String(programId), 10) : null,
-          s(programName, 255),
-          s(universityName, 255),
-          existingStudent.gpa || s(gpa, 20) || null,
-          existingStudent.languageScore || s(languageScore, 20) || null,
-        );
-        resultAppId = reuseAppResult.appId;
+        console.warn(`[EMBED-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (slug=${widget.slug})`);
+        existingStudentBlocked = true;
+        // resultStudentId and resultAppId stay null — auto-convert won't fire.
+        // Fall through to the response at the bottom.
       }
     }
 
-    if (!resultStudentId && (!existingUser || existingUser.role === "student")) {
+    if (!existingStudentBlocked && !resultStudentId && (!existingUser || existingUser.role === "student")) {
       // Create a placeholder user + student record. Account starts inactive
       // and unverified; staff can invite the student later when they want
       // to give them portal access.
@@ -1144,6 +1391,12 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).send("Widget not found"); return; }
 
+  // The widget HTML shell is served openly so the iframe renders the widget's
+  // own "Unable to load widget" state when the token is missing or invalid,
+  // rather than a bare browser 403 page.  All actual data (config, programs,
+  // apply) is gated by checkEmbedAccess() on the respective JSON endpoints
+  // and requires a valid HMAC session token (obtained via /token with the widget
+  // API key header — see the backend-mediated token issuance endpoint).
   const baseUrl = getBaseUrl(req);
   const docMeta = await loadDocCatalogForEmbed();
   const html = generateWidgetHTML(slug, baseUrl, widget, docMeta);
@@ -1173,8 +1426,14 @@ function generateEmbedScript(baseUrl: string): string {
   containers.forEach(function(el) {
     var slug = el.getAttribute('data-edcons-widget');
     if (!slug) return;
+    // data-edcons-token-url is the URL of the partner's backend endpoint that
+    // returns {"token":"<session-token>"}.  The partner's server holds the
+    // long-lived widget API key and exchanges it server-to-server for a session
+    // token using the X-Widget-Api-Key header — the secret never appears here.
+    // For open widgets (no allowedDomains), this attribute is optional; the
+    // loader falls back to calling /token directly (no key needed).
+    var tokenUrl = el.getAttribute('data-edcons-token-url') || '';
     var iframe = document.createElement('iframe');
-    iframe.src = '${baseUrl}/api/public/embed/' + slug + '/widget';
     iframe.style.width = '100%';
     iframe.style.border = 'none';
     // No artificial minimum: the iframe must size itself to the widget's
@@ -1184,7 +1443,25 @@ function generateEmbedScript(baseUrl: string): string {
     iframe.style.minHeight = '0';
     iframe.setAttribute('loading', 'lazy');
     iframe.setAttribute('allowfullscreen', 'true');
-    el.appendChild(iframe);
+    // Fetch a short-lived HMAC session token for this widget.  For restricted
+    // widgets the token is obtained via the partner's own backend endpoint
+    // (data-edcons-token-url), which holds the long-lived API key and exchanges
+    // it server-to-server.  Open (unrestricted) widgets call /token directly.
+    // The session token is passed into the iframe URL and validated server-side
+    // on all data endpoints.
+    function mountIframe(token) {
+      var src = '${baseUrl}/api/public/embed/' + slug + '/widget';
+      if (token) src += '?t=' + encodeURIComponent(token);
+      iframe.src = src;
+      el.appendChild(iframe);
+    }
+    try {
+      var resolvedTokenUrl = tokenUrl || '${baseUrl}/api/public/embed/' + slug + '/token';
+      fetch(resolvedTokenUrl, {credentials:'omit'})
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){ mountIframe(d && d.token ? d.token : ''); })
+        .catch(function(){ mountIframe(''); });
+    } catch(e) { mountIframe(''); }
     var savedScroll = null;
     var savedBodyStyle = null;
     var rafScheduled = false;
@@ -1552,6 +1829,12 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 var API='${baseUrl}/api/public/embed/${slug}';
 var SLUG='${slug}';
 var MODE='${safeMode}';
+// Read the HMAC token the loader script placed in the iframe URL (?t=...).
+// The token is required by restricted widgets; for open widgets it is ignored.
+var TOKEN=(typeof URLSearchParams!=='undefined'?(new URLSearchParams(window.location.search)).get('t')||'':'');
+// Append token to API call URLs so the server can verify access without relying
+// on Origin/Referer headers (which reflect the iframe's own api-server origin).
+function addToken(u){if(!TOKEN)return u;var sep=u.indexOf('?')>=0?'&':'?';return u+sep+'t='+encodeURIComponent(TOKEN);}
 var config=null, filters=null, programs=[], meta={}, currentPage=1;
 var formOpen=false, formProgram=null, formSubmitted=false, formLoading=false;
 var programDocs=null;
@@ -1948,7 +2231,7 @@ function $$(s,p){return (p||document).querySelectorAll(s)}
 function el(tag,cls,html){var e=document.createElement(tag);if(cls)e.className=cls;if(html)e.innerHTML=html;return e}
 
 function fetchJSON(url){
-  return fetch(url).then(function(r){
+  return fetch(addToken(url)).then(function(r){
     if(!r.ok)throw new Error(r.statusText);
     return r.json();
   });
@@ -2953,7 +3236,7 @@ function handleNextPersonal(scope){
     var utmMap={utm_source:'utmSource',utm_medium:'utmMedium',utm_campaign:'utmCampaign',utm_term:'utmTerm',utm_content:'utmContent'};
     Object.keys(utmMap).forEach(function(k){var v=params.get(k);if(v)leadPayload[utmMap[k]]=v});
   }catch(_){}
-  fetch(API+'/lead',{
+  fetch(addToken(API+'/lead'),{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(leadPayload)
@@ -3095,7 +3378,7 @@ function handleFormSubmit(e){
   }
   if(aiResult)data.aiExtractedData=aiResult;
   if(leadId)data.leadId=leadId;
-  fetch(API+'/apply',{
+  fetch(addToken(API+'/apply'),{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(data)

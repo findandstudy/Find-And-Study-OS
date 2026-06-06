@@ -15,6 +15,7 @@ export const embedWidgetsTable = pgTable("embed_widgets", {
   visibleFilters: jsonb("visible_filters").notNull().default([]),
   theme: jsonb("theme").notNull().default({}),
   allowedDomains: jsonb("allowed_domains").notNull().default([]),
+  embedApiKey: text("embed_api_key"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

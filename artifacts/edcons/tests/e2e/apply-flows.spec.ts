@@ -140,9 +140,14 @@ test.describe("apply flows e2e (smoke)", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────────
-  // (a) student-self-apply  — existing user re-applies via public endpoint
+  // (a) student-self-apply  — existing account blocks unauthenticated re-apply
   // ────────────────────────────────────────────────────────────────────────
-  test("(a) student-self-apply: existing email reuses account, creates application", async ({ request }) => {
+  // Security fix: public /apply must NOT mutate existing student accounts
+  // without authentication.  The first call creates the account and application
+  // (new-user path).  A second call with the same email is a potential hijack
+  // attempt and must return 409 ACCOUNT_CONFLICT so the student is directed
+  // to log in instead.
+  test("(a) student-self-apply: second apply for existing email returns 409", async ({ request }) => {
     const runId = newRunId();
     const email = e2eEmail(runId);
 
@@ -165,20 +170,24 @@ test.describe("apply flows e2e (smoke)", () => {
       universityName: program!.universityName,
     };
 
-    // First call: creates the account.
+    // First call: creates the account and first application (new-user path).
     const first = await request.post(`${BASE_URL}/api/public/apply`, {
       headers: { "Content-Type": "application/json" },
       data: payload,
     });
-    expect(first.status()).toBeLessThan(300);
+    expect(first.status(), `first apply failed: ${await first.text()}`).toBeLessThan(300);
 
-    // Second call: same email → existing user path → second application.
+    // Second call: same email → existing live student account → must be blocked.
+    // Unauthenticated callers cannot create applications on existing accounts.
     const second = await request.post(`${BASE_URL}/api/public/apply`, {
       headers: { "Content-Type": "application/json" },
       data: payload,
     });
-    expect(second.status(), `second apply failed: ${await second.text()}`).toBeLessThan(300);
+    expect(second.status(), `expected 409 ACCOUNT_CONFLICT, got ${second.status()}: ${await second.text()}`).toBe(409);
+    const secondBody = await second.json();
+    expect(secondBody.code, "expected ACCOUNT_CONFLICT error code").toBe("ACCOUNT_CONFLICT");
 
+    // Verify the first application was created successfully.
     await loginAs(request, STAFF_EMAIL, STAFF_PASS);
 
     const studentsRes = await request.get(`${BASE_URL}/api/students?search=${encodeURIComponent(email)}&limit=5`);
@@ -190,7 +199,7 @@ test.describe("apply flows e2e (smoke)", () => {
     const appsRes = await request.get(`${BASE_URL}/api/applications?studentId=${student.id}&limit=10`);
     const appsBody = await appsRes.json();
     const appsList: any[] = Array.isArray(appsBody) ? appsBody : appsBody.data || appsBody.items || appsBody.applications || [];
-    expect(appsList.length, "expected at least 2 applications for existing-user re-apply").toBeGreaterThanOrEqual(2);
+    expect(appsList.length, "expected exactly 1 application (second was blocked)").toBeGreaterThanOrEqual(1);
   });
 
   // ────────────────────────────────────────────────────────────────────────

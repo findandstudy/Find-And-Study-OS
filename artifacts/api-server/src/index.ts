@@ -795,6 +795,11 @@ async function seedClaudeIntegration() {
     } catch (err) {
       console.error("[migrate] catalog_options.metadata:", err);
     }
+    try {
+      await pool.query(`ALTER TABLE embed_widgets ADD COLUMN IF NOT EXISTS embed_api_key TEXT`);
+    } catch (err) {
+      console.error("[migrate] embed_widgets.embed_api_key:", err);
+    }
     await seedDocumentTypes(pool);
     await seedCurrencies(pool);
 
