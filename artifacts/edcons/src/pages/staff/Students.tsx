@@ -2040,10 +2040,13 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
           <Label className="text-xs">{t("studentsPage.assignedToLabel")}</Label>
           <Select value={filters.assignment} onValueChange={v => onChange({ ...filters, assignment: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-60">
               {canViewOthers && <SelectItem value="all">{t("studentsPage.all")}</SelectItem>}
               <SelectItem value="mine_unassigned">{t("studentsPage.meUnassigned")}</SelectItem>
               {canViewUnassigned && <SelectItem value="unassigned">{t("studentsPage.unassigned")}</SelectItem>}
+              {canViewOthers && staffUsers.filter((u: any) => u.id !== currentUserId).map((u: any) => (
+                <SelectItem key={u.id} value={String(u.id)}>{`${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -2203,6 +2206,7 @@ export default function StudentsPage() {
     if (filters.appSource === "staff" && s.agentId) return false;
     if (filters.assignment === "mine_unassigned" && !(s.assignedToId === user?.id || s.assignedToId == null)) return false;
     if (filters.assignment === "unassigned" && s.assignedToId != null) return false;
+    if (filters.assignment !== "all" && filters.assignment !== "mine_unassigned" && filters.assignment !== "unassigned" && !isNaN(Number(filters.assignment)) && s.assignedToId !== Number(filters.assignment)) return false;
     if (filters.nationality !== "all" && (s.nationality || "") !== filters.nationality) return false;
     if (filters.agent !== "all") {
       if (filters.agent === "none") { if (s.agentId) return false; }
