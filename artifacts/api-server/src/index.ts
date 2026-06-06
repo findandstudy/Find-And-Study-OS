@@ -789,6 +789,28 @@ async function seedClaudeIntegration() {
     console.error("[migrate] agent_staff/sub_agent emailVerified fix:", err);
   }
 
+  // Idempotent fix: revoke any admin_driven signing sessions that were mistakenly
+  // assigned to agent_staff or sub_agent users. These roles should never sign
+  // individual agency contracts — only the primary agent (role='agent') does.
+  try {
+    const revokeRes = await pool.query(`
+      UPDATE signing_sessions ss
+      SET status = 'revoked'
+      FROM agents a
+      JOIN users u ON u.id = a.user_id
+      WHERE ss.agent_id = a.id
+        AND ss.mode = 'admin_driven'
+        AND ss.status NOT IN ('signed', 'revoked')
+        AND u.role IN ('agent_staff', 'sub_agent')
+    `);
+    const revoked = revokeRes.rowCount || 0;
+    if (revoked > 0) {
+      console.log(`[migrate] Revoked ${revoked} admin_driven signing session(s) belonging to agent_staff/sub_agent users`);
+    }
+  } catch (err) {
+    console.error("[migrate] revoke agent_staff/sub_agent sessions:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

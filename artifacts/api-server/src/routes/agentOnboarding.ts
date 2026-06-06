@@ -681,6 +681,13 @@ const ADMIN_PENDING_STATUSES = ["review_pending", "intake_pending"];
  * (unsigned and not yet expired). Error-safe so it never breaks its callers.
  */
 async function syncAdminContracts(agent: typeof agentsTable.$inferSelect) {
+  // agent_staff and sub_agent users should never receive admin-driven contracts
+  if (agent.userId) {
+    const [linkedUser] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, agent.userId));
+    if (linkedUser && (linkedUser.role === "agent_staff" || linkedUser.role === "sub_agent")) {
+      return [];
+    }
+  }
   const rows = await db.select().from(signingSessionsTable).where(and(
     eq(signingSessionsTable.agentId, agent.id),
     eq(signingSessionsTable.isPrimaryOnboarding, false),

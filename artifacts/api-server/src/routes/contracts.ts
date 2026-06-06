@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
+import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable } from "@workspace/db";
 import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
@@ -152,6 +152,13 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
     const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, aId));
     if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
     if (!agent.email) { res.status(400).json({ error: "Agent has no email on file" }); return; }
+    if (agent.userId) {
+      const [linkedUser] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, agent.userId));
+      if (linkedUser && (linkedUser.role === "agent_staff" || linkedUser.role === "sub_agent")) {
+        res.status(400).json({ error: "Contracts cannot be sent to agent staff or sub-agent accounts" });
+        return;
+      }
+    }
     const lang = (requestedLang && typeof requestedLang === "string") ? requestedLang : (agent.preferredContractLanguage || "en");
     const entityType = agent.entityType === "individual" ? "individual" : "company";
     let tpl = null as Awaited<ReturnType<typeof pickTemplate>>;
