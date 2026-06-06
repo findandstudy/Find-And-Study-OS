@@ -1271,6 +1271,7 @@ export default function FinancePage() {
                       const params = new URLSearchParams({ season });
                       if (commSearch) params.set("search", commSearch);
                       if (commStatus !== "all") params.set("status", commStatus);
+                      if (currency && currency !== "all") params.set("currency", currency);
                       await downloadExcel(
                         `${BASE}/api/finance/export/commissions?${params}`,
                         `commissions_${season}_${new Date().toISOString().slice(0, 10)}.xlsx`
@@ -1605,6 +1606,7 @@ export default function FinancePage() {
                   setUniExporting(true);
                   try {
                     const params = new URLSearchParams({ season });
+                    if (currency && currency !== "all") params.set("currency", currency);
                     await downloadExcel(
                       `${BASE}/api/finance/export/university-breakdown?${params}`,
                       `university_breakdown_${season}_${new Date().toISOString().slice(0, 10)}.xlsx`
@@ -1790,6 +1792,7 @@ export default function FinancePage() {
                     setFeeExporting(true);
                     try {
                       const params = new URLSearchParams({ season });
+                      if (currency && currency !== "all") params.set("currency", currency);
                       await downloadExcel(
                         `${BASE}/api/finance/export/service-fees?${params}`,
                         `service_fees_${season}_${new Date().toISOString().slice(0, 10)}.xlsx`

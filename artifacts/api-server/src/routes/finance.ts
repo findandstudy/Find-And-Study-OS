@@ -1046,12 +1046,15 @@ function xlsxDate(v: any): string {
 }
 
 router.get("/finance/export/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const { status, season, search } = req.query as Record<string, string>;
+  const { status, season, search, currency } = req.query as Record<string, string>;
   const conditions: any[] = [sql`${commissionsTable.status} != 'excluded'`];
   if (status && status !== "all") conditions.push(eq(commissionsTable.status, status));
   if (season) conditions.push(eq(commissionsTable.season, season));
   if (search) {
     conditions.push(sql`(${commissionsTable.studentName} ilike ${"%" + search + "%"} OR ${commissionsTable.universityName} ilike ${"%" + search + "%"})`);
+  }
+  if (currency && currency !== "all" && /^[A-Za-z]{2,5}$/.test(currency)) {
+    conditions.push(eq(commissionsTable.currency, currency.toUpperCase()));
   }
 
   const rows = await db.select().from(commissionsTable).where(and(...conditions)).orderBy(desc(commissionsTable.createdAt));
@@ -1084,9 +1087,12 @@ router.get("/finance/export/commissions", requireAuth, requireRole(...FINANCE_RO
 });
 
 router.get("/finance/export/university-breakdown", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const { season } = req.query as Record<string, string>;
+  const { season, currency } = req.query as Record<string, string>;
   const conditions: any[] = [sql`${commissionsTable.status} != 'excluded'`];
   if (season) conditions.push(eq(commissionsTable.season, season));
+  if (currency && currency !== "all" && /^[A-Za-z]{2,5}$/.test(currency)) {
+    conditions.push(eq(commissionsTable.currency, currency.toUpperCase()));
+  }
 
   const allComm = await db.select().from(commissionsTable).where(and(...conditions));
 
@@ -1145,11 +1151,14 @@ router.get("/finance/export/university-breakdown", requireAuth, requireRole(...F
 });
 
 router.get("/finance/export/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const { season, status, financeStatus } = req.query as Record<string, string>;
+  const { season, status, financeStatus, currency } = req.query as Record<string, string>;
   const conditions: any[] = [sql`${serviceFeesTable.financeStatus} != 'excluded'`];
   if (season) conditions.push(eq(serviceFeesTable.season, season));
   if (status && status !== "all") conditions.push(eq(serviceFeesTable.status, status));
   if (financeStatus && financeStatus !== "all") conditions.push(eq(serviceFeesTable.financeStatus, financeStatus));
+  if (currency && currency !== "all" && /^[A-Za-z]{2,5}$/.test(currency)) {
+    conditions.push(eq(serviceFeesTable.currency, currency.toUpperCase()));
+  }
 
   const rows = await db.select().from(serviceFeesTable).where(and(...conditions)).orderBy(desc(serviceFeesTable.createdAt));
 
