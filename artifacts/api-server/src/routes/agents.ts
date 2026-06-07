@@ -1610,26 +1610,70 @@ router.post("/agents/:id/resend-credentials", requireAuth, async (req, res, next
   const id = parseInt(req.params.id, 10);
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-  if (!agent.userId) { res.status(400).json({ error: "Agent has no linked user account" }); return; }
-  const [user] = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, agent.userId));
-  if (!user?.email) { res.status(404).json({ error: "Agent user account not found" }); return; }
 
   const newPassword = generateAgentPassword();
   const newHash = await bcrypt.hash(newPassword, 10);
-  await db.update(usersTable)
-    .set({ passwordHash: newHash, passwordResetToken: null, passwordResetExpires: null })
-    .where(eq(usersTable.id, agent.userId));
+
+  let resolvedUserId: number;
+  let resolvedEmail: string;
+
+  if (!agent.userId) {
+    // Agent was created via bulk import and has no linked user account yet.
+    // Provision one now using the same pattern as manual agent creation:
+    // create or reuse an existing agent-role user, mark email verified + active,
+    // link it to the agent row, and send credentials by email.
+    const agentEmail = agent.email?.toLowerCase().trim();
+    if (!agentEmail) {
+      res.status(400).json({ error: "Agent has no email on file; cannot provision credentials" });
+      return;
+    }
+    const [existingUser] = await db.select().from(usersTable).where(ilike(usersTable.email, agentEmail));
+    let newUserId: number;
+    if (existingUser) {
+      if (!AGENT_ROLES.includes(existingUser.role)) {
+        res.status(409).json({ error: "An account with this email already exists and is not an agent account" });
+        return;
+      }
+      await db.update(usersTable)
+        .set({ email: agentEmail, emailVerified: true, isActive: true, passwordHash: newHash, passwordResetToken: null, passwordResetExpires: null })
+        .where(eq(usersTable.id, existingUser.id));
+      newUserId = existingUser.id;
+    } else {
+      const role = "agent";
+      const [created] = await db.insert(usersTable).values({
+        email: agentEmail,
+        firstName: agent.firstName,
+        lastName: agent.lastName || "",
+        role,
+        emailVerified: true,
+        isActive: true,
+        passwordHash: newHash,
+      }).returning({ id: usersTable.id });
+      newUserId = created.id;
+    }
+    await db.update(agentsTable).set({ userId: newUserId }).where(eq(agentsTable.id, agent.id));
+    resolvedUserId = newUserId;
+    resolvedEmail = agentEmail;
+  } else {
+    const [user] = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, agent.userId));
+    if (!user?.email) { res.status(404).json({ error: "Agent user account not found" }); return; }
+    await db.update(usersTable)
+      .set({ passwordHash: newHash, passwordResetToken: null, passwordResetExpires: null })
+      .where(eq(usersTable.id, agent.userId));
+    resolvedUserId = agent.userId;
+    resolvedEmail = user.email;
+  }
 
   let emailSent = false;
   try {
     const emailContent = await buildAgentCredentialsEmail({
       firstName: agent.firstName,
-      email: user.email,
+      email: resolvedEmail,
       password: newPassword,
       loginUrl: `${getAppBaseUrl()}/login`,
       hasContract: !!agent.assignedContractTemplateId,
     });
-    await sendEmail(user.email, emailContent);
+    await sendEmail(resolvedEmail, emailContent);
     emailSent = true;
   } catch (err) {
     console.error("[agents resend-credentials] failed to send email:", err);
@@ -1639,8 +1683,8 @@ router.post("/agents/:id/resend-credentials", requireAuth, async (req, res, next
     userId: req.user!.id,
     action: "agent.credentials_sent",
     resource: "user",
-    resourceId: agent.userId,
-    changes: { agentId: id, initial: false, resent: true, emailSent },
+    resourceId: resolvedUserId,
+    changes: { agentId: id, initial: !agent.userId, resent: !!agent.userId, emailSent },
     ipAddress: req.ip,
   });
 

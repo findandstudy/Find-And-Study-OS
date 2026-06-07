@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import express, { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, settingsTable, usersTable, emailVerificationCodesTable } from "@workspace/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
@@ -48,6 +48,12 @@ import { buildSignedContractEmail, buildSignVerificationCodeEmail, buildSignedCo
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 
 const router: IRouter = Router();
+
+// Public signing endpoints carry the signer's base64 PNG (up to 2 MB) plus a
+// JSON envelope. app.ts bypasses the global 1 MB parser for /api/public/sign/*;
+// these routes install their own 3 MB parser so Express reads the body before
+// the route handler runs.
+const signBodyParser = express.json({ limit: "3mb" });
 
 const SIGN_WINDOW_MS = 15 * 60 * 1000;
 const signLimiter = rateLimit({
@@ -353,7 +359,7 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
   }
 });
 
-router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<void> => {
+router.post("/public/sign/:token/sign", signBodyParser, signLimiter, async (req, res): Promise<void> => {
   try {
     const r = await resolveByToken(req.params.token);
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }

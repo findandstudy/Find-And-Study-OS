@@ -18,11 +18,12 @@ process.on("unhandledRejection", (reason) => {
   console.error("[fatal] Unhandled promise rejection:", reason);
 });
 
+// In production, log uncaught exceptions but do NOT exit. A single stray
+// exception from a background timer should not take down the entire server
+// and cause every in-flight request to receive an opaque edge-proxy 403.
+// Node.js will continue serving requests after the log.
 process.on("uncaughtException", (err) => {
-  console.error("[fatal] Uncaught exception:", err);
-  if (isProd) {
-    process.exit(1);
-  }
+  console.error("[fatal] Uncaught exception (continuing):", err);
 });
 
 function getSeedDir(): string {

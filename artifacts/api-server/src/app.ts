@@ -121,6 +121,10 @@ const LARGE_BODY_PATHS = [
   // long before the route's own 2 MB validation could run. The primary
   // onboarding sign route installs its own 3 MB parser.
   "/api/contracts/me/sign",
+  // Public token-based signing also sends a base64 PNG; the route installs its
+  // own 3 MB parser. Match the prefix so all /public/sign/:token/* sub-paths
+  // (verify-code, intake, sign) bypass the global 1 MB cap.
+  "/api/public/sign",
 ];
 // Stage-document uploads send the file as base64 inside a JSON body. A 1MB
 // file balloons to ~1.4MB after base64 + JSON envelope, so the global 1MB
