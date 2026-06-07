@@ -1,5 +1,5 @@
 import { db, signedContractsTable, contractTemplatesTable, agentsTable, usersTable } from "@workspace/db";
-import { and, eq, isNull, inArray, gt, lt, or, asc } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, inArray, gt, lt, or, asc } from "drizzle-orm";
 import { buildSignedContractEmail, buildSignedContractAdminEmail, sendEmail, getAppBaseUrl } from "./email";
 import { ensureSignedContractPdf } from "./signContract";
 
@@ -15,9 +15,15 @@ const DELIVERY_INTERVAL_MS = 30_000;
 // (emailed_at IS NULL) stay untouched, while freshly-signed rows are picked up
 // within one sweep.
 const RECENT_WINDOW_DAYS = 3;
-// Bound the work per sweep. With no Chromium renders each row is a handful of
-// DB queries + SMTP calls, so this is purely a backlog-throttle.
+// Bound the primary sweep per tick. Each claimed row now also renders one PDF
+// (serialized via withRenderLock inside ensureSignedContractPdf), so this also
+// caps concurrent render pressure on the instance.
 const BATCH_SIZE = 5;
+// Legacy-row PDF backfill batch. Deliberately smaller than BATCH_SIZE and run
+// AFTER the primary sweep so it never delays freshly-signed deliveries and
+// drains a large historical backlog gradually instead of overwhelming a
+// memory-constrained instance.
+const BACKFILL_BATCH_SIZE = 3;
 // A claimed-but-not-delivered row is considered abandoned (worker crashed/
 // restarted mid-delivery) after this long and becomes reclaimable. Comfortably
 // longer than the worst-case SMTP timeout.
@@ -230,6 +236,88 @@ export async function deliverPendingSignedContracts(): Promise<void> {
   }
 }
 
+/**
+ * Backfill for legacy signed contracts that were delivered (emailed_at IS NOT
+ * NULL) BEFORE PDF rendering moved into this worker, so they never got a
+ * pdf_object_key. For each such row we ONLY render + upload the PDF
+ * (ensureSignedContractPdf also hydrates agents.contractUrl). We never re-send
+ * any email and never touch emailed_at — these rows are already delivered.
+ *
+ * Runs at the tail of each sweep with a small batch so it never delays the
+ * primary (freshly-signed) flow and drains a large historical backlog
+ * gradually. The lease re-uses delivery_claimed_at: the primary sweep only ever
+ * considers emailed_at IS NULL rows, so the two candidate sets are disjoint and
+ * can never contend for the same row. No new column / migration is required.
+ */
+export async function backfillMissingSignedPdfs(): Promise<void> {
+  try {
+    const leaseExpiry = new Date(Date.now() - LEASE_TIMEOUT_MS);
+    const reclaimable = or(
+      isNull(signedContractsTable.deliveryClaimedAt),
+      lt(signedContractsTable.deliveryClaimedAt, leaseExpiry),
+    );
+    const candidates = await db.select({ id: signedContractsTable.id })
+      .from(signedContractsTable)
+      .where(and(
+        isNull(signedContractsTable.pdfObjectKey),
+        isNotNull(signedContractsTable.emailedAt),
+        reclaimable,
+      ))
+      .orderBy(asc(signedContractsTable.signedAt))
+      .limit(BACKFILL_BATCH_SIZE);
+
+    if (candidates.length === 0) return;
+
+    for (const row of candidates) {
+      // Atomically claim via delivery_claimed_at. Reusing this column is safe:
+      // emailed rows are never primary-sweep candidates, so there is no contention.
+      const claimed = await db.update(signedContractsTable)
+        .set({ deliveryClaimedAt: new Date() })
+        .where(and(
+          eq(signedContractsTable.id, row.id),
+          isNull(signedContractsTable.pdfObjectKey),
+          isNotNull(signedContractsTable.emailedAt),
+          or(isNull(signedContractsTable.deliveryClaimedAt), lt(signedContractsTable.deliveryClaimedAt, leaseExpiry)),
+        ))
+        .returning({ id: signedContractsTable.id });
+      if (claimed.length === 0) continue;
+
+      console.log(`[contract-pdf-backfill] start row=${row.id}`);
+      try {
+        // Render + upload only. ensureSignedContractPdf sets pdf_object_key
+        // (compare-and-set) which permanently drops the row from this backfill
+        // set; it does NOT email and does NOT touch emailed_at.
+        await ensureSignedContractPdf(row.id);
+        oomStreak = 0;
+        console.log(`[contract-pdf-backfill] done row=${row.id}`);
+      } catch (pdfErr) {
+        const msg = String((pdfErr as any)?.message || pdfErr || "");
+        if (OOM_PATTERN.test(msg)) {
+          oomStreak++;
+          console.warn(`[contract-pdf-backfill] OOM detected row=${row.id}, releasing lease for retry`);
+          if (oomStreak >= 5) {
+            console.error("[contract-pdf] CRITICAL: 5 consecutive OOMs, manual intervention needed");
+          }
+        } else {
+          console.error(`[contract-pdf-backfill] render failed row=${row.id}, releasing lease for retry:`, pdfErr);
+        }
+        // Release the lease so the row is retried on a later sweep. emailed_at is
+        // already set and must stay set, so the release guards only on the PDF
+        // still being missing.
+        try {
+          await db.update(signedContractsTable)
+            .set({ deliveryClaimedAt: null })
+            .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.pdfObjectKey)));
+        } catch (resetErr) {
+          console.error(`[contract-pdf-backfill] failed to release lease for row=${row.id}:`, resetErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[contract-pdf-backfill] sweep error:", err);
+  }
+}
+
 let deliveryInterval: ReturnType<typeof setInterval> | null = null;
 // Re-entrancy guard: a sweep can outlast the interval in pathological cases
 // (many SMTP calls), so never let two sweeps run concurrently on the same
@@ -240,7 +328,11 @@ async function runSweep(): Promise<void> {
   if (sweeping) return;
   sweeping = true;
   try {
+    // Primary flow first (freshly-signed deliveries), then drain a small batch
+    // of legacy rows that predate worker-side rendering. Both have their own
+    // internal try/catch and never throw, so one can't starve the other.
     await deliverPendingSignedContracts();
+    await backfillMissingSignedPdfs();
   } finally {
     sweeping = false;
   }
