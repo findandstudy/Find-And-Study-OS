@@ -99,6 +99,8 @@ export default function SignFlow({ token }: { token: string }) {
   const [sendingCode, setSendingCode] = useState(false);
   const [verifyingCode, setVerifyingCode] = useState(false);
   const [codeError, setCodeError] = useState("");
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [pdfMsg, setPdfMsg] = useState<string | null>(null);
 
   // Sign flow language is driven by the contract template's language so the
   // signing experience matches the language the issuer picked when sending
@@ -109,6 +111,45 @@ export default function SignFlow({ token }: { token: string }) {
   }, [session?.template?.language]);
   const t: Tfn = (key, params) => getTranslation(lang, `sign.${key}`, params);
   const isRTL = RTL_LANGUAGES.includes(lang);
+
+  // Signed PDF is rendered asynchronously by a background worker. The download
+  // endpoint returns 202 while it is still being generated, so we fetch it from
+  // JS to surface a friendly "still generating" message instead of dumping the
+  // raw 202 JSON into a new browser tab.
+  async function handleDownloadPdf() {
+    setPdfMsg(null);
+    setDownloadingPdf(true);
+    try {
+      const res = await fetch(
+        `${BASE_URL}/api/public/sign/${encodeURIComponent(token)}/pdf`,
+        { credentials: "include" },
+      );
+      if (res.status === 202) {
+        setPdfMsg(getTranslation(lang, "signedContract.pdfPending"));
+        return;
+      }
+      if (!res.ok) {
+        setPdfMsg(getTranslation(lang, "signedContract.pdfDownloadError"));
+        return;
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+      const filename = m ? decodeURIComponent(m[1]) : "contract.pdf";
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setPdfMsg(getTranslation(lang, "signedContract.pdfDownloadError"));
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   useEffect(() => {
     if (!session) return;
@@ -280,22 +321,28 @@ export default function SignFlow({ token }: { token: string }) {
     </CenterShell>;
   }
   if (step === "success") {
-    const pdfUrl = `${BASE_URL}/api/public/sign/${encodeURIComponent(token)}/pdf`;
     return <CenterShell brand={brand}>
       <CheckCircle2 className="w-14 h-14 text-emerald-500 mb-4" />
       <h1 className="text-2xl font-semibold mb-2">{t("signed")}</h1>
       <p className="text-muted-foreground text-sm text-center max-w-md mb-6">{t("signedBody")}</p>
       <div className="flex flex-col sm:flex-row gap-2 w-full">
-        <Button asChild className="flex-1 bg-[#143591] hover:bg-[#0f2870] text-white">
-          <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download>
-            <FileSignature className="w-4 h-4 mr-2" />
-            {t("downloadPdf")}
-          </a>
+        <Button
+          onClick={handleDownloadPdf}
+          disabled={downloadingPdf}
+          className="flex-1 bg-[#143591] hover:bg-[#0f2870] text-white"
+        >
+          {downloadingPdf
+            ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            : <FileSignature className="w-4 h-4 mr-2" />}
+          {t("downloadPdf")}
         </Button>
         <Button asChild variant="outline" className="flex-1">
           <a href={`${BASE_URL}/login`}>{t("openPortal")}</a>
         </Button>
       </div>
+      {pdfMsg && (
+        <p className="text-sm text-muted-foreground text-center mt-3">{pdfMsg}</p>
+      )}
     </CenterShell>;
   }
 

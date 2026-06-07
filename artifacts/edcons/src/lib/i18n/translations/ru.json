@@ -4117,5 +4117,9 @@
     "reqNumber": "Одна цифра",
     "saving": "Сохранение...",
     "submitButton": "Задать пароль"
+  },
+  "signedContract": {
+    "pdfPending": "PDF создается. Пожалуйста, попробуйте снова примерно через 30 секунд.",
+    "pdfDownloadError": "Не удалось скачать PDF."
   }
 }

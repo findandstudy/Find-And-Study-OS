@@ -4117,5 +4117,9 @@
     "reqNumber": "One number",
     "saving": "Saving...",
     "submitButton": "Set Password"
+  },
+  "signedContract": {
+    "pdfPending": "PDF is still being generated. Please try again in about 30 seconds.",
+    "pdfDownloadError": "Failed to download PDF."
   }
 }

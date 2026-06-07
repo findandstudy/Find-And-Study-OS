@@ -4117,5 +4117,9 @@
     "agentSearchPlaceholder": "Acenteleri ada veya e-postaya göre ara…",
     "noAgents": "Acente bulunamadı",
     "selectedAgents": "{count} acente seçildi"
+  },
+  "signedContract": {
+    "pdfPending": "PDF hazırlanıyor. Yaklaşık 30 saniye sonra tekrar deneyin.",
+    "pdfDownloadError": "PDF indirilemedi."
   }
 }

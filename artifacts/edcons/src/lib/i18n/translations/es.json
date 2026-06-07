@@ -4117,5 +4117,9 @@
     "reqNumber": "Un número",
     "saving": "Guardando...",
     "submitButton": "Establecer contraseña"
+  },
+  "signedContract": {
+    "pdfPending": "El PDF se está generando. Por favor, inténtelo de nuevo en unos 30 segundos.",
+    "pdfDownloadError": "No se pudo descargar el PDF."
   }
 }

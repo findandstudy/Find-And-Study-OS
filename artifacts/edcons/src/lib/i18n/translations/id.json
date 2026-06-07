@@ -4117,5 +4117,9 @@
     "reqNumber": "Satu angka",
     "saving": "Menyimpan...",
     "submitButton": "Tetapkan Kata Sandi"
+  },
+  "signedContract": {
+    "pdfPending": "PDF sedang dibuat. Silakan coba lagi sekitar 30 detik.",
+    "pdfDownloadError": "Gagal mengunduh PDF."
   }
 }

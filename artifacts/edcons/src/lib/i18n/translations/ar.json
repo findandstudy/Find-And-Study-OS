@@ -4117,5 +4117,9 @@
     "reqNumber": "رقم واحد",
     "saving": "جارٍ الحفظ...",
     "submitButton": "تعيين كلمة المرور"
+  },
+  "signedContract": {
+    "pdfPending": "يتم إنشاء ملف PDF. يرجى المحاولة مرة أخرى بعد حوالي 30 ثانية.",
+    "pdfDownloadError": "فشل تنزيل ملف PDF."
   }
 }

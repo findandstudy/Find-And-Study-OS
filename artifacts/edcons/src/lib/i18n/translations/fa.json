@@ -4117,5 +4117,9 @@
     "reqNumber": "یک عدد",
     "saving": "در حال ذخیره...",
     "submitButton": "تنظیم گذرواژه"
+  },
+  "signedContract": {
+    "pdfPending": "PDF در حال آماده‌سازی است. لطفاً حدود ۳۰ ثانیه دیگر دوباره امتحان کنید.",
+    "pdfDownloadError": "دانلود PDF ناموفق بود."
   }
 }

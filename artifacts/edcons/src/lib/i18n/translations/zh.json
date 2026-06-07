@@ -4117,5 +4117,9 @@
     "reqNumber": "一个数字",
     "saving": "保存中...",
     "submitButton": "设置密码"
+  },
+  "signedContract": {
+    "pdfPending": "PDF 正在生成中。请在约 30 秒后重试。",
+    "pdfDownloadError": "PDF 下载失败。"
   }
 }

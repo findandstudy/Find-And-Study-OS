@@ -4117,5 +4117,9 @@
     "reqNumber": "Un chiffre",
     "saving": "Enregistrement...",
     "submitButton": "Définir le mot de passe"
+  },
+  "signedContract": {
+    "pdfPending": "Le PDF est en cours de génération. Veuillez réessayer dans environ 30 secondes.",
+    "pdfDownloadError": "Échec du téléchargement du PDF."
   }
 }

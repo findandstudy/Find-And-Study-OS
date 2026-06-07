@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { Send, Loader2, FileSignature, RotateCw, Ban, Download, Trash2 } from "lucide-react";
 
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
 type Session = {
   id: number; templateId: number; agentId: number | null; mode: string; status: string;
   signerEmail: string; signerName: string | null; expiresAt: string;
@@ -37,6 +39,43 @@ export default function ContractsPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"sessions" | "signed">("sessions");
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+  // The signed PDF is produced asynchronously by a background worker. The
+  // endpoint returns 202 while it is still being generated, so we fetch it from
+  // JS and surface a friendly toast instead of opening the raw 202 JSON.
+  async function downloadSignedPdf(id: number) {
+    setDownloadingId(id);
+    try {
+      const res = await fetch(`${BASE_URL}/api/contracts/signed/${id}/pdf`, {
+        credentials: "include",
+      });
+      if (res.status === 202) {
+        toast({ title: t("signedContract.pdfPending") });
+        return;
+      }
+      if (!res.ok) {
+        toast({ title: t("signedContract.pdfDownloadError"), variant: "destructive" });
+        return;
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+      const filename = m ? decodeURIComponent(m[1]) : `contract-${id}.pdf`;
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err: any) {
+      toast({ title: t("signedContract.pdfDownloadError"), description: err?.message, variant: "destructive" });
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [agentId, setAgentId] = useState<string>("");
@@ -287,9 +326,16 @@ export default function ContractsPage() {
                   <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(c.signedAt).toLocaleString()}</td>
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{c.evidenceHash ? c.evidenceHash.slice(0, 16) + "…" : "—"}</td>
                   <td className="px-4 py-3 text-right">
-                    <a href={`/api/contracts/signed/${c.id}/pdf`} target="_blank" rel="noreferrer">
-                      <Button size="sm" variant="ghost"><Download className="w-4 h-4" /></Button>
-                    </a>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={downloadingId === c.id}
+                      onClick={() => downloadSignedPdf(c.id)}
+                    >
+                      {downloadingId === c.id
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <Download className="w-4 h-4" />}
+                    </Button>
                   </td>
                 </tr>
               ))}
