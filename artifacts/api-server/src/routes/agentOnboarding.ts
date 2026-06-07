@@ -8,7 +8,7 @@ import { MANAGER_ROLES } from "../lib/roles";
 import { writeAudit } from "../lib/auditLog";
 import { sendEmail, buildContractSignRequestEmail, buildAgentOnboardingEmail, getAppBaseUrl } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
-import { finalizeSign } from "../lib/signContract";
+import { finalizeSign, loadNewestSignedContractForAgent } from "../lib/signContract";
 import { agentIntakeDefaults } from "../lib/contractRenderer";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
@@ -458,6 +458,24 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
   let session = await loadOnboardingSession(agent.id);
   if (!session) { res.json({ data: null }); return; }
   session = await lazyExpire(session);
+
+  // Read-time resolution: if the agent has re-signed via a resend, the newest
+  // signed_contract lives on a LATER session (often isPrimaryOnboarding=false)
+  // that loadOnboardingSession does not return. When the primary onboarding
+  // session is already signed and a strictly-newer signed session exists, surface
+  // that newer session here so the dashboard reflects the agent's current
+  // (correct) contract instead of the superseded primary one.
+  const newest = await loadNewestSignedContractForAgent(agent.id);
+  if (
+    session.status === "signed" &&
+    newest &&
+    newest.session.id !== session.id &&
+    newest.signed.signedAt && session.signedAt &&
+    new Date(newest.signed.signedAt) > new Date(session.signedAt)
+  ) {
+    session = newest.session;
+  }
+
   const [template] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, session.templateId));
   let signedContract: typeof signedContractsTable.$inferSelect | null = null;
   if (session.status === "signed") {
@@ -583,14 +601,15 @@ router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response)
   try {
     const agent = await loadAgentForUser(req.user!.id, req.user!.role);
     if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
-    const session = await loadOnboardingSession(agent.id);
-    if (!session || session.status !== "signed") {
+    // Stream the agent's NEWEST signed contract (across all sessions), not just
+    // the primary onboarding session's — a resend re-sign produces a newer
+    // signed_contract on a later session, and that is the authoritative one.
+    const newest = await loadNewestSignedContractForAgent(agent.id);
+    if (!newest) {
       res.status(404).json({ error: "Signed contract not available" });
       return;
     }
-    const [signed] = await db.select().from(signedContractsTable)
-      .where(eq(signedContractsTable.signingSessionId, session.id));
-    if (!signed) { res.status(404).json({ error: "Signed contract record not found" }); return; }
+    const signed = newest.signed;
     if (signed.agentId !== agent.id) { res.status(403).json({ error: "Forbidden" }); return; }
     const pdfKey = signed.pdfObjectKey;
     if (!pdfKey) {

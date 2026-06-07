@@ -19,6 +19,7 @@ import {
   type AgentCatalog,
 } from "../lib/exportImportExcel";
 import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
+import { getNewestSignedContractUrl } from "../lib/signContract";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
@@ -389,7 +390,20 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  res.json({ ...agent, assignedStaff, assignedStaffList, parentAgent });
+  // Resolve contractUrl at read time to the agent's NEWEST signed contract. The
+  // stored agents.contractUrl is hydrated lazily on first PDF render and could be
+  // locked to an earlier (possibly broken) contract when the agent later
+  // re-signed via a resend. Falling back to the stored value preserves manually
+  // set URLs and agents whose newest contract PDF has not rendered yet.
+  let contractUrl = agent.contractUrl;
+  try {
+    const resolved = await getNewestSignedContractUrl(agent.id);
+    if (resolved) contractUrl = resolved;
+  } catch (err) {
+    console.error(`[agents/me] failed to resolve newest contract url for agent ${agent.id}:`, err);
+  }
+
+  res.json({ ...agent, contractUrl, assignedStaff, assignedStaffList, parentAgent });
 });
 
 router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {

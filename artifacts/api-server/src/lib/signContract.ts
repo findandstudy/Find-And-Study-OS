@@ -8,11 +8,37 @@ import { getAppBaseUrl } from "./email";
 
 // Convert the canonical /objects/<entityId> key returned by uploadBuffer into a
 // browser-openable URL served by GET /api/storage/objects/*path (requireAuth).
-function objectKeyToStorageUrl(pdfObjectKey: string): string {
+export function objectKeyToStorageUrl(pdfObjectKey: string): string {
   let p = pdfObjectKey;
   if (p.startsWith("/objects/")) p = p.slice("/objects/".length);
   else if (p.startsWith("objects/")) p = p.slice("objects/".length);
   return `${getAppBaseUrl()}/api/storage/objects/${p}`;
+}
+
+// Read-time resolution of an agent's *current* signed contract. An agent can
+// accumulate multiple signed_contracts over time: an admin "resend" creates a
+// brand-new signing session (often isPrimaryOnboarding=false) plus a new
+// signed_contract. The agent's authoritative contract is always the most
+// recently signed one. Endpoints resolve this at read time so that neither a
+// stale agents.contractUrl (locked to an earlier contract) nor a
+// primary-onboarding-only session lookup can surface a superseded/broken PDF.
+export async function loadNewestSignedContractForAgent(agentId: number) {
+  const [row] = await db
+    .select({ signed: signedContractsTable, session: signingSessionsTable })
+    .from(signedContractsTable)
+    .innerJoin(signingSessionsTable, eq(signedContractsTable.signingSessionId, signingSessionsTable.id))
+    .where(eq(signedContractsTable.agentId, agentId))
+    .orderBy(desc(signedContractsTable.signedAt), desc(signedContractsTable.id))
+    .limit(1);
+  return row ?? null;
+}
+
+// Browser-openable URL of the agent's newest signed contract PDF, or null when
+// the agent has no signed contract yet or its PDF has not been rendered.
+export async function getNewestSignedContractUrl(agentId: number): Promise<string | null> {
+  const row = await loadNewestSignedContractForAgent(agentId);
+  if (!row?.signed.pdfObjectKey) return null;
+  return objectKeyToStorageUrl(row.signed.pdfObjectKey);
 }
 
 const objectStorage = new ObjectStorageService();

@@ -59,7 +59,28 @@ still needs a one-off `UPDATE agents SET contract_url = <newest pdf url>`.
 single session id. A "missing #N" record is usually on the newer session — query
 `signed_contracts ORDER BY id DESC` across ALL sessions before concluding data
 loss. A 200 + "Contract.Signed #N" activity with "no row" almost always means you
-looked at the wrong session.
+looked at the wrong session. The resend session is typically
+`isPrimaryOnboarding=false`.
+
+## Read-time resolution is required (the write-time fix alone is not enough)
+
+The lazy `contract_url` write-time fix only self-corrects on the NEXT render of the
+newest contract — but renders are idempotent, so an already-rendered newest
+contract never re-runs, leaving the agent stuck on the old URL. And the
+agent-facing endpoints had their OWN staleness:
+- `GET /api/agents/me` returned the stored `agents.contract_url` verbatim.
+- `GET /api/contracts/me` selected only the PRIMARY onboarding session
+  (`loadOnboardingSession` = newest where `isPrimaryOnboarding=true`), so a resend
+  session was invisible.
+- `GET /api/contracts/me/pdf` streamed the primary session's PDF.
+
+**Fix:** a single read-time resolver in `signContract.ts`
+(`loadNewestSignedContractForAgent` / `getNewestSignedContractUrl`, ordered by
+`signed_at DESC, id DESC`) used by all three endpoints. `/agents/me` overrides
+`contractUrl` (falling back to the stored value so manual URLs and not-yet-rendered
+PDFs survive); `/contracts/me` surfaces a strictly-newer signed session when the
+primary is already signed; `/contracts/me/pdf` streams the newest. This fixes the
+LIVE read path without any prod DB write — the prod data row can stay as-is.
 
 **Note:** the unsigned-preview render paths (publicSigning preview,
 agentOnboarding preview) intentionally leave `signature`/`main_agency_signature`
