@@ -49,11 +49,13 @@ import { PgRateLimitStore } from "../lib/pgRateLimiter";
 
 const router: IRouter = Router();
 
-// Public signing endpoints carry the signer's base64 PNG (up to 2 MB) plus a
-// JSON envelope. app.ts bypasses the global 1 MB parser for /api/public/sign/*;
-// these routes install their own 3 MB parser so Express reads the body before
-// the route handler runs.
-const signBodyParser = express.json({ limit: "3mb" });
+// app.ts bypasses the global 1 MB JSON parser for all /api/public/sign/* paths.
+// Apply a 3 MB parser here at the router level so every sub-route under
+// /public/sign/:token/* (send-code, verify-code, intake, sign) has access to
+// req.body.  The sign step carries a base64 PNG that can approach 2 MB; the
+// other steps carry small JSON but must also be covered since the global parser
+// is now bypassed for the whole prefix.
+router.use("/public/sign", express.json({ limit: "3mb" }));
 
 const SIGN_WINDOW_MS = 15 * 60 * 1000;
 const signLimiter = rateLimit({
@@ -359,7 +361,7 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
   }
 });
 
-router.post("/public/sign/:token/sign", signBodyParser, signLimiter, async (req, res): Promise<void> => {
+router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<void> => {
   try {
     const r = await resolveByToken(req.params.token);
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
