@@ -4,6 +4,16 @@ import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOL
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
 import { writeAudit } from "./auditLog";
+import { getAppBaseUrl } from "./email";
+
+// Convert the canonical /objects/<entityId> key returned by uploadBuffer into a
+// browser-openable URL served by GET /api/storage/objects/*path (requireAuth).
+function objectKeyToStorageUrl(pdfObjectKey: string): string {
+  let p = pdfObjectKey;
+  if (p.startsWith("/objects/")) p = p.slice("/objects/".length);
+  else if (p.startsWith("objects/")) p = p.slice("objects/".length);
+  return `${getAppBaseUrl()}/api/storage/objects/${p}`;
+}
 
 const objectStorage = new ObjectStorageService();
 
@@ -251,13 +261,42 @@ export async function ensureSignedContractPdf(
       .set({ pdfObjectKey, evidenceHash: built.evidenceHash })
       .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.pdfObjectKey)))
       .returning({ id: signedContractsTable.id });
+
+    let finalPdfObjectKey = pdfObjectKey;
+    let finalEvidenceHash = built.evidenceHash;
+
     if (updated.length === 0) {
       const [fresh] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, row.id));
       if (fresh?.pdfObjectKey && fresh.evidenceHash) {
         console.warn(`[ensureSignedContractPdf] race for signed_contract ${row.id}; discarding duplicate object ${pdfObjectKey}`);
-        return { pdfObjectKey: fresh.pdfObjectKey, evidenceHash: fresh.evidenceHash };
+        finalPdfObjectKey = fresh.pdfObjectKey;
+        finalEvidenceHash = fresh.evidenceHash;
       }
     }
-    return { pdfObjectKey, evidenceHash: built.evidenceHash };
+
+    // Lazy contractUrl hydration: set agents.contractUrl on the first successful
+    // PDF render so the agent's Account "Contract" tile and the staff Agents page
+    // contract link work as soon as someone first downloads the PDF. The delivery
+    // worker sets contractStartDate/contractEndDate without the PDF; this fills
+    // in contractUrl. The WHERE isNull guard makes this a no-op if another
+    // request or the delivery worker already set it.
+    if (row.agentId) {
+      try {
+        const storageUrl = objectKeyToStorageUrl(finalPdfObjectKey);
+        const startDate = row.signedAt ? new Date(row.signedAt) : new Date();
+        const endDate = new Date(startDate);
+        endDate.setFullYear(endDate.getFullYear() + 1);
+        await db.update(agentsTable)
+          .set({ contractUrl: storageUrl, contractStartDate: startDate, contractEndDate: endDate })
+          .where(and(eq(agentsTable.id, row.agentId), isNull(agentsTable.contractUrl)));
+      } catch (agentErr) {
+        // Non-fatal: contractUrl is cosmetic. Log and continue — the PDF is
+        // already stored and will be downloadable; the tile link just won't
+        // appear until the next successful render (or a manual admin update).
+        console.error(`[ensureSignedContractPdf] failed to set contractUrl for agent ${row.agentId}:`, agentErr);
+      }
+    }
+
+    return { pdfObjectKey: finalPdfObjectKey, evidenceHash: finalEvidenceHash };
   });
 }

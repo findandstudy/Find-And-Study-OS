@@ -677,6 +677,8 @@ const SIGNED_EMAIL_STRINGS: Record<SignedEmailLang, {
   download: string;
   portal: string;
   portalIntro: string;
+  portalOnlyIntro: (n: string) => string;
+  portalOnlyButton: string;
   footer: string;
   shellSubtitle: string;
 }> = {
@@ -687,6 +689,8 @@ const SIGNED_EMAIL_STRINGS: Record<SignedEmailLang, {
     download: "Download signed PDF",
     portal: "Open the portal",
     portalIntro: "You can also access your contracts and applications from the agent portal:",
+    portalOnlyIntro: n => `Your signed copy of <strong>${n}</strong> is ready. Log in to the agent portal to view and download it.`,
+    portalOnlyButton: "Log in to view your contract",
     footer: "Keep this email for your records.",
     shellSubtitle: "Signed contract",
   },
@@ -697,6 +701,8 @@ const SIGNED_EMAIL_STRINGS: Record<SignedEmailLang, {
     download: "İmzalı PDF'i indir",
     portal: "Portala giriş yap",
     portalIntro: "Sözleşmelerinize ve başvurularınıza acente portalından da ulaşabilirsiniz:",
+    portalOnlyIntro: n => `<strong>${n}</strong> sözleşmesinin imzalı kopyası hazırlandı. Görüntülemek ve indirmek için portala giriş yapın.`,
+    portalOnlyButton: "Sözleşmenizi görüntülemek için giriş yapın",
     footer: "Bu e-postayı kayıtlarınız için saklayın.",
     shellSubtitle: "İmzalı sözleşme",
   },
@@ -707,6 +713,8 @@ const SIGNED_EMAIL_STRINGS: Record<SignedEmailLang, {
     download: "تنزيل ملف PDF الموقّع",
     portal: "افتح البوابة",
     portalIntro: "يمكنك أيضاً الوصول إلى عقودك وطلباتك من بوابة الوكيل:",
+    portalOnlyIntro: n => `نسختك الموقّعة من <strong>${n}</strong> جاهزة. سجّل الدخول إلى بوابة الوكيل لعرضها وتنزيلها.`,
+    portalOnlyButton: "تسجيل الدخول لعرض العقد",
     footer: "احتفظ بهذا البريد الإلكتروني لسجلاتك.",
     shellSubtitle: "عقد موقّع",
   },
@@ -717,6 +725,8 @@ const SIGNED_EMAIL_STRINGS: Record<SignedEmailLang, {
     download: "Télécharger le PDF signé",
     portal: "Ouvrir le portail",
     portalIntro: "Vous pouvez aussi consulter vos contrats et candidatures depuis le portail agent :",
+    portalOnlyIntro: n => `Votre copie signée de <strong>${n}</strong> est prête. Connectez-vous au portail agent pour la consulter et la télécharger.`,
+    portalOnlyButton: "Se connecter pour voir le contrat",
     footer: "Conservez cet e-mail pour vos archives.",
     shellSubtitle: "Contrat signé",
   },
@@ -727,6 +737,8 @@ const SIGNED_EMAIL_STRINGS: Record<SignedEmailLang, {
     download: "Скачать подписанный PDF",
     portal: "Открыть портал",
     portalIntro: "Вы также можете просматривать договоры и заявки в портале агента:",
+    portalOnlyIntro: n => `Ваша подписанная копия <strong>${n}</strong> готова. Войдите в портал агента, чтобы просмотреть и скачать её.`,
+    portalOnlyButton: "Войти и просмотреть договор",
     footer: "Сохраните это письмо для своих записей.",
     shellSubtitle: "Подписанный договор",
   },
@@ -735,7 +747,10 @@ const SIGNED_EMAIL_STRINGS: Record<SignedEmailLang, {
 export async function buildSignedContractEmail(params: {
   signerName?: string | null;
   templateName: string;
-  pdfDownloadUrl: string;
+  /** Direct PDF download URL. When absent (delivery worker path), the email
+   * shows a portal login link instead — the PDF is rendered lazily on first
+   * download and is not available at delivery time. */
+  pdfDownloadUrl?: string;
   portalUrl?: string;
   language?: string;
 }): Promise<{ subject: string; html: string; text: string }> {
@@ -745,17 +760,35 @@ export async function buildSignedContractEmail(params: {
     : "en";
   const s = SIGNED_EMAIL_STRINGS[lang];
   const subject = s.subject(params.templateName);
-  const portalLink = params.portalUrl
-    ? `<p style="margin:24px 0 8px;color:#374151;font-size:14px;line-height:1.6;">${s.portalIntro}</p>${emailButton(s.portal, params.portalUrl, brand.primaryColor)}`
-    : "";
-  const bodyHtml = `
+
+  let bodyHtml: string;
+  let text: string;
+
+  if (params.pdfDownloadUrl) {
+    // Legacy/direct path: PDF already rendered, show download button + optional portal.
+    const portalLink = params.portalUrl
+      ? `<p style="margin:24px 0 8px;color:#374151;font-size:14px;line-height:1.6;">${s.portalIntro}</p>${emailButton(s.portal, params.portalUrl, brand.primaryColor)}`
+      : "";
+    bodyHtml = `
     <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${subject}</h2>
     <p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.6;">${s.greeting(params.signerName)}</p>
     <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">${s.body(params.templateName)}</p>
     ${emailButton(s.download, params.pdfDownloadUrl, brand.primaryColor)}
     ${portalLink}
     <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">${s.footer}</p>`;
-  const text = `${s.greeting(params.signerName)}\n\n${s.download}: ${params.pdfDownloadUrl}${params.portalUrl ? `\n${s.portal}: ${params.portalUrl}` : ""}`;
+    text = `${s.greeting(params.signerName)}\n\n${s.download}: ${params.pdfDownloadUrl}${params.portalUrl ? `\n${s.portal}: ${params.portalUrl}` : ""}`;
+  } else {
+    // Link-only path (delivery worker): PDF not yet rendered — direct to portal.
+    const portalTarget = params.portalUrl || (getAppBaseUrl() + "/login");
+    bodyHtml = `
+    <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${subject}</h2>
+    <p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.6;">${s.greeting(params.signerName)}</p>
+    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">${s.portalOnlyIntro(params.templateName)}</p>
+    ${emailButton(s.portalOnlyButton, portalTarget, brand.primaryColor)}
+    <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">${s.footer}</p>`;
+    text = `${s.greeting(params.signerName)}\n\n${s.portalOnlyIntro(params.templateName).replace(/<[^>]+>/g, "")}\n\n${portalTarget}`;
+  }
+
   return { subject, html: emailShell(brand, s.shellSubtitle, bodyHtml), text };
 }
 
@@ -836,13 +869,24 @@ export async function buildSignedContractAdminEmail(params: {
   signerName?: string | null;
   signerEmail: string;
   templateName: string;
-  pdfDownloadUrl: string;
+  /** Optional direct PDF download URL. When absent (delivery worker path), the
+   * email links to the admin signed-contracts panel instead — the PDF is
+   * rendered lazily on first download and is not available at delivery time. */
+  pdfDownloadUrl?: string;
+  /** Link to the admin signed-contracts panel. Used when pdfDownloadUrl is
+   * absent so admins can navigate directly to review the record. */
+  adminContractUrl?: string;
 }): Promise<{ subject: string; html: string; text: string }> {
   const brand = await getEmailBranding();
   const subject = `Signed contract — ${params.templateName}`;
   const who = params.signerName
     ? `${escapeNotifText(params.signerName)} (${escapeNotifText(params.signerEmail)})`
     : escapeNotifText(params.signerEmail);
+  const pdfNote = params.pdfDownloadUrl
+    ? `<p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6;">The signed PDF is attached to this email.</p>
+    ${emailButton("Download signed PDF", params.pdfDownloadUrl, brand.primaryColor)}`
+    : `<p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6;">The signed PDF will be available in the admin panel once rendered (on first download by the agent).</p>
+    ${params.adminContractUrl ? emailButton("View signed contracts", params.adminContractUrl, brand.primaryColor) : ""}`;
   const bodyHtml = `
     <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">${subject}</h2>
     <p style="margin:0 0 12px;color:#374151;font-size:15px;line-height:1.6;">A contract has been signed.</p>
@@ -850,9 +894,9 @@ export async function buildSignedContractAdminEmail(params: {
       <tr><td style="padding:6px 0;color:#6b7280;width:120px;">Contract</td><td style="padding:6px 0;font-weight:600;">${escapeNotifText(params.templateName)}</td></tr>
       <tr><td style="padding:6px 0;color:#6b7280;">Signed by</td><td style="padding:6px 0;font-weight:600;">${who}</td></tr>
     </table>
-    <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6;">The signed PDF is attached to this email.</p>
-    ${emailButton("Download signed PDF", params.pdfDownloadUrl, brand.primaryColor)}`;
-  const text = `${subject}\n\nSigned by: ${params.signerName ? `${params.signerName} (${params.signerEmail})` : params.signerEmail}\nDownload: ${params.pdfDownloadUrl}`;
+    ${pdfNote}`;
+  const viewUrl = params.pdfDownloadUrl || params.adminContractUrl || "";
+  const text = `${subject}\n\nSigned by: ${params.signerName ? `${params.signerName} (${params.signerEmail})` : params.signerEmail}${viewUrl ? `\nView: ${viewUrl}` : ""}`;
   return { subject, html: emailShell(brand, "Signed contract", bodyHtml), text };
 }
 

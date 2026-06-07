@@ -1,6 +1,5 @@
-import { db, signedContractsTable, signingSessionsTable, contractTemplatesTable, agentsTable, usersTable } from "@workspace/db";
+import { db, signedContractsTable, contractTemplatesTable, agentsTable, usersTable } from "@workspace/db";
 import { and, eq, isNull, inArray, gt, lt, or, asc } from "drizzle-orm";
-import { ensureSignedContractPdf, readObjectBuffer } from "./signContract";
 import { buildSignedContractEmail, buildSignedContractAdminEmail, sendEmail, getAppBaseUrl } from "./email";
 
 // Roles that receive a copy of every signed contract (mirrors publicSigning).
@@ -15,14 +14,12 @@ const DELIVERY_INTERVAL_MS = 30_000;
 // (emailed_at IS NULL) stay untouched, while freshly-signed rows are picked up
 // within one sweep.
 const RECENT_WINDOW_DAYS = 3;
-// Bound the work per sweep so a backlog can never spawn many serialized Chromium
-// renders back-to-back inside one tick.
+// Bound the work per sweep. With no Chromium renders each row is a handful of
+// DB queries + SMTP calls, so this is purely a backlog-throttle.
 const BATCH_SIZE = 5;
 // A claimed-but-not-delivered row is considered abandoned (worker crashed/
-// restarted mid-delivery) after this long, and becomes reclaimable. This is the
-// crash-recovery mechanism: delivery state (emailed_at) is only set on success,
-// so a stale lease is always safe to retry. Comfortably longer than the slowest
-// serialized Chromium render.
+// restarted mid-delivery) after this long and becomes reclaimable. Comfortably
+// longer than the worst-case SMTP timeout.
 const LEASE_TIMEOUT_MS = 5 * 60_000;
 
 async function getAdminRecipientEmails(excludeEmail?: string | null): Promise<string[]> {
@@ -43,27 +40,25 @@ async function getAdminRecipientEmails(excludeEmail?: string | null): Promise<st
   return out;
 }
 
-// Convert the canonical /objects/<entityId> key returned by uploadBuffer into a
-// browser-openable URL served by GET /api/storage/objects/*path (requireAuth).
-// This is the same URL shape admin-uploaded agent documents use, so the agent
-// Account "Contract" tile and the staff Agents page both render it identically.
-function objectKeyToStorageUrl(pdfObjectKey: string): string {
-  let p = pdfObjectKey;
-  if (p.startsWith("/objects/")) p = p.slice("/objects/".length);
-  else if (p.startsWith("objects/")) p = p.slice("objects/".length);
-  return `${getAppBaseUrl()}/api/storage/objects/${p}`;
-}
-
 /**
- * Out-of-band delivery of signed contracts produced by the in-app / onboarding
- * signing flow (finalizeSign leaves emailed_at = NULL). For each pending row:
- *   1. render the signed PDF (serialized headless Chromium via withRenderLock),
- *   2. email it as an ATTACHMENT to the signer AND every active admin,
- *   3. populate agents.contract_url so the signed PDF shows in the agent's
- *      Account "Contract" tile (and the staff Agents page) just like an
- *      admin-uploaded contract.
- * The whole step runs off the user-blocking request path, which is why it lives
- * in a worker rather than inside finalizeSign.
+ * Lightweight delivery worker for signed contracts produced by the in-app /
+ * onboarding signing flow (finalizeSign leaves emailed_at = NULL). For each
+ * pending row the worker:
+ *   1. Claims an exclusive lease (delivery_claimed_at) so concurrent instances
+ *      never double-deliver.
+ *   2. Sets contractStartDate / contractEndDate on the agent row (date fields
+ *      only — no PDF needed).
+ *   3. Sends a link-only notification email to the signer (portal login URL)
+ *      and every active admin (admin signed-contracts panel URL).
+ *   4. Marks emailed_at = now, permanently excluding the row from future sweeps.
+ *
+ * The worker deliberately does NOT render the signed PDF and does NOT start
+ * headless Chromium at any point. Chromium is memory-heavy and was OOM-killing
+ * the autoscale container while a sign POST was in-flight, causing the edge
+ * proxy to return its own HTML "403 Forbidden" instead of completing the sign
+ * request. PDF rendering is now lazy: it happens on the first download request
+ * via ensureSignedContractPdf() in signContract.ts, which also sets
+ * agents.contractUrl at that point.
  */
 export async function deliverPendingSignedContracts(): Promise<void> {
   try {
@@ -92,6 +87,9 @@ export async function deliverPendingSignedContracts(): Promise<void> {
 
     if (pending.length === 0) return;
 
+    const portalUrl = `${getAppBaseUrl()}/login`;
+    const adminContractUrl = `${getAppBaseUrl()}/admin/signed-contracts`;
+
     for (const row of pending) {
       // Atomically claim a lease on the row so concurrent workers / instances
       // don't deliver twice. The lease (delivery_claimed_at) is DISTINCT from
@@ -110,45 +108,32 @@ export async function deliverPendingSignedContracts(): Promise<void> {
       if (claimed.length === 0) continue;
 
       try {
-        const { pdfObjectKey } = await ensureSignedContractPdf(row.id);
-        const pdfBuf = await readObjectBuffer(pdfObjectKey);
-        if (!pdfBuf) throw new Error(`signed PDF bytes unreadable for signed_contract ${row.id}`);
-
         const [template] = await db.select({ name: contractTemplatesTable.name, language: contractTemplatesTable.language })
           .from(contractTemplatesTable)
           .where(eq(contractTemplatesTable.id, row.templateId));
         const templateName = template?.name || "Contract";
 
-        const storageUrl = objectKeyToStorageUrl(pdfObjectKey);
-
-        // Populate the agent's Contract tile (parity with admin-uploaded
-        // contracts). Start date = signing date; end date = start + 1 year.
+        // Populate start/end dates on the agent row (date fields only — no PDF
+        // needed here). agents.contractUrl is set lazily inside
+        // ensureSignedContractPdf() on the first download request.
         if (row.agentId) {
           const startDate = row.signedAt ?? new Date();
           const endDate = new Date(startDate);
           endDate.setFullYear(endDate.getFullYear() + 1);
           await db.update(agentsTable)
-            .set({ contractUrl: storageUrl, contractStartDate: startDate, contractEndDate: endDate })
+            .set({ contractStartDate: startDate, contractEndDate: endDate })
             .where(eq(agentsTable.id, row.agentId));
         }
-
-        const attachment = {
-          filename: `contract-${row.signingSessionId}.pdf`,
-          content: pdfBuf,
-          contentType: "application/pdf",
-        };
-        const portalUrl = `${getAppBaseUrl()}/login`;
 
         const signerEmail = (row.signerEmail || "").trim();
         if (signerEmail && EMAIL_RE.test(signerEmail)) {
           const email = await buildSignedContractEmail({
             signerName: row.signerName,
             templateName,
-            pdfDownloadUrl: storageUrl,
             portalUrl,
             language: template?.language,
           });
-          await sendEmail(signerEmail, email, { attachments: [attachment] });
+          await sendEmail(signerEmail, email);
         }
 
         const adminEmails = await getAdminRecipientEmails(signerEmail);
@@ -157,21 +142,21 @@ export async function deliverPendingSignedContracts(): Promise<void> {
             signerName: row.signerName,
             signerEmail,
             templateName,
-            pdfDownloadUrl: storageUrl,
+            adminContractUrl,
           });
           for (const to of adminEmails) {
             try {
-              await sendEmail(to, adminEmail, { attachments: [attachment] });
+              await sendEmail(to, adminEmail);
             } catch (adminErr) {
               console.error(`[SIGNED-DELIVERY] failed to email admin ${to} for signed_contract ${row.id}:`, adminErr);
             }
           }
         }
 
-        // Mark delivered only now that the PDF rendered, the tile was updated and
-        // the signer email was sent. emailed_at is the permanent "done" flag and
-        // excludes the row from all future sweeps. Admin failures are logged
-        // above but do not block this — admins are best-effort copies.
+        // Mark delivered only now that the dates were updated and the signer
+        // email was sent. emailed_at is the permanent "done" flag and excludes
+        // the row from all future sweeps. Admin failures are logged above but
+        // do not block this — admins are best-effort copies.
         await db.update(signedContractsTable)
           .set({ emailedAt: new Date() })
           .where(eq(signedContractsTable.id, row.id));
@@ -198,8 +183,9 @@ export async function deliverPendingSignedContracts(): Promise<void> {
 }
 
 let deliveryInterval: ReturnType<typeof setInterval> | null = null;
-// Re-entrancy guard: a sweep can outlast the interval (serialized Chromium
-// renders), so never let two sweeps run concurrently on the same instance.
+// Re-entrancy guard: a sweep can outlast the interval in pathological cases
+// (many SMTP calls), so never let two sweeps run concurrently on the same
+// instance.
 let sweeping = false;
 
 async function runSweep(): Promise<void> {
