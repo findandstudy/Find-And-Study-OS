@@ -5,7 +5,6 @@ import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { createSigningToken } from "../lib/signingTokens";
 import { buildContractSignRequestEmail, sendEmail, getAppBaseUrl } from "../lib/email";
-import { ensureSignedContractPdf } from "../lib/signContract";
 
 const router: IRouter = Router();
 
@@ -125,10 +124,14 @@ router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contract
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
-    let pdfKey = row.pdfObjectKey;
+    const pdfKey = row.pdfObjectKey;
     if (!pdfKey) {
-      try { pdfKey = (await ensureSignedContractPdf(row.id)).pdfObjectKey; }
-      catch (e) { console.error("[contracts] lazy pdf gen:", e); res.status(503).json({ error: "PDF hazırlanıyor, lütfen birazdan tekrar deneyin." }); return; }
+      // PDF not yet rendered. The signed-contract delivery worker generates it
+      // off the request path (no Chromium here — synchronous render was the
+      // autoscale OOM root cause). Tell the client to retry shortly.
+      res.setHeader("Retry-After", "30");
+      res.status(202).json({ status: "pending", message: "PDF is being generated. Please try again in a moment.", retryAfter: 30 });
+      return;
     }
     const { ObjectStorageService } = await import("../lib/objectStorage");
     const svc = new ObjectStorageService();

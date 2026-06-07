@@ -8,7 +8,7 @@ import { MANAGER_ROLES } from "../lib/roles";
 import { writeAudit } from "../lib/auditLog";
 import { sendEmail, buildContractSignRequestEmail, buildAgentOnboardingEmail, getAppBaseUrl } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
-import { finalizeSign, ensureSignedContractPdf } from "../lib/signContract";
+import { finalizeSign } from "../lib/signContract";
 import { agentIntakeDefaults } from "../lib/contractRenderer";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
@@ -591,10 +591,14 @@ router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response)
       .where(eq(signedContractsTable.signingSessionId, session.id));
     if (!signed) { res.status(404).json({ error: "Signed contract record not found" }); return; }
     if (signed.agentId !== agent.id) { res.status(403).json({ error: "Forbidden" }); return; }
-    let pdfKey = signed.pdfObjectKey;
+    const pdfKey = signed.pdfObjectKey;
     if (!pdfKey) {
-      try { pdfKey = (await ensureSignedContractPdf(signed.id)).pdfObjectKey; }
-      catch (e) { console.error("[contracts/me/pdf] lazy pdf gen:", e); res.status(503).json({ error: "PDF hazırlanıyor, lütfen birazdan tekrar deneyin." }); return; }
+      // PDF not yet rendered. The signed-contract delivery worker generates it
+      // off the request path (no Chromium here — synchronous render was the
+      // autoscale OOM root cause). Tell the client to retry shortly.
+      res.setHeader("Retry-After", "30");
+      res.status(202).json({ status: "pending", message: "PDF is being generated. Please try again in a moment.", retryAfter: 30 });
+      return;
     }
     const { ObjectStorageService } = await import("../lib/objectStorage");
     const svc = new ObjectStorageService();
