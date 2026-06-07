@@ -23,7 +23,8 @@ const router: IRouter = Router();
 // Contract signing carries the signer's signature as a base64 PNG (drawn or
 // uploaded). app.ts skips the global 1 MB JSON parser for the sign paths, so the
 // sign routes must install their own parser. 3 MB comfortably covers the route's
-// own 2 MB (2_000_000 char) signature validation plus the JSON envelope.
+// own 2 MB (decoded) signature validation (~2.8 M base64 chars) plus the JSON
+// envelope, all enforced precisely by validateSignatureImage() in finalizeSign().
 const signBodyParser = express.json({ limit: "3mb" });
 
 const AGENT_ROLES = ["agent", "sub_agent", "agent_staff"];
@@ -642,7 +643,7 @@ router.post("/contracts/me/sign", signBodyParser, requireAuth, async (req: Reque
   if (!signatureImagePngBase64 || typeof signatureImagePngBase64 !== "string") {
     res.status(400).json({ error: "signatureImagePngBase64 is required" }); return;
   }
-  if (signatureImagePngBase64.length > 2_000_000) {
+  if (signatureImagePngBase64.length > 2_800_000) {
     res.status(413).json({ error: "Signature image too large" }); return;
   }
   const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;
@@ -811,7 +812,7 @@ router.post("/contracts/me/session/:id/sign", signBodyParser, requireAuth, async
   if (!signatureImagePngBase64 || typeof signatureImagePngBase64 !== "string") {
     res.status(400).json({ error: "signatureImagePngBase64 is required" }); return;
   }
-  if (signatureImagePngBase64.length > 2_000_000) {
+  if (signatureImagePngBase64.length > 2_800_000) {
     res.status(413).json({ error: "Signature image too large" }); return;
   }
   const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;

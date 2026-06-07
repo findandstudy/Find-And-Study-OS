@@ -178,12 +178,16 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
 
   async function submitSignature(b64: string) {
     if (!data) return;
+    // The edge WAF blocks JSON bodies containing a >~4 KB "data:" URI with an
+    // opaque 403 HTML page before the request reaches Express. Always send bare
+    // base64 (strip the "data:image/...;base64," prefix); bare base64 passes.
+    const bare = b64.includes(",") ? b64.slice(b64.indexOf(",") + 1) : b64;
     setSubmitting(true); setError("");
     try {
       await customFetch(signUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signatureImagePngBase64: b64, signerName }),
+        body: JSON.stringify({ signatureImagePngBase64: bare, signerName }),
       });
       onSigned();
     } catch (err: any) {

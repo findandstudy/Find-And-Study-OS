@@ -35,6 +35,33 @@ export type FinalizeSignResult =
   | { ok: true; signedContractId: number }
   | { ok: false; status: number; error: string };
 
+// First 8 bytes of every PNG file (magic number).
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+export const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024;
+
+export type SignatureValidation =
+  | { ok: true; base64: string; bytes: Buffer }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Normalize and validate an incoming signature image. Accepts either bare
+ * base64 or a legacy "data:image/...;base64,<...>" data URL (older clients sent
+ * the latter for small signatures). Decodes the base64 and enforces that the
+ * bytes are a real PNG (magic number) of bounded size — a prior bug let an
+ * invalid value ("AAAA") through and corrupted a signed contract record.
+ */
+export function validateSignatureImage(input: string): SignatureValidation {
+  const base64 = input.replace(/^data:image\/[a-z+]+;base64,/i, "");
+  const bytes = Buffer.from(base64, "base64");
+  if (bytes.length < PNG_MAGIC.length || !bytes.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC)) {
+    return { ok: false, status: 400, error: "Invalid PNG" };
+  }
+  if (bytes.length > MAX_SIGNATURE_BYTES) {
+    return { ok: false, status: 400, error: "Signature image too large" };
+  }
+  return { ok: true, base64, bytes };
+}
+
 /**
  * Finalize a signing session: render PDF, store, atomically flip status to
  * signed, insert signed_contracts row, email the signer the PDF link.
@@ -79,7 +106,9 @@ export async function finalizeSign(opts: {
   // and eliminates the GCS I/O from the sign hot path entirely.
   // The GCS upload now happens lazily inside ensureSignedContractPdf() the first
   // time someone downloads the PDF, together with the Chromium render.
-  const signatureBase64 = opts.signatureImagePngBase64.replace(/^data:image\/[a-z]+;base64,/, "");
+  const sigCheck = validateSignatureImage(opts.signatureImagePngBase64);
+  if (!sigCheck.ok) return sigCheck;
+  const signatureBase64 = sigCheck.base64;
 
   type Outcome = { ok: true; row: typeof signedContractsTable.$inferSelect } | { ok: false; status: number; error: string };
   let outcome: Outcome;

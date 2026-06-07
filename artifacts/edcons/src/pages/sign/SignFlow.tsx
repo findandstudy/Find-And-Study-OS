@@ -283,11 +283,17 @@ export default function SignFlow({ token }: { token: string }) {
   }
 
   async function submitSignature(signaturePngBase64: string) {
+    // The edge WAF blocks JSON bodies containing a >~4 KB "data:" URI with an
+    // opaque 403 HTML page before the request reaches Express. Always send bare
+    // base64 (strip the "data:image/...;base64," prefix); bare base64 passes.
+    const bare = signaturePngBase64.includes(",")
+      ? signaturePngBase64.slice(signaturePngBase64.indexOf(",") + 1)
+      : signaturePngBase64;
     setSubmitting(true);
     try {
       await customFetch(`/api/public/sign/${encodeURIComponent(token)}/sign`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ signatureImagePngBase64: signaturePngBase64, signerName }),
+        body: JSON.stringify({ signatureImagePngBase64: bare, signerName }),
       });
       setStep("success");
     } catch (err: any) {
@@ -815,8 +821,9 @@ function SignaturePad({ onSubmit, submitRef, onReady, signerName, onChangeName, 
         const cx = cv.getContext("2d");
         if (!cx) { setUploadError(t("sigTooLarge")); return; }
         cx.drawImage(img, 0, 0, w, h);
-        let dataUrl = cv.toDataURL("image/png");
-        if (dataUrl.length > MAX_SIG_BASE64) dataUrl = cv.toDataURL("image/jpeg", 0.85);
+        // Canonical signature format is PNG (the backend validates PNG magic
+        // bytes), so never fall back to JPEG here.
+        const dataUrl = cv.toDataURL("image/png");
         if (dataUrl.length > MAX_SIG_BASE64) { setUploadError(t("sigTooLarge")); return; }
         setUploaded(dataUrl);
       };

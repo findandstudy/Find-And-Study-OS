@@ -381,7 +381,12 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
     if (!signatureImagePngBase64 || typeof signatureImagePngBase64 !== "string") {
       res.status(400).json({ error: "signatureImagePngBase64 is required" }); return;
     }
-    if (signatureImagePngBase64.length > 2_000_000) {
+    // Cheap early envelope guard (base64 chars). The precise 2 MB *decoded*
+    // limit is enforced by validateSignatureImage() inside finalizeSign(); a 2 MB
+    // decoded PNG is ~2.8 M base64 chars, so this cap rejects only larger
+    // payloads without falsely rejecting valid sub-2 MB images (and stays under
+    // the 3 MB JSON body parser).
+    if (signatureImagePngBase64.length > 2_800_000) {
       res.status(413).json({ error: "Signature image too large" }); return;
     }
 
