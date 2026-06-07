@@ -36,6 +36,31 @@ was deleted).
 render/display point (`toSignatureDataUrl`, idempotent for legacy data-URL rows).
 Never write the data-URL form back to the DB.
 
+## The deeper cause: agents.contract_url locks to the FIRST contract
+
+`agents.contract_url` is hydrated lazily in `ensureSignedContractPdf` on the first
+PDF render. The original guard `.where(... isNull(agentsTable.contractUrl))` meant
+the URL was set **once and never updated**. So when an agent **re-signs** (a
+"resend" creates a brand-new `signing_sessions` row + a new `signed_contracts`
+row), the new contract's render became a no-op and the agent stayed pointed at the
+**stale/broken** earlier PDF. This is the real reason the portal kept showing the
+broken `contract-23.pdf` even after a valid re-sign produced a good
+`contract-24.pdf`.
+
+**Fix:** gate the hydration on "is this row the agent's *newest* signed_contract"
+(`ORDER BY signed_at DESC, id DESC LIMIT 1`), then update without the `isNull`
+guard. A re-sign now wins; a late download of an OLD contract's PDF won't clobber
+the URL back to a superseded contract. This fix only auto-corrects an agent on the
+**next** render of their newest contract — because rendering is idempotent, an
+already-rendered newest contract won't re-run, so an agent stuck on an old URL
+still needs a one-off `UPDATE agents SET contract_url = <newest pdf url>`.
+
+**Resend creates a NEW session, not a reused one:** don't scope diagnosis to a
+single session id. A "missing #N" record is usually on the newer session — query
+`signed_contracts ORDER BY id DESC` across ALL sessions before concluding data
+loss. A 200 + "Contract.Signed #N" activity with "no row" almost always means you
+looked at the wrong session.
+
 **Note:** the unsigned-preview render paths (publicSigning preview,
 agentOnboarding preview) intentionally leave `signature`/`main_agency_signature`
 empty; `cleanupSignatureImages` swaps an empty `<img src="">` for a styled

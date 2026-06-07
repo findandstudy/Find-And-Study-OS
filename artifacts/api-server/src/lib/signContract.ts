@@ -1,5 +1,5 @@
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, desc } from "drizzle-orm";
 import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOLDER, toSignatureDataUrl } from "./contractRenderer";
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
@@ -326,17 +326,33 @@ export async function ensureSignedContractPdf(
     // PDF render so the agent's Account "Contract" tile and the staff Agents page
     // contract link work as soon as someone first downloads the PDF. The delivery
     // worker sets contractStartDate/contractEndDate without the PDF; this fills
-    // in contractUrl. The WHERE isNull guard makes this a no-op if another
-    // request or the delivery worker already set it.
+    // in contractUrl.
+    //
+    // Only the agent's MOST RECENT signed_contract is allowed to set contractUrl.
+    // An earlier `isNull(contractUrl)` guard permanently locked the agent to the
+    // first contract that rendered — so when an agent re-signs (resend creates a
+    // new signing session + signed_contract), the new contract's render became a
+    // no-op and the agent stayed pointed at the stale (possibly broken) PDF.
+    // Gating on "is this the newest signed_contract for the agent" lets a re-sign
+    // win while preventing a late download of an OLD contract's PDF from clobbering
+    // the URL back to a superseded contract.
     if (row.agentId) {
       try {
-        const storageUrl = objectKeyToStorageUrl(finalPdfObjectKey);
-        const startDate = row.signedAt ? new Date(row.signedAt) : new Date();
-        const endDate = new Date(startDate);
-        endDate.setFullYear(endDate.getFullYear() + 1);
-        await db.update(agentsTable)
-          .set({ contractUrl: storageUrl, contractStartDate: startDate, contractEndDate: endDate })
-          .where(and(eq(agentsTable.id, row.agentId), isNull(agentsTable.contractUrl)));
+        const [newest] = await db
+          .select({ id: signedContractsTable.id })
+          .from(signedContractsTable)
+          .where(eq(signedContractsTable.agentId, row.agentId))
+          .orderBy(desc(signedContractsTable.signedAt), desc(signedContractsTable.id))
+          .limit(1);
+        if (newest?.id === row.id) {
+          const storageUrl = objectKeyToStorageUrl(finalPdfObjectKey);
+          const startDate = row.signedAt ? new Date(row.signedAt) : new Date();
+          const endDate = new Date(startDate);
+          endDate.setFullYear(endDate.getFullYear() + 1);
+          await db.update(agentsTable)
+            .set({ contractUrl: storageUrl, contractStartDate: startDate, contractEndDate: endDate })
+            .where(eq(agentsTable.id, row.agentId));
+        }
       } catch (agentErr) {
         // Non-fatal: contractUrl is cosmetic. Log and continue — the PDF is
         // already stored and will be downloadable; the tile link just won't
