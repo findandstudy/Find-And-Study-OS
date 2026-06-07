@@ -226,39 +226,10 @@ router.get("/public/sign/:token/preview", signLimiter, async (req, res): Promise
   }
 });
 
-// Render an unsigned PDF preview so signers can review the document before
-// drawing their signature. Same content as /preview but as a downloadable PDF.
-router.get("/public/sign/:token/preview-pdf", signLimiter, async (req, res): Promise<void> => {
-  try {
-    const r = await resolveByToken(req.params.token);
-    if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
-    if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
-    const ctx = buildAgentContext(r.agent, (r.session.intakeData as any) || null, {
-      signerEmail: r.session.signerEmail,
-      signerName: r.session.signerName || undefined,
-      number: contractNumber(r.session.id),
-    });
-    const rendered = renderTemplate(r.template.bodyHtml, ctx);
-    const placeholder = SIG_PLACEHOLDER[r.template.language] || SIG_PLACEHOLDER.en;
-    const html = cleanupSignatureImages(rendered, placeholder);
-    const { buildSignedPdf } = await import("../lib/contractPdf");
-    const { pdfBytes } = await buildSignedPdf({
-      templateName: r.template.name,
-      bodyHtml: html,
-      signerEmail: r.session.signerEmail,
-      signerName: r.session.signerName,
-      signerIp: req.ip,
-      signerUserAgent: req.headers["user-agent"] || null,
-      signedAt: new Date(),
-    });
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="contract-preview.pdf"`);
-    res.end(Buffer.from(pdfBytes));
-  } catch (err) {
-    console.error("[public-sign] preview-pdf:", err);
-    if (!res.headersSent) res.status(500).json({ error: "Failed to render preview PDF" });
-  }
-});
+// NOTE: /public/sign/:token/preview-pdf was removed. Headless-Chromium PDF
+// rendering on the synchronous request path OOM-kills the autoscale instance,
+// which makes the edge proxy return an opaque HTML "403 Forbidden". Use the
+// /preview endpoint (returns HTML) for in-browser contract review instead.
 
 // Send a 6-digit verification code to the email the signer entered. The signer
 // must verify ownership of this email before they are allowed to sign.

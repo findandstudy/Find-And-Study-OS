@@ -635,6 +635,13 @@ async function seedClaudeIntegration() {
     // does not permanently lose the delivery — the lease expires and the row
     // is reclaimed. Idempotent.
     await pool.query(`ALTER TABLE signed_contracts ADD COLUMN IF NOT EXISTS delivery_claimed_at TIMESTAMPTZ`);
+    // Signature base64 column: new sign attempts store the signature PNG as
+    // a base64 TEXT string directly in the DB row, eliminating the GCS upload
+    // from the sign hot path. The GCS upload (up to 30 s) was OOM-killing the
+    // autoscale instance mid-request, causing the edge proxy to return an opaque
+    // HTML "403 Forbidden" page. The GCS upload now happens lazily inside
+    // ensureSignedContractPdf() on the first PDF download. Idempotent.
+    await pool.query(`ALTER TABLE signed_contracts ADD COLUMN IF NOT EXISTS signature_image_base64 TEXT`);
 
     // Backfill the new contract permissions for the default admin role.
     const newPerms = [

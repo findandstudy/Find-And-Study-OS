@@ -54,6 +54,7 @@ export const signedContractsTable = pgTable("signed_contracts", {
   templateId: integer("template_id").notNull(),
   pdfObjectKey: text("pdf_object_key"),
   signatureImageObjectKey: text("signature_image_object_key"),
+  signatureImageBase64: text("signature_image_base64"),
   evidenceHash: text("evidence_hash"),
   signerEmail: text("signer_email").notNull(),
   signerName: text("signer_name"),

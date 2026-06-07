@@ -71,25 +71,15 @@ export async function finalizeSign(opts: {
   const signedAt = new Date();
   const finalSignerName = opts.signerName ? opts.signerName.slice(0, 200) : (session.signerName || null);
 
-  // Store ONLY the signature image here (lightweight). The contract PDF is
-  // rendered lazily on first download via ensureSignedContractPdf(), NOT during
-  // this request. Headless-Chromium rendering is memory-heavy and was crashing
-  // the resource-constrained autoscale instance mid-request, which made the edge
-  // proxy return an opaque HTML "403 Forbidden" page instead of completing the
-  // sign. Decoupling guarantees signing succeeds without Chromium on the hot path.
-  let signatureObjectKey: string | null = null;
-  try {
-    const sigBytes = Buffer.from(opts.signatureImagePngBase64.replace(/^data:image\/[a-z]+;base64,/, ""), "base64");
-    signatureObjectKey = await objectStorage.uploadBuffer({
-      subdir: "signed-contracts",
-      filename: `signature-${session.id}.png`,
-      buffer: sigBytes,
-      contentType: "image/png",
-    });
-  } catch (err) {
-    console.error("[signContract] signature upload failed:", err);
-    return { ok: false, status: 500, error: "İmza görseli kaydedilemedi. Lütfen tekrar deneyin." };
-  }
+  // Store the signature as a base64 string directly in the DB row. Previously
+  // the signature was uploaded to GCS here, but the GCS upload (up to 30 s) was
+  // OOM-killing the resource-constrained autoscale instance mid-request, which
+  // made the edge proxy return an opaque HTML "403 Forbidden" page instead of
+  // completing the sign. Storing base64 in the DB is a pure DB write (<50 ms)
+  // and eliminates the GCS I/O from the sign hot path entirely.
+  // The GCS upload now happens lazily inside ensureSignedContractPdf() the first
+  // time someone downloads the PDF, together with the Chromium render.
+  const signatureBase64 = opts.signatureImagePngBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
   type Outcome = { ok: true; row: typeof signedContractsTable.$inferSelect } | { ok: false; status: number; error: string };
   let outcome: Outcome;
@@ -107,7 +97,8 @@ export async function finalizeSign(opts: {
         agentId: session.agentId,
         templateId: template.id,
         pdfObjectKey: null,
-        signatureImageObjectKey: signatureObjectKey,
+        signatureImageObjectKey: null,
+        signatureImageBase64: signatureBase64,
         evidenceHash: null,
         signerEmail: session.signerEmail,
         signerName: finalSignerName,
@@ -202,18 +193,46 @@ export async function ensureSignedContractPdf(
     agent = a || null;
   }
 
-  // Fail hard if the signature image cannot be retrieved. Generating a PDF with
-  // an empty signature would persist an "unsigned" document as if it were validly
-  // signed — a data-integrity failure. Throwing keeps pdfObjectKey/evidenceHash
-  // null so the download route returns 503 and a later retry can succeed.
-  if (!row.signatureImageObjectKey) {
+  // Signature source: new sign attempts store base64 directly in the DB row
+  // (signatureImageBase64) to avoid a GCS upload on the hot sign path. Older
+  // rows that were signed before this change have a GCS object key instead. The
+  // logic below handles both transparently.
+  // Fail hard if neither source is available: generating a PDF with no signature
+  // would persist an "unsigned" document as if it were validly signed.
+  let signatureBase64: string;
+  if (row.signatureImageBase64) {
+    signatureBase64 = row.signatureImageBase64;
+  } else if (row.signatureImageObjectKey) {
+    const sigBuf = await readObjectBuffer(row.signatureImageObjectKey);
+    if (!sigBuf) {
+      throw new Error(`Signature image could not be read for signed_contract ${row.id}; refusing to generate unsigned PDF`);
+    }
+    signatureBase64 = sigBuf.toString("base64");
+  } else {
     throw new Error(`Signature image missing for signed_contract ${row.id}; refusing to generate unsigned PDF`);
   }
-  const sigBuf = await readObjectBuffer(row.signatureImageObjectKey);
-  if (!sigBuf) {
-    throw new Error(`Signature image could not be read for signed_contract ${row.id}; refusing to generate unsigned PDF`);
+
+  // For rows that only have the base64 in the DB (no GCS object key yet),
+  // upload the signature to GCS now so the object storage stays the authoritative
+  // store for binary assets and future renders can skip the DB column.
+  // This is a best-effort background step: failure is logged but does NOT abort
+  // the PDF render — the base64 column is still there for next time.
+  if (!row.signatureImageObjectKey && row.signatureImageBase64) {
+    try {
+      const sigBytes = Buffer.from(row.signatureImageBase64, "base64");
+      const uploadedKey = await objectStorage.uploadBuffer({
+        subdir: "signed-contracts",
+        filename: `signature-${row.signingSessionId}.png`,
+        buffer: sigBytes,
+        contentType: "image/png",
+      });
+      await db.update(signedContractsTable)
+        .set({ signatureImageObjectKey: uploadedKey })
+        .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.signatureImageObjectKey)));
+    } catch (uploadErr) {
+      console.warn(`[ensureSignedContractPdf] background signature GCS upload failed for signed_contract ${row.id} (non-fatal):`, uploadErr);
+    }
   }
-  const signatureBase64 = sigBuf.toString("base64");
 
   const signedAt = row.signedAt ? new Date(row.signedAt) : new Date();
   const ctx = buildAgentContext(agent, (session?.intakeData as any) || null, {
