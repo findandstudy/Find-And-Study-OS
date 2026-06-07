@@ -395,6 +395,18 @@ async function seedClaudeIntegration() {
     )
   `);
 
+  // Step 1c: General-purpose key-value store for persisting system state across
+  // restarts (e.g. assignment consistency checker last-known count for delta
+  // alerting). Runs unconditionally on all processes so the table always exists
+  // before any worker that reads from it starts.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS system_kv (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
   // Step 2: Create rate-limits table — runs on all processes, idempotent.
   const { ensureRateLimitsTable } = await import("./lib/pgRateLimiter");
   await ensureRateLimitsTable();
@@ -874,6 +886,51 @@ async function seedClaudeIntegration() {
       `);
     } catch (err) {
       console.error("[migrate] assignment.inconsistency notification rule:", err);
+    }
+
+    // One-shot data fix: sync leads and applications whose assigned_to_id does
+    // not match their student's assigned_to_id. These accumulated over time
+    // because assignment cascades are permission-gated and many historical
+    // reassignments pre-date the cascade feature. The student is the canonical
+    // record; leads and applications inherit from it.
+    // Gated by system_flags so it runs exactly once per environment, not on
+    // every boot. A future manual change via the UI will continue to cascade
+    // normally through the existing cascade helpers.
+    try {
+      const assignFix = await pool.query(
+        `INSERT INTO system_flags (key) VALUES ('assignment_consistency_backfill_v1') ON CONFLICT DO NOTHING RETURNING key`
+      );
+      if (assignFix.rows.length > 0) {
+        const leadResult = await pool.query(`
+          UPDATE leads l
+          SET assigned_to_id = s.assigned_to_id
+          FROM students s
+          WHERE l.converted_student_id = s.id
+            AND l.assigned_to_id IS DISTINCT FROM s.assigned_to_id
+            AND l.deleted_at IS NULL
+            AND s.deleted_at IS NULL
+        `);
+        const appResult = await pool.query(`
+          UPDATE applications a
+          SET assigned_to_id = s.assigned_to_id
+          FROM students s
+          WHERE a.student_id = s.id
+            AND a.assigned_to_id IS DISTINCT FROM s.assigned_to_id
+            AND a.deleted_at IS NULL
+            AND s.deleted_at IS NULL
+        `);
+        const leadsFixed = leadResult.rowCount ?? 0;
+        const appsFixed = appResult.rowCount ?? 0;
+        console.log(`[migrate] assignment consistency backfill: fixed ${leadsFixed} lead(s), ${appsFixed} application(s)`);
+        // Reset the stored delta-alerting baseline so the checker doesn't
+        // immediately alert with the (now-lower) fresh count on next run.
+        await pool.query(
+          `INSERT INTO system_kv (key, value, updated_at) VALUES ('assignment_inconsistency_last_count', '0', NOW())
+           ON CONFLICT (key) DO UPDATE SET value = '0', updated_at = NOW()`
+        );
+      }
+    } catch (err) {
+      console.error("[migrate] assignment consistency backfill:", err);
     }
 
     // One-shot backfill: grant the three *.view_commission permission keys to

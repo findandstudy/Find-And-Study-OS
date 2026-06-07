@@ -1,10 +1,11 @@
-import { db, leadsTable, studentsTable, applicationsTable, usersTable } from "@workspace/db";
+import { db, pool, leadsTable, studentsTable, applicationsTable, usersTable } from "@workspace/db";
 import { and, eq, isNull, inArray } from "drizzle-orm";
 import { logAudit } from "./auth";
 import { dispatchNotification } from "./notificationDispatcher";
 
 const CHECK_INTERVAL = 24 * 60 * 60 * 1000;
 const INITIAL_DELAY = 30 * 1000;
+const LAST_COUNT_KEY = "assignment_inconsistency_last_count";
 
 export interface AssignmentInconsistency {
   studentId: number;
@@ -116,16 +117,44 @@ async function resolveUserName(id: number | null): Promise<string | null> {
   }
 }
 
+async function getLastKnownCount(): Promise<number> {
+  try {
+    const { rows } = await pool.query<{ value: string }>(
+      `SELECT value FROM system_kv WHERE key = $1`,
+      [LAST_COUNT_KEY]
+    );
+    if (rows.length > 0) return parseInt(rows[0].value, 10) || 0;
+  } catch {
+  }
+  return 0;
+}
+
+async function saveLastKnownCount(count: number): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO system_kv (key, value, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [LAST_COUNT_KEY, String(count)]
+    );
+  } catch (err: any) {
+    console.error("[assignmentConsistencyChecker] failed to save last count:", err?.message || err);
+  }
+}
+
 export async function runAssignmentConsistencyCheck(): Promise<void> {
   try {
     const inconsistencies = await checkAssignmentConsistency();
+    const currentCount = inconsistencies.length;
 
-    if (inconsistencies.length === 0) {
+    if (currentCount === 0) {
       console.log("[assignmentConsistencyChecker] No assignment inconsistencies found.");
+      await saveLastKnownCount(0);
       return;
     }
 
-    console.warn(`[assignmentConsistencyChecker] Found ${inconsistencies.length} assignment inconsistency(ies).`);
+    const lastCount = await getLastKnownCount();
+    console.warn(`[assignmentConsistencyChecker] Found ${currentCount} assignment inconsistency(ies) (was ${lastCount}).`);
 
     for (const inc of inconsistencies) {
       if (inc.type === "lead_mismatch") {
@@ -155,6 +184,13 @@ export async function runAssignmentConsistencyCheck(): Promise<void> {
       }
     }
 
+    await saveLastKnownCount(currentCount);
+
+    if (currentCount <= lastCount) {
+      console.log(`[assignmentConsistencyChecker] Count has not increased (${lastCount} → ${currentCount}); skipping notification.`);
+      return;
+    }
+
     const leadMismatches = inconsistencies.filter(i => i.type === "lead_mismatch").length;
     const appMismatches = inconsistencies.filter(i => i.type === "application_mismatch").length;
 
@@ -166,11 +202,12 @@ export async function runAssignmentConsistencyCheck(): Promise<void> {
     await dispatchNotification({
       event: "assignment.inconsistency",
       title: "Assignment Inconsistencies Detected",
-      body: `${inconsistencies.length} assignment inconsistency(ies) detected: ${summary}. Check the Assignment Inconsistencies report in the Audit section.`,
+      body: `${currentCount} assignment inconsistency(ies) detected: ${summary}. Check the Assignment Inconsistencies report in the Audit section.`,
       actionUrl: "/settings/audit?action=assignment.inconsistency",
       icon: "⚠️",
       data: {
-        count: inconsistencies.length,
+        count: currentCount,
+        previousCount: lastCount,
         leadMismatches,
         appMismatches,
       },
