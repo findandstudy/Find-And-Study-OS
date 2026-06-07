@@ -362,6 +362,9 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
 });
 
 router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<void> => {
+  const signStart = Date.now();
+  const startRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
+  console.log(`[public-sign] start token=${req.params.token.slice(0, 8)}… rss=${startRss}MB`);
   try {
     const r = await resolveByToken(req.params.token);
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
@@ -386,13 +389,10 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
     const signerUserAgent = (req.headers["user-agent"] as string) || null;
     const finalSignerName = signerName ? String(signerName).slice(0, 200) : (r.session.signerName || null);
 
-    // Lightweight hot path: signature image upload + atomic DB commit only.
-    // PDF rendering (headless Chromium) is deferred to the delivery worker which
-    // calls ensureSignedContractPdf() off the request path. Running Chromium here
-    // was OOM-crashing the autoscale instance and making the edge proxy return an
-    // opaque HTML "403 Forbidden" page to the signer instead of completing the
-    // signing. Decoupling guarantees signing succeeds without Chromium on the hot
-    // path; email + PDF attachment are delivered within ~30 s by the worker.
+    // Lightweight hot path: signature image stored as base64 TEXT in the DB
+    // (no GCS, no Chromium). PDF rendering is deferred to the delivery worker
+    // which calls ensureSignedContractPdf() off the request path — decoupled so
+    // the sign POST cannot OOM-crash the autoscale instance.
     const result = await finalizeSign({
       sessionId: r.session.id,
       signatureImagePngBase64,
@@ -401,13 +401,21 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
       signerUserAgent,
     });
     if (!result.ok) {
+      const rejMs = Date.now() - signStart;
+      const rejRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
+      console.log(`[public-sign] rejected sessionId=${r.session.id} status=${result.status} ms=${rejMs} rss=${rejRss}MB`);
       res.status(result.status).json({ error: result.error });
       return;
     }
 
+    const doneMs = Date.now() - signStart;
+    const doneRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
+    console.log(`[public-sign] done signedContractId=${result.signedContractId} ms=${doneMs} rss=${doneRss}MB`);
     res.json({ data: { signedContractId: result.signedContractId } });
   } catch (err) {
-    console.error("[public-sign] sign:", err);
+    const errMs = Date.now() - signStart;
+    const errRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
+    console.error(`[public-sign] error ms=${errMs} rss=${errRss}MB`, err);
     res.status(500).json({ error: "Failed to complete signing" });
   }
 });

@@ -659,15 +659,21 @@ router.post("/contracts/me/sign", signBodyParser, requireAuth, async (req: Reque
     // unhandled rejection: the request hangs and the edge proxy eventually
     // returns its own opaque "403 Forbidden" HTML page instead of a usable
     // error. Convert it into a clean JSON 500 so the agent sees a real message.
-    console.error("[contracts/sign] finalizeSign threw:", err);
+    const errMs = Date.now() - signStart;
+    const errRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
+    console.error(`[contracts/sign] error user=${req.user!.id} ms=${errMs} rss=${errRss}MB`, err);
     res.status(500).json({ error: "Sözleşme imzalanamadı. Lütfen tekrar deneyin." });
     return;
   }
   if (!result.ok) {
-    console.log(`[contracts/sign] rejected user=${req.user!.id} status=${result.status} ms=${Date.now() - signStart}`);
+    const rejMs = Date.now() - signStart;
+    const rejRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
+    console.log(`[contracts/sign] rejected user=${req.user!.id} status=${result.status} ms=${rejMs} rss=${rejRss}MB`);
     res.status(result.status).json({ error: result.error }); return;
   }
-  console.log(`[contracts/sign] done user=${req.user!.id} signedContractId=${result.signedContractId} ms=${Date.now() - signStart}`);
+  const doneMs = Date.now() - signStart;
+  const doneRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
+  console.log(`[contracts/sign] done user=${req.user!.id} signedContractId=${result.signedContractId} ms=${doneMs} rss=${doneRss}MB`);
   res.json({ data: { signedContractId: result.signedContractId } });
 });
 
