@@ -1,6 +1,7 @@
 import { db, signedContractsTable, contractTemplatesTable, agentsTable, usersTable } from "@workspace/db";
 import { and, eq, isNull, inArray, gt, lt, or, asc } from "drizzle-orm";
 import { buildSignedContractEmail, buildSignedContractAdminEmail, sendEmail, getAppBaseUrl } from "./email";
+import { ensureSignedContractPdf } from "./signContract";
 
 // Roles that receive a copy of every signed contract (mirrors publicSigning).
 const SIGNED_CONTRACT_ADMIN_ROLES = ["super_admin", "admin"];
@@ -21,6 +22,17 @@ const BATCH_SIZE = 5;
 // restarted mid-delivery) after this long and becomes reclaimable. Comfortably
 // longer than the worst-case SMTP timeout.
 const LEASE_TIMEOUT_MS = 5 * 60_000;
+
+// A signed-PDF render that fails for one of these reasons is treated as an
+// out-of-memory / Chromium-crash event: the lease is released (emailed_at stays
+// NULL) so the row is retried on a later sweep, instead of being marked
+// delivered without a PDF. Case-insensitive; "OOM" also matches "oom".
+const OOM_PATTERN = /out of memory|OOM|Chromium|page crashed|Protocol error|Target closed/i;
+// Consecutive OOM/crash counter across sweeps. Reset to 0 on the next successful
+// render. When it reaches 5 we emit a single CRITICAL alarm log so a super_admin
+// can intervene (e.g. the instance is persistently memory-starved). It does NOT
+// stop the worker — delivery keeps retrying.
+let oomStreak = 0;
 
 async function getAdminRecipientEmails(excludeEmail?: string | null): Promise<string[]> {
   const rows = await db.select({ email: usersTable.email })
@@ -46,19 +58,22 @@ async function getAdminRecipientEmails(excludeEmail?: string | null): Promise<st
  * pending row the worker:
  *   1. Claims an exclusive lease (delivery_claimed_at) so concurrent instances
  *      never double-deliver.
- *   2. Sets contractStartDate / contractEndDate on the agent row (date fields
- *      only — no PDF needed).
- *   3. Sends a link-only notification email to the signer (portal login URL)
+ *   2. Renders + uploads the signed PDF via ensureSignedContractPdf() and sets
+ *      agents.contractUrl. This is the ONLY place headless Chromium runs for the
+ *      in-app / onboarding signing flow — never on a request path.
+ *   3. Sets contractStartDate / contractEndDate on the agent row.
+ *   4. Sends a link-only notification email to the signer (portal login URL)
  *      and every active admin (admin signed-contracts panel URL).
- *   4. Marks emailed_at = now, permanently excluding the row from future sweeps.
+ *   5. Marks emailed_at = now, permanently excluding the row from future sweeps.
  *
- * The worker deliberately does NOT render the signed PDF and does NOT start
- * headless Chromium at any point. Chromium is memory-heavy and was OOM-killing
- * the autoscale container while a sign POST was in-flight, causing the edge
- * proxy to return its own HTML "403 Forbidden" instead of completing the sign
- * request. PDF rendering is now lazy: it happens on the first download request
- * via ensureSignedContractPdf() in signContract.ts, which also sets
- * agents.contractUrl at that point.
+ * PDF rendering runs HERE, off the request path, by design. Chromium is
+ * memory-heavy and, when launched inside an HTTP handler, OOM-killed the 512MB
+ * autoscale container while a sign POST was in-flight — the edge proxy then
+ * returned its own HTML "403 Forbidden" instead of completing the request.
+ * Moving the render into this background sweep keeps every request path free of
+ * Chromium. If a render still OOMs/crashes here (OOM_PATTERN), the lease is
+ * released and emailed_at stays NULL so the row is retried on a later sweep —
+ * the instance restarting mid-render never permanently loses delivery.
  */
 export async function deliverPendingSignedContracts(): Promise<void> {
   try {
@@ -106,6 +121,39 @@ export async function deliverPendingSignedContracts(): Promise<void> {
         ))
         .returning({ id: signedContractsTable.id });
       if (claimed.length === 0) continue;
+
+      // Render + upload the signed PDF (and hydrate agents.contractUrl) BEFORE
+      // marking the row delivered, so by the time the notification emails go out
+      // the download is ready. This is the single Chromium launch site for this
+      // flow and it lives off the request path. On an OOM/crash we release the
+      // lease and leave emailed_at NULL for a later retry; a non-OOM render error
+      // is handled the same way (retry) but without the OOM streak bookkeeping.
+      try {
+        await ensureSignedContractPdf(row.id);
+        oomStreak = 0;
+      } catch (pdfErr) {
+        const msg = String((pdfErr as any)?.message || pdfErr || "");
+        if (OOM_PATTERN.test(msg)) {
+          oomStreak++;
+          console.warn(`[contract-pdf] OOM/crash detected for row=${row.id}, releasing lease for retry`);
+          if (oomStreak >= 5) {
+            console.error("[contract-pdf] CRITICAL: 5 consecutive OOMs, manual intervention needed");
+          }
+        } else {
+          console.error(`[SIGNED-DELIVERY] PDF render failed for signed_contract ${row.id}, releasing lease for retry:`, pdfErr);
+        }
+        // Both OOM and non-OOM render errors: keep emailed_at NULL and release
+        // the lease so the row is retried on a later sweep (still bounded by
+        // RECENT_WINDOW_DAYS). Do not throw — the sweep continues to the next row.
+        try {
+          await db.update(signedContractsTable)
+            .set({ deliveryClaimedAt: null })
+            .where(and(eq(signedContractsTable.id, row.id), isNull(signedContractsTable.emailedAt)));
+        } catch (resetErr) {
+          console.error(`[SIGNED-DELIVERY] failed to release lease for signed_contract ${row.id}:`, resetErr);
+        }
+        continue;
+      }
 
       try {
         const [template] = await db.select({ name: contractTemplatesTable.name, language: contractTemplatesTable.language })
