@@ -149,6 +149,15 @@ const CHROMIUM_LAUNCH_ARGS = [
   "--disable-extensions",
   "--disable-background-networking",
   "--mute-audio",
+  // Defense-in-depth memory cap. --max-old-space-size / --max-semi-space-size
+  // are V8 flags (NOT Chromium browser flags); passed directly as Chromium args
+  // they are silently ignored. Routed through --js-flags they cap the browser
+  // process's V8 heap so a runaway render makes Chromium's own V8 throw
+  // "JavaScript heap out of memory" — failing the single render (caught + force-
+  // closed below) instead of OOM-killing the 512MB autoscale container and
+  // surfacing as an opaque edge-proxy 403. With --single-process the browser and
+  // renderer share one process, so this cap applies to the whole Chromium heap.
+  "--js-flags=--max-old-space-size=256 --max-semi-space-size=64",
 ];
 
 /**
