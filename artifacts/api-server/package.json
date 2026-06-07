@@ -19,7 +19,8 @@
     "test:webhook-dedup": "tsx ./scripts/test-webhook-dedup.ts",
     "test:inbox-suite": "tsx ./scripts/test-inbox-suite.ts",
     "test:doc-equivalence": "tsx ./scripts/test-doc-equivalence.ts",
-    "test:agent-commission": "tsx ./scripts/test-agent-commission.ts"
+    "test:agent-commission": "tsx ./scripts/test-agent-commission.ts",
+    "test:contract-sign-smoke": "tsx ./scripts/test-contract-sign-smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

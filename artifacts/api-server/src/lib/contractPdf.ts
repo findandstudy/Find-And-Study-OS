@@ -135,6 +135,30 @@ function isBlockedSubresourceHost(host: string): boolean {
   return false;
 }
 
+// Memory-minimizing launch args. See buildSignedPdf for the rationale behind
+// each flag. Extracted here so both render calls use identical configuration.
+const CHROMIUM_LAUNCH_ARGS = [
+  "--no-sandbox",
+  "--disable-setuid-sandbox",
+  "--disable-dev-shm-usage",
+  "--font-render-hinting=none",
+  "--single-process",
+  "--no-zygote",
+  "--disable-gpu",
+  "--disable-software-rasterizer",
+  "--disable-extensions",
+  "--disable-background-networking",
+  "--mute-audio",
+];
+
+/**
+ * Render `html` to a PDF page using the supplied Chromium `browser`.
+ *
+ * The browser is NOT managed here — the caller (buildSignedPdf) owns its
+ * lifecycle and must close it regardless of success/failure. This lets
+ * buildSignedPdf force-close the browser on a render timeout, guaranteeing
+ * memory is freed even when the underlying promise is still in flight.
+ */
 async function renderHtmlToPdf(browser: any, html: string): Promise<Uint8Array> {
   const page = await browser.newPage();
   try {
@@ -168,7 +192,7 @@ async function renderHtmlToPdf(browser: any, html: string): Promise<Uint8Array> 
     const buf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
     return new Uint8Array(buf);
   } finally {
-    await page.close();
+    await page.close().catch(() => {});
   }
 }
 
@@ -209,38 +233,19 @@ function renderWithTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
 export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfResult> {
   const { chromium } = await import("playwright-core");
   const executablePath = resolveChromiumPath();
-  // Memory-minimizing launch args. The autoscale instance is small, and a single
-  // contract render must not blow its RSS budget — an OOM kill there does not
-  // surface as a JSON error, it kills the whole instance mid-request and the
-  // edge proxy returns an opaque HTML "403 Forbidden" to whatever other request
-  // was in flight (e.g. an agent's sign POST). In addition to the existing
-  // shared-memory and sandbox flags we:
-  //  - `--single-process`: collapse Chromium's multi-process model into one
-  //    process. This is the single biggest RSS reduction for short-lived
-  //    HTML→PDF renders and is the standard choice in memory-constrained
-  //    serverless environments. Safe here because each browser renders one
-  //    document then closes.
-  //  - `--no-zygote`: no forked zygote process (pairs with --single-process).
-  //  - `--disable-gpu` / `--disable-software-rasterizer`: no GPU stack; PDF
-  //    print does not need it and it costs memory.
-  //  - `--disable-extensions` / `--disable-background-networking` /
-  //    `--mute-audio`: trim background subsystems we never use.
-  const browser = await chromium.launch({
-    executablePath,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--font-render-hinting=none",
-      "--single-process",
-      "--no-zygote",
-      "--disable-gpu",
-      "--disable-software-rasterizer",
-      "--disable-extensions",
-      "--disable-background-networking",
-      "--mute-audio",
-    ],
-  });
+  // Two separate short-lived Chromium browser instances are used — one for the
+  // content page and one for the evidence page. Previously a single browser was
+  // shared; with --single-process the Chromium renderer can crash after the
+  // first page is generated, causing browser.newPage() to throw "Target page,
+  // context or browser has been closed" on the evidence render.
+  //
+  // buildSignedPdf owns both browser handles. The finally block force-closes
+  // whichever browser is still alive when a render timeout or any error fires,
+  // so Chromium is never left running in the background after the render lock
+  // is released. renderHtmlToPdf does NOT close the browser (it only closes the
+  // page), keeping all lifecycle management in one place here.
+  let browser1: any = null;
+  let browser2: any = null;
 
   const renderStart = Date.now();
   const rssMb = () => Math.round(process.memoryUsage().rss / (1024 * 1024));
@@ -248,11 +253,16 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
   const deadline = Date.now() + RENDER_TIMEOUT_MS;
   const remainingMs = () => Math.max(1, deadline - Date.now());
   try {
+    browser1 = await chromium.launch({ executablePath, args: CHROMIUM_LAUNCH_ARGS });
     const contentBytes = await renderWithTimeout(
-      renderHtmlToPdf(browser, documentShell(params.bodyHtml)),
+      renderHtmlToPdf(browser1, documentShell(params.bodyHtml)),
       remainingMs(),
       "Contract PDF content render",
     );
+    // Close browser1 before launching browser2 so the two browsers are never
+    // alive simultaneously (keeps peak RSS bounded to one Chromium at a time).
+    await browser1.close().catch(() => {});
+    browser1 = null;
 
     const hasher = crypto.createHash("sha256");
     hasher.update(Buffer.from(contentBytes));
@@ -264,8 +274,9 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
     hasher.update(params.signedAt.toISOString());
     const evidenceHash = hasher.digest("hex");
 
+    browser2 = await chromium.launch({ executablePath, args: CHROMIUM_LAUNCH_ARGS });
     const evidenceBytes = await renderWithTimeout(
-      renderHtmlToPdf(browser, documentShell(evidencePageHtml(params, evidenceHash))),
+      renderHtmlToPdf(browser2, documentShell(evidencePageHtml(params, evidenceHash))),
       remainingMs(),
       "Contract PDF evidence render",
     );
@@ -287,6 +298,12 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
     console.error(`[contract-pdf] render failed signer=${params.signerEmail} ms=${Date.now() - renderStart} rss=${rssMb()}MB:`, err);
     throw err;
   } finally {
-    await browser.close();
+    // Force-close any browser still alive. This is the critical path for
+    // timeout scenarios: renderWithTimeout rejects and buildSignedPdf throws,
+    // but the underlying renderHtmlToPdf promise may still be running inside
+    // Chromium. Closing the browser here terminates the Chromium process
+    // immediately, bounding peak memory before the render lock is released.
+    if (browser1) await browser1.close().catch(() => {});
+    if (browser2) await browser2.close().catch(() => {});
   }
 }
