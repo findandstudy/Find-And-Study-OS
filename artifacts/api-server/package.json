@@ -7,7 +7,7 @@
     "dev": "NODE_ENV=development tsx ./src/index.ts",
     "build": "tsx ./build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run test:shared-libs && pnpm run test:export-import && pnpm run test:inbox-suite && pnpm run test:inbox-ai-actions && pnpm run test:webhook-dedup && pnpm run test:doc-equivalence && pnpm run test:agent-commission && pnpm run test:gpa-normalize && pnpm run test:stage-behaviors && pnpm run test:assignment-cascade && pnpm run test:contract-context && pnpm run test:contract-sign",
+    "test": "pnpm run test:shared-libs && pnpm run test:export-import && pnpm run test:inbox-suite && pnpm run test:inbox-ai-actions && pnpm run test:webhook-dedup && pnpm run test:doc-equivalence && pnpm run test:agent-commission && pnpm run test:gpa-normalize && pnpm run test:stage-behaviors && pnpm run test:assignment-cascade && pnpm run test:contract-context && pnpm run test:contract-sign && pnpm run test:object-authz-signed-contract",
     "test:assignment-cascade": "tsx --test ./scripts/test-assignment-cascade.ts",
     "test:contract-context": "tsx ./scripts/test-contract-context.ts",
     "test:inbox-ai-actions": "tsx --test ./scripts/test-inbox-ai-actions.ts",
@@ -21,7 +21,8 @@
     "test:doc-equivalence": "tsx ./scripts/test-doc-equivalence.ts",
     "test:agent-commission": "tsx ./scripts/test-agent-commission.ts",
     "test:contract-sign-smoke": "tsx ./scripts/test-contract-sign-smoke.ts",
-    "test:contract-sign": "tsx --test ./scripts/test-contract-sign.ts"
+    "test:contract-sign": "tsx --test ./scripts/test-contract-sign.ts",
+    "test:object-authz-signed-contract": "tsx --test ./scripts/test-object-authz-signed-contract.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

@@ -461,18 +461,16 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
 
   // Read-time resolution: if the agent has re-signed via a resend, the newest
   // signed_contract lives on a LATER session (often isPrimaryOnboarding=false)
-  // that loadOnboardingSession does not return. When the primary onboarding
-  // session is already signed and a strictly-newer signed session exists, surface
-  // that newer session here so the dashboard reflects the agent's current
-  // (correct) contract instead of the superseded primary one.
+  // that loadOnboardingSession does not return. loadNewestSignedContractForAgent
+  // returns the agent's globally-newest signed contract (ORDER BY signed_at DESC,
+  // id DESC over ALL sessions, including the primary one). So when the primary
+  // onboarding session is signed and the newest signed contract belongs to a
+  // DIFFERENT session, that newer session is by definition the authoritative one
+  // — surface it. Using session identity (rather than a timestamp `>` compare)
+  // keeps this consistent with /contracts/me/pdf and /agents/me, which both stream
+  // the same globally-newest record (avoids an equal-timestamp tie-break skew).
   const newest = await loadNewestSignedContractForAgent(agent.id);
-  if (
-    session.status === "signed" &&
-    newest &&
-    newest.session.id !== session.id &&
-    newest.signed.signedAt && session.signedAt &&
-    new Date(newest.signed.signedAt) > new Date(session.signedAt)
-  ) {
+  if (session.status === "signed" && newest && newest.session.id !== session.id) {
     session = newest.session;
   }
 

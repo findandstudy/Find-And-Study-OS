@@ -82,6 +82,28 @@ PDFs survive); `/contracts/me` surfaces a strictly-newer signed session when the
 primary is already signed; `/contracts/me/pdf` streams the newest. This fixes the
 LIVE read path without any prod DB write — the prod data row can stay as-is.
 
+## Generic object ACL must not depend on agents.contractUrl for signed PDFs
+
+After the read-time resolver pointed `/agents/me` at the NEWEST signed PDF, the
+download itself 403'd: the frontend fetches the PDF via the generic
+`GET /api/storage/objects/*path` route, whose authorizer (`canAccessGenericObject`
+in `objectAuthz.ts`) reached signed-contract PDFs ONLY through the
+`agents.contractUrl` reference rule. That column is stale (locked to the earlier
+contract after a resend, and we can't write prod), so the old contract returned
+200 while the new one returned 403 "Access denied" — *for the same logged-in
+agent*. `object_owners` doesn't help either: server-generated PDFs are never
+bound to a user uploader, so the uploader rule never fires.
+
+**Rule added (section 2b):** authorize signed PDFs directly against the
+`signed_contracts` ledger — if the requested key matches any
+`signed_contracts.pdf_object_key`, grant to admins or the owning agent (via
+`getAgentVisibleIds`, which includes the agent's own id + sub-agents). Safe from
+IDOR because `pdf_object_key` is server-written only (like the agent trust-doc
+rule), never user-writable. This lets an agent download ANY of their own signed
+contracts (old or new) regardless of which one `agents.contractUrl` currently
+points at. **Why:** an agent accumulates multiple signed contracts over time; the
+single `contractUrl` pointer cannot gate all of them.
+
 **Note:** the unsigned-preview render paths (publicSigning preview,
 agentOnboarding preview) intentionally leave `signature`/`main_agency_signature`
 empty; `cleanupSignatureImages` swaps an empty `<img src="">` for a styled

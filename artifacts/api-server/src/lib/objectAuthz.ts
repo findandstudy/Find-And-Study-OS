@@ -10,6 +10,7 @@ import {
   messagesTable,
   conversationParticipantsTable,
   objectOwnersTable,
+  signedContractsTable,
 } from "@workspace/db";
 import { ADMIN_ROLES, FINANCE_ROLES } from "@workspace/roles";
 import { and, eq, inArray, isNull, or, sql, type SQL, type AnyColumn } from "drizzle-orm";
@@ -185,6 +186,29 @@ export async function canAccessGenericObject(user: RequestUser, wildcardPath: st
     if (isAdmin) return true;
     const visibleIds = await getAgentVisibleIds(user.id, role);
     if (visibleIds.includes(agentTrustDoc.id)) return true;
+  }
+
+  // 2b. Signed contract PDFs — generated server-side by the signing flow and
+  //     referenced by signed_contracts.pdf_object_key (never user-writable, so
+  //     trustworthy like an agent trust doc). Authorize directly against the
+  //     signed_contracts ledger rather than relying on agents.contractUrl
+  //     (section 2): that column only points at the agent's CURRENT contract and
+  //     lags behind after a re-sign/resend, leaving the older—or the newer—signed
+  //     PDF unreachable through this generic route. An agent can have several
+  //     signed contracts over time and must be able to download any of their own.
+  //     Visible to admins, or to the owning agent (plus its staff/sub-agents via
+  //     visibility).
+  const [signedPdf] = await db
+    .select({ agentId: signedContractsTable.agentId })
+    .from(signedContractsTable)
+    .where(matchKey(signedContractsTable.pdfObjectKey, key))
+    .limit(1);
+  if (signedPdf) {
+    if (isAdmin) return true;
+    if (signedPdf.agentId !== null) {
+      const visibleIds = await getAgentVisibleIds(user.id, role);
+      if (visibleIds.includes(signedPdf.agentId)) return true;
+    }
   }
 
   // 3. Staff / HR documents — admin-written. Admins, or the subject user.
