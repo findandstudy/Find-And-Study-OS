@@ -14,7 +14,7 @@ run = "pnpm --filter @workspace/api-server run dev"
 
 [services.production]
 build = "pnpm --filter @workspace/api-server run build"
-run = ["node", "artifacts/api-server/dist/index.cjs"]
+run = ["node", "--max-old-space-size=512", "artifacts/api-server/dist/index.cjs"]
 
 [services.production.env]
 PORT = "8080"
