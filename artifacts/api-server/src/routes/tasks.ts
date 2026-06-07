@@ -71,7 +71,11 @@ router.get("/tasks/assignees", requireAuth, requireRole(...STAFF_ROLES), async (
       role: usersTable.role,
     })
     .from(usersTable)
-    .where(and(eq(usersTable.isActive, true), isNull(usersTable.deletedAt)));
+    .where(and(
+      eq(usersTable.isActive, true),
+      isNull(usersTable.deletedAt),
+      inArray(usersTable.role, [...STAFF_ROLES]),
+    ));
   res.json({ data });
 });
 
