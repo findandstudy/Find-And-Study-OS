@@ -653,6 +653,36 @@ router.patch("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), asy
       await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, subAgent.userId));
     }
   }
+
+  const subAgentRateChanged = updates.commissionRate !== undefined && updates.commissionRate !== subAgent.commissionRate;
+  if (subAgentRateChanged) {
+    const newSubRate = updated.commissionRate ?? 0;
+    const currentSeason = await getCurrentSeason();
+
+    const subAgentComms = await db.select().from(commissionsTable)
+      .where(and(
+        eq(commissionsTable.subAgentId, subAgentId),
+        eq(commissionsTable.season, currentSeason),
+        sql`${commissionsTable.agentCommissionAmount} IS NOT NULL`,
+        sql`CAST(${commissionsTable.agentCommissionAmount} AS numeric) > 0`
+      ));
+
+    let recalculated = 0;
+    for (const comm of subAgentComms) {
+      const agentAmount = parseFloat(String(comm.agentCommissionAmount ?? "0")) || 0;
+      const subAmount = (agentAmount * newSubRate) / 100;
+      await db.update(commissionsTable).set({
+        subAgentCommissionRate: String(newSubRate),
+        subAgentCommissionAmount: String(Math.round(subAmount * 100) / 100),
+      }).where(eq(commissionsTable.id, comm.id));
+      recalculated++;
+    }
+
+    if (recalculated > 0) {
+      console.log(`[Commission Recalc] Sub-agent ${subAgentId} rate changed to ${newSubRate}% → recalculated ${recalculated} commission(s) for season ${currentSeason}`);
+    }
+  }
+
   res.json(updated);
 });
 
