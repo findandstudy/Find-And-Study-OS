@@ -65,6 +65,7 @@ import {
   Sparkles,
   ListChecks,
   FileSearch,
+  KeyRound,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
       ...(role === 'super_admin' ? [{ title: t("dashboard.branches"), icon: Building, url: '/admin/branches' }] : []),
       { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
       { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
+      ...(isAdmin ? [{ title: t("dashboard.apiTokens"), icon: KeyRound, url: '/admin/api-tokens' }] : []),
       { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
     ];
 
@@ -268,9 +270,6 @@ const ROLE_COLORS: Record<string, string> = {
   agent_staff: "bg-teal-500/10 text-teal-600",
 };
 
-// DEV-only: module-level mount counter to detect unexpected remounts
-let _devMountCount = 0;
-
 export function DashboardLayout({ children }: { children: ReactNode }) {
   // useAuth returns liveUser ?? getStickyUser() — never undefined after first
   // authentication. prevUserRef adds one more layer of defense.
@@ -278,19 +277,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const prevUserRef = useRef(liveUser);
   if (liveUser) prevUserRef.current = liveUser;
   const user = prevUserRef.current ?? liveUser;
-
-  // DEV-only: track mount count to detect unexpected remounts
-  const mountSessionRef = useRef(import.meta.env.DEV ? ++_devMountCount : 0);
-  const renderCountRef = useRef(0);
-  if (import.meta.env.DEV) renderCountRef.current++;
-
-  useEffect(() => {
-    console.log("[DashboardLayout] MOUNTED session #" + mountSessionRef.current);
-    return () => {
-      console.log("[DashboardLayout] UNMOUNTED session #" + mountSessionRef.current);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const [location, setLocation] = useLocation();
   const [navPending, startNavTransition] = useTransition();
@@ -429,6 +415,34 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       .catch(() => { clearedSectionRef.current = null; /* allow retry */ });
   }, [location, isStaff, isAgentRole, sectionCounts, queryClient]);
 
+  // Sidebar favorites — persisted per user so each account keeps its own pins.
+  // These hooks MUST run before every early return to comply with Rules of Hooks.
+  const pinnedStorageKey = `edcons:sidebarPinned:${user?.id ?? user?.email ?? "anon"}`;
+  const [pinnedUrls, setPinnedUrls] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(pinnedStorageKey);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.filter(v => typeof v === "string") : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(pinnedStorageKey, JSON.stringify(pinnedUrls)); } catch { /* ignore quota errors */ }
+  }, [pinnedStorageKey, pinnedUrls]);
+
+  const groupStorageKey = `edcons:sidebarGroups:${user?.id ?? user?.email ?? "anon"}`;
+  const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(groupStorageKey);
+      const obj = raw ? JSON.parse(raw) : {};
+      return obj && typeof obj === "object" ? obj : {};
+    } catch { return {}; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(groupStorageKey, JSON.stringify(groupOpen)); } catch { /* ignore quota errors */ }
+  }, [groupStorageKey, groupOpen]);
+
   if (!user && isLoading) {
     // Still resolving auth — show a blank bg so there's no white flash
     return <div className="min-h-screen bg-secondary/20" />;
@@ -442,36 +456,11 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const { groups } = getMenuForRole(user.role, t, staffPerms);
   const allItems = groups.flatMap(g => g.items);
 
-  // Sidebar favorites — persisted per user so each account keeps its own pins.
-  const pinnedStorageKey = `edcons:sidebarPinned:${user.id ?? user.email ?? "anon"}`;
-  const [pinnedUrls, setPinnedUrls] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = window.localStorage.getItem(pinnedStorageKey);
-      const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr.filter(v => typeof v === "string") : [];
-    } catch { return []; }
-  });
-  useEffect(() => {
-    try { window.localStorage.setItem(pinnedStorageKey, JSON.stringify(pinnedUrls)); } catch { /* ignore quota errors */ }
-  }, [pinnedStorageKey, pinnedUrls]);
   const togglePin = (url: string) => {
     setPinnedUrls(prev => prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url]);
   };
   const pinnedSet = new Set(pinnedUrls);
 
-  const groupStorageKey = `edcons:sidebarGroups:${user.id ?? user.email ?? "anon"}`;
-  const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>(() => {
-    if (typeof window === "undefined") return {};
-    try {
-      const raw = window.localStorage.getItem(groupStorageKey);
-      const obj = raw ? JSON.parse(raw) : {};
-      return obj && typeof obj === "object" ? obj : {};
-    } catch { return {}; }
-  });
-  useEffect(() => {
-    try { window.localStorage.setItem(groupStorageKey, JSON.stringify(groupOpen)); } catch { /* ignore quota errors */ }
-  }, [groupStorageKey, groupOpen]);
   const toggleGroup = (key: string, defaultOpen: boolean) => {
     setGroupOpen(prev => {
       const cur = prev[key] !== undefined ? prev[key] : defaultOpen;
@@ -520,11 +509,6 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "16rem" } as React.CSSProperties}>
-      {import.meta.env.DEV && (
-        <div style={{position:'fixed',top:0,right:0,zIndex:99999,background:'#ef4444',color:'white',padding:'2px 8px',fontSize:'10px',fontFamily:'monospace',pointerEvents:'none'}}>
-          layout #{mountSessionRef.current} render #{renderCountRef.current}
-        </div>
-      )}
       <div className="flex min-h-screen w-full bg-secondary/20">
         <Sidebar collapsible="icon" className="border-r border-border/60 shadow-sm">
           <SidebarContent className="bg-card">
