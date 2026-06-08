@@ -133,8 +133,24 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
   // Enforce admin-sent contract deadlines on every panel navigation: expires
   // past-due sessions and suspends the account when a deadline is missed.
   try { await syncAdminContracts(agent); } catch (err) { console.error("[onboarding-status] admin contract sync:", err); }
+
+  // Authoritative signed detection. An agent counts as signed whenever they
+  // have ANY signing_sessions row with status='signed', resolved to the
+  // globally-newest signed contract across ALL sessions — the same resolution
+  // used by /api/contracts/me, /api/contracts/me/pdf and /api/agents/me. This
+  // must NOT key off PDF presence (pdf_object_key/evidence_hash) or
+  // agents.contract_url: the regenerate flow legitimately NULLs those cache
+  // fields, and clearing them must never make a signed agent look unsigned and
+  // re-trigger the onboarding gate/banner. Resolving across all sessions also
+  // covers a re-sign that lands on a LATER (non-primary) session, which
+  // loadOnboardingSession does not return.
+  const newestSigned = await loadNewestSignedContractForAgent(agent.id);
+
   let contractStatus: "none" | "pending" | "signed" | "expired" | "revoked" = "none";
-  if (session) {
+  if (newestSigned) {
+    contractStatus = "signed";
+    session = newestSigned.session;
+  } else if (session) {
     if (session.status === "signed") contractStatus = "signed";
     else if (session.status === "expired") contractStatus = "expired";
     else if (session.status === "revoked") contractStatus = "revoked";

@@ -11,6 +11,20 @@ const router: IRouter = Router();
 
 const DEFAULT_EXPIRY_DAYS = 14;
 
+// Status-neutral PDF-cache reset applied by the regenerate endpoint. It clears
+// ONLY the rendered-PDF cache fields so the background sweep re-renders the PDF;
+// it must NEVER include any status field (signed_contracts has no status; a
+// signed contract's "signed" state lives on signing_sessions.status, which this
+// payload does not touch). Exported so a regression test can assert the exact
+// (PDF-cache-only) key set and catch any future status mutation. Keep this in
+// lockstep with the agent's signed-contract detection: detection keys off
+// signing_sessions.status='signed', never off these PDF-cache fields.
+export const REGENERATE_PDF_CACHE_RESET = {
+  pdfObjectKey: null,
+  evidenceHash: null,
+  deliveryClaimedAt: null,
+} as const;
+
 async function pickTemplate(language: string, entityType: string) {
   // Strict match: only the exact (language, entityType) pair, latest version.
   // No silent language fallback — caller must surface the 404 to the operator
@@ -173,7 +187,7 @@ router.post("/contracts/signed/:id/regenerate", requireAuth, requirePermission("
     const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
     await db.update(signedContractsTable)
-      .set({ pdfObjectKey: null, evidenceHash: null, deliveryClaimedAt: null })
+      .set(REGENERATE_PDF_CACHE_RESET)
       .where(eq(signedContractsTable.id, id));
     await writeAudit({
       userId: (req as any).user?.id ?? null,

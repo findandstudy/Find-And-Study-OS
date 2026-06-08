@@ -501,12 +501,22 @@ function OnboardingContractBanner() {
   const qc = useQueryClient();
   const [signing, setSigning] = useState(false);
 
+  // Authoritative gate: onboarding-status resolves "signed" across ALL sessions
+  // (including resends) and is immune to PDF-cache regenerates, so a signed
+  // agent is never nagged even if /api/contracts/me momentarily reports the
+  // primary session as pending.
+  const { data: onboarding } = useQuery<{ contractStatus: string }>({
+    queryKey: ["/api/agents/me/onboarding-status"],
+    queryFn: () => fetch(`${BASE}/api/agents/me/onboarding-status`, { credentials: "include" }).then(r => r.json()),
+  });
+
   const { data } = useQuery<{ data: { status: string; expiresAt: string; template: { name: string | null } | null } | null }>({
     queryKey: ["/api/contracts/me"],
     queryFn: () => fetch(`${BASE}/api/contracts/me`, { credentials: "include" }).then(r => r.json()),
   });
   const sess = data?.data || null;
-  const pending = !!sess && (sess.status === "intake_pending" || sess.status === "review_pending");
+  const pending = onboarding?.contractStatus === "pending"
+    && !!sess && (sess.status === "intake_pending" || sess.status === "review_pending");
 
   if (!pending || !sess) return null;
 
