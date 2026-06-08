@@ -124,6 +124,7 @@ export default function AgentDashboard() {
           </div>
         </div>
 
+        <OnboardingContractBanner />
         <PendingContractsCard />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -486,6 +487,51 @@ function ContractReminderCard({ templateName, expiresAt, onSign }: { templateNam
         </Button>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Reminder for the agent's PRIMARY onboarding contract. The onboarding modal is
+ * dismissible ("Later") before the deadline day; once dismissed the dashboard
+ * is shown, so this banner keeps the contract visible with a "Sign now" action.
+ * The signing flow is opened WITHOUT a sessionId so the onboarding intake step
+ * ("Agency Information") is collected, mirroring AgentOnboardingGuard.
+ */
+function OnboardingContractBanner() {
+  const qc = useQueryClient();
+  const [signing, setSigning] = useState(false);
+
+  const { data } = useQuery<{ data: { status: string; expiresAt: string; template: { name: string | null } | null } | null }>({
+    queryKey: ["/api/contracts/me"],
+    queryFn: () => fetch(`${BASE}/api/contracts/me`, { credentials: "include" }).then(r => r.json()),
+  });
+  const sess = data?.data || null;
+  const pending = !!sess && (sess.status === "intake_pending" || sess.status === "review_pending");
+
+  if (!pending || !sess) return null;
+
+  return (
+    <>
+      <ContractReminderCard
+        templateName={sess.template?.name ?? null}
+        expiresAt={sess.expiresAt}
+        onSign={() => setSigning(true)}
+      />
+      {signing && (
+        <SignContract
+          asModal
+          onClose={() => setSigning(false)}
+          onSigned={() => {
+            setSigning(false);
+            void qc.invalidateQueries({ queryKey: ["/api/contracts/me"] });
+            // Reload so AgentOnboardingGuard (which caches onboarding-status per
+            // mount, outside react-query) re-evaluates and clears any stale
+            // pending state after the primary onboarding contract is signed.
+            window.location.reload();
+          }}
+        />
+      )}
+    </>
   );
 }
 
