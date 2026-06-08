@@ -395,7 +395,7 @@ export default function AgentAccount() {
 
           {/* ── Agency Tab ── */}
           <TabsContent value="agency" className="pt-6">
-            <AgencyTab agentProfile={agentProfile} agentLoading={agentLoading} />
+            <AgencyTab agentProfile={agentProfile} agentLoading={agentLoading} isStaff={user?.role === "agent_staff"} />
           </TabsContent>
 
           {/* ── Web to Lead Tab ── */}
@@ -477,7 +477,7 @@ export default function AgentAccount() {
   );
 }
 
-function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoading: boolean }) {
+function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfile: any; agentLoading: boolean; isStaff?: boolean }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [businessName, setBusinessName] = useState("");
@@ -579,22 +579,32 @@ function AgencyTab({ agentProfile, agentLoading }: { agentProfile: any; agentLoa
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Business Name</Label>
+              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                Business Name
+                {isStaff && <Lock className="w-3 h-3 text-muted-foreground/60" />}
+              </Label>
               <Input
                 value={businessName}
-                onChange={e => setBusinessName(e.target.value)}
+                onChange={e => !isStaff && setBusinessName(e.target.value)}
                 placeholder="Your legal company name"
                 className="h-10"
+                disabled={isStaff}
               />
-              <p className="text-[11px] text-muted-foreground">Enter your registered legal company / business name</p>
+              <p className="text-[11px] text-muted-foreground">
+                {isStaff
+                  ? "Only the account owner can edit the business name"
+                  : "Enter your registered legal company / business name"}
+              </p>
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-border/50">
-              <Button onClick={handleSaveAgency} disabled={saving} size="sm" className="gap-2 px-6">
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                Save Changes
-              </Button>
-            </div>
+            {!isStaff && (
+              <div className="flex justify-end pt-3 border-t border-border/50">
+                <Button onClick={handleSaveAgency} disabled={saving} size="sm" className="gap-2 px-6">
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  Save Changes
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
 

@@ -448,8 +448,13 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
+  const userRole = (req.user as any).role as string;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  if (userRole === "agent_staff" && req.body.businessName !== undefined) {
+    res.status(403).json({ error: "Staff members cannot change the business name" });
+    return;
+  }
   const updates: Record<string, unknown> = {};
   for (const key of AGENT_SELF_PATCH_FIELDS) {
     if (req.body[key] !== undefined) {
