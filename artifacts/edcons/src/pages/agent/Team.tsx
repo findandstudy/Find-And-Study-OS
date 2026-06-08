@@ -65,17 +65,34 @@ type StaffMember = {
   createdAt: string;
 };
 
-const PERMISSION_OPTIONS = [
+type PermissionOption = {
+  key: string;
+  labelKey: string;
+  descKey: string;
+  children?: PermissionOption[];
+};
+
+const PERMISSION_OPTIONS: PermissionOption[] = [
   { key: "leads", labelKey: "teamPage.permLeads", descKey: "teamPage.permLeadsDesc" },
   { key: "students", labelKey: "teamPage.permStudents", descKey: "teamPage.permStudentsDesc" },
   { key: "applications", labelKey: "teamPage.permApplications", descKey: "teamPage.permApplicationsDesc" },
   { key: "documents", labelKey: "teamPage.permDocuments", descKey: "teamPage.permDocumentsDesc" },
-  { key: "course_finder", labelKey: "teamPage.permCourseFinder", descKey: "teamPage.permCourseFinderDesc" },
-  { key: "view_commission_amount", labelKey: "teamPage.permViewCommissionAmount", descKey: "teamPage.permViewCommissionAmountDesc" },
-  { key: "view_service_fee", labelKey: "teamPage.permViewServiceFee", descKey: "teamPage.permViewServiceFeeDesc" },
+  {
+    key: "course_finder",
+    labelKey: "teamPage.permCourseFinder",
+    descKey: "teamPage.permCourseFinderDesc",
+    children: [
+      { key: "view_commission_amount", labelKey: "teamPage.permViewCommissionAmount", descKey: "teamPage.permViewCommissionAmountDesc" },
+      { key: "view_service_fee", labelKey: "teamPage.permViewServiceFee", descKey: "teamPage.permViewServiceFeeDesc" },
+    ],
+  },
   { key: "messages", labelKey: "teamPage.permMessages", descKey: "teamPage.permMessagesDesc" },
   { key: "commissions", labelKey: "teamPage.permCommissions", descKey: "teamPage.permCommissionsDesc" },
 ];
+
+function allPermissionKeys(options: PermissionOption[]): string[] {
+  return options.flatMap(p => [p.key, ...(p.children ? allPermissionKeys(p.children) : [])]);
+}
 
 export default function AgentTeam() {
   const { t } = useI18n();
@@ -334,18 +351,20 @@ export default function AgentTeam() {
 
 function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: (perms: string[]) => void }) {
   const { t } = useI18n();
-  function toggle(key: string) {
+
+  function toggle(key: string, children?: PermissionOption[]) {
     if (value.includes(key)) {
-      onChange(value.filter(p => p !== key));
+      const childKeys = children ? allPermissionKeys(children) : [];
+      onChange(value.filter(p => p !== key && !childKeys.includes(p)));
     } else {
       onChange([...value, key]);
     }
   }
 
-  const allSelected = PERMISSION_OPTIONS.every(p => value.includes(p.key));
+  const ALL_KEYS = allPermissionKeys(PERMISSION_OPTIONS);
+  const allSelected = ALL_KEYS.every(k => value.includes(k));
 
   return (
-    <>
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium flex items-center gap-2">
@@ -361,7 +380,7 @@ function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: 
             if (allSelected) {
               onChange([]);
             } else {
-              onChange(PERMISSION_OPTIONS.map(p => p.key));
+              onChange(ALL_KEYS);
             }
           }}
         >
@@ -369,27 +388,62 @@ function PermissionsChecklist({ value, onChange }: { value: string[]; onChange: 
         </Button>
       </div>
       <div className="grid sm:grid-cols-2 gap-2">
-        {PERMISSION_OPTIONS.map(p => (
-          <label
-            key={p.key}
-            className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-              value.includes(p.key) ? "border-primary bg-primary/5" : "border-border/60 hover:border-border"
-            }`}
-          >
-            <Checkbox
-              checked={value.includes(p.key)}
-              onCheckedChange={() => toggle(p.key)}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm font-medium text-foreground">{t(p.labelKey)}</p>
-              <p className="text-xs text-muted-foreground">{t(p.descKey)}</p>
+        {PERMISSION_OPTIONS.map(p => {
+          const hasChildren = p.children && p.children.length > 0;
+          const isParentChecked = value.includes(p.key);
+          return (
+            <div key={p.key} className={hasChildren ? "sm:col-span-2" : ""}>
+              <label
+                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                  isParentChecked ? "border-primary bg-primary/5" : "border-border/60 hover:border-border"
+                }`}
+              >
+                <Checkbox
+                  checked={isParentChecked}
+                  onCheckedChange={() => toggle(p.key, p.children)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-sm font-medium text-foreground">{t(p.labelKey)}</p>
+                  <p className="text-xs text-muted-foreground">{t(p.descKey)}</p>
+                </div>
+              </label>
+              {hasChildren && (
+                <div className="ml-6 mt-1.5 grid sm:grid-cols-2 gap-2 pl-3 border-l-2 border-border/40">
+                  {p.children!.map(child => {
+                    const isChildChecked = value.includes(child.key) && isParentChecked;
+                    const isDisabled = !isParentChecked;
+                    return (
+                      <label
+                        key={child.key}
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
+                          isDisabled
+                            ? "border-border/30 bg-muted/30 opacity-50 cursor-not-allowed"
+                            : isChildChecked
+                            ? "border-primary bg-primary/5 cursor-pointer"
+                            : "border-border/60 hover:border-border cursor-pointer"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={isChildChecked}
+                          onCheckedChange={() => { if (!isDisabled) toggle(child.key); }}
+                          disabled={isDisabled}
+                          className="mt-0.5"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{t(child.labelKey)}</p>
+                          <p className="text-xs text-muted-foreground">{t(child.descKey)}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </label>
-        ))}
+          );
+        })}
       </div>
     </div>
-    </>
   );
 }
 
