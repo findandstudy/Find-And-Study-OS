@@ -28,6 +28,7 @@ export const GetMeResponse = zod.object({
   phone: zod.string().nullish(),
   language: zod.string(),
   isActive: zod.boolean(),
+  agentStaffPermissions: zod.array(zod.string()).nullish(),
   createdAt: zod.date(),
 });
 
@@ -62,6 +63,7 @@ export const ListUsersResponse = zod.object({
       phone: zod.string().nullish(),
       language: zod.string(),
       isActive: zod.boolean(),
+      agentStaffPermissions: zod.array(zod.string()).nullish(),
       createdAt: zod.date(),
     }),
   ),
@@ -103,6 +105,7 @@ export const GetUserResponse = zod.object({
   phone: zod.string().nullish(),
   language: zod.string(),
   isActive: zod.boolean(),
+  agentStaffPermissions: zod.array(zod.string()).nullish(),
   createdAt: zod.date(),
 });
 
@@ -134,6 +137,7 @@ export const UpdateUserResponse = zod.object({
   phone: zod.string().nullish(),
   language: zod.string(),
   isActive: zod.boolean(),
+  agentStaffPermissions: zod.array(zod.string()).nullish(),
   createdAt: zod.date(),
 });
 

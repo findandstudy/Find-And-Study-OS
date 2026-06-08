@@ -52,8 +52,12 @@ function buildSessionUser(dbUser: typeof usersTable.$inferSelect): SessionUser {
     emailVerified: dbUser.emailVerified,
     phone: dbUser.phone,
   };
-  if (dbUser.role === "agent_staff" && dbUser.agentStaffPermissions) {
-    result.agentStaffPermissions = dbUser.agentStaffPermissions as string[];
+  if (dbUser.role === "agent_staff") {
+    // Always emit the field for agent_staff (even when the DB column is null)
+    // so the frontend never sees `undefined` and mis-renders Access Denied.
+    result.agentStaffPermissions = Array.isArray(dbUser.agentStaffPermissions)
+      ? (dbUser.agentStaffPermissions as string[])
+      : [];
   }
   return result;
 }

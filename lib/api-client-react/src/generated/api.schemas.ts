@@ -42,6 +42,8 @@ export interface UserProfile {
   phone?: string | null;
   language: string;
   isActive: boolean;
+  /** @nullable */
+  agentStaffPermissions?: string[] | null;
   createdAt: string;
 }
 

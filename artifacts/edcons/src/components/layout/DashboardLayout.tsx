@@ -298,8 +298,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const navigateAndRefresh = (url: string) => {
     startNavTransition(() => setLocation(url));
     // Refresh data in the destination section without a full page reload.
-    // Invalidate all server queries so the new section pulls fresh content.
-    queryClient.invalidateQueries();
+    // Invalidate server queries so the new section pulls fresh content, but
+    // NEVER invalidate the auth query (/api/auth/me). Doing so makes `liveUser`
+    // briefly undefined while it refetches, which — combined with the 5s
+    // agent_staff polling — can race the useAuth redirect effect and bounce
+    // an authorized agent_staff user back to "/".
+    queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey?.[0] !== "/api/auth/me",
+    });
   };
   const handleNavClick = (url: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
     // Allow native middle-click / ctrl+click / cmd+click / shift / alt to open in new tab/window.

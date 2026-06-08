@@ -75,8 +75,12 @@ function buildSessionUser(user: Record<string, unknown>): SessionUser {
     emailVerified: user.emailVerified as boolean,
     phone: user.phone as string | null,
   };
-  if (user.role === "agent_staff" && user.agentStaffPermissions) {
-    result.agentStaffPermissions = user.agentStaffPermissions as string[];
+  if (user.role === "agent_staff") {
+    // Always emit the field for agent_staff (even when the DB column is null)
+    // so the frontend never sees `undefined` and mis-renders Access Denied.
+    result.agentStaffPermissions = Array.isArray(user.agentStaffPermissions)
+      ? (user.agentStaffPermissions as string[])
+      : [];
   }
   return result;
 }
