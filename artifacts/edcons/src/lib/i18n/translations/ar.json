@@ -1010,7 +1010,12 @@
     "noNotifications": "لا توجد إشعارات.",
     "viewAll": "عرض الكل",
     "followUpCreatedBy": "أنشأه: {name}",
-    "followUpLastEditedBy": "آخر تعديل بواسطة: {name}"
+    "followUpLastEditedBy": "آخر تعديل بواسطة: {name}",
+    "myTasks": "مهامي",
+    "noMyTasks": "لا توجد مهام مُسنَدة إليك.",
+    "taskStart": "ابدأ",
+    "taskDone": "تم",
+    "viewAllTasks": "عرض جميع المهام"
   },
   "agentDash": {
     "title": "بوابة الوكيل",

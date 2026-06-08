@@ -1010,7 +1010,12 @@
     "noNotifications": "Tidak ada notifikasi.",
     "viewAll": "Lihat Semua",
     "followUpCreatedBy": "Dibuat oleh: {name}",
-    "followUpLastEditedBy": "Terakhir diedit oleh: {name}"
+    "followUpLastEditedBy": "Terakhir diedit oleh: {name}",
+    "myTasks": "Tugas Saya",
+    "noMyTasks": "Tidak ada tugas yang ditugaskan kepada Anda.",
+    "taskStart": "Mulai",
+    "taskDone": "Selesai",
+    "viewAllTasks": "Lihat Semua Tugas"
   },
   "agentDash": {
     "title": "Portal Agen",

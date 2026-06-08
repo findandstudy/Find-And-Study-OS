@@ -1010,7 +1010,12 @@
     "noNotifications": "Aucune notification.",
     "viewAll": "Tout voir",
     "followUpCreatedBy": "Créé par : {name}",
-    "followUpLastEditedBy": "Dernière modification par : {name}"
+    "followUpLastEditedBy": "Dernière modification par : {name}",
+    "myTasks": "Mes tâches",
+    "noMyTasks": "Aucune tâche ne vous est assignée.",
+    "taskStart": "Démarrer",
+    "taskDone": "Terminé",
+    "viewAllTasks": "Voir toutes les tâches"
   },
   "agentDash": {
     "title": "Portail agent",

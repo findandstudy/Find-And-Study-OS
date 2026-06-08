@@ -951,7 +951,12 @@
     "noNotifications": "Bildirim yok.",
     "viewAll": "Tümünü Gör",
     "followUpCreatedBy": "Oluşturan: {name}",
-    "followUpLastEditedBy": "Son düzenleyen: {name}"
+    "followUpLastEditedBy": "Son düzenleyen: {name}",
+    "myTasks": "Görevlerim",
+    "noMyTasks": "Size atanmış görev yok.",
+    "taskStart": "Başla",
+    "taskDone": "Tamamla",
+    "viewAllTasks": "Tüm Görevleri Gör"
   },
   "agentDash": {
     "title": "Acente Portalı",

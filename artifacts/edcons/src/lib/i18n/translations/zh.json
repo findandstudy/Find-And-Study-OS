@@ -1010,7 +1010,12 @@
     "noNotifications": "暂无通知。",
     "viewAll": "查看全部",
     "followUpCreatedBy": "创建者：{name}",
-    "followUpLastEditedBy": "最后编辑者：{name}"
+    "followUpLastEditedBy": "最后编辑者：{name}",
+    "myTasks": "我的任务",
+    "noMyTasks": "没有分配给您的任务。",
+    "taskStart": "开始",
+    "taskDone": "完成",
+    "viewAllTasks": "查看所有任务"
   },
   "agentDash": {
     "title": "代理门户",

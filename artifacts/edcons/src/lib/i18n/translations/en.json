@@ -1010,7 +1010,12 @@
     "noNotifications": "No notifications.",
     "viewAll": "View All",
     "followUpCreatedBy": "Created by: {name}",
-    "followUpLastEditedBy": "Last edited by: {name}"
+    "followUpLastEditedBy": "Last edited by: {name}",
+    "myTasks": "My Tasks",
+    "noMyTasks": "No tasks assigned to you.",
+    "taskStart": "Start",
+    "taskDone": "Done",
+    "viewAllTasks": "View All Tasks"
   },
   "agentDash": {
     "title": "Agent Portal",

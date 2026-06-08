@@ -1010,7 +1010,12 @@
     "noNotifications": "कोई सूचना नहीं।",
     "viewAll": "सभी देखें",
     "followUpCreatedBy": "बनाने वाले: {name}",
-    "followUpLastEditedBy": "अंतिम संपादक: {name}"
+    "followUpLastEditedBy": "अंतिम संपादक: {name}",
+    "myTasks": "मेरे कार्य",
+    "noMyTasks": "आपको कोई कार्य नहीं सौंपा गया है।",
+    "taskStart": "शुरू करें",
+    "taskDone": "पूर्ण",
+    "viewAllTasks": "सभी कार्य देखें"
   },
   "agentDash": {
     "title": "एजेंट पोर्टल",

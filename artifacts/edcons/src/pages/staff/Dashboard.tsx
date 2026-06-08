@@ -1,14 +1,15 @@
 import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 import { useGetOverviewStats } from "@workspace/api-client-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink, Activity, Bell, UserPlus, FileCheck, CreditCard, DollarSign, MessageCircle, Megaphone, AlertCircle, AlertTriangle, Shield, Link as LinkIcon } from "lucide-react";
+import { Users, FileText, GraduationCap, ArrowUpRight, Clock, CalendarClock, ExternalLink, Activity, Bell, UserPlus, FileCheck, CreditCard, DollarSign, MessageCircle, Megaphone, AlertCircle, AlertTriangle, Shield, Link as LinkIcon, ClipboardList, CheckCheck, Play, CheckCircle2 } from "lucide-react";
 import { formatMoney } from "@/lib/currency";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
+import { useToast } from "@/hooks/use-toast";
 import { formatTimeAgo } from "@/lib/i18n";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 import { useSeason } from "@/contexts/SeasonContext";
@@ -64,6 +65,7 @@ function isOverdue(d: string) { return new Date(d) < new Date(); }
 export default function StaffDashboard() {
   const { user } = useAuth(true);
   const { t, lang } = useI18n();
+  const { toast } = useToast();
   const dateLoc = DATE_LOCALE[lang] || "en-US";
   const showOfferDeadlines = user?.role !== "super_admin";
   const { season } = useSeason();
@@ -122,6 +124,38 @@ export default function StaffDashboard() {
       return Array.isArray(j) ? j : [];
     },
   });
+
+  const queryClient = useQueryClient();
+
+  const { data: myTasksData } = useQuery<{ data: any[] }>({
+    queryKey: ["/api/tasks", "dashboard-mine"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/tasks?limit=5&archived=false&assignedTo=me`, { credentials: "include" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!user,
+  });
+  const myTasks: any[] = myTasksData?.data || [];
+
+  async function updateTaskStatus(taskId: number, status: string) {
+    try {
+      const r = await fetch(`${BASE}/api/tasks/${taskId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        toast({ title: t("common.error"), description: (body as any).error || `HTTP ${r.status}`, variant: "destructive" });
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks", "dashboard-mine"] });
+    } catch (err) {
+      toast({ title: t("common.error"), description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    }
+  }
 
   if (isLoading) {
     return (
@@ -343,10 +377,10 @@ export default function StaffDashboard() {
           </Card>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          <Card className="lg:col-span-2 p-6 border-none shadow-lg shadow-black/5">
-            <h3 className="font-display font-bold text-lg mb-6">{t("staffDash.growthOverview")}</h3>
-            <div className="h-[300px] w-full">
+        <div className="grid lg:grid-cols-3 gap-6">
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <h3 className="font-display font-bold text-base mb-4">{t("staffDash.growthOverview")}</h3>
+            <div className="h-[200px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={growthData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
@@ -356,15 +390,83 @@ export default function StaffDashboard() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 11}} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 11}} />
                   <Tooltip
                     contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                     itemStyle={{ color: 'hsl(var(--foreground))' }}
                   />
-                  <Area type="monotone" dataKey="leads" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#colorLeads)" />
+                  <Area type="monotone" dataKey="leads" stroke="hsl(var(--primary))" strokeWidth={2} fillOpacity={1} fill="url(#colorLeads)" />
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card className="p-6 border-none shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <ClipboardList className="w-4 h-4 text-blue-500" />
+              </div>
+              <h3 className="font-display font-bold text-base flex-1">{t("staffDash.myTasks")}</h3>
+              <Link href="/staff/tasks">
+                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-primary/10 gap-1">
+                  {t("staffDash.viewAllTasks")} <ArrowUpRight className="w-3 h-3" />
+                </Badge>
+              </Link>
+            </div>
+            <div className="space-y-2 max-h-[260px] overflow-y-auto">
+              {myTasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("staffDash.noMyTasks")}</p>
+              ) : (
+                myTasks.map((tk: any) => {
+                  const priorityClass = tk.priority === "high"
+                    ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                    : tk.priority === "medium"
+                    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300"
+                    : "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300";
+                  const isDone = tk.status === "done";
+                  const isInProgress = tk.status === "in_progress";
+                  return (
+                    <Link key={tk.id} href="/staff/tasks">
+                      <div className="flex items-center gap-2 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group">
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-medium truncate ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                            {tk.title}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${priorityClass}`}>
+                              {tk.priority}
+                            </span>
+                            {tk.dueDate && (
+                              <span className={`text-[10px] ${new Date(tk.dueDate) < new Date() && !isDone ? "text-red-500 font-semibold" : "text-muted-foreground"}`}>
+                                {new Date(tk.dueDate).toLocaleDateString(dateLoc, { day: "2-digit", month: "2-digit" })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {isDone ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                        ) : (
+                          <button
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); void updateTaskStatus(tk.id, isInProgress ? "done" : "in_progress"); }}
+                            className={`shrink-0 flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg border transition-colors ${
+                              isInProgress
+                                ? "border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950/30"
+                                : "border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                            }`}
+                          >
+                            {isInProgress ? (
+                              <><CheckCheck className="w-3 h-3" />{t("staffDash.taskDone")}</>
+                            ) : (
+                              <><Play className="w-3 h-3" />{t("staffDash.taskStart")}</>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </Card>
 

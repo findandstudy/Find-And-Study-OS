@@ -1010,7 +1010,12 @@
     "noNotifications": "No hay notificaciones.",
     "viewAll": "Ver todo",
     "followUpCreatedBy": "Creado por: {name}",
-    "followUpLastEditedBy": "Última edición por: {name}"
+    "followUpLastEditedBy": "Última edición por: {name}",
+    "myTasks": "Mis tareas",
+    "noMyTasks": "No tienes tareas asignadas.",
+    "taskStart": "Iniciar",
+    "taskDone": "Hecho",
+    "viewAllTasks": "Ver todas las tareas"
   },
   "agentDash": {
     "title": "Portal de agentes",

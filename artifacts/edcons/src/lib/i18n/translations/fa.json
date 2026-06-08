@@ -1010,7 +1010,12 @@
     "noNotifications": "اعلانی وجود ندارد.",
     "viewAll": "مشاهده‌ی همه",
     "followUpCreatedBy": "ایجادشده توسط: {name}",
-    "followUpLastEditedBy": "آخرین ویرایش توسط: {name}"
+    "followUpLastEditedBy": "آخرین ویرایش توسط: {name}",
+    "myTasks": "وظایف من",
+    "noMyTasks": "هیچ وظیفه‌ای به شما اختصاص داده نشده است.",
+    "taskStart": "شروع",
+    "taskDone": "انجام شد",
+    "viewAllTasks": "مشاهده همه وظایف"
   },
   "agentDash": {
     "title": "پورتال نماینده",

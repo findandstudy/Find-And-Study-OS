@@ -42,11 +42,15 @@ router.get("/tasks", requireAuth, async (req, res): Promise<void> => {
   const archived = String(req.query.archived ?? "") === "true";
   const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
   const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+  const assignedToMe = String(req.query.assignedTo ?? "") === "me";
   const me = req.user!;
 
   const conditions = [];
   conditions.push(archived ? isNotNull(tasksTable.archivedAt) : isNull(tasksTable.archivedAt));
-  if (!isAdmin(me.role)) {
+  if (assignedToMe) {
+    // Explicitly request only tasks assigned to the current user (any role).
+    conditions.push(eq(tasksTable.assignedTo, me.id));
+  } else if (!isAdmin(me.role)) {
     conditions.push(or(eq(tasksTable.assignedTo, me.id), isNull(tasksTable.assignedTo))!);
   }
 
