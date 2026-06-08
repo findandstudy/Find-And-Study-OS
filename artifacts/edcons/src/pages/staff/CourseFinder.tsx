@@ -869,6 +869,7 @@ export default function CourseFinder() {
         currentUser={user}
         agentShareRate={agentShareRate}
         hideServiceFee={effectiveForceHideServiceFee}
+        showCommission={!!showCommission}
       />
 
       {canUsePdfMarkup && !effectiveForceHideServiceFee && (
@@ -1820,7 +1821,7 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
   );
 }
 
-function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideServiceFee = false }: { program: Program | null; onClose: () => void; currentUser: any; agentShareRate?: number | null | undefined; hideServiceFee?: boolean }) {
+function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideServiceFee = false, showCommission = false }: { program: Program | null; onClose: () => void; currentUser: any; agentShareRate?: number | null | undefined; hideServiceFee?: boolean; showCommission?: boolean }) {
   const { t } = useI18n();
   const isStudentUser = currentUser?.role === "student";
   const { toast } = useToast();
@@ -2200,7 +2201,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                 {p.scholarship != null && p.scholarship > 0 && (
                   <Badge className="text-xs bg-emerald-100 text-emerald-700 border-0 dark:bg-emerald-900/40 dark:text-emerald-300">Scholarship: {formatCurrency(p.scholarship, cur)}</Badge>
                 )}
-                {!isStudentUser && commissionAmount != null && (
+                {!isStudentUser && showCommission && commissionAmount != null && (
                   <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0 dark:bg-indigo-900/40 dark:text-indigo-300">Commission: {formatCurrency(commissionAmount, cur)}</Badge>
                 )}
                 {!isStudentUser && !hideServiceFee && p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
