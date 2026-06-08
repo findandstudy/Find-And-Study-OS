@@ -65,7 +65,6 @@ import {
   Sparkles,
   ListChecks,
   FileSearch,
-  KeyRound,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -79,87 +78,88 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, ChevronUp, User } from "lucide-react";
+import { LogOut, ChevronUp, ChevronDown, User } from "lucide-react";
 
 type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string; permKey?: string };
 type TFunc = (key: string, params?: Record<string, string | number>) => string;
 
-function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { groups: { label: string; items: MenuItem[] }[] } {
+// Sidebar groups that start collapsed by default (long, less-frequently used).
+const DEFAULT_CLOSED_GROUPS = new Set(["website", "ai", "system"]);
+
+function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { groups: { id?: string; label: string; items: MenuItem[] }[] } {
   const showFinance = (FINANCE_ROLES as readonly string[]).includes(role);
 
   if (role === 'super_admin' || role === 'admin' || role === 'manager') {
-    const opsItems: MenuItem[] = [
+    const isAdmin = role === 'super_admin' || role === 'admin';
+    const canSee = (perm: string) => isAdmin || (agentStaffPerms || []).includes(perm);
+
+    const crmItems: MenuItem[] = [
       { title: t("dashboard.leads"), icon: Users, url: '/staff/leads' },
       { title: t("dashboard.students"), icon: GraduationCap, url: '/staff/students' },
       { title: t("dashboard.applications"), icon: FileText, url: '/staff/applications' },
       { title: t("dashboard.courseFinder"), icon: Search, url: '/staff/course-finder' },
       { title: t("dashboard.messages"), icon: MessageCircle, url: '/staff/messages' },
-      { title: t("dashboard.agents"), icon: Handshake, url: '/staff/agents' },
       { title: t("dashboard.tasks"), icon: ClipboardList, url: '/staff/tasks' },
     ];
-    if (showFinance) opsItems.push({ title: t("dashboard.finance"), icon: DollarSign, url: '/staff/finance' });
-    const groups = [
-      {
-        label: t("dashboard.overview"),
-        items: [
-          { title: t("dashboard.dashboard"), icon: LayoutDashboard, url: '/admin' },
-        ]
-      },
-      {
-        label: t("dashboard.operations"),
-        items: opsItems
-      },
-      {
-        label: t("dashboard.admin"),
-        items: [
-          { title: t("dashboard.catalog"), icon: Library, url: '/admin/catalog' },
-          { title: t("dashboard.campaigns"), icon: Megaphone, url: '/admin/campaigns' },
-          { title: t("dashboard.popupAds"), icon: Bell, url: '/admin/popups' },
-          { title: t("dashboard.users"), icon: UserCheck, url: '/admin/users' },
-          ...((role === 'super_admin' || role === 'admin') ? [{ title: t("dashboard.staffCards"), icon: IdCard, url: '/admin/staff-cards' }] : []),
-          ...(role === 'super_admin' ? [{ title: t("dashboard.branches"), icon: Building, url: '/admin/branches' }] : []),
-          ...((role === 'super_admin' || role === 'admin') ? [
-            { title: t('dashboard.aiPersonas'), icon: Sparkles, url: '/admin/ai-personas' },
-            { title: t('dashboard.aiActionQueue'), icon: ListChecks, url: '/admin/ai-action-queue' },
-            { title: t('aiExtractor.sidebar'), icon: FileSearch, url: '/admin/ai-extractors' },
-          ] : []),
-          { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
-          { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
-          { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
-          ...((role === 'super_admin' || role === 'admin' || role === 'manager') ? [{ title: t("dashboard.apiTokens"), icon: KeyRound, url: '/admin/api-tokens' }] : []),
-          ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('contract_templates.view')) ? [
-            { title: t("dashboard.contractTemplates"), icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' },
-          ] : []),
-          ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('contracts.view')) ? [
-            { title: t("dashboard.contracts"), icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' },
-          ] : []),
-          ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('university_contracts.view')) ? [
-            { title: t("dashboard.universityContracts"), icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' },
-          ] : []),
-          ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('self_fill_links.view')) ? [
-            { title: t("dashboard.selfFillLinks"), icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' },
-          ] : []),
-          { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
-        ]
-      },
+
+    const agentNetworkItems: MenuItem[] = [
+      { title: t("dashboard.agents"), icon: Handshake, url: '/staff/agents' },
+      ...(canSee('contracts.view') ? [{ title: t("dashboard.contracts"), icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' }] : []),
+      ...(canSee('contract_templates.view') ? [{ title: t("dashboard.contractTemplates"), icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' }] : []),
+      ...(canSee('university_contracts.view') ? [{ title: t("dashboard.universityContracts"), icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' }] : []),
+      ...(canSee('self_fill_links.view') ? [{ title: t("dashboard.selfFillLinks"), icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' }] : []),
     ];
-    if (role === 'super_admin' || role === 'admin') {
-      groups.push({
-        label: t("dashboard.website"),
-        items: [
-          { title: t("dashboard.websitePages"), icon: FileText, url: '/admin/website/pages' },
-          { title: t("dashboard.websiteGlobalComponents"), icon: Component, url: '/admin/website/global-components' },
-          { title: t("dashboard.websiteNavigation"), icon: Menu, url: '/admin/website/navigation' },
-          { title: t("dashboard.websiteBlog"), icon: BookOpen, url: '/admin/website/blog' },
-          { title: t("dashboard.websiteCollections"), icon: Layers, url: '/admin/website/collections' },
-          { title: t("dashboard.websiteForms"), icon: ClipboardList, url: '/admin/website/forms' },
-          { title: t("dashboard.websiteSeoOverrides"), icon: Search, url: '/admin/website/seo' },
-          { title: t("dashboard.websiteThemeBuilder"), icon: Palette, url: '/admin/website/theme' },
-          { title: t("dashboard.websiteTranslations"), icon: Languages, url: '/admin/website/translations' },
-          { title: t("dashboard.websitePublishHistory"), icon: History, url: '/admin/website/publish-history' },
-        ]
-      });
-    }
+
+    const financeItems: MenuItem[] = [
+      ...(showFinance ? [{ title: t("dashboard.finance"), icon: DollarSign, url: '/staff/finance' }] : []),
+      { title: t("dashboard.campaigns"), icon: Megaphone, url: '/admin/campaigns' },
+    ];
+
+    const catalogAdsItems: MenuItem[] = [
+      { title: t("dashboard.catalog"), icon: Library, url: '/admin/catalog' },
+      { title: t("dashboard.popupAds"), icon: Bell, url: '/admin/popups' },
+      { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
+    ];
+
+    const aiItems: MenuItem[] = isAdmin ? [
+      { title: t('dashboard.aiPersonas'), icon: Sparkles, url: '/admin/ai-personas' },
+      { title: t('dashboard.aiActionQueue'), icon: ListChecks, url: '/admin/ai-action-queue' },
+      { title: t('aiExtractor.sidebar'), icon: FileSearch, url: '/admin/ai-extractors' },
+    ] : [];
+
+    const websiteItems: MenuItem[] = isAdmin ? [
+      { title: t("dashboard.websitePages"), icon: FileText, url: '/admin/website/pages' },
+      { title: t("dashboard.websiteGlobalComponents"), icon: Component, url: '/admin/website/global-components' },
+      { title: t("dashboard.websiteNavigation"), icon: Menu, url: '/admin/website/navigation' },
+      { title: t("dashboard.websiteBlog"), icon: BookOpen, url: '/admin/website/blog' },
+      { title: t("dashboard.websiteCollections"), icon: Layers, url: '/admin/website/collections' },
+      { title: t("dashboard.websiteForms"), icon: ClipboardList, url: '/admin/website/forms' },
+      { title: t("dashboard.websiteSeoOverrides"), icon: Search, url: '/admin/website/seo' },
+      { title: t("dashboard.websiteThemeBuilder"), icon: Palette, url: '/admin/website/theme' },
+      { title: t("dashboard.websiteTranslations"), icon: Languages, url: '/admin/website/translations' },
+      { title: t("dashboard.websitePublishHistory"), icon: History, url: '/admin/website/publish-history' },
+    ] : [];
+
+    const systemItems: MenuItem[] = [
+      { title: t("dashboard.users"), icon: UserCheck, url: '/admin/users' },
+      ...(isAdmin ? [{ title: t("dashboard.staffCards"), icon: IdCard, url: '/admin/staff-cards' }] : []),
+      ...(role === 'super_admin' ? [{ title: t("dashboard.branches"), icon: Building, url: '/admin/branches' }] : []),
+      { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
+      { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
+      { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
+    ];
+
+    const groups = [
+      { id: 'overview', label: t("dashboard.overview"), items: [{ title: t("dashboard.dashboard"), icon: LayoutDashboard, url: '/admin' }] },
+      { id: 'crm', label: t("dashboard.groupCrm"), items: crmItems },
+      { id: 'agentNetwork', label: t("dashboard.groupAgentNetwork"), items: agentNetworkItems },
+      { id: 'finance', label: t("dashboard.groupFinance"), items: financeItems },
+      { id: 'catalogAds', label: t("dashboard.groupCatalogAds"), items: catalogAdsItems },
+      { id: 'ai', label: t("dashboard.groupAi"), items: aiItems },
+      { id: 'website', label: t("dashboard.website"), items: websiteItems },
+      { id: 'system', label: t("dashboard.groupSystem"), items: systemItems },
+    ].filter(g => g.items.length > 0);
+
     return { groups };
   }
 
@@ -453,16 +453,34 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     setPinnedUrls(prev => prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url]);
   };
   const pinnedSet = new Set(pinnedUrls);
+
+  const groupStorageKey = `edcons:sidebarGroups:${user.id ?? user.email ?? "anon"}`;
+  const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(groupStorageKey);
+      const obj = raw ? JSON.parse(raw) : {};
+      return obj && typeof obj === "object" ? obj : {};
+    } catch { return {}; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(groupStorageKey, JSON.stringify(groupOpen)); } catch { /* ignore quota errors */ }
+  }, [groupStorageKey, groupOpen]);
+  const toggleGroup = (key: string, defaultOpen: boolean) => {
+    setGroupOpen(prev => {
+      const cur = prev[key] !== undefined ? prev[key] : defaultOpen;
+      return { ...prev, [key]: !cur };
+    });
+  };
+
+  const isItemActive = (item: MenuItem) =>
+    item.url === location ||
+    (item.url !== '/staff' && item.url !== '/admin' && item.url !== '/student' && item.url !== '/agent' && location.startsWith(item.url));
   // Preserve the order in which the user pinned each item (most recent last).
   const favoriteItems = pinnedUrls
     .map(u => allItems.find(i => i.url === u))
     .filter((i): i is MenuItem => !!i);
-  const activeItem = allItems.find(i => {
-    if (i.url === '/staff' || i.url === '/admin' || i.url === '/student' || i.url === '/agent') {
-      return location === i.url;
-    }
-    return location.startsWith(i.url);
-  });
+  const activeItem = allItems.find(isItemActive);
   const roleBadgeColor = ROLE_COLORS[user.role] || "bg-secondary text-muted-foreground";
   const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || user.email?.[0] || '?'}`.toUpperCase();
   const isOperationalRole = ["super_admin","admin","manager","staff","consultant","accountant","editor","agent","sub_agent"].includes(user.role);
@@ -542,8 +560,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             <div className="px-3 pt-4 pb-4 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden space-y-4 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:space-y-2 group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:items-center group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:flex group-data-[collapsible=icon]:[&_[data-sidebar=group-content]_ul]:flex-col">
               {(() => {
                 const renderItem = (item: MenuItem, keyPrefix = "") => {
-                  const isActive = item.url === location ||
-                    (item.url !== '/staff' && item.url !== '/admin' && item.url !== '/student' && item.url !== '/agent' && location.startsWith(item.url));
+                  const isActive = isItemActive(item);
                   const isPinned = pinnedSet.has(item.url);
                   return (
                           <SidebarMenuItem key={`${keyPrefix}${item.title}`}>
@@ -674,18 +691,32 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                         </SidebarGroupContent>
                       </SidebarGroup>
                     )}
-                    {groups.map(group => (
-                      <SidebarGroup key={group.label} className="p-0">
-                        <SidebarGroupLabel className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1 px-3">
-                          {group.label}
+                    {groups.map(group => {
+                      const groupKey = group.id ?? group.label;
+                      const isActiveGroup = group.items.some(isItemActive);
+                      const defaultOpen = !DEFAULT_CLOSED_GROUPS.has(groupKey);
+                      const userState = groupOpen[groupKey];
+                      const expanded = (userState !== undefined ? userState : defaultOpen) || isActiveGroup;
+                      return (
+                      <SidebarGroup key={groupKey} className="p-0">
+                        <SidebarGroupLabel asChild>
+                          <button
+                            type="button"
+                            onClick={() => toggleGroup(groupKey, defaultOpen)}
+                            className="w-full flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1 px-3 hover:text-foreground transition-colors cursor-pointer"
+                          >
+                            <span>{group.label}</span>
+                            <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded ? "" : "-rotate-90"}`} />
+                          </button>
                         </SidebarGroupLabel>
-                        <SidebarGroupContent>
+                        <SidebarGroupContent className={expanded ? "" : "hidden group-data-[collapsible=icon]:!block"}>
                           <SidebarMenu className="space-y-0.5">
                             {group.items.map(item => renderItem(item))}
                           </SidebarMenu>
                         </SidebarGroupContent>
                       </SidebarGroup>
-                    ))}
+                      );
+                    })}
                   </>
                 );
               })()}

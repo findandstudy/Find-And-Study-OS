@@ -55,7 +55,7 @@ function tokenStatus(t: ApiToken): "revoked" | "expired" | "active" {
   return "active";
 }
 
-export default function ApiTokens() {
+export function ApiTokensManager({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, lang } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -159,17 +159,21 @@ export default function ApiTokens() {
   const scopes = scopesQuery.data ?? [];
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className={embedded ? "space-y-6" : "p-4 md:p-6 space-y-6"}>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-            <KeyRound className="h-6 w-6 text-primary" />
-            {t("apiTokens.title")}
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            {t("apiTokens.description")}
-          </p>
-        </div>
+        {!embedded ? (
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+              <KeyRound className="h-6 w-6 text-primary" />
+              {t("apiTokens.title")}
+            </h1>
+            <p className="text-sm text-muted-foreground max-w-2xl">
+              {t("apiTokens.description")}
+            </p>
+          </div>
+        ) : (
+          <div />
+        )}
         <Button onClick={() => setCreateOpen(true)} data-testid="button-create-token">
           <Plus className="h-4 w-4 me-2" />
           {t("apiTokens.createButton")}
@@ -379,4 +383,8 @@ export default function ApiTokens() {
       </AlertDialog>
     </div>
   );
+}
+
+export default function ApiTokens() {
+  return <ApiTokensManager />;
 }

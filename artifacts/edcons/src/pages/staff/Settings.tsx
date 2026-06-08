@@ -34,6 +34,7 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { PHONE_CODES as PHONE_CODES_LIB } from "@/lib/nationalities";
 import { IntegrationsManager } from "@/components/IntegrationsManager";
+import { ApiTokensManager } from "@/pages/admin/ApiTokens";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { EditStagesDialog } from "@/components/EditStagesDialog";
 
@@ -1127,7 +1128,15 @@ export default function SettingsPage() {
   }
 
   function IntegrationsTab() {
-    return <IntegrationsManager />;
+    return (
+      <div className="space-y-8">
+        <IntegrationsManager />
+        <div className="space-y-4">
+          <SectionHeader title={t("apiTokens.title")} description={t("apiTokens.description")} />
+          <ApiTokensManager embedded />
+        </div>
+      </div>
+    );
   }
 
   function AdvancedTab() {
