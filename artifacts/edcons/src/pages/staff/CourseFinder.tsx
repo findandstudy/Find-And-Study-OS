@@ -169,6 +169,10 @@ export default function CourseFinder() {
   const [colStatus, setColStatus] = useState<string>("all");
   const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
   const isAgent = user && ["agent", "sub_agent"].includes(user.role);
+  // Agency-side roles that should respect the agency's service-fee visibility,
+  // including agency staff (agent_staff) — otherwise an agency could bypass a
+  // parent's "hide service fee" simply by viewing through a staff account.
+  const isAgentSide = user && ["agent", "sub_agent", "agent_staff"].includes(user.role);
   const isStudent = user?.role === "student";
   const showWishlist = isStudent || !user;
   const canUsePdfMarkup = user && ["super_admin", "admin", "manager", "agent", "sub_agent"].includes(user.role);
@@ -326,12 +330,20 @@ export default function CourseFinder() {
     staleTime: 10 * 60_000,
   });
 
-  const { data: agentProfile } = useQuery<{ logoUrl?: string | null; companyName?: string; commissionRate?: number | null; subAgentCommissionRate?: number | null; effectiveCommissionRate?: number | null }>({
+  const { data: agentProfile } = useQuery<{ logoUrl?: string | null; companyName?: string; commissionRate?: number | null; subAgentCommissionRate?: number | null; effectiveCommissionRate?: number | null; hideServiceFees?: boolean; effectiveHideServiceFees?: boolean }>({
     queryKey: ["agent-me-pdf"],
     queryFn: () => apiFetch(`${BASE_URL}/api/agents/me`),
-    enabled: !!isAgent,
+    enabled: !!isAgentSide,
     staleTime: 10 * 60_000,
   });
+
+  // Whether service fees must be hidden from the current agency-side user. The
+  // backend resolves this up the whole sub-agent tree (effectiveHideServiceFees),
+  // so a parent's "hide" cascades to every descendant sub-agent (and the
+  // agency's own staff). When true we suppress every on-screen service-fee
+  // figure and force the PDF proposal to omit them, regardless of the manual
+  // "Hide Service Fee" toggle.
+  const forceHideServiceFee: boolean = !!isAgentSide && !!agentProfile?.effectiveHideServiceFees;
 
   // Use the backend-computed effective (cascaded) rate as the single source of
   // truth. For sub-agents this is parentRate × subRate / 100 so the estimate
@@ -393,7 +405,7 @@ export default function CourseFinder() {
         showCommission: !!showCommission,
         agentShareRate: agentShareRate ?? null,
         serviceFeeMarkup: pdfMarkup !== 0 ? pdfMarkup : undefined,
-        hideServiceFee,
+        hideServiceFee: hideServiceFee || forceHideServiceFee,
         accentColor: settings?.pdfAccentColor || undefined,
       });
       toast({ title: t("courseFinderPage.pdfGenerated"), description: t("courseFinderPage.proposalDownloaded", { n: selected.length }) });
@@ -662,7 +674,7 @@ export default function CourseFinder() {
                   </Button>
                   {selectedIds.size > 0 && (
                     <>
-                      {canUsePdfMarkup && (
+                      {canUsePdfMarkup && !forceHideServiceFee && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -678,7 +690,7 @@ export default function CourseFinder() {
                           )}
                         </Button>
                       )}
-                      {!isStudent && (
+                      {!isStudent && !forceHideServiceFee && (
                         <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
                           <input
                             type="checkbox"
@@ -842,6 +854,7 @@ export default function CourseFinder() {
         onClose={() => setSelectedProgram(null)}
         showCommission={!!showCommission}
         agentShareRate={agentShareRate}
+        hideServiceFee={forceHideServiceFee}
       />
 
       <UniversityInfoDialog
@@ -854,9 +867,10 @@ export default function CourseFinder() {
         onClose={() => setApplyProgram(null)}
         currentUser={user}
         agentShareRate={agentShareRate}
+        hideServiceFee={forceHideServiceFee}
       />
 
-      {canUsePdfMarkup && (
+      {canUsePdfMarkup && !forceHideServiceFee && (
         <PdfMarkupModal
           open={markupModalOpen}
           onOpenChange={setMarkupModalOpen}
@@ -1522,11 +1536,12 @@ function UniversityInfoDialog({ program: p, onClose }: {
   );
 }
 
-function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate }: {
+function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate, hideServiceFee = false }: {
   program: Program | null;
   onClose: () => void;
   showCommission: boolean;
   agentShareRate?: number | null;
+  hideServiceFee?: boolean;
 }) {
   if (!p) return null;
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
@@ -1568,7 +1583,7 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
         { label: "Deposit Fee", value: formatCurrency(p.depositFee, cur) },
         { label: "Advanced Fee", value: formatCurrency(p.advancedFee, cur) },
         { label: "Language Fee", value: formatCurrency(p.languageFee, cur) },
-        { label: "Service Fee", value: formatCurrency(p.serviceFeeAmount, cur) },
+        ...(hideServiceFee ? [] : [{ label: "Service Fee", value: formatCurrency(p.serviceFeeAmount, cur) }]),
         ...(p.scholarship != null && p.scholarship > 0 ? [{ label: "Scholarship", value: formatCurrency(p.scholarship, cur), highlight: "green" }] : []),
         ...(showCommission && commissionAmount != null ? [{ label: "Commission", value: formatCurrency(commissionAmount, cur), highlight: "indigo" }] : []),
       ],
@@ -1804,7 +1819,7 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
   );
 }
 
-function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { program: Program | null; onClose: () => void; currentUser: any; agentShareRate?: number | null | undefined }) {
+function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideServiceFee = false }: { program: Program | null; onClose: () => void; currentUser: any; agentShareRate?: number | null | undefined; hideServiceFee?: boolean }) {
   const { t } = useI18n();
   const isStudentUser = currentUser?.role === "student";
   const { toast } = useToast();
@@ -2187,7 +2202,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate }: { pro
                 {!isStudentUser && commissionAmount != null && (
                   <Badge className="text-xs bg-indigo-100 text-indigo-700 border-0 dark:bg-indigo-900/40 dark:text-indigo-300">Commission: {formatCurrency(commissionAmount, cur)}</Badge>
                 )}
-                {!isStudentUser && p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
+                {!isStudentUser && !hideServiceFee && p.serviceFeeAmount != null && p.serviceFeeAmount > 0 && (
                   <Badge className="text-xs bg-amber-100 text-amber-700 border-0 dark:bg-amber-900/40 dark:text-amber-300">Service Fee: {formatCurrency(p.serviceFeeAmount, cur)}</Badge>
                 )}
               </div>

@@ -408,6 +408,28 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  // Effective service-fee visibility: the hideServiceFees flag is meant to
+  // cascade DOWN the sub-agent tree. If any ancestor (the agent's parent, its
+  // parent, and so on) has hideServiceFees = true, then the current agent must
+  // also have service fees hidden — even when their OWN flag is false. Without
+  // walking the chain, a grandparent's "hide" only affected its direct child,
+  // letting deeper sub-agents still see the service fee. Walk up via
+  // parentAgentId, OR-ing the flag, with a visited-set guard against cycles.
+  let effectiveHideServiceFees = agent.hideServiceFees === true;
+  if (!effectiveHideServiceFees) {
+    const visited = new Set<number>([agent.id]);
+    let ancestorId: number | null = agent.parentAgentId ?? null;
+    while (ancestorId && !visited.has(ancestorId)) {
+      visited.add(ancestorId);
+      const [ancestor]: Array<{ hideServiceFees: boolean | null; parentAgentId: number | null }> =
+        await db.select({ hideServiceFees: agentsTable.hideServiceFees, parentAgentId: agentsTable.parentAgentId })
+          .from(agentsTable).where(eq(agentsTable.id, ancestorId));
+      if (!ancestor) break;
+      if (ancestor.hideServiceFees === true) { effectiveHideServiceFees = true; break; }
+      ancestorId = ancestor.parentAgentId ?? null;
+    }
+  }
+
   // Resolve contractUrl at read time to the agent's NEWEST signed contract. The
   // stored agents.contractUrl is hydrated lazily on first PDF render and could be
   // locked to an earlier (possibly broken) contract when the agent later
@@ -421,7 +443,7 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
     console.error(`[agents/me] failed to resolve newest contract url for agent ${agent.id}:`, err);
   }
 
-  res.json({ ...agent, contractUrl, assignedStaff, assignedStaffList, parentAgent, effectiveCommissionRate });
+  res.json({ ...agent, contractUrl, assignedStaff, assignedStaffList, parentAgent, effectiveCommissionRate, effectiveHideServiceFees });
 });
 
 router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
