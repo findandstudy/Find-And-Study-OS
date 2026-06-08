@@ -89,6 +89,7 @@ const AdminAiExtractors = lazyRetry(() => import("@/pages/admin/AiExtractors"));
 const AdminAiExtractorDetail = lazyRetry(() => import("@/pages/admin/AiExtractorDetail"));
 const AdminPopups = lazyRetry(() => import("@/pages/admin/Popups"));
 const AdminAuditLog = lazyRetry(() => import("@/pages/admin/AuditLog"));
+const AdminApiTokens = lazyRetry(() => import("@/pages/admin/ApiTokens"));
 const AdminActivity = lazyRetry(() => import("@/pages/admin/Activity"));
 const AdminEmbeds = lazyRetry(() => import("@/pages/admin/Embeds"));
 const AdminStaffCards = lazyRetry(() => import("@/pages/admin/StaffCards"));
@@ -323,6 +324,9 @@ function StaffAdminShell() {
           </Route>
           <Route path="/admin/embeds">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminEmbeds /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/api-tokens">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminApiTokens /></ProtectedRoute>
           </Route>
           <Route path="/admin/staff-cards/:userId">
             {(params) => <ProtectedRoute allowedRoles={["super_admin","admin"]}><AdminStaffCardDetail userId={Number(params.userId)} /></ProtectedRoute>}

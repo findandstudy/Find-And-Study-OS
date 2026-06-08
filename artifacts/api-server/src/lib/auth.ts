@@ -75,6 +75,28 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
   next();
 }
 
+/**
+ * Scope gate for API-token (Bearer) requests. Cookie/session requests are NOT
+ * scope-limited here — they are governed by requireRole / requirePermission —
+ * so for them this is a pass-through (no regression to session auth). For token
+ * requests, every required scope must be present in req.tokenScopes.
+ */
+export function requireScope(...required: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.apiTokenAuth) {
+      next();
+      return;
+    }
+    const granted = req.tokenScopes ?? [];
+    const ok = required.every((s) => granted.includes(s));
+    if (!ok) {
+      res.status(403).json({ error: "Insufficient token scope", required, granted });
+      return;
+    }
+    next();
+  };
+}
+
 const SUPER_ROLES = new Set(["super_admin"]);
 
 /**

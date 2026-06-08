@@ -162,6 +162,10 @@ const CSRF_HEADER = "x-csrf-token";
 const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
+  // Bearer API-token requests carry no auth cookie and are immune to CSRF, so
+  // they bypass the double-submit cookie check entirely.
+  if ((req as any).apiTokenAuth) return next();
+
   if (
     req.path.startsWith("/api/public/") ||
     req.path.startsWith("/api/course-finder") ||

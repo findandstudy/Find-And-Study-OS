@@ -65,6 +65,7 @@ import {
   Sparkles,
   ListChecks,
   FileSearch,
+  KeyRound,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
           { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
           { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
+          ...((role === 'super_admin' || role === 'admin' || role === 'manager') ? [{ title: t("dashboard.apiTokens"), icon: KeyRound, url: '/admin/api-tokens' }] : []),
           ...((role === 'super_admin' || role === 'admin' || (agentStaffPerms || []).includes('contract_templates.view')) ? [
             { title: t("dashboard.contractTemplates"), icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' },
           ] : []),

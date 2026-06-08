@@ -46,6 +46,8 @@ import universityContractsRouter from "./universityContracts";
 import agentOnboardingRouter, { ONBOARDING_HELPERS } from "./agentOnboarding";
 import leadAssignmentRulesRouter from "./leadAssignmentRules";
 import staffCardsRouter from "./staffCards";
+import apiTokensRouter from "./apiTokens";
+import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
 const router: IRouter = Router();
 
@@ -123,6 +125,11 @@ router.use(async (req, res, next) => {
   }
 });
 
+// Central API-token scope enforcement (default-deny). Runs before all route
+// handlers. No-op for cookie/session requests; enforces least-privilege on
+// Bearer-token requests.
+router.use(tokenScopeGuard);
+
 router.use(healthRouter);
 router.use(storageRouter);
 router.use(authRouter);
@@ -170,5 +177,6 @@ router.use(leadAssignmentRulesRouter);
 router.use(staffCardsRouter);
 router.use(aiPersonasRouter);
 router.use(aiExtractorsRouter);
+router.use(apiTokensRouter);
 
 export default router;

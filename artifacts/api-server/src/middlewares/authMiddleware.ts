@@ -11,12 +11,20 @@ import {
   type SessionUser,
 } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
+import { extractBearerToken, lookupApiToken } from "../lib/apiTokenAuth";
 
 declare global {
   namespace Express {
     interface Request {
       isAuthenticated(): this is AuthedRequest;
       user?: SessionUser | undefined;
+      // Scopes granted to the API token that authenticated this request.
+      // Undefined for cookie/session requests (those are gated by role/perms).
+      tokenScopes?: string[] | undefined;
+      // True when the request authenticated via an "Authorization: Bearer"
+      // API token rather than a session cookie. Used to bypass CSRF and to
+      // switch on scope enforcement.
+      apiTokenAuth?: boolean | undefined;
     }
 
     interface AuthedRequest {
@@ -58,6 +66,24 @@ export async function authMiddleware(
   req.isAuthenticated = function (this: Request) {
     return this.user != null;
   } as Request["isAuthenticated"];
+
+  // Bearer API token takes precedence over the session cookie when present.
+  // A malformed/unknown/expired/revoked token is rejected outright (401) rather
+  // than silently falling back to session auth, which would be surprising and
+  // could mask a bad credential.
+  const bearer = extractBearerToken(req.headers.authorization);
+  if (bearer) {
+    const result = await lookupApiToken(bearer);
+    if (!result) {
+      res.status(401).json({ error: "Invalid or expired API token" });
+      return;
+    }
+    req.user = buildSessionUser(result.dbUser);
+    req.tokenScopes = result.scopes;
+    req.apiTokenAuth = true;
+    next();
+    return;
+  }
 
   const sid = getSessionId(req);
   if (!sid) {

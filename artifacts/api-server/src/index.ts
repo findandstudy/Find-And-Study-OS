@@ -674,6 +674,32 @@ async function seedClaudeIntegration() {
     console.error("[migrate] contract-signing tables:", err);
   }
 
+  // Step 2b2b: Persistent API tokens (Bearer auth for programmatic access).
+  // Mirrors lib/db migration 0013_api_tokens. Idempotent (IF NOT EXISTS) — this
+  // is the prod migration path (deploys run no Drizzle migrate step).
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS api_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        token_prefix TEXT NOT NULL,
+        scopes TEXT[] NOT NULL DEFAULT '{}',
+        last_used_at TIMESTAMP WITH TIME ZONE,
+        expires_at TIMESTAMP WITH TIME ZONE,
+        revoked_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS api_tokens_token_hash_unique ON api_tokens(token_hash)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_user_id_idx ON api_tokens(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_token_prefix_idx ON api_tokens(token_prefix)`);
+  } catch (err) {
+    console.error("[migrate] api_tokens table:", err);
+  }
+
   // Step 2b3: Performance quick-wins (Task #141) — pg_trgm trigram GIN
   // indexes for ILIKE '%term%' searches, partial index for unread
   // notifications, and the students.has_photo denormalized flag with
