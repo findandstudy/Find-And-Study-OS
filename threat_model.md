@@ -11,6 +11,7 @@ EdCons OS, eğitim danışmanlığı şirketleri için geliştirilmiş çok kira
 - **Yüklenen belgeler ve sözleşmeler** — pasaport kopyaları, transkriptler, fotoğraflar, imzalı kontratlar ve benzeri dosyalar object storage’da tutulur. Yanlış erişim kurgusu toplu veri sızıntısına neden olabilir.
 - **İş verileri** — lead, application, finance, messaging, task ve pipeline kayıtları. Yetkisiz değişiklik operasyonel ve finansal zarara neden olur.
 - **Uygulama sırları ve entegrasyon sırları** — SMTP kimlik bilgileri, webhook secret’ları, veritabanı bağlantısı, object storage erişimi ve benzeri gizli bilgiler. Sızmaları sistem dışına yetkisiz erişim doğurur.
+- **Partner/embed sırları** — restricted widget `embedApiKey` değerleri ve bunların ürettiği kısa ömürlü widget token’ları üçüncü taraf siteler için güven sınırıdır. Sızmaları partner siteleri taklit etmeye, sahte lead/apply trafiği üretmeye ve mevcut entegrasyonları bozacak anahtar rotasyonuna yol açabilir.
 
 ## Trust Boundaries
 
@@ -19,6 +20,7 @@ EdCons OS, eğitim danışmanlığı şirketleri için geliştirilmiş çok kira
 - **API / PostgreSQL** — uygulama sunucusu veritabanına tam erişimle bağlanır. API katmanındaki injection veya yetki hatası doğrudan veri tabanını etkiler.
 - **API / Object Storage** — özel belgeler ve sözleşmeler storage’da durur. Object path bilgisi tek başına yetki vermemeli; erişim ayrıca sahiplik/ACL ile doğrulanmalıdır.
 - **API / Harici servisler** — SMTP, WhatsApp, AI ve webhook entegrasyonları ayrı güven sınırlarıdır. Ağ üzerindeki veya karşı taraftaki sahtecilik/tampering girişimleri burada değerlendirilir.
+- **İç rol ayrımı** — `super_admin/admin/manager` ile daha düşük ayrıcalıklı `staff/consultant/editor/accountant` ve agent rolleri arasında güçlü sunucu tarafı ayrım olmalıdır. Frontend’de gizlemek yeterli değildir; özellikle yardımcı CRUD uçları, export/import yüzeyleri ve “settings” altı modüller backend’de ayrıca doğrulanmalıdır.
 - **Üretim / Geliştirme** — `artifacts/mockup-sandbox` üretim dışıdır. Kanıtlı üretim erişimi gösterilmedikçe oradaki bulgular rapor dışıdır.
 
 ## Scan Anchors
@@ -26,6 +28,8 @@ EdCons OS, eğitim danışmanlığı şirketleri için geliştirilmiş çok kira
 - Üretim girişleri: `artifacts/api-server/src/index.ts`, `artifacts/api-server/src/app.ts`, `artifacts/edcons/src/main.tsx`.
 - Yüksek riskli API alanları: `src/routes/public-apply.ts`, `src/routes/embed.ts`, `src/routes/storage.ts`, `src/routes/webhooks.ts`, `src/routes/contracts.ts`, `src/routes/publicSigning.ts`, auth/session yardımcıları.
 - Hassas veri yüzeyi: document/contract/object storage akışları ve user/student/application CRUD yolları.
+- RBAC ve görünürlük anchor’ları: `src/routes/leads.ts`, `src/routes/students.ts`, `src/routes/applications.ts`, `src/lib/studentAccess.ts`, `src/lib/permissions.ts`, `src/lib/roles.ts`.
+- Özellikle tekrar kontrol edilmesi gereken yardımcı uçlar: follow-up, note, delete, export/import ve embed yönetim rotaları; bunlar ana liste/detay uçları kadar sıkı görünürlük kontrolü uygulamak zorundadır.
 - Dev-only ve genelde dışlanacak alan: `artifacts/mockup-sandbox`, test yardımcıları, yalnızca geliştirme amaçlı scriptler.
 - Varsayımlar: üretimde `NODE_ENV=production`; Replit platform TLS’i tarayıcı↔uygulama trafiğini korur; public deployment internetten erişilebilir kabul edilir.
 
@@ -41,12 +45,12 @@ Kullanıcılar ve internetten gelen entegrasyon çağrıları lead, başvuru, be
 
 ### Information Disclosure
 
-Bu proje yüksek hacimde PII, pasaport verisi ve özel belgeler işler. En önemli ifşa riskleri; yanlış yetkilendirilmiş API yanıtları, özel object storage nesnelerine doğrudan erişim, kamuya açık formların kullanıcı veya pasaport varlığını doğrulaması, hassas hata mesajları ve entegrasyon trafiğinde taşıma güvenliği eksiklikleridir. Sistem, tüm veri dönüşlerini çağıranın yetki kapsamına göre daraltmalı; özel nesnelere erişimde ACL/sahiplik kontrolünü zorunlu kılmalı; public uçlarda gereksiz hesap varlığı sinyallerini azaltmalı; harici servislerle kurduğu gizli iletişimde sertifika doğrulamasını kapatmamalıdır.
+Bu proje yüksek hacimde PII, pasaport verisi ve özel belgeler işler. En önemli ifşa riskleri; yanlış yetkilendirilmiş API yanıtları, özel object storage nesnelerine doğrudan erişim, kamuya açık formların kullanıcı veya pasaport varlığını doğrulaması, hassas hata mesajları ve entegrasyon trafiğinde taşıma güvenliği eksiklikleridir. Sistem, tüm veri dönüşlerini çağıranın yetki kapsamına göre daraltmalı; özel nesnelere erişimde ACL/sahiplik kontrolünü zorunlu kılmalı; public uçlarda gereksiz hesap varlığı sinyallerini azaltmalı; harici servislerle kurduğu gizli iletişimde sertifika doğrulamasını kapatmamalıdır. Authenticated iç kullanıcılara dönen admin/config verileri de aynı sınıfa dahildir; örneğin embed anahtarları, export çıktıları ve kullanıcı dizinleri yalnızca gerçekten ihtiyacı olan rollere açılmalıdır.
 
 ### Denial of Service
 
-Public apply, embed, signing ve webhook uçları internetten doğrudan çağrılabildiği için rate limit ve kaynak tüketimi kritik önemdedir. Büyük JSON body’ler, dosya yüklemeleri ve ağır PDF oluşturma işlemleri hizmeti bozabilir. Sistem, public uçlarda kalıcı rate limit uygulamalı; büyük body ve upload akışlarını sınırlandırmalı; ağır işlemleri güvenli şekilde serialize veya async yürütmeli; dış servis çağrılarında timeout kullanmalıdır.
+Public apply, embed, signing ve webhook uçları internetten doğrudan çağrılabildiği için rate limit ve kaynak tüketimi kritik önemdedir. Büyük JSON body’ler, dosya yüklemeleri ve ağır PDF oluşturma işlemleri hizmeti bozabilir. Sistem, public uçlarda kalıcı rate limit uygulamalı; büyük body ve upload akışlarını sınırlandırmalı; ağır işlemleri güvenli şekilde serialize veya async yürütmeli; dış servis çağrılarında timeout kullanmalıdır. Authenticated iç kullanıcıların yapabildiği anahtar rotasyonu, silme veya toplu değişiklik işlemleri de operasyonel DoS yüzeyi oluşturur; bu yüzden yüksek etkili yönetim aksiyonları daha dar rol setleriyle korunmalıdır.
 
 ### Elevation of Privilege
 
-RBAC yoğun bir ürün olduğu için en kritik risklerden biri broken access control’dür. Authenticated olmak tek başına başka kullanıcının belgelerine, başvurularına, sözleşmelerine veya yönetici fonksiyonlarına erişim vermemelidir. Sistem, her kaynak erişiminde rol + sahiplik + tenant görünürlüğünü sunucu tarafında doğrulamalı; generic dosya/obje uçlarında “oturum açmış herhangi biri” seviyesinde izin vermemeli; admin/staff-only işlevlerde açık rol kontrollerini zorunlu kılmalıdır.
+RBAC yoğun bir ürün olduğu için en kritik risklerden biri broken access control’dür. Authenticated olmak tek başına başka kullanıcının belgelerine, başvurularına, sözleşmelerine veya yönetici fonksiyonlarına erişim vermemelidir. Sistem, her kaynak erişiminde rol + sahiplik + tenant görünürlüğünü sunucu tarafında doğrulamalı; generic dosya/obje uçlarında “oturum açmış herhangi biri” seviyesinde izin vermemeli; admin/staff-only işlevlerde açık rol kontrollerini zorunlu kılmalıdır. Ana liste/detay uçlarında görünen görünürlük kuralları yardımcı uçlarda da aynen uygulanmalıdır; aksi halde follow-up, note veya delete gibi ikincil endpoint’ler tüm yetki modelini fiilen by-pass eder.
