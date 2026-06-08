@@ -3181,7 +3181,10 @@
     "confirmDeleteSession": "Delete this session? This cannot be undone.",
     "cannotDeleteSigned": "Signed sessions cannot be deleted",
     "sessionDeleted": "Session deleted",
-    "sessionsBulkDeleted": "Sessions deleted"
+    "sessionsBulkDeleted": "Sessions deleted",
+    "confirmDeleteSigned": "هل تريد حذف هذا العقد الموقَّع؟ لا يمكن التراجع عن هذا الإجراء.",
+    "signedDeleted": "تم حذف العقد الموقَّع",
+    "signedBulkDeleted": "تم حذف العقود الموقَّعة"
   },
   "contractTemplates": {
     "title": "قوالب العقود",

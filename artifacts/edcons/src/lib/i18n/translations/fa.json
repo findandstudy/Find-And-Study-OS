@@ -3130,7 +3130,10 @@
     "confirmDeleteSession": "Delete this session? This cannot be undone.",
     "cannotDeleteSigned": "Signed sessions cannot be deleted",
     "sessionDeleted": "Session deleted",
-    "sessionsBulkDeleted": "Sessions deleted"
+    "sessionsBulkDeleted": "Sessions deleted",
+    "confirmDeleteSigned": "این قرارداد امضاشده حذف شود؟ این عمل قابل بازگشت نیست.",
+    "signedDeleted": "قرارداد امضاشده حذف شد",
+    "signedBulkDeleted": "قراردادهای امضاشده حذف شدند"
   },
   "contractTemplates": {
     "title": "قالب‌های قرارداد",

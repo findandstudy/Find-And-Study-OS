@@ -3181,7 +3181,10 @@
     "confirmDeleteSession": "Delete this session? This cannot be undone.",
     "cannotDeleteSigned": "Signed sessions cannot be deleted",
     "sessionDeleted": "Session deleted",
-    "sessionsBulkDeleted": "Sessions deleted"
+    "sessionsBulkDeleted": "Sessions deleted",
+    "confirmDeleteSigned": "Supprimer ce contrat signé ? Cette action est irréversible.",
+    "signedDeleted": "Contrat signé supprimé",
+    "signedBulkDeleted": "Contrats signés supprimés"
   },
   "contractTemplates": {
     "title": "Modèles de contrat",

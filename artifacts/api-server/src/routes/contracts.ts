@@ -132,6 +132,36 @@ router.get("/contracts/signed", requireAuth, requirePermission("contracts.view")
   }
 });
 
+// Hard-delete a signed contract record. Unlike sessions (where a signed session
+// is protected as the audit anchor), admins may explicitly remove a
+// signed_contracts row from the Signed tab. The underlying signing session is
+// left intact; only the signed artifact row is removed. Any PDF object in
+// storage is left in place (orphaned objects are harmless and no storage delete
+// API is wired here). Note: removing the newest signed contract for an agent
+// makes onboarding-status resolve them as unsigned again (the reminder/gate may
+// reappear) — that is the intended consequence of an explicit deletion.
+router.delete("/contracts/signed/:id", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    await db.delete(signedContractsTable).where(eq(signedContractsTable.id, id));
+    await writeAudit({
+      userId: (req as any).user?.id ?? null,
+      action: "contract.signed_deleted",
+      resource: "signed_contract",
+      resourceId: id,
+      changes: { signingSessionId: row.signingSessionId, agentId: row.agentId },
+      ipAddress: req.ip,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[contracts] delete signed:", err);
+    res.status(500).json({ error: "Failed to delete signed contract" });
+  }
+});
+
 // Admin-gated streaming download for a signed contract PDF.
 router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contracts.view"), async (req, res): Promise<void> => {
   try {

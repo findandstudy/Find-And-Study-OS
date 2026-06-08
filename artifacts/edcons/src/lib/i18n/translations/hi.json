@@ -3130,7 +3130,10 @@
     "confirmDeleteSession": "Delete this session? This cannot be undone.",
     "cannotDeleteSigned": "Signed sessions cannot be deleted",
     "sessionDeleted": "Session deleted",
-    "sessionsBulkDeleted": "Sessions deleted"
+    "sessionsBulkDeleted": "Sessions deleted",
+    "confirmDeleteSigned": "क्या यह हस्ताक्षरित अनुबंध हटाएं? इसे पूर्ववत नहीं किया जा सकता।",
+    "signedDeleted": "हस्ताक्षरित अनुबंध हटा दिया गया",
+    "signedBulkDeleted": "हस्ताक्षरित अनुबंध हटा दिए गए"
   },
   "contractTemplates": {
     "title": "अनुबंध टेम्पलेट",

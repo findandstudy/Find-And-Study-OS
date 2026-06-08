@@ -3130,7 +3130,10 @@
     "confirmDeleteSession": "Delete this session? This cannot be undone.",
     "cannotDeleteSigned": "Signed sessions cannot be deleted",
     "sessionDeleted": "Session deleted",
-    "sessionsBulkDeleted": "Sessions deleted"
+    "sessionsBulkDeleted": "Sessions deleted",
+    "confirmDeleteSigned": "¿Eliminar este contrato firmado? Esta acción no se puede deshacer.",
+    "signedDeleted": "Contrato firmado eliminado",
+    "signedBulkDeleted": "Contratos firmados eliminados"
   },
   "contractTemplates": {
     "title": "Plantillas de contrato",

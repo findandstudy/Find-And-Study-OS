@@ -3130,7 +3130,10 @@
     "confirmDeleteSession": "Delete this session? This cannot be undone.",
     "cannotDeleteSigned": "Signed sessions cannot be deleted",
     "sessionDeleted": "Session deleted",
-    "sessionsBulkDeleted": "Sessions deleted"
+    "sessionsBulkDeleted": "Sessions deleted",
+    "confirmDeleteSigned": "删除此已签署的合同？此操作无法撤销。",
+    "signedDeleted": "已签署的合同已删除",
+    "signedBulkDeleted": "已签署的合同已删除"
   },
   "contractTemplates": {
     "title": "合同模板",

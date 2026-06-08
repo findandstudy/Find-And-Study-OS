@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { Send, Loader2, FileSignature, RotateCw, Ban, Download, Trash2 } from "lucide-react";
+import { Send, Loader2, FileSignature, RotateCw, Ban, Download, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -101,6 +101,31 @@ export default function ContractsPage() {
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  type SortDir = "asc" | "desc";
+  type SortState = { key: string; dir: SortDir } | null;
+  const [sessionSort, setSessionSort] = useState<SortState>(null);
+  const [signedSort, setSignedSort] = useState<SortState>(null);
+
+  // Click cycle per column: unsorted -> ascending -> descending -> unsorted.
+  function nextSort(current: SortState, key: string): SortState {
+    if (!current || current.key !== key) return { key, dir: "asc" };
+    if (current.dir === "asc") return { key, dir: "desc" };
+    return null;
+  }
+  // Direction-aware sort that always pushes null/empty values last, in BOTH asc
+  // and desc — the direction only flips the order of the populated values, never
+  // the null placement (negating a null-aware comparator would float nulls up).
+  function sortByDir<T>(arr: T[], getVal: (x: T) => string | number | null, dir: SortDir): T[] {
+    return [...arr].sort((a, b) => {
+      const va = getVal(a), vb = getVal(b);
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      const r = (typeof va === "number" && typeof vb === "number") ? va - vb : String(va).localeCompare(String(vb));
+      return dir === "asc" ? r : -r;
+    });
+  }
 
   const STATUS_LABELS: Record<string, { label: string; tone: "default" | "secondary" | "destructive" | "outline" }> = {
     intake_pending: { label: t("contracts.statusIntakePending"), tone: "secondary" },
@@ -222,8 +247,76 @@ export default function ContractsPage() {
     await load();
   }
 
+  async function deleteSigned(id: number) {
+    if (!confirm(t("contracts.confirmDeleteSigned"))) return;
+    try {
+      await customFetch(`/api/contracts/signed/${id}`, { method: "DELETE" });
+      toast({ title: t("contracts.signedDeleted") });
+      await load();
+    } catch (err: any) { toast({ title: t("contracts.error"), description: err.message, variant: "destructive" }); }
+  }
+
+  function toggleAllSigned() {
+    if (signed.length > 0 && signed.every(c => selected.has(c.id))) setSelected(new Set());
+    else setSelected(new Set(signed.map(c => c.id)));
+  }
+
+  async function bulkDeleteSigned() {
+    if (!confirm(t("common.confirmBulkDelete", { n: selected.size }))) return;
+    setBulkDeleting(true);
+    let failed = 0;
+    for (const id of Array.from(selected)) {
+      try { await customFetch(`/api/contracts/signed/${id}`, { method: "DELETE" }); }
+      catch { failed++; }
+    }
+    if (failed > 0) toast({ title: t("common.error"), description: t("common.bulkDeletePartialFailure", { n: failed }), variant: "destructive" });
+    else toast({ title: t("contracts.signedBulkDeleted") });
+    setBulkDeleting(false);
+    await load();
+  }
+
   const deletableSessions = sessions.filter(s => s.status !== "signed" && s.status !== "revoked");
   const allDeletableSelected = deletableSessions.length > 0 && deletableSessions.every(s => selected.has(s.id));
+  const allSignedSelected = signed.length > 0 && signed.every(c => selected.has(c.id));
+
+  const sortedSessions = useMemo(() => {
+    if (!sessionSort) return sessions;
+    const getVal = (s: Session): string | number | null => {
+      switch (sessionSort.key) {
+        case "signer": return (s.signerName || s.signerEmail || "").toLowerCase();
+        case "status": return s.status;
+        case "opened": return s.openedAt ? new Date(s.openedAt).getTime() : null;
+        case "expires": return s.expiresAt ? new Date(s.expiresAt).getTime() : null;
+        default: return null;
+      }
+    };
+    return sortByDir(sessions, getVal, sessionSort.dir);
+  }, [sessions, sessionSort]);
+
+  const sortedSigned = useMemo(() => {
+    if (!signedSort) return signed;
+    const getVal = (c: Signed): string | number | null => {
+      switch (signedSort.key) {
+        case "signer": return (c.signerName || c.signerEmail || "").toLowerCase();
+        case "date": return c.signedAt ? new Date(c.signedAt).getTime() : null;
+        case "evidence": return c.evidenceHash || null;
+        default: return null;
+      }
+    };
+    return sortByDir(signed, getVal, signedSort.dir);
+  }, [signed, signedSort]);
+
+  const sortTh = (label: string, sortKey: string, state: SortState, setState: (s: SortState) => void, align: "left" | "right" = "left") => {
+    const active = state?.key === sortKey;
+    return (
+      <th className={`px-4 py-3 ${align === "right" ? "text-right" : "text-left"}`}>
+        <button type="button" onClick={() => setState(nextSort(state, sortKey))} className={`inline-flex items-center gap-1 font-medium hover:text-foreground ${align === "right" ? "flex-row-reverse" : ""}`}>
+          {label}
+          {active ? (state!.dir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
+        </button>
+      </th>
+    );
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -244,10 +337,10 @@ export default function ContractsPage() {
         </button>
       </div>
 
-      {tab === "sessions" && selected.size > 0 && (
+      {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2 bg-muted/60 rounded-lg border">
           <span className="text-sm font-medium">{t("common.selectedCount", { n: selected.size })}</span>
-          <Button size="sm" variant="destructive" onClick={bulkDelete} disabled={bulkDeleting}>
+          <Button size="sm" variant="destructive" onClick={tab === "sessions" ? bulkDelete : bulkDeleteSigned} disabled={bulkDeleting}>
             {bulkDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Trash2 className="w-3.5 h-3.5 mr-1" />}
             {t("common.deleteSelected", { n: selected.size })}
           </Button>
@@ -267,15 +360,15 @@ export default function ContractsPage() {
                   <th className="px-4 py-3 w-10">
                     <input type="checkbox" checked={allDeletableSelected} onChange={toggleAll} className="cursor-pointer" title={t("common.selectAll")} />
                   </th>
-                  <th className="text-left px-4 py-3">{t("contracts.colSigner")}</th>
-                  <th className="text-left px-4 py-3">{t("contracts.colStatus")}</th>
-                  <th className="text-left px-4 py-3">{t("contracts.colOpened")}</th>
-                  <th className="text-left px-4 py-3">{t("contracts.colExpires")}</th>
+                  {sortTh(t("contracts.colSigner"), "signer", sessionSort, setSessionSort)}
+                  {sortTh(t("contracts.colStatus"), "status", sessionSort, setSessionSort)}
+                  {sortTh(t("contracts.colOpened"), "opened", sessionSort, setSessionSort)}
+                  {sortTh(t("contracts.colExpires"), "expires", sessionSort, setSessionSort)}
                   <th className="text-right px-4 py-3">{t("contracts.colActions")}</th>
                 </tr>
               </thead>
               <tbody>
-                {sessions.map(s => {
+                {sortedSessions.map(s => {
                   const canDelete = s.status !== "signed" && s.status !== "revoked";
                   return (
                     <tr key={s.id} className="border-t">
@@ -327,15 +420,21 @@ export default function ContractsPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr>
-                <th className="text-left px-4 py-3">{t("contracts.colSigner")}</th>
-                <th className="text-left px-4 py-3">{t("contracts.colDate")}</th>
-                <th className="text-left px-4 py-3">{t("contracts.colEvidenceHash")}</th>
+                <th className="px-4 py-3 w-10">
+                  <input type="checkbox" checked={allSignedSelected} onChange={toggleAllSigned} className="cursor-pointer" title={t("common.selectAll")} />
+                </th>
+                {sortTh(t("contracts.colSigner"), "signer", signedSort, setSignedSort)}
+                {sortTh(t("contracts.colDate"), "date", signedSort, setSignedSort)}
+                {sortTh(t("contracts.colEvidenceHash"), "evidence", signedSort, setSignedSort)}
                 <th className="text-right px-4 py-3">{t("contracts.colPdf")}</th>
               </tr>
             </thead>
             <tbody>
-              {signed.map(c => (
+              {sortedSigned.map(c => (
                 <tr key={c.id} className="border-t">
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)} className="cursor-pointer" />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="font-medium">{c.signerName || "-"}</div>
                     <div className="text-xs text-muted-foreground">{c.signerEmail}</div>
@@ -364,6 +463,14 @@ export default function ContractsPage() {
                       {downloadingId === c.id
                         ? <Loader2 className="w-4 h-4 animate-spin" />
                         : <Download className="w-4 h-4" />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title={t("common.delete")}
+                      onClick={() => deleteSigned(c.id)}
+                    >
+                      <Trash2 className="w-4 h-4 text-red-500" />
                     </Button>
                   </td>
                 </tr>

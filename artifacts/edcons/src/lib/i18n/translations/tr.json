@@ -1494,7 +1494,10 @@
     "confirmDeleteSession": "Bu oturum silinsin mi? Bu işlem geri alınamaz.",
     "cannotDeleteSigned": "İmzalı oturumlar silinemez",
     "sessionDeleted": "Oturum silindi",
-    "sessionsBulkDeleted": "Oturumlar silindi"
+    "sessionsBulkDeleted": "Oturumlar silindi",
+    "confirmDeleteSigned": "Bu imzalanmış sözleşmeyi silmek istiyor musunuz? Bu işlem geri alınamaz.",
+    "signedDeleted": "İmzalanmış sözleşme silindi",
+    "signedBulkDeleted": "İmzalanmış sözleşmeler silindi"
   },
   "contractTemplates": {
     "title": "Sözleşme Şablonları",

@@ -3130,7 +3130,10 @@
     "confirmDeleteSession": "Delete this session? This cannot be undone.",
     "cannotDeleteSigned": "Signed sessions cannot be deleted",
     "sessionDeleted": "Session deleted",
-    "sessionsBulkDeleted": "Sessions deleted"
+    "sessionsBulkDeleted": "Sessions deleted",
+    "confirmDeleteSigned": "Hapus kontrak yang sudah ditandatangani ini? Tindakan ini tidak dapat dibatalkan.",
+    "signedDeleted": "Kontrak yang ditandatangani dihapus",
+    "signedBulkDeleted": "Kontrak yang ditandatangani dihapus"
   },
   "contractTemplates": {
     "title": "Templat Kontrak",

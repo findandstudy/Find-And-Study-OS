@@ -1553,7 +1553,10 @@
     "confirmDeleteSession": "Delete this session? This cannot be undone.",
     "cannotDeleteSigned": "Signed sessions cannot be deleted",
     "sessionDeleted": "Session deleted",
-    "sessionsBulkDeleted": "Sessions deleted"
+    "sessionsBulkDeleted": "Sessions deleted",
+    "confirmDeleteSigned": "Delete this signed contract? This cannot be undone.",
+    "signedDeleted": "Signed contract deleted",
+    "signedBulkDeleted": "Signed contracts deleted"
   },
   "contractTemplates": {
     "title": "Contract Templates",

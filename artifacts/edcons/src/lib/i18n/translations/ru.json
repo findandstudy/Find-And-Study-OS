@@ -3181,7 +3181,10 @@
     "confirmDeleteSession": "Delete this session? This cannot be undone.",
     "cannotDeleteSigned": "Signed sessions cannot be deleted",
     "sessionDeleted": "Session deleted",
-    "sessionsBulkDeleted": "Sessions deleted"
+    "sessionsBulkDeleted": "Sessions deleted",
+    "confirmDeleteSigned": "Удалить этот подписанный договор? Это действие нельзя отменить.",
+    "signedDeleted": "Подписанный договор удалён",
+    "signedBulkDeleted": "Подписанные договоры удалены"
   },
   "contractTemplates": {
     "title": "Шаблоны договоров",
