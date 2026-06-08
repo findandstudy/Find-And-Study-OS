@@ -4120,6 +4120,10 @@
   },
   "signedContract": {
     "pdfPending": "PDF 正在生成中。请在约 30 秒后重试。",
-    "pdfDownloadError": "PDF 下载失败。"
+    "pdfDownloadError": "PDF 下载失败。",
+    "download": "下载 PDF",
+    "regenerate": "重新生成 PDF",
+    "regenerateQueued": "正在重新生成 PDF，大约 30 秒后即可下载。",
+    "regenerateError": "无法启动重新生成。"
   }
 }

@@ -4120,6 +4120,10 @@
   },
   "signedContract": {
     "pdfPending": "Le PDF est en cours de génération. Veuillez réessayer dans environ 30 secondes.",
-    "pdfDownloadError": "Échec du téléchargement du PDF."
+    "pdfDownloadError": "Échec du téléchargement du PDF.",
+    "download": "Télécharger le PDF",
+    "regenerate": "Régénérer le PDF",
+    "regenerateQueued": "Régénération du PDF ; il sera prêt à télécharger dans environ 30 secondes.",
+    "regenerateError": "Impossible de lancer la régénération."
   }
 }

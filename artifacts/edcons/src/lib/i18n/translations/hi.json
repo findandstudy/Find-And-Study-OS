@@ -4120,6 +4120,10 @@
   },
   "signedContract": {
     "pdfPending": "PDF अभी भी तैयार किया जा रहा है। कृपया लगभग 30 सेकंड में पुनः प्रयास करें।",
-    "pdfDownloadError": "PDF डाउनलोड करने में विफल।"
+    "pdfDownloadError": "PDF डाउनलोड करने में विफल।",
+    "download": "PDF डाउनलोड करें",
+    "regenerate": "PDF दोबारा बनाएँ",
+    "regenerateQueued": "PDF दोबारा बनाया जा रहा है; यह लगभग 30 सेकंड में डाउनलोड के लिए तैयार होगा.",
+    "regenerateError": "पुनः निर्माण शुरू नहीं हो सका."
   }
 }

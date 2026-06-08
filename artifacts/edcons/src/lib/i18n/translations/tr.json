@@ -4120,6 +4120,10 @@
   },
   "signedContract": {
     "pdfPending": "PDF hazırlanıyor. Yaklaşık 30 saniye sonra tekrar deneyin.",
-    "pdfDownloadError": "PDF indirilemedi."
+    "pdfDownloadError": "PDF indirilemedi.",
+    "download": "PDF indir",
+    "regenerate": "PDF'i yeniden oluştur",
+    "regenerateQueued": "PDF yeniden oluşturuluyor; yaklaşık 30 saniye içinde indirmeye hazır olacak.",
+    "regenerateError": "Yeniden oluşturma başlatılamadı."
   }
 }

@@ -4120,6 +4120,10 @@
   },
   "signedContract": {
     "pdfPending": "PDF is still being generated. Please try again in about 30 seconds.",
-    "pdfDownloadError": "Failed to download PDF."
+    "pdfDownloadError": "Failed to download PDF.",
+    "download": "Download PDF",
+    "regenerate": "Regenerate PDF",
+    "regenerateQueued": "Regenerating the PDF; it will be ready to download in about 30 seconds.",
+    "regenerateError": "Could not start regeneration."
   }
 }

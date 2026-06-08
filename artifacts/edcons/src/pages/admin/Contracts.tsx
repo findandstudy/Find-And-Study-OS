@@ -40,6 +40,7 @@ export default function ContractsPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"sessions" | "signed">("sessions");
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<number | null>(null);
 
   // The signed PDF is produced asynchronously by a background worker. The
   // endpoint returns 202 while it is still being generated, so we fetch it from
@@ -74,6 +75,22 @@ export default function ContractsPage() {
       toast({ title: t("signedContract.pdfDownloadError"), description: err?.message, variant: "destructive" });
     } finally {
       setDownloadingId(null);
+    }
+  }
+
+  // Force a re-render of an already-generated PDF (e.g. to pick up the
+  // main-agency seal added after the contract was first signed). The backend
+  // clears the render cache and a background worker rebuilds the PDF off the
+  // request path; the new file is downloadable within ~30s.
+  async function regeneratePdf(id: number) {
+    setRegeneratingId(id);
+    try {
+      await customFetch(`/api/contracts/signed/${id}/regenerate`, { method: "POST" });
+      toast({ title: t("signedContract.regenerateQueued") });
+    } catch (err: any) {
+      toast({ title: t("signedContract.regenerateError"), description: err?.message, variant: "destructive" });
+    } finally {
+      setRegeneratingId(null);
     }
   }
 
@@ -329,6 +346,18 @@ export default function ContractsPage() {
                     <Button
                       size="sm"
                       variant="ghost"
+                      title={t("signedContract.regenerate")}
+                      disabled={regeneratingId === c.id}
+                      onClick={() => regeneratePdf(c.id)}
+                    >
+                      {regeneratingId === c.id
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <RotateCw className="w-4 h-4" />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title={t("signedContract.download")}
                       disabled={downloadingId === c.id}
                       onClick={() => downloadSignedPdf(c.id)}
                     >

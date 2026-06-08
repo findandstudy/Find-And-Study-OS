@@ -4120,6 +4120,10 @@
   },
   "signedContract": {
     "pdfPending": "يتم إنشاء ملف PDF. يرجى المحاولة مرة أخرى بعد حوالي 30 ثانية.",
-    "pdfDownloadError": "فشل تنزيل ملف PDF."
+    "pdfDownloadError": "فشل تنزيل ملف PDF.",
+    "download": "تنزيل PDF",
+    "regenerate": "إعادة إنشاء PDF",
+    "regenerateQueued": "تتم إعادة إنشاء ملف PDF؛ سيكون جاهزًا للتنزيل خلال حوالي 30 ثانية.",
+    "regenerateError": "تعذّر بدء إعادة الإنشاء."
   }
 }

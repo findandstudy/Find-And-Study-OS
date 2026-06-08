@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { validateSignatureImage, MAX_SIGNATURE_BYTES } from "../src/lib/signContract";
+import { MAIN_AGENCY_SIGNATURE_DATA_URL } from "../src/lib/mainAgencySignature";
 import {
   renderTemplate,
   buildAgentContext,
@@ -98,6 +99,43 @@ test("an unfilled signature falls back to the styled placeholder box (no <img>)"
   const html = cleanupSignatureImages(renderTemplate(`<img src="{{signature}}">`, ctx), SIG_PLACEHOLDER.en);
   assert.equal(html.includes("<img"), false);
   assert.ok(html.includes(SIG_PLACEHOLDER.en));
+});
+
+// --- Main-agency seal: the final, post-signature PDF render must stamp the
+// Find And Study seal into the {{main_agency_signature}} box, while the
+// preview / signing-screen render (which never sets ctx.main_agency_signature)
+// must leave that box empty -- no broken image, no leaked seal before signing.
+// {{signature}} -> Alt Acente; {{main_agency_signature}} -> Ana Acente. ---
+
+const DUAL_SIG_TEMPLATE =
+  `<img src="{{signature}}" alt="Alt Acente İmzası">` +
+  `<img src="{{main_agency_signature}}" alt="Ana Acente İmzası">`;
+
+test("final render stamps the main-agency seal into {{main_agency_signature}}", () => {
+  const ctx = buildAgentContext(null, null, { signerName: "Test Agent" });
+  ctx.signature = toSignatureDataUrl(VALID_PNG_BASE64);
+  // Mirror ensureSignedContractPdf's final-render injection.
+  ctx.main_agency_signature = MAIN_AGENCY_SIGNATURE_DATA_URL;
+  const html = cleanupSignatureImages(renderTemplate(DUAL_SIG_TEMPLATE, ctx), SIG_PLACEHOLDER.en);
+  assert.ok(
+    html.includes(`src="${MAIN_AGENCY_SIGNATURE_DATA_URL}"`),
+    "expected the main-agency seal data URL in the final render",
+  );
+  assert.ok(MAIN_AGENCY_SIGNATURE_DATA_URL.startsWith("data:image/png;base64,"));
+  // The two signature boxes must carry DIFFERENT images (sub vs main agency).
+  assert.ok(html.includes(`src="data:image/png;base64,${VALID_PNG_BASE64}"`));
+  assert.notEqual(MAIN_AGENCY_SIGNATURE_DATA_URL, toSignatureDataUrl(VALID_PNG_BASE64));
+});
+
+test("preview render leaves {{main_agency_signature}} empty (no seal, no <img>)", () => {
+  const ctx = buildAgentContext(null, null, { signerName: "Test Agent" });
+  ctx.signature = toSignatureDataUrl(VALID_PNG_BASE64);
+  // Preview path never sets main_agency_signature -> buildAgentContext default "".
+  const html = cleanupSignatureImages(renderTemplate(DUAL_SIG_TEMPLATE, ctx), SIG_PLACEHOLDER.en);
+  assert.equal(html.includes(MAIN_AGENCY_SIGNATURE_DATA_URL), false);
+  // The Ana Acente box collapses to the styled placeholder using its alt label,
+  // so there is exactly ONE real <img> (the sub-agent's signature) in preview.
+  assert.equal((html.match(/<img/g) || []).length, 1);
 });
 
 // NOTE: the "second sign -> 409" case is enforced by finalizeSign's session

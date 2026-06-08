@@ -4120,6 +4120,10 @@
   },
   "signedContract": {
     "pdfPending": "PDF sedang dibuat. Silakan coba lagi sekitar 30 detik.",
-    "pdfDownloadError": "Gagal mengunduh PDF."
+    "pdfDownloadError": "Gagal mengunduh PDF.",
+    "download": "Unduh PDF",
+    "regenerate": "Buat ulang PDF",
+    "regenerateQueued": "PDF sedang dibuat ulang; akan siap diunduh dalam sekitar 30 detik.",
+    "regenerateError": "Tidak dapat memulai pembuatan ulang."
   }
 }

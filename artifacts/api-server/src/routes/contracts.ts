@@ -147,6 +147,44 @@ router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contract
   }
 });
 
+// Force-regenerate a signed contract's final PDF, bypassing the idempotent
+// render cache. ensureSignedContractPdf() early-returns whenever
+// pdf_object_key + evidence_hash are already set, so a template/renderer change
+// (e.g. adding the main-agency seal) never reaches an already-rendered contract.
+// This endpoint clears those columns (and releases any delivery lease) so the
+// existing background sweep (backfillMissingSignedPdfs, which targets
+// pdf_object_key IS NULL) re-renders the PDF with the current renderer.
+//
+// The render itself deliberately runs OFF the request path: launching headless
+// Chromium inside an HTTP handler OOM-killed the 512MB autoscale container and
+// surfaced as an opaque edge 403, so we never render synchronously here. We only
+// clear the cache and let the worker pick it up (within ~30s of any instance
+// being alive). We do NOT touch emailed_at, so an already-delivered contract is
+// regenerated WITHOUT re-sending any notification email.
+router.post("/contracts/signed/:id/regenerate", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    await db.update(signedContractsTable)
+      .set({ pdfObjectKey: null, evidenceHash: null, deliveryClaimedAt: null })
+      .where(eq(signedContractsTable.id, id));
+    await writeAudit({
+      userId: (req as any).user?.id ?? null,
+      action: "contract.regenerate_pdf",
+      resource: "signed_contract",
+      resourceId: id,
+      changes: { signingSessionId: row.signingSessionId, agentId: row.agentId },
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
+    });
+    res.status(202).json({ status: "queued", message: "PDF yeniden oluşturuluyor; kısa süre içinde indirilmeye hazır olacak." });
+  } catch (err) {
+    console.error("[contracts] regenerate pdf:", err);
+    res.status(500).json({ error: "Failed to queue regeneration" });
+  }
+});
+
 router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
   try {
     const { agentId, language: requestedLang, expiryDays, templateId: explicitTemplateId } = req.body || {};

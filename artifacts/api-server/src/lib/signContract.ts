@@ -1,6 +1,7 @@
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
 import { and, eq, isNull, desc } from "drizzle-orm";
 import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOLDER, toSignatureDataUrl } from "./contractRenderer";
+import { MAIN_AGENCY_SIGNATURE_DATA_URL } from "./mainAgencySignature";
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
 import { writeAudit } from "./auditLog";
@@ -296,6 +297,14 @@ export async function ensureSignedContractPdf(
     date: signedAt.toISOString().slice(0, 10),
   });
   ctx.signature = toSignatureDataUrl(signatureBase64);
+  // Stamp the main-agency (Find And Study) seal + signature into the FINAL,
+  // post-signature PDF only. The preview / signing-screen renders never set this
+  // (buildAgentContext leaves main_agency_signature ""), so the seal appears only
+  // after the sub-agent has signed and this server-side finalizer runs. The image
+  // is an inlined data URL (no fetch/disk dependency), so it can never fail to
+  // load and never blocks signing. {{main_agency_signature}} -> Ana Acente box;
+  // {{signature}} -> Alt Acente box (distinct images, never the same source).
+  ctx.main_agency_signature = MAIN_AGENCY_SIGNATURE_DATA_URL;
   const placeholder = SIG_PLACEHOLDER[template.language] || SIG_PLACEHOLDER.en;
   const renderedHtml = cleanupSignatureImages(renderTemplate(template.bodyHtml, ctx), placeholder);
 

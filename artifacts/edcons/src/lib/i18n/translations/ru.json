@@ -4120,6 +4120,10 @@
   },
   "signedContract": {
     "pdfPending": "PDF создается. Пожалуйста, попробуйте снова примерно через 30 секунд.",
-    "pdfDownloadError": "Не удалось скачать PDF."
+    "pdfDownloadError": "Не удалось скачать PDF.",
+    "download": "Скачать PDF",
+    "regenerate": "Сгенерировать PDF заново",
+    "regenerateQueued": "PDF пересоздаётся; он будет готов к загрузке примерно через 30 секунд.",
+    "regenerateError": "Не удалось запустить повторную генерацию."
   }
 }

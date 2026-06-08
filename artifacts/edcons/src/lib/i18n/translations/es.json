@@ -4120,6 +4120,10 @@
   },
   "signedContract": {
     "pdfPending": "El PDF se está generando. Por favor, inténtelo de nuevo en unos 30 segundos.",
-    "pdfDownloadError": "No se pudo descargar el PDF."
+    "pdfDownloadError": "No se pudo descargar el PDF.",
+    "download": "Descargar PDF",
+    "regenerate": "Regenerar PDF",
+    "regenerateQueued": "Regenerando el PDF; estará listo para descargar en unos 30 segundos.",
+    "regenerateError": "No se pudo iniciar la regeneración."
   }
 }
