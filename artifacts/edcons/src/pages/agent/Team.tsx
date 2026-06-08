@@ -73,6 +73,8 @@ const PERMISSION_OPTIONS = [
   { key: "course_finder", labelKey: "teamPage.permCourseFinder", descKey: "teamPage.permCourseFinderDesc" },
   { key: "messages", labelKey: "teamPage.permMessages", descKey: "teamPage.permMessagesDesc" },
   { key: "commissions", labelKey: "teamPage.permCommissions", descKey: "teamPage.permCommissionsDesc" },
+  { key: "view_commission_amount", labelKey: "teamPage.permViewCommissionAmount", descKey: "teamPage.permViewCommissionAmountDesc" },
+  { key: "view_service_fee", labelKey: "teamPage.permViewServiceFee", descKey: "teamPage.permViewServiceFeeDesc" },
 ];
 
 export default function AgentTeam() {

@@ -144,7 +144,7 @@ function ensureUrl(url: string | null | undefined): string | null {
 
 export default function CourseFinder() {
   const { t } = useI18n();
-  const { user } = useAuth(true);
+  const { user, hasAgentStaffPermission } = useAuth(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<Filters>({
@@ -167,7 +167,7 @@ export default function CourseFinder() {
   // `filters` state (intakes substring + university open/closed status).
   const [colIntakes, setColIntakes] = useState<string>("");
   const [colStatus, setColStatus] = useState<string>("all");
-  const showCommission = user && SHOW_COMMISSION_ROLES.includes(user.role);
+  const showCommission = user && (SHOW_COMMISSION_ROLES.includes(user.role) || (user.role === "agent_staff" && hasAgentStaffPermission("view_commission_amount")));
   const isAgent = user && ["agent", "sub_agent"].includes(user.role);
   // Agency-side roles that should respect the agency's service-fee visibility,
   // including agency staff (agent_staff) — otherwise an agency could bypass a
@@ -344,6 +344,7 @@ export default function CourseFinder() {
   // figure and force the PDF proposal to omit them, regardless of the manual
   // "Hide Service Fee" toggle.
   const forceHideServiceFee: boolean = !!isAgentSide && !!agentProfile?.effectiveHideServiceFees;
+  const effectiveForceHideServiceFee: boolean = forceHideServiceFee || (user?.role === "agent_staff" && !hasAgentStaffPermission("view_service_fee"));
 
   // Use the backend-computed effective (cascaded) rate as the single source of
   // truth. For sub-agents this is parentRate × subRate / 100 so the estimate
@@ -405,7 +406,7 @@ export default function CourseFinder() {
         showCommission: !!showCommission,
         agentShareRate: agentShareRate ?? null,
         serviceFeeMarkup: pdfMarkup !== 0 ? pdfMarkup : undefined,
-        hideServiceFee: hideServiceFee || forceHideServiceFee,
+        hideServiceFee: hideServiceFee || effectiveForceHideServiceFee,
         accentColor: settings?.pdfAccentColor || undefined,
       });
       toast({ title: t("courseFinderPage.pdfGenerated"), description: t("courseFinderPage.proposalDownloaded", { n: selected.length }) });
@@ -674,7 +675,7 @@ export default function CourseFinder() {
                   </Button>
                   {selectedIds.size > 0 && (
                     <>
-                      {canUsePdfMarkup && !forceHideServiceFee && (
+                      {canUsePdfMarkup && !effectiveForceHideServiceFee && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -690,7 +691,7 @@ export default function CourseFinder() {
                           )}
                         </Button>
                       )}
-                      {!isStudent && !forceHideServiceFee && (
+                      {!isStudent && !effectiveForceHideServiceFee && (
                         <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
                           <input
                             type="checkbox"
@@ -854,7 +855,7 @@ export default function CourseFinder() {
         onClose={() => setSelectedProgram(null)}
         showCommission={!!showCommission}
         agentShareRate={agentShareRate}
-        hideServiceFee={forceHideServiceFee}
+        hideServiceFee={effectiveForceHideServiceFee}
       />
 
       <UniversityInfoDialog
@@ -867,10 +868,10 @@ export default function CourseFinder() {
         onClose={() => setApplyProgram(null)}
         currentUser={user}
         agentShareRate={agentShareRate}
-        hideServiceFee={forceHideServiceFee}
+        hideServiceFee={effectiveForceHideServiceFee}
       />
 
-      {canUsePdfMarkup && !forceHideServiceFee && (
+      {canUsePdfMarkup && !effectiveForceHideServiceFee && (
         <PdfMarkupModal
           open={markupModalOpen}
           onOpenChange={setMarkupModalOpen}
