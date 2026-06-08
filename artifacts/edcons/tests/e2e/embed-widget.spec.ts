@@ -31,6 +31,9 @@ import { test, expect, request as pwRequest, type Page, type FrameLocator } from
 import { execSync } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197";
 const EMBED_SLUG = "e2e-embed-test";

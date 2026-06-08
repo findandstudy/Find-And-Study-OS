@@ -88,7 +88,7 @@ const ROLE_LABELS: Record<string, string> = {
   student: "Student", agent: "Agent", sub_agent: "Sub Agent",
 };
 
-import { MANAGER_ROLES as _MANAGER_ROLES } from "@workspace/roles";
+import { ADMIN_ROLES, MANAGER_ROLES as _MANAGER_ROLES } from "@workspace/roles";
 const MANAGER_ROLES = _MANAGER_ROLES;
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
@@ -1976,6 +1976,8 @@ type LeadFormWidget = {
 function WebToLeadTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth(true);
+  const isAdmin = ADMIN_ROLES.includes(user?.role ?? "");
   const [editing, setEditing] = useState<LeadFormWidget | null>(null);
   const [creating, setCreating] = useState(false);
   const [codeFor, setCodeFor] = useState<LeadFormWidget | null>(null);
@@ -2023,9 +2025,11 @@ function WebToLeadTab() {
               Web sitelerinize gömebileceğiniz form widget'ları oluşturun. Her form için ayrı bir kod parçası alır, hangi sayfadan geldiğini ve UTM bilgilerini lead detayında görürsünüz.
             </p>
           </div>
-          <Button onClick={() => setCreating(true)} className="gap-1.5 shrink-0">
-            <Plus className="w-4 h-4" /> Yeni Form
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => setCreating(true)} className="gap-1.5 shrink-0">
+              <Plus className="w-4 h-4" /> Yeni Form
+            </Button>
+          )}
         </div>
 
         {isLoading ? (
@@ -2035,9 +2039,11 @@ function WebToLeadTab() {
             <Code className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
             <p className="text-sm font-medium mb-1">Henüz form yok</p>
             <p className="text-xs text-muted-foreground mb-4">İlk web-to-lead formunuzu oluşturun.</p>
-            <Button size="sm" onClick={() => setCreating(true)} className="gap-1.5">
-              <Plus className="w-3.5 h-3.5" /> Form Oluştur
-            </Button>
+            {isAdmin && (
+              <Button size="sm" onClick={() => setCreating(true)} className="gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Form Oluştur
+              </Button>
+            )}
           </div>
         ) : (
           <div className="border rounded-xl overflow-hidden">
@@ -2069,15 +2075,19 @@ function WebToLeadTab() {
                         <Button size="sm" variant="ghost" onClick={() => setCodeFor(w)} title="Kodu kopyala">
                           <Code className="w-3.5 h-3.5" />
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditing(w)} title="Düzenle">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => toggleActive(w)} title={w.isActive ? "Devre dışı" : "Etkinleştir"}>
-                          {w.isActive ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => deleteWidget(w.id)} title="Sil">
-                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                        </Button>
+                        {isAdmin && (
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => setEditing(w)} title="Düzenle">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => toggleActive(w)} title={w.isActive ? "Devre dışı" : "Etkinleştir"}>
+                              {w.isActive ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => deleteWidget(w.id)} title="Sil">
+                              <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -2088,7 +2098,7 @@ function WebToLeadTab() {
         )}
       </Card>
 
-      {(creating || editing) && (
+      {isAdmin && (creating || editing) && (
         <LeadFormWidgetDialog
           widget={editing}
           onClose={() => { setCreating(false); setEditing(null); }}

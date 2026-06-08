@@ -509,7 +509,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       ?? (await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null));
   } else {
     const callerVisible = await getVisibleBranchIds(user.id, user.role);
-    if (callerVisible !== null && (callerVisible.length === 0 ||
+    if (!isAgentRole(user.role) && callerVisible !== null && (callerVisible.length === 0 ||
         (studentFull.branchId != null && !callerVisible.includes(studentFull.branchId)))) {
       res.status(403).json({ error: "Student not in your branch scope" });
       return;

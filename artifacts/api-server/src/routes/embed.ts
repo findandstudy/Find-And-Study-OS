@@ -271,7 +271,7 @@ router.get("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async
   res.json(sanitizeWidget(widget, req.user!.role));
 });
 
-router.post("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains } = req.body;
   if (!name || !slug) { res.status(400).json({ error: "name and slug are required" }); return; }
   const validMode = VALID_MODES.includes(mode) ? mode : "combined";
@@ -308,7 +308,7 @@ router.post("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (r
   }
 });
 
-router.patch("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+router.patch("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res, next): Promise<void> => {
   if (!/^\d+$/.test(req.params.id)) { next(); return; }
   const id = parseInt(req.params.id, 10);
   const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, isActive } = req.body;
@@ -620,7 +620,7 @@ router.post(
   },
 );
 
-router.delete("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+router.delete("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res, next): Promise<void> => {
   if (!/^\d+$/.test(req.params.id)) { next(); return; }
   const id = parseInt(req.params.id, 10);
   await db.delete(embedWidgetsTable).where(eq(embedWidgetsTable.id, id));
