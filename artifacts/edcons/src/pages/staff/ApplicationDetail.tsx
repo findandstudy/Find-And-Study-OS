@@ -84,7 +84,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   // Task #269 — shared document-request / incomplete-docs flow.
   const [docRequestDialog, setDocRequestDialog] = useState<{ stage: string; stageLabel: string; suggestedDocTypes: string[]; title: string | null; retryTarget: string } | null>(null);
   const [docsIncompleteDialog, setDocsIncompleteDialog] = useState<{ currentStageLabel: string; missing: MissingDocEntry[]; retryTarget: string } | null>(null);
-  const { user: authUser, hasPermission } = useAuth();
+  const { user: authUser, hasPermission, hasAgentStaffPermission } = useAuth();
   const canSeeCommission = hasPermission("applications.view_commission");
   const isAdmin = authUser && ["super_admin", "admin", "manager"].includes(authUser.role);
   const canChangeStage = !!isAdmin || hasPermission("applications.change_stage");
@@ -396,7 +396,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
               </div>
             )}
 
-            {app && authUser && (
+            {app && authUser && hasAgentStaffPermission("documents") && (
               <>
                 <ApplicationDocumentsPanel
                   applicationId={id}

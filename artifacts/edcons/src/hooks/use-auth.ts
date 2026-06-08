@@ -10,6 +10,13 @@ export function useAuth(requireAuth = false, allowedRoles?: readonly string[]) {
     query: {
       retry: false,
       staleTime: 30_000,
+      // Agent staff permissions are edited by their managing agent from a
+      // different session. Poll /auth/me every 5s for agent_staff so a
+      // permission change (sidebar links + route guards) reflects without a
+      // manual page refresh. Other roles don't poll. Refetch on focus too.
+      refetchInterval: (query: any) =>
+        (query?.state?.data as any)?.role === "agent_staff" ? 5_000 : false,
+      refetchOnWindowFocus: true,
       ...(initialUser !== undefined
         ? {
             initialData: initialUser as any,
@@ -89,5 +96,17 @@ export function useAuth(requireAuth = false, allowedRoles?: readonly string[]) {
     return permissions.includes(key);
   };
 
-  return { user, isLoading, isAuthenticated: !!user, hasPermission };
+  // Agent-staff granular permissions (leads, students, applications, documents,
+  // course_finder, messages, commissions) are stored on the user as
+  // `agentStaffPermissions`. Only the agent_staff role is restricted by this
+  // layer; every other role is unaffected here (their access is governed by
+  // role/hasPermission instead).
+  const agentStaffPermissions =
+    (((user as any)?.agentStaffPermissions) as string[] | undefined) ?? [];
+  const hasAgentStaffPermission = (key: string): boolean => {
+    if (role !== "agent_staff") return true;
+    return agentStaffPermissions.includes(key);
+  };
+
+  return { user, isLoading, isAuthenticated: !!user, hasPermission, hasAgentStaffPermission };
 }
