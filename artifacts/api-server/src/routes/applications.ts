@@ -4,6 +4,7 @@ import { eq, sql, and, inArray, desc, isNull, isNotNull, ne } from "drizzle-orm"
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
+import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeApplicationAssignment } from "../lib/leadAssignment";
@@ -1440,13 +1441,17 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
   res.json({ success: true, updated });
 });
 
-router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [existing] = await db
-    .select({ id: applicationsTable.id })
+    .select({ id: applicationsTable.id, studentId: applicationsTable.studentId })
     .from(applicationsTable)
     .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Application not found" }); return; }
+  if (existing.studentId) {
+    const access = await assertCanAccessStudent(req, existing.studentId);
+    if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  }
   // Soft-delete the application; cascade soft-delete on documents (which has
   // its own deletedAt). Notes and application_stage_documents are hidden via
   // the parent.deletedAt filter on listing endpoints (no orphan exposure).

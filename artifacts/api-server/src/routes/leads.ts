@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from 
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { normalizeAndValidateNames, normalizePhoneField, toLatinUpper } from "../lib/textNormalize";
@@ -825,13 +826,19 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   res.json(lead);
 });
 
-router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [existing] = await db.select({ id: leadsTable.id }).from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
+  const [existing] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
-  await softDelete(leadsTable, [id], { actorUserId: req.user!.id });
-  await logAudit(req.user!.id, "delete_lead", "lead", id, { soft: true }, req.ip);
+  const delUser = req.user!;
+  if (!(ADMIN_ROLES as readonly string[]).includes(delUser.role)) {
+    if (existing.assignedToId !== null && existing.assignedToId !== delUser.id) {
+      res.status(403).json({ error: "Access denied" }); return;
+    }
+  }
+  await softDelete(leadsTable, [id], { actorUserId: delUser.id });
+  await logAudit(delUser.id, "delete_lead", "lead", id, { soft: true }, req.ip);
   res.sendStatus(204);
 });
 
@@ -1187,9 +1194,18 @@ router.delete("/leads/:id/notes/:noteId", requireAuth, requireRole(...STAFF_ROLE
   res.status(204).end();
 });
 
-router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+  const user = req.user!;
+  if (isAgentRole(user.role)) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (!lead.agentId || !visibleIds.includes(lead.agentId)) { res.status(403).json({ error: "Access denied" }); return; }
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    if (lead.assignedToId !== null && lead.assignedToId !== user.id) { res.status(403).json({ error: "Access denied" }); return; }
+  }
   const { page = "1", limit = "50" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
@@ -1219,9 +1235,18 @@ router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), as
   res.json(data);
 });
 
-router.post("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.post("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
+  if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
+  const user = req.user!;
+  if (isAgentRole(user.role)) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (!lead.agentId || !visibleIds.includes(lead.agentId)) { res.status(403).json({ error: "Access denied" }); return; }
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    if (lead.assignedToId !== null && lead.assignedToId !== user.id) { res.status(403).json({ error: "Access denied" }); return; }
+  }
   const { title, scheduledAt, notes } = req.body;
   if (!title?.trim() || !scheduledAt) {
     res.status(400).json({ error: "title and scheduledAt are required" });
@@ -1259,6 +1284,20 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [existingFu] = await db.select().from(followUpsTable).where(eq(followUpsTable.id, id));
   if (!existingFu) { res.status(404).json({ error: "Follow-up not found" }); return; }
+  const fuUser = req.user!;
+  if (existingFu.leadId) {
+    const [fuLead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, existingFu.leadId), isNull(leadsTable.deletedAt)));
+    if (!fuLead) { res.status(404).json({ error: "Follow-up not found" }); return; }
+    if (isAgentRole(fuUser.role)) {
+      const visibleIds = await getAgentVisibleIds(fuUser.id, fuUser.role);
+      if (!fuLead.agentId || !visibleIds.includes(fuLead.agentId)) { res.status(403).json({ error: "Access denied" }); return; }
+    } else if (!(ADMIN_ROLES as readonly string[]).includes(fuUser.role)) {
+      if (fuLead.assignedToId !== null && fuLead.assignedToId !== fuUser.id) { res.status(403).json({ error: "Access denied" }); return; }
+    }
+  } else if (existingFu.studentId) {
+    const access = await assertCanAccessStudent(req, existingFu.studentId);
+    if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  }
   const { completed, title, scheduledAt, notes } = req.body;
   const updates: Record<string, unknown> = {};
   let isContentEdit = false;
