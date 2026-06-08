@@ -108,6 +108,7 @@ export default function AgentAccount() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const contractPollStart = useRef<number>(Date.now());
 
   const [form, setForm] = useState({ firstName: "", lastName: "", phoneCode: "+90", phoneNumber: "", email: "", avatarUrl: "" });
   const [saving, setSaving] = useState(false);
@@ -136,6 +137,15 @@ export default function AgentAccount() {
     // Re-fetch when the tab regains focus so admin-side changes (e.g.
     // uploading/replacing the contract file) appear without a hard reload.
     refetchOnWindowFocus: true,
+    // Poll every 5 s until contractUrl is populated (background PDF worker runs
+    // ~30 s after signing). Stop after 2 minutes to avoid indefinite polling
+    // for agents who genuinely have no signed contract yet.
+    refetchInterval: (query) => {
+      const d = query.state.data as any;
+      if (!d || d.contractUrl) return false;
+      if (Date.now() - contractPollStart.current > 120_000) return false;
+      return 5_000;
+    },
   });
 
   async function handleAvatarUpload(file: File) {

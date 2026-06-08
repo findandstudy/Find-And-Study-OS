@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { Loader2 } from "lucide-react";
@@ -31,6 +32,7 @@ interface Props { children: React.ReactNode }
  */
 export function AgentOnboardingGuard({ children }: Props) {
   const { user } = useAuth(false);
+  const qc = useQueryClient();
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
   // Per-mount dismissal: when the contract is not yet mandatory the agent can
@@ -85,7 +87,14 @@ export function AgentOnboardingGuard({ children }: Props) {
         {(mandatory || !dismissed) && (
           <SignContract
             asModal
-            onSigned={() => { setDismissed(false); fetched.current = false; void reload(); }}
+            onSigned={() => {
+              setDismissed(false);
+              fetched.current = false;
+              void reload();
+              void qc.invalidateQueries({ queryKey: ["/api/agents/me/onboarding-status"] });
+              void qc.invalidateQueries({ queryKey: ["/api/contracts/me"] });
+              void qc.invalidateQueries({ queryKey: ["agent-me"] });
+            }}
             onClose={mandatory ? undefined : () => setDismissed(true)}
           />
         )}
