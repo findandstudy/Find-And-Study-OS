@@ -1143,9 +1143,9 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canVie
           <Select value={filters.assignedTo} onValueChange={v => onChange({ ...filters, assignedTo: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              {canViewOthers && <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>}
+              <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>
               <SelectItem value="mine">{t("applicationsPage.me")}</SelectItem>
-              {canViewUnassigned && <SelectItem value="unassigned">{t("applicationsPage.unassigned")}</SelectItem>}
+              <SelectItem value="unassigned">{t("applicationsPage.unassigned")}</SelectItem>
               <SelectItem value="mine_unassigned">{t("applicationsPage.meUnassigned")}</SelectItem>
               {canViewOthers && staffUsersList.filter(u => u.id !== currentUserId).map(u => (
                 <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
@@ -1976,11 +1976,11 @@ export default function ApplicationsPage() {
                             onChange: v => setFilters(f => ({ ...f, assignedTo: v })),
                             options: [
                               { value: "mine", label: t("applicationsPage.me") },
-                              ...(canViewUnassigned ? [{ value: "unassigned", label: t("applicationsPage.unassigned") }] : []),
+                              { value: "unassigned", label: t("applicationsPage.unassigned") },
                               { value: "mine_unassigned", label: t("applicationsPage.meUnassigned") },
                             ],
                             allLabel: t("applicationsPage.all"),
-                            hideAll: !canViewOthers,
+                            hideAll: false,
                             label: t("applicationsPage.assignedTo"),
                           }}
                         />

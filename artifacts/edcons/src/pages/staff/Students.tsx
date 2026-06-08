@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { toLatinUpper } from "@/lib/textTransform";
 import { useLocation } from "wouter";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
+import { usePersistedFilterValue } from "@/hooks/use-table-prefs";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
@@ -2041,9 +2042,9 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
           <Select value={filters.assignment} onValueChange={v => onChange({ ...filters, assignment: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
-              {canViewOthers && <SelectItem value="all">{t("studentsPage.all")}</SelectItem>}
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
               <SelectItem value="mine">{t("studentsPage.me")}</SelectItem>
-              {canViewUnassigned && <SelectItem value="unassigned">{t("studentsPage.unassigned")}</SelectItem>}
+              <SelectItem value="unassigned">{t("studentsPage.unassigned")}</SelectItem>
               <SelectItem value="mine_unassigned">{t("studentsPage.meUnassigned")}</SelectItem>
               {canViewOthers && staffUsers.filter((u: any) => u.id !== currentUserId).map((u: any) => (
                 <SelectItem key={u.id} value={String(u.id)}>{`${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email}</SelectItem>
@@ -2126,13 +2127,21 @@ export default function StudentsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
-  const [filters, setFilters] = useState<StuFilters>({ ...DEFAULT_STU_FILTERS });
+  const [persistedAssignment, setPersistedAssignment] = usePersistedFilterValue(
+    "students-table", "assignment_v2",
+    (user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager") ? "all" : DEFAULT_STU_FILTERS.assignment,
+    user?.id,
+  );
+  const [filters, setFilters] = useState<StuFilters>({ ...DEFAULT_STU_FILTERS, assignment: persistedAssignment });
   useEffect(() => {
-    if (user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager") {
-      setFilters(f => f.assignment === "mine_unassigned" ? { ...f, assignment: "all" } : f);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+    setFilters(f => f.assignment === persistedAssignment ? f : { ...f, assignment: persistedAssignment });
+  }, [persistedAssignment]);
+  const persistAssignmentRef = useRef(setPersistedAssignment);
+  persistAssignmentRef.current = setPersistedAssignment;
+  useEffect(() => {
+    persistAssignmentRef.current(filters.assignment);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.assignment]);
   const [colFilters, setColFilters] = useState({ name: "", email: "", passport: "" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
@@ -2468,11 +2477,11 @@ export default function StudentsPage() {
                         onChange: v => setFilters(f => ({ ...f, assignment: v })),
                         options: [
                           { value: "mine", label: t("studentsPage.me") },
-                          ...(canViewUnassigned ? [{ value: "unassigned", label: t("studentsPage.unassigned") }] : []),
+                          { value: "unassigned", label: t("studentsPage.unassigned") },
                           { value: "mine_unassigned", label: t("studentsPage.meUnassigned") },
                         ],
                         allLabel: t("studentsPage.all"),
-                        hideAll: !canViewOthers,
+                        hideAll: false,
                         label: t("studentsPage.assignedToLabel"),
                       }}
                     />
