@@ -755,7 +755,11 @@ export default function AgentLeadsPage() {
 
   const pg = useTablePagination(25);
 
-  const { user } = useAuth(true, ["agent", "sub_agent"]);
+  // Authorization (role + granular permission) is enforced by the route-level
+  // ProtectedRoute (AGENT_ROLES + requiredPermission). Do NOT pass a narrower
+  // role list here — ["agent","sub_agent"] excludes agent_staff and would
+  // bounce permitted agent_staff users to "/" (→ /en).
+  const { user } = useAuth(true);
   const canSeeRevenue = true;
 
   const { season } = useSeason();

@@ -1604,7 +1604,11 @@ export default function AgentStudentsPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { user } = useAuth(true, ["agent", "sub_agent"]);
+  // Authorization (role + granular permission) is enforced by the route-level
+  // ProtectedRoute (AGENT_ROLES + requiredPermission). Do NOT pass a narrower
+  // role list here — ["agent","sub_agent"] excludes agent_staff and would
+  // bounce permitted agent_staff users to "/" (→ /en).
+  const { user } = useAuth(true);
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
