@@ -326,15 +326,19 @@ export default function CourseFinder() {
     staleTime: 10 * 60_000,
   });
 
-  const { data: agentProfile } = useQuery<{ logoUrl?: string | null; companyName?: string; commissionRate?: number | null; subAgentCommissionRate?: number | null }>({
+  const { data: agentProfile } = useQuery<{ logoUrl?: string | null; companyName?: string; commissionRate?: number | null; subAgentCommissionRate?: number | null; effectiveCommissionRate?: number | null }>({
     queryKey: ["agent-me-pdf"],
     queryFn: () => apiFetch(`${BASE_URL}/api/agents/me`),
     enabled: !!isAgent,
     staleTime: 10 * 60_000,
   });
 
+  // Use the backend-computed effective (cascaded) rate as the single source of
+  // truth. For sub-agents this is parentRate × subRate / 100 so the estimate
+  // matches what finance books; for parent/standalone agents it equals their
+  // own commissionRate.
   const agentShareRate: number | null | undefined = isAgent
-    ? (agentProfile?.commissionRate ?? undefined)
+    ? (agentProfile?.effectiveCommissionRate ?? undefined)
     : null;
 
   async function handleGeneratePdf() {

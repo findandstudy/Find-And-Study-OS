@@ -390,6 +390,24 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  // Effective commission rate: the rate the logged-in agent actually earns of a
+  // university commission, used by Course Finder / PDF proposals to show an
+  // estimate consistent with the value finance later books via
+  // resolveAgentCommission. This MUST follow the same cascade + fallback rules:
+  //   - Sub-agent with a valid parent: parentRate × subRate / 100 (multiplicative).
+  //   - Parent / standalone agent: its own commissionRate.
+  //   - Orphan parent (parentAgentId set but parent deleted) or self-reference:
+  //     fall back to standalone (own rate), mirroring resolveAgentCommission.
+  let effectiveCommissionRate: number | null = agent.commissionRate ?? null;
+  if (agent.parentAgentId && agent.parentAgentId !== agent.id) {
+    const [commissionParent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agent.parentAgentId));
+    if (commissionParent) {
+      const parentRate = commissionParent.commissionRate ?? 0;
+      const subRate = agent.commissionRate ?? 0;
+      effectiveCommissionRate = (parentRate * subRate) / 100;
+    }
+  }
+
   // Resolve contractUrl at read time to the agent's NEWEST signed contract. The
   // stored agents.contractUrl is hydrated lazily on first PDF render and could be
   // locked to an earlier (possibly broken) contract when the agent later
@@ -403,7 +421,7 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
     console.error(`[agents/me] failed to resolve newest contract url for agent ${agent.id}:`, err);
   }
 
-  res.json({ ...agent, contractUrl, assignedStaff, assignedStaffList, parentAgent });
+  res.json({ ...agent, contractUrl, assignedStaff, assignedStaffList, parentAgent, effectiveCommissionRate });
 });
 
 router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
