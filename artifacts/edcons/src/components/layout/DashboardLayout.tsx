@@ -16,7 +16,6 @@ import {
   SidebarContent, 
   SidebarGroup, 
   SidebarGroupContent, 
-  SidebarGroupLabel, 
   SidebarMenu, 
   SidebarMenuItem, 
   SidebarMenuButton,
@@ -671,9 +670,9 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                   <>
                     {favoriteItems.length > 0 && (
                       <SidebarGroup className="p-0">
-                        <SidebarGroupLabel className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1 px-3 flex items-center gap-1.5">
+                        <div className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1 px-3 flex items-center gap-1.5 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:-mt-6">
                           <Star className="w-3 h-3 fill-amber-400" /> {t("dashboard.favorites")}
-                        </SidebarGroupLabel>
+                        </div>
                         <SidebarGroupContent>
                           <SidebarMenu className="space-y-0.5">
                             {favoriteItems.map(item => renderItem(item, "fav-"))}
@@ -689,16 +688,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                       const expanded = (userState !== undefined ? userState : defaultOpen) || isActiveGroup;
                       return (
                       <SidebarGroup key={groupKey} className="p-0">
-                        <SidebarGroupLabel asChild>
-                          <button
-                            type="button"
-                            onClick={() => toggleGroup(groupKey, defaultOpen)}
-                            className="w-full flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1 px-3 hover:text-foreground transition-colors cursor-pointer"
-                          >
-                            <span>{group.label}</span>
-                            <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded ? "" : "-rotate-90"}`} />
-                          </button>
-                        </SidebarGroupLabel>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(groupKey, defaultOpen)}
+                          className="w-full flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1 px-3 hover:text-foreground transition-colors cursor-pointer group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0"
+                        >
+                          <span>{group.label}</span>
+                          <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded ? "" : "-rotate-90"}`} />
+                        </button>
                         <SidebarGroupContent className={expanded ? "" : "hidden group-data-[collapsible=icon]:!block"}>
                           <SidebarMenu className="space-y-0.5">
                             {group.items.map(item => renderItem(item))}
