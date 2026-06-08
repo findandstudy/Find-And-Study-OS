@@ -29,7 +29,7 @@ const signLimiter = rateLimit({
   message: { error: "Too many requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
-  store: new PgRateLimitStore(SIGN_WINDOW_MS),
+  store: new PgRateLimitStore(SIGN_WINDOW_MS, "sign"),
 });
 
 // Tighter limiter for sending verification codes: the signer types an
@@ -41,7 +41,7 @@ const codeLimiter = rateLimit({
   message: { error: "Too many requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
-  store: new PgRateLimitStore(SIGN_WINDOW_MS),
+  store: new PgRateLimitStore(SIGN_WINDOW_MS, "sign-code"),
 });
 
 function generateVerificationCode(): string {

@@ -78,7 +78,7 @@ const embedSubmitLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many submissions. Please try again later." },
-  store: new PgRateLimitStore(EMBED_WINDOW_MS),
+  store: new PgRateLimitStore(EMBED_WINDOW_MS, "embed-submit"),
 });
 
 // ─── Embed HMAC security helpers ─────────────────────────────────────────────
@@ -187,7 +187,7 @@ const embedTokenLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
-  store: new PgRateLimitStore(EMBED_TOKEN_WINDOW_MS),
+  store: new PgRateLimitStore(EMBED_TOKEN_WINDOW_MS, "embed-token"),
 });
 
 /**

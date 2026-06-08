@@ -52,12 +52,19 @@ export async function checkAndIncrementRateLimit(
  */
 export class PgRateLimitStore {
   private windowMs: number;
+  private prefix: string;
 
-  constructor(windowMs: number) {
+  constructor(windowMs: number, prefix: string = "") {
     this.windowMs = windowMs;
+    this.prefix = prefix;
+  }
+
+  private ns(key: string): string {
+    return this.prefix ? `${this.prefix}:${key}` : key;
   }
 
   async increment(key: string): Promise<{ totalHits: number; resetTime: Date }> {
+    const nsKey = this.ns(key);
     const resetAt = new Date(Date.now() + this.windowMs);
 
     const result = await pool.query<{ count: number; reset_at: Date }>(
@@ -73,7 +80,7 @@ export class PgRateLimitStore {
                           ELSE pg_rate_limits.reset_at
                         END
        RETURNING count, reset_at`,
-      [key, resetAt],
+      [nsKey, resetAt],
     );
 
     const row = result.rows[0];
@@ -86,12 +93,12 @@ export class PgRateLimitStore {
   async decrement(key: string): Promise<void> {
     await pool.query(
       `UPDATE pg_rate_limits SET count = GREATEST(count - 1, 0) WHERE key = $1`,
-      [key],
+      [this.ns(key)],
     );
   }
 
   async resetKey(key: string): Promise<void> {
-    await pool.query(`DELETE FROM pg_rate_limits WHERE key = $1`, [key]);
+    await pool.query(`DELETE FROM pg_rate_limits WHERE key = $1`, [this.ns(key)]);
   }
 
   async resetAll(): Promise<void> {

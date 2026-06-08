@@ -32,7 +32,7 @@ const applyLimiter = rateLimit({
   message: { error: "Too many applications. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
-  store: new PgRateLimitStore(APPLY_WINDOW_MS),
+  store: new PgRateLimitStore(APPLY_WINDOW_MS, "apply"),
 });
 
 const aiExtractLimiter = rateLimit({
@@ -41,7 +41,7 @@ const aiExtractLimiter = rateLimit({
   message: { error: "Too many AI extraction requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
-  store: new PgRateLimitStore(APPLY_WINDOW_MS),
+  store: new PgRateLimitStore(APPLY_WINDOW_MS, "ai-extract"),
 });
 
 /**

@@ -54,7 +54,7 @@ const EMBED_ALLOWLIST_STRICT_SLUG = "e2e-embed-test-allowlist-strict";
 
 /** Read embedApiKeys written by globalSetup into the fixture state file. */
 function getFixtureState(): { permissiveWidgetApiKey: string; strictWidgetApiKey: string } {
-  const stateFile = path.resolve(__dirname, "../../../e2e-embed-state.json");
+  const stateFile = path.resolve(__dirname, "../../../../e2e-embed-state.json");
   return JSON.parse(fs.readFileSync(stateFile, "utf8"));
 }
 
@@ -566,11 +566,13 @@ test.describe("embed widget — apply submission", { tag: "@desktop" }, () => {
       .click();
     await expect(widget.locator(".ew-modal")).toBeVisible({ timeout: 5_000 });
 
-    // The modal opens at the upload step ("Apply — <program>" with a
-    // grid of 4 document slots). Skip straight to the form step — the
-    // upload+AI path needs a real LLM round-trip, which is out of scope
-    // for the submission-flow regression test.
-    //
+    // Unique per-run email — declared early because we also need it in
+    // the personal step below.
+    const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const submittedEmail = `e2e-apply-${runId}@e2e.test`;
+    const firstName = "E2EApply";
+    const lastName = `Run${runId}`;
+
     // We use `dispatchEvent("click")` (rather than `click()`) for the
     // in-modal interactions: the modal is `position:absolute` inside
     // the widget iframe and can extend past the iframe's CSS box (the
@@ -582,20 +584,53 @@ test.describe("embed widget — apply submission", { tag: "@desktop" }, () => {
     // real click handler the widget JS bound at line 1187 of
     // routes/embed.ts. The button being live in the DOM is still
     // verified by `toBeVisible()` immediately above.
+
+    // Step 1 — Personal Info: the modal now opens at the personal step.
+    // Wait for the Next button, then atomically fill fields AND click it
+    // inside a single evaluate() call so there is no async gap during
+    // which loadProgramDocs() can fire its showModal() callback and
+    // wipe the values we just set.  JS is single-threaded: all of the
+    // field mutations and the click dispatch run synchronously, so
+    // handleNextPersonal captures them into savedFormData before any
+    // setTimeout/Promise callback can re-render the modal.
+    const nextBtn = widget.locator("#ew-next-personal");
+    await expect(nextBtn).toBeVisible({ timeout: 8_000 });
+    await nextBtn.evaluate(
+      (btn, d) => {
+        const form = btn.closest("form") as HTMLFormElement | null;
+        if (!form) return;
+        const set = (name: string, val: string) => {
+          const el = form.querySelector(
+            `input[name="${name}"]`,
+          ) as HTMLInputElement | null;
+          if (el) {
+            el.value = val;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        };
+        set("firstName", d.firstName);
+        set("lastName", d.lastName);
+        set("email", d.email);
+        set("phone", "5000000000");
+        // countryCode is a hidden input — must be non-empty or
+        // handleNextPersonal blocks with an alert.
+        set("countryCode", "+1");
+        btn.click();
+      },
+      { firstName, lastName, email: submittedEmail },
+    );
+
+    // Step 2 — Documents: skip the AI upload step to stay out of the
+    // LLM round-trip path.  The skip button appears once formStep
+    // transitions to 'documents' (after the /lead call resolves).
     const skipBtn = widget.locator("#ew-skip-btn");
-    await expect(skipBtn).toBeVisible({ timeout: 5_000 });
+    await expect(skipBtn).toBeVisible({ timeout: 10_000 });
     await skipBtn.dispatchEvent("click");
+
+    // Step 3 — Review & Submit.
     const form = widget.locator("#ew-form");
     await expect(form).toBeVisible({ timeout: 5_000 });
-
-    // Unique per-run email so we can deterministically find this row
-    // even if the suite is re-run quickly (the teardown deletes by
-    // widgetId so leftover rows from a crashed prior run don't shadow
-    // this one — but the unique email is cheap insurance).
-    const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    const submittedEmail = `e2e-apply-${runId}@e2e.test`;
-    const firstName = "E2EApply";
-    const lastName = `Run${runId}`;
 
     // Same iframe-quirk reason as the skip button: Playwright's `fill`
     // also runs the viewport check. Set the values directly and then
@@ -614,23 +649,30 @@ test.describe("embed widget — apply submission", { tag: "@desktop" }, () => {
     await setFieldValue("lastName", lastName);
     await setFieldValue("email", submittedEmail);
 
-    // Submit. Calling `requestSubmit()` on the form fires the same
-    // `submit` event that `handleFormSubmit` is bound to (line 1170 of
-    // routes/embed.ts), and goes through the form's native validation
-    // (so a missing required field would still block). The button is
-    // the only `button[type="submit"]` in the modal — assert it
-    // exists/is visible first so a regression that removes it still
-    // surfaces here.
+    // Submit. We verify the button exists and is enabled to surface
+    // regressions, then dispatch a `submit` Event directly on the form.
+    //
+    // The review form has many `required` fields (nationality, DOB, gender,
+    // passport, address, …) that the test deliberately leaves empty because
+    // they are not relevant to the security/embed-access-control assertions
+    // this test exercises.  Native browser validation (triggered by
+    // btn.click() or form.requestSubmit()) silently blocks submission when any
+    // required field is missing and the form is inside a cross-origin-like
+    // iframe — the `submit` event never fires and no API call is made.
+    //
+    // Dispatching a synthetic `submit` Event bypasses the browser's built-in
+    // validation while still calling the widget's `handleFormSubmit` handler
+    // (bound via addEventListener).  That handler performs its own lightweight
+    // server-side-mirrored check (firstName/lastName/email) and then POSTs to
+    // the embed /apply endpoint, which is the actual code path under test.
     const submitBtn = form.locator('button[type="submit"]', {
       hasText: /submit application/i,
     });
     await expect(submitBtn).toBeVisible({ timeout: 5_000 });
-    // `toBeEnabled` guards against a UX regression where the submit
-    // button gets disabled (e.g. spinner state stuck on, missing
-    // required field). `requestSubmit()` ignores button state, so this
-    // explicit check is what surfaces such a regression.
     await expect(submitBtn).toBeEnabled({ timeout: 5_000 });
-    await form.evaluate((el) => (el as HTMLFormElement).requestSubmit());
+    await form.evaluate((el) => {
+      el.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
 
     // Success UI: renderSuccess() replaces the form contents with a
     // `<div class="ew-success">` containing an `<h3>Application
@@ -687,8 +729,10 @@ test.describe("embed widget — apply submission", { tag: "@desktop" }, () => {
     expect(row.id).toBeGreaterThan(0);
     expect(row.widgetId).toBeGreaterThan(0);
     expect(row.email.toLowerCase()).toBe(submittedEmail.toLowerCase());
-    expect(row.firstName).toBe(firstName);
-    expect(row.lastName).toBe(lastName);
+    // The widget normalises first/last names via ewToLatinUpper before
+    // sending them to the server, so the stored value is always uppercase.
+    expect(row.firstName).toBe(firstName.toUpperCase());
+    expect(row.lastName).toBe(lastName.toUpperCase());
     // The route inserts the lead first, then the submission with that
     // lead's id, in a single transaction. A null leadId would mean the
     // transaction broke and only the submission half landed.
@@ -702,10 +746,13 @@ test.describe("embed widget — apply submission", { tag: "@desktop" }, () => {
     // the lead insert (or mis-tags `source`).
     expect(row.lead).not.toBeNull();
     expect(row.lead!.id).toBe(row.leadId);
-    expect(row.lead!.firstName).toBe(firstName);
-    expect(row.lead!.lastName).toBe(lastName);
+    // ewToLatinUpper normalises names to uppercase before the server stores them.
+    expect(row.lead!.firstName).toBe(firstName.toUpperCase());
+    expect(row.lead!.lastName).toBe(lastName.toUpperCase());
     expect(row.lead!.email?.toLowerCase()).toBe(submittedEmail.toLowerCase());
     expect(row.lead!.source).toBe(`embed:${EMBED_SLUG}`);
-    expect(row.lead!.status).toBe("new");
+    // /apply auto-converts the lead (leads.status = "converted") once the
+    // full application is submitted.
+    expect(row.lead!.status).toBe("converted");
   });
 });

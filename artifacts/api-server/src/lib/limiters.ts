@@ -9,5 +9,5 @@ export const publicLeadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many submissions. Please try again later." },
-  store: new PgRateLimitStore(WINDOW_MS),
+  store: new PgRateLimitStore(WINDOW_MS, "lead"),
 });

@@ -23,7 +23,7 @@ const webhookLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many webhook requests" },
-  store: new PgRateLimitStore(WEBHOOK_WINDOW_MS),
+  store: new PgRateLimitStore(WEBHOOK_WINDOW_MS, "webhook"),
 });
 
 const router: IRouter = Router();
