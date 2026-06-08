@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, desc, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { STAFF_ROLES } from "../lib/roles";
+import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
 import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
@@ -242,6 +242,12 @@ function sanitizeTheme(theme: any): Record<string, string> {
 
 const VALID_MODES = ["combined", "course_finder", "application_only", "lead_form"];
 
+function sanitizeWidget(widget: Record<string, any>, userRole: string): Record<string, any> {
+  if (ADMIN_ROLES.includes(userRole)) return widget;
+  const { embedApiKey: _stripped, ...rest } = widget;
+  return rest;
+}
+
 router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -250,8 +256,8 @@ router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (re
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(embedWidgetsTable);
   const rows = await db.select().from(embedWidgetsTable).orderBy(desc(embedWidgetsTable.createdAt)).limit(limitNum).offset(offset);
-
-  res.json({ data: rows, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+  const role = req.user!.role;
+  res.json({ data: rows.map(w => sanitizeWidget(w, role)), meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
 // Non-numeric ids fall through to sibling string paths like
@@ -262,7 +268,7 @@ router.get("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async
   const id = parseInt(req.params.id, 10);
   const [widget] = await db.select().from(embedWidgetsTable).where(eq(embedWidgetsTable.id, id));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
-  res.json(widget);
+  res.json(sanitizeWidget(widget, req.user!.role));
 });
 
 router.post("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
@@ -287,7 +293,7 @@ router.post("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (r
       embedApiKey: isRestricted ? generateWidgetApiKey() : null,
     }).returning();
     await logAudit(req.user!.id, "create_embed_widget", "embed_widget", widget.id, { name, slug: cleanSlug }, req.ip);
-    res.status(201).json(widget);
+    res.status(201).json(sanitizeWidget(widget, req.user!.role));
   } catch (err: any) {
     // Postgres unique-violation SQLSTATE is 23505. We previously matched on
     // `err.message.includes("duplicate")`, which only worked under the
@@ -332,7 +338,7 @@ router.patch("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), asy
     const [widget] = await db.update(embedWidgetsTable).set(updates).where(eq(embedWidgetsTable.id, id)).returning();
     if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
     await logAudit(req.user!.id, "update_embed_widget", "embed_widget", id, updates, req.ip);
-    res.json(widget);
+    res.json(sanitizeWidget(widget, req.user!.role));
   } catch (err: any) {
     if (err?.code === "23505" || err?.cause?.code === "23505" || err?.message?.includes("duplicate") || err?.message?.includes("unique")) {
       res.status(409).json({ error: "A widget with this slug already exists" });
@@ -626,7 +632,7 @@ router.delete("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), as
 // Partners hold the embedApiKey on their backend server — it is NEVER placed
 // in HTML.  Use this endpoint to issue a new key when a key may be compromised.
 // The old key is immediately invalidated.
-router.post("/embed/widgets/:id/rotate-key", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+router.post("/embed/widgets/:id/rotate-key", requireAuth, requireRole(...ADMIN_ROLES), async (req, res, next): Promise<void> => {
   if (!/^\d+$/.test(req.params.id)) { next(); return; }
   const id = parseInt(req.params.id, 10);
   const [widget] = await db.select().from(embedWidgetsTable).where(eq(embedWidgetsTable.id, id));
