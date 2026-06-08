@@ -9,7 +9,7 @@ import { writeAudit } from "../lib/auditLog";
 import { sendEmail, buildContractSignRequestEmail, buildAgentOnboardingEmail, getAppBaseUrl } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
 import { finalizeSign, loadNewestSignedContractForAgent } from "../lib/signContract";
-import { agentIntakeDefaults } from "../lib/contractRenderer";
+import { agentIntakeDefaults, signedContractFilename } from "../lib/contractRenderer";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
@@ -626,7 +626,15 @@ router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response)
     const file = await svc.getObjectEntityFile(`/objects/${normalizedPath}`);
     const [meta] = await file.getMetadata();
     res.setHeader("Content-Type", (meta.contentType as string) || "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="contract-${signed.id}.pdf"`);
+    // Same contractNumber() source as the document body's {{contract_number}}
+    // (e.g. FAS-2026-00025_signed.pdf), shared with the admin + public download
+    // paths. Fallback order (signedAt -> createdAt) is identical everywhere so
+    // the filename's year can never drift between routes for the same contract.
+    const filename = signedContractFilename(
+      signed.signingSessionId,
+      signed.signedAt ? new Date(signed.signedAt) : (signed.createdAt ? new Date(signed.createdAt) : undefined),
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.setHeader("Cache-Control", "private, no-store");
     if (meta.size) res.setHeader("Content-Length", String(meta.size));
     file.createReadStream()

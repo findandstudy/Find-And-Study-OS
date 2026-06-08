@@ -5,6 +5,7 @@ import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { createSigningToken } from "../lib/signingTokens";
 import { buildContractSignRequestEmail, sendEmail, getAppBaseUrl } from "../lib/email";
+import { signedContractFilename } from "../lib/contractRenderer";
 
 const router: IRouter = Router();
 
@@ -138,7 +139,11 @@ router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contract
     const file = await svc.getObjectEntityFile(pdfKey);
     const [meta] = await file.getMetadata();
     res.setHeader("Content-Type", (meta.contentType as string) || "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="contract-${id}.pdf"`);
+    // Meaningful, deterministic filename derived from the SAME contractNumber()
+    // source as the document body's {{contract_number}} (e.g.
+    // FAS-2026-00025_signed.pdf). The storage object key keeps its uuid.
+    const filename = signedContractFilename(row.signingSessionId, row.signedAt ? new Date(row.signedAt) : (row.createdAt ? new Date(row.createdAt) : undefined));
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
     if (meta.size) res.setHeader("Content-Length", String(meta.size));
     file.createReadStream().on("error", (e) => { console.error("[contracts] stream:", e); try { res.end(); } catch {} }).pipe(res);
   } catch (err) {

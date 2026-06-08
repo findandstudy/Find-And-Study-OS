@@ -8,6 +8,9 @@ import {
   cleanupSignatureImages,
   toSignatureDataUrl,
   SIG_PLACEHOLDER,
+  buildFinalSignedContractHtml,
+  contractNumber,
+  signedContractFilename,
 } from "../src/lib/contractRenderer";
 
 // A real 1x1 transparent PNG (starts with the PNG magic 89 50 4E 47 0D 0A 1A 0A).
@@ -136,6 +139,59 @@ test("preview render leaves {{main_agency_signature}} empty (no seal, no <img>)"
   // The Ana Acente box collapses to the styled placeholder using its alt label,
   // so there is exactly ONE real <img> (the sub-agent's signature) in preview.
   assert.equal((html.match(/<img/g) || []).length, 1);
+});
+
+// --- Sign-time render path (the ACTUAL function the delivery worker, backfill
+// sweep, and admin regenerate all funnel through). Guards SORUN 1: at sign time
+// the auto-generated PDF must contain the main-agency seal, not an empty box.
+// Because ensureSignedContractPdf calls THIS exact function, asserting on its
+// output guarantees the seal is present in the sign-time render, not just a
+// hand-mirrored copy of the injection. ---
+
+const FINAL_RENDER_TEMPLATE =
+  `<p>No: {{contract_number}}</p>` +
+  `<img src="{{signature}}" alt="Alt Acente İmzası">` +
+  `<img src="{{main_agency_signature}}" alt="Ana Acente İmzası">`;
+
+test("sign-time render (buildFinalSignedContractHtml) stamps the main-agency seal", () => {
+  const html = buildFinalSignedContractHtml({
+    bodyHtml: FINAL_RENDER_TEMPLATE,
+    templateLanguage: "tr",
+    agent: null,
+    intakeData: null,
+    signerEmail: "agent@example.com",
+    signerName: "Test Agent",
+    signedAt: new Date("2026-06-08T10:00:00Z"),
+    signatureBase64: VALID_PNG_BASE64,
+    contractNumber: contractNumber(25, new Date("2026-06-08T10:00:00Z")),
+  });
+  // The seal data URL must be present in the sign-time PDF HTML.
+  assert.ok(
+    html.includes(`src="${MAIN_AGENCY_SIGNATURE_DATA_URL}"`),
+    "sign-time render is missing the main-agency seal data URL",
+  );
+  // The sub-agent signature and the main-agency seal are DISTINCT images.
+  assert.ok(html.includes(`src="data:image/png;base64,${VALID_PNG_BASE64}"`));
+  assert.notEqual(MAIN_AGENCY_SIGNATURE_DATA_URL, toSignatureDataUrl(VALID_PNG_BASE64));
+  // The final PDF must also carry the contract number (previously empty because
+  // the finalizer passed no number to buildAgentContext).
+  assert.ok(html.includes("FAS-2026-00025"), `expected contract number in body, got: ${html}`);
+});
+
+// --- Contract number / download filename (SORUN 2). The filename is derived
+// from the SAME contractNumber() source as the document body, so the two can
+// never drift. Pattern: FAS-{YYYY}-{NNNNN}_signed.pdf. ---
+
+test("contractNumber uses 4-digit year + zero-padded session id", () => {
+  assert.equal(contractNumber(25, new Date("2026-06-08T10:00:00Z")), "FAS-2026-00025");
+  assert.equal(contractNumber(7, new Date("2027-01-02T00:00:00Z")), "FAS-2027-00007");
+});
+
+test("signedContractFilename = <contract_number>_signed.pdf (same source as {{contract_number}})", () => {
+  const signedAt = new Date("2026-06-08T10:00:00Z");
+  assert.equal(signedContractFilename(25, signedAt), "FAS-2026-00025_signed.pdf");
+  // Filename's number must equal the value rendered into the document body.
+  assert.equal(signedContractFilename(25, signedAt), `${contractNumber(25, signedAt)}_signed.pdf`);
 });
 
 // NOTE: the "second sign -> 409" case is enforced by finalizeSign's session

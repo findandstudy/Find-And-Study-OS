@@ -1,7 +1,6 @@
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable } from "@workspace/db";
 import { and, eq, isNull, desc } from "drizzle-orm";
-import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOLDER, toSignatureDataUrl } from "./contractRenderer";
-import { MAIN_AGENCY_SIGNATURE_DATA_URL } from "./mainAgencySignature";
+import { buildFinalSignedContractHtml, contractNumber } from "./contractRenderer";
 import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
 import { writeAudit } from "./auditLog";
@@ -291,22 +290,26 @@ export async function ensureSignedContractPdf(
   }
 
   const signedAt = row.signedAt ? new Date(row.signedAt) : new Date();
-  const ctx = buildAgentContext(agent, (session?.intakeData as any) || null, {
+  // Single shared final-render path: every signed-PDF producer (this delivery
+  // worker, the legacy backfill sweep, and the admin force-regenerate, which all
+  // reach this function) funnels through buildFinalSignedContractHtml. That one
+  // function is the only place that stamps the main-agency seal
+  // ({{main_agency_signature}}) and the canonical contract number
+  // ({{contract_number}}) into the FINAL document, so no path can render a signed
+  // PDF that is missing either. The number is derived from contractNumber() —
+  // the identical source used for the download filename — so the body and the
+  // filename can never disagree.
+  const renderedHtml = buildFinalSignedContractHtml({
+    bodyHtml: template.bodyHtml,
+    templateLanguage: template.language,
+    agent,
+    intakeData: (session?.intakeData as any) || null,
     signerEmail: row.signerEmail,
-    signerName: row.signerName || undefined,
-    date: signedAt.toISOString().slice(0, 10),
+    signerName: row.signerName,
+    signedAt,
+    signatureBase64,
+    contractNumber: contractNumber(row.signingSessionId, signedAt),
   });
-  ctx.signature = toSignatureDataUrl(signatureBase64);
-  // Stamp the main-agency (Find And Study) seal + signature into the FINAL,
-  // post-signature PDF only. The preview / signing-screen renders never set this
-  // (buildAgentContext leaves main_agency_signature ""), so the seal appears only
-  // after the sub-agent has signed and this server-side finalizer runs. The image
-  // is an inlined data URL (no fetch/disk dependency), so it can never fail to
-  // load and never blocks signing. {{main_agency_signature}} -> Ana Acente box;
-  // {{signature}} -> Alt Acente box (distinct images, never the same source).
-  ctx.main_agency_signature = MAIN_AGENCY_SIGNATURE_DATA_URL;
-  const placeholder = SIG_PLACEHOLDER[template.language] || SIG_PLACEHOLDER.en;
-  const renderedHtml = cleanupSignatureImages(renderTemplate(template.bodyHtml, ctx), placeholder);
 
   // Serialize the heavy render: only one headless Chromium runs at a time across
   // the instance (see withRenderLock). The lock also lets concurrent downloads of

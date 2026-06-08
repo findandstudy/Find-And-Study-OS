@@ -1,4 +1,30 @@
+import { MAIN_AGENCY_SIGNATURE_DATA_URL } from "./mainAgencySignature";
+
 type Ctx = Record<string, any>;
+
+/**
+ * Canonical contract number. This is the SINGLE source of truth for the value
+ * rendered into the template's `{{contract_number}}` placeholder AND for the
+ * download filename, so the two can never drift apart. Format: `FAS-YYYY-NNNNN`
+ * where YYYY is the 4-digit sign year and NNNNN is the zero-padded signing
+ * session id (deterministic, no DB lookup, stable across re-renders).
+ */
+export function contractNumber(sessionId: number, signedAt?: Date): string {
+  const d = signedAt || new Date();
+  const yyyy = String(d.getUTCFullYear());
+  return `FAS-${yyyy}-${String(sessionId).padStart(5, "0")}`;
+}
+
+/**
+ * Download filename for a signed contract PDF, derived from the SAME
+ * `contractNumber()` source that feeds `{{contract_number}}` in the document
+ * body. Pattern: `<contract_number>_signed.pdf` (e.g.
+ * `FAS-2026-00025_signed.pdf`). The storage object key keeps its own uuid for
+ * uniqueness; only the user-facing Content-Disposition filename uses this.
+ */
+export function signedContractFilename(sessionId: number, signedAt?: Date): string {
+  return `${contractNumber(sessionId, signedAt)}_signed.pdf`;
+}
 
 /**
  * Per-language label shown in place of an unfilled signature box (used by
@@ -235,4 +261,44 @@ export function cleanupSignatureImages(html: string, placeholderText: string): s
     const safe = escapeHtml(alt || placeholderText);
     return `<div style="display:flex;align-items:center;justify-content:center;min-height:64px;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;color:#94a3b8;font-size:12px;font-style:italic;padding:16px;margin:4px 0;">${safe}</div>`;
   });
+}
+
+/**
+ * THE single render path for a FINAL, post-signature contract. Every caller
+ * that produces the legally-signed PDF — the sign-time delivery worker, the
+ * legacy backfill sweep, and the admin force-regenerate — funnels its HTML
+ * through here so the two things that must always be present in a signed
+ * document can never be forgotten by one path and remembered by another:
+ *
+ *   1. {{main_agency_signature}} -> the Find And Study (main agency) seal, an
+ *      inlined data URL so it can never fail to fetch. The unsigned preview /
+ *      signing-screen renders deliberately leave this empty (buildAgentContext
+ *      defaults it to ""), so the seal appears ONLY after signing.
+ *   2. {{contract_number}} -> the canonical contract number, identical to the
+ *      value used for the download filename.
+ *
+ * `{{signature}}` is the sub-agent's captured signature (distinct image,
+ * distinct source). Returns the cleaned HTML ready for headless-Chromium PDF.
+ */
+export function buildFinalSignedContractHtml(params: {
+  bodyHtml: string;
+  templateLanguage: string;
+  agent: any | null;
+  intakeData: Record<string, any> | null;
+  signerEmail: string;
+  signerName?: string | null;
+  signedAt: Date;
+  signatureBase64: string;
+  contractNumber: string;
+}): string {
+  const ctx = buildAgentContext(params.agent, params.intakeData || null, {
+    signerEmail: params.signerEmail,
+    signerName: params.signerName || undefined,
+    date: params.signedAt.toISOString().slice(0, 10),
+    number: params.contractNumber,
+  });
+  ctx.signature = toSignatureDataUrl(params.signatureBase64);
+  ctx.main_agency_signature = MAIN_AGENCY_SIGNATURE_DATA_URL;
+  const placeholder = SIG_PLACEHOLDER[params.templateLanguage] || SIG_PLACEHOLDER.en;
+  return cleanupSignatureImages(renderTemplate(params.bodyHtml, ctx), placeholder);
 }
