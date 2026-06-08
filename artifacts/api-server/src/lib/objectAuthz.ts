@@ -11,6 +11,7 @@ import {
   conversationParticipantsTable,
   objectOwnersTable,
   signedContractsTable,
+  quickLinksTable,
 } from "@workspace/db";
 import { ADMIN_ROLES, FINANCE_ROLES } from "@workspace/roles";
 import { and, eq, inArray, isNull, or, sql, type SQL, type AnyColumn } from "drizzle-orm";
@@ -316,6 +317,16 @@ export async function canAccessGenericObject(user: RequestUser, wildcardPath: st
   const avatarUserExists = await exists(matchKey(usersTable.avatarUrl, key), usersTable);
   const logoAgentExists = await exists(matchKey(agentsTable.logoUrl, key), agentsTable);
   if (avatarUserExists || logoAgentExists) return true;
+
+  // 10. Quick link logos — uploaded by admins, visible to any authenticated user
+  //     (quick links appear on all role dashboards; the logo is display-only
+  //     branding, not sensitive). Written only through admin routes, so the
+  //     DB reference is trustworthy without an uploader-consistency check.
+  const quickLinkLogoExists = await exists(
+    matchKey(quickLinksTable.logoUrl, key),
+    quickLinksTable as unknown as typeof usersTable,
+  );
+  if (quickLinkLogoExists) return true;
 
   // No referencing record grants this user access.
   return false;
