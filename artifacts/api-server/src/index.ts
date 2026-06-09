@@ -1098,5 +1098,8 @@ async function seedClaudeIntegration() {
   serveStaticFrontend();
   app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);
+    if (typeof process.send === "function") {
+      process.send("ready");
+    }
   });
 })();
