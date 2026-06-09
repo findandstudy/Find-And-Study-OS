@@ -1464,7 +1464,32 @@
   },
   "agentStudents": {
     "title": "Siswa Saya",
-    "subtitle": "Siswa yang Anda daftarkan"
+    "subtitle": "Siswa yang Anda daftarkan",
+    "selectAll": "Pilih semua",
+    "selectRow": "Pilih baris",
+    "selectedCount": "{count} dipilih",
+    "clearSelection": "Hapus pilihan",
+    "filter": {
+      "title": "Filter",
+      "clear": "Bersihkan",
+      "status": "Status",
+      "nationality": "Kewarganegaraan",
+      "all": "Semua",
+      "apply": "Terapkan"
+    },
+    "export": {
+      "button": "Ekspor",
+      "exportSelected": "Ekspor yang dipilih",
+      "empty": "Tidak ada siswa untuk diekspor",
+      "success": "{count} siswa diekspor",
+      "colName": "Nama",
+      "colEmail": "Email",
+      "colPhone": "Telepon",
+      "colNationality": "Kewarganegaraan",
+      "colPassport": "Paspor",
+      "colStatus": "Status",
+      "colJoined": "Bergabung"
+    }
   },
   "agentApps": {
     "title": "Aplikasi",

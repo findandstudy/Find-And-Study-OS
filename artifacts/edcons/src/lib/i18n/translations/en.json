@@ -1492,7 +1492,32 @@
   },
   "agentStudents": {
     "title": "My Students",
-    "subtitle": "Students you've enrolled"
+    "subtitle": "Students you've enrolled",
+    "selectAll": "Select all",
+    "selectRow": "Select row",
+    "selectedCount": "{count} selected",
+    "clearSelection": "Clear selection",
+    "filter": {
+      "title": "Filter",
+      "clear": "Clear",
+      "status": "Status",
+      "nationality": "Nationality",
+      "all": "All",
+      "apply": "Apply"
+    },
+    "export": {
+      "button": "Export",
+      "exportSelected": "Export selected",
+      "empty": "No students to export",
+      "success": "{count} students exported",
+      "colName": "Name",
+      "colEmail": "Email",
+      "colPhone": "Phone",
+      "colNationality": "Nationality",
+      "colPassport": "Passport",
+      "colStatus": "Status",
+      "colJoined": "Joined"
+    }
   },
   "agentApps": {
     "title": "Applications",

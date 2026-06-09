@@ -1464,7 +1464,32 @@
   },
   "agentStudents": {
     "title": "طلابي",
-    "subtitle": "الطلاب الذين سجّلتهم"
+    "subtitle": "الطلاب الذين سجّلتهم",
+    "selectAll": "تحديد الكل",
+    "selectRow": "تحديد الصف",
+    "selectedCount": "تم تحديد {count}",
+    "clearSelection": "مسح التحديد",
+    "filter": {
+      "title": "تصفية",
+      "clear": "مسح",
+      "status": "الحالة",
+      "nationality": "الجنسية",
+      "all": "الكل",
+      "apply": "تطبيق"
+    },
+    "export": {
+      "button": "تصدير",
+      "exportSelected": "تصدير المحدد",
+      "empty": "لا يوجد طلاب للتصدير",
+      "success": "تم تصدير {count} طالب",
+      "colName": "الاسم",
+      "colEmail": "البريد الإلكتروني",
+      "colPhone": "الهاتف",
+      "colNationality": "الجنسية",
+      "colPassport": "جواز السفر",
+      "colStatus": "الحالة",
+      "colJoined": "تاريخ الانضمام"
+    }
   },
   "agentApps": {
     "title": "الطلبات",

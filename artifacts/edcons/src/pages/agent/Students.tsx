@@ -22,7 +22,7 @@ import {
   Users, Loader2, LayoutGrid, List, Eye,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
   Filter, UserCheck, UserX, UserMinus, UserPlus,
-  Trophy, XCircle,
+  Trophy, XCircle, Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
@@ -1563,12 +1563,14 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
   );
 }
 
-function StuFilterPopover({ filters, onChange, stages }: {
+function StuFilterPopover({ filters, onChange, stages, nationalities, t }: {
   stages: PipelineStage[];
-  filters: { status: string }; onChange: (f: { status: string }) => void;
+  nationalities: string[];
+  t: (key: string, vars?: Record<string, string | number>) => string;
+  filters: { status: string; nationality: string }; onChange: (f: { status: string; nationality: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const hasActive = filters.status !== "all";
+  const hasActive = filters.status !== "all" || filters.nationality !== "all";
   return (
     <>
     <Popover open={open} onOpenChange={setOpen}>
@@ -1580,20 +1582,30 @@ function StuFilterPopover({ filters, onChange, stages }: {
       </PopoverTrigger>
       <PopoverContent className="w-56 p-4 space-y-4" align="end">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Filter</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ status: "all" })}>Clear</Button>}
+          <p className="text-sm font-semibold">{t("agentStudents.filter.title")}</p>
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ status: "all", nationality: "all" })}>{t("agentStudents.filter.clear")}</Button>}
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Status</Label>
-          <Select value={filters.status} onValueChange={v => onChange({ status: v })}>
+          <Label className="text-xs">{t("agentStudents.filter.status")}</Label>
+          <Select value={filters.status} onValueChange={v => onChange({ ...filters, status: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="all">{t("agentStudents.filter.all")}</SelectItem>
               {stages.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>Apply</Button>
+        <div className="space-y-1.5">
+          <Label className="text-xs">{t("agentStudents.filter.nationality")}</Label>
+          <Select value={filters.nationality} onValueChange={v => onChange({ ...filters, nationality: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("agentStudents.filter.all")}</SelectItem>
+              {nationalities.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button size="sm" className="w-full" onClick={() => setOpen(false)}>{t("agentStudents.filter.apply")}</Button>
       </PopoverContent>
     </Popover>
     </>
@@ -1613,7 +1625,7 @@ export default function AgentStudentsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
-  const [filters, setFilters] = useState({ status: "all" });
+  const [filters, setFilters] = useState({ status: "all", nationality: "all" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
   const [editStudent, setEditStudent] = useState<any>(null);
@@ -1635,8 +1647,18 @@ export default function AgentStudentsPage() {
   const { data, isLoading } = useListStudents({ search, season, limit: 500 } as any);
   const allStudents: any[] = data?.data ?? [];
 
+  const nationalityOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of allStudents) {
+      const n = (s.nationality || "").trim();
+      if (n) set.add(n);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [allStudents]);
+
   const filteredStudents = allStudents.filter((s: any) => {
     if (filters.status !== "all" && s.status !== filters.status) return false;
+    if (filters.nationality !== "all" && (s.nationality || "").trim() !== filters.nationality) return false;
     return true;
   });
 
@@ -1676,6 +1698,35 @@ export default function AgentStudentsPage() {
   }
 
   function invalidate() { queryClient.invalidateQueries({ queryKey: ["/api/students"] }); }
+
+  async function handleExport(scope: "selected" | "all" = "all") {
+    // Export the current client-side scoped/filtered set. "selected" exports
+    // only the checked rows; "all" exports every filtered+sorted row.
+    // Data is already agent-scoped server-side by /api/students, so this adds
+    // no new IDOR surface.
+    const rows = scope === "selected"
+      ? sortedStudents.filter((s: any) => selectedIds.has(s.id))
+      : sortedStudents;
+    if (rows.length === 0) {
+      toast({ title: t("agentStudents.export.empty"), variant: "destructive" });
+      return;
+    }
+    const data = rows.map((s: any) => ({
+      [t("agentStudents.export.colName")]: `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim(),
+      [t("agentStudents.export.colEmail")]: s.email || "",
+      [t("agentStudents.export.colPhone")]: s.phone || "",
+      [t("agentStudents.export.colNationality")]: s.nationality || "",
+      [t("agentStudents.export.colPassport")]: s.passportNumber || "",
+      [t("agentStudents.export.colStatus")]: stageMap[s.status]?.label || s.status || "",
+      [t("agentStudents.export.colJoined")]: s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "",
+    }));
+    const XLSX = await import("xlsx");
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Students");
+    XLSX.writeFile(wb, `students_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast({ title: t("agentStudents.export.success", { count: rows.length }) });
+  }
 
   async function handleBulkDelete() {
     setDeleteInProgress(true);
@@ -1756,7 +1807,10 @@ export default function AgentStudentsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} />
+            <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} nationalities={nationalityOptions} t={t} />
+            <Button variant="outline" className="rounded-full gap-2" onClick={() => handleExport("all")} title={t("agentStudents.export.button")}>
+              <Download className="w-4 h-4" /> {t("agentStudents.export.button")}
+            </Button>
             <div className="flex items-center border rounded-full overflow-hidden">
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
@@ -1780,10 +1834,28 @@ export default function AgentStudentsPage() {
 
         {viewMode === "list" && (
           <div className="flex-1 flex flex-col overflow-hidden bg-card rounded-2xl border">
+            {selectedIds.size > 0 && (
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b bg-primary/5 shrink-0">
+                <span className="text-sm font-medium text-foreground">{t("agentStudents.selectedCount", { count: selectedIds.size })}</span>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => handleExport("selected")}>
+                    <Download className="w-3.5 h-3.5" /> {t("agentStudents.export.exportSelected")}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>{t("agentStudents.clearSelection")}</Button>
+                </div>
+              </div>
+            )}
             <div className="flex-1 overflow-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allPageSelected}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label={t("agentStudents.selectAll")}
+                      />
+                    </TableHead>
                     <StuSortHeader label="Name" sortKey="name" currentSort={sort} onSort={handleSort} />
                     <StuSortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
                     <StuSortHeader label="Nationality" sortKey="nationality" currentSort={sort} onSort={handleSort} />
@@ -1795,11 +1867,18 @@ export default function AgentStudentsPage() {
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">Loading...</TableCell></TableRow>
                   ) : pagedStudents.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
                   ) : pagedStudents.map((student: any) => (
-                    <TableRow key={student.id} className="cursor-pointer hover:bg-muted/30 transition-colors">
+                    <TableRow key={student.id} className={cn("cursor-pointer hover:bg-muted/30 transition-colors", selectedIds.has(student.id) && "bg-primary/5")}>
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(student.id)}
+                          onCheckedChange={() => toggleSelect(student.id)}
+                          aria-label={t("agentStudents.selectRow")}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium cursor-pointer" onClick={() => setLocation(`/agent/students/${student.id}`)}>
                         <div className="flex items-center gap-2">
                           <StudentAvatar student={student} />

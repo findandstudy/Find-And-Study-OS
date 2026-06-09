@@ -1464,7 +1464,32 @@
   },
   "agentStudents": {
     "title": "دانشجویان من",
-    "subtitle": "دانشجویانی که ثبت‌نام کرده‌اید"
+    "subtitle": "دانشجویانی که ثبت‌نام کرده‌اید",
+    "selectAll": "انتخاب همه",
+    "selectRow": "انتخاب ردیف",
+    "selectedCount": "{count} انتخاب شد",
+    "clearSelection": "پاک کردن انتخاب",
+    "filter": {
+      "title": "فیلتر",
+      "clear": "پاک کردن",
+      "status": "وضعیت",
+      "nationality": "ملیت",
+      "all": "همه",
+      "apply": "اعمال"
+    },
+    "export": {
+      "button": "خروجی",
+      "exportSelected": "خروجی موارد انتخابی",
+      "empty": "دانشجویی برای خروجی نیست",
+      "success": "{count} دانشجو خروجی گرفته شد",
+      "colName": "نام",
+      "colEmail": "ایمیل",
+      "colPhone": "تلفن",
+      "colNationality": "ملیت",
+      "colPassport": "گذرنامه",
+      "colStatus": "وضعیت",
+      "colJoined": "تاریخ عضویت"
+    }
   },
   "agentApps": {
     "title": "پرونده‌ها",

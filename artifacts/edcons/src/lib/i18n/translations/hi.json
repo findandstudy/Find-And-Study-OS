@@ -1464,7 +1464,32 @@
   },
   "agentStudents": {
     "title": "मेरे छात्र",
-    "subtitle": "आपके द्वारा नामांकित छात्र"
+    "subtitle": "आपके द्वारा नामांकित छात्र",
+    "selectAll": "सभी चुनें",
+    "selectRow": "पंक्ति चुनें",
+    "selectedCount": "{count} चयनित",
+    "clearSelection": "चयन साफ़ करें",
+    "filter": {
+      "title": "फ़िल्टर",
+      "clear": "साफ़ करें",
+      "status": "स्थिति",
+      "nationality": "राष्ट्रीयता",
+      "all": "सभी",
+      "apply": "लागू करें"
+    },
+    "export": {
+      "button": "निर्यात",
+      "exportSelected": "चयनित निर्यात करें",
+      "empty": "निर्यात के लिए कोई छात्र नहीं",
+      "success": "{count} छात्र निर्यात किए गए",
+      "colName": "नाम",
+      "colEmail": "ईमेल",
+      "colPhone": "फ़ोन",
+      "colNationality": "राष्ट्रीयता",
+      "colPassport": "पासपोर्ट",
+      "colStatus": "स्थिति",
+      "colJoined": "शामिल हुए"
+    }
   },
   "agentApps": {
     "title": "आवेदन",

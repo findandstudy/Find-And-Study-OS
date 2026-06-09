@@ -1464,7 +1464,32 @@
   },
   "agentStudents": {
     "title": "我的学生",
-    "subtitle": "您招收的学生"
+    "subtitle": "您招收的学生",
+    "selectAll": "全选",
+    "selectRow": "选择行",
+    "selectedCount": "已选择 {count} 项",
+    "clearSelection": "清除选择",
+    "filter": {
+      "title": "筛选",
+      "clear": "清除",
+      "status": "状态",
+      "nationality": "国籍",
+      "all": "全部",
+      "apply": "应用"
+    },
+    "export": {
+      "button": "导出",
+      "exportSelected": "导出所选",
+      "empty": "没有可导出的学生",
+      "success": "已导出 {count} 名学生",
+      "colName": "姓名",
+      "colEmail": "邮箱",
+      "colPhone": "电话",
+      "colNationality": "国籍",
+      "colPassport": "护照",
+      "colStatus": "状态",
+      "colJoined": "加入时间"
+    }
   },
   "agentApps": {
     "title": "申请",

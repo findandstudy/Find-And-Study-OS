@@ -1433,7 +1433,32 @@
   },
   "agentStudents": {
     "title": "Öğrencilerim",
-    "subtitle": "Kaydını yaptığın öğrenciler"
+    "subtitle": "Kaydını yaptığın öğrenciler",
+    "selectAll": "Tümünü seç",
+    "selectRow": "Satırı seç",
+    "selectedCount": "{count} seçildi",
+    "clearSelection": "Seçimi temizle",
+    "filter": {
+      "title": "Filtre",
+      "clear": "Temizle",
+      "status": "Durum",
+      "nationality": "Uyruk",
+      "all": "Tümü",
+      "apply": "Uygula"
+    },
+    "export": {
+      "button": "Dışa Aktar",
+      "exportSelected": "Seçilenleri dışa aktar",
+      "empty": "Dışa aktarılacak öğrenci yok",
+      "success": "{count} öğrenci dışa aktarıldı",
+      "colName": "Ad",
+      "colEmail": "E-posta",
+      "colPhone": "Telefon",
+      "colNationality": "Uyruk",
+      "colPassport": "Pasaport",
+      "colStatus": "Durum",
+      "colJoined": "Katılım"
+    }
   },
   "agentApps": {
     "title": "Başvurular",

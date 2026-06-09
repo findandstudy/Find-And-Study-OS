@@ -1464,7 +1464,32 @@
   },
   "agentStudents": {
     "title": "Мои студенты",
-    "subtitle": "Студенты, которых вы зачислили"
+    "subtitle": "Студенты, которых вы зачислили",
+    "selectAll": "Выбрать все",
+    "selectRow": "Выбрать строку",
+    "selectedCount": "Выбрано: {count}",
+    "clearSelection": "Очистить выбор",
+    "filter": {
+      "title": "Фильтр",
+      "clear": "Очистить",
+      "status": "Статус",
+      "nationality": "Гражданство",
+      "all": "Все",
+      "apply": "Применить"
+    },
+    "export": {
+      "button": "Экспорт",
+      "exportSelected": "Экспортировать выбранное",
+      "empty": "Нет студентов для экспорта",
+      "success": "Экспортировано студентов: {count}",
+      "colName": "Имя",
+      "colEmail": "Эл. почта",
+      "colPhone": "Телефон",
+      "colNationality": "Гражданство",
+      "colPassport": "Паспорт",
+      "colStatus": "Статус",
+      "colJoined": "Дата регистрации"
+    }
   },
   "agentApps": {
     "title": "Заявки",

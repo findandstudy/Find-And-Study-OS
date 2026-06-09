@@ -1464,7 +1464,32 @@
   },
   "agentStudents": {
     "title": "Mis estudiantes",
-    "subtitle": "Estudiantes que has matriculado"
+    "subtitle": "Estudiantes que has matriculado",
+    "selectAll": "Seleccionar todo",
+    "selectRow": "Seleccionar fila",
+    "selectedCount": "{count} seleccionados",
+    "clearSelection": "Borrar selección",
+    "filter": {
+      "title": "Filtro",
+      "clear": "Limpiar",
+      "status": "Estado",
+      "nationality": "Nacionalidad",
+      "all": "Todos",
+      "apply": "Aplicar"
+    },
+    "export": {
+      "button": "Exportar",
+      "exportSelected": "Exportar seleccionados",
+      "empty": "No hay estudiantes para exportar",
+      "success": "{count} estudiantes exportados",
+      "colName": "Nombre",
+      "colEmail": "Correo",
+      "colPhone": "Teléfono",
+      "colNationality": "Nacionalidad",
+      "colPassport": "Pasaporte",
+      "colStatus": "Estado",
+      "colJoined": "Se unió"
+    }
   },
   "agentApps": {
     "title": "Solicitudes",

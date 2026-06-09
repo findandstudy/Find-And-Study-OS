@@ -1464,7 +1464,32 @@
   },
   "agentStudents": {
     "title": "Mes étudiants",
-    "subtitle": "Étudiants que vous avez inscrits"
+    "subtitle": "Étudiants que vous avez inscrits",
+    "selectAll": "Tout sélectionner",
+    "selectRow": "Sélectionner la ligne",
+    "selectedCount": "{count} sélectionné(s)",
+    "clearSelection": "Effacer la sélection",
+    "filter": {
+      "title": "Filtre",
+      "clear": "Effacer",
+      "status": "Statut",
+      "nationality": "Nationalité",
+      "all": "Tous",
+      "apply": "Appliquer"
+    },
+    "export": {
+      "button": "Exporter",
+      "exportSelected": "Exporter la sélection",
+      "empty": "Aucun étudiant à exporter",
+      "success": "{count} étudiants exportés",
+      "colName": "Nom",
+      "colEmail": "E-mail",
+      "colPhone": "Téléphone",
+      "colNationality": "Nationalité",
+      "colPassport": "Passeport",
+      "colStatus": "Statut",
+      "colJoined": "Inscrit le"
+    }
   },
   "agentApps": {
     "title": "Candidatures",
