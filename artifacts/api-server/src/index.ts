@@ -560,6 +560,8 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS offer_expiry_warning_days TEXT DEFAULT '30,14,7,1'`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS contract_expiry_reminder_days TEXT DEFAULT '30,14,7,1'`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS pdf_accent_color TEXT`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS agent_can_change_lead_stage BOOLEAN NOT NULL DEFAULT true`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS agent_can_change_student_app_stage BOOLEAN NOT NULL DEFAULT false`);
   } catch (err) {
     console.error("[migrate] offer-expiry columns:", err);
   }

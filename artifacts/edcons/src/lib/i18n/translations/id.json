@@ -1449,6 +1449,15 @@
     "title": "Prospek Saya",
     "subtitle": "Lacak prospek yang Anda rujuk"
   },
+  "agentStagePerms": {
+    "title": "Izin Tahap Agen",
+    "desc": "Kontrol tahap pipeline mana yang boleh diubah oleh agen.",
+    "leadLabel": "Agen dapat mengubah tahap prospek",
+    "leadDesc": "Izinkan agen memindahkan prospek antar tahap pipeline.",
+    "studentAppLabel": "Agen dapat mengubah tahap siswa/aplikasi",
+    "studentAppDesc": "Izinkan agen untuk memajukan tahap pipeline siswa dan aplikasi.",
+    "saved": "Izin tahap agen disimpan"
+  },
   "agentStudents": {
     "title": "Siswa Saya",
     "subtitle": "Siswa yang Anda daftarkan"

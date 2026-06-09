@@ -1449,6 +1449,15 @@
     "title": "Mis prospectos",
     "subtitle": "Haz seguimiento de los prospectos que has referido"
   },
+  "agentStagePerms": {
+    "title": "Permisos de etapa del agente",
+    "desc": "Controla qué etapas del pipeline pueden cambiar los agentes.",
+    "leadLabel": "Los agentes pueden cambiar la etapa del prospecto",
+    "leadDesc": "Permite a los agentes mover prospectos entre etapas del pipeline.",
+    "studentAppLabel": "Los agentes pueden cambiar la etapa del estudiante/solicitud",
+    "studentAppDesc": "Permite a los agentes avanzar las etapas del pipeline de estudiantes y solicitudes.",
+    "saved": "Permisos de etapa del agente guardados"
+  },
   "agentStudents": {
     "title": "Mis estudiantes",
     "subtitle": "Estudiantes que has matriculado"

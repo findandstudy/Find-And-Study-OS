@@ -1477,6 +1477,15 @@
     "title": "My Leads",
     "subtitle": "Track leads you've referred"
   },
+  "agentStagePerms": {
+    "title": "Agent Stage Permissions",
+    "desc": "Control which pipeline stages agents are allowed to change.",
+    "leadLabel": "Agents can change lead stage",
+    "leadDesc": "Allow agents to move leads between pipeline stages.",
+    "studentAppLabel": "Agents can change student/application stage",
+    "studentAppDesc": "Allow agents to advance student and application pipeline stages.",
+    "saved": "Agent stage permissions saved"
+  },
   "agentStudents": {
     "title": "My Students",
     "subtitle": "Students you've enrolled"

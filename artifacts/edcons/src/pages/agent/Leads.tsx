@@ -769,9 +769,21 @@ export default function AgentLeadsPage() {
   const deleteLead = useDeleteLead();
   const queryClient = useQueryClient();
 
+  const { data: agentPermsData } = useQuery<{ agentCanChangeLeadStage: boolean; agentCanChangeStudentAppStage: boolean }>({
+    queryKey: ["agent-permissions"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE_URL}/api/settings/agent-permissions`, { credentials: "include" });
+      if (!r.ok) return { agentCanChangeLeadStage: true, agentCanChangeStudentAppStage: false };
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+  const canChangLeadStage = agentPermsData?.agentCanChangeLeadStage !== false;
+
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
+  const keyboardSensor = useSensor(KeyboardSensor);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor)
+    ...(canChangLeadStage ? [pointerSensor, keyboardSensor] : [])
   );
 
   const allLeads = data?.data || [];

@@ -1449,6 +1449,15 @@
     "title": "我的潜在客户",
     "subtitle": "跟踪您推荐的潜在客户"
   },
+  "agentStagePerms": {
+    "title": "代理阶段权限",
+    "desc": "控制代理被允许更改哪些流水线阶段。",
+    "leadLabel": "代理可以更改潜在客户阶段",
+    "leadDesc": "允许代理在流水线阶段之间移动潜在客户。",
+    "studentAppLabel": "代理可以更改学生/申请阶段",
+    "studentAppDesc": "允许代理推进学生和申请流水线阶段。",
+    "saved": "代理阶段权限已保存"
+  },
   "agentStudents": {
     "title": "我的学生",
     "subtitle": "您招收的学生"

@@ -137,6 +137,10 @@ export const settingsTable = pgTable("settings", {
   // Auto-convert lead → student on /public/apply + /public/embed full submit
   autoConvertLeadEnabled: boolean("auto_convert_lead_enabled").notNull().default(true),
   autoConvertStudentStageKey: text("auto_convert_student_stage_key").notNull().default("active"),
+
+  // Agent stage-change permissions (system-wide toggles)
+  agentCanChangeLeadStage: boolean("agent_can_change_lead_stage").notNull().default(true),
+  agentCanChangeStudentAppStage: boolean("agent_can_change_student_app_stage").notNull().default(false),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });

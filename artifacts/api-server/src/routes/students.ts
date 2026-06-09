@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, softDelete } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, settingsTable, softDelete } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -535,6 +535,12 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     : isAgent
     ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId" && f !== "assignedToId" && f !== "status")
     : STUDENT_PATCH_FIELDS;
+  if (isAgent && req.body.status !== undefined) {
+    const [settingsRow] = await db.select({ agentCanChangeStudentAppStage: settingsTable.agentCanChangeStudentAppStage }).from(settingsTable);
+    if (settingsRow?.agentCanChangeStudentAppStage === true) {
+      allowedFields = [...allowedFields, "status"];
+    }
+  }
   if (!isAdmin && !isAgent && !isStudent && !perms.has("students.change_stage")) {
     allowedFields = allowedFields.filter(f => f !== "status");
   }

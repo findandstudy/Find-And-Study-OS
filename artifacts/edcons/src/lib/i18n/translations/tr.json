@@ -1418,6 +1418,15 @@
     "title": "Adaylarım",
     "subtitle": "Yönlendirdiğin adayları takip et"
   },
+  "agentStagePerms": {
+    "title": "Acente Aşama Yetkileri",
+    "desc": "Acentelerin hangi pipeline aşamalarını değiştirebileceğini kontrol edin.",
+    "leadLabel": "Acenteler aday aşamasını değiştirebilir",
+    "leadDesc": "Acentelerin adayları pipeline aşamaları arasında taşımasına izin verir.",
+    "studentAppLabel": "Acenteler öğrenci/başvuru aşamasını değiştirebilir",
+    "studentAppDesc": "Acentelerin öğrenci ve başvuru pipeline aşamalarını ilerletmesine izin verir.",
+    "saved": "Acente aşama yetkileri kaydedildi"
+  },
   "agentStudents": {
     "title": "Öğrencilerim",
     "subtitle": "Kaydını yaptığın öğrenciler"

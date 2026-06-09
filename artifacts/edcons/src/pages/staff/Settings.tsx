@@ -1272,9 +1272,14 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
   const [editingType, setEditingType] = useState<string | null>(null);
   const { toast } = useToast();
 
+  const { t } = useI18n();
   const [autoConvert, setAutoConvert] = useState<{ enabled: boolean; stageKey: string }>({ enabled: true, stageKey: "active" });
   const [autoConvertLoaded, setAutoConvertLoaded] = useState(false);
   const [savingAutoConvert, setSavingAutoConvert] = useState(false);
+
+  const [agentPerms, setAgentPerms] = useState<{ agentCanChangeLeadStage: boolean; agentCanChangeStudentAppStage: boolean }>({ agentCanChangeLeadStage: true, agentCanChangeStudentAppStage: false });
+  const [agentPermsLoaded, setAgentPermsLoaded] = useState(false);
+  const [savingAgentPerms, setSavingAgentPerms] = useState(false);
 
   useEffect(() => {
     customFetch("/api/settings").then((data: any) => {
@@ -1282,8 +1287,13 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
         enabled: data?.autoConvertLeadEnabled !== false,
         stageKey: data?.autoConvertStudentStageKey || "active",
       });
+      setAgentPerms({
+        agentCanChangeLeadStage: data?.agentCanChangeLeadStage !== false,
+        agentCanChangeStudentAppStage: data?.agentCanChangeStudentAppStage === true,
+      });
       setAutoConvertLoaded(true);
-    }).catch(() => setAutoConvertLoaded(true));
+      setAgentPermsLoaded(true);
+    }).catch(() => { setAutoConvertLoaded(true); setAgentPermsLoaded(true); });
   }, []);
 
   async function saveAutoConvert(next: { enabled: boolean; stageKey: string }) {
@@ -1301,6 +1311,20 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally { setSavingAutoConvert(false); }
+  }
+
+  async function saveAgentPerms(next: { agentCanChangeLeadStage: boolean; agentCanChangeStudentAppStage: boolean }) {
+    setSavingAgentPerms(true);
+    try {
+      await customFetch("/api/settings", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      setAgentPerms(next);
+      toast({ title: t("agentStagePerms.saved") });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally { setSavingAgentPerms(false); }
   }
 
   const pipelines = [
@@ -1348,6 +1372,37 @@ function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
               </SelectContent>
             </Select>
           </FieldGroup>
+        </div>
+      </Card>
+
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <SectionHeader
+          title={t("agentStagePerms.title")}
+          description={t("agentStagePerms.desc")}
+        />
+        <div className="space-y-3">
+          <div className="flex items-start gap-3 p-4 rounded-xl border border-border/50">
+            <Switch
+              checked={agentPerms.agentCanChangeLeadStage}
+              onCheckedChange={(v) => saveAgentPerms({ ...agentPerms, agentCanChangeLeadStage: !!v })}
+              disabled={!agentPermsLoaded || savingAgentPerms}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm">{t("agentStagePerms.leadLabel")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("agentStagePerms.leadDesc")}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 p-4 rounded-xl border border-border/50">
+            <Switch
+              checked={agentPerms.agentCanChangeStudentAppStage}
+              onCheckedChange={(v) => saveAgentPerms({ ...agentPerms, agentCanChangeStudentAppStage: !!v })}
+              disabled={!agentPermsLoaded || savingAgentPerms}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm">{t("agentStagePerms.studentAppLabel")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("agentStagePerms.studentAppDesc")}</p>
+            </div>
+          </div>
         </div>
       </Card>
 

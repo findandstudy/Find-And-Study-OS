@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, softDelete } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete } from "@workspace/db";
 import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -673,8 +673,14 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     }
   }
 
-  let allowedFields = isAgent ? AGENT_LEAD_PATCH_FIELDS : LEAD_PATCH_FIELDS;
-  if (!isAdmin && !perms.has("leads.change_stage")) {
+  let allowedFields = isAgent ? [...AGENT_LEAD_PATCH_FIELDS] : LEAD_PATCH_FIELDS;
+  if (isAgent && req.body.status !== undefined) {
+    const [settingsRow] = await db.select({ agentCanChangeLeadStage: settingsTable.agentCanChangeLeadStage }).from(settingsTable);
+    if (settingsRow?.agentCanChangeLeadStage === true) {
+      allowedFields = [...allowedFields, "status"];
+    }
+  }
+  if (!isAdmin && !isAgent && !perms.has("leads.change_stage")) {
     allowedFields = allowedFields.filter(f => f !== "status");
   }
   if (!isAdmin && !isAgent) {

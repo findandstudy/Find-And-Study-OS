@@ -1449,6 +1449,15 @@
     "title": "Mes prospects",
     "subtitle": "Suivez les prospects que vous avez recommandés"
   },
+  "agentStagePerms": {
+    "title": "Autorisations d'étape des agents",
+    "desc": "Contrôlez les étapes de pipeline que les agents sont autorisés à modifier.",
+    "leadLabel": "Les agents peuvent changer l'étape du prospect",
+    "leadDesc": "Autoriser les agents à déplacer les prospects entre les étapes du pipeline.",
+    "studentAppLabel": "Les agents peuvent changer l'étape étudiant/candidature",
+    "studentAppDesc": "Autoriser les agents à faire avancer les étapes du pipeline étudiant et candidature.",
+    "saved": "Autorisations d'étape des agents enregistrées"
+  },
   "agentStudents": {
     "title": "Mes étudiants",
     "subtitle": "Étudiants que vous avez inscrits"
