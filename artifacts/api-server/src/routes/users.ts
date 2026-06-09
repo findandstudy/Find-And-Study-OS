@@ -6,6 +6,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { toE164 } from "../lib/inbox/phone";
+import { dispatchAgentProfileChangedNotif } from "../lib/agentProfileNotif";
 import { createSession, deleteSessionsForUser, getSessionId, SESSION_TTL, SESSION_COOKIE, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { validatePassword } from "../lib/passwordPolicy";
@@ -231,28 +232,51 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     const [pre] = await db.select({ phone: usersTable.phone, role: usersTable.role }).from(usersTable).where(eq(usersTable.id, id));
     if (pre && AGENT_ROLES.includes(pre.role as any)) oldPhone = pre.phone ?? null;
   }
-  const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+  let user: any = null;
+  let syncedAgentId: number | null = null;
+  await db.transaction(async (tx) => {
+    const [u] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+    if (!u) return;
+    user = u;
+    if (updates.phone !== undefined && AGENT_ROLES.includes(u.role as any)) {
+      const phoneE164 = toE164(u.phone ?? null);
+      const [agentRow] = await tx.update(agentsTable)
+        .set({ phone: u.phone ?? null, phoneE164 })
+        .where(eq(agentsTable.userId, u.id))
+        .returning({ id: agentsTable.id });
+      syncedAgentId = agentRow?.id ?? null;
+    }
+  });
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   await logAudit(req.user!.id, "update_user", "user", id, updates, req.ip);
-  if (updates.phone !== undefined && AGENT_ROLES.includes(user.role as any)) {
+  if (updates.phone !== undefined && AGENT_ROLES.includes(user.role as any) && syncedAgentId !== null) {
+    await writeAudit({
+      userId: req.user!.id,
+      action: "agent_profile_field_changed",
+      resource: "agent_profile",
+      resourceId: syncedAgentId,
+      changes: { phone: { from: oldPhone, to: user.phone ?? null } },
+      ipAddress: req.ip ?? null,
+    });
     try {
-      const phoneE164 = toE164(user.phone ?? null);
-      const [agentRow] = await db.update(agentsTable)
-        .set({ phone: user.phone ?? null, phoneE164 })
-        .where(eq(agentsTable.userId, user.id))
-        .returning({ id: agentsTable.id });
-      if (agentRow) {
-        await writeAudit({
-          userId: req.user!.id,
-          action: "agent_profile_field_changed",
-          resource: "agent_profile",
-          resourceId: agentRow.id,
-          changes: { phone: { from: oldPhone, to: user.phone ?? null } },
-          ipAddress: req.ip ?? null,
+      const [agentInfo] = await db.select({
+        id: agentsTable.id,
+        firstName: agentsTable.firstName,
+        lastName: agentsTable.lastName,
+        companyName: agentsTable.companyName,
+      }).from(agentsTable).where(eq(agentsTable.id, syncedAgentId));
+      if (agentInfo) {
+        const agentName = `${agentInfo.firstName ?? ""} ${agentInfo.lastName ?? ""}`.trim() || agentInfo.companyName || `Agent #${agentInfo.id}`;
+        await dispatchAgentProfileChangedNotif({
+          agentId: agentInfo.id,
+          agentName,
+          changedFields: { phone: { from: oldPhone, to: user.phone ?? null } },
+          actorUserId: req.user!.id,
+          actionUrl: `/staff/agents/${agentInfo.id}`,
         });
       }
     } catch (err) {
-      console.error("[users/patch] phone sync to agents failed:", err);
+      console.error("[users/patch] phone notification failed:", err);
     }
   }
   const { passwordHash: _ph2, replitId: _ri2, ...safePatchUser } = user as any;

@@ -18,7 +18,7 @@ import {
   toAgentInsertValues,
   type AgentCatalog,
 } from "../lib/exportImportExcel";
-import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable, notificationsTable } from "@workspace/db";
+import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
 import { getNewestSignedContractUrl } from "../lib/signContract";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
@@ -32,7 +32,7 @@ import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, deleteSessionsForUser, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
-import { notificationBus } from "../lib/notificationBus";
+import { dispatchAgentProfileChangedNotif } from "../lib/agentProfileNotif";
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
 import { setAgencyStaff, getAgencyStaff, getAgencyStaffWithLegacy, getAgencyStaffMap, parseStaffInput, staffDisplayName } from "../lib/agencyStaff";
@@ -493,28 +493,13 @@ router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
     });
     try {
       const agentName = `${agent.firstName ?? ""} ${agent.lastName ?? ""}`.trim() || agent.companyName || `Agent #${agent.id}`;
-      const fieldList = Object.keys(changedFields).join(", ");
-      const adminUsers = await db.select({ id: usersTable.id }).from(usersTable)
-        .where(and(inArray(usersTable.role, ["super_admin", "admin"]), eq(usersTable.isActive, true)));
-      if (adminUsers.length > 0) {
-        const notifTitle = "Acente profili güncellendi";
-        const notifBody = `${agentName} kendi profilini güncelledi: ${fieldList}`;
-        const inserted = await db.insert(notificationsTable).values(
-          adminUsers.map(u => ({
-            userId: u.id,
-            type: "agent.profile_changed",
-            title: notifTitle,
-            body: notifBody,
-            icon: "Users",
-            actionUrl: `/staff/agents/${agent.id}`,
-            data: { agentId: agent.id, fields: Object.keys(changedFields), actorUserId: userId },
-            channel: "in_app",
-          }))
-        ).returning({ id: notificationsTable.id, userId: notificationsTable.userId });
-        for (const row of inserted) {
-          notificationBus.publish({ userId: row.userId, notificationId: row.id, type: "agent.profile_changed", title: notifTitle });
-        }
-      }
+      await dispatchAgentProfileChangedNotif({
+        agentId: agent.id,
+        agentName,
+        changedFields,
+        actorUserId: userId,
+        actionUrl: `/staff/agents/${agent.id}`,
+      });
     } catch (err) {
       console.error("[agents/me] admin notification failed:", err);
     }
