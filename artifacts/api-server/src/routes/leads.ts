@@ -479,7 +479,7 @@ router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
 });
 
 router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
@@ -510,7 +510,7 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
 // lets staff see the documents a contact uploaded through public/apply or the
 // embed widget even before the lead is converted to a student.
 router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
@@ -565,7 +565,7 @@ router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...A
 // document-requirements checklist. Uses the same fileKey object-storage flow
 // and validation as POST /documents.
 router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
@@ -668,7 +668,7 @@ const AGENT_LEAD_PATCH_FIELDS = [
 ];
 
 router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const user = req.user!;
@@ -896,7 +896,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
 });
 
 router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [existing] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
@@ -929,7 +929,7 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_RO
 
 // Hard-delete (purge) — super_admin only. Permanently removes the row.
 router.post("/leads/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const result = await db.delete(leadsTable).where(eq(leadsTable.id, id));
   await logAudit(req.user!.id, "purge_lead", "lead", id, { hard: true }, req.ip);
@@ -978,7 +978,7 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), asyn
 
 router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const user = req.user!;
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
@@ -1165,7 +1165,7 @@ async function createApplicationFromSubmission(studentId: number, submission: an
 }
 
 router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { page = "1", limit = "50", internal } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -1207,7 +1207,7 @@ router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT
 });
 
 router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { content, isInternal } = req.body;
   if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
@@ -1258,8 +1258,8 @@ router.post("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
 });
 
 router.delete("/leads/:id/notes/:noteId", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
-  const noteId = parseInt(req.params.noteId, 10);
+  const id = parseInt(String(req.params.id), 10);
+  const noteId = parseInt(String(req.params.noteId), 10);
   if (isNaN(id) || isNaN(noteId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [note] = await db.select({
@@ -1287,7 +1287,7 @@ router.delete("/leads/:id/notes/:noteId", requireAuth, requireRole(...STAFF_ROLE
 });
 
 router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
@@ -1330,7 +1330,7 @@ router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES, ...
 });
 
 router.post("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [lead] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
@@ -1374,7 +1374,7 @@ router.post("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES, ..
 });
 
 router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [existingFu] = await db.select().from(followUpsTable).where(eq(followUpsTable.id, id));
   if (!existingFu) { res.status(404).json({ error: "Follow-up not found" }); return; }
@@ -1534,7 +1534,7 @@ router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES), asy
 });
 
 router.patch("/leads/:id/origin", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { originType, originEntityType, originEntityId, originDisplayName } = req.body;
   if (!originType || !["direct", "agent", "sub_agent"].includes(originType)) {

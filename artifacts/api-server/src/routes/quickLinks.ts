@@ -84,7 +84,7 @@ router.post("/quick-links", requireAuth, requireRole(...MANAGER_ROLES), validate
 });
 
 router.patch("/quick-links/:id", requireAuth, requireRole(...MANAGER_ROLES), validate({ body: patchQuickLinkBodySchema }), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const body = getValidated<{ body: typeof patchQuickLinkBodySchema }>(req).body;
   const updates: Record<string, unknown> = {};
@@ -98,7 +98,7 @@ router.patch("/quick-links/:id", requireAuth, requireRole(...MANAGER_ROLES), val
 });
 
 router.delete("/quick-links/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [deleted] = await db.delete(quickLinksTable).where(eq(quickLinksTable.id, id)).returning();
   if (!deleted) { res.status(404).json({ error: "Quick link not found" }); return; }

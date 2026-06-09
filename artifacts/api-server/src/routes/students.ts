@@ -162,7 +162,7 @@ router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> => {
-  const studentId = parseInt(req.params.id, 10);
+  const studentId = parseInt(String(req.params.id), 10);
   const access = await assertCanAccessStudent(req, studentId);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
   const [photoDoc] = await db.select({
@@ -483,14 +483,14 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
 });
 
 router.get("/students/:id", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const access = await assertCanAccessStudent(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
   res.json(access.student);
 });
 
 router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const role = req.user!.role;
   const isStaff = (STAFF_ROLES as readonly string[]).includes(role);
   const isAgent = isAgentRole(role);
@@ -849,7 +849,7 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
 });
 
 router.delete("/students/:id", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const access = await assertCanAccessStudent(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
   const student = access.student;
@@ -891,7 +891,7 @@ async function softDeleteStudents(studentIds: number[], userIds: number[], actor
 // Hard-delete (purge) — super_admin only. Permanently removes student and all
 // associated rows; loses audit/finance history. Use for GDPR-style purges.
 router.post("/students/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, id));
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
@@ -913,7 +913,7 @@ router.post("/students/:id/purge", requireAuth, requireRole("super_admin"), asyn
 });
 
 router.patch("/students/:id/origin", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { originType, originEntityType, originEntityId, originDisplayName } = req.body;
   if (!originType || !["direct", "agent", "sub_agent"].includes(originType)) {
@@ -938,7 +938,7 @@ router.patch("/students/:id/origin", requireAuth, requireRole("super_admin", "ad
 });
 
 router.post("/students/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { password } = req.body;
   if (!password || password.length < 6) {
@@ -989,7 +989,7 @@ router.post("/students/:id/set-password", requireAuth, requireRole(...ADMIN_ROLE
 });
 
 router.get("/students/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES, "student"), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { page = "1", limit = "50", internal } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -1032,7 +1032,7 @@ router.get("/students/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AG
 });
 
 router.post("/students/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { content, isInternal } = req.body;
   if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
@@ -1083,8 +1083,8 @@ router.post("/students/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...A
 });
 
 router.delete("/students/:id/notes/:noteId", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
-  const noteId = parseInt(req.params.noteId, 10);
+  const id = parseInt(String(req.params.id), 10);
+  const noteId = parseInt(String(req.params.noteId), 10);
   if (isNaN(id) || isNaN(noteId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [note] = await db.select({
@@ -1112,7 +1112,7 @@ router.delete("/students/:id/notes/:noteId", requireAuth, requireRole(...STAFF_R
 });
 
 router.get("/students/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const access = await assertCanAccessStudent(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
@@ -1146,7 +1146,7 @@ router.get("/students/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES),
 });
 
 router.post("/students/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const access = await assertCanAccessStudent(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }

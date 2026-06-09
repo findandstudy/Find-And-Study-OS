@@ -802,7 +802,7 @@ router.get("/contracts/me/pending", requireAuth, async (req: Request, res: Respo
 router.get("/contracts/me/session/:id", requireAuth, async (req: Request, res: Response): Promise<void> => {
   const agent = await loadAgentForUser(req.user!.id, req.user!.role);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
-  const sid = parseInt(req.params.id, 10);
+  const sid = parseInt(String(req.params.id), 10);
   if (!sid) { res.status(400).json({ error: "Invalid session id" }); return; }
   let [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, sid));
   if (!session || session.agentId !== agent.id || session.isPrimaryOnboarding) {
@@ -843,7 +843,7 @@ router.get("/contracts/me/session/:id", requireAuth, async (req: Request, res: R
 router.post("/contracts/me/session/:id/sign", signBodyParser, requireAuth, async (req: Request, res: Response): Promise<void> => {
   const agent = await loadAgentForUser(req.user!.id, req.user!.role);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
-  const sid = parseInt(req.params.id, 10);
+  const sid = parseInt(String(req.params.id), 10);
   if (!sid) { res.status(400).json({ error: "Invalid session id" }); return; }
   const [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, sid));
   if (!session || session.agentId !== agent.id || session.isPrimaryOnboarding) {
@@ -887,7 +887,7 @@ router.post("/contracts/me/session/:id/sign", signBodyParser, requireAuth, async
  * was revoked. Reuses the originally assigned template if any.
  */
 router.post("/contracts/agent/:agentId/resend-onboarding", requireAuth, requireRole(...MANAGER_ROLES), async (req: Request, res: Response): Promise<void> => {
-  const agentId = parseInt(req.params.agentId, 10);
+  const agentId = parseInt(String(req.params.agentId), 10);
   if (!agentId) { res.status(400).json({ error: "Invalid agent id" }); return; }
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }

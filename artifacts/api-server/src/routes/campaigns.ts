@@ -124,7 +124,7 @@ router.post("/campaigns", requireAuth, requireRole(...ADMIN_ROLES), async (req, 
 });
 
 router.put("/campaigns/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [existing] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Campaign not found" }); return; }
@@ -175,7 +175,7 @@ router.put("/campaigns/:id", requireAuth, requireRole(...ADMIN_ROLES), async (re
 });
 
 router.delete("/campaigns/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [updated] = await db
     .update(campaignsTable)
@@ -188,7 +188,7 @@ router.delete("/campaigns/:id", requireAuth, requireRole(...ADMIN_ROLES), async 
 });
 
 router.post("/campaigns/:id/restore", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [updated] = await db
     .update(campaignsTable)

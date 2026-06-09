@@ -57,7 +57,7 @@ router.get("/roles/permissions-schema", requireAuth, requireRole(...ADMIN_ROLES)
 });
 
 router.get("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [role] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
   if (!role) {
     res.status(404).json({ error: "Role not found" });
@@ -100,7 +100,7 @@ router.post("/roles", requireAuth, requireRole(...ADMIN_ROLES), validate({ body:
 });
 
 router.patch("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), validate({ body: patchRoleBodySchema }), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
   if (!existing) {
     res.status(404).json({ error: "Role not found" });
@@ -131,7 +131,7 @@ router.patch("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), validate({ 
 });
 
 router.delete("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
   if (!existing) {
     res.status(404).json({ error: "Role not found" });

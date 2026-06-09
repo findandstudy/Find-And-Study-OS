@@ -199,7 +199,7 @@ router.get("/notifications/section-counts", requireAuth, async (req, res): Promi
  */
 router.post("/notifications/section/:section/read", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const section = req.params.section;
+  const section = String(req.params.section);
   if (!["leads", "students", "applications", "tasks"].includes(section)) {
     res.status(400).json({ error: "Unknown section" });
     return;
@@ -234,7 +234,7 @@ router.post("/notifications/section/:section/read", requireAuth, async (req, res
 });
 
 router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const userId = req.user!.id;
 
   const [notification] = await db
@@ -277,7 +277,7 @@ router.get("/notification-rules/schema", requireAuth, requireRole(...ADMIN_ROLES
 });
 
 router.patch("/notification-rules/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const updates: Record<string, unknown> = {};
 
   if (req.body.channels !== undefined) updates.channels = req.body.channels;

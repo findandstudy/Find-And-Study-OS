@@ -77,7 +77,7 @@ router.post("/branches", requireAuth, requireRole("super_admin"), validate({ bod
 });
 
 router.patch("/branches/:id", requireAuth, requireRole("super_admin"), validate({ body: patchBranchBodySchema }), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const rawBody = getValidated<{ body: typeof patchBranchBodySchema }>(req).body;
   const updates: Record<string, unknown> = {};
@@ -104,7 +104,7 @@ router.patch("/branches/:id", requireAuth, requireRole("super_admin"), validate(
 });
 
 router.post("/branches/:id/archive", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [branch] = await db.update(branchesTable).set({ archivedAt: new Date() }).where(eq(branchesTable.id, id)).returning();
   if (!branch) { res.status(404).json({ error: "Branch not found" }); return; }
@@ -112,7 +112,7 @@ router.post("/branches/:id/archive", requireAuth, requireRole("super_admin"), as
 });
 
 router.post("/branches/:id/unarchive", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [branch] = await db.update(branchesTable).set({ archivedAt: null }).where(eq(branchesTable.id, id)).returning();
   if (!branch) { res.status(404).json({ error: "Branch not found" }); return; }

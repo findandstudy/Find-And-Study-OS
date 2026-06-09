@@ -2,6 +2,7 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { db, emailQueueTable, integrationsTable, settingsTable } from "@workspace/db";
+import { pool } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 let cachedTransporter: Transporter | null = null;
@@ -936,23 +937,58 @@ export async function sendEmail(
 export async function processEmailQueue(): Promise<number> {
   let processed = 0;
   try {
-    const pending = await db.select().from(emailQueueTable)
-      .where(eq(emailQueueTable.status, "pending"))
-      .limit(20);
+    // Atomically claim up to 20 retryable-and-due pending emails.
+    // The UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED)
+    // pattern is cluster-safe: concurrent workers skip rows already
+    // being claimed, preventing duplicate delivery attempts.
+    const { rows } = await pool.query<{
+      id: number;
+      to_email: string;
+      subject: string;
+      html_body: string;
+      text_body: string;
+      retry_count: number;
+      max_retries: number;
+    }>(
+      `UPDATE email_queue SET status = 'processing'
+       WHERE id IN (
+         SELECT id FROM email_queue
+         WHERE status = 'pending'
+           AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+         ORDER BY created_at
+         LIMIT 20
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING id, to_email, subject, html_body, text_body, retry_count, max_retries`
+    );
 
-    if (pending.length === 0) return 0;
+    if (rows.length === 0) return 0;
 
-    for (const email of pending) {
-      const sent = await sendViaSmtp(email.toEmail, email.subject, email.htmlBody, email.textBody);
+    for (const email of rows) {
+      const sent = await sendViaSmtp(email.to_email, email.subject, email.html_body, email.text_body);
       if (sent) {
-        await db.update(emailQueueTable)
-          .set({ status: "sent", sentAt: new Date() })
-          .where(eq(emailQueueTable.id, email.id));
+        await pool.query(
+          `UPDATE email_queue SET status = 'sent', sent_at = NOW() WHERE id = $1`,
+          [email.id]
+        );
         processed++;
       } else {
-        await db.update(emailQueueTable)
-          .set({ status: "failed" })
-          .where(eq(emailQueueTable.id, email.id));
+        const newRetryCount = email.retry_count + 1;
+        if (newRetryCount >= email.max_retries) {
+          await pool.query(
+            `UPDATE email_queue SET status = 'failed', retry_count = $2 WHERE id = $1`,
+            [email.id, newRetryCount]
+          );
+          console.warn(`[EMAIL] Permanently failed for queue id=${email.id} after ${newRetryCount} attempts`);
+        } else {
+          // Exponential backoff: 2^retry_count minutes (2, 4, 8 min for attempts 1-3)
+          const backoffSec = Math.pow(2, newRetryCount) * 60;
+          await pool.query(
+            `UPDATE email_queue SET status = 'pending', retry_count = $2, next_retry_at = NOW() + ($3 * INTERVAL '1 second') WHERE id = $1`,
+            [email.id, newRetryCount, backoffSec]
+          );
+          console.log(`[EMAIL] Will retry queue id=${email.id} in ${backoffSec}s (attempt ${newRetryCount}/${email.max_retries})`);
+        }
       }
     }
   } catch (err) {

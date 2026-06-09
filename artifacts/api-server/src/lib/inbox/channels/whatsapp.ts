@@ -140,7 +140,7 @@ export async function sendWhatsAppText(opts: {
   if (!result.ok) {
     return { ok: false, error: result.error, simulated: false };
   }
-  const externalMessageId = result.data?.messages?.[0]?.id;
+  const externalMessageId = (result.data as Record<string, any>)?.messages?.[0]?.id;
   return { ok: true, externalMessageId, simulated: false };
 }
 
@@ -191,7 +191,7 @@ export async function sendWhatsAppTemplate(opts: {
   if (!result.ok) {
     return { ok: false, error: result.error, simulated: false };
   }
-  const externalMessageId = result.data?.messages?.[0]?.id;
+  const externalMessageId = (result.data as Record<string, any>)?.messages?.[0]?.id;
   return { ok: true, externalMessageId, simulated: false };
 }
 

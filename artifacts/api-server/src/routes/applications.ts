@@ -693,7 +693,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
 });
 
 router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [row] = await db
     .select({
       id: applicationsTable.id,
@@ -774,7 +774,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
 });
 
 router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
 
@@ -1493,7 +1493,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
 });
 
 router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db
     .select({ id: applicationsTable.id, studentId: applicationsTable.studentId, agentId: applicationsTable.agentId })
     .from(applicationsTable)
@@ -1523,7 +1523,7 @@ router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), req
 // Hard-delete (purge) — super_admin only. Permanently removes the row and all
 // child rows. Use only when retention is no longer required.
 router.post("/applications/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.transaction(async (tx) => {
     await tx.delete(notesTable).where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")));
@@ -1536,7 +1536,7 @@ router.post("/applications/:id/purge", requireAuth, requireRole("super_admin"), 
 });
 
 router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { page = "1", limit = "50", internal } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
@@ -1577,7 +1577,7 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, .
 });
 
 router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { content, isInternal } = req.body;
   if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
 
@@ -1626,7 +1626,7 @@ router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, 
 });
 
 router.patch("/applications/:id/origin", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { originType, originEntityType, originEntityId, originDisplayName } = req.body;
   if (!originType || !["direct", "agent", "sub_agent"].includes(originType)) {

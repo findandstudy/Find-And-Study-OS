@@ -607,7 +607,7 @@ router.post("/wishlists", requireAuth, async (req, res): Promise<void> => {
 
 router.delete("/wishlists/:programId", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const programId = parseInt(req.params.programId, 10);
+  const programId = parseInt(String(req.params.programId), 10);
   if (isNaN(programId)) { res.status(400).json({ error: "Invalid programId" }); return; }
   await db.delete(wishlistsTable)
     .where(and(eq(wishlistsTable.userId, userId), eq(wishlistsTable.programId, programId)));

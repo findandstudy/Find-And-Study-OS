@@ -304,21 +304,23 @@ router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (r
 
   await logAudit(req.user!.id, "create_commission", "commission", commission.id, { studentName, universityName }, req.ip);
 
-  dispatchNotification({
-    actorUserId: req.user!.id,
-    event: "finance.commission_confirmed",
-    title: "Commission Created",
-    body: `A new commission has been created for ${studentName || "student"} — ${universityName || "University"}.`,
-    actionUrl: `/staff/finance`,
-    icon: "DollarSign",
-    templateVars: { studentName: studentName || "", universityName: universityName || "", programName: programName || "" },
-  }).catch(() => {});
+  try {
+    await dispatchNotification({
+      actorUserId: req.user!.id,
+      event: "finance.commission_confirmed",
+      title: "Commission Created",
+      body: `A new commission has been created for ${studentName || "student"} — ${universityName || "University"}.`,
+      actionUrl: `/staff/finance`,
+      icon: "DollarSign",
+      templateVars: { studentName: studentName || "", universityName: universityName || "", programName: programName || "" },
+    });
+  } catch {}
 
   res.status(201).json(commission);
 });
 
 router.get("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [c] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, id));
   if (!c) { res.status(404).json({ error: "Commission not found" }); return; }
@@ -326,7 +328,7 @@ router.get("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), async
 });
 
 router.patch("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const updates: Record<string, unknown> = {};
@@ -383,7 +385,7 @@ router.post("/commissions/bulk-delete-by-university", requireAuth, requireRole(.
 });
 
 router.delete("/commissions/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(commissionsTable).where(eq(commissionsTable.id, id));
   await logAudit(req.user!.id, "delete_commission", "commission", id, {}, req.ip);
@@ -483,7 +485,7 @@ router.post("/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (
 });
 
 router.patch("/service-fees/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const updates: Record<string, unknown> = {};
@@ -526,7 +528,7 @@ router.post("/service-fees/bulk-delete", requireAuth, requireRole(...FINANCE_ROL
 });
 
 router.delete("/service-fees/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(serviceFeesTable).where(eq(serviceFeesTable.id, id));
   await logAudit(req.user!.id, "delete_service_fee", "service_fee", id, {}, req.ip);
@@ -638,7 +640,7 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
 });
 
 router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [tx] = await db.select().from(financialTransactionsTable).where(eq(financialTransactionsTable.id, id));
@@ -708,7 +710,7 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     studentCount: number;
     commissionCount: number;
     statuses: Record<string, number>;
-    oldestUnpaid: string | null;
+    oldestUnpaid: Date | null;
   }> = {};
 
   for (const c of allComm) {
@@ -891,7 +893,7 @@ router.post("/invoices", requireAuth, requireRole(...FINANCE_ROLES), async (req,
 });
 
 router.patch("/invoices/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const FIELDS = ["status", "amount", "currency", "dueDate", "paidAt", "notes"];
   const updates: Record<string, unknown> = {};

@@ -36,7 +36,7 @@ router.get("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
   const [integration] = await db
     .select()
     .from(integrationsTable)
-    .where(eq(integrationsTable.key, req.params.key));
+    .where(eq(integrationsTable.key, String(req.params.key)));
 
   if (!integration) {
     res.status(404).json({ error: "Integration not found" });
@@ -50,7 +50,7 @@ router.get("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
 });
 
 router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { key } = req.params;
+  const key = String(req.params.key);
   const { name, category, isEnabled, config } = req.body;
 
   if (!name || !category) {
@@ -130,7 +130,7 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
   const [existing] = await db
     .select()
     .from(integrationsTable)
-    .where(eq(integrationsTable.key, req.params.key));
+    .where(eq(integrationsTable.key, String(req.params.key)));
 
   if (!existing) {
     res.status(404).json({ error: "Integration not found" });
@@ -138,7 +138,7 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
   }
 
   const willEnable = !existing.isEnabled;
-  if (LIVE_GATED_KEYS.has(req.params.key) && willEnable && !isLiveIntegrationsEnabled()) {
+  if (LIVE_GATED_KEYS.has(String(req.params.key)) && willEnable && !isLiveIntegrationsEnabled()) {
     res.status(403).json({
       error: "live_integrations_disabled",
       message:
@@ -148,7 +148,7 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
   }
 
   // Same WA secrets check as PUT — toggling must not bypass mandatory creds.
-  if (req.params.key === "whatsapp" && willEnable) {
+  if (String(req.params.key) === "whatsapp" && willEnable) {
     const plain = decryptConfig(existing.config as Record<string, any>);
     if (!plain.appSecret || !plain.webhookVerifyToken) {
       res.status(400).json({
@@ -162,12 +162,12 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
   const [result] = await db
     .update(integrationsTable)
     .set({ isEnabled: willEnable })
-    .where(eq(integrationsTable.key, req.params.key))
+    .where(eq(integrationsTable.key, String(req.params.key)))
     .returning();
 
-  if (req.params.key === "claude") clearConfigCache();
-  if (req.params.key === "smtp") invalidateSmtpCache();
-  await logAudit(req.user!.id, "toggle_integration", "integration", result.id, { key: req.params.key, isEnabled: result.isEnabled }, req.ip);
+  if (String(req.params.key) === "claude") clearConfigCache();
+  if (String(req.params.key) === "smtp") invalidateSmtpCache();
+  await logAudit(req.user!.id, "toggle_integration", "integration", result.id, { key: String(req.params.key), isEnabled: result.isEnabled }, req.ip);
   res.json({ ...result, config: maskSecrets(decryptConfig(result.config as Record<string, any>)) });
 });
 
@@ -175,7 +175,7 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
   const [integration] = await db
     .select()
     .from(integrationsTable)
-    .where(eq(integrationsTable.key, req.params.key));
+    .where(eq(integrationsTable.key, String(req.params.key)));
 
   if (!integration) {
     res.status(404).json({ error: "Integration not found" });
@@ -184,7 +184,7 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
 
   const config = decryptConfig(integration.config as Record<string, any>);
 
-  if (req.params.key === "claude") {
+  if (String(req.params.key) === "claude") {
     if (!config.apiKey) {
       res.json({ success: false, message: "API key is not configured" });
       return;
@@ -209,7 +209,7 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
     return;
   }
 
-  if (req.params.key === "smtp") {
+  if (String(req.params.key) === "smtp") {
     if (!config.host || !config.username || !config.password) {
       res.json({ success: false, message: "SMTP host, username, and password are required" });
       return;
@@ -229,7 +229,7 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
     return;
   }
 
-  if (req.params.key === "whatsapp") {
+  if (String(req.params.key) === "whatsapp") {
     if (!isLiveIntegrationsEnabled()) {
       res.json({ success: true, message: "Test skipped — running in simulated mode (set ALLOW_LIVE_INTEGRATIONS=true to test live)" });
       return;
@@ -255,7 +255,7 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
     return;
   }
 
-  if (req.params.key === "web_form") {
+  if (String(req.params.key) === "web_form") {
     if (!config.formId || !config.secret) {
       res.json({ success: false, message: "Web form has no formId/secret yet — save first to generate" });
       return;

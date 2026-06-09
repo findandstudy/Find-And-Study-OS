@@ -165,7 +165,7 @@ router.delete("/contracts/signed/:id", requireAuth, requirePermission("contracts
 // Admin-gated streaming download for a signed contract PDF.
 router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contracts.view"), async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
@@ -380,7 +380,7 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
 });
 
 async function gateSessionMutate(req: any, res: any, next: any) {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
   const [row] = await db.select({ mode: signingSessionsTable.mode }).from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
@@ -391,7 +391,7 @@ async function gateSessionMutate(req: any, res: any, next: any) {
 // Update signer details on a non-signed session (self_fill only; admin_driven identity is fixed after dispatch).
 router.patch("/contracts/sessions/:id", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const [existing] = await db.select({ status: signingSessionsTable.status, mode: signingSessionsTable.mode }).from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
     if (!existing) { res.status(404).json({ error: "Not found" }); return; }
     if (existing.mode !== "self_fill") { res.status(409).json({ error: "Signer identity is fixed on admin-driven sessions and cannot be edited" }); return; }
@@ -424,7 +424,7 @@ router.patch("/contracts/sessions/:id", requireAuth, gateSessionMutate, async (r
 
 router.post("/contracts/sessions/:id/revoke", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     // Lifecycle guard: a signed session is final and must not be revoked —
     // doing so would orphan the signed_contracts row and break token-gated
     // PDF access. Already-revoked is a no-op.
@@ -455,7 +455,7 @@ router.post("/contracts/sessions/:id/revoke", requireAuth, gateSessionMutate, as
 // signed_contracts row holds them as the audit anchor.
 router.delete("/contracts/sessions/:id", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const [existing] = await db.select({ status: signingSessionsTable.status }).from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
     if (!existing) { res.status(404).json({ error: "Not found" }); return; }
     if (existing.status === "signed") { res.status(409).json({ error: "Cannot delete a signed session" }); return; }
@@ -477,7 +477,7 @@ router.delete("/contracts/sessions/:id", requireAuth, gateSessionMutate, async (
 
 router.post("/contracts/sessions/:id/resend", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
     if (!session) { res.status(404).json({ error: "Not found" }); return; }

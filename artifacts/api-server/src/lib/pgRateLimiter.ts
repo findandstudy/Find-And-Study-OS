@@ -1,4 +1,5 @@
 import { pool } from "@workspace/db";
+import type { Store, Options, ClientRateLimitInfo } from "express-rate-limit";
 
 /**
  * Ensures the rate_limits table exists. Called once at startup.
@@ -50,20 +51,23 @@ export async function checkAndIncrementRateLimit(
  * express-rate-limit Store backed by PostgreSQL.
  * Compatible with express-rate-limit v7 Store interface.
  */
-export class PgRateLimitStore {
+export class PgRateLimitStore implements Store {
   private windowMs: number;
-  private prefix: string;
+  localKeys = true;
+  prefix: string;
 
   constructor(windowMs: number, prefix: string = "") {
     this.windowMs = windowMs;
     this.prefix = prefix;
   }
 
+  init(_options: Options): void {}
+
   private ns(key: string): string {
     return this.prefix ? `${this.prefix}:${key}` : key;
   }
 
-  async increment(key: string): Promise<{ totalHits: number; resetTime: Date }> {
+  async increment(key: string): Promise<ClientRateLimitInfo> {
     const nsKey = this.ns(key);
     const resetAt = new Date(Date.now() + this.windowMs);
 

@@ -151,7 +151,7 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), validate({ body:
 });
 
 router.get("/users/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   const { replitId: _r, passwordHash: _p, ...safeUser } = user as any;
@@ -159,7 +159,7 @@ router.get("/users/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req,
 });
 
 router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const isAdmin = ADMIN_ROLES.includes(req.user!.role as any);
   const isSelf = req.user!.id === id;
 
@@ -284,7 +284,7 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.delete("/users/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (req.user!.id === id) {
     res.status(400).json({ error: "Cannot delete your own account" });
     return;
@@ -314,7 +314,7 @@ router.delete("/users/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req
 // Hard-delete (purge) — super_admin only. Drops the row entirely; only run
 // after audit / commission references have been re-attributed.
 router.post("/users/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (req.user!.id === id) {
     res.status(400).json({ error: "Cannot purge your own account" });
     return;
@@ -325,7 +325,7 @@ router.post("/users/:id/purge", requireAuth, requireRole("super_admin"), async (
 });
 
 router.post("/users/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { password } = req.body;
   const pwd = validatePassword(password);
   if (!pwd.ok) {
@@ -380,7 +380,7 @@ router.post("/users/me/change-password", requireAuth, async (req, res): Promise<
 });
 
 router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (req.user!.id === id) {
     res.status(400).json({ error: "Cannot impersonate yourself" });
     return;

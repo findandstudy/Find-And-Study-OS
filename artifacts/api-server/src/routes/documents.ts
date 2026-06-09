@@ -328,16 +328,18 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     const [studentRec] = await db.select({ assignedToId: studentsTable.assignedToId }).from(studentsTable).where(eq(studentsTable.id, doc.studentId));
     const recipientIds: number[] = [];
     if (studentRec?.assignedToId) recipientIds.push(studentRec.assignedToId);
-    dispatchNotification({
-    actorUserId: req.user!.id,
-      event: "student.document_uploaded",
-      title: "Document Uploaded",
-      body: `A new document "${doc.name}" (${doc.type}) has been uploaded.`,
-      actionUrl: `/staff/students`,
-      icon: "Upload",
-      recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
-      templateVars: { documentName: doc.name, documentType: doc.type },
-    }).catch(() => {});
+    try {
+      await dispatchNotification({
+        actorUserId: req.user!.id,
+        event: "student.document_uploaded",
+        title: "Document Uploaded",
+        body: `A new document "${doc.name}" (${doc.type}) has been uploaded.`,
+        actionUrl: `/staff/students`,
+        icon: "Upload",
+        recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
+        templateVars: { documentName: doc.name, documentType: doc.type },
+      });
+    } catch {}
   }
 
   // Task #187 — auto-match against open missing-doc requests, scoped to
@@ -359,7 +361,7 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.get("/documents/:id/download", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
@@ -405,7 +407,7 @@ router.get("/documents/:id/download", requireAuth, async (req, res): Promise<voi
 });
 
 router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
@@ -437,7 +439,7 @@ router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   if (req.body.fileUrl !== undefined) {
@@ -469,16 +471,18 @@ router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (
       if (student?.userId) recipientIds.push(student.userId);
       if (student?.assignedToId) recipientIds.push(student.assignedToId);
     }
-    dispatchNotification({
-    actorUserId: req.user!.id,
-      event: "document.status_changed",
-      title: "Document Status Updated",
-      body: `Document "${doc.name}" status changed to "${updates.status}".`,
-      actionUrl: doc.studentId ? `/staff/students/${doc.studentId}` : `/staff/documents`,
-      icon: "FileCheck",
-      recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
-      templateVars: { documentName: doc.name, documentType: doc.type || "", newStatus: String(updates.status) },
-    }).catch(() => {});
+    try {
+      await dispatchNotification({
+        actorUserId: req.user!.id,
+        event: "document.status_changed",
+        title: "Document Status Updated",
+        body: `Document "${doc.name}" status changed to "${updates.status}".`,
+        actionUrl: doc.studentId ? `/staff/students/${doc.studentId}` : `/staff/documents`,
+        icon: "FileCheck",
+        recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
+        templateVars: { documentName: doc.name, documentType: doc.type || "", newStatus: String(updates.status) },
+      });
+    } catch {}
   }
 
   res.json(doc);
@@ -529,7 +533,7 @@ router.post("/documents/bulk-delete", requireAuth, requireRole(...STAFF_ROLES), 
 });
 
 router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
@@ -568,7 +572,7 @@ router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
 });
 
 router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
-  const studentId = parseInt(req.params.studentId, 10);
+  const studentId = parseInt(String(req.params.studentId), 10);
   if (isNaN(studentId)) { res.status(400).json({ error: "Invalid studentId" }); return; }
 
   const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, studentId));
@@ -694,7 +698,7 @@ router.post("/documents/merge-pdf", requireAuth, requireRole(...STAFF_ROLES, ...
 });
 
 router.post("/documents/:id/extract", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }

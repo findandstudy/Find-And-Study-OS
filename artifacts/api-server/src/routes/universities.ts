@@ -115,7 +115,7 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
 });
 
 router.get("/universities/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [uni] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, id));
   if (!uni) { res.status(404).json({ error: "University not found" }); return; }
@@ -127,7 +127,7 @@ router.get("/universities/:id", async (req, res): Promise<void> => {
 // Public /universities responses mask this field, so admin UIs use
 // this endpoint to prefill the assignment editor.
 router.get("/universities/:id/assigned-staff", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [uni] = await db.select({ assignedStaffIds: universitiesTable.assignedStaffIds })
     .from(universitiesTable).where(eq(universitiesTable.id, id));
@@ -136,7 +136,7 @@ router.get("/universities/:id/assigned-staff", requireAuth, requireRole(...MANAG
 });
 
 router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const updates: Record<string, unknown> = {};
   for (const key of UNI_PATCH_FIELDS) {
@@ -160,7 +160,7 @@ router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), as
 });
 
 router.delete("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(universitiesTable).where(eq(universitiesTable.id, id));
   await logAudit(req.user!.id, "delete_university", "university", id, {}, req.ip);
@@ -271,7 +271,7 @@ router.get("/programs/enrolled-counts", requireAuth, requireRole(...MANAGER_ROLE
 });
 
 router.get("/programs/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [prog] = await db.select().from(programsTable).where(eq(programsTable.id, id));
   if (!prog) { res.status(404).json({ error: "Program not found" }); return; }
@@ -282,7 +282,7 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
 });
 
 router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const updates: Record<string, unknown> = {};
   for (const key of PROG_PATCH_FIELDS) {
@@ -305,7 +305,7 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
 });
 
 router.delete("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(programsTable).where(eq(programsTable.id, id));
   await logAudit(req.user!.id, "delete_program", "program", id, {}, req.ip);

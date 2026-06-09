@@ -81,7 +81,7 @@ router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROL
 });
 
 router.patch("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { name, code, flagEmoji, isActive } = req.body;
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
@@ -94,7 +94,7 @@ router.patch("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async
 });
 
 router.delete("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   await db.delete(countriesTable).where(eq(countriesTable.id, id));
   res.sendStatus(204);
 });
@@ -151,7 +151,7 @@ router.post("/cities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES)
 });
 
 router.patch("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { name, countryId, isActive } = req.body;
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
@@ -163,7 +163,7 @@ router.patch("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
 });
 
 router.delete("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   await db.delete(citiesTable).where(eq(citiesTable.id, id));
   res.sendStatus(204);
 });
@@ -565,7 +565,7 @@ router.post("/catalog-options", requireAuth, requireRole(...MANAGER_ROLES), asyn
 });
 
 router.patch("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { value, sortOrder, isActive, metadata } = req.body;
   const updates: Record<string, unknown> = {};
   if (value !== undefined) updates.value = value;
@@ -665,7 +665,7 @@ async function getDegreeUsage(catalogOptionId: number, dbx: DbOrTx = db): Promis
 // GET /api/catalog-options/:id/usage — proactive lookup for the UI so
 // admins see "kullanılıyor mu?" before they even click delete.
 router.get("/catalog-options/:id/usage", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [opt] = await db.select().from(catalogOptionsTable).where(eq(catalogOptionsTable.id, id));
   if (!opt) { res.status(404).json({ error: "Not found" }); return; }
@@ -822,7 +822,7 @@ router.post("/catalog-options/orphans/cleanup", requireAuth, requireRole(...MANA
 });
 
 router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   // Atomic check + delete: a previous version did `select → check → delete`

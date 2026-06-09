@@ -71,7 +71,7 @@ router.get("/popups/active", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.get("/popups/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [row] = await db.select().from(popupsTable).where(eq(popupsTable.id, id));
   if (!row) { res.status(404).json({ error: "Popup not found" }); return; }
@@ -136,7 +136,7 @@ router.post("/popups", requireAuth, requireRole(...ADMIN_ROLES), async (req, res
 });
 
 router.put("/popups/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [existing] = await db.select().from(popupsTable).where(eq(popupsTable.id, id));
@@ -209,7 +209,7 @@ router.put("/popups/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, 
 });
 
 router.delete("/popups/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [deleted] = await db
     .delete(popupsTable)
@@ -220,7 +220,7 @@ router.delete("/popups/:id", requireAuth, requireRole(...ADMIN_ROLES), async (re
 });
 
 router.post("/popups/:id/dismiss", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const user = req.user!;

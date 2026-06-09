@@ -118,7 +118,7 @@ async function resolveByToken(rawToken: string): Promise<ResolvedSession | { err
 
 router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> => {
   try {
-    const r = await resolveByToken(req.params.token);
+    const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { res.status(r.status).json({ error: r.error, code: r.code }); return; }
     // Signed sessions are terminal — surface success even if past expiresAt
     // so the signer can re-open the page and see the success state / PDF link
@@ -181,7 +181,7 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
 
 router.get("/public/sign/:token/preview", signLimiter, async (req, res): Promise<void> => {
   try {
-    const r = await resolveByToken(req.params.token);
+    const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
     if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
     const ctx = buildAgentContext(r.agent, (r.session.intakeData as any) || null, {
@@ -208,7 +208,7 @@ router.get("/public/sign/:token/preview", signLimiter, async (req, res): Promise
 // must verify ownership of this email before they are allowed to sign.
 router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Promise<void> => {
   try {
-    const r = await resolveByToken(req.params.token);
+    const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { res.status(r.status).json({ error: r.error, code: r.code }); return; }
     if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
     if (r.session.status === "signed" || r.session.status === "revoked") {
@@ -221,7 +221,7 @@ router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Prom
     // Bind the code to this specific signing link by storing the same token
     // hash used for the session, so a code issued for one link cannot be
     // replayed against another link/flow for the same email.
-    const tokenHash = hashToken(req.params.token);
+    const tokenHash = hashToken(String(req.params.token));
     // Invalidate previous unused codes for this email+link so only the newest works.
     await db.update(emailVerificationCodesTable)
       .set({ used: true })
@@ -255,7 +255,7 @@ router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Prom
 // session and adopt it as the signer's email (the signer supplies their own).
 router.post("/public/sign/:token/verify-code", codeLimiter, async (req, res): Promise<void> => {
   try {
-    const r = await resolveByToken(req.params.token);
+    const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { res.status(r.status).json({ error: r.error, code: r.code }); return; }
     if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
     if (r.session.status === "signed" || r.session.status === "revoked") {
@@ -267,7 +267,7 @@ router.post("/public/sign/:token/verify-code", codeLimiter, async (req, res): Pr
       res.status(400).json({ error: "Email and 6-digit code are required" }); return;
     }
     // The code must have been issued for THIS signing link (token hash bound).
-    const tokenHash = hashToken(req.params.token);
+    const tokenHash = hashToken(String(req.params.token));
     const [record] = await db.select().from(emailVerificationCodesTable).where(and(
       eq(emailVerificationCodesTable.email, email),
       eq(emailVerificationCodesTable.code, code),
@@ -293,7 +293,7 @@ router.post("/public/sign/:token/verify-code", codeLimiter, async (req, res): Pr
 
 router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise<void> => {
   try {
-    const r = await resolveByToken(req.params.token);
+    const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
     if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
     if (r.session.mode !== "self_fill") { res.status(400).json({ error: "Intake only allowed for self-fill links" }); return; }
@@ -329,9 +329,9 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
 router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<void> => {
   const signStart = Date.now();
   const startRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
-  console.log(`[public-sign] start token=${req.params.token.slice(0, 8)}… rss=${startRss}MB`);
+  console.log(`[public-sign] start token=${String(req.params.token).slice(0, 8)}… rss=${startRss}MB`);
   try {
-    const r = await resolveByToken(req.params.token);
+    const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
     if (r.expired) { res.status(410).json({ error: "Link expired" }); return; }
     if (r.session.status === "signed") { res.status(409).json({ error: "Already signed" }); return; }
@@ -398,7 +398,7 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
  */
 router.get("/public/sign/:token/pdf", signLimiter, async (req, res): Promise<void> => {
   try {
-    const r = await resolveByToken(req.params.token);
+    const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
     if (r.session.status !== "signed") {
       res.status(404).json({ error: "Signed PDF not available" });

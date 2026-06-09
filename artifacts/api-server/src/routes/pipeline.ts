@@ -347,7 +347,7 @@ router.get("/document-types", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_
 });
 
 router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
-  const { entityType } = req.params;
+  const entityType = String(req.params.entityType);
   if (!ENTITY_TYPES.includes(entityType)) {
     res.status(400).json({ error: "Invalid entity type" });
     return;
@@ -377,7 +377,7 @@ router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROL
 });
 
 router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { entityType } = req.params;
+  const entityType = String(req.params.entityType);
   if (!ENTITY_TYPES.includes(entityType)) {
     res.status(400).json({ error: "Invalid entity type" });
     return;

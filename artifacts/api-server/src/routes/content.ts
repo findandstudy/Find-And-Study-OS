@@ -157,7 +157,7 @@ router.post("/announcements", requireAuth, requireRole(...MANAGER_ROLES), valida
 });
 
 router.patch("/announcements/:id", requireAuth, requireRole(...MANAGER_ROLES), validate({ body: patchAnnouncementBodySchema }), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const body = getValidated<{ body: typeof patchAnnouncementBodySchema }>(req).body;
   const updates: Record<string, unknown> = {};
   for (const key of ANN_PATCH_FIELDS) {
@@ -173,7 +173,7 @@ router.patch("/announcements/:id", requireAuth, requireRole(...MANAGER_ROLES), v
 });
 
 router.delete("/announcements/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   await db.delete(announcementsTable).where(eq(announcementsTable.id, id));
   res.sendStatus(204);
 });

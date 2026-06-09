@@ -64,7 +64,7 @@ async function verifyApplicationAccess(userId: number, role: string, application
 }
 
 router.get("/applications/:id/stage-documents", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
-  const applicationId = parseInt(req.params.id, 10);
+  const applicationId = parseInt(String(req.params.id), 10);
   const user = req.user!;
 
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
@@ -105,7 +105,7 @@ router.get("/applications/:id/stage-documents", requireAuth, requireAgentStaffPe
 });
 
 router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
-  const applicationId = parseInt(req.params.id, 10);
+  const applicationId = parseInt(String(req.params.id), 10);
   const user = req.user!;
 
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
@@ -280,8 +280,8 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
 });
 
 router.patch("/applications/:id/stage-documents/:docId", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
-  const applicationId = parseInt(req.params.id, 10);
-  const docId = parseInt(req.params.docId, 10);
+  const applicationId = parseInt(String(req.params.id), 10);
+  const docId = parseInt(String(req.params.docId), 10);
   const user = req.user!;
 
   const isAdmin = ADMIN_ROLES.includes(user.role as any);
@@ -324,8 +324,8 @@ router.patch("/applications/:id/stage-documents/:docId", requireAuth, requireAge
 });
 
 router.delete("/applications/:id/stage-documents/:docId", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
-  const applicationId = parseInt(req.params.id, 10);
-  const docId = parseInt(req.params.docId, 10);
+  const applicationId = parseInt(String(req.params.id), 10);
+  const docId = parseInt(String(req.params.docId), 10);
   const user = req.user!;
 
   const isAdmin = ADMIN_ROLES.includes(user.role as any);
@@ -347,7 +347,7 @@ router.delete("/applications/:id/stage-documents/:docId", requireAuth, requireAg
 });
 
 router.get("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
-  const applicationId = parseInt(req.params.id, 10);
+  const applicationId = parseInt(String(req.params.id), 10);
   const user = req.user!;
 
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
@@ -400,7 +400,7 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, (req, res, next)
   if (req.user && req.user.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
   next();
 }, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
-  const applicationId = parseInt(req.params.id, 10);
+  const applicationId = parseInt(String(req.params.id), 10);
   const user = req.user!;
 
   // Task #167 — row-level authz before any read/write.
@@ -545,8 +545,8 @@ function requireStaffOrAdmin(req: any, res: any, next: any) {
   next();
 }
 router.patch("/applications/:id/missing-doc-notes/:noteId", requireAuth, requireStaffOrAdmin, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
-  const applicationId = parseInt(req.params.id, 10);
-  const noteId = parseInt(req.params.noteId, 10);
+  const applicationId = parseInt(String(req.params.id), 10);
+  const noteId = parseInt(String(req.params.noteId), 10);
   const user = req.user!;
 
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
@@ -571,8 +571,8 @@ router.patch("/applications/:id/missing-doc-notes/:noteId", requireAuth, require
 
 // Task #187 — delete a single missing-doc request row (admin / staff).
 router.delete("/applications/:id/missing-doc-notes/:noteId", requireAuth, requireStaffOrAdmin, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
-  const applicationId = parseInt(req.params.id, 10);
-  const noteId = parseInt(req.params.noteId, 10);
+  const applicationId = parseInt(String(req.params.id), 10);
+  const noteId = parseInt(String(req.params.noteId), 10);
   const user = req.user!;
 
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
@@ -594,7 +594,7 @@ router.delete("/applications/:id/missing-doc-notes/:noteId", requireAuth, requir
 // applications, with university/program/stage context. Powers the
 // "Başvuru Belgeleri" section on the student detail page.
 router.get("/students/:id/application-documents", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
-  const studentId = parseInt(req.params.id, 10);
+  const studentId = parseInt(String(req.params.id), 10);
   const access = await assertCanAccessStudent(req, studentId);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
 
@@ -637,8 +637,8 @@ router.get("/students/:id/application-documents", requireAuth, requireAgentStaff
 });
 
 router.get("/applications/:id/stage-documents/:docId/download", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
-  const applicationId = parseInt(req.params.id, 10);
-  const docId = parseInt(req.params.docId, 10);
+  const applicationId = parseInt(String(req.params.id), 10);
+  const docId = parseInt(String(req.params.docId), 10);
   const user = req.user!;
 
   const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);

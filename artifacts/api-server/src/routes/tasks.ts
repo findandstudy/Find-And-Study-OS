@@ -131,24 +131,26 @@ router.post("/tasks", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
 
   if (created.assignedTo) {
     const actorName = `${req.user!.firstName ?? ""} ${req.user!.lastName ?? ""}`.trim() || req.user!.email || "Bir yönetici";
-    dispatchNotification({
-      actorUserId: req.user!.id,
-      event: "task.assigned",
-      title: "Yeni görev atandı",
-      body: `${actorName} size yeni bir görev atadı: "${created.title}"`,
-      actionUrl: `/staff/tasks?taskId=${created.id}`,
-      icon: "ClipboardList",
-      recipientUserIds: [created.assignedTo],
-      data: { resourceType: "task", taskId: created.id },
-      templateVars: { actorName, taskTitle: created.title },
-    }).catch(() => {});
+    try {
+      await dispatchNotification({
+        actorUserId: req.user!.id,
+        event: "task.assigned",
+        title: "Yeni görev atandı",
+        body: `${actorName} size yeni bir görev atadı: "${created.title}"`,
+        actionUrl: `/staff/tasks?taskId=${created.id}`,
+        icon: "ClipboardList",
+        recipientUserIds: [created.assignedTo],
+        data: { resourceType: "task", taskId: created.id },
+        templateVars: { actorName, taskTitle: created.title },
+      });
+    } catch {}
   }
 
   res.status(201).json(created);
 });
 
 router.put("/tasks/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const me = req.user!;
   const [existing] = await db.select().from(tasksTable).where(eq(tasksTable.id, id));
@@ -230,24 +232,26 @@ router.put("/tasks/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, r
     updated.assignedTo !== me.id
   ) {
     const actorName = `${me.firstName ?? ""} ${me.lastName ?? ""}`.trim() || me.email || "Bir yönetici";
-    dispatchNotification({
-      actorUserId: me.id,
-      event: "task.assigned",
-      title: "Yeni görev atandı",
-      body: `${actorName} size bir görev atadı: "${updated.title}"`,
-      actionUrl: `/staff/tasks?taskId=${updated.id}`,
-      icon: "ClipboardList",
-      recipientUserIds: [updated.assignedTo],
-      data: { resourceType: "task", taskId: updated.id },
-      templateVars: { actorName, taskTitle: updated.title },
-    }).catch(() => {});
+    try {
+      await dispatchNotification({
+        actorUserId: me.id,
+        event: "task.assigned",
+        title: "Yeni görev atandı",
+        body: `${actorName} size bir görev atadı: "${updated.title}"`,
+        actionUrl: `/staff/tasks?taskId=${updated.id}`,
+        icon: "ClipboardList",
+        recipientUserIds: [updated.assignedTo],
+        data: { resourceType: "task", taskId: updated.id },
+        templateVars: { actorName, taskTitle: updated.title },
+      });
+    } catch {}
   }
 
   res.json(updated);
 });
 
 router.delete("/tasks/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const now = new Date();
   const [updated] = await db
@@ -261,7 +265,7 @@ router.delete("/tasks/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req
 });
 
 router.post("/tasks/restore/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [updated] = await db
     .update(tasksTable)
@@ -274,7 +278,7 @@ router.post("/tasks/restore/:id", requireAuth, requireRole(...ADMIN_ROLES), asyn
 });
 
 router.post("/tasks/:id/notes", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
   if (!text) { res.status(400).json({ error: "Note text is required" }); return; }
@@ -331,27 +335,29 @@ router.post("/tasks/:id/notes", requireAuth, async (req, res): Promise<void> => 
 
   if (validMentions.length > 0) {
     const snippet = text.length > 140 ? `${text.slice(0, 140)}…` : text;
-    dispatchNotification({
-      actorUserId: me.id,
-      event: "task.mention",
-      title: `${authorName} mentioned you in a task`,
-      body: `${authorName} mentioned you in a note on "${task.title}": ${snippet}`,
-      actionUrl: `/staff/tasks?taskId=${task.id}&noteId=${note.id}`,
-      icon: "AtSign",
-      recipientUserIds: validMentions,
-      templateVars: {
-        authorName,
-        taskTitle: task.title,
-        snippet,
-      },
-    }).catch(() => {});
+    try {
+      await dispatchNotification({
+        actorUserId: me.id,
+        event: "task.mention",
+        title: `${authorName} mentioned you in a task`,
+        body: `${authorName} mentioned you in a note on "${task.title}": ${snippet}`,
+        actionUrl: `/staff/tasks?taskId=${task.id}&noteId=${note.id}`,
+        icon: "AtSign",
+        recipientUserIds: validMentions,
+        templateVars: {
+          authorName,
+          taskTitle: task.title,
+          snippet,
+        },
+      });
+    } catch {}
   }
 
   res.status(201).json(updated);
 });
 
 router.delete("/tasks/:id/notes/:noteId", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const noteId = req.params.noteId;
   if (!Number.isFinite(id) || !noteId) { res.status(400).json({ error: "Invalid id" }); return; }
   const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, id));

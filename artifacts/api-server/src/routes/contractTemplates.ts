@@ -30,7 +30,7 @@ router.get("/contract-templates", requireAuth, requirePermission("contract_templ
 // preview the final HTML before sending or saving template edits.
 router.post("/contract-templates/:id/preview", requireAuth, requirePermission("contract_templates.view"), async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [row] = await db.select().from(contractTemplatesTable)
       .where(and(eq(contractTemplatesTable.id, id), isNull(contractTemplatesTable.deletedAt)));
@@ -60,7 +60,7 @@ router.post("/contract-templates/:id/preview", requireAuth, requirePermission("c
 
 router.get("/contract-templates/:id", requireAuth, requirePermission("contract_templates.view"), async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [row] = await db.select().from(contractTemplatesTable)
       .where(and(eq(contractTemplatesTable.id, id), isNull(contractTemplatesTable.deletedAt)));
@@ -104,7 +104,7 @@ router.post("/contract-templates", requireAuth, requirePermission("contract_temp
 
 router.patch("/contract-templates/:id", requireAuth, requirePermission("contract_templates.manage"), async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const updates: any = {};
     const allowed = ["name", "language", "entityType", "version", "bodyHtml", "intakeSchema", "isActive"];
@@ -143,7 +143,7 @@ router.patch("/contract-templates/:id", requireAuth, requirePermission("contract
 
 router.delete("/contract-templates/:id", requireAuth, requirePermission("contract_templates.manage"), async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     await db.update(contractTemplatesTable)
       .set({ deletedAt: new Date(), isActive: false })

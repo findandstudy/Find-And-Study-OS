@@ -48,7 +48,7 @@ router.post("/settings/lead-assignment-rules", requireAuth, requireRole(...MANAG
 });
 
 router.patch("/settings/lead-assignment-rules/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const updates: Record<string, unknown> = {};
   const b = req.body;
@@ -77,7 +77,7 @@ router.patch("/settings/lead-assignment-rules/:id", requireAuth, requireRole(...
 });
 
 router.delete("/settings/lead-assignment-rules/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [deleted] = await db.delete(leadAssignmentRulesTable).where(eq(leadAssignmentRulesTable.id, id)).returning();
   if (!deleted) { res.status(404).json({ error: "Rule not found" }); return; }

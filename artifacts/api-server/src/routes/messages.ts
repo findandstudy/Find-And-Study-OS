@@ -269,7 +269,7 @@ router.post("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_
 });
 
 router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const conversationId = parseInt(req.params.id, 10);
+  const conversationId = parseInt(String(req.params.id), 10);
   const userId = req.user!.id;
   const { limit = "50", before } = req.query as Record<string, string>;
 
@@ -372,7 +372,7 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
 });
 
 router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const conversationId = parseInt(req.params.id, 10);
+  const conversationId = parseInt(String(req.params.id), 10);
   const userId = req.user!.id;
   const { content, channel = "internal", replyToId, metadata } = req.body;
 
@@ -480,7 +480,7 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
 });
 
 router.get("/conversations/:id/participants", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const conversationId = parseInt(req.params.id, 10);
+  const conversationId = parseInt(String(req.params.id), 10);
   const userId = req.user!.id;
 
   const [membership] = await db
@@ -516,7 +516,7 @@ router.get("/conversations/:id/participants", requireAuth, requireRole(...STAFF_
 });
 
 router.patch("/conversations/:id/read-receipts", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const conversationId = parseInt(req.params.id, 10);
+  const conversationId = parseInt(String(req.params.id), 10);
   const userId = req.user!.id;
 
   const [membership] = await db
@@ -850,7 +850,7 @@ router.post("/message-templates", requireAuth, requireRole(...ADMIN_ROLES, ...ST
 });
 
 router.patch("/message-templates/:id", requireAuth, requireRole(...ADMIN_ROLES, ...STAFF_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const updates: Record<string, unknown> = {};
 
   const allowed = ["name", "category", "subject", "content", "channel", "language", "variables", "isActive"];
@@ -879,7 +879,7 @@ router.patch("/message-templates/:id", requireAuth, requireRole(...ADMIN_ROLES, 
 });
 
 router.delete("/message-templates/:id", requireAuth, requireRole(...ADMIN_ROLES, ...STAFF_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [deleted] = await db
     .delete(messageTemplatesTable)
     .where(eq(messageTemplatesTable.id, id))
@@ -935,7 +935,7 @@ router.get("/student/conversations", requireAuth, async (req, res): Promise<void
 router.get("/student/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
   if (req.user!.role !== "student") { res.status(403).json({ error: "Students only" }); return; }
   const userId = req.user!.id;
-  const conversationId = parseInt(req.params.id, 10);
+  const conversationId = parseInt(String(req.params.id), 10);
   if (isNaN(conversationId)) { res.status(400).json({ error: "Invalid conversation id" }); return; }
 
   const participation = await db.select().from(conversationParticipantsTable)
@@ -994,7 +994,7 @@ router.post("/student/conversations", requireAuth, async (req, res): Promise<voi
 router.post("/student/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
   if (req.user!.role !== "student") { res.status(403).json({ error: "Students only" }); return; }
   const userId = req.user!.id;
-  const conversationId = parseInt(req.params.id, 10);
+  const conversationId = parseInt(String(req.params.id), 10);
   if (isNaN(conversationId)) { res.status(400).json({ error: "Invalid conversation id" }); return; }
   const { content, metadata } = req.body;
 
@@ -1134,7 +1134,7 @@ router.get("/agent/conversations", requireAuth, requireAgentStaffPermission("mes
 router.get("/agent/conversations/:id/messages", requireAuth, requireAgentStaffPermission("messages"), async (req, res): Promise<void> => {
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
   const userId = req.user!.id;
-  const conversationId = parseInt(req.params.id, 10);
+  const conversationId = parseInt(String(req.params.id), 10);
   if (isNaN(conversationId)) { res.status(400).json({ error: "Invalid conversation id" }); return; }
 
   const participation = await db.select().from(conversationParticipantsTable)
@@ -1216,7 +1216,7 @@ router.post("/agent/conversations", requireAuth, requireAgentStaffPermission("me
 router.post("/agent/conversations/:id/messages", requireAuth, requireAgentStaffPermission("messages"), async (req, res): Promise<void> => {
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
   const userId = req.user!.id;
-  const conversationId = parseInt(req.params.id, 10);
+  const conversationId = parseInt(String(req.params.id), 10);
   if (isNaN(conversationId)) { res.status(400).json({ error: "Invalid conversation id" }); return; }
   const { content, metadata } = req.body;
 

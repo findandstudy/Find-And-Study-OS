@@ -245,7 +245,7 @@ router.get("/activity/analytics", requireAuth, requireRole(...ADMIN_ROLES), asyn
 });
 
 router.get("/activity/user/:userId", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const targetUserId = parseInt(req.params.userId, 10);
+  const targetUserId = parseInt(String(req.params.userId), 10);
   const { from, to } = req.query as Record<string, string>;
 
   const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));

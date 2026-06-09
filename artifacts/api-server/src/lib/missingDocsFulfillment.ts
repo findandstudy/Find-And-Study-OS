@@ -176,7 +176,7 @@ export async function handleMissingDocFulfillment(
             sourceStage: sourceStageKey,
             toStage: targetStageRow.key,
             fulfilledCount: matchedIds.length,
-          }).catch(() => {});
+          });
         });
         break;
       }

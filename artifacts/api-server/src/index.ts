@@ -703,6 +703,23 @@ async function seedClaudeIntegration() {
     console.error("[migrate] api_tokens table:", err);
   }
 
+  // Step 2b2c: email_queue retry backoff columns.
+  // retry_count — how many delivery attempts have been made so far.
+  // max_retries — maximum attempts before the row is marked 'failed'.
+  // next_retry_at — when the next attempt may be made (exponential backoff).
+  // 'processing' status is used transiently during the UPDATE-based cluster-safe claim.
+  // All steps are idempotent (ADD COLUMN IF NOT EXISTS).
+  try {
+    await pool.query(`ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS max_retries INTEGER NOT NULL DEFAULT 3`);
+    await pool.query(`ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS email_queue_retry_idx ON email_queue (status, next_retry_at)`);
+    // Recover any rows stuck in 'processing' from a previous crashed worker.
+    await pool.query(`UPDATE email_queue SET status = 'pending' WHERE status = 'processing'`);
+  } catch (err) {
+    console.error("[migrate] email_queue retry columns:", err);
+  }
+
   // Step 2b3: Performance quick-wins (Task #141) — pg_trgm trigram GIN
   // indexes for ILIKE '%term%' searches, partial index for unread
   // notifications, and the students.has_photo denormalized flag with

@@ -371,7 +371,7 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
   let parentAgent = null;
   if (userRole === "sub_agent" && agent.parentAgentId) {
     const [parentAgentRow] = await db.select().from(agentsTable).where(eq(agentsTable.id, agent.parentAgentId));
-    if (parentAgentRow) {
+    if (parentAgentRow && parentAgentRow.userId) {
       const [parentUser] = await db.select({
         id: usersTable.id,
         firstName: usersTable.firstName,
@@ -521,7 +521,7 @@ router.get("/agents/me/embed-token", requireAuth, async (req, res): Promise<void
 });
 
 router.get("/agents/:agentId/embed-token", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
-  const agentId = parseInt(req.params.agentId, 10);
+  const agentId = parseInt(String(req.params.agentId), 10);
   if (isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
@@ -556,7 +556,7 @@ router.get("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (re
         ilike(agentsTable.lastName, `%${search}%`),
         ilike(agentsTable.email, `%${search}%`),
         ilike(agentsTable.phone, `%${search}%`),
-      )
+      )!
     );
   }
 
@@ -639,7 +639,7 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
 
 router.patch("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const subAgentId = parseInt(req.params.id, 10);
+  const subAgentId = parseInt(String(req.params.id), 10);
   const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
@@ -717,7 +717,7 @@ router.patch("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), asy
 
 router.delete("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const subAgentId = parseInt(req.params.id, 10);
+  const subAgentId = parseInt(String(req.params.id), 10);
   const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
@@ -733,7 +733,7 @@ router.delete("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), as
 
 router.post("/agents/me/sub-agents/:id/set-password", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const subAgentId = parseInt(req.params.id, 10);
+  const subAgentId = parseInt(String(req.params.id), 10);
   const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
@@ -752,7 +752,7 @@ router.post("/agents/me/sub-agents/:id/set-password", requireAuth, requireRole("
 
 router.patch("/agents/me/sub-agents/:id/status", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const subAgentId = parseInt(req.params.id, 10);
+  const subAgentId = parseInt(String(req.params.id), 10);
   const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
@@ -773,7 +773,7 @@ router.patch("/agents/me/sub-agents/:id/status", requireAuth, requireRole("agent
 
 router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const subAgentId = parseInt(req.params.id, 10);
+  const subAgentId = parseInt(String(req.params.id), 10);
   const [parentAgent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!parentAgent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
@@ -874,7 +874,7 @@ router.get("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), a
         ilike(usersTable.firstName, `%${search}%`),
         ilike(usersTable.lastName, `%${search}%`),
         ilike(usersTable.email, `%${search}%`),
-      )
+      )!
     );
   }
 
@@ -958,7 +958,7 @@ router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), 
 router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
-  const staffId = parseInt(req.params.id, 10);
+  const staffId = parseInt(String(req.params.id), 10);
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
@@ -1012,7 +1012,7 @@ router.patch("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agen
 router.delete("/agents/me/staff/:id", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
-  const staffId = parseInt(req.params.id, 10);
+  const staffId = parseInt(String(req.params.id), 10);
   const agent = await resolveManagingAgent(userId, userRole);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
 
@@ -1074,7 +1074,7 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
         ilike(agentsTable.companyName, `%${search}%`),
         ilike(agentsTable.agencyCode, `%${search}%`),
         ilike(agentsTable.businessName, `%${search}%`),
-      )
+      )!
     );
   }
 
@@ -1157,7 +1157,7 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
 });
 
 router.get("/agents/:id/sub-agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const parentId = parseInt(req.params.id, 10);
+  const parentId = parseInt(String(req.params.id), 10);
   if (!(await isAgentInScope(req.user!.id, req.user!.role, parentId))) {
     res.status(403).json({ error: "Agent not in your branch scope" });
     return;
@@ -1430,7 +1430,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
 });
 
 router.get("/agents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   if (!(await isAgentInScope(req.user!.id, req.user!.role, id))) {
@@ -1449,7 +1449,7 @@ router.get("/agents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, 
 });
 
 router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (!(await isAgentInScope(req.user!.id, req.user!.role, id))) {
     res.status(403).json({ error: "Agent not in your branch scope" });
     return;
@@ -1635,7 +1635,7 @@ async function clearUserReferencesAndDelete(
 }
 
 router.delete("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (!(await isAgentInScope(req.user!.id, req.user!.role, id))) {
     res.status(403).json({ error: "Agent not in your branch scope" });
     return;
@@ -1703,7 +1703,7 @@ router.post("/agents/bulk-assign", requireAuth, requireRole(...MANAGER_ROLES), a
 });
 
 router.patch("/agents/:id/status", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { status } = req.body;
   if (!status || !["active", "inactive"].includes(status)) {
     res.status(400).json({ error: "status must be 'active' or 'inactive'" });
@@ -1728,7 +1728,7 @@ router.post("/agents/:id/set-password", requireAuth, async (req, res, next): Pro
     res.status(403).json({ error: "Unauthorised action: Only an administrator can perform this action." });
     return;
   }
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { password } = req.body;
   const pwd = validatePassword(password);
   if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
@@ -1750,7 +1750,7 @@ router.post("/agents/:id/resend-credentials", requireAuth, async (req, res, next
     res.status(403).json({ error: "Unauthorised action: Only an administrator can perform this action." });
     return;
   }
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
 
@@ -1843,7 +1843,7 @@ router.post("/agents/:id/impersonate", requireAuth, async (req, res, next): Prom
     res.status(403).json({ error: "Unauthorised action: Only an administrator can perform this action." });
     return;
   }
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   if (!agent.userId) {

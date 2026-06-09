@@ -328,7 +328,7 @@ router.get(
   requireAuth,
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (!id) {
       res.status(400).json({ error: "Invalid id" });
       return;
@@ -470,7 +470,7 @@ router.patch(
   requireAuth,
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const { userId } = req.body as { userId: number | null };
     if (!id) {
       res.status(400).json({ error: "Invalid id" });
@@ -521,7 +521,7 @@ router.post(
   requireAuth,
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const { type, entityId } = req.body as { type: "lead" | "student" | "agent"; entityId: number };
     if (!id || !type || !entityId) {
       res.status(400).json({ error: "type and entityId are required" });
@@ -552,7 +552,7 @@ router.get(
   requireAuth,
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id));
     if (!conv || !conv.externalContactId) {
       res.json({ outcome: "none", candidates: [] });
@@ -573,7 +573,7 @@ router.post(
   requireAuth,
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id));
     if (!conv || !conv.externalContactId) {
       res.status(404).json({ error: "Conversation has no external contact" });
@@ -617,7 +617,7 @@ router.post(
   requireAuth,
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const { content } = req.body as { content: string };
     if (!id || !content || !content.trim()) {
       res.status(400).json({ error: "content is required" });
@@ -787,7 +787,7 @@ router.post(
   requireAuth,
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     const { templateId, parameters } = req.body as { templateId: number; parameters?: string[] };
     if (!id || !templateId) {
       res.status(400).json({ error: "templateId is required" });
