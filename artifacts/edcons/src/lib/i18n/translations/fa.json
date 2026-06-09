@@ -1300,7 +1300,9 @@
     "saving": "در حال ذخیره...",
     "saved": "ذخیره شد",
     "immutableFieldHint": "این فیلد فقط توسط مدیر قابل تغییر است.",
-    "immutableFieldTooltip": "توسط مدیر مدیریت می‌شود — برای به‌روزرسانی با پشتیبانی تماس بگیرید"
+    "immutableFieldTooltip": "توسط مدیر مدیریت می‌شود — برای به‌روزرسانی با پشتیبانی تماس بگیرید",
+    "profileChangedNotifTitle": "پروفایل نماینده به‌روز شد",
+    "profileChangedNotifBody": "{{agentName}} پروفایل خود را به‌روز کرد: {{fields}}"
   },
   "studentAccount": {
     "title": "تنظیمات حساب",

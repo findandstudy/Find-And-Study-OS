@@ -1300,7 +1300,9 @@
     "saving": "Menyimpan...",
     "saved": "Tersimpan",
     "immutableFieldHint": "Bidang ini hanya dapat diubah oleh admin.",
-    "immutableFieldTooltip": "Dikelola oleh admin — hubungi dukungan untuk pembaruan"
+    "immutableFieldTooltip": "Dikelola oleh admin — hubungi dukungan untuk pembaruan",
+    "profileChangedNotifTitle": "Profil agen diperbarui",
+    "profileChangedNotifBody": "{{agentName}} memperbarui profilnya: {{fields}}"
   },
   "studentAccount": {
     "title": "Pengaturan Akun",

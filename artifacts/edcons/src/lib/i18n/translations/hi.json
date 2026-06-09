@@ -1300,7 +1300,9 @@
     "saving": "सहेजा जा रहा है...",
     "saved": "सहेजा गया",
     "immutableFieldHint": "यह फ़ील्ड केवल व्यवस्थापक द्वारा बदली जा सकती है।",
-    "immutableFieldTooltip": "व्यवस्थापक द्वारा प्रबंधित — अपडेट के लिए सहायता से संपर्क करें"
+    "immutableFieldTooltip": "व्यवस्थापक द्वारा प्रबंधित — अपडेट के लिए सहायता से संपर्क करें",
+    "profileChangedNotifTitle": "एजेंट प्रोफ़ाइल अपडेट किया गया",
+    "profileChangedNotifBody": "{{agentName}} ने अपना प्रोफ़ाइल अपडेट किया: {{fields}}"
   },
   "studentAccount": {
     "title": "खाता सेटिंग्स",

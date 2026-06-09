@@ -1300,7 +1300,9 @@
     "saving": "Guardando...",
     "saved": "Guardado",
     "immutableFieldHint": "Este campo solo puede ser modificado por un administrador.",
-    "immutableFieldTooltip": "Gestionado por el administrador — contacta con soporte para actualizar"
+    "immutableFieldTooltip": "Gestionado por el administrador — contacta con soporte para actualizar",
+    "profileChangedNotifTitle": "Perfil del agente actualizado",
+    "profileChangedNotifBody": "{{agentName}} actualizó su perfil: {{fields}}"
   },
   "studentAccount": {
     "title": "Configuración de la cuenta",

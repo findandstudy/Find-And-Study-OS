@@ -1241,7 +1241,9 @@
     "saving": "Kaydediliyor...",
     "saved": "Kaydedildi",
     "immutableFieldHint": "Bu alan yalnızca yönetici tarafından değiştirilebilir.",
-    "immutableFieldTooltip": "Yönetici tarafından yönetilir — güncellemek için destek ile iletişime geçin"
+    "immutableFieldTooltip": "Yönetici tarafından yönetilir — güncellemek için destek ile iletişime geçin",
+    "profileChangedNotifTitle": "Acente profili güncellendi",
+    "profileChangedNotifBody": "{{agentName}} profilini güncelledi: {{fields}}"
   },
   "studentAccount": {
     "title": "Hesap Ayarları",

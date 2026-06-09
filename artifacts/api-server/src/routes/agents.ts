@@ -18,7 +18,7 @@ import {
   toAgentInsertValues,
   type AgentCatalog,
 } from "../lib/exportImportExcel";
-import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
+import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable, notificationsTable } from "@workspace/db";
 import { getNewestSignedContractUrl } from "../lib/signContract";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
@@ -32,6 +32,7 @@ import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, deleteSessionsForUser, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { notificationBus } from "../lib/notificationBus";
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
 import { setAgencyStaff, getAgencyStaff, getAgencyStaffWithLegacy, getAgencyStaffMap, parseStaffInput, staffDisplayName } from "../lib/agencyStaff";
@@ -475,6 +476,49 @@ router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const [updated] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, agent.id)).returning();
+  const changedFields: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of Object.keys(updates)) {
+    const oldVal = (agent as Record<string, unknown>)[key];
+    const newVal = updates[key];
+    if (oldVal !== newVal) changedFields[key] = { from: oldVal ?? null, to: newVal ?? null };
+  }
+  if (Object.keys(changedFields).length > 0) {
+    await writeAudit({
+      userId,
+      action: "agent_profile_field_changed",
+      resource: "agent_profile",
+      resourceId: agent.id,
+      changes: changedFields,
+      ipAddress: req.ip ?? null,
+    });
+    try {
+      const agentName = `${agent.firstName ?? ""} ${agent.lastName ?? ""}`.trim() || agent.companyName || `Agent #${agent.id}`;
+      const fieldList = Object.keys(changedFields).join(", ");
+      const adminUsers = await db.select({ id: usersTable.id }).from(usersTable)
+        .where(and(inArray(usersTable.role, ["super_admin", "admin"]), eq(usersTable.isActive, true)));
+      if (adminUsers.length > 0) {
+        const notifTitle = "Acente profili güncellendi";
+        const notifBody = `${agentName} kendi profilini güncelledi: ${fieldList}`;
+        const inserted = await db.insert(notificationsTable).values(
+          adminUsers.map(u => ({
+            userId: u.id,
+            type: "agent.profile_changed",
+            title: notifTitle,
+            body: notifBody,
+            icon: "Users",
+            actionUrl: `/staff/agents/${agent.id}`,
+            data: { agentId: agent.id, fields: Object.keys(changedFields), actorUserId: userId },
+            channel: "in_app",
+          }))
+        ).returning({ id: notificationsTable.id, userId: notificationsTable.userId });
+        for (const row of inserted) {
+          notificationBus.publish({ userId: row.userId, notificationId: row.id, type: "agent.profile_changed", title: notifTitle });
+        }
+      }
+    } catch (err) {
+      console.error("[agents/me] admin notification failed:", err);
+    }
+  }
   res.json(updated);
 });
 
@@ -1546,6 +1590,31 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
     if (recalculated > 0) {
       console.log(`[Commission Recalc] Agent ${id} rate changed to ${newRate}% → recalculated ${recalculated} commission(s) for season ${currentSeason}`);
     }
+  }
+
+  const auditChanges: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of Object.keys(updates)) {
+    const oldVal = (oldAgent as Record<string, unknown>)[key];
+    const newVal = (agent as Record<string, unknown>)[key];
+    if (String(oldVal ?? "") !== String(newVal ?? "")) {
+      auditChanges[key] = { from: oldVal ?? null, to: newVal ?? null };
+    }
+  }
+  if (req.body.branchIds !== undefined) {
+    auditChanges["branchIds"] = { from: null, to: Array.isArray(req.body.branchIds) ? req.body.branchIds.join(",") : String(req.body.branchIds) };
+  }
+  if (hasStaffUpdate) {
+    auditChanges["assignedStaff"] = { from: null, to: String(req.body.assignedStaff ?? req.body.assignedStaffId ?? null) };
+  }
+  if (Object.keys(auditChanges).length > 0) {
+    await writeAudit({
+      userId: req.user!.id,
+      action: "agent_profile_field_changed",
+      resource: "agent_profile",
+      resourceId: id,
+      changes: auditChanges,
+      ipAddress: req.ip ?? null,
+    });
   }
 
   res.json(agent);

@@ -1300,7 +1300,9 @@
     "saving": "Enregistrement...",
     "saved": "Enregistré",
     "immutableFieldHint": "Ce champ ne peut être modifié que par un administrateur.",
-    "immutableFieldTooltip": "Géré par l'administrateur — contactez le support pour mettre à jour"
+    "immutableFieldTooltip": "Géré par l'administrateur — contactez le support pour mettre à jour",
+    "profileChangedNotifTitle": "Profil de l'agent mis à jour",
+    "profileChangedNotifBody": "{{agentName}} a mis à jour son profil : {{fields}}"
   },
   "studentAccount": {
     "title": "Paramètres du compte",

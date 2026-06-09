@@ -1300,7 +1300,9 @@
     "saving": "جارٍ الحفظ...",
     "saved": "تم الحفظ",
     "immutableFieldHint": "يمكن تغيير هذا الحقل من قِبل المشرف فقط.",
-    "immutableFieldTooltip": "يديره المشرف — تواصل مع الدعم للتحديث"
+    "immutableFieldTooltip": "يديره المشرف — تواصل مع الدعم للتحديث",
+    "profileChangedNotifTitle": "تم تحديث ملف الوكيل",
+    "profileChangedNotifBody": "{{agentName}} قام بتحديث ملفه الشخصي: {{fields}}"
   },
   "studentAccount": {
     "title": "إعدادات الحساب",

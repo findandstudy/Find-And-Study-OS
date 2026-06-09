@@ -1300,7 +1300,9 @@
     "saving": "Saving...",
     "saved": "Saved",
     "immutableFieldHint": "This field can only be changed by an admin.",
-    "immutableFieldTooltip": "Managed by admin — contact support to update"
+    "immutableFieldTooltip": "Managed by admin — contact support to update",
+    "profileChangedNotifTitle": "Agent profile updated",
+    "profileChangedNotifBody": "{{agentName}} updated their profile: {{fields}}"
   },
   "studentAccount": {
     "title": "Account Settings",

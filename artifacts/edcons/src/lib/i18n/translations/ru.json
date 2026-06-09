@@ -1300,7 +1300,9 @@
     "saving": "Сохранение...",
     "saved": "Сохранено",
     "immutableFieldHint": "Это поле может изменить только администратор.",
-    "immutableFieldTooltip": "Управляется администратором — обратитесь в службу поддержки"
+    "immutableFieldTooltip": "Управляется администратором — обратитесь в службу поддержки",
+    "profileChangedNotifTitle": "Профиль агента обновлён",
+    "profileChangedNotifBody": "{{agentName}} обновил профиль: {{fields}}"
   },
   "studentAccount": {
     "title": "Настройки аккаунта",
