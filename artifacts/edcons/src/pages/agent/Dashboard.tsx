@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 import { useSeason } from "@/contexts/SeasonContext";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import SignContract from "@/pages/agent/SignContract";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -75,6 +76,7 @@ export default function AgentDashboard() {
   const [, setLocation] = useLocation();
   const [showAddLead, setShowAddLead] = useState(false);
   const [showAddStudent, setShowAddStudent] = useState(false);
+  const { stages: pipelineStages } = usePipelineStages("student");
   const { season } = useSeason();
   const { data: stats, isLoading: statsLoading } = useGetOverviewStats({ season });
 
@@ -433,6 +435,7 @@ export default function AgentDashboard() {
         open={showAddStudent}
         onClose={() => setShowAddStudent(false)}
         onSuccess={() => setShowAddStudent(false)}
+        defaultStatus={pipelineStages[0]?.key}
       />
     </>
   );
