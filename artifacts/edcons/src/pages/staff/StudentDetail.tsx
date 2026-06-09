@@ -1468,6 +1468,17 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
   );
 }
 
+function F({ label, value, onChange, type = "text", placeholder = "", required = false, className = "", latinUppercase = false }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; required?: boolean; className?: string; latinUppercase?: boolean;
+}) {
+  return (
+    <div className={`space-y-1.5 ${className}`}>
+      <Label className="font-semibold text-sm">{label}{required && <span className="text-destructive ml-0.5">*</span>}</Label>
+      <Input type={type} value={value} onChange={e => { let v = e.target.value; if (latinUppercase) v = toLatinUpper(v); onChange(v); }} placeholder={placeholder} className={`rounded-xl h-9 ${latinUppercase ? "uppercase" : ""}`} />
+    </div>
+  );
+}
+
 function EditStudentDetailDialog({ open, onClose, student, studentId }: {
   open: boolean; onClose: () => void; student: any; studentId: number;
 }) {
@@ -1560,15 +1571,6 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
       toast({ title: "Error", description: "Failed to update", variant: "destructive" });
     } finally { setSaving(false); }
   }
-
-  const F = ({ label, value, onChange, type = "text", placeholder = "", required = false, className = "", latinUppercase = false }: {
-    label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; required?: boolean; className?: string; latinUppercase?: boolean;
-  }) => (
-    <div className={`space-y-1.5 ${className}`}>
-      <Label className="font-semibold text-sm">{label}{required && <span className="text-destructive ml-0.5">*</span>}</Label>
-      <Input type={type} value={value} onChange={e => { let v = e.target.value; if (latinUppercase) v = toLatinUpper(v); onChange(v); }} placeholder={placeholder} className={`rounded-xl h-9 ${latinUppercase ? "uppercase" : ""}`} />
-    </div>
-  );
 
   return (
     <>

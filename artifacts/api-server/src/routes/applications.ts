@@ -133,6 +133,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       return;
     }
     conditions.push(inArray(applicationsTable.agentId, visibleIds));
+    if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
     if (stage) conditions.push(eq(applicationsTable.stage, stage));
   }
 
@@ -360,6 +361,45 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     });
     return;
   }
+
+  // A1 gate: block application creation when the selected program has
+  // mandatory document requirements the student has not satisfied (using
+  // doc-type equivalence). Mirrors the documents_collected stage gate so
+  // an application is never created with missing mandatory documents.
+  if (programId) {
+    const progIdNum = parseInt(String(programId), 10);
+    const studentIdNum = parseInt(String(studentId), 10);
+    const [mandatoryReqs, studentDocs] = await Promise.all([
+      db.select({ documentType: programDocumentRequirementsTable.documentType })
+        .from(programDocumentRequirementsTable)
+        .where(and(
+          eq(programDocumentRequirementsTable.programId, progIdNum),
+          eq(programDocumentRequirementsTable.mandatory, true),
+        )),
+      db.select({ type: documentsTable.type })
+        .from(documentsTable)
+        .where(and(
+          eq(documentsTable.studentId, studentIdNum),
+          isNull(documentsTable.deletedAt),
+        )),
+    ]);
+    if (mandatoryReqs.length > 0) {
+      const uploadedTypes = new Set<string>(studentDocs.map((d: { type: string | null }) => (d.type || "").toLowerCase()));
+      const missingDocTypes = findMissingMandatoryTypes(
+        mandatoryReqs.map(r => r.documentType),
+        uploadedTypes,
+      );
+      if (missingDocTypes.length > 0) {
+        res.status(422).json({
+          error: "Mandatory student documents are missing for this application's program",
+          code: "STUDENT_DOCS_REQUIRED",
+          missingDocTypes,
+        });
+        return;
+      }
+    }
+  }
+
   const studentRec2 = studentFull;
   const studentFullName = `${studentRec2.firstName || ""} ${studentRec2.lastName || ""}`.trim();
 
