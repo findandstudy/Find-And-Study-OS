@@ -9,6 +9,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useLocation } from "wouter";
+import { CreateLeadDialog } from "@/components/agent/CreateLeadDialog";
+import { AddStudentModal } from "@/components/agent/AddStudentModal";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import {
   Users, TrendingUp, Clock, CheckCircle, GraduationCap, Activity, Bell,
@@ -71,6 +73,8 @@ export default function AgentDashboard() {
   const { t, lang } = useI18n();
   const dateLoc = DATE_LOCALE[lang] || "en-US";
   const [, setLocation] = useLocation();
+  const [showAddLead, setShowAddLead] = useState(false);
+  const [showAddStudent, setShowAddStudent] = useState(false);
   const { season } = useSeason();
   const { data: stats, isLoading: statsLoading } = useGetOverviewStats({ season });
 
@@ -116,6 +120,7 @@ export default function AgentDashboard() {
   const contactPerson = user?.role === "sub_agent" ? parentAgent : assignedStaff;
 
   return (
+    <>
       <div className="space-y-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -338,7 +343,7 @@ export default function AgentDashboard() {
               <Button
                 variant="outline"
                 className="h-auto py-4 flex flex-col items-center gap-2 hover:bg-primary/5 hover:border-primary/30"
-                onClick={() => setLocation("/agent/leads")}
+                onClick={() => setShowAddLead(true)}
               >
                 <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
                   <UserPlus className="w-5 h-5 text-blue-500" />
@@ -348,7 +353,7 @@ export default function AgentDashboard() {
               <Button
                 variant="outline"
                 className="h-auto py-4 flex flex-col items-center gap-2 hover:bg-primary/5 hover:border-primary/30"
-                onClick={() => setLocation("/agent/students")}
+                onClick={() => setShowAddStudent(true)}
               >
                 <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
                   <GraduationCap className="w-5 h-5 text-green-500" />
@@ -422,6 +427,14 @@ export default function AgentDashboard() {
         <OfferDeadlinesWidget detailHrefPrefix="/agent/apps" />
 
       </div>
+
+      <CreateLeadDialog open={showAddLead} onOpenChange={setShowAddLead} />
+      <AddStudentModal
+        open={showAddStudent}
+        onClose={() => setShowAddStudent(false)}
+        onSuccess={() => setShowAddStudent(false)}
+      />
+    </>
   );
 }
 

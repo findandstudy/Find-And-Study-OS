@@ -48,6 +48,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 import { useI18n } from "@/hooks/use-i18n";
+import { AddStudentModal } from "@/components/agent/AddStudentModal";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -453,7 +454,7 @@ function NationalityCombobox({ value, onChange, countries, aiExtracted }: { valu
   );
 }
 
-function AddStudentModal({
+function _AddStudentModalInline_REMOVED({
   open,
   onClose,
   onSuccess,

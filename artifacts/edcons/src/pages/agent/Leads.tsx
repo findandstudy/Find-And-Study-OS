@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
-import { useListLeads, useUpdateLead, useCreateLead, useDeleteLead, customFetch } from "@workspace/api-client-react";
+import { useListLeads, useUpdateLead, useDeleteLead, customFetch } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 import { useI18n } from "@/hooks/use-i18n";
+import { CreateLeadDialog } from "@/components/agent/CreateLeadDialog";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -739,7 +740,6 @@ export default function AgentLeadsPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [filters, setFilters] = useState({ source: "all", status: "all" });
   const { stages: pipelineStages } = usePipelineStages("lead");
@@ -765,7 +765,6 @@ export default function AgentLeadsPage() {
   const { season } = useSeason();
   const { data, isLoading } = useListLeads({ search, season, limit: 200 } as any);
   const updateLead = useUpdateLead();
-  const createLead = useCreateLead();
   const deleteLead = useDeleteLead();
   const queryClient = useQueryClient();
 
@@ -957,28 +956,6 @@ export default function AgentLeadsPage() {
       }
     );
   };
-
-  function handleCreate() {
-    if (!form.firstName || !form.lastName || !form.email || !form.phone) return;
-    const defaultStatus = pipelineStages.length > 0 ? pipelineStages[0].key : "new";
-    const { phoneCode, ...formRest } = form;
-    const payload: any = { ...formRest, phone: `${phoneCode}${form.phone}`, status: defaultStatus, season };
-    const parsedCreate = parseFloat(form.estimatedValue);
-    if (form.estimatedValue && !isNaN(parsedCreate)) payload.estimatedValue = parsedCreate;
-    else delete payload.estimatedValue;
-
-    createLead.mutate(
-      { data: payload },
-      {
-        onSuccess: () => {
-          toast({ title: "Lead created" });
-          setCreateOpen(false);
-          setForm(EMPTY_FORM);
-          queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-        },
-      }
-    );
-  }
 
   return (
     <>
@@ -1238,80 +1215,7 @@ export default function AgentLeadsPage() {
         isPending={deleteInProgress}
       />
 
-      {/* ── Create Lead Dialog ─────────────────────────────── */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>Add New Lead</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-2">
-            <div className="space-y-1.5">
-              <Label>First Name *</Label>
-              <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: toLatinUpper(e.target.value) })} placeholder="First name" className="uppercase" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Last Name *</Label>
-              <Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: toLatinUpper(e.target.value) })} placeholder="Last name" className="uppercase" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Email *</Label>
-              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Phone *</Label>
-              <div className="flex gap-1">
-                <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
-                  <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PHONE_CODES.map(pc => (
-                      <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
-                        <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input className="flex-1 min-w-0" value={form.phone} onChange={(e) => setForm({ ...form, phone: digitsOnly(e.target.value) })} placeholder="555 000 0000" />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Nationality</Label>
-              <NationalityCombobox value={form.nationality} onChange={v => setForm({ ...form, nationality: v })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Source</Label>
-              <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {SOURCES.map((s) => (
-                    <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label>Interested Program</Label>
-              <Input value={form.interestedProgram} onChange={(e) => setForm({ ...form, interestedProgram: e.target.value })} placeholder="e.g. Computer Science" />
-            </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label>Interested Country</Label>
-              <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
-            </div>
-            {canSeeRevenue && (
-              <div className="space-y-1.5 col-span-2">
-                <Label className="flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                  Estimated Value (USD)
-                </Label>
-                <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })} placeholder="e.g. 5000" />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={createLead.isPending || !form.firstName || !form.lastName || !form.email || !form.phone}>
-              {createLead.isPending ? "Creating…" : "Create Lead"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateLeadDialog open={createOpen} onOpenChange={setCreateOpen} />
     </>
   );
 }
