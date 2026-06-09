@@ -71,6 +71,20 @@ test("isAgentSourcedAndBlockedForStaff: non-admin staff NOT blocked when agentId
   }
 });
 
+test("isAgentSourcedAndBlockedForStaff: student role is NOT blocked (own visibility handled elsewhere)", () => {
+  // student accesses own applications via studentId scope; KURAL 1 does not apply.
+  assert.equal(
+    isAgentSourcedAndBlockedForStaff({ role: "student" }, 5),
+    false,
+    "student must not be blocked even when agentId is set",
+  );
+  assert.equal(
+    isAgentSourcedAndBlockedForStaff({ role: "student" }, null),
+    false,
+    "student must not be blocked when agentId is null",
+  );
+});
+
 test("isAgentSourcedAndBlockedForStaff: agentId=0 blocks staff — 0 != null is true", () => {
   // 0 is not a valid agent PK (serial starts at 1), but the guard uses `!= null`
   // which evaluates `0 != null` as true → non-admin staff are blocked.

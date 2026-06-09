@@ -1,6 +1,6 @@
 import { isNull, inArray } from "drizzle-orm";
 import type { Column } from "drizzle-orm";
-import { ADMIN_ROLES, isAgentRole } from "@workspace/roles";
+import { ADMIN_ROLES, STAFF_ROLES, isAgentRole } from "@workspace/roles";
 import { getAgentVisibleIds } from "../agentVisibility";
 
 export interface AgentSourceScopeResult {
@@ -41,8 +41,9 @@ export async function buildAgentSourceScope(
  * a specific agent-sourced record.  Use in single-record (detail / mutation)
  * endpoint scope guards.
  *
- * Returns false for admin roles and agent roles (their own check is done via
- * getAgentVisibleIds elsewhere).
+ * Only targets non-admin STAFF_ROLES (staff, consultant, editor, accountant).
+ * Returns false for admin roles, agent roles, students, and any other role
+ * — those are handled by their own visibility logic elsewhere.
  */
 export function isAgentSourcedAndBlockedForStaff(
   user: { role: string },
@@ -50,5 +51,7 @@ export function isAgentSourcedAndBlockedForStaff(
 ): boolean {
   if ((ADMIN_ROLES as string[]).includes(user.role)) return false;
   if (isAgentRole(user.role)) return false;
+  // Only apply to non-admin staff roles; students / other roles are not in scope.
+  if (!(STAFF_ROLES as string[]).includes(user.role)) return false;
   return recordAgentId != null;
 }
