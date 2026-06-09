@@ -2466,7 +2466,15 @@
     "applicationCreated": "Aplikasi dibuat",
     "applicationCreatedDesc": "{student} → {program}{docs}",
     "withDocuments": " dengan {n} dokumen",
-    "failedToCreateApplication": "Gagal membuat aplikasi"
+    "failedToCreateApplication": "Gagal membuat aplikasi",
+    "documentUploadTitle": "Unggah Dokumen",
+    "documentUploadSubtitle": "Unggah dokumen yang diperlukan untuk jenjang {level}.",
+    "requiredDocuments": "Dokumen yang Diperlukan",
+    "uploadedCount": "{n}/{total} diunggah",
+    "submitting": "Mengirim...",
+    "creating": "Membuat...",
+    "uploadRequiredRemaining": "Unggah dokumen yang diperlukan ({count} tersisa)",
+    "submitApplication": "Kirim Lamaran"
   },
   "docTypes": {
     "passport": "Paspor",

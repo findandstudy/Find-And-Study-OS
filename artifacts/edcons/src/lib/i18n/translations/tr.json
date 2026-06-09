@@ -2709,7 +2709,15 @@
     "applicationCreated": "Başvuru oluşturuldu",
     "applicationCreatedDesc": "{student} → {program}{docs}",
     "withDocuments": " ({n} belge ile)",
-    "failedToCreateApplication": "Başvuru oluşturulamadı"
+    "failedToCreateApplication": "Başvuru oluşturulamadı",
+    "documentUploadTitle": "Belge Yükleme",
+    "documentUploadSubtitle": "{level} seviyesi için gerekli belgeleri yükleyin.",
+    "requiredDocuments": "Gerekli Belgeler",
+    "uploadedCount": "{n}/{total} yüklendi",
+    "submitting": "Gönderiliyor...",
+    "creating": "Oluşturuluyor...",
+    "uploadRequiredRemaining": "Gerekli belgeleri yükleyin ({count} kaldı)",
+    "submitApplication": "Başvuruyu Gönder"
   },
   "staffCards": {
     "title": "Personel Kartları",

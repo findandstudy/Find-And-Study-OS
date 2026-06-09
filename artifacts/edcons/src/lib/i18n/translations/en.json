@@ -2768,7 +2768,15 @@
     "applicationCreated": "Application created",
     "applicationCreatedDesc": "{student} → {program}{docs}",
     "withDocuments": " with {n} document(s)",
-    "failedToCreateApplication": "Failed to create application"
+    "failedToCreateApplication": "Failed to create application",
+    "documentUploadTitle": "Document Upload",
+    "documentUploadSubtitle": "Upload the required documents for {level} level.",
+    "requiredDocuments": "Required Documents",
+    "uploadedCount": "{n}/{total} uploaded",
+    "submitting": "Submitting...",
+    "creating": "Creating...",
+    "uploadRequiredRemaining": "Upload required documents ({count} remaining)",
+    "submitApplication": "Submit Application"
   },
   "staffCards": {
     "title": "Staff Cards",

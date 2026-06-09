@@ -19,10 +19,9 @@ import {
   ChevronLeft, ChevronRight, X, FileText, ExternalLink,
   Mail, Phone, User, Award, Calendar, Check, Loader2, UserSearch,
   Download, CheckSquare, Square, FileDown, LayoutGrid, List, ArrowUpDown,
-  ArrowUp, ArrowDown, Sparkles, CheckCircle2, AlertCircle, Upload,
+  ArrowUp, ArrowDown, CheckCircle2, AlertCircle, Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
 import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
@@ -1719,15 +1718,6 @@ function degreeToLevel(degree?: string | null): AppLevel {
   return "undergraduate";
 }
 
-function fileToBase64CF(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 function compressImageCF(file: File, maxWidth = 1600, quality = 0.78): Promise<File> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1831,24 +1821,8 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [step, setStep] = useState<"select" | "documents" | "analyzing" | "review">("select");
+  const [step, setStep] = useState<"select" | "documents">("select");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
-  const [analysisResult, setAnalysisResult] = useState<Record<string, string> | null>(null);
-  const [reviewForm, setReviewForm] = useState({
-    firstName: "", lastName: "", motherName: "", fatherName: "",
-    nationality: "", dateOfBirth: "", passportNumber: "",
-    address: "", highSchool: "", graduationYear: "", gpa: "",
-  });
-  const [reviewExtracted, setReviewExtracted] = useState<Set<string>>(new Set());
-  const [allCountries, setAllCountries] = useState<Array<{ id: number; name: string; flagEmoji?: string | null }>>([]);
-
-  useEffect(() => {
-    if (p && allCountries.length === 0) {
-      fetch(`${BASE_URL}/api/countries?limit=500`).then(r => r.json()).then(d => {
-        if (d?.data) setAllCountries(d.data);
-      }).catch(() => {});
-    }
-  }, [p]);
 
   const level = p ? degreeToLevel(p.degree) : "undergraduate";
   // Pull program-specific document requirements from the catalog. Falls
@@ -1940,80 +1914,12 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
     setSuccess(false);
     setStep("select");
     setDocs({});
-    setAnalysisResult(null);
     onClose();
   }
 
   function handleNextToDocuments() {
     if (!selectedStudent) return;
     setStep("documents");
-  }
-
-  function mergeAiToReviewForm(aiData: Record<string, any>) {
-    const newForm = {
-      firstName: currentUser?.firstName || selectedStudent?.firstName || "",
-      lastName: currentUser?.lastName || selectedStudent?.lastName || "",
-      motherName: "", fatherName: "",
-      nationality: selectedStudent?.nationality || "",
-      dateOfBirth: "", passportNumber: "",
-      address: "", highSchool: "", graduationYear: "", gpa: "",
-    };
-    const ex = new Set<string>();
-    const mapping: [keyof typeof newForm, string][] = [
-      ["firstName", "firstName"], ["lastName", "lastName"],
-      ["motherName", "motherName"], ["fatherName", "fatherName"],
-      ["nationality", "nationality"], ["dateOfBirth", "dateOfBirth"],
-      ["passportNumber", "passportNumber"], ["address", "address"],
-      ["highSchool", "highSchool"], ["graduationYear", "graduationYear"],
-      ["gpa", "gpa"],
-    ];
-    for (const [fk, ek] of mapping) {
-      let val = aiData[ek];
-      if (val != null && val !== "" && val !== "null") {
-        if (fk === "nationality") {
-          const countryNames = allCountries.map(c => c.name);
-          val = normalizeNationality(String(val), countryNames);
-        }
-        newForm[fk] = String(val);
-        ex.add(fk);
-      }
-    }
-    setReviewForm(newForm);
-    setReviewExtracted(ex);
-  }
-
-  async function handleAnalyzeAndContinue() {
-    const uploadedDocs = Object.values(docs);
-    if (uploadedDocs.length === 0) {
-      mergeAiToReviewForm({});
-      setStep("review");
-      return;
-    }
-    setStep("analyzing");
-    try {
-      const docPayload = await Promise.all(uploadedDocs.map(async (d) => ({
-        type: d.isImage ? "image" : "pdf",
-        data: await fileToBase64CF(d.file),
-        mediaType: d.mediaType,
-        label: d.label,
-      })));
-      const res = await fetch(`${BASE_URL}/api/ai/extract-document`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ documents: docPayload }),
-      });
-      if (res.ok) {
-        const { extracted } = await res.json();
-        setAnalysisResult(extracted);
-        mergeAiToReviewForm(extracted || {});
-      } else {
-        mergeAiToReviewForm({});
-      }
-    } catch {
-      mergeAiToReviewForm({});
-    }
-    setStep("review");
   }
 
   async function saveDocumentsForApplication(studentId: number, applicationId: number, studentFirstName: string, studentLastName: string): Promise<number> {
@@ -2061,6 +1967,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
 
   async function handleSubmit() {
     if (!selectedStudent || !p) return;
+    if (!allRequiredUploaded) return;
     setSubmitting(true);
     try {
       const result = await apiFetch(`${BASE_URL}/api/course-finder/apply`, {
@@ -2081,65 +1988,6 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
         const savedCount = await saveDocumentsForApplication(resolvedStudentId, applicationId, selectedStudent.firstName, selectedStudent.lastName);
         if (savedCount < docCount) {
           toast({ title: t("courseFinderPage.warning"), description: t("courseFinderPage.documentsUploadedPartial", { saved: savedCount, total: docCount }), variant: "destructive" });
-        }
-      }
-
-      const mergedProfile: Record<string, string> = { ...analysisResult };
-      if (reviewForm.firstName) mergedProfile.firstName = reviewForm.firstName;
-      if (reviewForm.lastName) mergedProfile.lastName = reviewForm.lastName;
-      if (reviewForm.motherName) mergedProfile.motherName = reviewForm.motherName;
-      if (reviewForm.fatherName) mergedProfile.fatherName = reviewForm.fatherName;
-      if (reviewForm.nationality) mergedProfile.nationality = reviewForm.nationality;
-      if (reviewForm.dateOfBirth) mergedProfile.dateOfBirth = reviewForm.dateOfBirth;
-      if (reviewForm.passportNumber) mergedProfile.passportNumber = reviewForm.passportNumber;
-      if (reviewForm.address) mergedProfile.address = reviewForm.address;
-      if (reviewForm.highSchool) mergedProfile.highSchool = reviewForm.highSchool;
-      if (reviewForm.graduationYear) mergedProfile.graduationYear = reviewForm.graduationYear;
-      if (reviewForm.gpa) mergedProfile.gpa = reviewForm.gpa;
-
-      if (resolvedStudentId) {
-        try {
-          const studentRes = await fetch(`${BASE_URL}/api/students/${resolvedStudentId}`, {
-            credentials: "include",
-          });
-          if (studentRes.ok) {
-            const currentStudent = await studentRes.json();
-            const extractableFields = [
-              "firstName", "lastName",
-              "dateOfBirth", "nationality", "passportNumber",
-              "passportIssueDate", "passportExpiry",
-              "motherName", "fatherName", "address",
-              "highSchool", "graduationYear", "gpa", "languageScore",
-            ] as const;
-            const profileFields: Record<string, unknown> = {};
-            for (const field of extractableFields) {
-              const val = mergedProfile[field];
-              if (val && val !== "null") {
-                const existing = currentStudent[field];
-                if (!existing && existing !== 0) {
-                  if (field === "graduationYear") {
-                    const parsed = parseInt(String(val), 10);
-                    if (!isNaN(parsed)) profileFields[field] = parsed;
-                  } else {
-                    profileFields[field] = String(val);
-                  }
-                }
-              }
-            }
-            if (Object.keys(profileFields).length > 0) {
-              const patchRes = await fetch(`${BASE_URL}/api/students/${resolvedStudentId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify(profileFields),
-              });
-              if (!patchRes.ok) {
-                console.error(`Failed to save AI analysis to student profile: ${patchRes.status}`);
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Error saving AI analysis to student profile:", err);
         }
       }
 
@@ -2288,20 +2136,20 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
 
             {step === "documents" && (
               <>
-                <div className="bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-100 rounded-xl p-3 flex items-start gap-3">
-                  <Sparkles className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
+                <div className="bg-muted/40 border border-muted rounded-xl p-3 flex items-start gap-3">
+                  <FileText className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-sm font-semibold text-foreground">AI-Powered Document Upload</p>
+                    <p className="text-sm font-semibold text-foreground">{t("courseFinderPage.documentUploadTitle")}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Upload documents for <strong>{levelLabel}</strong> level. AI will analyze them automatically.
+                      {t("courseFinderPage.documentUploadSubtitle", { level: levelLabel })}
                     </p>
                   </div>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold text-foreground">Required Documents</p>
-                    <p className="text-xs text-muted-foreground">{uploadedCount}/{currentDocs.length} uploaded</p>
+                    <p className="text-sm font-semibold text-foreground">{t("courseFinderPage.requiredDocuments")}</p>
+                    <p className="text-xs text-muted-foreground">{t("courseFinderPage.uploadedCount", { n: uploadedCount, total: currentDocs.length })}</p>
                   </div>
                   <div className={cn(
                     "grid gap-2",
@@ -2320,208 +2168,37 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                   </div>
                 </div>
 
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-2">{t("courseFinderPage.noteOptional")}</p>
+                  <Textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={3}
+                    className="rounded-xl resize-none"
+                  />
+                </div>
+
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep("select")} className="rounded-xl h-11">
                     <ChevronLeft className="w-4 h-4 mr-1" /> Back
                   </Button>
                   <Button
-                    onClick={handleAnalyzeAndContinue}
+                    onClick={handleSubmit}
                     disabled={submitting || !allRequiredUploaded}
                     className="flex-1 rounded-xl h-11"
                   >
-                    {!allRequiredUploaded ? (
-                      <><Send className="w-4 h-4 mr-2" /> Upload Required Documents ({missingRequiredCount} remaining)</>
-                    ) : uploadedCount > 0 ? (
-                      <><Sparkles className="w-4 h-4 mr-2" /> Analyze & Continue ({uploadedCount} doc{uploadedCount !== 1 ? "s" : ""})</>
-                    ) : (
-                      <><Send className="w-4 h-4 mr-2" /> Continue</>
-                    )}
-                  </Button>
-                </div>
-              </>
-            )}
-
-            {step === "analyzing" && (
-              <div className="flex flex-col items-center justify-center py-12 gap-5">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-100 to-blue-100 flex items-center justify-center">
-                    <Sparkles className="w-8 h-8 text-violet-500" />
-                  </div>
-                  <div className="absolute inset-0 rounded-full border-4 border-violet-200 animate-ping opacity-40" />
-                </div>
-                <div className="text-center space-y-1">
-                  <p className="text-base font-display font-semibold">AI is analyzing your documents...</p>
-                  <p className="text-sm text-muted-foreground">
-                    Processing {uploadedCount} document{uploadedCount !== 1 ? "s" : ""}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 w-full max-w-xs">
-                  {Object.values(docs).map((d) => (
-                    <div key={d.key} className="flex items-center gap-2 text-sm bg-secondary/50 rounded-lg px-3 py-2">
-                      <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
-                      <span className="text-sm text-muted-foreground">Analyzing {d.label}...</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {step === "review" && (
-              <>
-                {reviewExtracted.size > 0 && (
-                  <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    AI extracted {reviewExtracted.size} fields. Please review and complete any missing information.
-                  </div>
-                )}
-
-                {uploadedCount > 0 && (
-                  <div className="bg-muted/30 rounded-xl p-3">
-                    <p className="text-xs font-semibold text-foreground mb-2">{uploadedCount} Document{uploadedCount !== 1 ? "s" : ""} Ready</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {Object.values(docs).map((d) => (
-                        <Badge key={d.key} variant="outline" className="text-[10px] gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-green-500" />
-                          {d.label}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      {t("courseFinderPage.firstName")} <span className="text-destructive ml-0.5">*</span>
-                      {reviewExtracted.has("firstName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <Input value={reviewForm.firstName} onChange={e => setReviewForm(f => ({ ...f, firstName: e.target.value }))}
-                      placeholder={t("courseFinderPage.firstNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("firstName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      {t("courseFinderPage.lastName")} <span className="text-destructive ml-0.5">*</span>
-                      {reviewExtracted.has("lastName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <Input value={reviewForm.lastName} onChange={e => setReviewForm(f => ({ ...f, lastName: e.target.value }))}
-                      placeholder={t("courseFinderPage.lastNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("lastName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      {t("courseFinderPage.motherName")}
-                      {reviewExtracted.has("motherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <Input value={reviewForm.motherName} onChange={e => setReviewForm(f => ({ ...f, motherName: e.target.value }))}
-                      placeholder={t("courseFinderPage.motherNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("motherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      {t("courseFinderPage.fatherName")}
-                      {reviewExtracted.has("fatherName") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <Input value={reviewForm.fatherName} onChange={e => setReviewForm(f => ({ ...f, fatherName: e.target.value }))}
-                      placeholder={t("courseFinderPage.fatherNamePlaceholder")} className={`rounded-xl ${reviewExtracted.has("fatherName") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      Nationality
-                      {reviewExtracted.has("nationality") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <select value={reviewForm.nationality} onChange={e => setReviewForm(f => ({ ...f, nationality: e.target.value }))}
-                      className={`w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${reviewExtracted.has("nationality") ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
-                      <option value="">Select nationality</option>
-                      {allCountries.length > 0
-                        ? allCountries.map(c => <option key={c.id} value={c.name}>{c.name}</option>)
-                        : FALLBACK_COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      Date of Birth
-                      {reviewExtracted.has("dateOfBirth") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <Input type="date" value={reviewForm.dateOfBirth} onChange={e => setReviewForm(f => ({ ...f, dateOfBirth: e.target.value }))}
-                      className={`rounded-xl ${reviewExtracted.has("dateOfBirth") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      {t("courseFinderPage.passportNumber")}
-                      {reviewExtracted.has("passportNumber") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <Input value={reviewForm.passportNumber} onChange={e => setReviewForm(f => ({ ...f, passportNumber: e.target.value }))}
-                      placeholder={t("courseFinderPage.passportNumberPlaceholder")} className={`rounded-xl ${reviewExtracted.has("passportNumber") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      {t("courseFinderPage.gpa")}
-                      {reviewExtracted.has("gpa") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <Input value={reviewForm.gpa} onChange={e => setReviewForm(f => ({ ...f, gpa: e.target.value }))}
-                      placeholder="e.g. 3.50" className={`rounded-xl ${reviewExtracted.has("gpa") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      {t("courseFinderPage.highSchool")}
-                      {reviewExtracted.has("highSchool") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <Input value={reviewForm.highSchool} onChange={e => setReviewForm(f => ({ ...f, highSchool: e.target.value }))}
-                      placeholder={t("courseFinderPage.highSchoolPlaceholder")} className={`rounded-xl ${reviewExtracted.has("highSchool") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm font-semibold flex items-center">
-                      {t("courseFinderPage.graduationYear")}
-                      {reviewExtracted.has("graduationYear") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                    </Label>
-                    <Input value={reviewForm.graduationYear} onChange={e => setReviewForm(f => ({ ...f, graduationYear: e.target.value }))}
-                      placeholder="e.g. 2024" className={`rounded-xl ${reviewExtracted.has("graduationYear") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold flex items-center">
-                    {t("courseFinderPage.address")}
-                    {reviewExtracted.has("address") && <span className="ml-1.5 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium dark:bg-emerald-900/40 dark:text-emerald-300">AI</span>}
-                  </Label>
-                  <Input value={reviewForm.address} onChange={e => setReviewForm(f => ({ ...f, address: e.target.value }))}
-                    placeholder={t("courseFinderPage.addressPlaceholder")} className={`rounded-xl ${reviewExtracted.has("address") ? "border-emerald-300 bg-emerald-50/40" : ""}`} />
-                </div>
-
-                <div>
-                  <Label className="text-sm font-medium mb-1.5 block">{t("courseFinderPage.noteOptional")}</Label>
-                  <Textarea rows={2} placeholder={t("courseFinderPage.applicationNotePlaceholder")} value={notes}
-                    onChange={e => setNotes(e.target.value)} className="resize-none rounded-lg" />
-                </div>
-
-                <div className="flex gap-3">
-                  <Button variant="outline" onClick={() => setStep("documents")} className="rounded-xl h-11">
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Back
-                  </Button>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={submitting || !reviewForm.firstName || !reviewForm.lastName}
-                    className="flex-1 rounded-xl h-11"
-                  >
                     {submitting ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isStudentUser ? "Submitting..." : "Creating..."}</>
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isStudentUser ? t("courseFinderPage.submitting") : t("courseFinderPage.creating")}</>
+                    ) : !allRequiredUploaded ? (
+                      <><Send className="w-4 h-4 mr-2" /> {t("courseFinderPage.uploadRequiredRemaining", { count: missingRequiredCount })}</>
                     ) : (
-                      <><Send className="w-4 h-4 mr-2" /> {isStudentUser ? "Submit Application" : "Create Application"}</>
+                      <><Send className="w-4 h-4 mr-2" /> {isStudentUser ? t("courseFinderPage.submitApplication") : t("courseFinderPage.createApplication")}</>
                     )}
                   </Button>
                 </div>
               </>
             )}
+
           </div>
         )}
       </DialogContent>

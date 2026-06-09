@@ -2517,7 +2517,15 @@
     "applicationCreated": "تم إنشاء الطلب",
     "applicationCreatedDesc": "{student} ← {program}{docs}",
     "withDocuments": " مع {n} مستند",
-    "failedToCreateApplication": "فشل إنشاء الطلب"
+    "failedToCreateApplication": "فشل إنشاء الطلب",
+    "documentUploadTitle": "رفع المستندات",
+    "documentUploadSubtitle": "قم برفع المستندات المطلوبة لمستوى {level}.",
+    "requiredDocuments": "المستندات المطلوبة",
+    "uploadedCount": "تم رفع {n}/{total}",
+    "submitting": "جارٍ الإرسال...",
+    "creating": "جارٍ الإنشاء...",
+    "uploadRequiredRemaining": "ارفع المستندات المطلوبة (المتبقي {count})",
+    "submitApplication": "إرسال الطلب"
   },
   "docTypes": {
     "passport": "جواز السفر",

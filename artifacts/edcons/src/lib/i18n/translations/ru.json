@@ -2517,7 +2517,15 @@
     "applicationCreated": "Заявка создана",
     "applicationCreatedDesc": "{student} → {program}{docs}",
     "withDocuments": " с документами ({n})",
-    "failedToCreateApplication": "Не удалось создать заявку"
+    "failedToCreateApplication": "Не удалось создать заявку",
+    "documentUploadTitle": "Загрузка документов",
+    "documentUploadSubtitle": "Загрузите необходимые документы для уровня {level}.",
+    "requiredDocuments": "Необходимые документы",
+    "uploadedCount": "{n}/{total} загружено",
+    "submitting": "Отправка...",
+    "creating": "Создание...",
+    "uploadRequiredRemaining": "Загрузите необходимые документы (осталось {count})",
+    "submitApplication": "Отправить заявку"
   },
   "docTypes": {
     "passport": "Паспорт",

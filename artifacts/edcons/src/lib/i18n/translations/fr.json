@@ -2517,7 +2517,15 @@
     "applicationCreated": "Candidature créée",
     "applicationCreatedDesc": "{student} → {program}{docs}",
     "withDocuments": " avec {n} document(s)",
-    "failedToCreateApplication": "Échec de la création de la candidature"
+    "failedToCreateApplication": "Échec de la création de la candidature",
+    "documentUploadTitle": "Téléversement de documents",
+    "documentUploadSubtitle": "Téléversez les documents requis pour le niveau {level}.",
+    "requiredDocuments": "Documents requis",
+    "uploadedCount": "{n}/{total} téléversés",
+    "submitting": "Envoi...",
+    "creating": "Création...",
+    "uploadRequiredRemaining": "Téléversez les documents requis ({count} restants)",
+    "submitApplication": "Envoyer la candidature"
   },
   "docTypes": {
     "passport": "Passeport",

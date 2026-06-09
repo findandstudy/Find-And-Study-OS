@@ -2466,7 +2466,15 @@
     "applicationCreated": "आवेदन बनाया गया",
     "applicationCreatedDesc": "{student} → {program}{docs}",
     "withDocuments": " {n} दस्तावेज़ों के साथ",
-    "failedToCreateApplication": "आवेदन बनाना विफल रहा"
+    "failedToCreateApplication": "आवेदन बनाना विफल रहा",
+    "documentUploadTitle": "दस्तावेज़ अपलोड",
+    "documentUploadSubtitle": "{level} स्तर के लिए आवश्यक दस्तावेज़ अपलोड करें।",
+    "requiredDocuments": "आवश्यक दस्तावेज़",
+    "uploadedCount": "{n}/{total} अपलोड किए गए",
+    "submitting": "सबमिट हो रहा है...",
+    "creating": "बनाया जा रहा है...",
+    "uploadRequiredRemaining": "आवश्यक दस्तावेज़ अपलोड करें ({count} शेष)",
+    "submitApplication": "आवेदन सबमिट करें"
   },
   "docTypes": {
     "passport": "पासपोर्ट",

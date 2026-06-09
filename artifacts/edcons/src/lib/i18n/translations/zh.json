@@ -2466,7 +2466,15 @@
     "applicationCreated": "申请已创建",
     "applicationCreatedDesc": "{student} → {program}{docs}",
     "withDocuments": "，含 {n} 份文件",
-    "failedToCreateApplication": "创建申请失败"
+    "failedToCreateApplication": "创建申请失败",
+    "documentUploadTitle": "上传文件",
+    "documentUploadSubtitle": "上传 {level} 级别所需的文件。",
+    "requiredDocuments": "所需文件",
+    "uploadedCount": "已上传 {n}/{total}",
+    "submitting": "提交中...",
+    "creating": "创建中...",
+    "uploadRequiredRemaining": "上传所需文件（还剩 {count} 个）",
+    "submitApplication": "提交申请"
   },
   "docTypes": {
     "passport": "护照",

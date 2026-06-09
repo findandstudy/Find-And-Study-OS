@@ -2466,7 +2466,15 @@
     "applicationCreated": "Solicitud creada",
     "applicationCreatedDesc": "{student} → {program}{docs}",
     "withDocuments": " con {n} documento(s)",
-    "failedToCreateApplication": "Error al crear la solicitud"
+    "failedToCreateApplication": "Error al crear la solicitud",
+    "documentUploadTitle": "Subida de documentos",
+    "documentUploadSubtitle": "Sube los documentos requeridos para el nivel {level}.",
+    "requiredDocuments": "Documentos requeridos",
+    "uploadedCount": "{n}/{total} subidos",
+    "submitting": "Enviando...",
+    "creating": "Creando...",
+    "uploadRequiredRemaining": "Sube los documentos requeridos ({count} restantes)",
+    "submitApplication": "Enviar solicitud"
   },
   "docTypes": {
     "passport": "Pasaporte",

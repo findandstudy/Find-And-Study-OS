@@ -2466,7 +2466,15 @@
     "applicationCreated": "درخواست ایجاد شد",
     "applicationCreatedDesc": "{student} ← {program}{docs}",
     "withDocuments": " با {n} مدرک",
-    "failedToCreateApplication": "ایجاد درخواست ناموفق بود"
+    "failedToCreateApplication": "ایجاد درخواست ناموفق بود",
+    "documentUploadTitle": "بارگذاری مدارک",
+    "documentUploadSubtitle": "مدارک لازم برای مقطع {level} را بارگذاری کنید.",
+    "requiredDocuments": "مدارک مورد نیاز",
+    "uploadedCount": "{n}/{total} بارگذاری شد",
+    "submitting": "در حال ارسال...",
+    "creating": "در حال ایجاد...",
+    "uploadRequiredRemaining": "مدارک لازم را بارگذاری کنید ({count} باقی‌مانده)",
+    "submitApplication": "ارسال درخواست"
   },
   "docTypes": {
     "passport": "گذرنامه",
