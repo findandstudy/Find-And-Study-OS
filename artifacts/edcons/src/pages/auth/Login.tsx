@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo, startTransition } from "react";
+import { useState, useEffect, useMemo, useRef, startTransition } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { setAuthCache, setStickyUser } from "@/lib/auth-cache";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useI18n } from "@/hooks/use-i18n";
-import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck, ChevronDown } from "lucide-react";
+import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language } from "@/lib/i18n/index";
 import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
 import { validatePasswordPolicy } from "@/components/password-policy";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
@@ -57,6 +58,11 @@ const PHONE_CODES: Array<{ code: string; iso: string; name: string }> = [
 ];
 import { motion, AnimatePresence } from "framer-motion";
 
+const LANG_COUNTRY: Record<string, string> = {
+  en: "GB", tr: "TR", ar: "SA", fr: "FR", ru: "RU",
+  fa: "IR", zh: "CN", hi: "IN", es: "ES", id: "ID",
+};
+
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 async function safeJson(res: Response): Promise<any> {
@@ -103,7 +109,24 @@ type Tab = "login" | "register" | "verify" | "set-password" | "forgot-password";
 export default function Login() {
   const { user, isLoading } = useAuth(false);
   const { settings, resolvedTheme } = useTheme();
-  const { t, localePath } = useI18n();
+  const { t, lang, setLang, localePath, isRTL } = useI18n();
+  const [langOpen, setLangOpen] = useState(false);
+  const langRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (langRef.current && !langRef.current.contains(e.target as Node)) {
+        setLangOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function handleLangSwitch(newLang: Language) {
+    setLang(newLang);
+    setLangOpen(false);
+  }
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
@@ -422,7 +445,44 @@ export default function Login() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center bg-background p-8">
+      <div className="flex-1 relative flex items-center justify-center bg-background p-8">
+        <div
+          ref={langRef}
+          className={`absolute top-4 ${isRTL ? "left-4" : "right-4"} z-50`}
+        >
+          <button
+            type="button"
+            onClick={() => setLangOpen(!langOpen)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-secondary/80 transition-colors text-sm font-medium"
+            aria-label="Select language"
+          >
+            <CountryFlag code={LANG_COUNTRY[lang] || "GB"} size="sm" />
+            <span className="text-foreground">{LANGUAGE_META[lang].code.toUpperCase()}</span>
+            <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${langOpen ? "rotate-180" : ""}`} />
+          </button>
+          {langOpen && (
+            <div className={`absolute top-full mt-2 ${isRTL ? "left-0" : "right-0"} bg-card border border-border rounded-xl shadow-xl py-2 min-w-[200px] max-h-[400px] overflow-y-auto`}>
+              {SUPPORTED_LANGUAGES.map((code) => {
+                const meta = LANGUAGE_META[code];
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => handleLangSwitch(code)}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-secondary/80 transition-colors ${
+                      code === lang ? "bg-primary/10 text-primary font-semibold" : "text-foreground"
+                    }`}
+                  >
+                    <CountryFlag code={LANG_COUNTRY[code] || "GB"} size="md" />
+                    <span>{meta.nativeName}</span>
+                    <span className="text-muted-foreground text-xs ms-auto">{meta.code.toUpperCase()}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
           <button
             type="button"
