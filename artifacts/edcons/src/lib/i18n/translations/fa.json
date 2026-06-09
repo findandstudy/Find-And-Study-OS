@@ -1717,7 +1717,8 @@
     "delivered": "ارسال شد",
     "seen": "دیده شد",
     "readReceiptsOn": "تاییدیه خواندن فعال",
-    "readReceiptsOff": "تاییدیه خواندن غیرفعال"
+    "readReceiptsOff": "تاییدیه خواندن غیرفعال",
+    "readReceiptsToggleFailed": "به‌روزرسانی تنظیمات تأیید خواندن ممکن نشد"
   },
   "settingsPage": {
     "navProfile": "پروفایل",

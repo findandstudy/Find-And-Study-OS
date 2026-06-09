@@ -1717,7 +1717,8 @@
     "delivered": "Terkirim",
     "seen": "Dilihat",
     "readReceiptsOn": "Tanda baca aktif",
-    "readReceiptsOff": "Tanda baca nonaktif"
+    "readReceiptsOff": "Tanda baca nonaktif",
+    "readReceiptsToggleFailed": "Tidak dapat memperbarui pengaturan tanda baca"
   },
   "settingsPage": {
     "navProfile": "Profil",

@@ -1717,7 +1717,8 @@
     "delivered": "Enviado",
     "seen": "Visto",
     "readReceiptsOn": "Confirmaciones de lectura activadas",
-    "readReceiptsOff": "Confirmaciones de lectura desactivadas"
+    "readReceiptsOff": "Confirmaciones de lectura desactivadas",
+    "readReceiptsToggleFailed": "No se pudo actualizar la configuración de confirmación de lectura"
   },
   "settingsPage": {
     "navProfile": "Perfil",

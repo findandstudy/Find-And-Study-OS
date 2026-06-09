@@ -2009,7 +2009,8 @@
     "delivered": "Delivered",
     "seen": "Seen",
     "readReceiptsOn": "Read receipts on",
-    "readReceiptsOff": "Read receipts off"
+    "readReceiptsOff": "Read receipts off",
+    "readReceiptsToggleFailed": "Could not update read receipts setting"
   },
   "settingsPage": {
     "navProfile": "Profile",

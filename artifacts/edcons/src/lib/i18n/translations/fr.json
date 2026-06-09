@@ -1768,7 +1768,8 @@
     "delivered": "Envoyé",
     "seen": "Lu",
     "readReceiptsOn": "Accusés de lecture activés",
-    "readReceiptsOff": "Accusés de lecture désactivés"
+    "readReceiptsOff": "Accusés de lecture désactivés",
+    "readReceiptsToggleFailed": "Impossible de mettre à jour le paramètre d'accusé de lecture"
   },
   "settingsPage": {
     "navProfile": "Profil",

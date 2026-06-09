@@ -1263,7 +1263,7 @@ function MessageThread({
       const res: any = await customFetch(`/api/conversations/${conversationId}/read-receipts`, { method: "PATCH" });
       if (typeof res?.readReceiptsEnabled === "boolean") setReadReceiptsEnabled(res.readReceiptsEnabled);
     } catch {
-      toast({ title: t("messagesPage.downloadFailed"), variant: "destructive" });
+      toast({ title: t("messagesPage.readReceiptsToggleFailed"), variant: "destructive" });
     } finally {
       setTogglingReceipts(false);
     }

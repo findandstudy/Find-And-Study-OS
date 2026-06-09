@@ -1768,7 +1768,8 @@
     "delivered": "Доставлено",
     "seen": "Прочитано",
     "readReceiptsOn": "Уведомления о прочтении включены",
-    "readReceiptsOff": "Уведомления о прочтении отключены"
+    "readReceiptsOff": "Уведомления о прочтении отключены",
+    "readReceiptsToggleFailed": "Не удалось обновить настройку подтверждения прочтения"
   },
   "settingsPage": {
     "navProfile": "Профиль",

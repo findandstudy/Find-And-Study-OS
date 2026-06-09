@@ -1717,7 +1717,8 @@
     "delivered": "已发送",
     "seen": "已读",
     "readReceiptsOn": "已开启已读回执",
-    "readReceiptsOff": "已关闭已读回执"
+    "readReceiptsOff": "已关闭已读回执",
+    "readReceiptsToggleFailed": "无法更新已读回执设置"
   },
   "settingsPage": {
     "navProfile": "个人资料",

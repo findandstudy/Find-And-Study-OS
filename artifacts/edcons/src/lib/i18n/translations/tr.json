@@ -1950,7 +1950,8 @@
     "delivered": "İletildi",
     "seen": "Görüldü",
     "readReceiptsOn": "Okundu bilgisi açık",
-    "readReceiptsOff": "Okundu bilgisi kapalı"
+    "readReceiptsOff": "Okundu bilgisi kapalı",
+    "readReceiptsToggleFailed": "Okundu bilgisi ayarı güncellenemedi"
   },
   "settingsPage": {
     "navProfile": "Profil",

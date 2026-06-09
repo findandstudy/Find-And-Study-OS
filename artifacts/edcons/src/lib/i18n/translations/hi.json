@@ -1717,7 +1717,8 @@
     "delivered": "भेजा गया",
     "seen": "देखा गया",
     "readReceiptsOn": "पठन रसीदें चालू",
-    "readReceiptsOff": "पठन रसीदें बंद"
+    "readReceiptsOff": "पठन रसीदें बंद",
+    "readReceiptsToggleFailed": "रीड रिसीप्ट सेटिंग अपडेट नहीं हो सकी"
   },
   "settingsPage": {
     "navProfile": "प्रोफ़ाइल",

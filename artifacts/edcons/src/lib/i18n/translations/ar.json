@@ -1768,7 +1768,8 @@
     "delivered": "تم الإرسال",
     "seen": "تمت الرؤية",
     "readReceiptsOn": "إيصالات القراءة مفعّلة",
-    "readReceiptsOff": "إيصالات القراءة معطّلة"
+    "readReceiptsOff": "إيصالات القراءة معطّلة",
+    "readReceiptsToggleFailed": "تعذر تحديث إعداد إيصالات القراءة"
   },
   "settingsPage": {
     "navProfile": "الملف الشخصي",
