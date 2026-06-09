@@ -1451,7 +1451,22 @@
   },
   "agentLeads": {
     "title": "عملائي المحتملون",
-    "subtitle": "تابع العملاء المحتملين الذين أحلتهم"
+    "subtitle": "تابع العملاء المحتملين الذين أحلتهم",
+    "export": {
+      "button": "تصدير",
+      "exportSelected": "تصدير المحدد",
+      "empty": "لا يوجد عملاء محتملون للتصدير",
+      "success": "تم تصدير {count} عميل محتمل",
+      "colName": "الاسم",
+      "colEmail": "البريد الإلكتروني",
+      "colPhone": "الهاتف",
+      "colStatus": "الحالة",
+      "colSource": "المصدر",
+      "colProgram": "البرنامج",
+      "colCountry": "الدولة",
+      "colValue": "القيمة",
+      "colCreated": "تاريخ الإنشاء"
+    }
   },
   "agentStagePerms": {
     "title": "أذونات مراحل الوكيل",

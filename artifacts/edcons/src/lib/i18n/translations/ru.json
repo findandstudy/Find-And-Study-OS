@@ -1451,7 +1451,22 @@
   },
   "agentLeads": {
     "title": "Мои лиды",
-    "subtitle": "Отслеживайте лиды, которых вы привлекли"
+    "subtitle": "Отслеживайте лиды, которых вы привлекли",
+    "export": {
+      "button": "Экспорт",
+      "exportSelected": "Экспортировать выбранное",
+      "empty": "Нет лидов для экспорта",
+      "success": "Экспортировано лидов: {count}",
+      "colName": "Имя",
+      "colEmail": "Эл. почта",
+      "colPhone": "Телефон",
+      "colStatus": "Статус",
+      "colSource": "Источник",
+      "colProgram": "Программа",
+      "colCountry": "Страна",
+      "colValue": "Стоимость",
+      "colCreated": "Создан"
+    }
   },
   "agentStagePerms": {
     "title": "Права агентов по этапам",

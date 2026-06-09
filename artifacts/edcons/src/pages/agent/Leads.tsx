@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Plus, Search, Filter, Eye, TrendingUp, X,
   ChevronDown, GripVertical, Check, Trophy, XCircle, LayoutGrid, List,
-  ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
+  ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil, Download,
 } from "lucide-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Input } from "@/components/ui/input";
@@ -867,6 +867,43 @@ export default function AgentLeadsPage() {
     }
   }
 
+  async function handleExport(scope: "selected" | "all" = "all") {
+    // Export the current client-side scoped/filtered set. "selected" exports
+    // only the checked rows; "all" exports every filtered+sorted row.
+    // Data is already agent-scoped server-side by /api/leads, so this adds
+    // no new IDOR surface.
+    const rows = scope === "selected"
+      ? sortedLeads.filter((l: any) => selectedIds.has(l.id))
+      : sortedLeads;
+    if (rows.length === 0) {
+      toast({ title: t("agentLeads.export.empty"), variant: "destructive" });
+      return;
+    }
+    const data = rows.map((l: any) => {
+      const row: Record<string, any> = {
+        [t("agentLeads.export.colName")]: `${l.firstName ?? ""} ${l.lastName ?? ""}`.trim(),
+        [t("agentLeads.export.colEmail")]: l.email || "",
+        [t("agentLeads.export.colPhone")]: l.phone || "",
+        [t("agentLeads.export.colStatus")]: leadStageMap[l.status]?.label || l.status || "",
+        [t("agentLeads.export.colSource")]: l.source ? l.source.replace(/_/g, " ") : "",
+        [t("agentLeads.export.colProgram")]: l.interestedProgram || "",
+        [t("agentLeads.export.colCountry")]: l.interestedCountry || "",
+      };
+      if (canSeeRevenue) {
+        const n = Number(l.estimatedValue);
+        row[t("agentLeads.export.colValue")] = l.estimatedValue && Number.isFinite(n) ? n : "";
+      }
+      row[t("agentLeads.export.colCreated")] = l.createdAt ? new Date(l.createdAt).toLocaleDateString() : "";
+      return row;
+    });
+    const XLSX = await import("xlsx");
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Leads");
+    XLSX.writeFile(wb, `leads_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast({ title: t("agentLeads.export.success", { count: rows.length }) });
+  }
+
   async function handleBulkDelete() {
     setDeleteInProgress(true);
     const ids = Array.from(selectedIds);
@@ -980,6 +1017,10 @@ export default function AgentLeadsPage() {
             </div>
             <FilterPopover filters={filters} onChange={setFilters} columns={columns} />
 
+            <Button variant="outline" className="rounded-full gap-2" onClick={() => handleExport("all")} title={t("agentLeads.export.button")}>
+              <Download className="w-4 h-4" /> {t("agentLeads.export.button")}
+            </Button>
+
             <div className="flex items-center border rounded-full overflow-hidden">
               <button
                 onClick={() => toggleView("pipeline")}
@@ -996,6 +1037,13 @@ export default function AgentLeadsPage() {
                 <List className="w-4 h-4" />
               </button>
             </div>
+
+            {selectedIds.size > 0 && (
+              <Button variant="outline" size="sm" className="rounded-full gap-1.5" onClick={() => handleExport("selected")}>
+                <Download className="w-4 h-4" />
+                {t("agentLeads.export.exportSelected")}
+              </Button>
+            )}
 
             {selectedIds.size > 0 && (
               <Button variant="destructive" size="sm" className="rounded-full" onClick={() => setDeleteOpen(true)}>

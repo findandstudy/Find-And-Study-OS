@@ -1451,7 +1451,22 @@
   },
   "agentLeads": {
     "title": "Prospek Saya",
-    "subtitle": "Lacak prospek yang Anda rujuk"
+    "subtitle": "Lacak prospek yang Anda rujuk",
+    "export": {
+      "button": "Ekspor",
+      "exportSelected": "Ekspor yang dipilih",
+      "empty": "Tidak ada prospek untuk diekspor",
+      "success": "{count} prospek diekspor",
+      "colName": "Nama",
+      "colEmail": "Email",
+      "colPhone": "Telepon",
+      "colStatus": "Status",
+      "colSource": "Sumber",
+      "colProgram": "Program",
+      "colCountry": "Negara",
+      "colValue": "Nilai",
+      "colCreated": "Dibuat"
+    }
   },
   "agentStagePerms": {
     "title": "Izin Tahap Agen",

@@ -1451,7 +1451,22 @@
   },
   "agentLeads": {
     "title": "Mes prospects",
-    "subtitle": "Suivez les prospects que vous avez recommandés"
+    "subtitle": "Suivez les prospects que vous avez recommandés",
+    "export": {
+      "button": "Exporter",
+      "exportSelected": "Exporter la sélection",
+      "empty": "Aucun prospect à exporter",
+      "success": "{count} prospects exportés",
+      "colName": "Nom",
+      "colEmail": "E-mail",
+      "colPhone": "Téléphone",
+      "colStatus": "Statut",
+      "colSource": "Source",
+      "colProgram": "Programme",
+      "colCountry": "Pays",
+      "colValue": "Valeur",
+      "colCreated": "Créé le"
+    }
   },
   "agentStagePerms": {
     "title": "Autorisations d'étape des agents",

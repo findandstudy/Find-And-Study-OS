@@ -1451,7 +1451,22 @@
   },
   "agentLeads": {
     "title": "سرنخ‌های من",
-    "subtitle": "سرنخ‌هایی را که معرفی کرده‌اید پیگیری کنید"
+    "subtitle": "سرنخ‌هایی را که معرفی کرده‌اید پیگیری کنید",
+    "export": {
+      "button": "خروجی",
+      "exportSelected": "خروجی موارد انتخابی",
+      "empty": "سرنخی برای خروجی نیست",
+      "success": "{count} سرنخ خروجی گرفته شد",
+      "colName": "نام",
+      "colEmail": "ایمیل",
+      "colPhone": "تلفن",
+      "colStatus": "وضعیت",
+      "colSource": "منبع",
+      "colProgram": "برنامه",
+      "colCountry": "کشور",
+      "colValue": "ارزش",
+      "colCreated": "تاریخ ایجاد"
+    }
   },
   "agentStagePerms": {
     "title": "مجوزهای مرحله نمایندگان",

@@ -1479,7 +1479,22 @@
   },
   "agentLeads": {
     "title": "My Leads",
-    "subtitle": "Track leads you've referred"
+    "subtitle": "Track leads you've referred",
+    "export": {
+      "button": "Export",
+      "exportSelected": "Export selected",
+      "empty": "No leads to export",
+      "success": "{count} leads exported",
+      "colName": "Name",
+      "colEmail": "Email",
+      "colPhone": "Phone",
+      "colStatus": "Status",
+      "colSource": "Source",
+      "colProgram": "Program",
+      "colCountry": "Country",
+      "colValue": "Value",
+      "colCreated": "Created"
+    }
   },
   "agentStagePerms": {
     "title": "Agent Stage Permissions",

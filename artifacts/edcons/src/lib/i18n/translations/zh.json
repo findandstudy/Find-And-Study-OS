@@ -1451,7 +1451,22 @@
   },
   "agentLeads": {
     "title": "我的潜在客户",
-    "subtitle": "跟踪您推荐的潜在客户"
+    "subtitle": "跟踪您推荐的潜在客户",
+    "export": {
+      "button": "导出",
+      "exportSelected": "导出所选",
+      "empty": "没有可导出的潜在客户",
+      "success": "已导出 {count} 个潜在客户",
+      "colName": "姓名",
+      "colEmail": "邮箱",
+      "colPhone": "电话",
+      "colStatus": "状态",
+      "colSource": "来源",
+      "colProgram": "项目",
+      "colCountry": "国家",
+      "colValue": "价值",
+      "colCreated": "创建时间"
+    }
   },
   "agentStagePerms": {
     "title": "代理阶段权限",

@@ -1420,7 +1420,22 @@
   },
   "agentLeads": {
     "title": "Adaylarım",
-    "subtitle": "Yönlendirdiğin adayları takip et"
+    "subtitle": "Yönlendirdiğin adayları takip et",
+    "export": {
+      "button": "Dışa Aktar",
+      "exportSelected": "Seçilenleri dışa aktar",
+      "empty": "Dışa aktarılacak aday yok",
+      "success": "{count} aday dışa aktarıldı",
+      "colName": "Ad",
+      "colEmail": "E-posta",
+      "colPhone": "Telefon",
+      "colStatus": "Durum",
+      "colSource": "Kaynak",
+      "colProgram": "Program",
+      "colCountry": "Ülke",
+      "colValue": "Değer",
+      "colCreated": "Oluşturulma"
+    }
   },
   "agentStagePerms": {
     "title": "Acente Aşama Yetkileri",
