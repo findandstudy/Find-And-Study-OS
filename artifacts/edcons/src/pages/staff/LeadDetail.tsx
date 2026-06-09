@@ -109,11 +109,25 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
-  const canChangeStage = !!isAdmin || hasPermission("leads.change_stage");
   const canChangeAssigned = !!isAdmin || hasPermission("records.change_assigned");
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isAgent = basePath === "/agent";
   const [noteTab, setNoteTab] = useState<"general" | "internal">("general");
+
+  // Agents change lead stage only when the agency setting allows it.
+  const { data: agentPermsData } = useQuery<{ agentCanChangeLeadStage: boolean }>({
+    queryKey: ["agent-permissions"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/settings/agent-permissions`, { credentials: "include" });
+      if (!r.ok) return { agentCanChangeLeadStage: true };
+      return r.json();
+    },
+    enabled: isAgent,
+    staleTime: 60_000,
+  });
+  const canChangeStage = isAgent
+    ? agentPermsData?.agentCanChangeLeadStage !== false
+    : !!isAdmin || hasPermission("leads.change_stage");
 
   const { data: lead, isLoading } = useGetLead(id) as { data: any; isLoading: boolean };
   const [mainTab, setMainTab] = useState<"overview" | "documents">("overview");
@@ -259,6 +273,33 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   });
 
   function handleStatusChange(status: string) {
+    // Selecting "converted" must actually create/merge the student record,
+    // not just flip the status string. Reuse the idempotent convert endpoint.
+    if (status === "converted" && lead?.status !== "converted") {
+      if (convertLead.isPending) return;
+      convertLead.mutate(
+        { id },
+        {
+          onSuccess: (result: any) => {
+            const studentData = result?.student || result;
+            const studentName = `${studentData?.firstName || ""} ${studentData?.lastName || ""}`.trim();
+            toast({
+              title: t("leadDetailPage.leadConverted"),
+              description: result?.merged
+                ? t("leadDetailPage.mergedWithExisting", { name: studentName })
+                : t("leadDetailPage.newStudentCreated", { name: studentName }),
+            });
+            queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
+            queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+          },
+          onError: () => {
+            toast({ title: t("leadDetailPage.conversionFailed"), variant: "destructive" });
+          },
+        }
+      );
+      return;
+    }
     updateLead.mutate(
       { id, data: { status } },
       {
@@ -492,7 +533,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   <Select
                     value={lead?.status}
                     onValueChange={handleStatusChange}
-                    disabled={updateLead.isPending || isLoading}
+                    disabled={updateLead.isPending || convertLead.isPending || isLoading}
                   >
                     <SelectTrigger className="w-36 rounded-full border-border">
                       <SelectValue />

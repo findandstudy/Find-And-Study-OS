@@ -858,13 +858,25 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   res.json(lead);
 });
 
-router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
+router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [existing] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
   const delUser = req.user!;
-  if (!(ADMIN_ROLES as readonly string[]).includes(delUser.role)) {
+  if (isAgentRole(delUser.role)) {
+    // Agents may only delete leads within their own visibility tree.
+    const visibleIds = await getAgentVisibleIds(delUser.id, delUser.role);
+    if (!existing.agentId || !visibleIds.includes(existing.agentId)) {
+      res.status(403).json({ error: "Access denied" }); return;
+    }
+    // A converted lead is linked to a student record; deleting it would orphan
+    // that link, so agents cannot delete leads that have been converted.
+    if (existing.convertedStudentId !== null) {
+      res.status(409).json({ error: "Cannot delete a converted lead", code: "LEAD_CONVERTED" });
+      return;
+    }
+  } else if (!(ADMIN_ROLES as readonly string[]).includes(delUser.role)) {
     // KURAL 1: non-admin staff cannot delete agent-sourced leads
     if (existing.agentId !== null) {
       res.status(404).json({ error: "Lead not found" }); return;
