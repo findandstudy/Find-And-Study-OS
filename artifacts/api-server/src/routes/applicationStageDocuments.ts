@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import express from "express";
-import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable, universitiesTable, programsTable } from "@workspace/db";
+import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable, universitiesTable, programsTable, documentsTable } from "@workspace/db";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -242,6 +242,39 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     ? documentNameOverride.trim()
     : stage;
   void handleMissingDocFulfillment(applicationId, fulfilmentSignal, user.id);
+
+  // When a document is uploaded into the "missing_docs" stage (the shared
+  // document-request workflow), also write it to the student's shared document
+  // pool (documentsTable) so it is visible across all applications for that
+  // student and can be reused. The catalog type comes from documentNameOverride
+  // when the admin configured it, otherwise we fall back to the stage key.
+  if (stage === "missing_docs") {
+    try {
+      const [appRow] = await db
+        .select({ studentId: applicationsTable.studentId })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.id, applicationId));
+      if (appRow?.studentId) {
+        const docType = (typeof documentNameOverride === "string" && documentNameOverride.trim())
+          ? documentNameOverride.trim()
+          : "missing_docs";
+        await db.insert(documentsTable).values({
+          studentId: appRow.studentId,
+          applicationId,
+          name: safeName,
+          type: docType,
+          status: "approved",
+          fileData: fileData || null,
+          fileUrl: fileUrl || null,
+          mimeType: mimeType || null,
+          sizeBytes: sizeBytes ? Number(sizeBytes) : null,
+        });
+      }
+    } catch (e) {
+      // Non-fatal: the stage document record was already saved; log and continue.
+      console.error("[STAGE-DOC] failed to mirror missing_docs upload to student pool:", e);
+    }
+  }
 
   res.status(201).json(doc);
 });

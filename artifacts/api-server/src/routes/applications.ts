@@ -970,7 +970,11 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       type MdAction = { type?: string; requiredDocTypes?: unknown; label?: unknown; targetStageKey?: unknown };
       const mdAction =
         (targetActions as MdAction[]).find(a => a && a.type === "missing_docs")
-        ?? (currentActions as MdAction[]).find(a => a && a.type === "missing_docs" && a.targetStageKey === targetStage);
+        ?? (currentActions as MdAction[]).find(a => a && a.type === "missing_docs" && a.targetStageKey === targetStage)
+        // Built-in "missing_docs" stage always triggers the document-request
+        // dialog, even when no explicit missing_docs action is configured on it.
+        // This matches the stage KEY, not just the action type.
+        ?? (targetStage === "missing_docs" ? ({ type: "missing_docs", requiredDocTypes: [], label: null } as MdAction) : undefined);
       if (mdAction) {
         const [existingReq] = await db.select({ id: applicationStageDocumentsTable.id })
           .from(applicationStageDocumentsTable)
