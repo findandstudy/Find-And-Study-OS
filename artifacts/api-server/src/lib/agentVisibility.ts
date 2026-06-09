@@ -18,8 +18,8 @@ export async function getAgentVisibleIds(userId: number, userRole: string): Prom
   if (!agentRec) return [];
 
   if (userRole === "agent") {
-    const subAgents = await db.select({ id: agentsTable.id }).from(agentsTable).where(eq(agentsTable.parentAgentId, agentRec.id));
-    return [agentRec.id, ...subAgents.map(s => s.id)];
+    // KURAL 2: agents see only their own leads; sub-agents' leads are not included.
+    return [agentRec.id];
   }
 
   return [agentRec.id];

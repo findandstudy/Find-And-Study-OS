@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from 
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
@@ -223,6 +224,10 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     conditions.push(eq(leadsTable.originType, originFilter));
   }
 
+  // KURAL 1: non-admin staff cannot see agent-sourced leads
+  if (!isAgentRole(user.role) && !(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    conditions.push(isNull(leadsTable.agentId));
+  }
   if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (visibleIds.length === 0) {
@@ -477,6 +482,10 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       return;
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    // KURAL 1: non-admin staff cannot access agent-sourced lead detail
+    if (lead.agentId !== null) {
+      res.status(404).json({ error: "Lead not found" }); return;
+    }
     if (lead.assignedToId !== null && lead.assignedToId !== user.id) {
       res.status(403).json({ error: "Access denied" });
       return;
@@ -504,6 +513,10 @@ router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...A
       return;
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    // KURAL 1: non-admin staff cannot access documents of agent-sourced leads
+    if (lead.agentId !== null) {
+      res.status(404).json({ error: "Lead not found" }); return;
+    }
     if (lead.assignedToId !== null && lead.assignedToId !== user.id) {
       res.status(403).json({ error: "Access denied" });
       return;
@@ -667,6 +680,10 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
       return;
     }
   } else if (!isAdmin) {
+    // KURAL 1: non-admin staff cannot update agent-sourced leads
+    if (existing.agentId !== null) {
+      res.status(404).json({ error: "Lead not found" }); return;
+    }
     if (!canAccessAssignedRecord(perms, existing.assignedToId, user.id)) {
       res.status(403).json({ error: "Access denied" });
       return;
@@ -839,6 +856,10 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES), requireAge
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
   const delUser = req.user!;
   if (!(ADMIN_ROLES as readonly string[]).includes(delUser.role)) {
+    // KURAL 1: non-admin staff cannot delete agent-sourced leads
+    if (existing.agentId !== null) {
+      res.status(404).json({ error: "Lead not found" }); return;
+    }
     if (existing.assignedToId !== null && existing.assignedToId !== delUser.id) {
       res.status(403).json({ error: "Access denied" }); return;
     }
@@ -1093,6 +1114,13 @@ router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
+  // KURAL 1: non-admin staff cannot access notes of agent-sourced leads
+  const [noteLeadRow] = await db.select({ agentId: leadsTable.agentId }).from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
+  if (!noteLeadRow) { res.status(404).json({ error: "Lead not found" }); return; }
+  if (isAgentSourcedAndBlockedForStaff(req.user!, noteLeadRow.agentId)) {
+    res.status(404).json({ error: "Lead not found" }); return;
+  }
+
   const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
   const conditions = [eq(notesTable.resourceId, id), eq(notesTable.resourceType, "lead")];
 
@@ -1210,6 +1238,8 @@ router.get("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES, ...
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (!lead.agentId || !visibleIds.includes(lead.agentId)) { res.status(403).json({ error: "Access denied" }); return; }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    // KURAL 1: non-admin staff cannot access follow-ups of agent-sourced leads
+    if (lead.agentId !== null) { res.status(404).json({ error: "Lead not found" }); return; }
     if (lead.assignedToId !== null && lead.assignedToId !== user.id) { res.status(403).json({ error: "Access denied" }); return; }
   }
   const { page = "1", limit = "50" } = req.query as Record<string, string>;

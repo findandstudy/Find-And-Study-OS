@@ -6,6 +6,7 @@ import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from 
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeApplicationAssignment } from "../lib/leadAssignment";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
@@ -98,6 +99,8 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     // Non-admin staff: only see applications assigned to them or unassigned
     // (mirrors the leads / students lists). Admins see everything in scope.
     if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+      // KURAL 1: non-admin staff cannot see agent-sourced applications
+      conditions.push(isNull(applicationsTable.agentId));
       // Visibility driven by records.* keys. Always see own records;
       // view_unassigned adds the unassigned pool; view_others adds
       // teammates' records. Task #128: also include applications for
@@ -690,6 +693,10 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
+  // KURAL 1: non-admin staff cannot access agent-sourced application detail
+  if (isAgentSourcedAndBlockedForStaff(user, row.agentId)) {
+    res.status(404).json({ error: "Application not found" }); return;
+  }
   if (isAgentRole(user.role)) {
     const agentRec = await getAgentRecord(user.id, user.role);
     const isSubAgentUser = user.role === "sub_agent" || !!agentRec?.parentAgentId;
@@ -1009,6 +1016,11 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   }
 
   const [preUpdateApp] = await db.select({ assignedToId: applicationsTable.assignedToId, agentId: applicationsTable.agentId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+
+  // KURAL 1: non-admin staff cannot update agent-sourced applications
+  if (isAgentSourcedAndBlockedForStaff(user, preUpdateApp?.agentId ?? null)) {
+    res.status(404).json({ error: "Application not found" }); return;
+  }
 
   const conditions = [eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)];
   if (!isStaff) {
@@ -1443,10 +1455,14 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
 router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [existing] = await db
-    .select({ id: applicationsTable.id, studentId: applicationsTable.studentId })
+    .select({ id: applicationsTable.id, studentId: applicationsTable.studentId, agentId: applicationsTable.agentId })
     .from(applicationsTable)
     .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Application not found" }); return; }
+  // KURAL 1: non-admin staff cannot delete agent-sourced applications
+  if (isAgentSourcedAndBlockedForStaff(req.user!, existing.agentId)) {
+    res.status(404).json({ error: "Application not found" }); return;
+  }
   if (existing.studentId) {
     const access = await assertCanAccessStudent(req, existing.studentId);
     if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
@@ -1485,6 +1501,13 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, .
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
+
+  // KURAL 1: non-admin staff cannot access notes of agent-sourced applications
+  const [noteApp] = await db.select({ agentId: applicationsTable.agentId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+  if (!noteApp) { res.status(404).json({ error: "Application not found" }); return; }
+  if (isAgentSourcedAndBlockedForStaff(req.user!, noteApp.agentId)) {
+    res.status(404).json({ error: "Application not found" }); return;
+  }
 
   const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
   const conditions = [eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")];
