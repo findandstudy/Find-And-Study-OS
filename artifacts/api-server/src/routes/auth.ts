@@ -586,7 +586,7 @@ router.get("/auth/verify-email-token/:token", async (req: Request, res: Response
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.emailVerificationToken, token));
+    .where(eq(usersTable.emailVerificationToken, String(token)));
 
   if (!user) {
     res.redirect("/login?verifyError=invalid");

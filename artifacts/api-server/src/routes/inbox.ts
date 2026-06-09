@@ -293,7 +293,7 @@ router.get(
       id: number;
       firstName: string | null;
       lastName: string | null;
-      email: string;
+      email: string | null;
     };
 
     const contactsMap = new Map<number, ExternalContact>();

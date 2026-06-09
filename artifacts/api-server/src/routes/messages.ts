@@ -121,7 +121,7 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
     let photoMap: Record<number, string> = {};
     if (studentUserIds.length > 0) {
       const studentRows = await db
-        .select({ userId: studentsTable.userId, studentId: studentsTable.id })
+        .select({ id: studentsTable.id, userId: studentsTable.userId, studentId: studentsTable.id })
         .from(studentsTable)
         .where(and(inArray(studentsTable.userId, studentUserIds), isNull(studentsTable.deletedAt)));
       const studentIdMap: Record<number, number> = {};
@@ -330,7 +330,7 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
   if (studentSenders.length > 0) {
     const senderIds = [...new Set(studentSenders.map(m => m.senderId!))];
     const studentRows = await db
-      .select({ userId: studentsTable.userId, studentId: studentsTable.id })
+      .select({ id: studentsTable.id, userId: studentsTable.userId, studentId: studentsTable.id })
       .from(studentsTable)
       .where(and(inArray(studentsTable.userId, senderIds), isNull(studentsTable.deletedAt)));
     const sidMap: Record<number, number> = {};

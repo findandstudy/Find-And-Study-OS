@@ -1,8 +1,7 @@
 import express, { Router, json, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { eq, asc, desc, inArray, and } from "drizzle-orm";
-import type { PgTableWithColumns, TableConfig } from "drizzle-orm/pg-core";
-import type { PgColumn } from "drizzle-orm/pg-core";
+import type { AnyPgTable, AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   websitePagesTable,
   websitePageVersionsTable,
@@ -63,15 +62,13 @@ const VALID_BLOCK_TYPES = new Set([
   "testimonials", "section_title", "spacer_divider", "global_block",
 ]);
 
-type AnyPgTable = PgTableWithColumns<TableConfig>;
-
 function registerCrud(
   basePath: string,
   table: AnyPgTable,
-  idCol: PgColumn,
-  orderCol?: PgColumn
-) {
-  router.get(basePath, ...adminOnly, async (_req: Request, res: Response) => {
+  idCol: AnyPgColumn,
+  orderCol?: AnyPgColumn
+): void {
+  router.get(basePath, ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
     try {
       const rows = await db.select().from(table).orderBy(orderCol ? asc(orderCol) : asc(idCol));
       res.json(rows);
@@ -81,10 +78,10 @@ function registerCrud(
     }
   });
 
-  router.get(`${basePath}/:id`, ...adminOnly, async (req: Request, res: Response) => {
+  router.get(`${basePath}/:id`, ...adminOnly, async (req: Request, res: Response): Promise<void> => {
     try {
       const [row] = await db.select().from(table).where(eq(idCol, Number(req.params.id)));
-      if (!row) return res.status(404).json({ error: "Not found" });
+      if (!row) { res.status(404).json({ error: "Not found" }); return; }
       res.json(row);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Internal server error";
@@ -92,7 +89,7 @@ function registerCrud(
     }
   });
 
-  router.post(basePath, ...adminOnly, async (req: Request, res: Response) => {
+  router.post(basePath, ...adminOnly, async (req: Request, res: Response): Promise<void> => {
     try {
       const [row] = await db.insert(table).values(req.body).returning();
       res.status(201).json(row);
@@ -102,10 +99,10 @@ function registerCrud(
     }
   });
 
-  router.put(`${basePath}/:id`, ...adminOnly, async (req: Request, res: Response) => {
+  router.put(`${basePath}/:id`, ...adminOnly, async (req: Request, res: Response): Promise<void> => {
     try {
       const [row] = await db.update(table).set(req.body).where(eq(idCol, Number(req.params.id))).returning();
-      if (!row) return res.status(404).json({ error: "Not found" });
+      if (!row) { res.status(404).json({ error: "Not found" }); return; }
       res.json(row);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Internal server error";
@@ -113,10 +110,10 @@ function registerCrud(
     }
   });
 
-  router.delete(`${basePath}/:id`, ...adminOnly, async (req: Request, res: Response) => {
+  router.delete(`${basePath}/:id`, ...adminOnly, async (req: Request, res: Response): Promise<void> => {
     try {
       const [row] = await db.delete(table).where(eq(idCol, Number(req.params.id))).returning();
-      if (!row) return res.status(404).json({ error: "Not found" });
+      if (!row) { res.status(404).json({ error: "Not found" }); return; }
       res.json({ success: true });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Internal server error";
@@ -143,7 +140,7 @@ registerCrud("/website/collections/team-members", websiteCollectionsTeamMembersT
 registerCrud("/website/collections/faqs", websiteCollectionsFaqsTable, websiteCollectionsFaqsTable.id, websiteCollectionsFaqsTable.sortOrder);
 registerCrud("/website/collections/testimonials", websiteCollectionsTestimonialsTable, websiteCollectionsTestimonialsTable.id, websiteCollectionsTestimonialsTable.sortOrder);
 
-router.get("/website/pages/:pageId/blocks", ...adminOnly, async (req: Request, res: Response) => {
+router.get("/website/pages/:pageId/blocks", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const rows = await db.select().from(websitePageBlocksTable)
       .where(eq(websitePageBlocksTable.pageId, Number(req.params.pageId)))
@@ -155,7 +152,7 @@ router.get("/website/pages/:pageId/blocks", ...adminOnly, async (req: Request, r
   }
 });
 
-router.get("/website/pages/:pageId/versions", ...adminOnly, async (req: Request, res: Response) => {
+router.get("/website/pages/:pageId/versions", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const rows = await db.select({
       id: websitePageVersionsTable.id,
@@ -240,13 +237,13 @@ function fieldsExportRows(
   }));
 }
 
-router.post("/website/forms/export", ...adminOnly, async (req: Request, res: Response) => {
+router.post("/website/forms/export", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const { ids } = (req.body || {}) as { ids?: unknown };
     let forms;
     if (Array.isArray(ids) && ids.length > 0) {
       const numericIds = ids.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0);
-      if (numericIds.length === 0) return res.status(400).json({ error: "ids must be a non-empty array of positive integers" });
+      if (numericIds.length === 0) return void res.status(400).json({ error: "ids must be a non-empty array of positive integers" });
       forms = await db.select().from(websiteFormsTable).where(inArray(websiteFormsTable.id, numericIds)).orderBy(asc(websiteFormsTable.name));
     } else {
       forms = await db.select().from(websiteFormsTable).orderBy(asc(websiteFormsTable.name));
@@ -278,7 +275,7 @@ router.post("/website/forms/export", ...adminOnly, async (req: Request, res: Res
   }
 });
 
-router.get("/website/forms/template", ...adminOnly, async (_req: Request, res: Response) => {
+router.get("/website/forms/template", ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
   try {
     const opts = await loadFormDropdownOptions();
     const pick = <T,>(arr: readonly T[], i: number): T | undefined => arr[i] ?? arr[0];
@@ -399,10 +396,10 @@ router.post(
   "/website/forms/import",
   ...adminOnly,
   express.raw({ type: XLSX_CONTENT_TYPE, limit: "2mb" }),
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response): Promise<void> => {
     const conflict: ConflictStrategy = isValidConflictStrategy(req.query.conflict) ? req.query.conflict : "skip";
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-      return res.status(400).json({ error: "Upload an .xlsx file with Content-Type " + XLSX_CONTENT_TYPE });
+      return void res.status(400).json({ error: "Upload an .xlsx file with Content-Type " + XLSX_CONTENT_TYPE });
     }
 
     const opts = await loadFormDropdownOptions();
@@ -414,7 +411,7 @@ router.post(
       });
     } catch (err) {
       const e = err as ImportValidationError;
-      return res.status(e.status || 400).json({ error: e.message });
+      return void res.status(e.status || 400).json({ error: e.message });
     }
 
     const rawForms = parsed.sheets.get("Forms")?.rows ?? [];
@@ -532,7 +529,7 @@ router.post(
   },
 );
 
-router.get("/website/forms/:formId/fields", ...adminOnly, async (req: Request, res: Response) => {
+router.get("/website/forms/:formId/fields", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const rows = await db.select().from(websiteFormFieldsTable)
       .where(eq(websiteFormFieldsTable.formId, Number(req.params.formId)))
@@ -544,7 +541,7 @@ router.get("/website/forms/:formId/fields", ...adminOnly, async (req: Request, r
   }
 });
 
-router.get("/website/menus/:menuId/items", ...adminOnly, async (req: Request, res: Response) => {
+router.get("/website/menus/:menuId/items", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const rows = await db.select().from(websiteNavigationItemsTable)
       .where(eq(websiteNavigationItemsTable.menuId, Number(req.params.menuId)))
@@ -556,7 +553,7 @@ router.get("/website/menus/:menuId/items", ...adminOnly, async (req: Request, re
   }
 });
 
-router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res: Response) => {
+router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const pageId = Number(req.params.id);
     const result = await db.transaction(async (tx) => {
@@ -587,7 +584,7 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
 
       return { page, version };
     });
-    if (!result) return res.status(404).json({ error: "Not found" });
+    if (!result) return void res.status(404).json({ error: "Not found" });
     res.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -595,13 +592,13 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
   }
 });
 
-router.post("/website/pages/:id/unpublish", ...adminOnly, async (req: Request, res: Response) => {
+router.post("/website/pages/:id/unpublish", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const [page] = await db.update(websitePagesTable)
       .set({ status: "draft", publishedAt: null })
       .where(eq(websitePagesTable.id, Number(req.params.id)))
       .returning();
-    if (!page) return res.status(404).json({ error: "Not found" });
+    if (!page) return void res.status(404).json({ error: "Not found" });
     res.json(page);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -609,13 +606,13 @@ router.post("/website/pages/:id/unpublish", ...adminOnly, async (req: Request, r
   }
 });
 
-router.post("/website/blog-posts/:id/publish", ...adminOnly, async (req: Request, res: Response) => {
+router.post("/website/blog-posts/:id/publish", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const [post] = await db.update(websiteBlogPostsTable)
       .set({ status: "published", publishedAt: new Date() })
       .where(eq(websiteBlogPostsTable.id, Number(req.params.id)))
       .returning();
-    if (!post) return res.status(404).json({ error: "Not found" });
+    if (!post) return void res.status(404).json({ error: "Not found" });
     res.json(post);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -623,13 +620,13 @@ router.post("/website/blog-posts/:id/publish", ...adminOnly, async (req: Request
   }
 });
 
-router.post("/website/blog-posts/:id/unpublish", ...adminOnly, async (req: Request, res: Response) => {
+router.post("/website/blog-posts/:id/unpublish", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const [post] = await db.update(websiteBlogPostsTable)
       .set({ status: "draft", publishedAt: null })
       .where(eq(websiteBlogPostsTable.id, Number(req.params.id)))
       .returning();
-    if (!post) return res.status(404).json({ error: "Not found" });
+    if (!post) return void res.status(404).json({ error: "Not found" });
     res.json(post);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -637,16 +634,16 @@ router.post("/website/blog-posts/:id/unpublish", ...adminOnly, async (req: Reque
   }
 });
 
-router.put("/website/theme-tokens/batch", ...adminOnly, async (req: Request, res: Response) => {
+router.put("/website/theme-tokens/batch", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const tokens: { tokenGroup: string; tokenKey: string; tokenValue: string | null; description?: string }[] = req.body.tokens;
-    if (!Array.isArray(tokens)) return res.status(400).json({ error: "tokens array required" });
+    if (!Array.isArray(tokens)) return void res.status(400).json({ error: "tokens array required" });
     for (const t of tokens) {
       if (typeof t.tokenGroup !== "string" || !t.tokenGroup || typeof t.tokenKey !== "string" || !t.tokenKey) {
-        return res.status(400).json({ error: "Each token must have non-empty tokenGroup and tokenKey strings" });
+        return void res.status(400).json({ error: "Each token must have non-empty tokenGroup and tokenKey strings" });
       }
       if (t.tokenValue !== null && typeof t.tokenValue !== "string") {
-        return res.status(400).json({ error: "tokenValue must be a string or null" });
+        return void res.status(400).json({ error: "tokenValue must be a string or null" });
       }
     }
     const results = await db.transaction(async (tx) => {
@@ -685,7 +682,7 @@ router.put("/website/theme-tokens/batch", ...adminOnly, async (req: Request, res
   }
 });
 
-router.delete("/website/theme-tokens/all", ...adminOnly, async (_req: Request, res: Response) => {
+router.delete("/website/theme-tokens/all", ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
   try {
     await db.delete(websiteThemeTokensTable);
     res.json({ success: true });
@@ -704,10 +701,10 @@ const DEFAULT_PAGES = [
   { title: "Contact", slug: "contact", sortOrder: 5, template: "contact" },
 ];
 
-router.post("/website/pages/seed", ...adminOnly, async (req: Request, res: Response) => {
+router.post("/website/pages/seed", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const existing = await db.select().from(websitePagesTable);
-    if (existing.length > 0) return res.json({ seeded: false, pages: existing });
+    if (existing.length > 0) return void res.json({ seeded: false, pages: existing });
     const pages = await db.insert(websitePagesTable).values(
       DEFAULT_PAGES.map(p => ({ ...p, status: "draft" as const, locale: "en", createdBy: req.user?.id }))
     ).returning();
@@ -718,7 +715,7 @@ router.post("/website/pages/seed", ...adminOnly, async (req: Request, res: Respo
   }
 });
 
-router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Request, res: Response) => {
+router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const pageId = Number(req.params.pageId);
     const { blocks, meta, translationsJson } = req.body;
@@ -726,7 +723,7 @@ router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Reque
     if (Array.isArray(blocks)) {
       const invalidBlock = blocks.find((b: { blockType: string }) => !VALID_BLOCK_TYPES.has(b.blockType));
       if (invalidBlock) {
-        return res.status(400).json({ error: `Invalid block type: ${invalidBlock.blockType}` });
+        return void res.status(400).json({ error: `Invalid block type: ${invalidBlock.blockType}` });
       }
     }
 
@@ -766,14 +763,14 @@ router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Reque
   }
 });
 
-router.post("/website/pages/:pageId/restore-version/:versionId", ...adminOnly, async (req: Request, res: Response) => {
+router.post("/website/pages/:pageId/restore-version/:versionId", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const pageId = Number(req.params.pageId);
     const versionId = Number(req.params.versionId);
 
     const [version] = await db.select().from(websitePageVersionsTable)
       .where(eq(websitePageVersionsTable.id, versionId));
-    if (!version || version.pageId !== pageId) return res.status(404).json({ error: "Version not found" });
+    if (!version || version.pageId !== pageId) return void res.status(404).json({ error: "Version not found" });
 
     const snapshot = version.blocksSnapshot as Array<{
       blockType: string;
@@ -822,7 +819,7 @@ router.post("/website/pages/:pageId/restore-version/:versionId", ...adminOnly, a
 
 registerCrud("/website/form-submissions", websiteFormSubmissionsTable, websiteFormSubmissionsTable.id);
 
-router.get("/website/forms/:formId/submissions", ...adminOnly, async (req: Request, res: Response) => {
+router.get("/website/forms/:formId/submissions", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const { page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = Math.max(1, parseInt(page, 10));
@@ -844,28 +841,28 @@ router.get("/website/forms/:formId/submissions", ...adminOnly, async (req: Reque
   }
 });
 
-router.get("/public/website-forms/:slug/check", async (req: Request, res: Response) => {
+router.get("/public/website-forms/:slug/check", async (req: Request, res: Response): Promise<void> => {
   try {
     const [form] = await db.select({ id: websiteFormsTable.id })
       .from(websiteFormsTable)
-      .where(and(eq(websiteFormsTable.slug, req.params.slug), eq(websiteFormsTable.isActive, true)));
+      .where(and(eq(websiteFormsTable.slug, String(req.params.slug)), eq(websiteFormsTable.isActive, true)));
     res.json({ exists: !!form });
   } catch {
     res.json({ exists: false });
   }
 });
 
-router.post("/public/website-forms/:slug/submit", async (req: Request, res: Response) => {
+router.post("/public/website-forms/:slug/submit", async (req: Request, res: Response): Promise<void> => {
   let formRecord: typeof websiteFormsTable.$inferSelect | undefined;
   try {
     const { slug } = req.params;
     const [form] = await db.select().from(websiteFormsTable)
-      .where(eq(websiteFormsTable.slug, slug));
-    if (!form || !form.isActive) return res.status(404).json({ error: "Form not found" });
+      .where(eq(websiteFormsTable.slug, String(slug)));
+    if (!form || !form.isActive) return void res.status(404).json({ error: "Form not found" });
     formRecord = form;
 
     const { _hp, ...formData } = req.body;
-    if (_hp) return res.json({ success: true });
+    if (_hp) return void res.json({ success: true });
 
     const fields = await db.select().from(websiteFormFieldsTable)
       .where(eq(websiteFormFieldsTable.formId, form.id))
@@ -874,31 +871,31 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
     for (const field of fields) {
       const val = formData[field.name];
       if (field.isRequired && !val) {
-        return res.status(400).json({ error: `${field.label} is required` });
+        return void res.status(400).json({ error: `${field.label} is required` });
       }
       if (val) {
         const strVal = String(val);
         const rules = (field.validationRules || {}) as Record<string, string>;
 
         if (field.fieldType === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(strVal)) {
-          return res.status(400).json({ error: `${field.label} must be a valid email address` });
+          return void res.status(400).json({ error: `${field.label} must be a valid email address` });
         }
         if (field.fieldType === "url" && !/^https?:\/\/.+/.test(strVal)) {
-          return res.status(400).json({ error: `${field.label} must be a valid URL` });
+          return void res.status(400).json({ error: `${field.label} must be a valid URL` });
         }
         if (field.fieldType === "phone" && !/^[+\d\s()-]{6,20}$/.test(strVal)) {
-          return res.status(400).json({ error: `${field.label} must be a valid phone number` });
+          return void res.status(400).json({ error: `${field.label} must be a valid phone number` });
         }
         if (rules.minLength && strVal.length < Number(rules.minLength)) {
-          return res.status(400).json({ error: `${field.label} must be at least ${rules.minLength} characters` });
+          return void res.status(400).json({ error: `${field.label} must be at least ${rules.minLength} characters` });
         }
         if (rules.maxLength && strVal.length > Number(rules.maxLength)) {
-          return res.status(400).json({ error: `${field.label} must be at most ${rules.maxLength} characters` });
+          return void res.status(400).json({ error: `${field.label} must be at most ${rules.maxLength} characters` });
         }
         if (rules.pattern) {
           try {
             if (!new RegExp(rules.pattern).test(strVal)) {
-              return res.status(400).json({ error: `${field.label} does not match the required format` });
+              return void res.status(400).json({ error: `${field.label} does not match the required format` });
             }
           } catch {}
         }
@@ -978,7 +975,7 @@ router.post("/public/website-forms/:slug/submit", async (req: Request, res: Resp
   }
 });
 
-router.get("/website/seo-overview", ...adminOnly, async (_req: Request, res: Response) => {
+router.get("/website/seo-overview", ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
   try {
     const pages = await db.select({
       id: websitePagesTable.id,
@@ -1004,7 +1001,7 @@ router.get("/website/seo-overview", ...adminOnly, async (_req: Request, res: Res
   }
 });
 
-router.get("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Response) => {
+router.get("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const [page] = await db.select({
       slug: websitePagesTable.slug,
@@ -1020,7 +1017,7 @@ router.get("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
       twitterDescription: websitePagesTable.twitterDescription,
       twitterImageUrl: websitePagesTable.twitterImageUrl,
     }).from(websitePagesTable).where(eq(websitePagesTable.id, Number(req.params.id)));
-    if (!page) return res.status(404).json({ error: "Page not found" });
+    if (!page) return void res.status(404).json({ error: "Page not found" });
     res.json(page);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -1028,7 +1025,7 @@ router.get("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
   }
 });
 
-router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Response) => {
+router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const allowedFields = [
       "metaTitle", "metaDescription", "ogImageUrl", "canonicalUrl",
@@ -1043,7 +1040,7 @@ router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
       .set(updates)
       .where(eq(websitePagesTable.id, Number(req.params.id)))
       .returning();
-    if (!page) return res.status(404).json({ error: "Not found" });
+    if (!page) return void res.status(404).json({ error: "Not found" });
     res.json(page);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -1067,15 +1064,15 @@ async function resolveAiIntegration(): Promise<{ provider: "openai" | "anthropic
   return null;
 }
 
-router.post("/website/ai/generate", ...adminOnly, async (req: Request, res: Response) => {
+router.post("/website/ai/generate", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const aiConfig = await resolveAiIntegration();
     if (!aiConfig) {
-      return res.status(400).json({ error: "AI not configured. Enable OpenAI or Anthropic Claude in Settings > Integrations." });
+      return void res.status(400).json({ error: "AI not configured. Enable OpenAI or Anthropic Claude in Settings > Integrations." });
     }
 
     const { action, context, locale } = req.body;
-    if (!action) return res.status(400).json({ error: "action is required" });
+    if (!action) return void res.status(400).json({ error: "action is required" });
 
     const { AiContentService } = await import("../lib/aiService");
     const aiService = new AiContentService(aiConfig);
@@ -1088,7 +1085,7 @@ router.post("/website/ai/generate", ...adminOnly, async (req: Request, res: Resp
   }
 });
 
-router.get("/website/ai/status", ...adminOnly, async (_req: Request, res: Response) => {
+router.get("/website/ai/status", ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
   try {
     const aiConfig = await resolveAiIntegration();
     res.json({ configured: !!aiConfig, provider: aiConfig?.provider || null });
@@ -1098,7 +1095,7 @@ router.get("/website/ai/status", ...adminOnly, async (_req: Request, res: Respon
   }
 });
 
-router.get("/website/translations/status", ...adminOnly, async (_req: Request, res: Response) => {
+router.get("/website/translations/status", ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
   try {
     const [settings] = await db.select({ supportedLanguages: settingsTable.supportedLanguages }).from(settingsTable);
     const locales = (settings?.supportedLanguages || "en").split(",").map((l: string) => l.trim());
@@ -1135,13 +1132,13 @@ router.get("/website/translations/status", ...adminOnly, async (_req: Request, r
   }
 });
 
-router.put("/website/pages/:id/translations", ...adminOnly, async (req: Request, res: Response) => {
+router.put("/website/pages/:id/translations", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const [page] = await db.update(websitePagesTable)
       .set({ translationsJson: req.body.translations || {} })
       .where(eq(websitePagesTable.id, Number(req.params.id)))
       .returning();
-    if (!page) return res.status(404).json({ error: "Not found" });
+    if (!page) return void res.status(404).json({ error: "Not found" });
     res.json(page);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -1149,13 +1146,13 @@ router.put("/website/pages/:id/translations", ...adminOnly, async (req: Request,
   }
 });
 
-router.put("/website/blog-posts/:id/translations", ...adminOnly, async (req: Request, res: Response) => {
+router.put("/website/blog-posts/:id/translations", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const [post] = await db.update(websiteBlogPostsTable)
       .set({ translationsJson: req.body.translations || {} })
       .where(eq(websiteBlogPostsTable.id, Number(req.params.id)))
       .returning();
-    if (!post) return res.status(404).json({ error: "Not found" });
+    if (!post) return void res.status(404).json({ error: "Not found" });
     res.json(post);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";

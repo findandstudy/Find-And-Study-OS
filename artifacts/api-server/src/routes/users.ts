@@ -44,13 +44,12 @@ router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
     if (roleList.length > 0) conditions.push(inArray(usersTable.role, roleList));
   }
   if (search) {
-    conditions.push(
-      or(
-        ilike(usersTable.firstName, `%${search}%`),
-        ilike(usersTable.lastName, `%${search}%`),
-        ilike(usersTable.email, `%${search}%`)
-      )
+    const searchCond = or(
+      ilike(usersTable.firstName, `%${search}%`),
+      ilike(usersTable.lastName, `%${search}%`),
+      ilike(usersTable.email, `%${search}%`)
     );
+    if (searchCond) conditions.push(searchCond);
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

@@ -432,7 +432,7 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
   }
 
   const bulkUser = req.user!;
-  const bulkOrigin = await inferOriginFromUser(bulkUser.role, bulkUser.id, (bulkUser as any).managingAgentId);
+  const bulkOrigin = await inferOriginFromUser({ role: bulkUser.role, id: bulkUser.id, managingAgentId: (bulkUser as any).managingAgentId });
   const inserted: any[] = [];
   const errors: any[] = [];
 
@@ -478,7 +478,7 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
     }
   }
 
-  await logAudit(req.user!.id, "bulk_create_students", "student", null, { count: inserted.length }, req.ip);
+  await logAudit(req.user!.id, "bulk_create_students", "student", undefined, { count: inserted.length }, req.ip);
   res.status(201).json({ inserted, errors, total: students.length, success: inserted.length });
 });
 
@@ -826,7 +826,7 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
       .where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     const result = await db.update(studentsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_assign_students", "student", null, { ids: numericIds, assignedToId }, req.ip);
+    await logAudit(req.user!.id, "bulk_assign_students", "student", undefined, { ids: numericIds, assignedToId }, req.ip);
     const canCascade = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
     if (canCascade) {
       for (const s of affected) {
@@ -841,7 +841,7 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
   } else if (action === "move" && status) {
     const result = await db.update(studentsTable).set({ status }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_move_students", "student", null, { ids: numericIds, status }, req.ip);
+    await logAudit(req.user!.id, "bulk_move_students", "student", undefined, { ids: numericIds, status }, req.ip);
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
   }

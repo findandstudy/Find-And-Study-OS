@@ -350,7 +350,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   const parsed = rows.map((r, rowIdx) => {
     // Excel parsed via XLSX often gives "" for empty cells, which `??` does
     // not treat as missing — coerce blanks to undefined first.
-    const rawId = r.universityId === "" || r.universityId === null ? undefined : r.universityId;
+    const rawId = (r.universityId as unknown) === "" || r.universityId === null ? undefined : r.universityId;
     const rawName = typeof r.universityName === "string" && r.universityName.trim() ? r.universityName.trim() : undefined;
     const uid = rawId ?? (rawName ? uniNameMap[rawName.toLowerCase()] : undefined);
     if (!uid) {
@@ -788,7 +788,7 @@ router.post("/catalog-options/orphans/cleanup", requireAuth, requireRole(...MANA
       });
       return;
     }
-    await logAudit(req.user!.id, "cleanup_orphan_document_refs", "catalog_option", null, { documentType: key, removed }, req.ip);
+    await logAudit(req.user!.id, "cleanup_orphan_document_refs", "catalog_option", undefined, { documentType: key, removed }, req.ip);
     res.json({ ok: true, action, documentType: key, removed });
     return;
   }
@@ -865,10 +865,10 @@ router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES)
     opt = row;
 
     if (row.category === "documents") {
-      const usage = await getDocumentUsage(row.value, tx as DbOrTx);
+      const usage = await getDocumentUsage(row.value, tx as unknown as DbOrTx);
       if (usage.totals.total > 0) { blocked = { kind: "documents", usage }; return; }
     } else if (row.category === "degree") {
-      const usage = await getDegreeUsage(row.id, tx as DbOrTx);
+      const usage = await getDegreeUsage(row.id, tx as unknown as DbOrTx);
       if (usage.totals.documents > 0) { blocked = { kind: "degree", usage }; return; }
     } else if (row.category === "currency") {
       const code = String(row.value).toUpperCase();
@@ -891,29 +891,30 @@ router.delete("/catalog-options/:id", requireAuth, requireRole(...MANAGER_ROLES)
 
   if (!opt) { res.sendStatus(204); return; }
 
-  if (blocked) {
+  const b = blocked as (BlockedReason | null);
+  if (b) {
     await logAudit(req.user!.id, "delete_catalog_option_blocked", "catalog_option", id, {
       category: opt.category, value: opt.value,
-      totals: blocked.kind === "currency" ? blocked.usage : blocked.usage.totals,
+      totals: b.kind === "currency" ? b.usage : b.usage.totals,
     }, req.ip);
-    if (blocked.kind === "documents") {
+    if (b.kind === "documents") {
       res.status(409).json({
         error: "in_use",
         message: "Bu belge tipi şu programlarda veya derecelerde kullanılıyor. Önce buralardan kaldırın, sonra silmeyi tekrar deneyin.",
         category: opt.category,
         value: opt.value,
-        ...blocked.usage,
+        ...b.usage,
       });
-    } else if (blocked.kind === "degree") {
+    } else if (b.kind === "degree") {
       res.status(409).json({
         error: "in_use",
         message: "Bu dereceye bağlı belge gereksinimleri var. Önce bunları temizleyin, sonra silmeyi tekrar deneyin.",
         category: opt.category,
         value: opt.value,
-        ...blocked.usage,
+        ...b.usage,
       });
     } else {
-      const u = blocked.usage;
+      const u = b.usage;
       const parts: string[] = [];
       if (u.programs > 0) parts.push(`${u.programs} program`);
       if (u.commissions > 0) parts.push(`${u.commissions} komisyon`);

@@ -39,7 +39,7 @@ router.get("/public/destinations", async (_req: Request, res: Response): Promise
 });
 
 router.get("/public/destinations/:slug", async (req: Request, res: Response): Promise<void> => {
-  const { slug } = req.params;
+  const slug = String(req.params.slug);
 
   const [destination] = await db.select()
     .from(destinationsTable)

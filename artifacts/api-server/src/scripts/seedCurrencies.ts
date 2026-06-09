@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+// Pool type from pg — resolved via actual usage (pool.query)
 
 /**
  * Seed the master list of currencies into `catalog_options` under
@@ -20,7 +20,7 @@ const CURRENCIES: CurrencySeed[] = [
   { code: "AED", label: "UAE Dirham", symbol: "د.إ" },
 ];
 
-export async function seedCurrencies(pool: Pool): Promise<void> {
+export async function seedCurrencies(pool: { query: (...args: any[]) => Promise<any> }): Promise<void> {
   try {
     // Race-safe uniqueness — relies on the index seedDocumentTypes also
     // creates. Create here too in case currencies are seeded standalone.

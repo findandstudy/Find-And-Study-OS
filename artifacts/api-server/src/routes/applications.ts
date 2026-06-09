@@ -1105,7 +1105,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         subAgentId: agentComm.subAgentId,
         subAgentCommissionRate: agentComm.subAgentCommissionRate,
         subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
-        ...(commStatus === "confirmed" ? { confirmedAt: new Date().toISOString() } : {}),
+        ...(commStatus === "confirmed" ? { confirmedAt: new Date() } : {}),
       });
     }
     for (const comm of existingComms) {
@@ -1115,7 +1115,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         }
       } else if (commStatus === "confirmed") {
         if (comm.status === "potential" || comm.status === "excluded") {
-          await db.update(commissionsTable).set({ status: "confirmed", confirmedAt: new Date().toISOString() }).where(eq(commissionsTable.id, comm.id));
+          await db.update(commissionsTable).set({ status: "confirmed", confirmedAt: new Date() }).where(eq(commissionsTable.id, comm.id));
         }
       } else {
         if (comm.status === "confirmed" && toNum(comm.universityCollected) <= 0) {
@@ -1307,7 +1307,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
       .where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     const result = await db.update(applicationsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_assign_applications", "application", null, { ids: numericIds, assignedToId }, req.ip);
+    await logAudit(req.user!.id, "bulk_assign_applications", "application", undefined, { ids: numericIds, assignedToId }, req.ip);
     const canCascadeApps = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
     if (canCascadeApps) {
       for (const a of affectedApps) {
@@ -1406,7 +1406,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
           subAgentId: agentComm.subAgentId,
           subAgentCommissionRate: agentComm.subAgentCommissionRate,
           subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
-          ...(commStatus === "confirmed" ? { confirmedAt: new Date().toISOString() } : {}),
+          ...(commStatus === "confirmed" ? { confirmedAt: new Date() } : {}),
         });
       }
       for (const comm of existingComms) {
@@ -1416,7 +1416,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
           }
         } else if (commStatus === "confirmed") {
           if (comm.status === "potential" || comm.status === "excluded") {
-            await db.update(commissionsTable).set({ status: "confirmed", confirmedAt: new Date().toISOString() }).where(eq(commissionsTable.id, comm.id));
+            await db.update(commissionsTable).set({ status: "confirmed", confirmedAt: new Date() }).where(eq(commissionsTable.id, comm.id));
           }
         } else {
           if (comm.status === "confirmed" && toNum(comm.universityCollected) <= 0) {

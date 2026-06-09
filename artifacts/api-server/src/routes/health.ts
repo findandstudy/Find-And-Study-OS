@@ -17,7 +17,7 @@ function getVersion(): string {
       cachedVersion = "0.0.0";
     }
   }
-  return cachedVersion;
+  return cachedVersion!;
 }
 
 router.get("/healthz", (_req, res) => {

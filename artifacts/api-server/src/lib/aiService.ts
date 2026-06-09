@@ -40,7 +40,7 @@ async function callOpenAI(config: AiProviderConfig, prompt: string): Promise<str
     const err = await response.text();
     throw new Error(`OpenAI error: ${err}`);
   }
-  const data = await response.json();
+  const data = await response.json() as Record<string, any>;
   return data.choices?.[0]?.message?.content || "";
 }
 
@@ -62,7 +62,7 @@ async function callAnthropic(config: AiProviderConfig, prompt: string): Promise<
     const err = await response.text();
     throw new Error(`Anthropic error: ${err}`);
   }
-  const data = await response.json();
+  const data = await response.json() as Record<string, any>;
   return data.content?.[0]?.text || "";
 }
 

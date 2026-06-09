@@ -442,7 +442,7 @@ router.post("/embed/widgets/export", requireAuth, requireRole(...EMBED_ADMIN_ROL
     ],
     meta: { kind: EMBED_KIND, version: "1", exportedAt: new Date().toISOString() },
   });
-  await logAudit(req.user!.id, "export_embed_widgets", "embed_widget", null, { count: rows.length }, req.ip);
+  await logAudit(req.user!.id, "export_embed_widgets", "embed_widget", undefined, { count: rows.length }, req.ip);
   res.setHeader("Content-Type", XLSX_CONTENT_TYPE);
   res.setHeader("Content-Disposition", `attachment; filename="embed-widgets-${new Date().toISOString().slice(0,10)}.xlsx"`);
   res.send(buf);
@@ -600,11 +600,13 @@ router.post(
             const [hit] = await db.select({ id: embedWidgetsTable.id }).from(embedWidgetsTable).where(eq(embedWidgetsTable.slug, cand));
             return !!hit;
           });
-          const [created] = await db.insert(embedWidgetsTable).values({ ...insertValues, slug: newSlug }).returning();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const [created] = await db.insert(embedWidgetsTable).values({ ...insertValues, slug: newSlug } as any).returning();
           tallyResult(summary, { index: i, slug, status: "renamed", finalSlug: created.slug });
           continue;
         }
-        const [created] = await db.insert(embedWidgetsTable).values(insertValues).returning();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const [created] = await db.insert(embedWidgetsTable).values(insertValues as any).returning();
         tallyResult(summary, { index: i, slug: created.slug, status: "created" });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -612,7 +614,7 @@ router.post(
       }
     }
 
-    await logAudit(req.user!.id, "import_embed_widgets", "embed_widget", null, {
+    await logAudit(req.user!.id, "import_embed_widgets", "embed_widget", undefined, {
       total: summary.total, created: summary.created, updated: summary.updated,
       renamed: summary.renamed, skipped: summary.skipped, errors: summary.errors, conflict,
     }, req.ip);
@@ -702,7 +704,7 @@ router.get("/embed/submissions", requireAuth, requireRole(...STAFF_ROLES), async
 //
 // CORS: open-to-all on /token (the API key is the auth gate, not CORS).
 router.get("/public/embed/:slug/token", embedTokenLimiter, async (req, res): Promise<void> => {
-  const { slug } = req.params;
+  const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
@@ -753,7 +755,7 @@ router.get("/public/embed/:slug/token", embedTokenLimiter, async (req, res): Pro
 });
 
 router.get("/public/embed/:slug/config", async (req, res): Promise<void> => {
-  const { slug } = req.params;
+  const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
@@ -778,7 +780,7 @@ router.get("/public/embed/:slug/config", async (req, res): Promise<void> => {
 });
 
 router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
-  const { slug } = req.params;
+  const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
@@ -881,7 +883,7 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
  */
 router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
   try {
-    const { slug } = req.params;
+    const slug = String(req.params.slug);
     const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
     if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
@@ -989,7 +991,7 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
 // clicks "Continue" on the Personal Info step so the lead lands in the
 // "new" column even if the user abandons the form before submitting docs.
 router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async (req, res): Promise<void> => {
-  const { slug } = req.params;
+  const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
@@ -1051,7 +1053,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
 });
 
 router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, async (req, res): Promise<void> => {
-  const { slug } = req.params;
+  const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
 
@@ -1393,7 +1395,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
 });
 
 router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
-  const { slug } = req.params;
+  const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).send("Widget not found"); return; }
 

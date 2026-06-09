@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+// Pool type from pg — resolved via actual usage (pool.query)
 
 /**
  * Seed the master list of document types into `catalog_options` under
@@ -122,7 +122,7 @@ const DOCUMENT_TYPES: DocSeed[] = [
   { key: "fraud_declaration", label: "Fraud Declaration", icon: "📝", accept: PDF_IMG },
 ];
 
-export async function seedDocumentTypes(pool: Pool): Promise<void> {
+export async function seedDocumentTypes(pool: { query: (...args: any[]) => Promise<any> }): Promise<void> {
   try {
     // Race-safe uniqueness: ensure (category, value) is unique BEFORE any
     // INSERT runs. Drops any pre-existing duplicates first (keeps lowest id).

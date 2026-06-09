@@ -251,7 +251,7 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
     }
     const lang = (requestedLang && typeof requestedLang === "string") ? requestedLang : (agent.preferredContractLanguage || "en");
     const entityType = agent.entityType === "individual" ? "individual" : "company";
-    let tpl = null as Awaited<ReturnType<typeof pickTemplate>>;
+    let tpl = null as unknown as Awaited<ReturnType<typeof pickTemplate>>;
     if (explicitTemplateId) {
       const tid = parseInt(String(explicitTemplateId), 10);
       if (!tid) { res.status(400).json({ error: "Invalid templateId" }); return; }
@@ -316,7 +316,7 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
   try {
     const { signerEmail, signerName, language, entityType, expiryDays, templateId } = req.body || {};
     const hasEmail = typeof signerEmail === "string" && signerEmail.trim().length > 0;
-    let tpl: Awaited<ReturnType<typeof pickTemplate>> | Awaited<ReturnType<typeof loadTemplateById>> = null;
+    let tpl: Awaited<ReturnType<typeof pickTemplate>> | Awaited<ReturnType<typeof loadTemplateById>> | null = null;
     if (templateId !== undefined && templateId !== null && templateId !== "") {
       const tid = typeof templateId === "number" ? templateId : parseInt(String(templateId), 10);
       if (!Number.isInteger(tid) || tid <= 0) { res.status(400).json({ error: "Invalid templateId" }); return; }

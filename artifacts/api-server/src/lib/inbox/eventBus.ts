@@ -1,5 +1,4 @@
 import { EventEmitter } from "events";
-import type { PoolClient } from "pg";
 import { pool } from "@workspace/db";
 
 export type InboxBusEvent =
@@ -25,7 +24,7 @@ const RECONNECT_DELAY_MS = 1000;
 const localEmitter = new EventEmitter();
 localEmitter.setMaxListeners(0);
 
-let listenClient: PoolClient | null = null;
+let listenClient: any = null;
 let connecting: Promise<void> | null = null;
 
 function scheduleReconnect(): void {
@@ -40,7 +39,7 @@ function scheduleReconnect(): void {
 async function connectListenClient(): Promise<void> {
   if (listenClient) return;
   if (connecting) return connecting;
-  connecting = (async () => {
+  connecting = (async (): Promise<void> => {
     try {
       const client = await pool.connect();
       const handleNotification = (msg: {
@@ -71,6 +70,7 @@ async function connectListenClient(): Promise<void> {
       client.on("error", handleError);
       await client.query(`LISTEN ${CHANNEL}`);
       listenClient = client;
+      return;
     } finally {
       connecting = null;
     }

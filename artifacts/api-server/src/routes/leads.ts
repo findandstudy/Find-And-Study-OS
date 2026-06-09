@@ -156,7 +156,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
 });
 
 router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<void> => {
-  const { token } = req.params;
+  const token = String(req.params.token);
   const [agent] = await db.select({ id: agentsTable.id, status: agentsTable.status })
     .from(agentsTable).where(eq(agentsTable.embedToken, token));
   if (!agent || agent.status !== "active") {
@@ -474,7 +474,7 @@ router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     }
   }
 
-  await logAudit(user.id, "bulk_create_leads", "lead", null, { count: inserted.length }, req.ip);
+  await logAudit(user.id, "bulk_create_leads", "lead", undefined, { count: inserted.length }, req.ip);
   res.status(201).json({ inserted, errors, total: leads.length, success: inserted.length });
 });
 
@@ -952,7 +952,7 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), asyn
       .where(inArray(leadsTable.id, numericIds));
     const result = await db.update(leadsTable).set({ assignedToId: newAssignedToId }).where(inArray(leadsTable.id, numericIds));
     updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_assign_leads", "lead", null, { ids: numericIds, assignedToId }, req.ip);
+    await logAudit(req.user!.id, "bulk_assign_leads", "lead", undefined, { ids: numericIds, assignedToId }, req.ip);
     const canCascadeLeads = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
     if (canCascadeLeads) {
       for (const l of affectedLeads) {
@@ -969,7 +969,7 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), asyn
   } else if (action === "move" && status) {
     const result = await db.update(leadsTable).set({ status }).where(inArray(leadsTable.id, numericIds));
     updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_move_leads", "lead", null, { ids: numericIds, status }, req.ip);
+    await logAudit(req.user!.id, "bulk_move_leads", "lead", undefined, { ids: numericIds, status }, req.ip);
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
   }
@@ -1447,10 +1447,10 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
         to: followUp.notes ? String(followUp.notes).slice(0, 200) : null,
       };
     }
-    await logAudit(req.user!.id, "update_follow_up", auditResource, auditResourceId, fuDiff, req.ip);
+    await logAudit(req.user!.id, "update_follow_up", auditResource, auditResourceId ?? undefined, fuDiff, req.ip);
   }
   if (isCompletionToggle && completed !== existingFu.completed) {
-    await logAudit(req.user!.id, completed ? "complete_follow_up" : "reopen_follow_up", auditResource, auditResourceId, {
+    await logAudit(req.user!.id, completed ? "complete_follow_up" : "reopen_follow_up", auditResource, auditResourceId ?? undefined, {
       followUpId: id,
       title: followUp.title,
     }, req.ip);
