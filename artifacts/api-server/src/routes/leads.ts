@@ -380,7 +380,9 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
   await applyLeadAssignmentRules(lead, req.ip);
   await logAudit(user.id, "create_lead", "lead", lead.id, {}, req.ip);
 
-  dispatchNotification({
+  // Sprint B: agent-sourced leads notify only admin roles (parity with Sprint A KURAL 1).
+  // Direct leads broadcast to all roles defined in the notification rule (staff + consultant).
+  const leadCreatedCtx: Parameters<typeof dispatchNotification>[0] = {
     actorUserId: req.user!.id,
     event: "lead.created",
     title: "New Lead Created",
@@ -388,7 +390,14 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     actionUrl: `/staff/leads/${lead.id}`,
     icon: "UserPlus",
     templateVars: { firstName: lead.firstName, lastName: lead.lastName, email: lead.email || "", phone: lead.phone || "" },
-  }).catch(() => {});
+  };
+  if (lead.agentId != null) {
+    const adminRows = await db.select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(inArray(usersTable.role, ADMIN_ROLES as string[]), eq(usersTable.isActive, true)));
+    leadCreatedCtx.recipientUserIds = adminRows.map(u => u.id);
+  }
+  dispatchNotification(leadCreatedCtx).catch(() => {});
 
   res.status(201).json(lead);
 });
