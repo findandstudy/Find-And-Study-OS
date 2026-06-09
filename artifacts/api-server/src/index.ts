@@ -917,6 +917,34 @@ async function seedClaudeIntegration() {
       console.error("[migrate] assignment.inconsistency notification rule:", err);
     }
 
+    // Idempotent: upgrade message.new to include email channel (was in_app only),
+    // and ensure note.created rule exists for environments seeded before it was added.
+    try {
+      await pool.query(`
+        UPDATE notification_rules
+        SET channels = '["in_app","email"]'::jsonb
+        WHERE event = 'message.new'
+          AND NOT (channels @> '["email"]'::jsonb)
+      `);
+      await pool.query(`
+        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
+        VALUES (
+          'note.created',
+          'Note Added',
+          'When a note is added to an application, student, or lead record',
+          'notes',
+          '["in_app","email"]'::jsonb,
+          'specific',
+          '[]'::jsonb,
+          true,
+          '{}'::jsonb
+        )
+        ON CONFLICT (event) DO NOTHING
+      `);
+    } catch (err) {
+      console.error("[migrate] notification_rules channel upgrades:", err);
+    }
+
     // One-shot data fix: sync leads and applications whose assigned_to_id does
     // not match their student's assigned_to_id. These accumulated over time
     // because assignment cascades are permission-gated and many historical

@@ -102,6 +102,12 @@ export const NOTIFICATION_EVENTS = {
       "message.mention": { name: "Mentioned in Message", description: "When you are mentioned in a message" },
     },
   },
+  notes: {
+    label: "Notes",
+    events: {
+      "note.created": { name: "Note Added", description: "When a note is added to an application, student, or lead record" },
+    },
+  },
   tasks: {
     label: "Tasks",
     events: {
@@ -143,7 +149,8 @@ export const DEFAULT_NOTIFICATION_RULES = [
   { event: "system.user_activated", name: "User Account Activated", category: "system", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "system.broadcast", name: "Broadcast Message", category: "system", channels: ["in_app"], recipientType: "all", recipientRoles: [] },
   { event: "system.announcement", name: "Announcement", category: "system", channels: ["in_app"], recipientType: "all", recipientRoles: [] },
-  { event: "message.new", name: "New Message", category: "messages", channels: ["in_app"], recipientType: "specific", recipientRoles: [] },
+  { event: "note.created", name: "Note Added", category: "notes", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
+  { event: "message.new", name: "New Message", category: "messages", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "message.mention", name: "Mentioned in Message", category: "messages", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "task.assigned", name: "Task Assigned", category: "tasks", channels: ["in_app"], recipientType: "specific", recipientRoles: [] },
   { event: "task.mention", name: "Mentioned in Task Note", category: "tasks", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
