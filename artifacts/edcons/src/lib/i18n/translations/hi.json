@@ -1713,7 +1713,11 @@
     "catAgent": "एजेंट",
     "allChannels": "सभी चैनल",
     "internal": "आंतरिक",
-    "subjectPrefix": "विषय: {subject}"
+    "subjectPrefix": "विषय: {subject}",
+    "delivered": "भेजा गया",
+    "seen": "देखा गया",
+    "readReceiptsOn": "पठन रसीदें चालू",
+    "readReceiptsOff": "पठन रसीदें बंद"
   },
   "settingsPage": {
     "navProfile": "प्रोफ़ाइल",

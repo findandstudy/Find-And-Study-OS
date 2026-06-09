@@ -1713,7 +1713,11 @@
     "catAgent": "Agente",
     "allChannels": "Todos los canales",
     "internal": "Interno",
-    "subjectPrefix": "Asunto: {subject}"
+    "subjectPrefix": "Asunto: {subject}",
+    "delivered": "Enviado",
+    "seen": "Visto",
+    "readReceiptsOn": "Confirmaciones de lectura activadas",
+    "readReceiptsOff": "Confirmaciones de lectura desactivadas"
   },
   "settingsPage": {
     "navProfile": "Perfil",

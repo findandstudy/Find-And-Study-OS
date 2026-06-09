@@ -1713,7 +1713,11 @@
     "catAgent": "نماینده",
     "allChannels": "همه کانال‌ها",
     "internal": "داخلی",
-    "subjectPrefix": "موضوع: {subject}"
+    "subjectPrefix": "موضوع: {subject}",
+    "delivered": "ارسال شد",
+    "seen": "دیده شد",
+    "readReceiptsOn": "تاییدیه خواندن فعال",
+    "readReceiptsOff": "تاییدیه خواندن غیرفعال"
   },
   "settingsPage": {
     "navProfile": "پروفایل",

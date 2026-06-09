@@ -1764,7 +1764,11 @@
     "catAgent": "وكيل",
     "allChannels": "جميع القنوات",
     "internal": "داخلي",
-    "subjectPrefix": "الموضوع: {subject}"
+    "subjectPrefix": "الموضوع: {subject}",
+    "delivered": "تم الإرسال",
+    "seen": "تمت الرؤية",
+    "readReceiptsOn": "إيصالات القراءة مفعّلة",
+    "readReceiptsOff": "إيصالات القراءة معطّلة"
   },
   "settingsPage": {
     "navProfile": "الملف الشخصي",

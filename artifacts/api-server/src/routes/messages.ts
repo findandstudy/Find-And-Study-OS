@@ -362,7 +362,13 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
     }
   }
 
-  res.json({ data: reversed });
+  const [convMeta] = await db
+    .select({ readReceiptsEnabled: conversationsTable.readReceiptsEnabled })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, conversationId))
+    .limit(1);
+
+  res.json({ data: reversed, readReceiptsEnabled: convMeta?.readReceiptsEnabled ?? true });
 });
 
 router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -500,12 +506,51 @@ router.get("/conversations/:id/participants", requireAuth, requireRole(...STAFF_
       role: usersTable.role,
       email: usersTable.email,
       joinedAt: conversationParticipantsTable.joinedAt,
+      lastReadAt: conversationParticipantsTable.lastReadAt,
     })
     .from(conversationParticipantsTable)
     .innerJoin(usersTable, eq(conversationParticipantsTable.userId, usersTable.id))
     .where(eq(conversationParticipantsTable.conversationId, conversationId));
 
   res.json({ data: participants });
+});
+
+router.patch("/conversations/:id/read-receipts", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const conversationId = parseInt(req.params.id, 10);
+  const userId = req.user!.id;
+
+  const [membership] = await db
+    .select({ id: conversationParticipantsTable.id })
+    .from(conversationParticipantsTable)
+    .where(and(
+      eq(conversationParticipantsTable.conversationId, conversationId),
+      eq(conversationParticipantsTable.userId, userId)
+    ))
+    .limit(1);
+
+  if (!membership) {
+    res.status(403).json({ error: "Not a participant of this conversation" });
+    return;
+  }
+
+  const [conv] = await db
+    .select({ readReceiptsEnabled: conversationsTable.readReceiptsEnabled })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, conversationId))
+    .limit(1);
+
+  if (!conv) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(conversationsTable)
+    .set({ readReceiptsEnabled: !conv.readReceiptsEnabled })
+    .where(eq(conversationsTable.id, conversationId))
+    .returning({ readReceiptsEnabled: conversationsTable.readReceiptsEnabled });
+
+  res.json({ readReceiptsEnabled: updated.readReceiptsEnabled });
 });
 
 router.get("/users-search", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {

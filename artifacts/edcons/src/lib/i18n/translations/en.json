@@ -2005,7 +2005,11 @@
     "catAgent": "Agent",
     "allChannels": "All Channels",
     "internal": "Internal",
-    "subjectPrefix": "Subject: {subject}"
+    "subjectPrefix": "Subject: {subject}",
+    "delivered": "Delivered",
+    "seen": "Seen",
+    "readReceiptsOn": "Read receipts on",
+    "readReceiptsOff": "Read receipts off"
   },
   "settingsPage": {
     "navProfile": "Profile",

@@ -1946,7 +1946,11 @@
     "catAgent": "Acente",
     "allChannels": "Tüm Kanallar",
     "internal": "Dahili",
-    "subjectPrefix": "Konu: {subject}"
+    "subjectPrefix": "Konu: {subject}",
+    "delivered": "İletildi",
+    "seen": "Görüldü",
+    "readReceiptsOn": "Okundu bilgisi açık",
+    "readReceiptsOff": "Okundu bilgisi kapalı"
   },
   "settingsPage": {
     "navProfile": "Profil",

@@ -1713,7 +1713,11 @@
     "catAgent": "代理",
     "allChannels": "所有渠道",
     "internal": "内部",
-    "subjectPrefix": "主题：{subject}"
+    "subjectPrefix": "主题：{subject}",
+    "delivered": "已发送",
+    "seen": "已读",
+    "readReceiptsOn": "已开启已读回执",
+    "readReceiptsOff": "已关闭已读回执"
   },
   "settingsPage": {
     "navProfile": "个人资料",

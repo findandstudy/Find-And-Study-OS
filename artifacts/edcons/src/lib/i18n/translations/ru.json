@@ -1764,7 +1764,11 @@
     "catAgent": "Агент",
     "allChannels": "Все каналы",
     "internal": "Внутренний",
-    "subjectPrefix": "Тема: {subject}"
+    "subjectPrefix": "Тема: {subject}",
+    "delivered": "Доставлено",
+    "seen": "Прочитано",
+    "readReceiptsOn": "Уведомления о прочтении включены",
+    "readReceiptsOff": "Уведомления о прочтении отключены"
   },
   "settingsPage": {
     "navProfile": "Профиль",

@@ -1713,7 +1713,11 @@
     "catAgent": "Agen",
     "allChannels": "Semua saluran",
     "internal": "Internal",
-    "subjectPrefix": "Subjek: {subject}"
+    "subjectPrefix": "Subjek: {subject}",
+    "delivered": "Terkirim",
+    "seen": "Dilihat",
+    "readReceiptsOn": "Tanda baca aktif",
+    "readReceiptsOff": "Tanda baca nonaktif"
   },
   "settingsPage": {
     "navProfile": "Profil",

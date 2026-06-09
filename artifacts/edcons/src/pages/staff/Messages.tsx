@@ -37,7 +37,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
-  FileText, Edit, Trash2, Copy, Check, X, Loader2, Eye, EyeOff, Globe, Download,
+  FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -50,8 +50,9 @@ interface Conversation {
   title: string | null;
   lastMessageAt: string | null;
   lastMessagePreview: string | null;
-  participants: Array<{ userId: number; firstName: string; lastName: string; avatarUrl: string | null; role: string }>;
+  participants: Array<{ userId: number; firstName: string; lastName: string; avatarUrl: string | null; role: string; lastReadAt?: string | null }>;
   unreadCount: number;
+  readReceiptsEnabled?: boolean;
 }
 
 interface MessageAttachment {
@@ -1072,7 +1073,9 @@ function MessageThread({
   const [newMessage, setNewMessage] = useState("");
   const channel = "internal" as const;
   const [sending, setSending] = useState(false);
-  const [participants, setParticipants] = useState<any[]>([]);
+  const [participants, setParticipants] = useState<Array<{ userId: number; firstName: string; lastName: string; avatarUrl: string | null; role: string; lastReadAt?: string | null }>>([]);
+  const [readReceiptsEnabled, setReadReceiptsEnabled] = useState(true);
+  const [togglingReceipts, setTogglingReceipts] = useState(false);
   const [summary, setSummary] = useState<ConversationAiSummary | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -1086,6 +1089,9 @@ function MessageThread({
     try {
       const res = await customFetch(`/api/conversations/${conversationId}/messages?limit=100`);
       setMessages((res as any)?.data || res || []);
+      if (typeof (res as any)?.readReceiptsEnabled === "boolean") {
+        setReadReceiptsEnabled((res as any).readReceiptsEnabled);
+      }
     } catch {}
   }, [conversationId]);
 
@@ -1098,6 +1104,7 @@ function MessageThread({
     // has no detail endpoint that returns aiSummary, so we seed it on demand
     // from the summarize response below.
     setSummary(null);
+    setReadReceiptsEnabled(true);
     Promise.all([
       fetchMessages(),
       customFetch(`/api/conversations/${conversationId}/participants`).then((r: any) => setParticipants(r?.data || r || [])),
@@ -1249,6 +1256,19 @@ function MessageThread({
   const others = participants.filter(p => p.userId !== user?.id);
   const threadTitle = others.map(p => `${p.firstName} ${p.lastName}`).join(", ") || "Conversation";
 
+  async function toggleReadReceipts() {
+    if (togglingReceipts) return;
+    setTogglingReceipts(true);
+    try {
+      const res: any = await customFetch(`/api/conversations/${conversationId}/read-receipts`, { method: "PATCH" });
+      if (typeof res?.readReceiptsEnabled === "boolean") setReadReceiptsEnabled(res.readReceiptsEnabled);
+    } catch {
+      toast({ title: t("messagesPage.downloadFailed"), variant: "destructive" });
+    } finally {
+      setTogglingReceipts(false);
+    }
+  }
+
   const ChannelIcon = channelIcon[channel] || MessageSquare;
 
   return (
@@ -1262,6 +1282,22 @@ function MessageThread({
           <p className="font-semibold text-sm truncate">{threadTitle}</p>
           <p className="text-xs text-muted-foreground">{participants.length} participants</p>
         </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={toggleReadReceipts}
+              disabled={togglingReceipts}
+              className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
+              aria-label={readReceiptsEnabled ? t("messagesPage.readReceiptsOn") : t("messagesPage.readReceiptsOff")}
+            >
+              {readReceiptsEnabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            {readReceiptsEnabled ? t("messagesPage.readReceiptsOn") : t("messagesPage.readReceiptsOff")}
+          </TooltipContent>
+        </Tooltip>
         <Badge variant="secondary" className={`text-xs ${channelColor[channel] || ""}`}>
           <ChannelIcon className="w-3 h-3 mr-1" />
           {channel}
@@ -1338,12 +1374,18 @@ function MessageThread({
                     )}
                     {hasTextContent && <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
                   </div>
-                  <p className={`text-[10px] text-muted-foreground mt-1 ${isMe ? "text-right" : ""}`}>
+                  <span className={`flex items-center gap-1 text-[10px] text-muted-foreground mt-1 ${isMe ? "justify-end" : ""}`}>
                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     {msg.channel !== "internal" && (
-                      <span className="ml-1.5 opacity-70">via {msg.channel}</span>
+                      <span className="ml-1 opacity-70">via {msg.channel}</span>
                     )}
-                  </p>
+                    {isMe && readReceiptsEnabled && (() => {
+                      const isSeen = others.some(p => p.lastReadAt && new Date(p.lastReadAt) >= new Date(msg.createdAt));
+                      return isSeen
+                        ? <Tooltip><TooltipTrigger asChild><span><CheckCheck className="w-3 h-3 text-primary inline" /></span></TooltipTrigger><TooltipContent side="top" className="text-xs">{t("messagesPage.seen")}</TooltipContent></Tooltip>
+                        : <Tooltip><TooltipTrigger asChild><span><Check className="w-3 h-3 opacity-50 inline" /></span></TooltipTrigger><TooltipContent side="top" className="text-xs">{t("messagesPage.delivered")}</TooltipContent></Tooltip>;
+                    })()}
+                  </span>
                 </div>
               </div>
             );

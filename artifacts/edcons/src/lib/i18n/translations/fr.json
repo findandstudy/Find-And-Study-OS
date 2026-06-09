@@ -1764,7 +1764,11 @@
     "catAgent": "Agent",
     "allChannels": "Tous les canaux",
     "internal": "Interne",
-    "subjectPrefix": "Objet : {subject}"
+    "subjectPrefix": "Objet : {subject}",
+    "delivered": "Envoyé",
+    "seen": "Lu",
+    "readReceiptsOn": "Accusés de lecture activés",
+    "readReceiptsOff": "Accusés de lecture désactivés"
   },
   "settingsPage": {
     "navProfile": "Profil",
