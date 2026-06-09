@@ -984,41 +984,21 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
           const configuredTypes = Array.isArray(mdAction.requiredDocTypes)
             ? (mdAction.requiredDocTypes as unknown[]).filter((t): t is string => typeof t === "string")
             : [];
-          // Task #286 — reconcile the configured request list against the
-          // documents the student already has on file (matched via the
-          // doc-type equivalence map). A re-application for a new program /
-          // level must NOT re-request documents the student already provided
-          // for another application, so we pre-select only the genuinely
-          // missing extras. Staff can still add more in the dialog.
-          let suggestedDocTypes: string[] = configuredTypes;
-          let allConfiguredAlreadyOnFile = false;
-          if (configuredTypes.length > 0 && curRow?.studentId) {
-            const studentDocs = await db.select({ type: documentsTable.type })
-              .from(documentsTable)
-              .where(and(
-                eq(documentsTable.studentId, curRow.studentId),
-                isNull(documentsTable.deletedAt),
-              ));
-            const uploadedTypes = new Set<string>(
-              studentDocs.map((d: { type: string | null }) => (d.type || "").toLowerCase()),
-            );
-            suggestedDocTypes = findMissingMandatoryTypes(configuredTypes, uploadedTypes);
-            allConfiguredAlreadyOnFile = suggestedDocTypes.length === 0;
-          }
-          // Only block to prompt a document request when there is actually
-          // something to request. If the stage configured specific documents
-          // and the student already satisfies every one of them (directly or
-          // via an equivalent doc), skip the prompt and let the move proceed.
-          if (!allConfiguredAlreadyOnFile) {
-            res.status(422).json({
-              error: "Bu aşamaya geçmeden önce talep edilecek belgeleri seçin",
-              code: "DOC_SELECTION_REQUIRED",
-              requiredStage: targetStage,
-              suggestedDocTypes,
-              actionLabel: typeof mdAction.label === "string" ? mdAction.label : null,
-            });
-            return;
-          }
+          // Always pre-select every configured doc type in the dialog,
+          // regardless of what the student has already uploaded.  Staff can
+          // deselect any they don't need.  Previously the list was filtered
+          // through findMissingMandatoryTypes, which caused all checkboxes to
+          // appear empty (or the dialog to be skipped entirely) when the student
+          // already had matching documents on file.
+          const suggestedDocTypes: string[] = configuredTypes;
+          res.status(422).json({
+            error: "Bu aşamaya geçmeden önce talep edilecek belgeleri seçin",
+            code: "DOC_SELECTION_REQUIRED",
+            requiredStage: targetStage,
+            suggestedDocTypes,
+            actionLabel: typeof mdAction.label === "string" ? mdAction.label : null,
+          });
+          return;
         }
       }
     }
