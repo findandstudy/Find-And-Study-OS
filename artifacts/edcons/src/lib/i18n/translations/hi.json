@@ -2101,7 +2101,13 @@
     "tableUploaded": "अपलोड किया गया",
     "tableActions": "क्रियाएँ",
     "preview": "पूर्वावलोकन",
-    "download": "डाउनलोड करें"
+    "download": "डाउनलोड करें",
+    "assignedTo": "असाइन किया गया",
+    "assignToMe": "मुझे असाइन करें",
+    "assigning": "असाइन हो रहा है...",
+    "you": "आप",
+    "staffMember": "स्टाफ सदस्य",
+    "error": "त्रुटि"
   },
   "studentDetailPage": {
     "profile": "प्रोफ़ाइल",

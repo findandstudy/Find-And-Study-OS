@@ -2101,7 +2101,13 @@
     "tableUploaded": "上传时间",
     "tableActions": "操作",
     "preview": "预览",
-    "download": "下载"
+    "download": "下载",
+    "assignedTo": "负责人",
+    "assignToMe": "指派给我",
+    "assigning": "正在指派...",
+    "you": "您",
+    "staffMember": "员工",
+    "error": "错误"
   },
   "studentDetailPage": {
     "profile": "个人资料",

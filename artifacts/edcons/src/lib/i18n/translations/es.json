@@ -2101,7 +2101,13 @@
     "tableUploaded": "Subido",
     "tableActions": "Acciones",
     "preview": "Vista previa",
-    "download": "Descargar"
+    "download": "Descargar",
+    "assignedTo": "Asignado a",
+    "assignToMe": "Asignarme",
+    "assigning": "Asignando...",
+    "you": "Tú",
+    "staffMember": "Miembro del personal",
+    "error": "Error"
   },
   "studentDetailPage": {
     "profile": "Perfil",

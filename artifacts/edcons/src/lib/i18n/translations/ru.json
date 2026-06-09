@@ -2152,7 +2152,13 @@
     "tableUploaded": "Загружено",
     "tableActions": "Действия",
     "preview": "Просмотр",
-    "download": "Скачать"
+    "download": "Скачать",
+    "assignedTo": "Назначено",
+    "assignToMe": "Назначить мне",
+    "assigning": "Назначение...",
+    "you": "Вы",
+    "staffMember": "Сотрудник",
+    "error": "Ошибка"
   },
   "studentDetailPage": {
     "profile": "Профиль",

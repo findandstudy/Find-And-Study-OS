@@ -682,9 +682,10 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     ? new Set<string>()
     : await getEffectivePermissionSet({ id: user.id, role: user.role });
 
+  let agentVisibleIds: number[] = [];
   if (isAgent) {
-    const visibleIds = await getAgentVisibleIds(user.id, user.role);
-    if (!existing.agentId || !visibleIds.includes(existing.agentId)) {
+    agentVisibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (!existing.agentId || !agentVisibleIds.includes(existing.agentId)) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -708,6 +709,42 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   }
   if (!isAdmin && !isAgent && !perms.has("leads.change_stage")) {
     allowedFields = allowedFields.filter(f => f !== "status");
+  }
+  // L1: lead assignment scope for agent roles.
+  //  - agent / sub_agent: may assign their lead to their own agent_staff
+  //    member, claim it for themselves, or unassign it.
+  //  - agent_staff: self-claim only (assign to self on a currently-unassigned
+  //    lead); may NOT unassign or assign it to anyone else.
+  // Targets are validated against the visible agent tree to prevent assigning
+  // leads to out-of-scope users (IDOR / horizontal privilege escalation).
+  if (isAgent && req.body.assignedTo !== undefined) {
+    const isAgentManagerRole = user.role === "agent" || user.role === "sub_agent";
+    const target = req.body.assignedTo;
+    if (!isAgentManagerRole) {
+      // agent_staff: only self-claim of an unassigned lead.
+      if (target === null || Number(target) !== user.id || existing.assignedToId !== null) {
+        res.status(403).json({ error: "Access denied" }); return;
+      }
+      allowedFields = [...allowedFields, "assignedTo"];
+    } else if (target === null) {
+      allowedFields = [...allowedFields, "assignedTo"];
+    } else {
+      const targetId = Number(target);
+      let ok = !Number.isNaN(targetId) && targetId === user.id;
+      if (!ok && !Number.isNaN(targetId) && agentVisibleIds.length > 0) {
+        const [staffRow] = await db
+          .select({ id: usersTable.id })
+          .from(usersTable)
+          .where(and(
+            eq(usersTable.id, targetId),
+            eq(usersTable.role, "agent_staff"),
+            inArray(usersTable.managingAgentId, agentVisibleIds),
+          ));
+        ok = !!staffRow;
+      }
+      if (!ok) { res.status(403).json({ error: "Access denied" }); return; }
+      allowedFields = [...allowedFields, "assignedTo"];
+    }
   }
   if (!isAdmin && !isAgent) {
     if (req.body.assignedTo !== undefined && !perms.has("records.change_assigned")) {

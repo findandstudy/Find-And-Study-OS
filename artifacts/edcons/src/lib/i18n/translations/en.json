@@ -2393,7 +2393,13 @@
     "tableUploaded": "Uploaded",
     "tableActions": "Actions",
     "preview": "Preview",
-    "download": "Download"
+    "download": "Download",
+    "assignedTo": "Assigned To",
+    "assignToMe": "Assign to me",
+    "assigning": "Assigning...",
+    "you": "You",
+    "staffMember": "Staff Member",
+    "error": "Error"
   },
   "studentDetailPage": {
     "profile": "Profile",

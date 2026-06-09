@@ -2152,7 +2152,13 @@
     "tableUploaded": "تاريخ الرفع",
     "tableActions": "الإجراءات",
     "preview": "معاينة",
-    "download": "تنزيل"
+    "download": "تنزيل",
+    "assignedTo": "معيّن إلى",
+    "assignToMe": "إسناد إليّ",
+    "assigning": "جارٍ الإسناد...",
+    "you": "أنت",
+    "staffMember": "موظف",
+    "error": "خطأ"
   },
   "studentDetailPage": {
     "profile": "الملف الشخصي",

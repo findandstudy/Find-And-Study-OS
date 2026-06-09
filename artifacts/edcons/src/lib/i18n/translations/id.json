@@ -2101,7 +2101,13 @@
     "tableUploaded": "Diunggah",
     "tableActions": "Tindakan",
     "preview": "Pratinjau",
-    "download": "Unduh"
+    "download": "Unduh",
+    "assignedTo": "Ditugaskan ke",
+    "assignToMe": "Tugaskan ke saya",
+    "assigning": "Menugaskan...",
+    "you": "Anda",
+    "staffMember": "Anggota staf",
+    "error": "Kesalahan"
   },
   "studentDetailPage": {
     "profile": "Profil",

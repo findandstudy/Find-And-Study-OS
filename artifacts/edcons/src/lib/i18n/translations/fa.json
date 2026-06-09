@@ -2101,7 +2101,13 @@
     "tableUploaded": "بارگذاری‌شده",
     "tableActions": "عملیات",
     "preview": "پیش‌نمایش",
-    "download": "دانلود"
+    "download": "دانلود",
+    "assignedTo": "واگذار شده به",
+    "assignToMe": "به من واگذار کن",
+    "assigning": "در حال واگذاری...",
+    "you": "شما",
+    "staffMember": "کارمند",
+    "error": "خطا"
   },
   "studentDetailPage": {
     "profile": "پروفایل",

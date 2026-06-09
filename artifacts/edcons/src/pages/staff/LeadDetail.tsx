@@ -159,6 +159,32 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     staleTime: 5 * 60_000,
   });
 
+  // L1: agents (and sub-agents) can assign their lead to their own agent_staff
+  // members. agent_staff users cannot list staff, so the dropdown is only
+  // sourced for agent/sub_agent; everyone else falls back to "Assign to me".
+  const isAgentManager = isAgent && !!user && ["agent", "sub_agent"].includes(user.role);
+  const { data: agentStaffData } = useQuery<any>({
+    queryKey: ["/api/agents/me/staff"],
+    queryFn: () => customFetch("/api/agents/me/staff?limit=100"),
+    enabled: isAgentManager,
+    staleTime: 5 * 60_000,
+  });
+  const assigneeOptions = useMemo(() => {
+    if (isAgent) {
+      const staff = ((agentStaffData?.data || []) as any[])
+        .filter((u: any) => u.isActive !== false)
+        .map((u: any) => ({ id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email }));
+      if (user && !staff.some((s: any) => s.id === user.id)) {
+        staff.unshift({ id: user.id, firstName: (user as any).firstName, lastName: (user as any).lastName, email: (user as any).email });
+      }
+      return staff;
+    }
+    const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
+    const staffRoles = ["super_admin", "admin", "manager", "staff", "consultant"];
+    return list.filter((u: any) => staffRoles.includes(u.role));
+  }, [isAgent, agentStaffData, staffUsersData, user]);
+  const canAssignLead = isAgent ? isAgentManager : canChangeAssigned;
+
   const [uploadOpen, setUploadOpen] = useState(false);
   const { data: catalogResp } = useQuery<any>({
     queryKey: ["catalog-options"],
@@ -208,13 +234,13 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
 
   function getAssignedUserName(assignedToId: number | null | undefined): string | null {
     if (!assignedToId) return null;
-    if (user && assignedToId === user.id) return "You";
-    if (staffUsersData) {
-      const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
-      const found = list.find((u: any) => u.id === assignedToId);
-      if (found) return `${found.firstName || ''} ${found.lastName || ''}`.trim() || found.email;
-    }
-    return "Staff Member";
+    if (user && assignedToId === user.id) return t("leadDetailPage.you");
+    const source = isAgent
+      ? ((agentStaffData?.data || []) as any[])
+      : (Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || []);
+    const found = source.find((u: any) => u.id === assignedToId);
+    if (found) return `${found.firstName || ''} ${found.lastName || ''}`.trim() || found.email;
+    return t("leadDetailPage.staffMember");
   }
 
   async function handleAssign(targetUserId: number | null) {
@@ -227,9 +253,9 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
       });
       queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-      toast({ title: targetUserId ? "Lead assigned" : "Lead unassigned" });
+      toast({ title: targetUserId ? t("leadDetailPage.leadAssigned") : t("leadDetailPage.leadUnassigned") });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("leadDetailPage.error"), description: err.message, variant: "destructive" });
     } finally {
       setAssigning(false);
     }
@@ -879,15 +905,14 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               </div>
             </div>
 
-            {!isAgent && (
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-foreground flex items-center gap-2">
                 <User className="w-4 h-4" />
-                Assigned To
+                {t("leadDetailPage.assignedTo")}
               </h2>
               {isLoading ? (
                 <Skeleton className="h-8 w-32" />
-              ) : canChangeAssigned ? (
+              ) : canAssignLead ? (
                 <Select
                   value={lead?.assignedToId ? String(lead.assignedToId) : "unassigned"}
                   onValueChange={(val) => handleAssign(val === "unassigned" ? null : Number(val))}
@@ -898,17 +923,14 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">{t("leadDetailPage.unassigned")}</SelectItem>
-                    {(() => {
-                      const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
-                      const staffRoles = ["super_admin", "admin", "manager", "staff", "consultant"];
-                      return list
-                        .filter((u: any) => staffRoles.includes(u.role))
-                        .map((u: any) => (
-                          <SelectItem key={u.id} value={String(u.id)}>
-                            {u.id === user?.id ? `${u.firstName || ''} ${u.lastName || ''} (You)`.trim() : `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
-                          </SelectItem>
-                        ));
-                    })()}
+                    {assigneeOptions.map((u: any) => {
+                      const label = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+                      return (
+                        <SelectItem key={u.id} value={String(u.id)}>
+                          {u.id === user?.id ? `${label} (${t("leadDetailPage.you")})` : label}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               ) : lead?.assignedToId ? (
@@ -918,7 +940,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Unassigned</p>
+                  <p className="text-sm text-muted-foreground">{t("leadDetailPage.unassigned")}</p>
                   <Button
                     size="sm"
                     variant="outline"
@@ -927,12 +949,11 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     disabled={assigning}
                   >
                     <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                    {assigning ? "Assigning..." : "Assign to Me"}
+                    {assigning ? t("leadDetailPage.assigning") : t("leadDetailPage.assignToMe")}
                   </Button>
                 </div>
               )}
             </div>
-            )}
 
             {!isAgent && (
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">

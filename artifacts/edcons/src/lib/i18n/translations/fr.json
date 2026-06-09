@@ -2152,7 +2152,13 @@
     "tableUploaded": "Téléversé",
     "tableActions": "Actions",
     "preview": "Aperçu",
-    "download": "Télécharger"
+    "download": "Télécharger",
+    "assignedTo": "Assigné à",
+    "assignToMe": "M'assigner",
+    "assigning": "Attribution...",
+    "you": "Vous",
+    "staffMember": "Membre du personnel",
+    "error": "Erreur"
   },
   "studentDetailPage": {
     "profile": "Profil",

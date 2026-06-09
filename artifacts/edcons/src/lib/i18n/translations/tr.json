@@ -2334,7 +2334,13 @@
     "tableUploaded": "Yüklenme",
     "tableActions": "İşlemler",
     "preview": "Önizle",
-    "download": "İndir"
+    "download": "İndir",
+    "assignedTo": "Atanan",
+    "assignToMe": "Bana ata",
+    "assigning": "Atanıyor...",
+    "you": "Siz",
+    "staffMember": "Personel",
+    "error": "Hata"
   },
   "studentDetailPage": {
     "profile": "Profil",
