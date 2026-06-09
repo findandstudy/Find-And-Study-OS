@@ -1335,7 +1335,7 @@ export default function AgentsPage() {
                         const checked = !!entry;
                         const isPrimary = entry?.isPrimary || false;
                         return (
-                          <div key={s.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md">
+                          <div key={s.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-primary/10 rounded-md">
                             <Checkbox
                               checked={checked}
                               onCheckedChange={v => {

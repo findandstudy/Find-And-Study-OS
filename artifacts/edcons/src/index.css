@@ -80,8 +80,8 @@
   --muted: 210 40% 96.1%;
   --muted-foreground: 215.4 16.3% 46.9%;
   
-  --accent: 221 83% 95%; /* Light blue accent matching primary */
-  --accent-foreground: 221 83% 40%;
+  --accent: 221 83% 53%; /* Vivid blue — same as primary */
+  --accent-foreground: 210 40% 98%;
   
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;

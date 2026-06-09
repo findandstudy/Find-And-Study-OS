@@ -133,7 +133,7 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
                 <button
                   key={u.id}
                   onClick={(e) => { e.stopPropagation(); onAssign(u.id); setOpen(false); }}
-                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent transition-colors flex items-center gap-2"
+                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-primary/10 transition-colors flex items-center gap-2"
                 >
                   <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[9px] font-bold shrink-0">
                     {u.name.split(" ").map(n => n[0]).join("").slice(0, 2)}

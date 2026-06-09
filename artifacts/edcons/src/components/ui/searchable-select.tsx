@@ -184,7 +184,7 @@ export function SearchableSelect({
                           type="button"
                           onClick={() => { emitChange(opt.value); setOpen(false); }}
                           className={`flex items-center justify-between gap-2 w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
-                            isSelected ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent text-foreground"
+                            isSelected ? "bg-primary/10 text-primary font-medium" : "hover:bg-primary/10 text-foreground"
                           }`}
                         >
                           <span className="truncate flex-1">

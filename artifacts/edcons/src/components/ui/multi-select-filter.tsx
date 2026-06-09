@@ -132,7 +132,7 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
                     type="button"
                     onClick={() => toggle(opt.value)}
                     className={`flex items-center gap-2 w-full px-2.5 py-1.5 text-xs rounded-md transition-colors text-left ${
-                      selected ? "bg-primary/10 text-primary font-medium" : "hover:bg-accent text-foreground"
+                      selected ? "bg-primary/10 text-primary font-medium" : "hover:bg-primary/10 text-foreground"
                     }`}
                   >
                     <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
@@ -151,7 +151,7 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
               <button
                 type="button"
                 onClick={() => { onChange([]); setOpen(false); }}
-                className="w-full px-2.5 py-1.5 text-xs text-muted-foreground hover:text-destructive rounded-md hover:bg-accent transition-colors text-left"
+                className="w-full px-2.5 py-1.5 text-xs text-muted-foreground hover:text-destructive rounded-md hover:bg-primary/10 transition-colors text-left"
               >
                 Clear all
               </button>
