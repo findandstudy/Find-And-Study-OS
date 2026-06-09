@@ -6,7 +6,7 @@ import { setAuthCache, setStickyUser } from "@/lib/auth-cache";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck, ChevronDown } from "lucide-react";
-import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language } from "@/lib/i18n/index";
+import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language, isValidLanguage } from "@/lib/i18n/index";
 import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
 import { validatePasswordPolicy } from "@/components/password-policy";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
@@ -214,16 +214,12 @@ export default function Login() {
         setStickyUser(data.user as any);
         setAuthCache(data.user);
         queryClient.setQueryData(["/api/auth/me"], data.user);
-        // Sync the language the user has selected on this device to their
-        // profile so it is remembered on future logins from any device.
-        // Fire-and-forget: login flow must not block on this.
-        if (data.user.id && lang) {
-          fetch(`${BASE_URL}/api/users/${data.user.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ language: lang }),
-            credentials: "include",
-          }).catch(() => {});
+        // If the server has a language preference saved for this user, apply
+        // it to localStorage now. This ensures that when the user later logs
+        // out and lands back on the login page, the picker shows their own
+        // preferred language rather than whoever last touched the device.
+        if (data.user.language && isValidLanguage(data.user.language)) {
+          setLang(data.user.language as Language);
         }
       }
     } catch {
@@ -314,13 +310,8 @@ export default function Login() {
         setStickyUser(data.user as any);
         setAuthCache(data.user);
         queryClient.setQueryData(["/api/auth/me"], data.user);
-        if (data.user.id && lang) {
-          fetch(`${BASE_URL}/api/users/${data.user.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ language: lang }),
-            credentials: "include",
-          }).catch(() => {});
+        if (data.user.language && isValidLanguage(data.user.language)) {
+          setLang(data.user.language as Language);
         }
       } else {
         setTab("login");
