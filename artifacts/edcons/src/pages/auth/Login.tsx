@@ -7,6 +7,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck, ChevronDown } from "lucide-react";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language, isValidLanguage } from "@/lib/i18n/index";
+import { storeLangHint, getLangHintByEmail } from "@/lib/i18n/context";
 import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
 import { validatePasswordPolicy } from "@/components/password-policy";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
@@ -168,6 +169,19 @@ export default function Login() {
     : null;
   const companyName = settings.companyName || "Find And Study OS";
 
+  // When the user types a recognised email on the login page, pre-select the
+  // language they last used on this device.  This is the shared-device fix:
+  // two people sharing one browser each see their own language on the login
+  // form before they have authenticated.
+  useEffect(() => {
+    const email = loginForm.email.trim();
+    if (!email.includes("@")) return;
+    const hint = getLangHintByEmail(email);
+    if (hint && hint !== lang) {
+      setLang(hint);
+    }
+  }, [loginForm.email]);
+
   useEffect(() => {
     if (!isLoading && user) {
       startTransition(() => {
@@ -214,13 +228,17 @@ export default function Login() {
         setStickyUser(data.user as any);
         setAuthCache(data.user);
         queryClient.setQueryData(["/api/auth/me"], data.user);
-        // If the server has a language preference saved for this user, apply
-        // it to localStorage now. This ensures that when the user later logs
-        // out and lands back on the login page, the picker shows their own
-        // preferred language rather than whoever last touched the device.
+        // Apply and store the effective language for this user.
+        // Using a per-user key (edcons_lang_hint_<userId>) means two people
+        // sharing the same device each see their own language on next visit,
+        // instead of inheriting the previous user's preference.
+        const effectiveLang = (data.user.language && isValidLanguage(data.user.language))
+          ? data.user.language as Language
+          : lang;
         if (data.user.language && isValidLanguage(data.user.language)) {
-          setLang(data.user.language as Language);
+          setLang(effectiveLang);
         }
+        storeLangHint(data.user.id, effectiveLang, loginForm.email.trim() || undefined);
       }
     } catch {
       setError(t("login.connectionError"));
@@ -310,9 +328,13 @@ export default function Login() {
         setStickyUser(data.user as any);
         setAuthCache(data.user);
         queryClient.setQueryData(["/api/auth/me"], data.user);
+        const effectiveLang = (data.user.language && isValidLanguage(data.user.language))
+          ? data.user.language as Language
+          : lang;
         if (data.user.language && isValidLanguage(data.user.language)) {
-          setLang(data.user.language as Language);
+          setLang(effectiveLang);
         }
+        storeLangHint(data.user.id, effectiveLang, verifyEmail.trim() || undefined);
       } else {
         setTab("login");
       }
