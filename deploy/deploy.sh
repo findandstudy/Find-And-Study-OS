@@ -28,8 +28,18 @@ echo "[2/5] Running production build..."
 bash deploy/build-production.sh
 
 echo ""
-echo "[3/6] Running database migrations..."
-pnpm --filter db run push
+echo "[3/6] Database migration check..."
+# UYARI: 'drizzle push' burada KULLANILMAZ — production tablolarını silebilir.
+#
+# Şema değişikliklerini production'a uygulamak için:
+#   1. lib/db dizininde: pnpm drizzle-kit generate
+#   2. Oluşan SQL dosyasını gözden geçir (lib/db/drizzle/)
+#   3. Production'da uygula: psql "$DATABASE_URL" < lib/db/drizzle/<migration>.sql
+#
+# api-server ilk açılışta boot DDL'i idempotent olarak çalıştırır
+# (artifacts/api-server/src/index.ts). Bu; yeni sütun/tablo eklemelerini
+# deployment sırasında otomatik uygular.
+echo "  Skipping — apply migrations manually if schema changed (see deploy/DEPLOYMENT.md)"
 
 echo ""
 echo "[4/6] Running one-shot data cleanups (idempotent)..."
@@ -63,11 +73,11 @@ else
   echo "       Then run: pm2 start deploy/ecosystem.config.cjs --env production"
   echo ""
   echo "       Or run directly with:"
-  echo "       NODE_ENV=production PORT=3000 node artifacts/api-server/dist/index.cjs"
+  echo "       NODE_ENV=production PORT=5000 node artifacts/api-server/dist/index.cjs"
 fi
 
 echo ""
 echo "============================================"
 echo " Deploy complete!"
-echo " App should be running on port ${PORT:-3000}"
+echo " App should be running on port ${PORT:-5000}"
 echo "============================================"
