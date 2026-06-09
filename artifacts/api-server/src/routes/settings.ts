@@ -162,7 +162,7 @@ router.get("/settings/agent-permissions", requireAuth, async (req, res): Promise
   });
 });
 
-router.get("/settings/available-years", async (req, res): Promise<void> => {
+router.get("/settings/available-years", requireAuth, async (req, res): Promise<void> => {
   const [settings] = await db.select({ availableYears: settingsTable.availableYears }).from(settingsTable);
   let details = normalizeYears(settings?.availableYears ?? null);
   if (details.length === 0) {

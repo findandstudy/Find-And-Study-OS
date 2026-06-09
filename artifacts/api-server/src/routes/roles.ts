@@ -9,8 +9,26 @@ import {
   getAllPermissions,
 } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { validate, getValidated } from "../middlewares/validate";
 import { ADMIN_ROLES } from "../lib/roles";
+
+const createRoleBodySchema = z.object({
+  name: z.string().trim().min(1),
+  displayName: z.string().trim().min(1),
+  description: z.string().trim().optional().nullable(),
+  color: z.string().trim().optional(),
+  permissions: z.array(z.string()).optional(),
+});
+
+const patchRoleBodySchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  displayName: z.string().trim().min(1).optional(),
+  description: z.string().trim().optional().nullable(),
+  color: z.string().trim().optional(),
+  permissions: z.array(z.string()).optional(),
+}).refine(obj => Object.keys(obj).length > 0, { message: "No valid fields to update" });
 
 const router: IRouter = Router();
 
@@ -48,12 +66,8 @@ router.get("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, r
   res.json(role);
 });
 
-router.post("/roles", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { name, displayName, description, color, permissions } = req.body;
-  if (!name || !displayName) {
-    res.status(400).json({ error: "Name and display name are required" });
-    return;
-  }
+router.post("/roles", requireAuth, requireRole(...ADMIN_ROLES), validate({ body: createRoleBodySchema }), async (req, res): Promise<void> => {
+  const { name, displayName, description, color, permissions } = getValidated<{ body: typeof createRoleBodySchema }>(req).body;
 
   const slug = name
     .toLowerCase()
@@ -85,7 +99,7 @@ router.post("/roles", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
   res.status(201).json(role);
 });
 
-router.patch("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.patch("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), validate({ body: patchRoleBodySchema }), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [existing] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
   if (!existing) {
@@ -93,16 +107,17 @@ router.patch("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req,
     return;
   }
 
+  const body = getValidated<{ body: typeof patchRoleBodySchema }>(req).body;
   const updates: Record<string, unknown> = {};
-  if (req.body.displayName !== undefined) updates.displayName = req.body.displayName;
-  if (req.body.description !== undefined) updates.description = req.body.description;
-  if (req.body.color !== undefined) updates.color = req.body.color;
-  if (req.body.permissions !== undefined) {
+  if (body.displayName !== undefined) updates.displayName = body.displayName;
+  if (body.description !== undefined) updates.description = body.description;
+  if (body.color !== undefined) updates.color = body.color;
+  if (body.permissions !== undefined) {
     const allPerms = getAllPermissions();
-    updates.permissions = (req.body.permissions as string[]).filter((p) => allPerms.includes(p));
+    updates.permissions = body.permissions.filter((p) => allPerms.includes(p));
   }
-  if (!existing.isSystem && req.body.name !== undefined) {
-    updates.name = req.body.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  if (!existing.isSystem && body.name !== undefined) {
+    updates.name = body.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
   }
 
   if (Object.keys(updates).length === 0) {

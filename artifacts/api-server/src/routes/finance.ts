@@ -173,7 +173,7 @@ function calcCommissionAmounts(body: any) {
 
 /* ─── CURRENCIES IN USE ──────────────────────────────────────── */
 
-router.get("/currencies-in-use", requireAuth, async (_req, res): Promise<void> => {
+router.get("/currencies-in-use", requireAuth, requireRole(...FINANCE_ROLES), async (_req, res): Promise<void> => {
   try {
     const [progRows, commRows, feeRows, catalog] = await Promise.all([
       db.selectDistinct({ currency: programsTable.currency }).from(programsTable),

@@ -1,9 +1,33 @@
 import { Router, type IRouter } from "express";
 import { db, branchesTable, agentBranchesTable, agentsTable } from "@workspace/db";
 import { eq, isNull, isNotNull, and, sql, inArray, desc } from "drizzle-orm";
+import { z } from "zod";
 import { requireAuth, requireRole } from "../lib/auth";
+import { validate, getValidated } from "../middlewares/validate";
 import { STAFF_ROLES } from "../lib/roles";
 import { getVisibleBranchIds } from "../lib/branchScope";
+
+const createBranchBodySchema = z.object({
+  name: z.string().trim().min(1, "Şube adı zorunludur."),
+  country: z.string().trim().optional().nullable(),
+  city: z.string().trim().optional().nullable(),
+  contactName: z.string().trim().optional().nullable(),
+  contactEmail: z.string().trim().email().optional().nullable(),
+  contactPhone: z.string().trim().optional().nullable(),
+  logoUrl: z.string().url().optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+});
+
+const patchBranchBodySchema = z.object({
+  name: z.string().trim().min(1, "Şube adı boş olamaz.").optional(),
+  country: z.string().trim().optional().nullable(),
+  city: z.string().trim().optional().nullable(),
+  contactName: z.string().trim().optional().nullable(),
+  contactEmail: z.string().trim().email().optional().nullable(),
+  contactPhone: z.string().trim().optional().nullable(),
+  logoUrl: z.string().url().optional().nullable(),
+  notes: z.string().trim().optional().nullable(),
+});
 
 const router: IRouter = Router();
 
@@ -28,22 +52,19 @@ router.get("/branches", requireAuth, requireRole(...STAFF_ROLES), async (req, re
   res.json({ data });
 });
 
-router.post("/branches", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
-  const { name, country, city, contactName, contactEmail, contactPhone, logoUrl, notes } = req.body || {};
-  if (!name || typeof name !== "string" || !name.trim()) {
-    res.status(400).json({ error: "Şube adı zorunludur." });
-    return;
-  }
+router.post("/branches", requireAuth, requireRole("super_admin"), validate({ body: createBranchBodySchema }), async (req, res): Promise<void> => {
+  const { name, country, city, contactName, contactEmail, contactPhone, logoUrl, notes } =
+    getValidated<{ body: typeof createBranchBodySchema }>(req).body;
   try {
     const [branch] = await db.insert(branchesTable).values({
-      name: name.trim(),
-      country: country?.trim() || null,
-      city: city?.trim() || null,
-      contactName: contactName?.trim() || null,
-      contactEmail: contactEmail?.trim() || null,
-      contactPhone: contactPhone?.trim() || null,
+      name,
+      country: country || null,
+      city: city || null,
+      contactName: contactName || null,
+      contactEmail: contactEmail || null,
+      contactPhone: contactPhone || null,
       logoUrl: logoUrl || null,
-      notes: notes?.trim() || null,
+      notes: notes || null,
     }).returning();
     res.status(201).json(branch);
   } catch (err: any) {
@@ -55,23 +76,18 @@ router.post("/branches", requireAuth, requireRole("super_admin"), async (req, re
   }
 });
 
-router.patch("/branches/:id", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
+router.patch("/branches/:id", requireAuth, requireRole("super_admin"), validate({ body: patchBranchBodySchema }), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const allowed = ["name", "country", "city", "contactName", "contactEmail", "contactPhone", "logoUrl", "notes"];
+  const rawBody = getValidated<{ body: typeof patchBranchBodySchema }>(req).body;
   const updates: Record<string, unknown> = {};
-  for (const k of allowed) {
-    if (req.body[k] !== undefined) {
-      const v = req.body[k];
-      updates[k] = (typeof v === "string" ? v.trim() : v) || null;
+  for (const k of ["name", "country", "city", "contactName", "contactEmail", "contactPhone", "logoUrl", "notes"] as const) {
+    if ((rawBody as Record<string, unknown>)[k] !== undefined) {
+      updates[k] = (rawBody as Record<string, unknown>)[k] ?? null;
     }
   }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });
-    return;
-  }
-  if (typeof updates.name === "string" && !(updates.name as string).trim()) {
-    res.status(400).json({ error: "Şube adı boş olamaz." });
     return;
   }
   try {

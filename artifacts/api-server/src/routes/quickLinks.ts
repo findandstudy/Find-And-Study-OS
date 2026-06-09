@@ -1,8 +1,41 @@
 import { Router, type IRouter } from "express";
 import { db, quickLinksTable } from "@workspace/db";
 import { eq, and, asc, sql } from "drizzle-orm";
+import { z } from "zod";
 import { requireAuth, requireRole } from "../lib/auth";
+import { validate, getValidated } from "../middlewares/validate";
 import { MANAGER_ROLES } from "../lib/roles";
+
+const VALID_TARGETS = ["agent", "sub_agent", "staff", "student"] as const;
+
+const targetSchema = z
+  .string()
+  .transform(v => v.split(",").map(t => t.trim()).filter(Boolean))
+  .refine(arr => arr.length > 0 && arr.every(t => (VALID_TARGETS as readonly string[]).includes(t)), {
+    message: "target must be one or more of: agent, sub_agent, staff, student",
+  })
+  .transform(arr => arr.join(","));
+
+const createQuickLinkBodySchema = z.object({
+  title: z.string().trim().min(1),
+  url: z.string().trim().min(1),
+  target: targetSchema,
+  icon: z.string().trim().optional().nullable(),
+  logoUrl: z.string().url().optional().nullable(),
+  color: z.string().trim().optional().nullable(),
+  sortOrder: z.number().int().optional().default(0),
+});
+
+const patchQuickLinkBodySchema = z.object({
+  title: z.string().trim().min(1).optional(),
+  url: z.string().trim().min(1).optional(),
+  target: targetSchema.optional(),
+  icon: z.string().trim().optional().nullable(),
+  logoUrl: z.string().url().optional().nullable(),
+  color: z.string().trim().optional().nullable(),
+  sortOrder: z.number().int().optional(),
+  isActive: z.boolean().optional(),
+});
 
 const router: IRouter = Router();
 
@@ -36,46 +69,27 @@ router.get("/quick-links/admin", requireAuth, requireRole(...MANAGER_ROLES), asy
   res.json({ data: links });
 });
 
-router.post("/quick-links", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { title, url, icon, logoUrl, color, target, sortOrder } = req.body;
-  if (!title || !url || !target) {
-    res.status(400).json({ error: "title, url and target are required" });
-    return;
-  }
-  const validTargets = ["agent", "sub_agent", "staff", "student"];
-  const targets = String(target).split(",").map(t => t.trim()).filter(Boolean);
-  if (targets.length === 0 || !targets.every(t => validTargets.includes(t))) {
-    res.status(400).json({ error: "target must be one or more of: agent, sub_agent, staff, student" });
-    return;
-  }
-  const normalizedTarget = targets.join(",");
+router.post("/quick-links", requireAuth, requireRole(...MANAGER_ROLES), validate({ body: createQuickLinkBodySchema }), async (req, res): Promise<void> => {
+  const { title, url, icon, logoUrl, color, target, sortOrder } = getValidated<{ body: typeof createQuickLinkBodySchema }>(req).body;
   const [link] = await db.insert(quickLinksTable).values({
     title,
     url,
     icon: icon || null,
     logoUrl: logoUrl || null,
     color: color || null,
-    target: normalizedTarget,
-    sortOrder: sortOrder ?? 0,
+    target,
+    sortOrder,
   }).returning();
   res.status(201).json(link);
 });
 
-router.patch("/quick-links/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+router.patch("/quick-links/:id", requireAuth, requireRole(...MANAGER_ROLES), validate({ body: patchQuickLinkBodySchema }), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = getValidated<{ body: typeof patchQuickLinkBodySchema }>(req).body;
   const updates: Record<string, unknown> = {};
-  for (const key of ["title", "url", "icon", "logoUrl", "color", "sortOrder", "isActive"]) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key];
-  }
-  if (req.body.target !== undefined) {
-    const validTargets = ["agent", "sub_agent", "staff", "student"];
-    const targets = String(req.body.target).split(",").map((t: string) => t.trim()).filter(Boolean);
-    if (targets.length === 0 || !targets.every((t: string) => validTargets.includes(t))) {
-      res.status(400).json({ error: "target must be one or more of: agent, sub_agent, staff, student" });
-      return;
-    }
-    updates.target = targets.join(",");
+  for (const key of ["title", "url", "icon", "logoUrl", "color", "sortOrder", "isActive", "target"] as const) {
+    if ((body as Record<string, unknown>)[key] !== undefined) updates[key] = (body as Record<string, unknown>)[key];
   }
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
   const [updated] = await db.update(quickLinksTable).set(updates).where(eq(quickLinksTable.id, id)).returning();

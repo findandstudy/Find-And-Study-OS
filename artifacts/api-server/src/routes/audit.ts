@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, auditLogsTable, usersTable, studentsTable, leadsTable, applicationsTable, documentsTable, programsTable, agentsTable } from "@workspace/db";
 import { sql, desc, ilike, or, eq, and, inArray } from "drizzle-orm";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { checkAssignmentConsistency } from "../lib/assignmentConsistencyChecker";
 
@@ -190,7 +190,7 @@ function enrichChanges(changes: string | null | Record<string, any>, userNames: 
   return out;
 }
 
-router.get("/audit", requireAuth, async (req, res): Promise<void> => {
+router.get("/audit", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const user = req.user!;
   const { search, resource, resourceId, page = "1", limit = "50" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -199,9 +199,7 @@ router.get("/audit", requireAuth, async (req, res): Promise<void> => {
 
   const conditions = [];
 
-  const isManager = (MANAGER_ROLES as readonly string[]).includes(user.role);
-  // T6: resource-scoped audit log access is admin-only (super_admin / admin),
-  // managers and below cannot read another resource's audit trail.
+  // Resource-scoped audit log access is admin-only (super_admin / admin).
   const isStrictAdmin = user.role === "super_admin" || user.role === "admin";
   if (resource && resourceId) {
     if (!isStrictAdmin) {
@@ -212,8 +210,6 @@ router.get("/audit", requireAuth, async (req, res): Promise<void> => {
     if (isNaN(ridNum)) { res.status(400).json({ error: "Invalid resourceId" }); return; }
     conditions.push(eq(auditLogsTable.resource, resource));
     conditions.push(eq(auditLogsTable.resourceId, ridNum));
-  } else if (!isManager) {
-    conditions.push(eq(auditLogsTable.userId, user.id));
   }
 
   if (search) {
@@ -278,14 +274,7 @@ router.get("/audit", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
-router.get("/audit/assignment-inconsistencies", requireAuth, async (req, res): Promise<void> => {
-  const user = req.user!;
-  const isStrictAdmin = user.role === "super_admin" || user.role === "admin";
-  if (!isStrictAdmin) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-
+router.get("/audit/assignment-inconsistencies", requireAuth, requireRole("super_admin", "admin"), async (_req, res): Promise<void> => {
   try {
     const inconsistencies = await checkAssignmentConsistency();
 
