@@ -1504,6 +1504,17 @@
       "colPassport": "Pasaporte",
       "colStatus": "Estado",
       "colJoined": "Se unió"
+    },
+    "transfer": {
+      "title": "Transferir a subagente",
+      "description": "Mueve a {name} y sus solicitudes a uno de tus subagentes.",
+      "selectLabel": "Subagente",
+      "selectPlaceholder": "Selecciona un subagente",
+      "note": "La propiedad del estudiante, las solicitudes y las comisiones pasará al subagente seleccionado. Tu parte se conserva.",
+      "cancel": "Cancelar",
+      "confirm": "Transferir",
+      "success": "Estudiante transferido",
+      "error": "Error al transferir"
     }
   },
   "agentApps": {

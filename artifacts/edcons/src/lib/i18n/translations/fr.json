@@ -1504,6 +1504,17 @@
       "colPassport": "Passeport",
       "colStatus": "Statut",
       "colJoined": "Inscrit le"
+    },
+    "transfer": {
+      "title": "Transférer à un sous-agent",
+      "description": "Déplacez {name} et ses candidatures vers l'un de vos sous-agents.",
+      "selectLabel": "Sous-agent",
+      "selectPlaceholder": "Sélectionnez un sous-agent",
+      "note": "La propriété de l'étudiant, des candidatures et des commissions est transférée au sous-agent sélectionné. Votre part est préservée.",
+      "cancel": "Annuler",
+      "confirm": "Transférer",
+      "success": "Étudiant transféré",
+      "error": "Échec du transfert"
     }
   },
   "agentApps": {

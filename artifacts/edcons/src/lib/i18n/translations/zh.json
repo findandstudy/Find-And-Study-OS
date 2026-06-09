@@ -1504,6 +1504,17 @@
       "colPassport": "护照",
       "colStatus": "状态",
       "colJoined": "加入时间"
+    },
+    "transfer": {
+      "title": "转移给子代理",
+      "description": "将 {name} 及其申请转移给您的某个子代理。",
+      "selectLabel": "子代理",
+      "selectPlaceholder": "选择一个子代理",
+      "note": "学生、申请和佣金的归属将转移给所选子代理。您的份额将被保留。",
+      "cancel": "取消",
+      "confirm": "转移",
+      "success": "学生已转移",
+      "error": "转移失败"
     }
   },
   "agentApps": {

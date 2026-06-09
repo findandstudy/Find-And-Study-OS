@@ -1532,6 +1532,17 @@
       "colPassport": "Passport",
       "colStatus": "Status",
       "colJoined": "Joined"
+    },
+    "transfer": {
+      "title": "Transfer to sub-agent",
+      "description": "Move {name} and their applications to one of your sub-agents.",
+      "selectLabel": "Sub-agent",
+      "selectPlaceholder": "Select a sub-agent",
+      "note": "Ownership of the student, applications and commissions moves to the selected sub-agent. Your share is preserved.",
+      "cancel": "Cancel",
+      "confirm": "Transfer",
+      "success": "Student transferred",
+      "error": "Transfer failed"
     }
   },
   "agentApps": {

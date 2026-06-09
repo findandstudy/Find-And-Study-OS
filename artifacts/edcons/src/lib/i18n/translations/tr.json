@@ -1473,6 +1473,17 @@
       "colPassport": "Pasaport",
       "colStatus": "Durum",
       "colJoined": "Katılım"
+    },
+    "transfer": {
+      "title": "Alt acenteye devret",
+      "description": "{name} ve başvurularını alt acentelerinizden birine taşıyın.",
+      "selectLabel": "Alt acente",
+      "selectPlaceholder": "Bir alt acente seçin",
+      "note": "Öğrencinin, başvuruların ve komisyonların sahipliği seçilen alt acenteye geçer. Sizin payınız korunur.",
+      "cancel": "İptal",
+      "confirm": "Devret",
+      "success": "Öğrenci devredildi",
+      "error": "Devir başarısız"
     }
   },
   "agentApps": {

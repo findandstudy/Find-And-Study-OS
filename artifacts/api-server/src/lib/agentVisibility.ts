@@ -18,7 +18,16 @@ export async function getAgentVisibleIds(userId: number, userRole: string): Prom
   if (!agentRec) return [];
 
   if (userRole === "agent") {
-    // KURAL 2: agents see only their own leads; sub-agents' leads are not included.
+    // A parent agent (no parentAgentId) sees its OWN records plus those of its
+    // OWN sub-agents (agents whose parentAgentId === this agent). Records of
+    // other agencies (and their sub-agents) are NEVER included — the sub-agent
+    // query is scoped strictly to parentAgentId = agentRec.id, so this stays
+    // IDOR-safe. A sub-agent that somehow carries the "agent" role (parentAgentId
+    // set) falls through to own-only.
+    if (!agentRec.parentAgentId) {
+      const subAgents = await db.select({ id: agentsTable.id }).from(agentsTable).where(eq(agentsTable.parentAgentId, agentRec.id));
+      return [agentRec.id, ...subAgents.map(s => s.id)];
+    }
     return [agentRec.id];
   }
 

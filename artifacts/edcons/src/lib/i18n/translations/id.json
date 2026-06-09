@@ -1504,6 +1504,17 @@
       "colPassport": "Paspor",
       "colStatus": "Status",
       "colJoined": "Bergabung"
+    },
+    "transfer": {
+      "title": "Transfer ke sub-agen",
+      "description": "Pindahkan {name} dan aplikasinya ke salah satu sub-agen Anda.",
+      "selectLabel": "Sub-agen",
+      "selectPlaceholder": "Pilih sub-agen",
+      "note": "Kepemilikan siswa, aplikasi, dan komisi akan berpindah ke sub-agen yang dipilih. Bagian Anda tetap terjaga.",
+      "cancel": "Batal",
+      "confirm": "Transfer",
+      "success": "Siswa ditransfer",
+      "error": "Transfer gagal"
     }
   },
   "agentApps": {

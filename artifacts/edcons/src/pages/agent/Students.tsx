@@ -22,7 +22,7 @@ import {
   Users, Loader2, LayoutGrid, List, Eye,
   ArrowUpDown, ArrowUp, ArrowDown, Trash2, Pencil,
   Filter, UserCheck, UserX, UserMinus, UserPlus,
-  Trophy, XCircle, Download,
+  Trophy, XCircle, Download, ArrowRightLeft,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
@@ -1612,6 +1612,81 @@ function StuFilterPopover({ filters, onChange, stages, nationalities, t }: {
   );
 }
 
+function TransferToSubAgentDialog({ open, onClose, student, subAgents, onSuccess }: {
+  open: boolean;
+  onClose: () => void;
+  student: any;
+  subAgents: any[];
+  onSuccess: () => void;
+}) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const [subAgentId, setSubAgentId] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  useEffect(() => { if (open) setSubAgentId(""); }, [open, student?.id]);
+  if (!student) return null;
+  const label = (sa: any) =>
+    (sa.companyName || "").trim() ||
+    `${sa.firstName ?? ""} ${sa.lastName ?? ""}`.trim() ||
+    sa.email ||
+    `#${sa.id}`;
+  async function handleConfirm() {
+    if (!subAgentId) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/students/${student.id}/transfer-to-sub-agent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ subAgentId: Number(subAgentId) }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || "Transfer failed");
+      }
+      toast({ title: t("agentStudents.transfer.success") });
+      onSuccess();
+      onClose();
+    } catch (e: any) {
+      toast({ title: t("agentStudents.transfer.error"), description: e?.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("agentStudents.transfer.title")}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <p className="text-sm text-muted-foreground">
+            {t("agentStudents.transfer.description", { name: `${student.firstName ?? ""} ${student.lastName ?? ""}`.trim() })}
+          </p>
+          <div className="space-y-2">
+            <Label>{t("agentStudents.transfer.selectLabel")}</Label>
+            <Select value={subAgentId} onValueChange={setSubAgentId}>
+              <SelectTrigger><SelectValue placeholder={t("agentStudents.transfer.selectPlaceholder")} /></SelectTrigger>
+              <SelectContent>
+                {subAgents.map((sa: any) => (
+                  <SelectItem key={sa.id} value={String(sa.id)}>{label(sa)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">{t("agentStudents.transfer.note")}</p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>{t("agentStudents.transfer.cancel")}</Button>
+          <Button onClick={handleConfirm} disabled={!subAgentId || submitting}>
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : t("agentStudents.transfer.confirm")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AgentStudentsPage() {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
@@ -1629,6 +1704,7 @@ export default function AgentStudentsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
   const [editStudent, setEditStudent] = useState<any>(null);
+  const [transferStudent, setTransferStudent] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const pg = useTablePagination(25);
@@ -1646,6 +1722,17 @@ export default function AgentStudentsPage() {
   const { season } = useSeason();
   const { data, isLoading } = useListStudents({ search, season, limit: 500 } as any);
   const allStudents: any[] = data?.data ?? [];
+
+  // Only a parent agent ("agent" role) can transfer students to its OWN
+  // sub-agents. sub_agent / agent_staff never see the control.
+  const isParentAgent = user?.role === "agent";
+  const { data: subAgentsResp } = useQuery({
+    queryKey: ["/api/agents/me/sub-agents", "transfer"],
+    queryFn: () => fetch(`${BASE_URL}/api/agents/me/sub-agents?limit=100`, { credentials: "include" }).then(r => r.json()),
+    enabled: isParentAgent,
+  });
+  const subAgents: any[] = subAgentsResp?.data ?? [];
+  const canTransfer = isParentAgent && subAgents.length > 0;
 
   const nationalityOptions = useMemo(() => {
     const set = new Set<string>();
@@ -1898,6 +1985,9 @@ export default function AgentStudentsPage() {
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => setEditStudent(student)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                          {canTransfer && (
+                            <button onClick={() => setTransferStudent(student)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title={t("agentStudents.transfer.title")}><ArrowRightLeft className="w-3.5 h-3.5" /></button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1917,6 +2007,7 @@ export default function AgentStudentsPage() {
       </div>
 
       <EditStudentDialog open={!!editStudent} onClose={() => setEditStudent(null)} student={editStudent} stages={pipelineStages} />
+      <TransferToSubAgentDialog open={!!transferStudent} onClose={() => setTransferStudent(null)} student={transferStudent} subAgents={subAgents} onSuccess={invalidate} />
       <AddStudentModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} defaultStatus={pipelineStages[0]?.key} />
     </>
   );

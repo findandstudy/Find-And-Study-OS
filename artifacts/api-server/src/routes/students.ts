@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, settingsTable, softDelete } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeStudentAssignment } from "../lib/leadAssignment";
+import { resolveAgentCommission } from "../lib/agentCommission";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
@@ -707,6 +708,101 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   }
 
   res.json(student);
+});
+
+// Transfer a student (and its full ownership chain) from the acting parent agent
+// to one of the agent's OWN sub-agents. The parent keeps its commission share —
+// resolveAgentCommission recomputes each commission row so commission.agentId
+// stays the PARENT (parentAmount) and subAgentId/subAmount go to the sub-agent.
+// Only a parent agent ("agent" role, no parentAgentId) may call this.
+router.post("/students/:id/transfer-to-sub-agent", requireAuth, requireRole("agent"), async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const subAgentId = parseInt(String(req.body?.subAgentId), 10);
+  if (isNaN(subAgentId)) { res.status(400).json({ error: "subAgentId is required" }); return; }
+
+  const actingAgent = await getAgentRecord(req.user!.id, req.user!.role);
+  if (!actingAgent) { res.status(403).json({ error: "Agent profile not found" }); return; }
+  // A sub-agent cannot itself transfer students (no second tier exists).
+  if (actingAgent.parentAgentId) { res.status(403).json({ error: "Sub-agents cannot transfer students" }); return; }
+
+  const [existing] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
+  if (!existing) { res.status(404).json({ error: "Student not found" }); return; }
+
+  // IDOR: the student must currently be inside the acting agent's own tree
+  // (the agent itself or one of its own sub-agents).
+  const visibleIds = await getAgentVisibleIds(req.user!.id, req.user!.role);
+  if (!existing.agentId || !visibleIds.includes(existing.agentId)) {
+    res.status(403).json({ error: "You can only transfer your own students" }); return;
+  }
+
+  // IDOR: the destination must be one of THIS agent's own sub-agents.
+  const [target] = await db.select().from(agentsTable)
+    .where(and(eq(agentsTable.id, subAgentId), eq(agentsTable.parentAgentId, actingAgent.id), isNull(agentsTable.deletedAt)));
+  if (!target) { res.status(404).json({ error: "Sub-agent not found" }); return; }
+
+  if (existing.agentId === subAgentId) { res.status(400).json({ error: "Student already belongs to this sub-agent" }); return; }
+
+  // Full origin metadata for the destination sub-agent (type + entity + display
+  // name). Applied to both student and applications so origin-based filtering
+  // and display stay consistent with the new owner. Reads agent rows only.
+  const subOrigin = await inferOriginFromAgentId(subAgentId);
+
+  await db.transaction(async (tx) => {
+    // 1. Student ownership → sub-agent (full origin reflects the sub-agent tier).
+    await tx.update(studentsTable).set({
+      agentId: subAgentId,
+      originType: subOrigin.originType,
+      originEntityType: subOrigin.originEntityType,
+      originEntityId: subOrigin.originEntityId,
+      originDisplayName: subOrigin.originDisplayName,
+    }).where(eq(studentsTable.id, id));
+
+    // 2. Existing applications + their service-fee rows move to the sub-agent.
+    const apps = await tx.select({ id: applicationsTable.id }).from(applicationsTable)
+      .where(and(eq(applicationsTable.studentId, id), isNull(applicationsTable.deletedAt)));
+    const appIds = apps.map(a => a.id);
+    if (appIds.length > 0) {
+      // agentId AND full origin metadata must move together so origin-based
+      // filtering / reporting stays consistent with the new owner (sub-agent).
+      await tx.update(applicationsTable).set({
+        agentId: subAgentId,
+        originType: subOrigin.originType,
+        originEntityType: subOrigin.originEntityType,
+        originEntityId: subOrigin.originEntityId,
+        originDisplayName: subOrigin.originDisplayName,
+      }).where(inArray(applicationsTable.id, appIds));
+      await tx.update(serviceFeesTable).set({ agentId: subAgentId }).where(inArray(serviceFeesTable.applicationId, appIds));
+
+      // 3. Recompute each commission row through the chain. The university
+      //    commission amount is agent-independent and stays as-is; only the
+      //    agent/sub-agent split changes. resolveAgentCommission returns the
+      //    PARENT as agentId for a sub-agent, so the parent keeps its share.
+      const comms = await tx.select().from(commissionsTable).where(inArray(commissionsTable.applicationId, appIds));
+      for (const comm of comms) {
+        const uniAmt = parseFloat(String(comm.universityCommissionAmount ?? "0")) || 0;
+        const recomputed = await resolveAgentCommission(subAgentId, uniAmt);
+        // For zero-amount rows resolveAgentCommission returns the passed id with
+        // null amounts; force the parent/sub link so ownership stays consistent.
+        await tx.update(commissionsTable).set({
+          agentId: uniAmt > 0 ? recomputed.agentId : actingAgent.id,
+          agentCommissionRate: recomputed.agentCommissionRate,
+          agentCommissionAmount: recomputed.agentCommissionAmount,
+          subAgentId: uniAmt > 0 ? recomputed.subAgentId : subAgentId,
+          subAgentCommissionRate: recomputed.subAgentCommissionRate,
+          subAgentCommissionAmount: recomputed.subAgentCommissionAmount,
+        }).where(eq(commissionsTable.id, comm.id));
+      }
+    }
+
+    // 4. Source lead(s) that converted into this student also follow ownership.
+    await tx.update(leadsTable).set({ agentId: subAgentId }).where(eq(leadsTable.convertedStudentId, id));
+  });
+
+  await logAudit(req.user!.id, "transfer_student_to_sub_agent", "student", id, { fromAgentId: existing.agentId, toAgentId: subAgentId }, req.ip);
+
+  const [updated] = await db.select().from(studentsTable).where(eq(studentsTable.id, id));
+  res.json(updated);
 });
 
 router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {

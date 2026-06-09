@@ -42,3 +42,4 @@
 - [RBAC agent-source scope (Sprint A)](rbac-agent-source-scope.md) — non-admin staff blocked from agentId≠null records; agent sees only own (not sub-agents); helper in src/lib/rbac/agentSourceScope.ts.
 - [Lead "converted" status → convert endpoint](edcons-lead-status-convert-binding.md) — status=converted must call the idempotent convert mutation (creates/merges student), not a plain status PATCH.
 - [Agent lead assignment scope](edcons-lead-assignment-scope.md) — agent/sub_agent assign own lead to own agent_staff/self/unassign; agent_staff self-claim only; validate target via getAgentVisibleIds (IDOR).
+- [Student transfer to sub-agent](edcons-student-transfer-subagent.md) — move WHOLE chain in one TX (student+apps+service_fees+leads agentId AND full origin via inferOriginFromAgentId); recompute commissions (parent keeps share); parent getAgentVisibleIds includes own sub-agents.
