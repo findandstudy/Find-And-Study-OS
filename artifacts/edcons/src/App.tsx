@@ -200,6 +200,27 @@ function LanguageSync({ lang }: { lang: string }) {
   return null;
 }
 
+function UserLanguageSyncer() {
+  const { data: me } = useGetMe({ query: { staleTime: 30_000 } } as any);
+  const { lang, setLang } = useI18nContext();
+  const appliedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const userId = (me as any)?.id as number | undefined;
+    const serverLang = (me as any)?.language as string | undefined;
+    if (!userId || !serverLang) return;
+    if (!isValidLanguage(serverLang)) return;
+    // Compose a key so we re-apply when the server language changes for the
+    // same user (e.g. post-login PATCH resolves and updates the cache).
+    const key = `${userId}:${serverLang}`;
+    if (appliedKeyRef.current === key) return;
+    appliedKeyRef.current = key;
+    if (serverLang !== lang) {
+      setLang(serverLang as Language);
+    }
+  }, [(me as any)?.id, (me as any)?.language, lang, setLang]);
+  return null;
+}
+
 /**
  * Catch-all for unrecognised public paths (e.g. /en/dashboard when the canvas
  * loads at that URL).  Checks the React Query cache (already populated by
@@ -762,6 +783,7 @@ function App() {
       <ThemeProvider>
         <SeasonProvider>
           <I18nProvider>
+            <UserLanguageSyncer />
             <TooltipProvider>
               <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")} hook={useCustomBrowserLocation as any}>
                 <ActivityTrackerProvider>

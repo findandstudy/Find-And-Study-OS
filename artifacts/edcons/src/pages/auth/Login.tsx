@@ -214,6 +214,17 @@ export default function Login() {
         setStickyUser(data.user as any);
         setAuthCache(data.user);
         queryClient.setQueryData(["/api/auth/me"], data.user);
+        // Sync the language the user has selected on this device to their
+        // profile so it is remembered on future logins from any device.
+        // Fire-and-forget: login flow must not block on this.
+        if (data.user.id && lang) {
+          fetch(`${BASE_URL}/api/users/${data.user.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ language: lang }),
+            credentials: "include",
+          }).catch(() => {});
+        }
       }
     } catch {
       setError(t("login.connectionError"));
@@ -303,6 +314,14 @@ export default function Login() {
         setStickyUser(data.user as any);
         setAuthCache(data.user);
         queryClient.setQueryData(["/api/auth/me"], data.user);
+        if (data.user.id && lang) {
+          fetch(`${BASE_URL}/api/users/${data.user.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ language: lang }),
+            credentials: "include",
+          }).catch(() => {});
+        }
       } else {
         setTab("login");
       }
