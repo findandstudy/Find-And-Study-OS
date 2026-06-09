@@ -1298,7 +1298,9 @@
     "security": "Sécurité",
     "save": "Enregistrer les modifications",
     "saving": "Enregistrement...",
-    "saved": "Enregistré"
+    "saved": "Enregistré",
+    "immutableFieldHint": "Ce champ ne peut être modifié que par un administrateur.",
+    "immutableFieldTooltip": "Géré par l'administrateur — contactez le support pour mettre à jour"
   },
   "studentAccount": {
     "title": "Paramètres du compte",

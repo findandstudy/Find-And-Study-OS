@@ -1298,7 +1298,9 @@
     "security": "Security",
     "save": "Save Changes",
     "saving": "Saving...",
-    "saved": "Saved"
+    "saved": "Saved",
+    "immutableFieldHint": "This field can only be changed by an admin.",
+    "immutableFieldTooltip": "Managed by admin — contact support to update"
   },
   "studentAccount": {
     "title": "Account Settings",

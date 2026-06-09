@@ -1298,7 +1298,9 @@
     "security": "Seguridad",
     "save": "Guardar cambios",
     "saving": "Guardando...",
-    "saved": "Guardado"
+    "saved": "Guardado",
+    "immutableFieldHint": "Este campo solo puede ser modificado por un administrador.",
+    "immutableFieldTooltip": "Gestionado por el administrador — contacta con soporte para actualizar"
   },
   "studentAccount": {
     "title": "Configuración de la cuenta",

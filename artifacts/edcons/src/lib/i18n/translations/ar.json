@@ -1298,7 +1298,9 @@
     "security": "الأمان",
     "save": "حفظ التغييرات",
     "saving": "جارٍ الحفظ...",
-    "saved": "تم الحفظ"
+    "saved": "تم الحفظ",
+    "immutableFieldHint": "يمكن تغيير هذا الحقل من قِبل المشرف فقط.",
+    "immutableFieldTooltip": "يديره المشرف — تواصل مع الدعم للتحديث"
   },
   "studentAccount": {
     "title": "إعدادات الحساب",

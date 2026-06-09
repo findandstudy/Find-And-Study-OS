@@ -1298,7 +1298,9 @@
     "security": "安全",
     "save": "保存更改",
     "saving": "保存中...",
-    "saved": "已保存"
+    "saved": "已保存",
+    "immutableFieldHint": "此字段只能由管理员更改。",
+    "immutableFieldTooltip": "由管理员管理 — 如需更新，请联系支持"
   },
   "studentAccount": {
     "title": "账户设置",

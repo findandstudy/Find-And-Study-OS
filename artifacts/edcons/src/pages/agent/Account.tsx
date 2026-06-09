@@ -19,6 +19,7 @@ import {
   Camera, Lock, KeyRound, LogOut, Code, Copy, ExternalLink,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
@@ -185,16 +186,16 @@ export default function AgentAccount() {
     setSaving(true);
     try {
       const phone = form.phoneNumber ? `${form.phoneCode}${form.phoneNumber}` : undefined;
+      const payload: Record<string, unknown> = { phone, avatarUrl: form.avatarUrl || null };
+      if (!isImmutable) {
+        payload.firstName = form.firstName;
+        payload.lastName  = form.lastName;
+        if (form.email) payload.email = form.email;
+      }
       await customFetch(`/api/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: form.firstName,
-          lastName:  form.lastName,
-          phone,
-          email: form.email || undefined,
-          avatarUrl: form.avatarUrl || null,
-        }),
+        body: JSON.stringify(payload),
       });
       await qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Profile updated", description: "Your information has been saved." });
@@ -240,6 +241,7 @@ export default function AgentAccount() {
     } catch {}
   }
 
+  const isImmutable = user?.role === "agent" || user?.role === "sub_agent";
   const initials = `${user?.firstName?.[0] || ""}${user?.lastName?.[0] || user?.email?.[0] || "?"}`.toUpperCase();
 
   return (
@@ -310,18 +312,43 @@ export default function AgentAccount() {
                   <h3 className="font-display font-semibold text-base mb-5">Personal Information</h3>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">First Name</Label>
-                      <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))} className="h-10 uppercase" />
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        First Name
+                        {isImmutable && (
+                          <Tooltip>
+                            <TooltipTrigger asChild><Lock className="w-3 h-3 text-muted-foreground/60 cursor-help" /></TooltipTrigger>
+                            <TooltipContent><p>{t("agentAccount.immutableFieldTooltip")}</p></TooltipContent>
+                          </Tooltip>
+                        )}
+                      </Label>
+                      <Input value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: toLatinUpper(e.target.value) }))} className="h-10 uppercase" disabled={isImmutable} />
+                      {isImmutable && <p className="text-[11px] text-muted-foreground">{t("agentAccount.immutableFieldHint")}</p>}
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Last Name</Label>
-                      <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))} className="h-10 uppercase" />
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        Last Name
+                        {isImmutable && (
+                          <Tooltip>
+                            <TooltipTrigger asChild><Lock className="w-3 h-3 text-muted-foreground/60 cursor-help" /></TooltipTrigger>
+                            <TooltipContent><p>{t("agentAccount.immutableFieldTooltip")}</p></TooltipContent>
+                          </Tooltip>
+                        )}
+                      </Label>
+                      <Input value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: toLatinUpper(e.target.value) }))} className="h-10 uppercase" disabled={isImmutable} />
+                      {isImmutable && <p className="text-[11px] text-muted-foreground">{t("agentAccount.immutableFieldHint")}</p>}
                     </div>
                     <div className="sm:col-span-2 space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                         <Mail className="w-3 h-3" /> Email
+                        {isImmutable && (
+                          <Tooltip>
+                            <TooltipTrigger asChild><Lock className="w-3 h-3 text-muted-foreground/60 cursor-help" /></TooltipTrigger>
+                            <TooltipContent><p>{t("agentAccount.immutableFieldTooltip")}</p></TooltipContent>
+                          </Tooltip>
+                        )}
                       </Label>
-                      <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="h-10" />
+                      <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="h-10" disabled={isImmutable} />
+                      {isImmutable && <p className="text-[11px] text-muted-foreground">{t("agentAccount.immutableFieldHint")}</p>}
                     </div>
                     <div className="sm:col-span-2 space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">

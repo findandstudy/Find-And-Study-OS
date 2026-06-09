@@ -1239,7 +1239,9 @@
     "security": "Güvenlik",
     "save": "Değişiklikleri Kaydet",
     "saving": "Kaydediliyor...",
-    "saved": "Kaydedildi"
+    "saved": "Kaydedildi",
+    "immutableFieldHint": "Bu alan yalnızca yönetici tarafından değiştirilebilir.",
+    "immutableFieldTooltip": "Yönetici tarafından yönetilir — güncellemek için destek ile iletişime geçin"
   },
   "studentAccount": {
     "title": "Hesap Ayarları",

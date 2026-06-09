@@ -3,6 +3,7 @@ import { db, usersTable, rolesTable, studentsTable, softDelete } from "@workspac
 import { eq, ilike, or, sql, and, isNull, desc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { writeAudit } from "../lib/auditLog";
 import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 import { createSession, deleteSessionsForUser, getSessionId, SESSION_TTL, SESSION_COOKIE, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
@@ -163,6 +164,24 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   if (!isAdmin && !isSelf) {
     res.status(403).json({ error: "Insufficient permissions" });
     return;
+  }
+
+  const AGENT_IMMUTABLE_ROLES = ["agent", "sub_agent"];
+  if (!isAdmin && AGENT_IMMUTABLE_ROLES.includes(req.user!.role)) {
+    const IMMUTABLE_FIELDS = ["email", "firstName", "lastName"];
+    const attempted = IMMUTABLE_FIELDS.filter(f => req.body[f] !== undefined);
+    if (attempted.length > 0) {
+      await writeAudit({
+        userId: req.user!.id,
+        action: "profile_immutable_field_change_denied",
+        resource: "user",
+        resourceId: id,
+        changes: { attempted },
+        ipAddress: req.ip ?? null,
+      });
+      res.status(403).json({ error: "Email, first name and last name can only be changed by an admin." });
+      return;
+    }
   }
 
   const allowedFields = isAdmin ? ADMIN_PATCH_FIELDS : ALLOWED_PATCH_FIELDS;

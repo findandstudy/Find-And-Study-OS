@@ -1298,7 +1298,9 @@
     "security": "Keamanan",
     "save": "Simpan Perubahan",
     "saving": "Menyimpan...",
-    "saved": "Tersimpan"
+    "saved": "Tersimpan",
+    "immutableFieldHint": "Bidang ini hanya dapat diubah oleh admin.",
+    "immutableFieldTooltip": "Dikelola oleh admin — hubungi dukungan untuk pembaruan"
   },
   "studentAccount": {
     "title": "Pengaturan Akun",
