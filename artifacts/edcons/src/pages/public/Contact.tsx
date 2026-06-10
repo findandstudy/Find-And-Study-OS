@@ -65,6 +65,10 @@ interface Office {
 interface Branding {
   companyEmail: string | null;
   companyPhone: string | null;
+  supportEmail: string | null;
+  whatsappNumber: string | null;
+  companyCity: string | null;
+  companyCountry: string | null;
   workingHours: string | null;
 }
 
@@ -72,8 +76,8 @@ export default function Contact() {
   const { t, lang } = useI18n();
 
   const { data: offices = [] } = useQuery<Office[]>({
-    queryKey: ["public-offices"],
-    queryFn: () => customFetch("/api/website/collections/offices/public"),
+    queryKey: ["cms-offices"],
+    queryFn: () => customFetch("/api/cms/offices"),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -83,9 +87,11 @@ export default function Contact() {
     staleTime: 10 * 60 * 1000,
   });
 
-  const contactEmail = branding?.companyEmail || "info@findandstudy.com";
-  const contactPhone = branding?.companyPhone || "+90 552 689 8515";
-  const workingHours = branding?.workingHours || t("contact.hoursValue");
+  const contactEmail = branding?.supportEmail || branding?.companyEmail || null;
+  const contactPhone = branding?.companyPhone || null;
+  const workingHours = branding?.workingHours || null;
+
+  const primaryOffice = offices[0] ?? null;
 
   useSeo({ title: t("seo.contactTitle"), description: t("seo.contactDesc"), lang });
   useJsonLd([
@@ -104,34 +110,31 @@ export default function Contact() {
         ],
       },
     },
-    {
+    ...(primaryOffice || contactEmail || contactPhone ? [{
       "@context": "https://schema.org",
       "@type": "LocalBusiness",
       "@id": `${SITE_URL}/#localbusiness`,
       name: SITE_NAME,
       url: SITE_URL,
-      telephone: contactPhone,
-      email: contactEmail,
-      address: offices.length > 0 ? {
-        "@type": "PostalAddress",
-        streetAddress: offices[0].address ?? "",
-        addressLocality: offices[0].city ?? "",
-        addressCountry: offices[0].country ?? "",
-      } : {
-        "@type": "PostalAddress",
-        streetAddress: "Levent Mahallesi, Büyükdere Cad. No:45",
-        addressLocality: "Istanbul",
-        postalCode: "34394",
-        addressCountry: "TR",
-      },
+      ...(contactPhone ? { telephone: contactPhone } : {}),
+      ...(contactEmail ? { email: contactEmail } : {}),
+      ...(primaryOffice?.address ? {
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: primaryOffice.address,
+          addressLocality: primaryOffice.city ?? "",
+          addressCountry: primaryOffice.country ?? "",
+        },
+      } : {}),
       openingHoursSpecification: {
         "@type": "OpeningHoursSpecification",
         dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
         opens: "09:00",
         closes: "18:00",
       },
-    },
+    }] : []),
   ]);
+
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phoneCode: "", phone: "", nationality: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
@@ -209,6 +212,12 @@ export default function Contact() {
       setLoading(false);
     }
   };
+
+  const quickContactItems = [
+    contactEmail ? { icon: Mail, label: t("contact.emailLabel"), value: contactEmail, href: `mailto:${contactEmail}` } : null,
+    contactPhone ? { icon: Phone, label: t("contact.phoneLabel"), value: contactPhone, href: `tel:${contactPhone.replace(/\s/g, "")}` } : null,
+    workingHours ? { icon: Clock, label: t("contact.hoursLabel"), value: workingHours, href: undefined } : null,
+  ].filter(Boolean) as { icon: typeof Mail; label: string; value: string; href: string | undefined }[];
 
   return (
     <>
@@ -345,27 +354,25 @@ export default function Contact() {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-            <div>
-              <h2 className="text-2xl font-display font-bold text-foreground mb-6">{t("contact.quickContact")}</h2>
-              <div className="space-y-4">
-                {[
-                  { icon: Mail, label: t("contact.emailLabel"), value: contactEmail, href: `mailto:${contactEmail}` },
-                  { icon: Phone, label: t("contact.phoneLabel"), value: contactPhone, href: `tel:${contactPhone.replace(/\s/g, "")}` },
-                  { icon: Clock, label: t("contact.hoursLabel"), value: workingHours, href: undefined },
-                ].map((c, i) => (
-                  <a key={i} href={c.href || '#'}
-                    className="flex items-center gap-4 p-4 rounded-2xl bg-secondary/50 hover:bg-primary/5 transition-colors group">
-                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                      <c.icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium">{c.label}</p>
-                      <p className="text-foreground font-semibold">{c.value}</p>
-                    </div>
-                  </a>
-                ))}
+            {quickContactItems.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-display font-bold text-foreground mb-6">{t("contact.quickContact")}</h2>
+                <div className="space-y-4">
+                  {quickContactItems.map((c, i) => (
+                    <a key={i} href={c.href || '#'}
+                      className="flex items-center gap-4 p-4 rounded-2xl bg-secondary/50 hover:bg-primary/5 transition-colors group">
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                        <c.icon className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium">{c.label}</p>
+                        <p className="text-foreground font-semibold">{c.value}</p>
+                      </div>
+                    </a>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {offices.length > 0 && (
               <div>

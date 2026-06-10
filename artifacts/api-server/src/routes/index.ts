@@ -47,6 +47,7 @@ import agentOnboardingRouter, { ONBOARDING_HELPERS } from "./agentOnboarding";
 import leadAssignmentRulesRouter from "./leadAssignmentRules";
 import staffCardsRouter from "./staffCards";
 import apiTokensRouter from "./apiTokens";
+import cmsRouter from "./cms";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
 const router: IRouter = Router();
@@ -178,5 +179,6 @@ router.use(staffCardsRouter);
 router.use(aiPersonasRouter);
 router.use(aiExtractorsRouter);
 router.use(apiTokensRouter);
+router.use(cmsRouter);
 
 export default router;

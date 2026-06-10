@@ -738,10 +738,12 @@ async function seedClaudeIntegration() {
         image_url TEXT,
         sort_order INTEGER NOT NULL DEFAULT 0,
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        translations_json JSONB NOT NULL DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    await pool.query(`ALTER TABLE website_collections_offices ADD COLUMN IF NOT EXISTS translations_json JSONB NOT NULL DEFAULT '{}'`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS website_collections_team_members (
         id SERIAL PRIMARY KEY,
@@ -753,38 +755,61 @@ async function seedClaudeIntegration() {
         linkedin_url TEXT,
         sort_order INTEGER NOT NULL DEFAULT 0,
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        translations_json JSONB NOT NULL DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
-    // One-shot seed: populate with default data if both tables are empty.
-    // Uses a system_flags marker so re-deploys don't overwrite admin edits.
+    await pool.query(`ALTER TABLE website_collections_team_members ADD COLUMN IF NOT EXISTS translations_json JSONB NOT NULL DEFAULT '{}'`);
+    // One-shot seed: populate with defaults sourced from the en.json i18n file
+    // (about.team* and contact.office* keys). Uses a system_flags marker so
+    // re-deploys don't overwrite edits made in the admin panel.
     const seedFlag = await pool.query(
       `INSERT INTO system_flags (key) VALUES ('cms_collections_seeded_v1') ON CONFLICT DO NOTHING RETURNING key`
     );
     if (seedFlag.rows.length > 0) {
+      // Load i18n defaults from the frontend translations file so seed values
+      // stay in sync with the static text that was previously shown on the page.
+      let i18nEn: Record<string, Record<string, string>> = { about: {}, contact: {} };
+      try {
+        const enJsonPath = path.join(process.cwd(), "../edcons/src/lib/i18n/translations/en.json");
+        const raw = fs.readFileSync(enJsonPath, "utf-8");
+        i18nEn = JSON.parse(raw);
+      } catch {
+        console.warn("[migrate] Could not load en.json for CMS seed — using built-in defaults");
+      }
+      const a = i18nEn.about ?? {};
+      const c = i18nEn.contact ?? {};
       const { rowCount: officeCount } = await pool.query(`SELECT 1 FROM website_collections_offices LIMIT 1`);
       if ((officeCount ?? 0) === 0) {
-        await pool.query(`
-          INSERT INTO website_collections_offices (name, city, country, address, sort_order, is_active)
-          VALUES
-            ('Istanbul Office', 'Istanbul', 'Türkiye', 'Levent Mahallesi, Buyukdere Cad. No:45, 34394 Istanbul, Turkiye', 0, TRUE),
-            ('London Office',   'London',   'UK',      '30 St Mary Axe, London EC3A 8BF, UK', 1, TRUE),
-            ('Dubai Office',    'Dubai',    'UAE',     'Dubai Internet City, Building 4, Office 220', 2, TRUE)
-        `);
-        console.log("[migrate] website_collections_offices seeded with 3 default offices");
+        const offices = [
+          { name: a["office0City"] ?? c["office0City"] ?? "Istanbul Office", city: c["office0City"] ?? "Istanbul", country: "Türkiye", address: c["office0Address"] ?? "Levent Mahallesi, Buyukdere Cad. No:45, 34394 Istanbul, Turkiye", order: 0 },
+          { name: a["office1City"] ?? c["office1City"] ?? "London Office",   city: c["office1City"] ?? "London",   country: "UK",       address: c["office1Address"] ?? "30 St Mary Axe, London EC3A 8BF, UK",                             order: 1 },
+          { name: a["office2City"] ?? c["office2City"] ?? "Dubai Office",    city: c["office2City"] ?? "Dubai",    country: "UAE",      address: c["office2Address"] ?? "Dubai Internet City, Building 4, Office 220",                     order: 2 },
+        ];
+        for (const o of offices) {
+          await pool.query(
+            `INSERT INTO website_collections_offices (name, city, country, address, sort_order, is_active) VALUES ($1, $2, $3, $4, $5, TRUE)`,
+            [o.name, o.city, o.country, o.address, o.order]
+          );
+        }
+        console.log(`[migrate] website_collections_offices seeded with ${offices.length} offices from en.json`);
       }
       const { rowCount: memberCount } = await pool.query(`SELECT 1 FROM website_collections_team_members LIMIT 1`);
       if ((memberCount ?? 0) === 0) {
-        await pool.query(`
-          INSERT INTO website_collections_team_members (name, title, bio, sort_order, is_active)
-          VALUES
-            ('Dr. Ayse Yildiz',   'Founder & CEO',                  '15+ years in international education consulting. Former admissions officer at top UK universities.', 0, TRUE),
-            ('Marcus Chen',       'Head of Admissions',             'Guided 2,000+ students to their dream universities across 30 countries.', 1, TRUE),
-            ('Fatima Al-Hassan',  'Visa & Immigration Specialist',  'Expert in student visa processes for UK, USA, Canada, Australia, and Europe.', 2, TRUE),
-            ('Olena Kovalenko',   'Regional Manager - Europe',      'Specializes in European university placements and scholarship programs.', 3, TRUE)
-        `);
-        console.log("[migrate] website_collections_team_members seeded with 4 default members");
+        const members = [
+          { name: a["team0Name"] ?? "Dr. Ayse Yildiz",   title: a["team0Role"] ?? "Founder & CEO",                 bio: a["team0Bio"] ?? "15+ years in international education consulting.", order: 0 },
+          { name: a["team1Name"] ?? "Marcus Chen",        title: a["team1Role"] ?? "Head of Admissions",            bio: a["team1Bio"] ?? "Guided 2,000+ students to their dream universities across 30 countries.", order: 1 },
+          { name: a["team2Name"] ?? "Fatima Al-Hassan",   title: a["team2Role"] ?? "Visa & Immigration Specialist", bio: a["team2Bio"] ?? "Expert in student visa processes for UK, USA, Canada, Australia, and Europe.", order: 2 },
+          { name: a["team3Name"] ?? "Olena Kovalenko",    title: a["team3Role"] ?? "Regional Manager - Europe",     bio: a["team3Bio"] ?? "Specializes in European university placements and scholarship programs.", order: 3 },
+        ];
+        for (const m of members) {
+          await pool.query(
+            `INSERT INTO website_collections_team_members (name, title, bio, sort_order, is_active) VALUES ($1, $2, $3, $4, TRUE)`,
+            [m.name, m.title, m.bio, m.order]
+          );
+        }
+        console.log(`[migrate] website_collections_team_members seeded with ${members.length} members from en.json`);
       }
     }
   } catch (err) {

@@ -222,6 +222,7 @@ export const websiteCollectionsOfficesTable = pgTable("website_collections_offic
   imageUrl: text("image_url"),
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
+  translationsJson: jsonb("translations_json").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -236,6 +237,7 @@ export const websiteCollectionsTeamMembersTable = pgTable("website_collections_t
   linkedinUrl: text("linkedin_url"),
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
+  translationsJson: jsonb("translations_json").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
