@@ -2291,6 +2291,7 @@
     "selectAssignee": "नियुक्त व्यक्ति चुनें",
     "unassigned": "अनिर्दिष्ट",
     "assignToMe": "मुझे नियुक्त करें",
+    "assigning": "नियुक्त किया जा रहा है...",
     "studentAssigned": "छात्र नियुक्त किया गया",
     "studentUnassigned": "छात्र से नियुक्ति हटाई गई",
     "downloadAllDocuments": "सभी दस्तावेज़ डाउनलोड करें"

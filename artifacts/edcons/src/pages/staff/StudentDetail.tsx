@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock, Copy, Check, Eye } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock, Copy, Check, Eye, UserPlus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/apiFetch";
 import { useDocumentPreview } from "@/components/DocumentPreviewDialog";
@@ -823,7 +823,21 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                       <span className="text-sm font-medium">{getAssignedUserName(student.assignedToId) || "—"}</span>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">{t("studentDetailPage.unassigned")}</p>
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">{t("studentDetailPage.unassigned")}</p>
+                      {user?.id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full rounded-full"
+                          onClick={() => handleAssign(user.id)}
+                          disabled={assigning}
+                        >
+                          <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                          {assigning ? t("studentDetailPage.assigning") : t("studentDetailPage.assignToMe")}
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
                 )}

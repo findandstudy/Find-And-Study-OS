@@ -2291,6 +2291,7 @@
     "selectAssignee": "انتخاب مسئول",
     "unassigned": "تخصیص‌نیافته",
     "assignToMe": "تخصیص به من",
+    "assigning": "در حال تخصیص...",
     "studentAssigned": "دانشجو تخصیص داده شد",
     "studentUnassigned": "تخصیص دانشجو لغو شد",
     "downloadAllDocuments": "دانلود همه اسناد"

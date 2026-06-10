@@ -2291,6 +2291,7 @@
     "selectAssignee": "Selecciona un responsable",
     "unassigned": "Sin asignar",
     "assignToMe": "Asignármelo",
+    "assigning": "Asignando...",
     "studentAssigned": "Estudiante asignado",
     "studentUnassigned": "Estudiante sin asignar",
     "downloadAllDocuments": "Descargar todos los documentos"

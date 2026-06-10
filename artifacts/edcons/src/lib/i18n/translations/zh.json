@@ -2291,6 +2291,7 @@
     "selectAssignee": "选择负责人",
     "unassigned": "未分配",
     "assignToMe": "分配给我",
+    "assigning": "正在分配...",
     "studentAssigned": "学生已分配",
     "studentUnassigned": "学生已取消分配",
     "downloadAllDocuments": "下载所有文档"

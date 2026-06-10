@@ -2583,6 +2583,7 @@
     "selectAssignee": "Select assignee",
     "unassigned": "Unassigned",
     "assignToMe": "Assign to me",
+    "assigning": "Assigning...",
     "studentAssigned": "Student assigned",
     "studentUnassigned": "Student unassigned",
     "downloadAllDocuments": "Download all documents"

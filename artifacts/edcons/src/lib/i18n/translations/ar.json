@@ -2342,6 +2342,7 @@
     "selectAssignee": "اختر المعيَّن إليه",
     "unassigned": "غير معيّن",
     "assignToMe": "تعيين لي",
+    "assigning": "جارٍ التعيين...",
     "studentAssigned": "تم تعيين الطالب",
     "studentUnassigned": "تم إلغاء تعيين الطالب",
     "downloadAllDocuments": "تنزيل كل المستندات"

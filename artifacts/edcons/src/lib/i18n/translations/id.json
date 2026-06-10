@@ -2291,6 +2291,7 @@
     "selectAssignee": "Pilih penerima tugas",
     "unassigned": "Belum Ditugaskan",
     "assignToMe": "Tugaskan ke saya",
+    "assigning": "Menugaskan...",
     "studentAssigned": "Siswa ditugaskan",
     "studentUnassigned": "Penugasan siswa dibatalkan",
     "downloadAllDocuments": "Unduh semua dokumen"

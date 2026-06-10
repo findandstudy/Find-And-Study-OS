@@ -2524,6 +2524,7 @@
     "selectAssignee": "Atanacak kişi seçin",
     "unassigned": "Atanmamış",
     "assignToMe": "Bana ata",
+    "assigning": "Atanıyor...",
     "studentAssigned": "Öğrenci atandı",
     "studentUnassigned": "Öğrenci ataması kaldırıldı",
     "downloadAllDocuments": "Tüm belgeleri indir"

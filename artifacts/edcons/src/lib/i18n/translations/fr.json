@@ -2342,6 +2342,7 @@
     "selectAssignee": "Sélectionner un responsable",
     "unassigned": "Non attribué",
     "assignToMe": "M'attribuer",
+    "assigning": "Attribution en cours...",
     "studentAssigned": "Étudiant attribué",
     "studentUnassigned": "Attribution de l'étudiant annulée",
     "downloadAllDocuments": "Télécharger tous les documents"
