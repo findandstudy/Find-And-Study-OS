@@ -95,10 +95,13 @@ router.post("/activity/heartbeat", requireAuth, async (req, res): Promise<void> 
   if (!sessionId) { res.status(400).json({ error: "sessionId required" }); return; }
 
   const now = new Date();
+  const aDelta = Math.round(activeDelta);
+  const iDelta = Math.round(idleDelta);
   await db.update(userSessionsTable).set({
     lastSeenAt: now,
-    activeDurationSeconds: sql`${userSessionsTable.activeDurationSeconds} + ${Math.round(activeDelta)}`,
-    idleDurationSeconds: sql`${userSessionsTable.idleDurationSeconds} + ${Math.round(idleDelta)}`,
+    activeDurationSeconds: sql`${userSessionsTable.activeDurationSeconds} + ${aDelta}`,
+    idleDurationSeconds: sql`${userSessionsTable.idleDurationSeconds} + ${iDelta}`,
+    totalDurationSeconds: sql`${userSessionsTable.activeDurationSeconds} + ${userSessionsTable.idleDurationSeconds} + ${aDelta} + ${iDelta}`,
   }).where(and(eq(userSessionsTable.id, sessionId), eq(userSessionsTable.userId, userId)));
 
   const presenceStatus = status === "idle" ? "idle" : "active";
@@ -315,7 +318,7 @@ router.get("/activity/user/:userId", requireAuth, requireRole(...ADMIN_ROLES), a
     presence: presence || { status: "offline" },
     sessions,
     pageVisits,
-    moduleBreakdown: moduleBreakdown.map(m => ({ ...m, visitCount: Number(m.visitCount), totalDuration: Number(m.totalDuration), activeDuration: Number(m.activeDuration), idleDuration: Number(m.idleDuration) })),
+    moduleBreakdown: normalizeModuleBreakdown(moduleBreakdown.map(m => ({ ...m, visitCount: Number(m.visitCount), totalDuration: Number(m.totalDuration), activeDuration: Number(m.activeDuration), idleDuration: Number(m.idleDuration) }))),
     events,
     dailyBreakdown: dailyBreakdown.map(d => ({ ...d, totalDuration: Number(d.totalDuration), activeDuration: Number(d.activeDuration), sessionCount: Number(d.sessionCount) })),
   });
@@ -339,7 +342,16 @@ router.get("/activity/modules", requireAuth, requireRole(...ADMIN_ROLES), async 
   .groupBy(userPageVisitsTable.moduleName)
   .orderBy(sql`count(*) desc`);
 
-  res.json({ data: modules.map(m => ({ ...m, visitCount: Number(m.visitCount), uniqueUsers: Number(m.uniqueUsers), totalDuration: Number(m.totalDuration), activeDuration: Number(m.activeDuration), avgDuration: Number(m.avgDuration) })) });
+  const rawModules = modules.map(m => ({
+    moduleName: m.moduleName,
+    visitCount: Number(m.visitCount),
+    uniqueUsers: Number(m.uniqueUsers),
+    totalDuration: Number(m.totalDuration),
+    activeDuration: Number(m.activeDuration),
+    avgDuration: Number(m.avgDuration),
+    idleDuration: 0,
+  }));
+  res.json({ data: normalizeModuleBreakdown(rawModules).map(m => ({ ...m, avgDuration: m.avgDuration ?? 0 })) });
 });
 
 router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -426,8 +438,9 @@ router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), asy
     ? buildDailyBarChartSvg(dailyChartData, primary, accent)
     : "";
 
-  const maxModVisits = Math.max(...moduleBreakdown.map(m => Number(m.visitCount) || 0), 1);
-  const moduleRows = moduleBreakdown.map((m, idx) => {
+  const normalizedMods = normalizeModuleBreakdown(moduleBreakdown.map(m => ({ ...m, visitCount: Number(m.visitCount), totalDuration: Number(m.totalDuration), activeDuration: Number(m.activeDuration), idleDuration: Number((m as any).idleDuration) || 0 })));
+  const maxModVisits = Math.max(...normalizedMods.map(m => Number(m.visitCount) || 0), 1);
+  const moduleRows = normalizedMods.map((m, idx) => {
     const vis = Number(m.visitCount) || 0;
     const dur = Number(m.totalDuration) || Number(m.activeDuration) || 0;
     const pct = Math.round((vis / maxModVisits) * 100);
@@ -554,6 +567,36 @@ ${sessions.length > 0 ? `
   res.send(pdfBuffer);
 });
 
+const EXCLUDE_SEGMENT_RE = /^(en|tr|ar|fr|ru|fa|zh|hi|es|id|login|register|verify|reset|confirm|auth|callback|public|embed|apply|sign|contract|token|oauth|sso|invite|accept|decline|redirect|error|404|500)$/i;
+
+function normalizeModuleBreakdown<T extends { moduleName: string | null }>(rows: T[]): T[] {
+  const acc = new Map<string, { row: T; visitCount: number; totalDuration: number; activeDuration: number; idleDuration: number }>();
+  for (const r of rows) {
+    const name = deriveModuleName(r.moduleName || "");
+    const vn = Number((r as any).visitCount) || 0;
+    const td = Number((r as any).totalDuration) || 0;
+    const ad = Number((r as any).activeDuration) || 0;
+    const id_ = Number((r as any).idleDuration) || 0;
+    const existing = acc.get(name);
+    if (existing) {
+      existing.visitCount += vn;
+      existing.totalDuration += td;
+      existing.activeDuration += ad;
+      existing.idleDuration += id_;
+    } else {
+      acc.set(name, { row: r, visitCount: vn, totalDuration: td, activeDuration: ad, idleDuration: id_ });
+    }
+  }
+  return Array.from(acc.entries()).map(([name, v]) => ({
+    ...v.row,
+    moduleName: name,
+    visitCount: v.visitCount,
+    totalDuration: v.totalDuration,
+    activeDuration: v.activeDuration,
+    idleDuration: v.idleDuration,
+  } as T)).sort((a, b) => (Number((b as any).visitCount) || 0) - (Number((a as any).visitCount) || 0));
+}
+
 function deriveModuleName(route: string): string {
   const map: Record<string, string> = {
     "/admin": "Dashboard", "/staff": "Dashboard", "/student": "Dashboard", "/agent": "Dashboard",
@@ -600,7 +643,7 @@ function deriveModuleName(route: string): string {
   const base = cleaned || route;
   const parts = base.split("/").filter(Boolean);
   const last = parts[parts.length - 1];
-  if (!last || /^\d+$/.test(last) || last.length > 30) return "Other";
+  if (!last || /^\d+$/.test(last) || last.length > 30 || last.length <= 2 || EXCLUDE_SEGMENT_RE.test(last)) return "Other";
   return last.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 

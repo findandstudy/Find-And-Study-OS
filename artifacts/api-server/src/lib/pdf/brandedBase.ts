@@ -81,6 +81,7 @@ export function buildBrandedHtml(opts: BuildBrandedHtmlOptions): string {
 <html lang="en"><head><meta charset="utf-8" />
 <style>
 @page{size:A4;margin:18mm 16mm 22mm}
+@page{@bottom-center{content:none}}
 *,*::before,*::after{box-sizing:border-box}
 body{font-family:'DejaVu Sans','Noto Sans',Arial,sans-serif;color:#0f172a;font-size:10px;line-height:1.5;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .pdf-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:12px;border-bottom:2.5px solid ${esc(primary)};position:relative}
@@ -102,6 +103,8 @@ tbody td{padding:4px 8px;border-bottom:1px solid #f1f5f9;font-size:9.5px;vertica
 .pct-bar{height:6px;background:${esc(accent)}33;border-radius:3px;overflow:hidden;margin-top:2px}
 .pct-bar-fill{height:100%;background:${esc(primary)};border-radius:3px}
 footer{position:fixed;bottom:6mm;left:16mm;right:16mm;font-size:8px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:4px;display:flex;justify-content:space-between}
+.page-num::before{content:counter(page)}
+.page-count::before{content:counter(pages)}
 </style></head><body>
 <div class="pdf-header">
   ${logoHtml}
@@ -114,7 +117,7 @@ footer{position:fixed;bottom:6mm;left:16mm;right:16mm;font-size:8px;color:#94a3b
 ${body}
 <footer>
   <span>${company}${footerText ? " &mdash; " + footerText : ""}</span>
-  <span>Generated: ${generatedAt}</span>
+  <span style="display:flex;align-items:center;gap:6px">Generated: ${generatedAt} &nbsp;|&nbsp; Page <span class="page-num"></span> / <span class="page-count"></span></span>
 </footer>
 </body></html>`;
 }
