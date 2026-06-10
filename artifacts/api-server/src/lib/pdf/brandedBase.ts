@@ -23,15 +23,26 @@ export async function loadBrandedPdfSettings(): Promise<BrandedPdfSettings> {
   return row ?? {};
 }
 
+const PRIVATE_HOST_RE = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1$|0\.0\.0\.0|fd[0-9a-f]{2}:|fc[0-9a-f]{2}:)/i;
+
 async function fetchAsDataUri(rawUrl: string | null | undefined): Promise<string | null> {
   if (!rawUrl) return null;
   try {
-    const port = process.env.PORT || "3001";
-    const url = rawUrl.startsWith("http") ? rawUrl : `http://localhost:${port}${rawUrl}`;
+    let url: string;
+    if (rawUrl.startsWith("http")) {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol !== "https:") return null;
+      if (PRIVATE_HOST_RE.test(parsed.hostname)) return null;
+      url = rawUrl;
+    } else {
+      const port = process.env.PORT || "3001";
+      url = `http://localhost:${port}${rawUrl}`;
+    }
     const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
     if (!resp.ok) return null;
     const buf = Buffer.from(await resp.arrayBuffer());
     const ct = resp.headers.get("content-type") || "image/png";
+    if (!ct.startsWith("image/")) return null;
     return `data:${ct};base64,${buf.toString("base64")}`;
   } catch {
     return null;

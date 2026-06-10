@@ -28,9 +28,7 @@ async function closeStaleSession(sessionId: number, reason: string) {
   if (!session || !session.isActive) return;
 
   const endedAt = session.lastSeenAt;
-  const wallClockSec = Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000);
-  const accSec = (session.activeDurationSeconds || 0) + (session.idleDurationSeconds || 0);
-  const totalSec = Math.max(wallClockSec, accSec);
+  const totalSec = (session.activeDurationSeconds || 0) + (session.idleDurationSeconds || 0);
   await db.update(userSessionsTable).set({
     isActive: false,
     endedAt,
@@ -163,9 +161,7 @@ router.post("/activity/session/end", requireAuth, async (req, res): Promise<void
       .where(and(eq(userSessionsTable.id, sessionId), eq(userSessionsTable.userId, userId)));
     if (session && session.isActive) {
       const now = new Date();
-      const wallClockSec = Math.floor((now.getTime() - session.startedAt.getTime()) / 1000);
-      const accSec = (session.activeDurationSeconds || 0) + (session.idleDurationSeconds || 0);
-      const totalSec = Math.max(wallClockSec, accSec);
+      const totalSec = (session.activeDurationSeconds || 0) + (session.idleDurationSeconds || 0);
       await db.update(userSessionsTable).set({
         isActive: false, endedAt: now, endReason: reason, totalDurationSeconds: totalSec,
       }).where(eq(userSessionsTable.id, sessionId));
@@ -643,8 +639,15 @@ function deriveModuleName(route: string): string {
   const base = cleaned || route;
   const parts = base.split("/").filter(Boolean);
   const last = parts[parts.length - 1];
-  if (!last || /^\d+$/.test(last) || last.length > 30 || last.length <= 2 || EXCLUDE_SEGMENT_RE.test(last)) return "Other";
-  return last.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  if (
+    !last ||
+    last.length <= 2 ||
+    last.length > 30 ||
+    /^\d+$/.test(last) ||
+    EXCLUDE_SEGMENT_RE.test(last) ||
+    (/^[a-z0-9_-]{6,}$/i.test(last) && /\d/.test(last) && /[a-zA-Z]/.test(last))
+  ) return "Other";
+  return "Other";
 }
 
 export default router;
