@@ -35,9 +35,9 @@ const applyLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new PgRateLimitStore(APPLY_WINDOW_MS, "apply"),
-  // Skip rate limiting in test environments (e.g. integration test scripts
-  // that call the endpoint many times with different payloads in rapid succession).
-  skip: (req) => process.env.NODE_ENV === "test" || req.headers["x-test-bypass-rate-limit"] === "1",
+  // Skip rate limiting only when the server is started in test mode (e.g.
+  // in-process integration test harnesses that spawn the API directly).
+  skip: () => process.env.NODE_ENV === "test",
 });
 
 const aiExtractLimiter = rateLimit({
