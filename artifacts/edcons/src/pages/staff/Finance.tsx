@@ -933,7 +933,7 @@ export default function FinancePage() {
 
   const { data: staffBonusGlobal } = useQuery({
     queryKey: ["staff-bonus-global", season],
-    queryFn: () => customFetch<any>(`${BASE}/api/finance/staff-bonuses`),
+    queryFn: () => customFetch<any>(`${BASE}/api/finance/staff-bonuses?season=${encodeURIComponent(season)}`),
   });
 
   const allCommissions: any[] = (commResp as any)?.data || [];

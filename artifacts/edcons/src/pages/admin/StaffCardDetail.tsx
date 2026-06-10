@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1031,8 +1034,20 @@ function SalaryTab({ payments, totals, userId, onSaved }: { payments: any[]; tot
 function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions: any[]; totals: any; userId: number; onSaved: () => void }) {
   const { t } = useI18n();
   const { toast } = useToast();
-  const potentialAmt = commissions.filter(c => c.status === "potential").reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
-  const pendingAmt = commissions.filter(c => c.status === "pending" || c.status === "approved").reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+
+  // Fetch direct-student enrollment bonus buckets for this staff member
+  const { data: bonusData } = useQuery({
+    queryKey: ["staff-bonus-per", userId],
+    queryFn: () => customFetch<any>(`${BASE}/api/finance/staff-bonuses?staffUserId=${userId}`),
+    staleTime: 30_000,
+  });
+
+  // 4 buckets from direct-bonus endpoint (mutually exclusive, correct derivation)
+  const potentialAmt = bonusData?.potential?.amount ?? commissions.filter(c => c.status === "potential").reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+  const confirmedAmt = bonusData?.confirmed?.amount ?? commissions.filter(c => c.status === "approved").reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+  const paidAmt = bonusData?.paid?.amount ?? totals.paid;
+  const pendingAmt = bonusData?.pending?.amount ?? totals.pending;
+
   const [form, setForm] = useState({ amount: "", currency: "USD", studentId: "", agentId: "", applicationId: "", payDate: "", status: "pending", notes: "" });
 
   const add = async () => {
@@ -1065,9 +1080,9 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label={t("staffCards.commissions.potential")} value={potentialAmt.toFixed(2)} />
-        <StatCard label={t("staffCards.commissions.confirmed")} value={pendingAmt.toFixed(2)} />
-        <StatCard label={t("staffCards.commissions.totalPaid")} value={`${totals.paid.toFixed(2)}`} />
-        <StatCard label={t("staffCards.commissions.pending")} value={`${totals.pending.toFixed(2)}`} />
+        <StatCard label={t("staffCards.commissions.confirmed")} value={confirmedAmt.toFixed(2)} />
+        <StatCard label={t("staffCards.commissions.totalPaid")} value={paidAmt.toFixed(2)} />
+        <StatCard label={t("staffCards.commissions.pending")} value={pendingAmt.toFixed(2)} />
       </div>
       <Card className="p-4 grid grid-cols-2 md:grid-cols-8 gap-2 items-end">
         <div><Label>{t("staffCards.salary.amount")}</Label><Input type="number" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} /></div>

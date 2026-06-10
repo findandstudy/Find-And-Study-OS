@@ -998,9 +998,15 @@ router.get("/finance/staff-bonuses", requireAuth, requireRole(...FINANCE_ROLES),
   const rate = Number(settingsRow?.directStudentEnrollmentBonusRate ?? 0) || 0;
   if (!staffUserId) {
     // Domain: all direct/no-agent students (regardless of current status — to include historical paid)
+    const directBaseConds: any[] = [
+      eq(studentsTable.originType, "direct"),
+      isNull(studentsTable.agentId),
+      isNull(studentsTable.deletedAt),
+    ];
+    if (season) directBaseConds.push(eq(studentsTable.season, season));
     const allDirectStudents = await db.select({ id: studentsTable.id })
       .from(studentsTable)
-      .where(and(eq(studentsTable.originType, "direct"), isNull(studentsTable.agentId), isNull(studentsTable.deletedAt)));
+      .where(and(...directBaseConds));
     const allDirectIds = allDirectStudents.map(s => s.id);
 
     // totalPaid: paid commissions scoped to direct/no-agent domain only
@@ -1015,7 +1021,7 @@ router.get("/finance/staff-bonuses", requireAuth, requireRole(...FINANCE_ROLES),
     // totalPending: currently enrolled direct students × rate − historically-paid (rate changes reprice unpaid)
     const allEnrolledDirect = await db.select({ id: studentsTable.id })
       .from(studentsTable)
-      .where(and(eq(studentsTable.originType, "direct"), isNull(studentsTable.agentId), isNull(studentsTable.deletedAt), eq(studentsTable.status, "enrolled")));
+      .where(and(...directBaseConds, eq(studentsTable.status, "enrolled")));
     const totalPending = Math.max(0, allEnrolledDirect.length * rate - paidForDirectTotal);
 
     res.json({ rate, totalPaid: paidForDirectTotal, totalPending, perStaff: [] });
