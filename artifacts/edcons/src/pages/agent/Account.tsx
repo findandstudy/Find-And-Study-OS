@@ -840,6 +840,7 @@ function DocumentViewer({
 }
 
 function WebToLeadTab() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
 
@@ -904,17 +905,17 @@ function WebToLeadTab() {
           <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
             <Code className="w-4 h-4 text-blue-600" />
           </div>
-          <h3 className="font-display font-semibold text-base">Web to Lead Form</h3>
+          <h3 className="font-display font-semibold text-base">{t("agentAccount.webToLeadTitle")}</h3>
         </div>
         <p className="text-sm text-muted-foreground mb-5">
-          Copy the HTML code below and paste it into your website. When someone fills out the form, their information will automatically appear as a new lead in your Leads page.
+          {t("agentAccount.webToLeadDesc")}
         </p>
 
         <div className="relative">
           <div className="absolute top-3 right-3 z-10">
             <Button size="sm" variant="secondary" onClick={handleCopy} className="gap-1.5 text-xs shadow-sm">
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              {copied ? "Copied" : "Copy Code"}
+              {copied ? t("agentAccount.copied") : t("agentAccount.copyCode")}
             </Button>
           </div>
           <pre className="bg-secondary/50 border rounded-xl p-4 pr-28 text-xs text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto font-mono leading-relaxed">
@@ -928,7 +929,7 @@ function WebToLeadTab() {
           <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
             <Eye className="w-4 h-4 text-green-600" />
           </div>
-          <h3 className="font-display font-semibold text-base">Form Preview</h3>
+          <h3 className="font-display font-semibold text-base">{t("agentAccount.formPreview")}</h3>
         </div>
         <div className="bg-secondary/30 rounded-xl p-8 flex justify-center">
           <div dangerouslySetInnerHTML={{ __html: formCode }} />
@@ -940,14 +941,14 @@ function WebToLeadTab() {
           <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
             <ExternalLink className="w-4 h-4 text-amber-600" />
           </div>
-          <h3 className="font-display font-semibold text-base">How to Use</h3>
+          <h3 className="font-display font-semibold text-base">{t("agentAccount.howToUse")}</h3>
         </div>
         <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-          <li>Click <strong>"Copy Code"</strong> to copy the form HTML</li>
-          <li>Open your website's HTML editor or CMS</li>
-          <li>Paste the code where you want the form to appear</li>
-          <li>Save and publish your website</li>
-          <li>Submissions will appear in your <strong>Leads</strong> page automatically</li>
+          <li>{t("agentAccount.howToStep1")}</li>
+          <li>{t("agentAccount.howToStep2")}</li>
+          <li>{t("agentAccount.howToStep3")}</li>
+          <li>{t("agentAccount.howToStep4")}</li>
+          <li>{t("agentAccount.howToStep5")}</li>
         </ol>
       </Card>
     </div>

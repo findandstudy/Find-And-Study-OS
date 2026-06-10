@@ -64,7 +64,19 @@
     "ctaTitle": "مستعد لبدء رحلتك؟",
     "ctaSubtitle": "احجز استشارة مجانية مع أحد مستشارينا الخبراء اليوم.",
     "bookConsultation": "احجز استشارة مجانية",
-    "browsePrograms": "تصفح البرامج"
+    "browsePrograms": "تصفح البرامج",
+    "team0Name": "Dr. Ayşe Yıldız",
+    "team0Role": "المؤسسة والرئيسة التنفيذية",
+    "team0Bio": "أكثر من 15 عاماً في استشارات التعليم الدولي. موظفة قبول سابقة في أفضل الجامعات البريطانية.",
+    "team1Name": "Marcus Chen",
+    "team1Role": "رئيس القبول",
+    "team1Bio": "أرشد أكثر من 2000 طالب إلى جامعاتهم المفضلة في 30 دولة.",
+    "team2Name": "Fatima Al-Hassan",
+    "team2Role": "متخصصة في التأشيرات والهجرة",
+    "team2Bio": "خبيرة في إجراءات تأشيرة الطلاب للمملكة المتحدة والولايات المتحدة وكندا وأستراليا وأوروبا.",
+    "team3Name": "Olena Kovalenko",
+    "team3Role": "المديرة الإقليمية - أوروبا",
+    "team3Bio": "متخصصة في القبول بالجامعات الأوروبية وبرامج المنح الدراسية."
   },
   "contact": {
     "badge": "نحن هنا للمساعدة",
@@ -104,7 +116,13 @@
     "latinOnly": "يُسمح فقط بالأحرف اللاتينية",
     "messageTooLong": "الرسالة لا يمكن أن تتجاوز 400 حرف",
     "phoneCode": "كود الدولة",
-    "phoneCodeRequired": "يرجى اختيار رمز الدولة"
+    "phoneCodeRequired": "يرجى اختيار رمز الدولة",
+    "office0City": "إسطنبول",
+    "office0Address": "Levent Mahallesi, 34394 Istanbul, Türkiye",
+    "office1City": "لندن",
+    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
+    "office2City": "دبي",
+    "office2Address": "Dubai Internet City, Building 4, Office 220"
   },
   "blog": {
     "badge": "المدونة",
@@ -1302,7 +1320,18 @@
     "immutableFieldHint": "يمكن تغيير هذا الحقل من قِبل المشرف فقط.",
     "immutableFieldTooltip": "يديره المشرف — تواصل مع الدعم للتحديث",
     "profileChangedNotifTitle": "تم تحديث ملف الوكيل",
-    "profileChangedNotifBody": "{{agentName}} قام بتحديث ملفه الشخصي: {{fields}}"
+    "profileChangedNotifBody": "{{agentName}} قام بتحديث ملفه الشخصي: {{fields}}",
+    "webToLeadTitle": "نموذج الويب للعملاء المحتملين",
+    "webToLeadDesc": "انسخ كود HTML أدناه والصقه في موقعك. عندما يملأ شخص ما النموذج، ستظهر معلوماته تلقائياً كعميل محتمل جديد في صفحة العملاء.",
+    "formPreview": "معاينة النموذج",
+    "howToUse": "كيفية الاستخدام",
+    "howToStep1": "انقر على نسخ الكود لنسخ HTML النموذج",
+    "howToStep2": "افتح محرر HTML أو نظام إدارة المحتوى",
+    "howToStep3": "الصق الكود حيث تريد ظهور النموذج",
+    "howToStep4": "احفظ موقعك وانشره",
+    "howToStep5": "ستظهر التقديمات في صفحة العملاء المحتملين تلقائياً",
+    "copyCode": "نسخ الكود",
+    "copied": "تم النسخ"
   },
   "studentAccount": {
     "title": "إعدادات الحساب",
@@ -1345,7 +1374,13 @@
   },
   "adminEmbeds": {
     "title": "التضمينات",
-    "subtitle": "أدِر الأدوات القابلة للتضمين في مواقع الشركاء"
+    "subtitle": "أدِر الأدوات القابلة للتضمين في مواقع الشركاء",
+    "tabGeneral": "عام",
+    "tabFilters": "الفلاتر",
+    "tabTheme": "المظهر",
+    "tabSecurity": "الأمان",
+    "editWidget": "تعديل الويدجت",
+    "newWidget": "ويدجت جديد"
   },
   "adminCatalog": {
     "title": "الكتالوج",
@@ -4277,5 +4312,15 @@
     "scopeDocumentsWrite": "رفع المستندات",
     "scopeStudentsRead": "عرض الطلاب",
     "scopeUniversitiesRead": "عرض الجامعات"
+  },
+  "settings": {
+    "assignFirstStaff": "تعيين للموظف الأول",
+    "assignRoundRobin": "توزيع بالتناوب (round-robin)"
+  },
+  "agentContract": {
+    "uploadSignatureHint": "انقر لتحميل صورة التوقيع",
+    "uploadSignatureFormat": "PNG أو JPG، بحد أقصى 5 ميجابايت",
+    "removeSignature": "إزالة",
+    "confirmText": "أؤكد أنني قرأت هذا العقد وفهمته، وأن توقيعي الإلكتروني سيعتبر صالحاً."
   }
 }

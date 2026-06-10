@@ -64,7 +64,19 @@
     "ctaTitle": "अपनी यात्रा शुरू करने के लिए तैयार हैं?",
     "ctaSubtitle": "आज ही हमारे विशेषज्ञ सलाहकार के साथ मुफ्त परामर्श बुक करें।",
     "bookConsultation": "मुफ्त परामर्श बुक करें",
-    "browsePrograms": "कार्यक्रम देखें"
+    "browsePrograms": "कार्यक्रम देखें",
+    "team0Name": "Dr. Ayşe Yıldız",
+    "team0Role": "संस्थापक एवं CEO",
+    "team0Bio": "अंतर्राष्ट्रीय शिक्षा परामर्श में 15+ वर्षों का अनुभव।",
+    "team1Name": "Marcus Chen",
+    "team1Role": "प्रमुख प्रवेश अधिकारी",
+    "team1Bio": "30 देशों में 2,000+ छात्रों का मार्गदर्शन किया।",
+    "team2Name": "Fatima Al-Hassan",
+    "team2Role": "वीज़ा और आप्रवासन विशेषज्ञ",
+    "team2Bio": "छात्र वीज़ा प्रक्रियाओं में विशेषज्ञ।",
+    "team3Name": "Olena Kovalenko",
+    "team3Role": "क्षेत्रीय प्रबंधक - यूरोप",
+    "team3Bio": "यूरोपीय विश्वविद्यालय प्रवेश में विशेषज्ञ।"
   },
   "contact": {
     "badge": "हम मदद के लिए यहाँ हैं",
@@ -104,7 +116,13 @@
     "latinOnly": "केवल लैटिन अक्षर अनुमत हैं",
     "messageTooLong": "संदेश 400 अक्षरों से अधिक नहीं हो सकता",
     "phoneCode": "देश कोड",
-    "phoneCodeRequired": "कृपया देश कोड चुनें"
+    "phoneCodeRequired": "कृपया देश कोड चुनें",
+    "office0City": "इस्तांबुल",
+    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
+    "office1City": "लंदन",
+    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
+    "office2City": "दुबई",
+    "office2Address": "Dubai Internet City, Building 4, Office 220"
   },
   "blog": {
     "badge": "ब्लॉग",
@@ -1302,7 +1320,18 @@
     "immutableFieldHint": "यह फ़ील्ड केवल व्यवस्थापक द्वारा बदली जा सकती है।",
     "immutableFieldTooltip": "व्यवस्थापक द्वारा प्रबंधित — अपडेट के लिए सहायता से संपर्क करें",
     "profileChangedNotifTitle": "एजेंट प्रोफ़ाइल अपडेट किया गया",
-    "profileChangedNotifBody": "{{agentName}} ने अपना प्रोफ़ाइल अपडेट किया: {{fields}}"
+    "profileChangedNotifBody": "{{agentName}} ने अपना प्रोफ़ाइल अपडेट किया: {{fields}}",
+    "webToLeadTitle": "वेब टू लीड फॉर्म",
+    "webToLeadDesc": "नीचे दिए गए HTML कोड को कॉपी करें और वेबसाइट में पेस्ट करें। जब कोई फॉर्म भरता है, उनकी जानकारी Leads पेज में दिखाई देगी।",
+    "formPreview": "फॉर्म पूर्वावलोकन",
+    "howToUse": "कैसे उपयोग करें",
+    "howToStep1": "फॉर्म HTML कॉपी करने के लिए कोड कॉपी करें पर क्लिक करें",
+    "howToStep2": "वेबसाइट का HTML एडिटर या CMS खोलें",
+    "howToStep3": "जहाँ फॉर्म दिखाना है वहाँ कोड पेस्ट करें",
+    "howToStep4": "वेबसाइट सेव करें और प्रकाशित करें",
+    "howToStep5": "सबमिशन स्वचालित रूप से Leads पेज में दिखाई देंगे",
+    "copyCode": "कोड कॉपी करें",
+    "copied": "कॉपी किया"
   },
   "studentAccount": {
     "title": "खाता सेटिंग्स",
@@ -1345,7 +1374,13 @@
   },
   "adminEmbeds": {
     "title": "एम्बेड",
-    "subtitle": "पार्टनर साइटों के लिए एम्बेड करने योग्य विजेट प्रबंधित करें"
+    "subtitle": "पार्टनर साइटों के लिए एम्बेड करने योग्य विजेट प्रबंधित करें",
+    "tabGeneral": "सामान्य",
+    "tabFilters": "फ़िल्टर",
+    "tabTheme": "थीम",
+    "tabSecurity": "सुरक्षा",
+    "editWidget": "विजेट संपादित करें",
+    "newWidget": "नया विजेट"
   },
   "adminCatalog": {
     "title": "कैटलॉग",
@@ -4277,5 +4312,15 @@
     "scopeDocumentsWrite": "दस्तावेज़ अपलोड करें",
     "scopeStudentsRead": "छात्र पढ़ें",
     "scopeUniversitiesRead": "विश्वविद्यालय पढ़ें"
+  },
+  "settings": {
+    "assignFirstStaff": "पहले कर्मचारी को सौंपें",
+    "assignRoundRobin": "रोटेशन में वितरित करें (round-robin)"
+  },
+  "agentContract": {
+    "uploadSignatureHint": "हस्ताक्षर छवि अपलोड करने के लिए क्लिक करें",
+    "uploadSignatureFormat": "PNG या JPG, अधिकतम 5MB",
+    "removeSignature": "हटाएं",
+    "confirmText": "मैं पुष्टि करता/करती हूं कि मैंने इस अनुबंध को पढ़ा और समझा है, और मेरा इलेक्ट्रॉनिक हस्ताक्षर वैध माना जाएगा।"
   }
 }

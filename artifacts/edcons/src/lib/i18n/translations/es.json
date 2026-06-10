@@ -64,7 +64,19 @@
     "ctaTitle": "¿Listo para comenzar tu viaje?",
     "ctaSubtitle": "Reserva una consulta gratuita con uno de nuestros asesores expertos.",
     "bookConsultation": "Reservar consulta gratuita",
-    "browsePrograms": "Ver programas"
+    "browsePrograms": "Ver programas",
+    "team0Name": "Dr. Ayşe Yıldız",
+    "team0Role": "Fundadora y CEO",
+    "team0Bio": "Más de 15 años en consultoría de educación internacional. Exoficial de admisiones en las principales universidades del Reino Unido.",
+    "team1Name": "Marcus Chen",
+    "team1Role": "Jefe de Admisiones",
+    "team1Bio": "Ha guiado a más de 2.000 estudiantes a sus universidades de ensueño en 30 países.",
+    "team2Name": "Fatima Al-Hassan",
+    "team2Role": "Especialista en visados e inmigración",
+    "team2Bio": "Experta en procesos de visado estudiantil para Reino Unido, EE.UU., Canadá, Australia y Europa.",
+    "team3Name": "Olena Kovalenko",
+    "team3Role": "Directora Regional - Europa",
+    "team3Bio": "Especializada en colocaciones universitarias europeas y programas de becas."
   },
   "contact": {
     "badge": "Estamos aquí para ayudar",
@@ -104,7 +116,13 @@
     "latinOnly": "Solo se permiten caracteres latinos",
     "messageTooLong": "El mensaje no puede exceder 400 caracteres",
     "phoneCode": "Código de país",
-    "phoneCodeRequired": "Por favor seleccione el código de país"
+    "phoneCodeRequired": "Por favor seleccione el código de país",
+    "office0City": "Estambul",
+    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
+    "office1City": "Londres",
+    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
+    "office2City": "Dubái",
+    "office2Address": "Dubai Internet City, Building 4, Office 220"
   },
   "blog": {
     "badge": "El Blog",
@@ -1302,7 +1320,18 @@
     "immutableFieldHint": "Este campo solo puede ser modificado por un administrador.",
     "immutableFieldTooltip": "Gestionado por el administrador — contacta con soporte para actualizar",
     "profileChangedNotifTitle": "Perfil del agente actualizado",
-    "profileChangedNotifBody": "{{agentName}} actualizó su perfil: {{fields}}"
+    "profileChangedNotifBody": "{{agentName}} actualizó su perfil: {{fields}}",
+    "webToLeadTitle": "Formulario Web a Lead",
+    "webToLeadDesc": "Copia el código HTML a continuación y pégalo en tu sitio web. Cuando alguien complete el formulario, su información aparecerá como un nuevo lead en tu página de Leads.",
+    "formPreview": "Vista previa del formulario",
+    "howToUse": "Cómo usar",
+    "howToStep1": "Haga clic en Copiar código para copiar el HTML del formulario",
+    "howToStep2": "Abra el editor HTML o CMS de su sitio web",
+    "howToStep3": "Pega el código donde quieres que aparezca el formulario",
+    "howToStep4": "Guarda y publica tu sitio web",
+    "howToStep5": "Los envíos aparecerán automáticamente en tu página de Leads",
+    "copyCode": "Copiar código",
+    "copied": "Copiado"
   },
   "studentAccount": {
     "title": "Configuración de la cuenta",
@@ -1345,7 +1374,13 @@
   },
   "adminEmbeds": {
     "title": "Inserciones",
-    "subtitle": "Gestiona los widgets insertables para los sitios de socios"
+    "subtitle": "Gestiona los widgets insertables para los sitios de socios",
+    "tabGeneral": "General",
+    "tabFilters": "Filtros",
+    "tabTheme": "Tema",
+    "tabSecurity": "Seguridad",
+    "editWidget": "Editar widget",
+    "newWidget": "Nuevo widget"
   },
   "adminCatalog": {
     "title": "Catálogo",
@@ -4277,5 +4312,15 @@
     "scopeDocumentsWrite": "Subir documentos",
     "scopeStudentsRead": "Leer estudiantes",
     "scopeUniversitiesRead": "Leer universidades"
+  },
+  "settings": {
+    "assignFirstStaff": "Asignar al primer agente",
+    "assignRoundRobin": "Distribuir en rotación (round-robin)"
+  },
+  "agentContract": {
+    "uploadSignatureHint": "Haga clic para cargar la firma",
+    "uploadSignatureFormat": "PNG o JPG, máximo 5MB",
+    "removeSignature": "Eliminar",
+    "confirmText": "Confirmo que he leído y entendido este contrato, y que mi firma electrónica será considerada válida."
   }
 }

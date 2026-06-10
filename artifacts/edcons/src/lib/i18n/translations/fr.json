@@ -64,7 +64,19 @@
     "ctaTitle": "Prêt à commencer votre parcours ?",
     "ctaSubtitle": "Réservez une consultation gratuite avec l'un de nos conseillers experts.",
     "bookConsultation": "Réservez une consultation gratuite",
-    "browsePrograms": "Parcourir les programmes"
+    "browsePrograms": "Parcourir les programmes",
+    "team0Name": "Dr. Ayşe Yıldız",
+    "team0Role": "Fondatrice et PDG",
+    "team0Bio": "Plus de 15 ans dans le conseil en éducation internationale. Ancienne chargée d'admissions dans les meilleures universités britanniques.",
+    "team1Name": "Marcus Chen",
+    "team1Role": "Responsable des admissions",
+    "team1Bio": "A guidé plus de 2 000 étudiants vers leurs universités de rêve dans 30 pays.",
+    "team2Name": "Fatima Al-Hassan",
+    "team2Role": "Spécialiste visa et immigration",
+    "team2Bio": "Experte des processus de visa étudiant pour le Royaume-Uni, les États-Unis, le Canada, l'Australie et l'Europe.",
+    "team3Name": "Olena Kovalenko",
+    "team3Role": "Directrice régionale - Europe",
+    "team3Bio": "Spécialisée dans les placements universitaires européens et les programmes de bourses."
   },
   "contact": {
     "badge": "Nous sommes là pour vous aider",
@@ -104,7 +116,13 @@
     "latinOnly": "Seuls les caractères latins sont autorisés",
     "messageTooLong": "Le message ne peut pas dépasser 400 caractères",
     "phoneCode": "Indicatif pays",
-    "phoneCodeRequired": "Veuillez sélectionner l'indicatif pays"
+    "phoneCodeRequired": "Veuillez sélectionner l'indicatif pays",
+    "office0City": "Istanbul",
+    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Turquie",
+    "office1City": "Londres",
+    "office1Address": "30 St Mary Axe, Londres EC3A 8BF, Royaume-Uni",
+    "office2City": "Dubaï",
+    "office2Address": "Dubai Internet City, Bâtiment 4, Bureau 220"
   },
   "blog": {
     "badge": "Le Blog",
@@ -1302,7 +1320,18 @@
     "immutableFieldHint": "Ce champ ne peut être modifié que par un administrateur.",
     "immutableFieldTooltip": "Géré par l'administrateur — contactez le support pour mettre à jour",
     "profileChangedNotifTitle": "Profil de l'agent mis à jour",
-    "profileChangedNotifBody": "{{agentName}} a mis à jour son profil : {{fields}}"
+    "profileChangedNotifBody": "{{agentName}} a mis à jour son profil : {{fields}}",
+    "webToLeadTitle": "Formulaire Web vers prospect",
+    "webToLeadDesc": "Copiez le code HTML ci-dessous et collez-le dans votre site web. Lorsqu'une personne remplit le formulaire, ses informations apparaîtront automatiquement comme un nouveau prospect.",
+    "formPreview": "Aperçu du formulaire",
+    "howToUse": "Comment utiliser",
+    "howToStep1": "Cliquez sur Copier le code pour copier le HTML du formulaire",
+    "howToStep2": "Ouvrez l'éditeur HTML ou CMS de votre site web",
+    "howToStep3": "Collez le code là où vous souhaitez que le formulaire apparaisse",
+    "howToStep4": "Enregistrez et publiez votre site web",
+    "howToStep5": "Les soumissions apparaîtront automatiquement sur votre page Leads",
+    "copyCode": "Copier le code",
+    "copied": "Copié"
   },
   "studentAccount": {
     "title": "Paramètres du compte",
@@ -1345,7 +1374,13 @@
   },
   "adminEmbeds": {
     "title": "Widgets intégrés",
-    "subtitle": "Gérez les widgets intégrables pour les sites partenaires"
+    "subtitle": "Gérez les widgets intégrables pour les sites partenaires",
+    "tabGeneral": "Général",
+    "tabFilters": "Filtres",
+    "tabTheme": "Thème",
+    "tabSecurity": "Sécurité",
+    "editWidget": "Modifier le widget",
+    "newWidget": "Nouveau widget"
   },
   "adminCatalog": {
     "title": "Catalogue",
@@ -4277,5 +4312,15 @@
     "scopeDocumentsWrite": "Téléverser des documents",
     "scopeStudentsRead": "Lire les étudiants",
     "scopeUniversitiesRead": "Lire les universités"
+  },
+  "settings": {
+    "assignFirstStaff": "Attribuer au premier agent",
+    "assignRoundRobin": "Distribuer en rotation (round-robin)"
+  },
+  "agentContract": {
+    "uploadSignatureHint": "Cliquez pour télécharger la signature",
+    "uploadSignatureFormat": "PNG ou JPG, max 5 Mo",
+    "removeSignature": "Supprimer",
+    "confirmText": "Je confirme avoir lu et compris ce contrat, et que ma signature électronique sera considérée comme valide."
   }
 }

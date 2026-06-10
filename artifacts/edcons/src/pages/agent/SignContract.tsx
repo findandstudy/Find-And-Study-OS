@@ -542,15 +542,15 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
               <>
                 <img src={uploadedUrl} alt="İmza" className="max-h-full max-w-full object-contain p-2" />
                 <button type="button" onClick={clearUpload} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
-                  <X className="w-3 h-3" /> Kaldır
+                  <X className="w-3 h-3" /> {t("agentContract.removeSignature")}
                 </button>
               </>
             ) : (
               <button type="button" onClick={() => fileInputRef.current?.click()}
                 className="flex flex-col items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
                 <Upload className="w-6 h-6" />
-                <span>İmza görselini yüklemek için tıklayın</span>
-                <span className="text-xs">PNG veya JPG, en fazla 5MB</span>
+                <span>{t("agentContract.uploadSignatureHint")}</span>
+                <span className="text-xs">{t("agentContract.uploadSignatureFormat")}</span>
               </button>
             )}
           </div>
@@ -559,7 +559,7 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
       </div>
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" />
-        <span>Bu sözleşmeyi okuduğumu, anladığımı ve elektronik imzamın geçerli kabul edileceğini onaylıyorum.</span>
+        <span>{t("agentContract.confirmText")}</span>
       </label>
       {error && (
         <div className="flex items-start gap-2 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">

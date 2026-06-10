@@ -6,15 +6,15 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Award, Globe2, Heart, Users, Target, Zap } from "lucide-react";
 
-const team = [
-  { name: "Dr. Ayşe Yıldız", role: "Founder & CEO", img: "AY", bio: "15+ years in international education consulting. Former admissions officer at top UK universities." },
-  { name: "Marcus Chen", role: "Head of Admissions", img: "MC", bio: "Guided 2,000+ students to their dream universities across 30 countries." },
-  { name: "Fatima Al-Hassan", role: "Visa & Immigration Specialist", img: "FA", bio: "Expert in student visa processes for UK, USA, Canada, Australia, and Europe." },
-  { name: "Olena Kovalenko", role: "Regional Manager - Europe", img: "OK", bio: "Specializes in European university placements and scholarship programs." },
-];
-
 export default function About() {
   const { t, lang, localePath } = useI18n();
+
+  const team = [
+    { name: t("about.team0Name"), role: t("about.team0Role"), img: "AY", bio: t("about.team0Bio") },
+    { name: t("about.team1Name"), role: t("about.team1Role"), img: "MC", bio: t("about.team1Bio") },
+    { name: t("about.team2Name"), role: t("about.team2Role"), img: "FA", bio: t("about.team2Bio") },
+    { name: t("about.team3Name"), role: t("about.team3Role"), img: "OK", bio: t("about.team3Bio") },
+  ];
   useSeo({ title: t("seo.aboutTitle"), description: t("seo.aboutDesc"), lang });
   useJsonLd([
     ORG_SCHEMA,

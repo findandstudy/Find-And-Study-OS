@@ -373,6 +373,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
   widget: Widget | null;
   onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -491,15 +492,15 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Widget" : "New Widget"}</DialogTitle>
+          <DialogTitle>{isEdit ? t("adminEmbeds.editWidget") : t("adminEmbeds.newWidget")}</DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue="general" className="mt-2">
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="filters">Filters</TabsTrigger>
-            <TabsTrigger value="theme">Theme</TabsTrigger>
-            <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="general">{t("adminEmbeds.tabGeneral")}</TabsTrigger>
+            <TabsTrigger value="filters">{t("adminEmbeds.tabFilters")}</TabsTrigger>
+            <TabsTrigger value="theme">{t("adminEmbeds.tabTheme")}</TabsTrigger>
+            <TabsTrigger value="security">{t("adminEmbeds.tabSecurity")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="space-y-4 mt-4">

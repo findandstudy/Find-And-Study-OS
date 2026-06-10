@@ -3000,8 +3000,8 @@ function LeadAssignmentRulesTab() {
               <div>
                 <Label className="text-xs font-medium mb-1.5">Strateji</Label>
                 <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.strategy} onChange={e => setForm(f => ({ ...f, strategy: e.target.value as any }))}>
-                  <option value="first">İlk personele ata</option>
-                  <option value="round_robin">Sırayla dağıt (round-robin)</option>
+                  <option value="first">{t("settings.assignFirstStaff")}</option>
+                  <option value="round_robin">{t("settings.assignRoundRobin")}</option>
                 </select>
               </div>
               <div className="flex items-center gap-3 pt-5">

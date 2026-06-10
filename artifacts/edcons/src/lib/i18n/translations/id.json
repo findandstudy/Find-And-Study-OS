@@ -64,7 +64,19 @@
     "ctaTitle": "Siap Memulai Perjalanan Anda?",
     "ctaSubtitle": "Pesan konsultasi gratis dengan salah satu penasihat ahli kami.",
     "bookConsultation": "Pesan Konsultasi Gratis",
-    "browsePrograms": "Lihat Program"
+    "browsePrograms": "Lihat Program",
+    "team0Name": "Dr. Ayşe Yıldız",
+    "team0Role": "Pendiri & CEO",
+    "team0Bio": "Lebih dari 15 tahun dalam konsultasi pendidikan internasional. Mantan petugas penerimaan di universitas terkemuka di Inggris.",
+    "team1Name": "Marcus Chen",
+    "team1Role": "Kepala Penerimaan",
+    "team1Bio": "Telah membimbing lebih dari 2.000 mahasiswa ke universitas impian mereka di 30 negara.",
+    "team2Name": "Fatima Al-Hassan",
+    "team2Role": "Spesialis Visa & Imigrasi",
+    "team2Bio": "Ahli dalam proses visa pelajar untuk UK, AS, Kanada, Australia, dan Eropa.",
+    "team3Name": "Olena Kovalenko",
+    "team3Role": "Manajer Regional - Eropa",
+    "team3Bio": "Spesialis dalam penempatan universitas Eropa dan program beasiswa."
   },
   "contact": {
     "badge": "Kami Siap Membantu",
@@ -104,7 +116,13 @@
     "latinOnly": "Hanya karakter Latin yang diperbolehkan",
     "messageTooLong": "Pesan tidak boleh melebihi 400 karakter",
     "phoneCode": "Kode negara",
-    "phoneCodeRequired": "Silakan pilih kode negara"
+    "phoneCodeRequired": "Silakan pilih kode negara",
+    "office0City": "Istanbul",
+    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
+    "office1City": "London",
+    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
+    "office2City": "Dubai",
+    "office2Address": "Dubai Internet City, Building 4, Office 220"
   },
   "blog": {
     "badge": "Blog",
@@ -1302,7 +1320,18 @@
     "immutableFieldHint": "Bidang ini hanya dapat diubah oleh admin.",
     "immutableFieldTooltip": "Dikelola oleh admin — hubungi dukungan untuk pembaruan",
     "profileChangedNotifTitle": "Profil agen diperbarui",
-    "profileChangedNotifBody": "{{agentName}} memperbarui profilnya: {{fields}}"
+    "profileChangedNotifBody": "{{agentName}} memperbarui profilnya: {{fields}}",
+    "webToLeadTitle": "Formulir Web ke Prospek",
+    "webToLeadDesc": "Salin kode HTML di bawah dan tempelkan ke situs web Anda. Ketika seseorang mengisi formulir, informasi mereka akan otomatis muncul sebagai prospek baru di halaman Leads.",
+    "formPreview": "Pratinjau Formulir",
+    "howToUse": "Cara Menggunakan",
+    "howToStep1": "Klik Salin Kode untuk menyalin HTML formulir",
+    "howToStep2": "Buka editor HTML atau CMS situs web Anda",
+    "howToStep3": "Tempel kode di tempat formulir harus muncul",
+    "howToStep4": "Simpan dan publikasikan situs web Anda",
+    "howToStep5": "Pengiriman akan otomatis muncul di halaman Leads",
+    "copyCode": "Salin Kode",
+    "copied": "Disalin"
   },
   "studentAccount": {
     "title": "Pengaturan Akun",
@@ -1345,7 +1374,13 @@
   },
   "adminEmbeds": {
     "title": "Sematan",
-    "subtitle": "Kelola widget yang dapat disematkan untuk situs mitra"
+    "subtitle": "Kelola widget yang dapat disematkan untuk situs mitra",
+    "tabGeneral": "Umum",
+    "tabFilters": "Filter",
+    "tabTheme": "Tema",
+    "tabSecurity": "Keamanan",
+    "editWidget": "Edit Widget",
+    "newWidget": "Widget Baru"
   },
   "adminCatalog": {
     "title": "Katalog",
@@ -4277,5 +4312,15 @@
     "scopeDocumentsWrite": "Unggah dokumen",
     "scopeStudentsRead": "Baca siswa",
     "scopeUniversitiesRead": "Baca universitas"
+  },
+  "settings": {
+    "assignFirstStaff": "Tetapkan ke staf pertama",
+    "assignRoundRobin": "Distribusikan secara bergilir (round-robin)"
+  },
+  "agentContract": {
+    "uploadSignatureHint": "Klik untuk mengunggah tanda tangan",
+    "uploadSignatureFormat": "PNG atau JPG, maksimal 5MB",
+    "removeSignature": "Hapus",
+    "confirmText": "Saya mengonfirmasi bahwa saya telah membaca dan memahami kontrak ini, dan tanda tangan elektronik saya akan dianggap sah."
   }
 }

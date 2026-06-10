@@ -64,7 +64,19 @@
     "ctaTitle": "Готовы начать свой путь?",
     "ctaSubtitle": "Запишитесь на бесплатную консультацию с нашим экспертом.",
     "bookConsultation": "Бесплатная консультация",
-    "browsePrograms": "Смотреть программы"
+    "browsePrograms": "Смотреть программы",
+    "team0Name": "Dr. Ayşe Yıldız",
+    "team0Role": "Основатель и генеральный директор",
+    "team0Bio": "Более 15 лет в международном образовательном консалтинге. Бывший сотрудник по приёму в ведущих британских университетах.",
+    "team1Name": "Marcus Chen",
+    "team1Role": "Руководитель приёмной комиссии",
+    "team1Bio": "Помог более 2000 студентов поступить в университеты мечты в 30 странах.",
+    "team2Name": "Fatima Al-Hassan",
+    "team2Role": "Специалист по визам и миграции",
+    "team2Bio": "Эксперт в области студенческих виз для Великобритании, США, Канады, Австралии и Европы.",
+    "team3Name": "Olena Kovalenko",
+    "team3Role": "Региональный менеджер — Европа",
+    "team3Bio": "Специализируется на поступлении в европейские университеты и стипендиальных программах."
   },
   "contact": {
     "badge": "Мы готовы помочь",
@@ -104,7 +116,13 @@
     "latinOnly": "Допускаются только латинские символы",
     "messageTooLong": "Сообщение не может превышать 400 символов",
     "phoneCode": "Код страны",
-    "phoneCodeRequired": "Пожалуйста, выберите код страны"
+    "phoneCodeRequired": "Пожалуйста, выберите код страны",
+    "office0City": "Стамбул",
+    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
+    "office1City": "Лондон",
+    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
+    "office2City": "Дубай",
+    "office2Address": "Dubai Internet City, Building 4, Office 220"
   },
   "blog": {
     "badge": "Блог",
@@ -1302,7 +1320,18 @@
     "immutableFieldHint": "Это поле может изменить только администратор.",
     "immutableFieldTooltip": "Управляется администратором — обратитесь в службу поддержки",
     "profileChangedNotifTitle": "Профиль агента обновлён",
-    "profileChangedNotifBody": "{{agentName}} обновил профиль: {{fields}}"
+    "profileChangedNotifBody": "{{agentName}} обновил профиль: {{fields}}",
+    "webToLeadTitle": "Форма лидогенерации",
+    "webToLeadDesc": "Скопируйте HTML-код ниже и вставьте его на свой сайт. Когда кто-то заполнит форму, данные появятся как новый лид на странице Лидов.",
+    "formPreview": "Предпросмотр формы",
+    "howToUse": "Как использовать",
+    "howToStep1": "Нажмите Скопировать код для копирования HTML формы",
+    "howToStep2": "Откройте HTML-редактор или CMS вашего сайта",
+    "howToStep3": "Вставьте код там, где должна появиться форма",
+    "howToStep4": "Сохраните и опубликуйте свой сайт",
+    "howToStep5": "Отправки автоматически появятся на странице Лидов",
+    "copyCode": "Скопировать код",
+    "copied": "Скопировано"
   },
   "studentAccount": {
     "title": "Настройки аккаунта",
@@ -1345,7 +1374,13 @@
   },
   "adminEmbeds": {
     "title": "Встраиваемые виджеты",
-    "subtitle": "Управляйте встраиваемыми виджетами для сайтов партнёров"
+    "subtitle": "Управляйте встраиваемыми виджетами для сайтов партнёров",
+    "tabGeneral": "Общие",
+    "tabFilters": "Фильтры",
+    "tabTheme": "Тема",
+    "tabSecurity": "Безопасность",
+    "editWidget": "Редактировать виджет",
+    "newWidget": "Новый виджет"
   },
   "adminCatalog": {
     "title": "Каталог",
@@ -4277,5 +4312,15 @@
     "scopeDocumentsWrite": "Загрузка документов",
     "scopeStudentsRead": "Чтение студентов",
     "scopeUniversitiesRead": "Чтение университетов"
+  },
+  "settings": {
+    "assignFirstStaff": "Назначить первому сотруднику",
+    "assignRoundRobin": "Распределить по очереди (round-robin)"
+  },
+  "agentContract": {
+    "uploadSignatureHint": "Нажмите для загрузки подписи",
+    "uploadSignatureFormat": "PNG или JPG, максимум 5 МБ",
+    "removeSignature": "Удалить",
+    "confirmText": "Подтверждаю, что прочитал и понял данный контракт, и что моя электронная подпись будет считаться действительной."
   }
 }

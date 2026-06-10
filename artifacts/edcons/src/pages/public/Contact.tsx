@@ -9,12 +9,6 @@ import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 
-const offices = [
-  { city: "Istanbul", address: "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye", phone: "+90 552 689 8515", email: "info@findandstudy.com" },
-  { city: "London", address: "30 St Mary Axe, London EC3A 8BF, UK", phone: "+90 552 689 8515", email: "info@findandstudy.com" },
-  { city: "Dubai", address: "Dubai Internet City, Building 4, Office 220", phone: "+90 552 689 8515", email: "info@findandstudy.com" },
-];
-
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 const PHONE_CODES = [
@@ -57,6 +51,13 @@ type CountryRow = { id: number; name: string; code: string; flagEmoji?: string |
 
 export default function Contact() {
   const { t, lang } = useI18n();
+
+  const offices = [
+    { city: t("contact.office0City"), address: t("contact.office0Address"), phone: "+90 552 689 8515", email: "info@findandstudy.com" },
+    { city: t("contact.office1City"), address: t("contact.office1Address"), phone: "+90 552 689 8515", email: "info@findandstudy.com" },
+    { city: t("contact.office2City"), address: t("contact.office2Address"), phone: "+90 552 689 8515", email: "info@findandstudy.com" },
+  ];
+
   useSeo({ title: t("seo.contactTitle"), description: t("seo.contactDesc"), lang });
   useJsonLd([
     {
