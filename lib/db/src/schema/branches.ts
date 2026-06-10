@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, integer, primaryKey, index, uniqueInd
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { agentsTable } from "./agents";
+import { usersTable } from "./users";
 
 export const branchesTable = pgTable("branches", {
   id: serial("id").primaryKey(),
@@ -11,6 +12,7 @@ export const branchesTable = pgTable("branches", {
   contactName: text("contact_name"),
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
+  contactUserId: integer("contact_user_id").references(() => usersTable.id, { onDelete: "set null" }),
   logoUrl: text("logo_url"),
   notes: text("notes"),
   archivedAt: timestamp("archived_at", { withTimezone: true }),

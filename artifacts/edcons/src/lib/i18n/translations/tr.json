@@ -4125,7 +4125,19 @@
     "uploadLogo": "Logo Yükle",
     "notesLabel": "Notlar",
     "cancel": "Vazgeç",
-    "save": "Kaydet"
+    "save": "Kaydet",
+    "selectCountry": "Ülke seçin",
+    "searchCountry": "Ülke ara...",
+    "noCountryFound": "Ülke bulunamadı",
+    "selectCity": "Şehir seçin",
+    "searchCity": "Şehir ara...",
+    "noCity": "Bu ülke için şehir yok",
+    "loadingCities": "Şehirler yükleniyor...",
+    "contactUserLabel": "İletişim Kişisi (Personel)",
+    "selectContactPerson": "Personel seçin...",
+    "searchStaff": "Personel ara...",
+    "noStaff": "Personel bulunamadı",
+    "noContactPerson": "Yok"
   },
   "editStages": {
     "actionTypeNone": "Yok",

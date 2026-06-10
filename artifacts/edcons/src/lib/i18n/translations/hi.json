@@ -4184,7 +4184,19 @@
     "uploadLogo": "लोगो अपलोड करें",
     "notesLabel": "नोट्स",
     "cancel": "रद्द करें",
-    "save": "सहेजें"
+    "save": "सहेजें",
+    "selectCountry": "देश चुनें",
+    "searchCountry": "देश खोजें...",
+    "noCountryFound": "कोई देश नहीं मिला",
+    "selectCity": "शहर चुनें",
+    "searchCity": "शहर खोजें...",
+    "noCity": "इस देश के लिए कोई शहर नहीं",
+    "loadingCities": "शहर लोड हो रहे हैं...",
+    "contactUserLabel": "संपर्क व्यक्ति (स्टाफ)",
+    "selectContactPerson": "स्टाफ सदस्य चुनें...",
+    "searchStaff": "स्टाफ खोजें...",
+    "noStaff": "कोई स्टाफ नहीं मिला",
+    "noContactPerson": "कोई नहीं"
   },
   "editStages": {
     "actionTypeNone": "कोई नहीं",

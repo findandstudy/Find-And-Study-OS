@@ -4184,7 +4184,19 @@
     "uploadLogo": "Загрузить логотип",
     "notesLabel": "Примечания",
     "cancel": "Отмена",
-    "save": "Сохранить"
+    "save": "Сохранить",
+    "selectCountry": "Выбрать страну",
+    "searchCountry": "Поиск страны...",
+    "noCountryFound": "Страна не найдена",
+    "selectCity": "Выбрать город",
+    "searchCity": "Поиск города...",
+    "noCity": "Нет городов для этой страны",
+    "loadingCities": "Загрузка городов...",
+    "contactUserLabel": "Контактное лицо (сотрудник)",
+    "selectContactPerson": "Выбрать сотрудника...",
+    "searchStaff": "Поиск сотрудника...",
+    "noStaff": "Сотрудники не найдены",
+    "noContactPerson": "Нет"
   },
   "editStages": {
     "actionTypeNone": "Нет",

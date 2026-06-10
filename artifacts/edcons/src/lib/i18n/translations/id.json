@@ -4184,7 +4184,19 @@
     "uploadLogo": "Unggah Logo",
     "notesLabel": "Catatan",
     "cancel": "Batal",
-    "save": "Simpan"
+    "save": "Simpan",
+    "selectCountry": "Pilih negara",
+    "searchCountry": "Cari negara...",
+    "noCountryFound": "Negara tidak ditemukan",
+    "selectCity": "Pilih kota",
+    "searchCity": "Cari kota...",
+    "noCity": "Tidak ada kota untuk negara ini",
+    "loadingCities": "Memuat kota...",
+    "contactUserLabel": "Orang Kontak (Staf)",
+    "selectContactPerson": "Pilih anggota staf...",
+    "searchStaff": "Cari staf...",
+    "noStaff": "Tidak ada staf ditemukan",
+    "noContactPerson": "Tidak ada"
   },
   "editStages": {
     "actionTypeNone": "Tidak ada",

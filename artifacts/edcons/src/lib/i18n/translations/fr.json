@@ -4184,7 +4184,19 @@
     "uploadLogo": "Téléverser un logo",
     "notesLabel": "Notes",
     "cancel": "Annuler",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "selectCountry": "Sélectionner un pays",
+    "searchCountry": "Rechercher un pays...",
+    "noCountryFound": "Aucun pays trouvé",
+    "selectCity": "Sélectionner une ville",
+    "searchCity": "Rechercher une ville...",
+    "noCity": "Aucune ville pour ce pays",
+    "loadingCities": "Chargement des villes...",
+    "contactUserLabel": "Personne de contact (personnel)",
+    "selectContactPerson": "Sélectionner un membre du personnel...",
+    "searchStaff": "Rechercher du personnel...",
+    "noStaff": "Aucun personnel trouvé",
+    "noContactPerson": "Aucun"
   },
   "editStages": {
     "actionTypeNone": "Aucune",

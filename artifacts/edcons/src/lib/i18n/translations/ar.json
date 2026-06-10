@@ -4184,7 +4184,19 @@
     "uploadLogo": "رفع الشعار",
     "notesLabel": "ملاحظات",
     "cancel": "إلغاء",
-    "save": "حفظ"
+    "save": "حفظ",
+    "selectCountry": "اختر الدولة",
+    "searchCountry": "ابحث عن الدولة...",
+    "noCountryFound": "لم يتم العثور على دولة",
+    "selectCity": "اختر المدينة",
+    "searchCity": "ابحث عن المدينة...",
+    "noCity": "لا توجد مدن لهذا البلد",
+    "loadingCities": "جارٍ تحميل المدن...",
+    "contactUserLabel": "جهة الاتصال (الموظف)",
+    "selectContactPerson": "اختر موظفاً...",
+    "searchStaff": "ابحث عن الموظف...",
+    "noStaff": "لم يتم العثور على موظف",
+    "noContactPerson": "لا أحد"
   },
   "editStages": {
     "actionTypeNone": "لا شيء",

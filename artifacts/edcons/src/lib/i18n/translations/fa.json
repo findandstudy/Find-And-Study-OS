@@ -4184,7 +4184,19 @@
     "uploadLogo": "بارگذاری لوگو",
     "notesLabel": "یادداشت‌ها",
     "cancel": "انصراف",
-    "save": "ذخیره"
+    "save": "ذخیره",
+    "selectCountry": "کشور را انتخاب کنید",
+    "searchCountry": "جستجوی کشور...",
+    "noCountryFound": "کشوری یافت نشد",
+    "selectCity": "شهر را انتخاب کنید",
+    "searchCity": "جستجوی شهر...",
+    "noCity": "هیچ شهری برای این کشور وجود ندارد",
+    "loadingCities": "در حال بارگذاری شهرها...",
+    "contactUserLabel": "شخص تماس (پرسنل)",
+    "selectContactPerson": "عضو پرسنل را انتخاب کنید...",
+    "searchStaff": "جستجوی پرسنل...",
+    "noStaff": "پرسنلی یافت نشد",
+    "noContactPerson": "هیچ"
   },
   "editStages": {
     "actionTypeNone": "هیچ‌کدام",

@@ -835,6 +835,12 @@ async function seedClaudeIntegration() {
     console.error("[migrate] branches columns:", err);
   }
 
+  try {
+    await pool.query(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS contact_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+  } catch (err) {
+    console.error("[migrate] branches contact_user_id:", err);
+  }
+
   // Idempotent fix: agent_staff and sub_agent users provisioned before this
   // change had emailVerified left at false (DB default). Because they are
   // added by a trusted agent (not via public self-registration) they should

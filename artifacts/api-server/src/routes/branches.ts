@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, branchesTable, agentBranchesTable, agentsTable } from "@workspace/db";
-import { eq, isNull, isNotNull, and, sql, inArray, desc } from "drizzle-orm";
+import { db, branchesTable, agentBranchesTable, agentsTable, usersTable } from "@workspace/db";
+import { eq, isNull, and, sql, inArray, getTableColumns } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../lib/auth";
 import { validate, getValidated } from "../middlewares/validate";
@@ -14,6 +14,7 @@ const createBranchBodySchema = z.object({
   contactName: z.string().trim().optional().nullable(),
   contactEmail: z.string().trim().email().optional().nullable(),
   contactPhone: z.string().trim().optional().nullable(),
+  contactUserId: z.number().int().optional().nullable(),
   logoUrl: z.string().url().optional().nullable(),
   notes: z.string().trim().optional().nullable(),
 });
@@ -25,6 +26,7 @@ const patchBranchBodySchema = z.object({
   contactName: z.string().trim().optional().nullable(),
   contactEmail: z.string().trim().email().optional().nullable(),
   contactPhone: z.string().trim().optional().nullable(),
+  contactUserId: z.number().int().optional().nullable(),
   logoUrl: z.string().url().optional().nullable(),
   notes: z.string().trim().optional().nullable(),
 });
@@ -48,12 +50,22 @@ router.get("/branches", requireAuth, requireRole(...STAFF_ROLES), async (req, re
   }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
-  const data = await db.select().from(branchesTable).where(where).orderBy(branchesTable.name);
-  res.json({ data });
+  const rows = await db
+    .select({
+      ...getTableColumns(branchesTable),
+      contactUserFirstName: usersTable.firstName,
+      contactUserLastName: usersTable.lastName,
+      contactUserEmail: usersTable.email,
+    })
+    .from(branchesTable)
+    .leftJoin(usersTable, eq(branchesTable.contactUserId, usersTable.id))
+    .where(where)
+    .orderBy(branchesTable.name);
+  res.json({ data: rows });
 });
 
 router.post("/branches", requireAuth, requireRole("super_admin"), validate({ body: createBranchBodySchema }), async (req, res): Promise<void> => {
-  const { name, country, city, contactName, contactEmail, contactPhone, logoUrl, notes } =
+  const { name, country, city, contactName, contactEmail, contactPhone, contactUserId, logoUrl, notes } =
     getValidated<{ body: typeof createBranchBodySchema }>(req).body;
   try {
     const [branch] = await db.insert(branchesTable).values({
@@ -63,6 +75,7 @@ router.post("/branches", requireAuth, requireRole("super_admin"), validate({ bod
       contactName: contactName || null,
       contactEmail: contactEmail || null,
       contactPhone: contactPhone || null,
+      contactUserId: contactUserId ?? null,
       logoUrl: logoUrl || null,
       notes: notes || null,
     }).returning();
@@ -81,7 +94,7 @@ router.patch("/branches/:id", requireAuth, requireRole("super_admin"), validate(
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const rawBody = getValidated<{ body: typeof patchBranchBodySchema }>(req).body;
   const updates: Record<string, unknown> = {};
-  for (const k of ["name", "country", "city", "contactName", "contactEmail", "contactPhone", "logoUrl", "notes"] as const) {
+  for (const k of ["name", "country", "city", "contactName", "contactEmail", "contactPhone", "contactUserId", "logoUrl", "notes"] as const) {
     if ((rawBody as Record<string, unknown>)[k] !== undefined) {
       updates[k] = (rawBody as Record<string, unknown>)[k] ?? null;
     }

@@ -4184,7 +4184,19 @@
     "uploadLogo": "Subir logotipo",
     "notesLabel": "Notas",
     "cancel": "Cancelar",
-    "save": "Guardar"
+    "save": "Guardar",
+    "selectCountry": "Seleccionar país",
+    "searchCountry": "Buscar países...",
+    "noCountryFound": "País no encontrado",
+    "selectCity": "Seleccionar ciudad",
+    "searchCity": "Buscar ciudades...",
+    "noCity": "No hay ciudades para este país",
+    "loadingCities": "Cargando ciudades...",
+    "contactUserLabel": "Persona de contacto (personal)",
+    "selectContactPerson": "Seleccionar miembro del personal...",
+    "searchStaff": "Buscar personal...",
+    "noStaff": "No se encontró personal",
+    "noContactPerson": "Ninguno"
   },
   "editStages": {
     "actionTypeNone": "Ninguno",

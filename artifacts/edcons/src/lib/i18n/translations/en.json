@@ -4184,7 +4184,19 @@
     "uploadLogo": "Upload Logo",
     "notesLabel": "Notes",
     "cancel": "Cancel",
-    "save": "Save"
+    "save": "Save",
+    "selectCountry": "Select country",
+    "searchCountry": "Search countries...",
+    "noCountryFound": "No country found",
+    "selectCity": "Select city",
+    "searchCity": "Search cities...",
+    "noCity": "No cities for this country",
+    "loadingCities": "Loading cities...",
+    "contactUserLabel": "Contact Person (Staff)",
+    "selectContactPerson": "Select staff member...",
+    "searchStaff": "Search staff...",
+    "noStaff": "No staff found",
+    "noContactPerson": "None"
   },
   "editStages": {
     "actionTypeNone": "None",

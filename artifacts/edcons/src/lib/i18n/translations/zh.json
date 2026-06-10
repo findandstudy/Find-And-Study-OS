@@ -4184,7 +4184,19 @@
     "uploadLogo": "上传徽标",
     "notesLabel": "备注",
     "cancel": "取消",
-    "save": "保存"
+    "save": "保存",
+    "selectCountry": "选择国家",
+    "searchCountry": "搜索国家...",
+    "noCountryFound": "未找到国家",
+    "selectCity": "选择城市",
+    "searchCity": "搜索城市...",
+    "noCity": "此国家没有城市",
+    "loadingCities": "正在加载城市...",
+    "contactUserLabel": "联系人（员工）",
+    "selectContactPerson": "选择员工...",
+    "searchStaff": "搜索员工...",
+    "noStaff": "未找到员工",
+    "noContactPerson": "无"
   },
   "editStages": {
     "actionTypeNone": "无",

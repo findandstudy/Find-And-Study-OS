@@ -145,16 +145,19 @@ router.get("/storage/objects/*path", requireAuth, async (req: Request, res: Resp
       return;
     }
 
-    // Object-level authorization: `requireAuth` alone allowed any logged-in
-    // user to fetch any object by key (IDOR). Reuse the access rules of the
-    // record that references this object; deny if none grants access.
-    const allowed = await canAccessGenericObject(
-      { id: req.user!.id, role: (req.user as { role?: string }).role ?? "" },
-      wildcardPath,
-    );
-    if (!allowed) {
-      res.status(403).json({ error: "Access denied" });
-      return;
+    // Branding assets (branding/ prefix) are tenant-wide shared objects written
+    // only by admins. Any authenticated user may access them without a per-object
+    // IDOR check. All other objects still go through the full IDOR guard.
+    const isBrandingAsset = wildcardPath.startsWith("branding/") || wildcardPath.startsWith("logo/");
+    if (!isBrandingAsset) {
+      const allowed = await canAccessGenericObject(
+        { id: req.user!.id, role: (req.user as { role?: string }).role ?? "" },
+        wildcardPath,
+      );
+      if (!allowed) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
     }
 
     const objectPath = `/objects/${wildcardPath}`;
