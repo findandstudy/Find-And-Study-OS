@@ -1365,6 +1365,7 @@
     "subtitle": "راقب نشاط النظام والإجراءات الأخيرة",
     "downloadPdf": "تحميل PDF",
     "downloadingPdf": "جاري الإنشاء...",
+    "pdfError": "فشل إنشاء PDF",
     "preset": {
       "today": "اليوم",
       "yesterday": "أمس",

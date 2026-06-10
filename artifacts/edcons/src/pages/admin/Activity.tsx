@@ -13,6 +13,7 @@ import {
 import { useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatDuration } from "@/lib/formatDuration";
+import { useToast } from "@/hooks/use-toast";
 
 function fmtTime(dateStr: string | null) {
   if (!dateStr) return "—";
@@ -356,6 +357,7 @@ function OverviewPage() {
 
 function UserDetailPage({ userId }: { userId: number }) {
   const { t } = useI18n();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [preset, setPreset] = useState<DatePreset>("7days");
   const [data, setData] = useState<any>(null);
@@ -397,7 +399,7 @@ function UserDetailPage({ userId }: { userId: number }) {
       link.click();
       URL.revokeObjectURL(link.href);
     } catch {
-      // silently fail — user sees button re-enable
+      toast({ title: t("common.error"), description: t("adminActivity.pdfError"), variant: "destructive" });
     } finally {
       setPdfLoading(false);
     }

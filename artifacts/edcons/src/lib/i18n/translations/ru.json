@@ -1365,6 +1365,7 @@
     "subtitle": "Отслеживайте системную активность и недавние действия",
     "downloadPdf": "Скачать PDF",
     "downloadingPdf": "Создание...",
+    "pdfError": "Не удалось создать PDF",
     "preset": {
       "today": "Сегодня",
       "yesterday": "Вчера",

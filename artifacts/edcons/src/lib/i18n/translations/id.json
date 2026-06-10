@@ -1365,6 +1365,7 @@
     "subtitle": "Pantau aktivitas sistem dan tindakan terbaru",
     "downloadPdf": "Unduh PDF",
     "downloadingPdf": "Membuat...",
+    "pdfError": "Gagal membuat PDF",
     "preset": {
       "today": "Hari Ini",
       "yesterday": "Kemarin",

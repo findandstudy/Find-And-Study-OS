@@ -1365,6 +1365,7 @@
     "subtitle": "सिस्टम गतिविधि और हाल की क्रियाओं की निगरानी करें",
     "downloadPdf": "PDF डाउनलोड करें",
     "downloadingPdf": "बन रहा है...",
+    "pdfError": "PDF बनाना विफल रहा",
     "preset": {
       "today": "आज",
       "yesterday": "कल",

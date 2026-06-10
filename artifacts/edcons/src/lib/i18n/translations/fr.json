@@ -1365,6 +1365,7 @@
     "subtitle": "Surveillez l'activité du système et les actions récentes",
     "downloadPdf": "Télécharger PDF",
     "downloadingPdf": "Génération...",
+    "pdfError": "Échec de la génération du PDF",
     "preset": {
       "today": "Aujourd'hui",
       "yesterday": "Hier",

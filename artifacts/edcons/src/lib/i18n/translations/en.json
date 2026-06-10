@@ -1365,6 +1365,7 @@
     "subtitle": "Monitor system activity and recent actions",
     "downloadPdf": "Download PDF",
     "downloadingPdf": "Generating...",
+    "pdfError": "Failed to generate PDF",
     "preset": {
       "today": "Today",
       "yesterday": "Yesterday",

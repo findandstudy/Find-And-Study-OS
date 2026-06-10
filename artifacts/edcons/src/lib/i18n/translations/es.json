@@ -1365,6 +1365,7 @@
     "subtitle": "Supervisa la actividad del sistema y las acciones recientes",
     "downloadPdf": "Descargar PDF",
     "downloadingPdf": "Generando...",
+    "pdfError": "Error al generar PDF",
     "preset": {
       "today": "Hoy",
       "yesterday": "Ayer",

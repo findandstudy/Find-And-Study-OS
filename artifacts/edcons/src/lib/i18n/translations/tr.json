@@ -1306,6 +1306,7 @@
     "subtitle": "Sistem aktivitesini ve son işlemleri izleyin",
     "downloadPdf": "PDF İndir",
     "downloadingPdf": "Oluşturuluyor...",
+    "pdfError": "PDF oluşturulamadı",
     "preset": {
       "today": "Bugün",
       "yesterday": "Dün",

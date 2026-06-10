@@ -1365,6 +1365,7 @@
     "subtitle": "نظارت بر فعالیت سیستم و اقدامات اخیر",
     "downloadPdf": "دانلود PDF",
     "downloadingPdf": "در حال ایجاد...",
+    "pdfError": "ایجاد PDF ناموفق بود",
     "preset": {
       "today": "امروز",
       "yesterday": "دیروز",

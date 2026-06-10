@@ -1365,6 +1365,7 @@
     "subtitle": "监控系统活动与近期操作",
     "downloadPdf": "下载PDF",
     "downloadingPdf": "生成中...",
+    "pdfError": "PDF生成失败",
     "preset": {
       "today": "今天",
       "yesterday": "昨天",

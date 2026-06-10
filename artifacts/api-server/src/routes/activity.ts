@@ -337,6 +337,10 @@ router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), asy
 
   const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
   const dateTo = to ? new Date(to) : new Date();
+  if (isNaN(dateFrom.getTime()) || isNaN(dateTo.getTime())) {
+    res.status(400).json({ error: "Invalid from/to date" });
+    return;
+  }
 
   const [user] = await db
     .select({ firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email, role: usersTable.role })

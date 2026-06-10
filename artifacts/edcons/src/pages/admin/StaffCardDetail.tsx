@@ -693,6 +693,7 @@ function getRange(p: ActPreset): { from: string; to: string } {
 
 function ActivityTab({ userId }: { userId: number }) {
   const { t } = useI18n();
+  const { toast } = useToast();
   const [preset, setPreset] = useState<ActPreset>("7days");
   const [detail, setDetail] = useState<any>(null);
   const [planned, setPlanned] = useState<any>(null);
@@ -713,7 +714,9 @@ function ActivityTab({ userId }: { userId: number }) {
       link.download = `activity-${userId}.pdf`;
       link.click();
       URL.revokeObjectURL(link.href);
-    } catch { /* silently fail */ } finally {
+    } catch {
+      toast({ title: t("common.error"), description: t("staffCards.kpi.downloadingPdf"), variant: "destructive" });
+    } finally {
       setPdfLoading(false);
     }
   }
