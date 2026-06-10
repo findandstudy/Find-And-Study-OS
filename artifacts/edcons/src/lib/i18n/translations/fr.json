@@ -3170,7 +3170,9 @@
       "actual": "Réel",
       "missing": "Manquant",
       "overtime": "Heures supplémentaires",
-      "outside": "Hors planning"
+      "outside": "Hors planning",
+      "downloadPdf": "Télécharger PDF",
+      "downloadingPdf": "Génération..."
     },
     "preset": {
       "today": "Aujourd'hui",

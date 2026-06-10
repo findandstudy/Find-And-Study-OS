@@ -3170,7 +3170,9 @@
       "actual": "Фактически",
       "missing": "Недоработка",
       "overtime": "Переработка",
-      "outside": "Вне графика"
+      "outside": "Вне графика",
+      "downloadPdf": "Скачать PDF",
+      "downloadingPdf": "Создание..."
     },
     "preset": {
       "today": "Сегодня",

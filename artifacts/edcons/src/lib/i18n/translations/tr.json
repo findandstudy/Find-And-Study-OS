@@ -2877,7 +2877,9 @@
       "actual": "Gerçekleşen",
       "missing": "Eksik",
       "overtime": "Mesai",
-      "outside": "Plan Dışı"
+      "outside": "Plan Dışı",
+      "downloadPdf": "PDF İndir",
+      "downloadingPdf": "Oluşturuluyor..."
     },
     "preset": {
       "today": "Bugün",

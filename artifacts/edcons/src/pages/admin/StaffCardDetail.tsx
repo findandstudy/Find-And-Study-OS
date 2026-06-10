@@ -269,7 +269,7 @@ function ScheduleSection({ schedules, userId, onSaved }: { schedules: any[]; use
   return (
     <div className="p-4 space-y-4">
       <div className="flex justify-end">
-        <span className="text-xs text-muted-foreground">{t("staffCards.kpi.planned")}: {fmtMin(totalMinutes)} / {t("staffCards.preset.7days")}</span>
+        <span className="text-xs text-muted-foreground">{t("staffCards.kpi.planned")}: {formatDuration(totalMinutes * 60)} / {t("staffCards.preset.7days")}</span>
       </div>
       <div className="space-y-2">
         {entries.length === 0 && <p className="text-sm text-muted-foreground">{t("staffCards.schedule.empty")}</p>}
@@ -697,6 +697,26 @@ function ActivityTab({ userId }: { userId: number }) {
   const [detail, setDetail] = useState<any>(null);
   const [planned, setPlanned] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  async function handleDownloadPdf() {
+    if (pdfLoading) return;
+    setPdfLoading(true);
+    try {
+      const range = getRange(preset);
+      const url = `/api/activity/report/pdf?userId=${userId}&from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) throw new Error("PDF generation failed");
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `activity-${userId}.pdf`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch { /* silently fail */ } finally {
+      setPdfLoading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -721,9 +741,9 @@ function ActivityTab({ userId }: { userId: number }) {
 
   const cards = [
     { label: t("staffCards.kpi.totalSessions"), value: sessions.length, icon: Monitor, color: "text-blue-500 bg-blue-50 dark:bg-blue-500/10" },
-    { label: t("staffCards.kpi.totalTime"), value: fmtSec(totalDuration), icon: Clock, color: "text-purple-500 bg-purple-50 dark:bg-purple-500/10" },
-    { label: t("staffCards.kpi.activeTime"), value: fmtSec(totalActive), icon: Activity, color: "text-green-500 bg-green-50 dark:bg-green-500/10" },
-    { label: t("staffCards.kpi.idleTime"), value: fmtSec(totalIdle), icon: Pause, color: "text-amber-500 bg-amber-50 dark:bg-amber-500/10" },
+    { label: t("staffCards.kpi.totalTime"), value: formatDuration(totalDuration), icon: Clock, color: "text-purple-500 bg-purple-50 dark:bg-purple-500/10" },
+    { label: t("staffCards.kpi.activeTime"), value: formatDuration(totalActive), icon: Activity, color: "text-green-500 bg-green-50 dark:bg-green-500/10" },
+    { label: t("staffCards.kpi.idleTime"), value: formatDuration(totalIdle), icon: Pause, color: "text-amber-500 bg-amber-50 dark:bg-amber-500/10" },
   ];
 
   return (
@@ -735,6 +755,11 @@ function ActivityTab({ userId }: { userId: number }) {
             {t(`staffCards.preset.${p}`)}
           </Button>
         ))}
+        <Button size="sm" variant="outline" className="rounded-xl text-xs gap-1.5 ml-auto"
+          onClick={handleDownloadPdf} disabled={pdfLoading || loading}>
+          {pdfLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          {pdfLoading ? t("staffCards.kpi.downloadingPdf") : t("staffCards.kpi.downloadPdf")}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -756,11 +781,11 @@ function ActivityTab({ userId }: { userId: number }) {
       {/* Planned vs Actual (from work schedule) */}
       {planned?.totals && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <StatCard label={t("staffCards.kpi.planned")} value={fmtMin(planned.totals.plannedMinutes)} />
-          <StatCard label={t("staffCards.kpi.actual")} value={fmtMin(planned.totals.actualMinutes)} />
-          <StatCard label={t("staffCards.kpi.outside")} value={fmtMin(planned.totals.outsideMinutes)} icon={<AlertTriangle className="h-4 w-4" />} />
-          <StatCard label={t("staffCards.kpi.missing")} value={fmtMin(planned.totals.missingMinutes)} />
-          <StatCard label={t("staffCards.kpi.overtime")} value={fmtMin(planned.totals.overtimeMinutes)} icon={<BadgeCheck className="h-4 w-4" />} />
+          <StatCard label={t("staffCards.kpi.planned")} value={formatDuration((planned.totals.plannedMinutes || 0) * 60)} />
+          <StatCard label={t("staffCards.kpi.actual")} value={formatDuration((planned.totals.actualMinutes || 0) * 60)} />
+          <StatCard label={t("staffCards.kpi.outside")} value={formatDuration((planned.totals.outsideMinutes || 0) * 60)} icon={<AlertTriangle className="h-4 w-4" />} />
+          <StatCard label={t("staffCards.kpi.missing")} value={formatDuration((planned.totals.missingMinutes || 0) * 60)} />
+          <StatCard label={t("staffCards.kpi.overtime")} value={formatDuration((planned.totals.overtimeMinutes || 0) * 60)} icon={<BadgeCheck className="h-4 w-4" />} />
         </div>
       )}
 
@@ -774,13 +799,13 @@ function ActivityTab({ userId }: { userId: number }) {
           ) : (
             <div className="space-y-3">
               {moduleBreakdown.map((m: any) => {
-                const maxActive = Math.max(...moduleBreakdown.map((x: any) => x.activeDuration || 1));
-                const pct = Math.round(((m.activeDuration || 0) / maxActive) * 100);
+                const maxVisits = Math.max(...moduleBreakdown.map((x: any) => x.visitCount || 1));
+                const pct = Math.round(((m.visitCount || 0) / maxVisits) * 100);
                 return (
                   <div key={m.moduleName}>
                     <div className="flex justify-between items-center text-xs mb-1">
                       <span className="font-medium text-foreground">{m.moduleName}</span>
-                      <span className="text-muted-foreground">{m.visitCount} · {fmtSec(m.activeDuration || 0)}</span>
+                      <span className="text-muted-foreground">{m.visitCount} · {formatDuration(m.totalDuration || m.activeDuration || 0)}</span>
                     </div>
                     <div className="h-2 bg-secondary rounded-full overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-green-500/80 to-green-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
@@ -809,7 +834,7 @@ function ActivityTab({ userId }: { userId: number }) {
                     <div className="flex-1 h-5 bg-secondary rounded-full overflow-hidden relative">
                       <div className="h-full bg-gradient-to-r from-blue-500/80 to-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="text-xs font-mono text-foreground w-16 text-right">{fmtSec(d.activeDuration || 0)}</span>
+                    <span className="text-xs font-mono text-foreground w-16 text-right">{formatDuration(d.activeDuration || 0)}</span>
                     <span className="text-[10px] text-muted-foreground w-14 text-right">{d.sessionCount}</span>
                   </div>
                 );

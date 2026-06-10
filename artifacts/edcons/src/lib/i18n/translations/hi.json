@@ -3119,7 +3119,9 @@
       "actual": "वास्तविक",
       "missing": "अनुपस्थित",
       "overtime": "ओवरटाइम",
-      "outside": "योजना से बाहर"
+      "outside": "योजना से बाहर",
+      "downloadPdf": "PDF डाउनलोड करें",
+      "downloadingPdf": "बन रहा है..."
     },
     "preset": {
       "today": "आज",

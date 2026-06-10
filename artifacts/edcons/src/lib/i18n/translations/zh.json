@@ -3119,7 +3119,9 @@
       "actual": "实际",
       "missing": "缺勤",
       "overtime": "加班",
-      "outside": "计划外"
+      "outside": "计划外",
+      "downloadPdf": "下载PDF",
+      "downloadingPdf": "生成中..."
     },
     "preset": {
       "today": "今天",

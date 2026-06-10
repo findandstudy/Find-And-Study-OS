@@ -3170,7 +3170,9 @@
       "actual": "الفعلي",
       "missing": "الناقص",
       "overtime": "ساعات إضافية",
-      "outside": "خارج الخطة"
+      "outside": "خارج الخطة",
+      "downloadPdf": "تحميل PDF",
+      "downloadingPdf": "جاري الإنشاء..."
     },
     "preset": {
       "today": "اليوم",

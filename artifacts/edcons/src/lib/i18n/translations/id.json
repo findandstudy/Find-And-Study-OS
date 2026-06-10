@@ -3119,7 +3119,9 @@
       "actual": "Aktual",
       "missing": "Hilang",
       "overtime": "Lembur",
-      "outside": "Di Luar Rencana"
+      "outside": "Di Luar Rencana",
+      "downloadPdf": "Unduh PDF",
+      "downloadingPdf": "Membuat..."
     },
     "preset": {
       "today": "Hari Ini",

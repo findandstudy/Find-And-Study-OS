@@ -3119,7 +3119,9 @@
       "actual": "Real",
       "missing": "Faltante",
       "overtime": "Horas extra",
-      "outside": "Fuera del plan"
+      "outside": "Fuera del plan",
+      "downloadPdf": "Descargar PDF",
+      "downloadingPdf": "Generando..."
     },
     "preset": {
       "today": "Hoy",

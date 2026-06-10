@@ -3119,7 +3119,9 @@
       "actual": "واقعی",
       "missing": "کسری",
       "overtime": "اضافه‌کار",
-      "outside": "خارج از برنامه"
+      "outside": "خارج از برنامه",
+      "downloadPdf": "دانلود PDF",
+      "downloadingPdf": "در حال ایجاد..."
     },
     "preset": {
       "today": "امروز",
