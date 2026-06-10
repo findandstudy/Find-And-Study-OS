@@ -4454,5 +4454,13 @@
     "uploadSignatureFormat": "PNG或JPG，最大5MB",
     "removeSignature": "移除",
     "confirmText": "我确认已阅读并理解本合同，且我的电子签名将被视为有效。"
+  },
+  "mandatoryDocs": {
+    "title": "缺少文件",
+    "description": "您的申请已创建，但以下必需文件缺失。请上传这些文件以继续。",
+    "uploadPrompt": "上传缺失的文件以继续您的申请。",
+    "parkedNotice": "申请待处理 — 缺少必需文件",
+    "staffNotice": "申请已暂停：缺少必需文件：{missing}",
+    "studentNotice": "您的申请缺少必需文件：{missing}"
   }
 }

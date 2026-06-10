@@ -4454,5 +4454,13 @@
     "uploadSignatureFormat": "PNG atau JPG, maksimal 5MB",
     "removeSignature": "Hapus",
     "confirmText": "Saya mengonfirmasi bahwa saya telah membaca dan memahami kontrak ini, dan tanda tangan elektronik saya akan dianggap sah."
+  },
+  "mandatoryDocs": {
+    "title": "Dokumen Kurang",
+    "description": "Lamaran Anda telah dibuat, tetapi dokumen wajib berikut ini tidak ada. Harap unggah untuk melanjutkan.",
+    "uploadPrompt": "Unggah dokumen yang kurang untuk melanjutkan lamaran Anda.",
+    "parkedNotice": "Lamaran tertunda — dokumen wajib kurang",
+    "staffNotice": "Lamaran ditangguhkan: dokumen wajib kurang: {missing}",
+    "studentNotice": "Dokumen wajib kurang untuk lamaran Anda: {missing}"
   }
 }

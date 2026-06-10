@@ -4454,5 +4454,13 @@
     "uploadSignatureFormat": "PNG o JPG, máximo 5MB",
     "removeSignature": "Eliminar",
     "confirmText": "Confirmo que he leído y entendido este contrato, y que mi firma electrónica será considerada válida."
+  },
+  "mandatoryDocs": {
+    "title": "Documentos faltantes",
+    "description": "Tu solicitud ha sido creada, pero faltan los siguientes documentos obligatorios. Por favor, súbelos para continuar.",
+    "uploadPrompt": "Sube los documentos faltantes para continuar con tu solicitud.",
+    "parkedNotice": "Solicitud pendiente — documentos obligatorios faltantes",
+    "staffNotice": "Solicitud suspendida: documentos obligatorios faltantes: {missing}",
+    "studentNotice": "Faltan documentos obligatorios para tu solicitud: {missing}"
   }
 }

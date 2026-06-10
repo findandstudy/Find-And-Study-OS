@@ -4454,5 +4454,13 @@
     "uploadSignatureFormat": "PNG veya JPG, en fazla 5MB",
     "removeSignature": "Kaldır",
     "confirmText": "Bu sözleşmeyi okuduğumu, anladığımı ve elektronik imzamın geçerli kabul edileceğini onaylıyorum."
+  },
+  "mandatoryDocs": {
+    "title": "Eksik Belgeler",
+    "description": "Başvurunuz oluşturuldu, ancak aşağıdaki zorunlu belgeler eksik. Devam etmek için lütfen bu belgeleri yükleyin.",
+    "uploadPrompt": "Başvurunuzu tamamlamak için eksik belgeleri yükleyin.",
+    "parkedNotice": "Başvuru beklemede — zorunlu belgeler eksik",
+    "staffNotice": "Başvuru askıya alındı: eksik zorunlu belgeler: {missing}",
+    "studentNotice": "Başvurunuz için gerekli belgeler eksik: {missing}"
   }
 }

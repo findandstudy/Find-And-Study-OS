@@ -4454,5 +4454,13 @@
     "uploadSignatureFormat": "PNG or JPG, max 5MB",
     "removeSignature": "Remove",
     "confirmText": "I confirm that I have read and understood this contract, and that my electronic signature will be considered valid."
+  },
+  "mandatoryDocs": {
+    "title": "Missing Documents",
+    "description": "Your application has been created, but the following required documents are missing. Please upload them to proceed.",
+    "uploadPrompt": "Upload the missing documents to continue your application.",
+    "parkedNotice": "Application is pending — missing required documents",
+    "staffNotice": "Application parked: missing mandatory documents: {missing}",
+    "studentNotice": "Required documents missing for your application: {missing}"
   }
 }

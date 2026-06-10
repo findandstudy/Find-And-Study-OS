@@ -4454,5 +4454,13 @@
     "uploadSignatureFormat": "PNG ou JPG, max 5 Mo",
     "removeSignature": "Supprimer",
     "confirmText": "Je confirme avoir lu et compris ce contrat, et que ma signature électronique sera considérée comme valide."
+  },
+  "mandatoryDocs": {
+    "title": "Documents manquants",
+    "description": "Votre candidature a été créée, mais les documents obligatoires suivants sont manquants. Veuillez les télécharger pour continuer.",
+    "uploadPrompt": "Téléchargez les documents manquants pour continuer votre candidature.",
+    "parkedNotice": "Candidature en attente — documents obligatoires manquants",
+    "staffNotice": "Candidature suspendue : documents obligatoires manquants : {missing}",
+    "studentNotice": "Documents obligatoires manquants pour votre candidature : {missing}"
   }
 }

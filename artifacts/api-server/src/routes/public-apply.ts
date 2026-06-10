@@ -14,6 +14,8 @@ import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { getActiveExtractor, buildExtractionPrompt, isFallbackExtractor, recordExtractorRun } from "../lib/aiExtractorService";
 import { getCurrentSeason } from "../lib/season";
+import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
+import { dispatchNotification } from "../lib/notificationDispatcher.js";
 
 const router: IRouter = Router();
 
@@ -432,16 +434,31 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       const [existingStudent] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
       if (existingStudent) {
-        console.warn(`[PUBLIC-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (${normalizedEmail})`);
-        res.status(409).json({
-          error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
-          code: "ACCOUNT_CONFLICT",
-          loginUrl,
-        });
-        return;
+        // Re-apply: existing verified student submits a new application.
+        // We do NOT overwrite any student fields — only add an application
+        // record and auto-link their existing documents below.
+        resultStudentId = existingStudent.id;
+        const reApplyResult = await createApplicationForStudent(
+          existingStudent.id,
+          programIdNum,
+          programName || null,
+          universityName || null,
+          gpa || null,
+          languageScore || null,
+        );
+        if (reApplyResult.eligibilityErrors) {
+          res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: reApplyResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
+          return;
+        }
+        if (reApplyResult.quotaError) {
+          res.status(422).json({ error: reApplyResult.quotaError, code: "QUOTA_FULL" });
+          return;
+        }
+        resultAppId = reApplyResult.appId;
+        console.log(`[PUBLIC-APPLY] Re-apply: existing student #${existingStudent.id} → app #${resultAppId}`);
       }
       // No live student row — fall through to the new-account path below.
-      console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
+      if (!existingStudent) console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
     }
 
     if (!existingUser || resultStudentId === null) {
@@ -831,7 +848,64 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       }
     }
 
-    res.status(201).json({ success: true });
+    // ─── Mandatory document gate ─────────────────────────────────────────
+    // After all document auto-linking is done, check whether the program
+    // requires documents that the student has not yet provided. If so, park
+    // the application in the "missing_docs" stage instead of "inquiry" so
+    // staff can see it and the student knows what to upload.
+    // The record is always created (no lead/application loss); only the stage
+    // differs. Gate is skipped when there are no mandatory requirements.
+    let missingDocTypes: string[] = [];
+    if (resultStudentId && resultAppId && programIdNum) {
+      try {
+        const { missing } = await checkMandatoryDocsForStudent(programIdNum, resultStudentId);
+        if (missing.length > 0) {
+          await parkApplicationInMissingDocsStage(resultAppId);
+          missingDocTypes = missing;
+          const missingStr = missing.join(", ");
+          // Notify in background — never block the 201 response.
+          const appIdForNotif = resultAppId;
+          const studentIdForNotif = resultStudentId;
+          void (async () => {
+            try {
+              const [appRow] = await db.select({ assignedToId: applicationsTable.assignedToId })
+                .from(applicationsTable).where(eq(applicationsTable.id, appIdForNotif));
+              if (appRow?.assignedToId) {
+                await dispatchNotification({
+                  event: "mandatory_docs_missing",
+                  title: "Eksik Belgeler",
+                  body: `Başvuru eksik belgeler nedeniyle park edildi: ${missingStr}`,
+                  recipientUserIds: [appRow.assignedToId],
+                  data: { applicationId: appIdForNotif, missing },
+                });
+              }
+              const [studentRow] = await db.select({ userId: studentsTable.userId })
+                .from(studentsTable).where(eq(studentsTable.id, studentIdForNotif));
+              if (studentRow?.userId) {
+                await dispatchNotification({
+                  event: "mandatory_docs_missing_student",
+                  title: "Eksik Belgeler",
+                  body: `Başvurunuz için gerekli belgeler eksik: ${missingStr}`,
+                  recipientUserIds: [studentRow.userId],
+                  data: { applicationId: appIdForNotif, missing },
+                });
+              }
+            } catch (notifErr) {
+              console.error("[PUBLIC-APPLY] Mandatory docs notification error:", notifErr);
+            }
+          })();
+        }
+      } catch (gateErr) {
+        console.error("[PUBLIC-APPLY] Mandatory doc gate error:", gateErr);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      ...(missingDocTypes.length > 0
+        ? { status: "missing_documents", missing: missingDocTypes }
+        : { status: "inquiry" }),
+    });
   } catch (err) {
     console.error("[PUBLIC-APPLY] Error during student/application creation:", err);
     res.status(500).json({ error: "An error occurred while processing your application. Please try again." });

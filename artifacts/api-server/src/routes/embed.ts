@@ -9,6 +9,8 @@ import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile, valid
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { createApplicationForStudent } from "./public-apply";
+import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
+import { dispatchNotification } from "../lib/notificationDispatcher.js";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
@@ -1385,6 +1387,54 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         }
       } catch (convertErr) {
         console.error("[EMBED-APPLY] Failed to auto-convert lead/student:", convertErr);
+      }
+    }
+
+    // ─── Mandatory document gate ─────────────────────────────────────────
+    // Check whether the program requires documents not yet in the student's
+    // library. Park the application in "missing_docs" when any are absent.
+    if (resultStudentId && resultAppId && programId) {
+      const programIdNum = parseInt(String(programId), 10);
+      if (Number.isFinite(programIdNum) && programIdNum > 0) {
+        try {
+          const { missing } = await checkMandatoryDocsForStudent(programIdNum, resultStudentId);
+          if (missing.length > 0) {
+            await parkApplicationInMissingDocsStage(resultAppId);
+            const missingStr = missing.join(", ");
+            const appIdForNotif = resultAppId;
+            const studentIdForNotif = resultStudentId;
+            void (async () => {
+              try {
+                const [appRow] = await db.select({ assignedToId: applicationsTable.assignedToId })
+                  .from(applicationsTable).where(eq(applicationsTable.id, appIdForNotif));
+                if (appRow?.assignedToId) {
+                  await dispatchNotification({
+                    event: "mandatory_docs_missing",
+                    title: "Eksik Belgeler",
+                    body: `Başvuru eksik belgeler nedeniyle park edildi: ${missingStr}`,
+                    recipientUserIds: [appRow.assignedToId],
+                    data: { applicationId: appIdForNotif, missing },
+                  });
+                }
+                const [studentRow] = await db.select({ userId: studentsTable.userId })
+                  .from(studentsTable).where(eq(studentsTable.id, studentIdForNotif));
+                if (studentRow?.userId) {
+                  await dispatchNotification({
+                    event: "mandatory_docs_missing_student",
+                    title: "Eksik Belgeler",
+                    body: `Başvurunuz için gerekli belgeler eksik: ${missingStr}`,
+                    recipientUserIds: [studentRow.userId],
+                    data: { applicationId: appIdForNotif, missing },
+                  });
+                }
+              } catch (notifErr) {
+                console.error("[EMBED-APPLY] Mandatory docs notification error:", notifErr);
+              }
+            })();
+          }
+        } catch (gateErr) {
+          console.error("[EMBED-APPLY] Mandatory doc gate error:", gateErr);
+        }
       }
     }
   } catch (postErr) {

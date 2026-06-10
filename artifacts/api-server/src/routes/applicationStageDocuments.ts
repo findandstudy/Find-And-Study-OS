@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import express from "express";
 import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable, universitiesTable, programsTable, documentsTable } from "@workspace/db";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
+import { reEvaluateMandatoryDocs } from "../lib/mandatoryDocs.js";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole, isStaffRole } from "../lib/roles";
@@ -242,6 +243,10 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     ? documentNameOverride.trim()
     : stage;
   void handleMissingDocFulfillment(applicationId, fulfilmentSignal, user.id);
+  // Re-evaluate mandatory doc gate: if this application is parked in the
+  // "missing_docs" stage, check whether all mandatory docs are now present
+  // and advance it to "inquiry" automatically.
+  void reEvaluateMandatoryDocs(applicationId);
 
   // When a document is uploaded into the "missing_docs" stage (the shared
   // document-request workflow), also write it to the student's shared document
