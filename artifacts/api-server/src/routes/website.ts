@@ -135,6 +135,32 @@ registerCrud("/website/blog-posts", websiteBlogPostsTable, websiteBlogPostsTable
 registerCrud("/website/blog-categories", websiteBlogCategoriesTable, websiteBlogCategoriesTable.id, websiteBlogCategoriesTable.sortOrder);
 registerCrud("/website/blog-tags", websiteBlogTagsTable, websiteBlogTagsTable.id);
 registerCrud("/website/blog-post-tags", websiteBlogPostTagsTable, websiteBlogPostTagsTable.id);
+// Public (no auth) — used by About and Contact pages to render DB-backed content.
+// Registered BEFORE registerCrud so "/public" suffix matches before "/:id".
+router.get("/website/collections/offices/public", async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await db.select().from(websiteCollectionsOfficesTable)
+      .where(eq(websiteCollectionsOfficesTable.isActive, true))
+      .orderBy(asc(websiteCollectionsOfficesTable.sortOrder), asc(websiteCollectionsOfficesTable.id));
+    res.json(rows);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
+router.get("/website/collections/team-members/public", async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await db.select().from(websiteCollectionsTeamMembersTable)
+      .where(eq(websiteCollectionsTeamMembersTable.isActive, true))
+      .orderBy(asc(websiteCollectionsTeamMembersTable.sortOrder), asc(websiteCollectionsTeamMembersTable.id));
+    res.json(rows);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    res.status(500).json({ error: msg });
+  }
+});
+
 registerCrud("/website/collections/offices", websiteCollectionsOfficesTable, websiteCollectionsOfficesTable.id, websiteCollectionsOfficesTable.sortOrder);
 registerCrud("/website/collections/team-members", websiteCollectionsTeamMembersTable, websiteCollectionsTeamMembersTable.id, websiteCollectionsTeamMembersTable.sortOrder);
 registerCrud("/website/collections/faqs", websiteCollectionsFaqsTable, websiteCollectionsFaqsTable.id, websiteCollectionsFaqsTable.sortOrder);

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -49,14 +50,42 @@ function latinMsgOnly(val: string): string {
 
 type CountryRow = { id: number; name: string; code: string; flagEmoji?: string | null; isActive: boolean };
 
+interface Office {
+  id: number;
+  name: string;
+  city: string | null;
+  country: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+interface Branding {
+  companyEmail: string | null;
+  companyPhone: string | null;
+  workingHours: string | null;
+}
+
 export default function Contact() {
   const { t, lang } = useI18n();
 
-  const offices = [
-    { city: t("contact.office0City"), address: t("contact.office0Address"), phone: "+90 552 689 8515", email: "info@findandstudy.com" },
-    { city: t("contact.office1City"), address: t("contact.office1Address"), phone: "+90 552 689 8515", email: "info@findandstudy.com" },
-    { city: t("contact.office2City"), address: t("contact.office2Address"), phone: "+90 552 689 8515", email: "info@findandstudy.com" },
-  ];
+  const { data: offices = [] } = useQuery<Office[]>({
+    queryKey: ["public-offices"],
+    queryFn: () => customFetch("/api/website/collections/offices/public"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: branding } = useQuery<Branding>({
+    queryKey: ["settings-branding-contact"],
+    queryFn: () => customFetch("/api/settings/branding"),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const contactEmail = branding?.companyEmail || "info@findandstudy.com";
+  const contactPhone = branding?.companyPhone || "+90 552 689 8515";
+  const workingHours = branding?.workingHours || t("contact.hoursValue");
 
   useSeo({ title: t("seo.contactTitle"), description: t("seo.contactDesc"), lang });
   useJsonLd([
@@ -81,9 +110,14 @@ export default function Contact() {
       "@id": `${SITE_URL}/#localbusiness`,
       name: SITE_NAME,
       url: SITE_URL,
-      telephone: "+90-552-689-8515",
-      email: "info@findandstudy.com",
-      address: {
+      telephone: contactPhone,
+      email: contactEmail,
+      address: offices.length > 0 ? {
+        "@type": "PostalAddress",
+        streetAddress: offices[0].address ?? "",
+        addressLocality: offices[0].city ?? "",
+        addressCountry: offices[0].country ?? "",
+      } : {
         "@type": "PostalAddress",
         streetAddress: "Levent Mahallesi, Büyükdere Cad. No:45",
         addressLocality: "Istanbul",
@@ -205,7 +239,7 @@ export default function Contact() {
                 <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
                 <h3 className="text-xl font-display font-bold text-foreground mb-2">{t("contact.successTitle")}</h3>
                 <p className="text-muted-foreground">{successMsg || t("contact.successMessage")}</p>
-                <Button onClick={() => { setSubmitted(false); setSuccessMsg(""); setForm({ firstName: "", lastName: "", email: "", phoneCode: "", phone: "", nationality: "", message: "" }); }} 
+                <Button onClick={() => { setSubmitted(false); setSuccessMsg(""); setForm({ firstName: "", lastName: "", email: "", phoneCode: "", phone: "", nationality: "", message: "" }); }}
                   variant="outline" className="mt-6 rounded-full">
                   {t("contact.sendAnother")}
                 </Button>
@@ -315,9 +349,9 @@ export default function Contact() {
               <h2 className="text-2xl font-display font-bold text-foreground mb-6">{t("contact.quickContact")}</h2>
               <div className="space-y-4">
                 {[
-                  { icon: Mail, label: t("contact.emailLabel"), value: "info@findandstudy.com", href: "mailto:info@findandstudy.com" },
-                  { icon: Phone, label: t("contact.phoneLabel"), value: "+90 552 689 8515", href: "tel:+905526898515" },
-                  { icon: Clock, label: t("contact.hoursLabel"), value: t("contact.hoursValue"), href: undefined },
+                  { icon: Mail, label: t("contact.emailLabel"), value: contactEmail, href: `mailto:${contactEmail}` },
+                  { icon: Phone, label: t("contact.phoneLabel"), value: contactPhone, href: `tel:${contactPhone.replace(/\s/g, "")}` },
+                  { icon: Clock, label: t("contact.hoursLabel"), value: workingHours, href: undefined },
                 ].map((c, i) => (
                   <a key={i} href={c.href || '#'}
                     className="flex items-center gap-4 p-4 rounded-2xl bg-secondary/50 hover:bg-primary/5 transition-colors group">
@@ -333,22 +367,24 @@ export default function Contact() {
               </div>
             </div>
 
-            <div>
-              <h3 className="text-xl font-display font-bold text-foreground mb-6">{t("contact.ourOffices")}</h3>
-              <div className="space-y-4">
-                {offices.map((office, i) => (
-                  <div key={i} className="p-5 rounded-2xl border border-border/60 hover:border-primary/30 transition-colors">
-                    <div className="flex items-center gap-2 mb-3">
-                      <MapPin className="w-4 h-4 text-primary" />
-                      <h4 className="font-display font-bold text-foreground">{office.city}</h4>
+            {offices.length > 0 && (
+              <div>
+                <h3 className="text-xl font-display font-bold text-foreground mb-6">{t("contact.ourOffices")}</h3>
+                <div className="space-y-4">
+                  {offices.map((office) => (
+                    <div key={office.id} className="p-5 rounded-2xl border border-border/60 hover:border-primary/30 transition-colors">
+                      <div className="flex items-center gap-2 mb-3">
+                        <MapPin className="w-4 h-4 text-primary" />
+                        <h4 className="font-display font-bold text-foreground">{office.city || office.name}</h4>
+                      </div>
+                      {office.address && <p className="text-muted-foreground text-sm mb-2">{office.address}</p>}
+                      {office.phone && <p className="text-sm font-medium text-foreground">{office.phone}</p>}
+                      {office.email && <p className="text-sm text-primary">{office.email}</p>}
                     </div>
-                    <p className="text-muted-foreground text-sm mb-2">{office.address}</p>
-                    <p className="text-sm font-medium text-foreground">{office.phone}</p>
-                    <p className="text-sm text-primary">{office.email}</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </motion.div>
         </div>
       </section>

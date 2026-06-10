@@ -5,16 +5,38 @@ import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld"
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Award, Globe2, Heart, Users, Target, Zap } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
+
+interface TeamMember {
+  id: number;
+  name: string;
+  title: string | null;
+  bio: string | null;
+  photoUrl: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(p => p[0])
+    .join("")
+    .toUpperCase();
+}
 
 export default function About() {
   const { t, lang, localePath } = useI18n();
 
-  const team = [
-    { name: t("about.team0Name"), role: t("about.team0Role"), img: "AY", bio: t("about.team0Bio") },
-    { name: t("about.team1Name"), role: t("about.team1Role"), img: "MC", bio: t("about.team1Bio") },
-    { name: t("about.team2Name"), role: t("about.team2Role"), img: "FA", bio: t("about.team2Bio") },
-    { name: t("about.team3Name"), role: t("about.team3Role"), img: "OK", bio: t("about.team3Bio") },
-  ];
+  const { data: teamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["public-team-members"],
+    queryFn: () => customFetch("/api/website/collections/team-members/public"),
+    staleTime: 5 * 60 * 1000,
+  });
+
   useSeo({ title: t("seo.aboutTitle"), description: t("seo.aboutDesc"), lang });
   useJsonLd([
     ORG_SCHEMA,
@@ -104,27 +126,37 @@ export default function About() {
         </div>
       </section>
 
-      <section className="py-24 bg-secondary/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">{t("about.teamTitle")}</h2>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">{t("about.teamSubtitle")}</p>
+      {teamMembers.length > 0 && (
+        <section className="py-24 bg-secondary/30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-display font-bold text-foreground mb-4">{t("about.teamTitle")}</h2>
+              <p className="text-muted-foreground text-lg max-w-2xl mx-auto">{t("about.teamSubtitle")}</p>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+              {teamMembers.map((member, i) => (
+                <motion.div key={member.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
+                  className="bg-card rounded-2xl p-6 text-center shadow-lg shadow-black/5 hover:-translate-y-2 transition-transform duration-300">
+                  {member.photoUrl ? (
+                    <img
+                      src={member.photoUrl}
+                      alt={member.name}
+                      className="w-20 h-20 rounded-full object-cover mx-auto mb-4 shadow-lg"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl mx-auto mb-4 shadow-lg">
+                      {getInitials(member.name)}
+                    </div>
+                  )}
+                  <h3 className="font-display font-bold text-foreground mb-1">{member.name}</h3>
+                  {member.title && <p className="text-primary text-sm font-semibold mb-3">{member.title}</p>}
+                  {member.bio && <p className="text-muted-foreground text-sm">{member.bio}</p>}
+                </motion.div>
+              ))}
+            </div>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {team.map((member, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
-                className="bg-card rounded-2xl p-6 text-center shadow-lg shadow-black/5 hover:-translate-y-2 transition-transform duration-300">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-display font-bold text-2xl mx-auto mb-4 shadow-lg">
-                  {member.img}
-                </div>
-                <h3 className="font-display font-bold text-foreground mb-1">{member.name}</h3>
-                <p className="text-primary text-sm font-semibold mb-3">{member.role}</p>
-                <p className="text-muted-foreground text-sm">{member.bio}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <section className="py-24 bg-gradient-to-br from-primary to-accent text-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">

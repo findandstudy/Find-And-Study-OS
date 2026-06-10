@@ -721,6 +721,76 @@ async function seedClaudeIntegration() {
     console.error("[migrate] email_queue retry columns:", err);
   }
 
+  // Step 2b2d: Website CMS collections tables.
+  // These mirror the Drizzle schema definitions in lib/db/src/schema/website.ts.
+  // All steps are idempotent (CREATE TABLE IF NOT EXISTS).
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS website_collections_offices (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        city TEXT,
+        country TEXT,
+        address TEXT,
+        phone TEXT,
+        email TEXT,
+        map_embed_url TEXT,
+        image_url TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS website_collections_team_members (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        title TEXT,
+        bio TEXT,
+        photo_url TEXT,
+        email TEXT,
+        linkedin_url TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    // One-shot seed: populate with default data if both tables are empty.
+    // Uses a system_flags marker so re-deploys don't overwrite admin edits.
+    const seedFlag = await pool.query(
+      `INSERT INTO system_flags (key) VALUES ('cms_collections_seeded_v1') ON CONFLICT DO NOTHING RETURNING key`
+    );
+    if (seedFlag.rows.length > 0) {
+      const { rowCount: officeCount } = await pool.query(`SELECT 1 FROM website_collections_offices LIMIT 1`);
+      if ((officeCount ?? 0) === 0) {
+        await pool.query(`
+          INSERT INTO website_collections_offices (name, city, country, address, sort_order, is_active)
+          VALUES
+            ('Istanbul Office', 'Istanbul', 'Türkiye', 'Levent Mahallesi, Buyukdere Cad. No:45, 34394 Istanbul, Turkiye', 0, TRUE),
+            ('London Office',   'London',   'UK',      '30 St Mary Axe, London EC3A 8BF, UK', 1, TRUE),
+            ('Dubai Office',    'Dubai',    'UAE',     'Dubai Internet City, Building 4, Office 220', 2, TRUE)
+        `);
+        console.log("[migrate] website_collections_offices seeded with 3 default offices");
+      }
+      const { rowCount: memberCount } = await pool.query(`SELECT 1 FROM website_collections_team_members LIMIT 1`);
+      if ((memberCount ?? 0) === 0) {
+        await pool.query(`
+          INSERT INTO website_collections_team_members (name, title, bio, sort_order, is_active)
+          VALUES
+            ('Dr. Ayse Yildiz',   'Founder & CEO',                  '15+ years in international education consulting. Former admissions officer at top UK universities.', 0, TRUE),
+            ('Marcus Chen',       'Head of Admissions',             'Guided 2,000+ students to their dream universities across 30 countries.', 1, TRUE),
+            ('Fatima Al-Hassan',  'Visa & Immigration Specialist',  'Expert in student visa processes for UK, USA, Canada, Australia, and Europe.', 2, TRUE),
+            ('Olena Kovalenko',   'Regional Manager - Europe',      'Specializes in European university placements and scholarship programs.', 3, TRUE)
+        `);
+        console.log("[migrate] website_collections_team_members seeded with 4 default members");
+      }
+    }
+  } catch (err) {
+    console.error("[migrate] website CMS collections tables:", err);
+  }
+
   // Step 2b3: Performance quick-wins (Task #141) — pg_trgm trigram GIN
   // indexes for ILIKE '%term%' searches, partial index for unread
   // notifications, and the students.has_photo denormalized flag with
