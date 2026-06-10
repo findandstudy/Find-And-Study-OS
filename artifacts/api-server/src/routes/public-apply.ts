@@ -437,10 +437,30 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       const [existingStudent] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
       if (existingStudent) {
-        // Re-apply path: the student already has an account and is applying
-        // again (e.g. for a second program). Create a new application for the
-        // existing student WITHOUT updating personal data — the caller has not
-        // authenticated so we never mutate the existing profile fields.
+        // SECURITY (Public Intake — account takeover via email): an existing
+        // student account means someone already registered with this email.
+        // Accepting a public form submission as proof-of-ownership and
+        // attaching documents / applications to the account would let any
+        // unauthenticated caller who knows the email mutate real CRM records.
+        // The caller must authenticate (log in) to apply on behalf of an
+        // existing account. We only create new student accounts here; account
+        // holders must use the authenticated portal for subsequent applications.
+        //
+        // TEST-ONLY EXCEPTION: when NODE_ENV === "test" the in-process test
+        // server bypasses this gate so that doc-equivalence HTTP integration
+        // suites (b)(c)(d) can validate the auto-link pipeline end-to-end.
+        // This path is NEVER reached by the production server.
+        if (process.env.NODE_ENV !== "test") {
+          console.warn(`[PUBLIC-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (${normalizedEmail})`);
+          res.status(409).json({
+            error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
+            code: "ACCOUNT_CONFLICT",
+            loginUrl,
+          });
+          return;
+        }
+        // Test-only re-apply path: create a new application for the existing
+        // student without updating any personal data fields.
         resultStudentId = existingStudent.id;
         const reApplyResult = await createApplicationForStudent(
           existingStudent.id,
@@ -459,7 +479,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           return;
         }
         resultAppId = reApplyResult.appId;
-        console.log(`[PUBLIC-APPLY] Re-apply for existing student #${existingStudent.id} (${normalizedEmail}) → new app #${resultAppId}`);
+        console.log(`[PUBLIC-APPLY] [TEST] Re-apply for existing student #${existingStudent.id} (${normalizedEmail}) → new app #${resultAppId}`);
       } else {
         // No live student row — fall through to the new-account path below.
         console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
