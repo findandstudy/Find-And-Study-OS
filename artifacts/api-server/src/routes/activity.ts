@@ -565,10 +565,16 @@ ${sessions.length > 0 ? `
 
 const EXCLUDE_SEGMENT_RE = /^(en|tr|ar|fr|ru|fa|zh|hi|es|id|login|register|verify|reset|confirm|auth|callback|public|embed|apply|sign|contract|token|oauth|sso|invite|accept|decline|redirect|error|404|500)$/i;
 
+function normalizeStoredModuleName(name: string | null): string {
+  if (!name) return "Other";
+  if (name.startsWith("/")) return deriveModuleName(name);
+  return name;
+}
+
 function normalizeModuleBreakdown<T extends { moduleName: string | null }>(rows: T[]): T[] {
   const acc = new Map<string, { row: T; visitCount: number; totalDuration: number; activeDuration: number; idleDuration: number }>();
   for (const r of rows) {
-    const name = deriveModuleName(r.moduleName || "");
+    const name = normalizeStoredModuleName(r.moduleName);
     const vn = Number((r as any).visitCount) || 0;
     const td = Number((r as any).totalDuration) || 0;
     const ad = Number((r as any).activeDuration) || 0;
