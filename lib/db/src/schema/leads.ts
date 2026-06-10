@@ -72,6 +72,7 @@ export const followUpsTable = pgTable("follow_ups", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
   assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
   notes: text("notes"),
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
   createdById: integer("created_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   updatedById: integer("updated_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

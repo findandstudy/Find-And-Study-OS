@@ -624,15 +624,19 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
     embedToken: crypto.randomUUID(),
   }).returning();
 
-  dispatchNotification({
-    actorUserId: req.user!.id,
-    event: "agent.sub_agent_added",
-    title: "Sub-Agent Added",
-    body: `A new sub-agent ${firstName} ${lastName} has been added.`,
-    actionUrl: `/staff/agents`,
-    icon: "UserPlus",
-    templateVars: { firstName, lastName, email: email || "" },
-  }).catch(() => {});
+  try {
+    await dispatchNotification({
+      actorUserId: req.user!.id,
+      event: "agent.sub_agent_added",
+      title: "Sub-Agent Added",
+      body: `A new sub-agent ${firstName} ${lastName} has been added.`,
+      actionUrl: `/staff/agents`,
+      icon: "UserPlus",
+      templateVars: { firstName, lastName, email: email || "" },
+    });
+  } catch (err) {
+    console.error("[AGENTS] sub_agent_added dispatch error:", err);
+  }
 
   res.status(201).json(subAgent);
 });

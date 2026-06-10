@@ -636,6 +636,28 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
   }
 
   await logAudit(req.user!.id, "create_financial_transaction", "financial_transaction", tx.id, { type, amount }, req.ip);
+
+  if (type === "agent_payment" || type === "sub_agent_payment") {
+    try {
+      await dispatchNotification({
+        actorUserId: req.user!.id,
+        event: "finance.agent_payout",
+        title: "Agent Payout Processed",
+        body: `A ${type === "sub_agent_payment" ? "sub-agent" : "agent"} payout of ${parsedAmount} ${currency} has been processed.${agentName ? ` Agent: ${agentName}.` : ""}`,
+        actionUrl: `/staff/finance`,
+        icon: "BadgeDollarSign",
+        templateVars: {
+          type,
+          amount: String(parsedAmount),
+          currency,
+          agentName: agentName || "",
+        },
+      });
+    } catch (err) {
+      console.error("[FINANCE] agent_payout dispatch error:", err);
+    }
+  }
+
   res.status(201).json(tx);
 });
 

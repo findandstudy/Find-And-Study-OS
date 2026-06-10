@@ -656,16 +656,20 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     const recipientIds: number[] = [];
     if (student.assignedToId) recipientIds.push(student.assignedToId);
     if (student.userId) recipientIds.push(student.userId);
-    dispatchNotification({
-    actorUserId: req.user!.id,
-      event: "student.status_changed",
-      title: "Student Status Changed",
-      body: `Student ${student.firstName} ${student.lastName} status changed from "${existing.status}" to "${updates.status}".`,
-      actionUrl: `/staff/students/${student.id}`,
-      icon: "UserCheck",
-      recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
-      templateVars: { firstName: student.firstName, lastName: student.lastName, oldStatus: existing.status || "", newStatus: String(updates.status) },
-    }).catch(() => {});
+    try {
+      await dispatchNotification({
+        actorUserId: req.user!.id,
+        event: "student.status_changed",
+        title: "Student Status Changed",
+        body: `Student ${student.firstName} ${student.lastName} status changed from "${existing.status}" to "${updates.status}".`,
+        actionUrl: `/staff/students/${student.id}`,
+        icon: "UserCheck",
+        recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
+        templateVars: { firstName: student.firstName, lastName: student.lastName, oldStatus: existing.status || "", newStatus: String(updates.status) },
+      });
+    } catch (err) {
+      console.error("[STUDENTS] status_changed dispatch error:", err);
+    }
   }
 
   if (updates.assignedToId && updates.assignedToId !== existing.assignedToId) {

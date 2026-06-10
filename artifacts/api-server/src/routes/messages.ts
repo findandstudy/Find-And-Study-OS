@@ -476,6 +476,31 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
     await dispatchNotification({ ...messageDispatchBase, actionUrl: "/student/messages", recipientUserIds: studentRecipientIds });
   }
 
+  const MENTION_RE = /@\[([^\]]*)\]\((\d+)\)/g;
+  const mentionedIds = new Set<number>();
+  let mentionMatch: RegExpExecArray | null;
+  while ((mentionMatch = MENTION_RE.exec(messageContent)) !== null) {
+    const uid = parseInt(mentionMatch[2], 10);
+    if (uid && uid !== userId) mentionedIds.add(uid);
+  }
+  for (const mentionedUserId of mentionedIds) {
+    try {
+      await dispatchNotification({
+        event: "message.mention",
+        title: `${senderName} mentioned you`,
+        body: messageContent.substring(0, 150),
+        icon: "at-sign",
+        actionUrl: "/staff/messages",
+        actorUserId: userId,
+        recipientUserIds: [mentionedUserId],
+        templateVars: { senderName },
+        data: { conversationId, messageId: message.id },
+      });
+    } catch (err) {
+      console.error("[MESSAGES] mention dispatch error:", err);
+    }
+  }
+
   res.status(201).json(message);
 });
 

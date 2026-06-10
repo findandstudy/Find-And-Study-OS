@@ -909,6 +909,11 @@ async function seedClaudeIntegration() {
     } catch (err) {
       console.error("[migrate] embed_widgets.embed_api_key:", err);
     }
+    try {
+      await pool.query(`ALTER TABLE follow_ups ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ`);
+    } catch (err) {
+      console.error("[migrate] follow_ups.notified_at:", err);
+    }
     await seedDocumentTypes(pool);
     await seedCurrencies(pool);
 
@@ -1093,6 +1098,8 @@ async function seedClaudeIntegration() {
     startSignedContractDeliveryWorker();
     const { startAssignmentConsistencyChecker } = await import("./lib/assignmentConsistencyChecker");
     startAssignmentConsistencyChecker();
+    const { startFollowUpChecker } = await import("./lib/followUpChecker");
+    startFollowUpChecker();
   }
 
   serveStaticFrontend();
