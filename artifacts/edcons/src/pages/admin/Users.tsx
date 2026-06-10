@@ -67,6 +67,7 @@ const roleBadgeColors: Record<string, string> = {
   student: "bg-green-500/10 text-green-600 border-green-200",
   agent: "bg-amber-500/10 text-amber-600 border-amber-200",
   sub_agent: "bg-yellow-500/10 text-yellow-600 border-yellow-200",
+  agent_staff: "bg-teal-500/10 text-teal-600 border-teal-200",
 };
 const ROLE_LABEL_KEYS: Record<string, string> = {
   super_admin: "usersPage.roleSuperAdmin",
@@ -79,6 +80,7 @@ const ROLE_LABEL_KEYS: Record<string, string> = {
   student: "usersPage.roleStudent",
   agent: "usersPage.roleAgent",
   sub_agent: "usersPage.roleSubAgent",
+  agent_staff: "usersPage.roleAgentStaff",
 };
 
 const roleColors: Record<string, string> = {
@@ -420,10 +422,16 @@ function UsersTab() {
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${roleFilter === "all" ? "bg-primary text-white shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}>
             All
           </button>
-          {["staff", "agent", "admin"].map(r => (
-            <button key={r} onClick={() => setRoleFilter(r)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all capitalize ${roleFilter === r ? "bg-primary text-white shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}>
-              {r}
+          {([
+            { value: "staff", labelKey: "usersPage.roleStaff" },
+            { value: "agent", labelKey: "usersPage.roleAgent" },
+            { value: "agent_staff", labelKey: "usersPage.roleAgentStaff" },
+            { value: "sub_agent", labelKey: "usersPage.roleSubAgent" },
+            { value: "admin", labelKey: "usersPage.roleAdmin" },
+          ] as const).map(r => (
+            <button key={r.value} onClick={() => setRoleFilter(r.value)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${roleFilter === r.value ? "bg-primary text-white shadow-sm" : "bg-secondary hover:bg-secondary/80"}`}>
+              {t(r.labelKey)}
             </button>
           ))}
         </div>

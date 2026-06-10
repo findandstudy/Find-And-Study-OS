@@ -2751,6 +2751,7 @@ const PHONE_CODE_OPTIONS = (() => {
 
 function LeadAssignmentRulesTab() {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [rules, setRules] = useState<AssignmentRule[]>([]);
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [countries, setCountries] = useState<CountryOption[]>([]);
@@ -2809,7 +2810,7 @@ function LeadAssignmentRulesTab() {
       setSources(sourcesRes.data || []);
       setUniversities(unisAll);
     } catch (err: any) {
-      toast({ title: "Yükleme başarısız", description: err.message, variant: "destructive" });
+      toast({ title: t("leadAssignment.loadFailed"), description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -2858,11 +2859,11 @@ function LeadAssignmentRulesTab() {
 
   async function handleSave() {
     if (!form.name.trim()) {
-      toast({ title: "İsim gerekli", variant: "destructive" });
+      toast({ title: t("leadAssignment.nameRequired"), variant: "destructive" });
       return;
     }
     if (form.staffUserIds.length === 0) {
-      toast({ title: "En az bir personel seçin", variant: "destructive" });
+      toast({ title: t("leadAssignment.staffRequired"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -2888,13 +2889,13 @@ function LeadAssignmentRulesTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      toast({ title: editingId ? "Kural güncellendi" : "Kural oluşturuldu" });
+      toast({ title: editingId ? t("leadAssignment.ruleUpdated") : t("leadAssignment.ruleCreated") });
       setShowForm(false);
       setEditingId(null);
       setForm(emptyForm);
       fetchAll();
     } catch (err: any) {
-      toast({ title: "Kaydetme başarısız", description: err.message, variant: "destructive" });
+      toast({ title: t("leadAssignment.saveFailed"), description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -2909,17 +2910,17 @@ function LeadAssignmentRulesTab() {
       });
       fetchAll();
     } catch (err: any) {
-      toast({ title: "Hata", description: err.message, variant: "destructive" });
+      toast({ title: t("leadAssignment.error"), description: err.message, variant: "destructive" });
     }
   }
 
   async function handleDelete(id: number) {
     try {
       await customFetch(`/api/settings/lead-assignment-rules/${id}`, { method: "DELETE" });
-      toast({ title: "Kural silindi" });
+      toast({ title: t("leadAssignment.ruleDeleted") });
       fetchAll();
     } catch (err: any) {
-      toast({ title: "Silme başarısız", description: err.message, variant: "destructive" });
+      toast({ title: t("leadAssignment.deleteFailed"), description: err.message, variant: "destructive" });
     } finally {
       setDeleteConfirm(null);
     }
@@ -2930,75 +2931,73 @@ function LeadAssignmentRulesTab() {
       <Card className="border-none shadow-lg shadow-black/5 p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="font-display font-bold text-lg">Lead Otomatik Atama</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Yeni gelen leadler için ülke/şehir/kaynak filtreleriyle staff'a otomatik atama kuralları tanımlayın. Kurallar öncelik sırasına göre değerlendirilir; ilk eşleşen aktif kural uygulanır.
-            </p>
+            <h3 className="font-display font-bold text-lg">{t("leadAssignment.title")}</h3>
+            <p className="text-sm text-muted-foreground mt-1">{t("leadAssignment.description")}</p>
           </div>
           <Button onClick={openNew} className="gap-2">
-            <Plus className="w-4 h-4" /> Yeni Kural
+            <Plus className="w-4 h-4" /> {t("leadAssignment.newRule")}
           </Button>
         </div>
 
         {showForm && (
           <Card className="p-5 mb-6 border-2 border-primary/20 bg-primary/[0.02] space-y-4">
-            <h4 className="font-semibold text-sm">{editingId ? "Kuralı Düzenle" : "Yeni Kural"}</h4>
+            <h4 className="font-semibold text-sm">{editingId ? t("leadAssignment.editTitle") : t("leadAssignment.newTitle")}</h4>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <Label className="text-xs font-medium mb-1.5">İsim</Label>
-                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="örn. Türkiye leadleri → Ahmet" />
+                <Label className="text-xs font-medium mb-1.5">{t("leadAssignment.nameLabel")}</Label>
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={t("leadAssignment.namePlaceholder")} />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Öncelik (küçük = önce)</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("leadAssignment.priorityLabel")}</Label>
                 <Input type="number" value={form.priority} onChange={e => setForm(f => ({ ...f, priority: parseInt(e.target.value, 10) || 0 }))} />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Ülkeler (boş = tümü)</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("leadAssignment.countriesLabel")}</Label>
                 <MultiSelectFilter
                   values={form.countries}
                   onChange={v => setForm(f => ({ ...f, countries: v }))}
                   options={countries.map(c => ({ value: c.name, label: c.name }))}
-                  placeholder="Tüm ülkeler"
+                  placeholder={t("leadAssignment.allCountries")}
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Kaynaklar (boş = tümü)</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("leadAssignment.sourcesLabel")}</Label>
                 <MultiSelectFilter
                   values={form.sources}
                   onChange={v => setForm(f => ({ ...f, sources: v }))}
                   options={sources.map(s => ({ value: s.value, label: s.label }))}
-                  placeholder={sources.length === 0 ? "(sistemde lead kaynağı yok)" : "Tüm kaynaklar"}
+                  placeholder={sources.length === 0 ? t("leadAssignment.noSources") : t("leadAssignment.allSources")}
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Şehirler (boş = tümü)</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("leadAssignment.citiesLabel")}</Label>
                 <MultiSelectFilter
                   values={form.cities}
                   onChange={v => setForm(f => ({ ...f, cities: v }))}
                   options={cities.map(c => ({ value: c, label: c }))}
-                  placeholder={cities.length === 0 ? "(sistemde şehir yok)" : "Tüm şehirler"}
+                  placeholder={cities.length === 0 ? t("leadAssignment.noCities") : t("leadAssignment.allCities")}
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Üniversiteler (boş = tümü)</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("leadAssignment.universitiesLabel")}</Label>
                 <MultiSelectFilter
                   values={form.universityIds.map(String)}
                   onChange={v => setForm(f => ({ ...f, universityIds: v.map(x => parseInt(x, 10)).filter(n => !isNaN(n)) }))}
                   options={universities.map(u => ({ value: String(u.id), label: u.country ? `${u.name} (${u.country})` : u.name }))}
-                  placeholder="Tüm üniversiteler"
+                  placeholder={t("leadAssignment.allUniversities")}
                 />
               </div>
               <div className="sm:col-span-2">
-                <Label className="text-xs font-medium mb-1.5">Telefon Kodları (boş = tümü)</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("leadAssignment.phoneCodesLabel")}</Label>
                 <MultiSelectFilter
                   values={form.phoneCodes}
                   onChange={v => setForm(f => ({ ...f, phoneCodes: v }))}
                   options={PHONE_CODE_OPTIONS.map(p => ({ value: p.value, label: p.label }))}
-                  placeholder="Tüm telefon kodları"
+                  placeholder={t("leadAssignment.allPhoneCodes")}
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium mb-1.5">Strateji</Label>
+                <Label className="text-xs font-medium mb-1.5">{t("leadAssignment.strategyLabel")}</Label>
                 <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.strategy} onChange={e => setForm(f => ({ ...f, strategy: e.target.value as any }))}>
                   <option value="first">{t("settings.assignFirstStaff")}</option>
                   <option value="round_robin">{t("settings.assignRoundRobin")}</option>
@@ -3006,12 +3005,12 @@ function LeadAssignmentRulesTab() {
               </div>
               <div className="flex items-center gap-3 pt-5">
                 <Switch checked={form.isActive} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />
-                <Label className="text-sm">Aktif</Label>
+                <Label className="text-sm">{t("leadAssignment.activeLabel")}</Label>
               </div>
             </div>
 
             <div>
-              <Label className="text-xs font-medium mb-1.5">Atanacak Personel</Label>
+              <Label className="text-xs font-medium mb-1.5">{t("leadAssignment.staffLabel")}</Label>
               <MultiSelectFilter
                 values={form.staffUserIds.map(String)}
                 onChange={v => setForm(f => ({ ...f, staffUserIds: v.map(x => parseInt(x, 10)).filter(n => !isNaN(n)) }))}
@@ -3019,19 +3018,19 @@ function LeadAssignmentRulesTab() {
                   const name = `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
                   return { value: String(u.id), label: `${name} (${u.role})` };
                 })}
-                placeholder={staff.length === 0 ? "(personel bulunamadı)" : "Personel seçin"}
+                placeholder={staff.length === 0 ? t("leadAssignment.noStaff") : t("leadAssignment.selectStaff")}
               />
               {form.staffUserIds.length > 0 && (
                 <div className="text-[11px] text-muted-foreground mt-1.5">
-                  Seçili: {form.staffUserIds.map(staffLabel).join(", ")}
+                  {t("leadAssignment.selected", { names: form.staffUserIds.map(staffLabel).join(", ") })}
                 </div>
               )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => { setShowForm(false); setEditingId(null); }}>İptal</Button>
+              <Button variant="outline" onClick={() => { setShowForm(false); setEditingId(null); }}>{t("leadAssignment.cancel")}</Button>
               <Button onClick={handleSave} disabled={saving} className="gap-2">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Kaydet
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {t("leadAssignment.save")}
               </Button>
             </div>
           </Card>
@@ -3041,7 +3040,7 @@ function LeadAssignmentRulesTab() {
           <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
         ) : rules.length === 0 ? (
           <div className="text-sm text-muted-foreground text-center py-10">
-            Henüz kural tanımlanmamış. "Yeni Kural" ile başlayın.
+            {t("leadAssignment.noRules")}
           </div>
         ) : (
           <div className="space-y-2">
@@ -3051,19 +3050,19 @@ function LeadAssignmentRulesTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm">{rule.name}</span>
-                    {!rule.isActive && <Badge variant="secondary" className="text-[10px]">Pasif</Badge>}
+                    {!rule.isActive && <Badge variant="secondary" className="text-[10px]">{t("leadAssignment.inactive")}</Badge>}
                     <Badge variant="outline" className="text-[10px]">
-                      {rule.strategy === "round_robin" ? "Round-robin" : "İlk personel"}
+                      {rule.strategy === "round_robin" ? t("leadAssignment.strategyRoundRobin") : t("leadAssignment.strategyFirst")}
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                    {rule.countries.length > 0 && <div>Ülke: {rule.countries.join(", ")}</div>}
-                    {rule.cities.length > 0 && <div>Şehir: {rule.cities.join(", ")}</div>}
-                    {(rule.phoneCodes?.length ?? 0) > 0 && <div>Tel kodu: {rule.phoneCodes.map(phoneCodeLabel).join(", ")}</div>}
-                    {rule.sources.length > 0 && <div>Kaynak: {rule.sources.join(", ")}</div>}
-                    {rule.universityIds.length > 0 && <div>Üniversite: {rule.universityIds.map(uniLabel).join(", ")}</div>}
-                    {rule.countries.length === 0 && rule.cities.length === 0 && (rule.phoneCodes?.length ?? 0) === 0 && rule.sources.length === 0 && rule.universityIds.length === 0 && <div className="italic">Tüm leadlere uygulanır</div>}
-                    <div>Personel: {rule.staffUserIds.map(staffLabel).join(", ")}</div>
+                    {rule.countries.length > 0 && <div>{t("leadAssignment.filterCountry", { values: rule.countries.join(", ") })}</div>}
+                    {rule.cities.length > 0 && <div>{t("leadAssignment.filterCity", { values: rule.cities.join(", ") })}</div>}
+                    {(rule.phoneCodes?.length ?? 0) > 0 && <div>{t("leadAssignment.filterPhoneCode", { values: rule.phoneCodes.map(phoneCodeLabel).join(", ") })}</div>}
+                    {rule.sources.length > 0 && <div>{t("leadAssignment.filterSource", { values: rule.sources.join(", ") })}</div>}
+                    {rule.universityIds.length > 0 && <div>{t("leadAssignment.filterUniversity", { values: rule.universityIds.map(uniLabel).join(", ") })}</div>}
+                    {rule.countries.length === 0 && rule.cities.length === 0 && (rule.phoneCodes?.length ?? 0) === 0 && rule.sources.length === 0 && rule.universityIds.length === 0 && <div className="italic">{t("leadAssignment.filterAll")}</div>}
+                    <div>{t("leadAssignment.filterStaff", { values: rule.staffUserIds.map(staffLabel).join(", ") })}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -3079,11 +3078,11 @@ function LeadAssignmentRulesTab() {
         {deleteConfirm !== null && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteConfirm(null)}>
             <Card className="p-6 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
-              <h4 className="font-semibold mb-2">Kuralı sil?</h4>
-              <p className="text-sm text-muted-foreground mb-4">Bu işlem geri alınamaz.</p>
+              <h4 className="font-semibold mb-2">{t("leadAssignment.deleteTitle")}</h4>
+              <p className="text-sm text-muted-foreground mb-4">{t("leadAssignment.deleteConfirm")}</p>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setDeleteConfirm(null)}>İptal</Button>
-                <Button variant="destructive" onClick={() => handleDelete(deleteConfirm)}>Sil</Button>
+                <Button variant="outline" onClick={() => setDeleteConfirm(null)}>{t("leadAssignment.deleteCancel")}</Button>
+                <Button variant="destructive" onClick={() => handleDelete(deleteConfirm)}>{t("leadAssignment.deleteBtn")}</Button>
               </div>
             </Card>
           </div>
