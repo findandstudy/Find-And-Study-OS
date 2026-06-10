@@ -43,6 +43,7 @@ const SETTINGS_PATCH_FIELDS = [
   "autoConvertStudentStageKey",
   "agentCanChangeLeadStage",
   "agentCanChangeStudentAppStage",
+  "directStudentEnrollmentBonusRate",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];

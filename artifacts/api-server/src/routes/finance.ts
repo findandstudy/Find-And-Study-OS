@@ -281,6 +281,31 @@ router.get("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (re
   const activeOnly = await db.select().from(commissionsTable).where(
     summaryConditions.length > 0 ? and(...summaryConditions) : undefined
   );
+
+  // Staff bonus deduction from net: query paid staff commissions for same students, grouped by currency
+  const summaryStudentIds = [...new Set(activeOnly.map(c => c.studentId).filter((x): x is number => x != null))];
+  const staffPaidByCurrency: Record<string, number> = {};
+  let totalStaffPaidForSummary = 0;
+  if (summaryStudentIds.length > 0) {
+    const staffPaidRows = await db.select({
+      currency: staffCommissionsTable.currency,
+      total: sql<string>`coalesce(sum(${staffCommissionsTable.amount}::numeric), 0)`,
+    }).from(staffCommissionsTable)
+      .where(and(eq(staffCommissionsTable.status, "paid"), inArray(staffCommissionsTable.studentId, summaryStudentIds)))
+      .groupBy(staffCommissionsTable.currency);
+    for (const row of staffPaidRows) {
+      const cur = normCurrency(row.currency);
+      staffPaidByCurrency[cur] = (staffPaidByCurrency[cur] || 0) + toNum(row.total);
+      totalStaffPaidForSummary += toNum(row.total);
+    }
+  }
+
+  const byCurrency = buildCommissionsByCurrency(activeOnly);
+  // Subtract staff paid per currency from totalNetAgency in each currency bucket
+  for (const [cur, staffAmt] of Object.entries(staffPaidByCurrency)) {
+    if (byCurrency[cur]) byCurrency[cur].totalNetAgency -= staffAmt;
+  }
+
   const summary = {
     potentialCount: activeOnly.filter(c => c.status === "potential").length,
     confirmedCount: activeOnly.filter(c => c.status === "confirmed").length,
@@ -290,9 +315,10 @@ router.get("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (re
     totalAgentPaid: activeOnly.reduce((s, c) => s + toNum(c.agentPaid), 0),
     totalSubAgentCommission: activeOnly.reduce((s, c) => s + toNum(c.subAgentCommissionAmount), 0),
     totalSubAgentPaid: activeOnly.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
-    totalNetAgency: activeOnly.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.agentCommissionAmount)), 0),
+    // Net = University − Agent − Staff (staff bonus deducted for consistency with university breakdown)
+    totalNetAgency: activeOnly.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.agentCommissionAmount)), 0) - totalStaffPaidForSummary,
     totalOffsetAmount: activeOnly.reduce((s, c) => s + toNum(c.offsetAmount), 0),
-    byCurrency: buildCommissionsByCurrency(activeOnly),
+    byCurrency,
   };
 
   res.json({
