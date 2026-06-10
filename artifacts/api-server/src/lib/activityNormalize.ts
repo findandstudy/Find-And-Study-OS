@@ -27,6 +27,8 @@ const SORTED_ROUTE_ENTRIES = Object.entries(ROUTE_MODULE_MAP).sort((a, b) => b[0
 function tryRouteMatch(r: string): string | null {
   for (const [pattern, name] of SORTED_ROUTE_ENTRIES) {
     if (r === pattern) return name;
+    const isRoot = pattern.split("/").filter(Boolean).length === 1;
+    if (!isRoot && r.startsWith(pattern + "/")) return name;
   }
   return null;
 }

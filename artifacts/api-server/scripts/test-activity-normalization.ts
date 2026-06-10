@@ -15,6 +15,13 @@ test("deriveModuleName: known routes resolve to labels", () => {
   assert.equal(deriveModuleName("/student/applications"), "Applications");
 });
 
+test("deriveModuleName: nested known sub-routes use prefix match", () => {
+  assert.equal(deriveModuleName("/staff/leads/detail"), "Leads");
+  assert.equal(deriveModuleName("/admin/settings/notifications"), "Settings");
+  assert.equal(deriveModuleName("/agent/leads/new"), "Leads");
+  assert.equal(deriveModuleName("/student/applications/view"), "Applications");
+});
+
 test("deriveModuleName: UUID/numeric tails stripped before match", () => {
   assert.equal(deriveModuleName("/staff/students/42"), "Students");
   assert.equal(deriveModuleName("/admin/users/550e8400-e29b-41d4-a716-446655440000"), "Users");
