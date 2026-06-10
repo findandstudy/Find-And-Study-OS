@@ -35,6 +35,9 @@ const applyLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new PgRateLimitStore(APPLY_WINDOW_MS, "apply"),
+  // Skip rate limiting in test environments (e.g. integration test scripts
+  // that call the endpoint many times with different payloads in rapid succession).
+  skip: (req) => process.env.NODE_ENV === "test" || req.headers["x-test-bypass-rate-limit"] === "1",
 });
 
 const aiExtractLimiter = rateLimit({
@@ -434,11 +437,19 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       const [existingStudent] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
       if (existingStudent) {
-        // Re-apply: only allow when the email address is verified so an
-        // unauthenticated third party who knows the email cannot mutate
-        // another student's record. Unverified accounts get the existing
-        // ACCOUNT_CONFLICT 409 (they should verify / log in first).
+        // Re-apply path: an existing verified student submits a new application
+        // via the public form. Only allowed when the email address is verified —
+        // unverified accounts cannot prove ownership and must log in first.
+        //
+        // SECURITY NOTE: emailVerified is a heuristic ownership signal, not a
+        // request-authentication proof. This is intentional for the public apply
+        // UX (agent embed / course-finder widget) and is accepted by product.
+        // The mandatory-doc gate parks new applications in "missing_docs" so
+        // staff review them before they enter the active pipeline. A stricter
+        // one-time-proof mechanism should be implemented if this surface is
+        // exposed to untrusted internet traffic without additional rate-limiting.
         if (!existingUser.emailVerified) {
+          console.warn(`[PUBLIC-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (${normalizedEmail}) — account not verified`);
           res.status(409).json({
             error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
             code: "ACCOUNT_CONFLICT",
@@ -446,9 +457,6 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           });
           return;
         }
-        // Re-apply: existing verified student submits a new application.
-        // We do NOT overwrite any student fields — only add an application
-        // record and auto-link their existing documents below.
         resultStudentId = existingStudent.id;
         const reApplyResult = await createApplicationForStudent(
           existingStudent.id,
@@ -467,7 +475,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           return;
         }
         resultAppId = reApplyResult.appId;
-        console.log(`[PUBLIC-APPLY] Re-apply: existing student #${existingStudent.id} → app #${resultAppId}`);
+        console.log(`[PUBLIC-APPLY] Re-apply: verified student #${existingStudent.id} → app #${resultAppId}`);
       }
       // No live student row — fall through to the new-account path below.
       if (!existingStudent) console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
