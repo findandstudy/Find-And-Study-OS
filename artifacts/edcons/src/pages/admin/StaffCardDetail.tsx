@@ -1065,9 +1065,9 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label={t("staffCards.commissions.potential")} value={potentialAmt.toFixed(2)} />
-        <StatCard label={t("staffCards.commissions.totalPending")} value={pendingAmt.toFixed(2)} />
+        <StatCard label={t("staffCards.commissions.confirmed")} value={pendingAmt.toFixed(2)} />
         <StatCard label={t("staffCards.commissions.totalPaid")} value={`${totals.paid.toFixed(2)}`} />
-        <StatCard label={t("staffCards.commissions.totalPayable")} value={`${totals.pending.toFixed(2)}`} />
+        <StatCard label={t("staffCards.commissions.pending")} value={`${totals.pending.toFixed(2)}`} />
       </div>
       <Card className="p-4 grid grid-cols-2 md:grid-cols-8 gap-2 items-end">
         <div><Label>{t("staffCards.salary.amount")}</Label><Input type="number" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} /></div>

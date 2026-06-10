@@ -3289,7 +3289,9 @@
       "totalPending": "Total en attente",
       "refs": "Références",
       "empty": "Aucun enregistrement de commission pour le moment",
-      "totalPayable": "Total à payer"
+      "totalPayable": "Total à payer",
+      "confirmed": "Confirmé",
+      "pending": "En attente"
     },
     "tzVsAdmin": "vs admin"
   },

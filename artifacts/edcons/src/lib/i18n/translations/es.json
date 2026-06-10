@@ -3238,7 +3238,9 @@
       "totalPending": "Total pendiente",
       "refs": "Referencias",
       "empty": "Aún no hay registros de comisiones",
-      "totalPayable": "Total a pagar"
+      "totalPayable": "Total a pagar",
+      "confirmed": "Confirmado",
+      "pending": "Pendiente"
     },
     "tzVsAdmin": "vs administrador"
   },

@@ -3055,7 +3055,9 @@
       "totalPending": "Total pending",
       "refs": "References",
       "empty": "No commission records yet",
-      "totalPayable": "Total payable"
+      "totalPayable": "Total payable",
+      "confirmed": "Confirmed",
+      "pending": "Pending"
     },
     "tzVsAdmin": "vs admin"
   },

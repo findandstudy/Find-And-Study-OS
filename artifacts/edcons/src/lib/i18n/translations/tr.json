@@ -2996,7 +2996,9 @@
       "totalPending": "Toplam Bekleyen",
       "refs": "Referanslar",
       "empty": "Henüz komisyon kaydı yok",
-      "totalPayable": "Ödenecek Toplam"
+      "totalPayable": "Ödenecek Toplam",
+      "confirmed": "Onaylandı",
+      "pending": "Beklemede"
     },
     "tzVsAdmin": "yöneticiye göre"
   },

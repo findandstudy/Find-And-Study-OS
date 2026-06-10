@@ -773,6 +773,7 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
 
   const allComm = await db.select().from(commissionsTable).where(whereClause);
 
+  const uniStudentsSeen: Record<string, Set<number>> = {};
   const uniMap: Record<string, {
     universityName: string;
     totalCommission: number;
@@ -822,8 +823,6 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     const aPaid = toNum(c.agentPaid);
     const saAmt = toNum(c.subAgentCommissionAmount);
     const saPaid = toNum(c.subAgentPaid);
-    const sPaid = c.studentId != null ? (staffPaidByStudent[c.studentId] || 0) : 0;
-
     u.totalCommission += uAmt;
     u.totalCollected += uColl;
     u.totalRemaining += uAmt - uColl;
@@ -832,8 +831,11 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     u.totalAgentRemaining += aAmt - aPaid;
     u.totalSubAgentCommission += saAmt;
     u.totalSubAgentPaid += saPaid;
-    u.totalStaffPaid += sPaid;
-    u.netIncome += uColl - aPaid;
+    if (c.studentId != null && !uniStudentsSeen[name]) uniStudentsSeen[name] = new Set();
+    if (c.studentId != null && !uniStudentsSeen[name].has(c.studentId)) {
+      uniStudentsSeen[name].add(c.studentId);
+      u.totalStaffPaid += staffPaidByStudent[c.studentId] || 0;
+    }
     u.commissionCount++;
     u.statuses[c.status] = (u.statuses[c.status] || 0) + 1;
 
@@ -850,6 +852,8 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
   }
   for (const key of Object.keys(uniMap)) {
     uniMap[key].studentCount = [...students].filter(s => s.startsWith(key + "::")).length;
+    // Compute netIncome after dedup: collected - agentPaid - staffPaid
+    uniMap[key].netIncome = uniMap[key].totalCollected - uniMap[key].totalAgentPaid - uniMap[key].totalStaffPaid;
   }
 
   const breakdown = Object.values(uniMap).sort((a, b) => b.totalCommission - a.totalCommission);
@@ -968,8 +972,20 @@ router.get("/finance/staff-bonuses", requireAuth, requireRole(...FINANCE_ROLES),
   const rate = Number(settingsRow?.directStudentEnrollmentBonusRate ?? 0) || 0;
   if (!staffUserId) {
     const [paidRow] = await db.select({ total: sql<string>`coalesce(sum(amount::numeric), 0)` }).from(staffCommissionsTable).where(eq(staffCommissionsTable.status, "paid"));
-    const [pendingRow] = await db.select({ total: sql<string>`coalesce(sum(amount::numeric), 0)` }).from(staffCommissionsTable).where(eq(staffCommissionsTable.status, "pending"));
-    res.json({ rate, totalPaid: toNum(paidRow?.total), totalPending: toNum(pendingRow?.total), perStaff: [] });
+    // Dynamic pending: enrolled direct students (no agent) that haven't been paid yet × current rate
+    const allEnrolledDirect = await db.select({ id: studentsTable.id })
+      .from(studentsTable)
+      .where(and(eq(studentsTable.originType, "direct"), isNull(studentsTable.agentId), isNull(studentsTable.deletedAt), eq(studentsTable.status, "enrolled")));
+    const allEnrolledIds = allEnrolledDirect.map(s => s.id);
+    let paidDirectComms: { studentId: number | null }[] = [];
+    if (allEnrolledIds.length > 0) {
+      paidDirectComms = await db.select({ studentId: staffCommissionsTable.studentId })
+        .from(staffCommissionsTable)
+        .where(and(eq(staffCommissionsTable.status, "paid"), inArray(staffCommissionsTable.studentId, allEnrolledIds)));
+    }
+    const paidDirectIds = new Set(paidDirectComms.map(c => c.studentId).filter(Boolean));
+    const unpaidEnrolledCount = allEnrolledDirect.filter(s => !paidDirectIds.has(s.id)).length;
+    res.json({ rate, totalPaid: toNum(paidRow?.total), totalPending: unpaidEnrolledCount * rate, perStaff: [] });
     return;
   }
   const staffId = parseInt(staffUserId, 10);
@@ -1305,11 +1321,14 @@ router.get("/finance/export/service-fees", requireAuth, requireRole(...FINANCE_R
     conditions.push(eq(serviceFeesTable.currency, currency.toUpperCase()));
   }
 
-  const rows = await db.select().from(serviceFeesTable).where(and(...conditions)).orderBy(desc(serviceFeesTable.createdAt));
+  const rawFeeRows = await db.select().from(serviceFeesTable).where(and(...conditions)).orderBy(desc(serviceFeesTable.createdAt));
+  const rows = await enrichWithNames(rawFeeRows);
 
   const data = rows.map(f => ({
     "Student": f.studentName || "",
     "University": f.universityName || "",
+    "Agent": f.agentName || "",
+    "Staff": f.staffName || "",
     "Payer": f.payerType || "",
     "Season": f.season || "",
     "Currency": f.currency || "",

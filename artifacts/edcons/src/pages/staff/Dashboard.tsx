@@ -71,6 +71,15 @@ export default function StaffDashboard() {
   const { season } = useSeason();
   const { data: stats, isLoading } = useGetOverviewStats({ season });
 
+  const { data: revenueMonth } = useQuery<any>({
+    queryKey: ["/api/staff-cards/me/revenue-month"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/staff-cards/me/revenue-month`, { credentials: "include" });
+      if (!r.ok) return null;
+      return r.json();
+    },
+  });
+
   const { data: growthData = [] } = useQuery<any[]>({
     queryKey: ["/api/stats/growth", season],
     queryFn: async () => {
@@ -175,7 +184,7 @@ export default function StaffDashboard() {
             { label: t("staffDash.totalLeads"), value: stats?.totalLeads || 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10", href: "/staff/leads" },
             { label: t("staffDash.activeApplications"), value: stats?.activeApplications || 0, icon: FileText, color: "text-purple-500", bg: "bg-purple-500/10", href: "/staff/applications" },
             { label: t("staffDash.studentsEnrolled"), value: (stats as any)?.enrolledStudents || 0, icon: GraduationCap, color: "text-green-500", bg: "bg-green-500/10", href: "/staff/students" },
-            { label: t("staffDash.revenueMonth"), value: (stats as any)?.monthlyRevenueByCurrency || { USD: (stats as any)?.monthlyRevenue || 0 }, icon: DollarSign, color: "text-emerald-500", bg: "bg-emerald-500/10", isMoney: true, href: "/staff/finance" },
+            { label: t("staffDash.revenueMonth"), value: revenueMonth?.potentialBonus != null ? { USD: revenueMonth.potentialBonus } : ((stats as any)?.monthlyRevenueByCurrency || { USD: (stats as any)?.monthlyRevenue || 0 }), icon: DollarSign, color: "text-emerald-500", bg: "bg-emerald-500/10", isMoney: true, href: "/staff/finance" },
           ].map((stat: any, i) => (
             <Link key={i} href={stat.href}>
               <Card className="p-6 border-none shadow-lg shadow-black/5 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/10 transition-all duration-300 cursor-pointer">

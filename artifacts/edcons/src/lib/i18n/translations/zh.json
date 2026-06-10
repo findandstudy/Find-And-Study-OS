@@ -3238,7 +3238,9 @@
       "totalPending": "待付总额",
       "refs": "引用",
       "empty": "尚无佣金记录",
-      "totalPayable": "应付总额"
+      "totalPayable": "应付总额",
+      "confirmed": "已确认",
+      "pending": "待处理"
     },
     "tzVsAdmin": "相对管理员"
   },

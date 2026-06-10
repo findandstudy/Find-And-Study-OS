@@ -866,8 +866,10 @@ export default function FinancePage() {
   const [tab, setTab] = useState("commissions");
   const [commSearch, setCommSearch] = useState("");
   const [commStatus, setCommStatus] = useState("all");
-  const [commAgentFilter, setCommAgentFilter] = useState("");
-  const [commStaffFilter, setCommStaffFilter] = useState("");
+  const [commAgentId, setCommAgentId] = useState("all");
+  const [commStaffId, setCommStaffId] = useState("all");
+  const [feeAgentId, setFeeAgentId] = useState("all");
+  const [feeStaffId, setFeeStaffId] = useState("all");
 
   const [commModal, setCommModal] = useState<{ open: boolean; id?: number; initial?: CommissionForm }>({ open: false });
   const [feeModal, setFeeModal] = useState<{ open: boolean; id?: number; initial?: ServiceFeeForm }>({ open: false });
@@ -894,17 +896,31 @@ export default function FinancePage() {
   const commPg = useTablePagination(25);
   const feePg = useTablePagination(25);
 
-  const commParams = { season, ...(commSearch ? { search: commSearch } : {}), ...(commStatus !== "all" ? { status: commStatus } : {}), limit: 200 } as any;
-  const feeParams  = { season, limit: 200 } as any;
+  const commParams = { season, ...(commSearch ? { search: commSearch } : {}), ...(commStatus !== "all" ? { status: commStatus } : {}), ...(commAgentId !== "all" ? { agentId: commAgentId } : {}), ...(commStaffId !== "all" ? { staffUserId: commStaffId } : {}), limit: 200 } as any;
+  const feeParams  = { season, ...(feeAgentId !== "all" ? { agentId: feeAgentId } : {}), ...(feeStaffId !== "all" ? { staffUserId: feeStaffId } : {}), limit: 200 } as any;
 
   const { data: commResp, isLoading: commLoading, refetch: refetchComm } = useListCommissions(
     commParams,
-    { query: { queryKey: ["commissions", season, commSearch, commStatus] } }
+    { query: { queryKey: ["commissions", season, commSearch, commStatus, commAgentId, commStaffId] } }
   );
   const { data: feeResp, isLoading: feeLoading, refetch: refetchFees } = useListServiceFees(
     feeParams,
-    { query: { queryKey: ["service-fees", season] } }
+    { query: { queryKey: ["service-fees", season, feeAgentId, feeStaffId] } }
   );
+
+  const { data: filterAgentsResp } = useQuery({
+    queryKey: ["agents-list-filter"],
+    queryFn: () => customFetch<any>(`${BASE}/api/agents?limit=500`),
+    staleTime: 5 * 60 * 1000,
+  });
+  const filterAgents: any[] = Array.isArray(filterAgentsResp) ? filterAgentsResp : ((filterAgentsResp as any)?.data || []);
+
+  const { data: filterStaffResp } = useQuery({
+    queryKey: ["staff-users-filter"],
+    queryFn: () => customFetch<any>(`${BASE}/api/users?roles=staff%2Cconsultant%2Ceditor%2Caccountant%2Cmanager%2Cadmin&limit=200`),
+    staleTime: 5 * 60 * 1000,
+  });
+  const filterStaff: any[] = (filterStaffResp as any)?.data || (Array.isArray(filterStaffResp) ? filterStaffResp : []);
   const { data: summaryData } = useGetFinanceSummary(
     { season } as any,
     { query: { queryKey: ["finance-summary", season] } }
@@ -963,8 +979,6 @@ export default function FinancePage() {
 
   const sortedCommissions = useMemo(() => {
     let rows: any[] = commissions;
-    if (commAgentFilter) rows = rows.filter((c: any) => (c.agentName || "").toLowerCase().includes(commAgentFilter.toLowerCase()));
-    if (commStaffFilter) rows = rows.filter((c: any) => (c.staffName || "").toLowerCase().includes(commStaffFilter.toLowerCase()));
     if (!commSort.key) return rows;
     const dir = commSort.dir === "asc" ? 1 : -1;
     return [...rows].sort((a, b) => {
@@ -986,7 +1000,7 @@ export default function FinancePage() {
         default: return 0;
       }
     });
-  }, [commissions, commSort, commAgentFilter, commStaffFilter]);
+  }, [commissions, commSort]);
   const { paged: pagedCommissions, total: totalCommissions } = commPg.paginate(sortedCommissions);
 
   const sortedUniBreakdown = useMemo(() => {
@@ -1335,18 +1349,20 @@ export default function FinancePage() {
                     <SelectItem key={v} value={v}>{t(`financePage.${label}`)}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <Input
-                placeholder={t("financePage.agentFilter")}
-                className="w-40"
-                value={commAgentFilter}
-                onChange={e => setCommAgentFilter(e.target.value)}
-              />
-              <Input
-                placeholder={t("financePage.staffFilter")}
-                className="w-40"
-                value={commStaffFilter}
-                onChange={e => setCommStaffFilter(e.target.value)}
-              />
+              <Select value={commAgentId} onValueChange={setCommAgentId}>
+                <SelectTrigger className="w-44"><SelectValue placeholder={t("financePage.agentFilter")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("financePage.agentFilter")}</SelectItem>
+                  {filterAgents.map((a: any) => <SelectItem key={a.id} value={String(a.id)}>{a.name || `Agent #${a.id}`}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={commStaffId} onValueChange={setCommStaffId}>
+                <SelectTrigger className="w-44"><SelectValue placeholder={t("financePage.staffFilter")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("financePage.staffFilter")}</SelectItem>
+                  {filterStaff.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}</SelectItem>)}
+                </SelectContent>
+              </Select>
               <div className="ml-auto flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -1941,6 +1957,20 @@ export default function FinancePage() {
                   | Potential: {fmt(feeSummary.potentialTotal)} · Confirmed: {fmt(feeSummary.confirmedTotal)}
                 </div>
               )}
+              <Select value={feeAgentId} onValueChange={setFeeAgentId}>
+                <SelectTrigger className="w-44"><SelectValue placeholder={t("financePage.agentFilter")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("financePage.agentFilter")}</SelectItem>
+                  {filterAgents.map((a: any) => <SelectItem key={a.id} value={String(a.id)}>{a.name || `Agent #${a.id}`}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={feeStaffId} onValueChange={setFeeStaffId}>
+                <SelectTrigger className="w-44"><SelectValue placeholder={t("financePage.staffFilter")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("financePage.staffFilter")}</SelectItem>
+                  {filterStaff.map((u: any) => <SelectItem key={u.id} value={String(u.id)}>{[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}</SelectItem>)}
+                </SelectContent>
+              </Select>
               <div className="ml-auto flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -2013,6 +2043,8 @@ export default function FinancePage() {
                       {([
                         { key: "studentName", label: t("financePage.student"), align: "text-left" },
                         { key: "universityName", label: t("financePage.university"), align: "text-left", hasUniFilter: true },
+                        { key: "agentName", label: t("financePage.agentFilter"), align: "text-left", noSort: true },
+                        { key: "staffName", label: t("financePage.staffFilter"), align: "text-left", noSort: true },
                         { key: "", label: t("financePage.payer"), align: "text-left", noSort: true },
                         { key: "totalAmount", label: t("financePage.total"), align: "text-right" },
                         { key: "", label: "1st Installment (50%)", align: "text-center", noSort: true },
@@ -2131,6 +2163,8 @@ export default function FinancePage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-slate-600 text-sm">{f.universityName || "—"}</td>
+                          <td className="px-4 py-3 text-slate-600 text-sm">{f.agentName || "—"}</td>
+                          <td className="px-4 py-3 text-slate-600 text-sm">{f.staffName || "—"}</td>
                           <td className="px-4 py-3 text-slate-600 capitalize">{f.payerType}</td>
                           <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-800">
                             {fmt(f.totalAmount, f.currency)}

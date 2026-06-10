@@ -3238,7 +3238,9 @@
       "totalPending": "कुल लंबित",
       "refs": "संदर्भ",
       "empty": "अभी तक कोई कमीशन रिकॉर्ड नहीं",
-      "totalPayable": "कुल देय"
+      "totalPayable": "कुल देय",
+      "confirmed": "पुष्टि की गई",
+      "pending": "लंबित"
     },
     "tzVsAdmin": "व्यवस्थापक की तुलना में"
   },

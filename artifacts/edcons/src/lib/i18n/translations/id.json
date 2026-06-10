@@ -3238,7 +3238,9 @@
       "totalPending": "Total tertunda",
       "refs": "Referensi",
       "empty": "Belum ada catatan komisi",
-      "totalPayable": "Total Terhutang"
+      "totalPayable": "Total Terhutang",
+      "confirmed": "Dikonfirmasi",
+      "pending": "Tertunda"
     },
     "tzVsAdmin": "vs admin"
   },
