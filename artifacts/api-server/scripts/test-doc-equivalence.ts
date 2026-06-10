@@ -53,7 +53,7 @@ import {
   getEquivalentCanonicalTypes,
 } from "@workspace/doc-equivalence";
 
-import publicApplyRouter from "../src/routes/public-apply";
+import publicApplyRouter, { enableTestModeBypass } from "../src/routes/public-apply";
 import { ensureRateLimitsTable } from "../src/lib/pgRateLimiter";
 
 const RUN_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -805,6 +805,10 @@ async function main(): Promise<void> {
 
   // Ensure rate limiting is bypassed for in-process test server.
   process.env.NODE_ENV = "test";
+  // Enable the ACCOUNT_CONFLICT bypass so doc-equivalence HTTP suites (b)(c)(d)
+  // can re-apply on existing student accounts.  This is wired explicitly here
+  // rather than via NODE_ENV so it never fires in a production server.
+  enableTestModeBypass();
 
   await ensureRateLimitsTable();
 

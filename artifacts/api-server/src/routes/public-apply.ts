@@ -19,6 +19,18 @@ import { dispatchNotification } from "../lib/notificationDispatcher.js";
 
 const router: IRouter = Router();
 
+/**
+ * Test-harness bypass for the ACCOUNT_CONFLICT security gate.
+ * Call enableTestModeBypass() from the test server setup code so that
+ * doc-equivalence HTTP integration suites can re-apply on existing student
+ * accounts.  This flag is NEVER set in production — the production server
+ * never calls this function.
+ */
+let _testModeBypassAccountConflict = false;
+export function enableTestModeBypass(): void {
+  _testModeBypassAccountConflict = true;
+}
+
 // Public-apply form (course-finder widget) and AI document extraction accept
 // base64-encoded PDF/image uploads in the JSON body. Base64 inflates payload
 // size by ~33%, so the global 1mb body limit blocks legitimate submissions.
@@ -445,12 +457,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         // The caller must authenticate (log in) to apply on behalf of an
         // existing account. We only create new student accounts here; account
         // holders must use the authenticated portal for subsequent applications.
-        //
-        // TEST-ONLY EXCEPTION: when NODE_ENV === "test" the in-process test
-        // server bypasses this gate so that doc-equivalence HTTP integration
-        // suites (b)(c)(d) can validate the auto-link pipeline end-to-end.
-        // This path is NEVER reached by the production server.
-        if (process.env.NODE_ENV !== "test") {
+        if (!_testModeBypassAccountConflict) {
           console.warn(`[PUBLIC-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (${normalizedEmail})`);
           res.status(409).json({
             error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
@@ -459,7 +466,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           });
           return;
         }
-        // Test-only re-apply path: create a new application for the existing
+        // Test-harness re-apply path: create a new application for the existing
         // student without updating any personal data fields.
         resultStudentId = existingStudent.id;
         const reApplyResult = await createApplicationForStudent(
