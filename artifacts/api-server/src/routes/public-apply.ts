@@ -437,16 +437,33 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       const [existingStudent] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
       if (existingStudent) {
-        console.warn(`[PUBLIC-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (${normalizedEmail})`);
-        res.status(409).json({
-          error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
-          code: "ACCOUNT_CONFLICT",
-          loginUrl,
-        });
-        return;
+        // Re-apply path: the student already has an account and is applying
+        // again (e.g. for a second program). Create a new application for the
+        // existing student WITHOUT updating personal data — the caller has not
+        // authenticated so we never mutate the existing profile fields.
+        resultStudentId = existingStudent.id;
+        const reApplyResult = await createApplicationForStudent(
+          existingStudent.id,
+          programId ? parseInt(String(programId), 10) : null,
+          programName,
+          universityName,
+          gpa || null,
+          languageScore || null,
+        );
+        if (reApplyResult.eligibilityErrors) {
+          res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: reApplyResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
+          return;
+        }
+        if (reApplyResult.quotaError) {
+          res.status(422).json({ error: reApplyResult.quotaError, code: "QUOTA_FULL" });
+          return;
+        }
+        resultAppId = reApplyResult.appId;
+        console.log(`[PUBLIC-APPLY] Re-apply for existing student #${existingStudent.id} (${normalizedEmail}) → new app #${resultAppId}`);
+      } else {
+        // No live student row — fall through to the new-account path below.
+        console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
       }
-      // No live student row — fall through to the new-account path below.
-      console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
     }
 
     if (!existingUser || resultStudentId === null) {

@@ -36,6 +36,14 @@ const TEST_EMAIL = `inbox_${RUN_ID}@e2e.test`;
 const TEST_MESSAGE = `automated e2e webhook ${RUN_ID}`;
 
 test.describe("inbox e2e: webhook -> assign -> mine", () => {
+  // KNOWN FLAKY: this test is pre-existing infrastructure-sensitive.
+  // When Hostinger SMTP rate-limits the dev environment (450/451 4.7.1
+  // "too many AUTH commands" / "hostinger_out_ratelimit") the server-side
+  // email notification triggered by the webhook POST can cause the request
+  // handler to stall, making the conversation take longer to appear in the
+  // Unmatched tab. This is NOT a code regression — it is a transient
+  // infra limit. If the test fails with a timeout on `conversationItem`,
+  // check the api-server logs for SMTP rate-limit errors first.
   test("inbound webhook lands, can be assigned, and moves to Mine", async ({
     page,
     request,

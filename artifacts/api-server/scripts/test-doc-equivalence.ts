@@ -803,19 +803,31 @@ async function main(): Promise<void> {
     console.warn("[doc-equivalence] pre-cleanup warning:", e);
   }
 
+  // Ensure rate limiting is bypassed for in-process test server.
+  process.env.NODE_ENV = "test";
+
   await ensureRateLimitsTable();
 
   const sections: Section[] = [];
   sections.push(testEquivalenceUnits());
   sections.push(testCrossLevelReconciliation());
 
-  // HTTP integration tests (b) same-level reuse, (c) cross-level reuse,
-  // (d) dedup-fresh-upload were removed: all three required the re-apply
-  // HTTP path (existing verified student submitting a second application via
-  // the public form), which was removed for security (unauthenticated callers
-  // who know a verified email could mutate student records without ownership
-  // proof). The equivalence / auto-link logic those tests validated is
-  // already fully covered by the pure-logic (a1) and (a2) suites above.
+  // HTTP integration tests (b)(c)(d): start an in-process Express server
+  // backed by the real publicApplyRouter (and real DB) so we validate the
+  // full apply → doc-link → mandatory-gate pipeline end-to-end.
+  const app = express();
+  app.use(express.json({ limit: "10mb" }));
+  app.use("/api", publicApplyRouter);
+  const server = http.createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as { port: number }).port;
+  const serverUrl = `http://127.0.0.1:${port}`;
+
+  sections.push(await testReuseSameLevel(serverUrl));
+  sections.push(await testReuseCrossLevel(serverUrl));
+  sections.push(await testFreshUploadSuppressesEquivalentReuse(serverUrl));
+
+  await new Promise<void>((resolve) => server.close(() => resolve()));
 
   let allOk = true;
   for (const s of sections) {
