@@ -864,6 +864,31 @@ function SalaryTab({ payments, totals, userId, onSaved }: { payments: any[]; tot
   const { t } = useI18n();
   const { toast } = useToast();
   const [form, setForm] = useState({ amount: "", currency: "USD", period: "monthly", payDate: "", status: "pending", notes: "" });
+  const [bulkForm, setBulkForm] = useState({ count: "3", startDate: "", amount: "", currency: "USD", period: "monthly", notes: "" });
+  const [bulkLoading, setBulkLoading] = useState(false);
+
+  const bulkGenerate = async () => {
+    if (!bulkForm.amount || !bulkForm.count) return;
+    setBulkLoading(true);
+    try {
+      const r = await customFetch(`/api/staff-cards/${userId}/salary-payments/bulk`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          count: Number(bulkForm.count),
+          amount: Number(bulkForm.amount),
+          currency: bulkForm.currency,
+          period: bulkForm.period,
+          startDate: bulkForm.startDate || undefined,
+          notes: bulkForm.notes || null,
+        }),
+      });
+      const data: any = r;
+      toast({ title: t("staffCards.salary.bulkSuccess", { count: String(data.created) }) });
+      setBulkForm({ count: "3", startDate: "", amount: "", currency: "USD", period: "monthly", notes: "" });
+      onSaved();
+    } catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
+    finally { setBulkLoading(false); }
+  };
 
   const add = async () => {
     if (!form.amount) return;
@@ -893,6 +918,49 @@ function SalaryTab({ payments, totals, userId, onSaved }: { payments: any[]; tot
         <StatCard label={t("staffCards.salary.totalPaid")} value={`${totals.paid.toFixed(2)}`} />
         <StatCard label={t("staffCards.salary.totalPending")} value={`${totals.pending.toFixed(2)}`} />
       </div>
+      {/* Bulk generate section */}
+      <Card className="p-4 border-dashed border-2 border-primary/30 bg-primary/5">
+        <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3">{t("staffCards.salary.bulkGenerate")}</p>
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-2 items-end">
+          <div>
+            <Label className="text-xs">{t("staffCards.salary.bulkCount")}</Label>
+            <Input type="number" min="1" max="36" value={bulkForm.count} onChange={e => setBulkForm(f => ({ ...f, count: e.target.value }))} />
+          </div>
+          <div>
+            <Label className="text-xs">{t("staffCards.salary.bulkStartDate")}</Label>
+            <Input type="date" value={bulkForm.startDate} onChange={e => setBulkForm(f => ({ ...f, startDate: e.target.value }))} />
+          </div>
+          <div>
+            <Label className="text-xs">{t("staffCards.salary.amount")}</Label>
+            <Input type="number" value={bulkForm.amount} onChange={e => setBulkForm(f => ({ ...f, amount: e.target.value }))} />
+          </div>
+          <div>
+            <Label className="text-xs">{t("staffCards.salary.currency")}</Label>
+            <Input value={bulkForm.currency} onChange={e => setBulkForm(f => ({ ...f, currency: e.target.value.toUpperCase() }))} />
+          </div>
+          <div>
+            <Label className="text-xs">{t("staffCards.salary.period")}</Label>
+            <Select value={bulkForm.period} onValueChange={v => setBulkForm(f => ({ ...f, period: v }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="monthly">{t("staffCards.salary.monthly")}</SelectItem>
+                <SelectItem value="weekly">{t("staffCards.salary.weekly")}</SelectItem>
+                <SelectItem value="biweekly">{t("staffCards.salary.biweekly")}</SelectItem>
+                <SelectItem value="hourly">{t("staffCards.salary.hourly")}</SelectItem>
+                <SelectItem value="project">{t("staffCards.salary.project")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">{t("staffCards.salary.notes")}</Label>
+            <Input value={bulkForm.notes} onChange={e => setBulkForm(f => ({ ...f, notes: e.target.value }))} />
+          </div>
+          <Button onClick={bulkGenerate} disabled={bulkLoading || !bulkForm.amount} className="w-full">
+            {bulkLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+            {t("staffCards.salary.bulkGenerate")}
+          </Button>
+        </div>
+      </Card>
       <Card className="p-4 grid grid-cols-1 md:grid-cols-7 gap-2 items-end">
         <div><Label>{t("staffCards.salary.amount")}</Label><Input type="number" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} /></div>
         <div><Label>{t("staffCards.salary.currency")}</Label><Input value={form.currency} onChange={(e) => setForm(f => ({ ...f, currency: e.target.value.toUpperCase() }))} /></div>
@@ -963,6 +1031,8 @@ function SalaryTab({ payments, totals, userId, onSaved }: { payments: any[]; tot
 function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions: any[]; totals: any; userId: number; onSaved: () => void }) {
   const { t } = useI18n();
   const { toast } = useToast();
+  const potentialAmt = commissions.filter(c => c.status === "potential").reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+  const pendingAmt = commissions.filter(c => c.status === "pending" || c.status === "approved").reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
   const [form, setForm] = useState({ amount: "", currency: "USD", studentId: "", agentId: "", applicationId: "", payDate: "", status: "pending", notes: "" });
 
   const add = async () => {
@@ -993,9 +1063,11 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label={t("staffCards.commissions.potential")} value={potentialAmt.toFixed(2)} />
+        <StatCard label={t("staffCards.commissions.totalPending")} value={pendingAmt.toFixed(2)} />
         <StatCard label={t("staffCards.commissions.totalPaid")} value={`${totals.paid.toFixed(2)}`} />
-        <StatCard label={t("staffCards.commissions.totalPending")} value={`${totals.pending.toFixed(2)}`} />
+        <StatCard label={t("staffCards.commissions.totalPayable")} value={`${totals.pending.toFixed(2)}`} />
       </div>
       <Card className="p-4 grid grid-cols-2 md:grid-cols-8 gap-2 items-end">
         <div><Label>{t("staffCards.salary.amount")}</Label><Input type="number" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} /></div>

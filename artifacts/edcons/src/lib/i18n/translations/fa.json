@@ -2056,7 +2056,12 @@
     "cancel": "لغو",
     "total": "کل",
     "currentDays": "جاری (۰-۳۰ روز)",
-    "exportExcel": "خروجی اکسل"
+    "exportExcel": "خروجی اکسل",
+    "staff": "کارمند",
+    "agentFilter": "فیلتر نماینده...",
+    "staffFilter": "فیلتر کارمند...",
+    "staffBonusPaid": "پاداش کارمند پرداخت شده",
+    "staffBonusPayable": "پاداش کارمند قابل پرداخت"
   },
   "studentsPage": {
     "addNewStudent": "افزودن دانشجوی جدید",
@@ -3217,7 +3222,11 @@
       "cancelled": "لغوشده",
       "totalPaid": "کل پرداخت‌شده",
       "totalPending": "کل در انتظار",
-      "empty": "هنوز سابقه حقوقی وجود ندارد"
+      "empty": "هنوز سابقه حقوقی وجود ندارد",
+      "bulkGenerate": "تولید دسته‌ای",
+      "bulkCount": "تعداد ماه",
+      "bulkStartDate": "ماه شروع",
+      "bulkSuccess": "{{count}} رکورد حقوق ایجاد شد"
     },
     "commissions": {
       "studentId": "شناسه دانشجو",
@@ -3228,7 +3237,8 @@
       "totalPaid": "کل پرداخت‌شده",
       "totalPending": "کل در انتظار",
       "refs": "مراجع",
-      "empty": "هنوز سابقه کمیسیونی وجود ندارد"
+      "empty": "هنوز سابقه کمیسیونی وجود ندارد",
+      "totalPayable": "جمع قابل پرداخت"
     },
     "tzVsAdmin": "نسبت به مدیر"
   },

@@ -2107,7 +2107,12 @@
     "cancel": "إلغاء",
     "total": "الإجمالي",
     "currentDays": "حالي (0-30 يوماً)",
-    "exportExcel": "تصدير إلى Excel"
+    "exportExcel": "تصدير إلى Excel",
+    "staff": "الموظف",
+    "agentFilter": "تصفية حسب الوكيل...",
+    "staffFilter": "تصفية حسب الموظف...",
+    "staffBonusPaid": "مكافأة الموظف المدفوعة",
+    "staffBonusPayable": "مكافأة الموظف المستحقة"
   },
   "studentsPage": {
     "addNewStudent": "إضافة طالب جديد",
@@ -3268,7 +3273,11 @@
       "cancelled": "ملغى",
       "totalPaid": "إجمالي المدفوع",
       "totalPending": "إجمالي قيد الانتظار",
-      "empty": "لا توجد سجلات رواتب بعد"
+      "empty": "لا توجد سجلات رواتب بعد",
+      "bulkGenerate": "إنشاء مجمّع",
+      "bulkCount": "عدد الأشهر",
+      "bulkStartDate": "شهر البدء",
+      "bulkSuccess": "تم إنشاء {{count}} سجل راتب"
     },
     "commissions": {
       "studentId": "معرّف الطالب",
@@ -3279,7 +3288,8 @@
       "totalPaid": "إجمالي المدفوع",
       "totalPending": "إجمالي قيد الانتظار",
       "refs": "المراجع",
-      "empty": "لا توجد سجلات عمولات بعد"
+      "empty": "لا توجد سجلات عمولات بعد",
+      "totalPayable": "إجمالي المستحق"
     },
     "tzVsAdmin": "مقارنةً بالمسؤول"
   },

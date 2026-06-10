@@ -141,6 +141,9 @@ export const settingsTable = pgTable("settings", {
   // Agent stage-change permissions (system-wide toggles)
   agentCanChangeLeadStage: boolean("agent_can_change_lead_stage").notNull().default(true),
   agentCanChangeStudentAppStage: boolean("agent_can_change_student_app_stage").notNull().default(false),
+
+  // Flat bonus amount per direct enrolled student assigned to staff member
+  directStudentEnrollmentBonusRate: text("direct_student_enrollment_bonus_rate").notNull().default("0"),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });

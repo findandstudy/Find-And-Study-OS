@@ -2056,7 +2056,12 @@
     "cancel": "रद्द करें",
     "total": "कुल",
     "currentDays": "वर्तमान (0-30 दिन)",
-    "exportExcel": "Excel निर्यात करें"
+    "exportExcel": "Excel निर्यात करें",
+    "staff": "स्टाफ",
+    "agentFilter": "एजेंट द्वारा फ़िल्टर...",
+    "staffFilter": "स्टाफ द्वारा फ़िल्टर...",
+    "staffBonusPaid": "स्टाफ बोनस भुगतान किया",
+    "staffBonusPayable": "स्टाफ बोनस देय"
   },
   "studentsPage": {
     "addNewStudent": "नया छात्र जोड़ें",
@@ -3217,7 +3222,11 @@
       "cancelled": "रद्द किया गया",
       "totalPaid": "कुल भुगतान",
       "totalPending": "कुल लंबित",
-      "empty": "अभी तक कोई वेतन रिकॉर्ड नहीं"
+      "empty": "अभी तक कोई वेतन रिकॉर्ड नहीं",
+      "bulkGenerate": "थोक उत्पन्न करें",
+      "bulkCount": "महीनों की संख्या",
+      "bulkStartDate": "प्रारंभ माह",
+      "bulkSuccess": "{{count}} वेतन रिकॉर्ड बनाए गए"
     },
     "commissions": {
       "studentId": "छात्र ID",
@@ -3228,7 +3237,8 @@
       "totalPaid": "कुल भुगतान",
       "totalPending": "कुल लंबित",
       "refs": "संदर्भ",
-      "empty": "अभी तक कोई कमीशन रिकॉर्ड नहीं"
+      "empty": "अभी तक कोई कमीशन रिकॉर्ड नहीं",
+      "totalPayable": "कुल देय"
     },
     "tzVsAdmin": "व्यवस्थापक की तुलना में"
   },

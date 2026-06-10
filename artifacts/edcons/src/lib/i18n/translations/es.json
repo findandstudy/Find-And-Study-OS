@@ -2056,7 +2056,12 @@
     "cancel": "Cancelar",
     "total": "Total",
     "currentDays": "Actual (0-30 días)",
-    "exportExcel": "Exportar Excel"
+    "exportExcel": "Exportar Excel",
+    "staff": "Personal",
+    "agentFilter": "Filtrar por agente...",
+    "staffFilter": "Filtrar por personal...",
+    "staffBonusPaid": "Bono de personal pagado",
+    "staffBonusPayable": "Bono de personal por pagar"
   },
   "studentsPage": {
     "addNewStudent": "Agregar estudiante",
@@ -3217,7 +3222,11 @@
       "cancelled": "Cancelado",
       "totalPaid": "Total pagado",
       "totalPending": "Total pendiente",
-      "empty": "Aún no hay registros de salario"
+      "empty": "Aún no hay registros de salario",
+      "bulkGenerate": "Generar en masa",
+      "bulkCount": "Número de meses",
+      "bulkStartDate": "Mes de inicio",
+      "bulkSuccess": "{{count}} registros de salario creados"
     },
     "commissions": {
       "studentId": "ID del estudiante",
@@ -3228,7 +3237,8 @@
       "totalPaid": "Total pagado",
       "totalPending": "Total pendiente",
       "refs": "Referencias",
-      "empty": "Aún no hay registros de comisiones"
+      "empty": "Aún no hay registros de comisiones",
+      "totalPayable": "Total a pagar"
     },
     "tzVsAdmin": "vs administrador"
   },

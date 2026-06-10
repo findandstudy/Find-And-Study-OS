@@ -2348,7 +2348,12 @@
     "cancel": "Cancel",
     "total": "Total",
     "currentDays": "Current (0-30 days)",
-    "exportExcel": "Export Excel"
+    "exportExcel": "Export Excel",
+    "staff": "Staff",
+    "agentFilter": "Filter by agent...",
+    "staffFilter": "Filter by staff...",
+    "staffBonusPaid": "Staff Bonus Paid",
+    "staffBonusPayable": "Staff Bonus Payable"
   },
   "studentsPage": {
     "addNewStudent": "Add New Student",
@@ -3034,7 +3039,11 @@
       "cancelled": "Cancelled",
       "totalPaid": "Total paid",
       "totalPending": "Total pending",
-      "empty": "No salary records yet"
+      "empty": "No salary records yet",
+      "bulkGenerate": "Bulk Generate",
+      "bulkCount": "Month Count",
+      "bulkStartDate": "Start Month",
+      "bulkSuccess": "{{count}} salary records created"
     },
     "commissions": {
       "studentId": "Student ID",
@@ -3045,7 +3054,8 @@
       "totalPaid": "Total paid",
       "totalPending": "Total pending",
       "refs": "References",
-      "empty": "No commission records yet"
+      "empty": "No commission records yet",
+      "totalPayable": "Total payable"
     },
     "tzVsAdmin": "vs admin"
   },

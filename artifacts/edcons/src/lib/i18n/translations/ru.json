@@ -2107,7 +2107,12 @@
     "cancel": "Отмена",
     "total": "Итого",
     "currentDays": "Текущий (0-30 дней)",
-    "exportExcel": "Экспорт в Excel"
+    "exportExcel": "Экспорт в Excel",
+    "staff": "Сотрудник",
+    "agentFilter": "Фильтр по агенту...",
+    "staffFilter": "Фильтр по сотруднику...",
+    "staffBonusPaid": "Бонус персонала выплачен",
+    "staffBonusPayable": "Бонус персонала к выплате"
   },
   "studentsPage": {
     "addNewStudent": "Добавить студента",
@@ -3268,7 +3273,11 @@
       "cancelled": "Отменено",
       "totalPaid": "Всего выплачено",
       "totalPending": "Всего ожидает",
-      "empty": "Записей о зарплате пока нет"
+      "empty": "Записей о зарплате пока нет",
+      "bulkGenerate": "Массовая генерация",
+      "bulkCount": "Кол-во месяцев",
+      "bulkStartDate": "Начальный месяц",
+      "bulkSuccess": "Создано {{count}} записей зарплат"
     },
     "commissions": {
       "studentId": "ID студента",
@@ -3279,7 +3288,8 @@
       "totalPaid": "Всего выплачено",
       "totalPending": "Всего ожидает",
       "refs": "Ссылки",
-      "empty": "Записей о комиссиях пока нет"
+      "empty": "Записей о комиссиях пока нет",
+      "totalPayable": "Итого к оплате"
     },
     "tzVsAdmin": "относительно администратора"
   },

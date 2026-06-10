@@ -2056,7 +2056,12 @@
     "cancel": "Batal",
     "total": "Total",
     "currentDays": "Saat ini (0-30 hari)",
-    "exportExcel": "Ekspor Excel"
+    "exportExcel": "Ekspor Excel",
+    "staff": "Staf",
+    "agentFilter": "Filter agen...",
+    "staffFilter": "Filter staf...",
+    "staffBonusPaid": "Bonus Staf Dibayar",
+    "staffBonusPayable": "Bonus Staf Harus Dibayar"
   },
   "studentsPage": {
     "addNewStudent": "Tambah Siswa Baru",
@@ -3217,7 +3222,11 @@
       "cancelled": "Dibatalkan",
       "totalPaid": "Total dibayar",
       "totalPending": "Total tertunda",
-      "empty": "Belum ada catatan gaji"
+      "empty": "Belum ada catatan gaji",
+      "bulkGenerate": "Buat Massal",
+      "bulkCount": "Jumlah Bulan",
+      "bulkStartDate": "Bulan Mulai",
+      "bulkSuccess": "{{count}} catatan gaji dibuat"
     },
     "commissions": {
       "studentId": "ID Siswa",
@@ -3228,7 +3237,8 @@
       "totalPaid": "Total dibayar",
       "totalPending": "Total tertunda",
       "refs": "Referensi",
-      "empty": "Belum ada catatan komisi"
+      "empty": "Belum ada catatan komisi",
+      "totalPayable": "Total Terhutang"
     },
     "tzVsAdmin": "vs admin"
   },

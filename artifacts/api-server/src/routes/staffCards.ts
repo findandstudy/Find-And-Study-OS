@@ -12,6 +12,7 @@ import {
   staffDocumentsTable,
   staffSalaryPaymentsTable,
   staffCommissionsTable,
+  settingsTable,
   userSessionsTable,
   userPresenceTable,
   STAFF_DOC_TYPES,
@@ -77,6 +78,39 @@ router.get("/staff-cards", requireAuth, requireStaffCardAdmin, async (req, res):
 // ─────────────────────────────────────────────────────────────────────────────
 // Aggregate kart
 // ─────────────────────────────────────────────────────────────────────────────
+router.get("/staff-cards/me/revenue-month", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  const [settingsRow] = await db.select({ directStudentEnrollmentBonusRate: settingsTable.directStudentEnrollmentBonusRate }).from(settingsTable);
+  const rate = Number(settingsRow?.directStudentEnrollmentBonusRate ?? 0) || 0;
+
+  const directStudents = await db.select({ id: studentsTable.id, status: studentsTable.status }).from(studentsTable).where(
+    and(eq(studentsTable.assignedToId, userId), eq(studentsTable.originType, "direct"), isNull(studentsTable.agentId), isNull(studentsTable.deletedAt))
+  );
+  const directIds = directStudents.map(s => s.id);
+  let paidComms: { studentId: number | null }[] = [];
+  if (directIds.length > 0) {
+    paidComms = await db.select({ studentId: staffCommissionsTable.studentId }).from(staffCommissionsTable).where(
+      and(eq(staffCommissionsTable.userId, userId), eq(staffCommissionsTable.status, "paid"), inArray(staffCommissionsTable.studentId, directIds))
+    );
+  }
+  const paidStudentIds = new Set(paidComms.map(c => c.studentId).filter((x): x is number => x != null));
+  const unpaidEnrolled = directStudents.filter(s => s.status === "enrolled" && !paidStudentIds.has(s.id));
+  const potentialBonus = unpaidEnrolled.length * rate;
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const pendingSalaries = await db.select({ amount: staffSalaryPaymentsTable.amount, currency: staffSalaryPaymentsTable.currency })
+    .from(staffSalaryPaymentsTable)
+    .where(and(eq(staffSalaryPaymentsTable.userId, userId), eq(staffSalaryPaymentsTable.status, "pending"), gte(staffSalaryPaymentsTable.payDate, monthStart), lte(staffSalaryPaymentsTable.payDate, monthEnd)));
+  const pendingSalaryByCurrency: Record<string, number> = {};
+  for (const p of pendingSalaries) {
+    const cur = String(p.currency || "USD").toUpperCase();
+    pendingSalaryByCurrency[cur] = (pendingSalaryByCurrency[cur] || 0) + (Number(p.amount) || 0);
+  }
+  res.json({ potentialBonus, bonusRate: rate, pendingSalaryByCurrency, unpaidEnrolledDirectStudents: unpaidEnrolled.length });
+});
+
 router.get("/staff-cards/:userId", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
   const userId = parseInt(String(req.params.userId), 10);
   if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
@@ -432,6 +466,32 @@ router.post("/staff-cards/:userId/salary-payments", requireAuth, requireStaffCar
   }).returning();
   logAudit(req.user!.id, "staff_card.salary.create", "user", userId, { id: row.id, amount: d.amount, currency: d.currency }, req.ip);
   res.status(201).json(row);
+});
+
+router.post("/staff-cards/:userId/salary-payments/bulk", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
+  const userId = parseInt(String(req.params.userId), 10);
+  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const bulkSchema = z.object({
+    count: z.coerce.number().int().min(1).max(36),
+    startDate: z.string().optional(),
+    amount: z.coerce.number().positive(),
+    currency: z.string().trim().min(2).max(5).default("USD"),
+    period: z.string().default("monthly"),
+    notes: z.string().nullable().optional(),
+  });
+  const parsed = bulkSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid body" }); return; }
+  const { count, startDate, amount, currency, period, notes } = parsed.data;
+  const base = startDate ? new Date(startDate) : new Date();
+  base.setDate(1);
+  base.setHours(0, 0, 0, 0);
+  const rows = Array.from({ length: count }, (_, i) => {
+    const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
+    return { userId, amount: String(amount), currency: currency.toUpperCase(), period, payDate: d, status: "pending" as const, notes: notes || null, createdBy: req.user!.id };
+  });
+  const created = await db.insert(staffSalaryPaymentsTable).values(rows).returning();
+  logAudit(req.user!.id, "staff_card.salary.bulk_create", "user", userId, { count, amount, currency }, req.ip);
+  res.status(201).json({ created: created.length, rows: created });
 });
 
 router.patch("/staff-cards/:userId/salary-payments/:id", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {

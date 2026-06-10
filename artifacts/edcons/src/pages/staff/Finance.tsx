@@ -866,6 +866,8 @@ export default function FinancePage() {
   const [tab, setTab] = useState("commissions");
   const [commSearch, setCommSearch] = useState("");
   const [commStatus, setCommStatus] = useState("all");
+  const [commAgentFilter, setCommAgentFilter] = useState("");
+  const [commStaffFilter, setCommStaffFilter] = useState("");
 
   const [commModal, setCommModal] = useState<{ open: boolean; id?: number; initial?: CommissionForm }>({ open: false });
   const [feeModal, setFeeModal] = useState<{ open: boolean; id?: number; initial?: ServiceFeeForm }>({ open: false });
@@ -913,6 +915,11 @@ export default function FinancePage() {
     queryFn: () => customFetch<any>(`${BASE}/api/finance/university-breakdown?season=${season}`),
   });
 
+  const { data: staffBonusGlobal } = useQuery({
+    queryKey: ["staff-bonus-global", season],
+    queryFn: () => customFetch<any>(`${BASE}/api/finance/staff-bonuses`),
+  });
+
   const allCommissions: any[] = (commResp as any)?.data || [];
   const commSummary: any = (commResp as any)?.summary || {};
   const allFees: any[] = (feeResp as any)?.data || [];
@@ -955,11 +962,16 @@ export default function FinancePage() {
   const uniTotals: any = uniBreakdownData?.totals || {};
 
   const sortedCommissions = useMemo(() => {
-    if (!commSort.key) return commissions;
+    let rows: any[] = commissions;
+    if (commAgentFilter) rows = rows.filter((c: any) => (c.agentName || "").toLowerCase().includes(commAgentFilter.toLowerCase()));
+    if (commStaffFilter) rows = rows.filter((c: any) => (c.staffName || "").toLowerCase().includes(commStaffFilter.toLowerCase()));
+    if (!commSort.key) return rows;
     const dir = commSort.dir === "asc" ? 1 : -1;
-    return [...commissions].sort((a, b) => {
+    return [...rows].sort((a, b) => {
       switch (commSort.key) {
         case "student": return dir * ((a.studentName || "").localeCompare(b.studentName || ""));
+        case "agent": return dir * ((a.agentName || "").localeCompare(b.agentName || ""));
+        case "staff": return dir * ((a.staffName || "").localeCompare(b.staffName || ""));
         case "progFee": return dir * (toNum(a.programFee) - toNum(b.programFee));
         case "univComm": return dir * (toNum(a.universityCommissionAmount) - toNum(b.universityCommissionAmount));
         case "agentComm": return dir * (toNum(a.agentCommissionAmount) - toNum(b.agentCommissionAmount));
@@ -974,7 +986,7 @@ export default function FinancePage() {
         default: return 0;
       }
     });
-  }, [commissions, commSort]);
+  }, [commissions, commSort, commAgentFilter, commStaffFilter]);
   const { paged: pagedCommissions, total: totalCommissions } = commPg.paginate(sortedCommissions);
 
   const sortedUniBreakdown = useMemo(() => {
@@ -1244,6 +1256,18 @@ export default function FinancePage() {
             color="text-indigo-600"
             rows={feeRowsFor("totalServiceFees")}
           />
+          {(toNum(staffBonusGlobal?.totalPaid) > 0 || toNum(staffBonusGlobal?.totalPending) > 0) && (
+            <FinanceStatCard
+              icon={DollarSign}
+              label={t("financePage.staff")}
+              borderColor="border-t-violet-400"
+              color="text-violet-600"
+              rows={[
+                { label: t("financePage.statusPaid"), value: fmt(toNum(staffBonusGlobal?.totalPaid)) },
+                { label: t("financePage.statusPending"), value: fmt(toNum(staffBonusGlobal?.totalPending)) },
+              ]}
+            />
+          )}
         </div>
 
         {offSummary.availableForOffset > 0 && (
@@ -1311,6 +1335,18 @@ export default function FinancePage() {
                     <SelectItem key={v} value={v}>{t(`financePage.${label}`)}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <Input
+                placeholder={t("financePage.agentFilter")}
+                className="w-40"
+                value={commAgentFilter}
+                onChange={e => setCommAgentFilter(e.target.value)}
+              />
+              <Input
+                placeholder={t("financePage.staffFilter")}
+                className="w-40"
+                value={commStaffFilter}
+                onChange={e => setCommStaffFilter(e.target.value)}
+              />
               <div className="ml-auto flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -1390,6 +1426,8 @@ export default function FinancePage() {
                       </th>
                       {([
                         { key: "student", label: t("financePage.studentUniversity"), align: "text-left" },
+                        { key: "agent", label: t("financePage.agent"), align: "text-left" },
+                        { key: "staff", label: t("financePage.staff"), align: "text-left" },
                         { key: "progFee", label: t("financePage.progFee"), align: "text-right" },
                         { key: "univComm", label: t("financePage.univCommission"), align: "text-right" },
                         { key: "agentComm", label: t("financePage.agentCommission"), align: "text-right" },
@@ -1481,6 +1519,12 @@ export default function FinancePage() {
                             {c.isStateUniversity && (
                               <Badge className="text-xs mt-0.5 bg-violet-100 text-violet-700 border-violet-200">{t("financePage.state")}</Badge>
                             )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-slate-700">{c.agentName || "—"}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-slate-700">{c.staffName || "—"}</div>
                           </td>
                           <td className="px-4 py-3 text-right text-slate-700 tabular-nums">
                             {c.programFee ? fmt(c.programFee, c.currency) : "—"}
@@ -1740,6 +1784,7 @@ export default function FinancePage() {
                           { key: "totalCollected", label: t("financePage.collected"), align: "text-right" },
                           { key: "totalRemaining", label: t("financePage.remaining"), align: "text-right" },
                           { key: "totalAgentPaid", label: t("financePage.agentPayout"), align: "text-right" },
+                          { key: "totalStaffPaid", label: t("financePage.staff"), align: "text-right" },
                           { key: "netIncome", label: t("financePage.netIncome"), align: "text-right" },
                           { key: "", label: "Collection %", align: "text-center", noSort: true },
                           { key: "studentCount", label: t("financePage.students"), align: "text-center" },
@@ -1842,6 +1887,9 @@ export default function FinancePage() {
                                 <div className="text-xs text-slate-400">{fmt(u.totalAgentRemaining)} unpaid</div>
                               )}
                             </td>
+                            <td className="px-4 py-3 text-right text-violet-700 tabular-nums">
+                              {u.totalStaffPaid > 0 ? fmt(u.totalStaffPaid) : <span className="text-slate-300">—</span>}
+                            </td>
                             <td className="px-4 py-3 text-right font-semibold text-emerald-700 tabular-nums">
                               {fmt(u.netIncome)}
                             </td>
@@ -1868,6 +1916,7 @@ export default function FinancePage() {
                         <td className="px-4 py-3 text-right text-green-700 tabular-nums">{fmt(uniTotals.totalCollected)}</td>
                         <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{fmt(uniTotals.totalRemaining)}</td>
                         <td className="px-4 py-3 text-right text-amber-700 tabular-nums">{fmt(uniTotals.totalAgentPaid)}</td>
+                        <td className="px-4 py-3 text-right text-violet-700 tabular-nums">{fmt(uniTotals.totalStaffPaid || 0)}</td>
                         <td className="px-4 py-3 text-right text-emerald-700 tabular-nums">{fmt(uniTotals.totalNetIncome)}</td>
                         <td className="px-4 py-3 text-center text-slate-600">
                           {pct(uniTotals.totalCollected, uniTotals.totalCommission)}%
@@ -2256,11 +2305,19 @@ export default function FinancePage() {
                           </p>
                         </div>
                       )}
+                      {toNum(staffBonusGlobal?.totalPaid) > 0 && (
+                        <div className="rounded-lg bg-violet-50 border border-violet-200 p-3 text-center">
+                          <p className="text-xs text-violet-600 font-medium uppercase">{t("financePage.staffBonusPaid")}</p>
+                          <p className="text-lg font-bold text-violet-700">
+                            {fmt(staffBonusGlobal.totalPaid)}
+                          </p>
+                        </div>
+                      )}
                     </div>
                     <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
                       <p className="text-xs text-emerald-600 font-medium uppercase">{t("financePage.netCashPosition")}</p>
                       <p className="text-2xl font-bold text-emerald-700">
-                        {fmt((toNum(summary?.commissions?.totalUniversityCollected) + toNum(summary?.serviceFees?.collected)) - toNum(summary?.commissions?.totalAgentPaid))}
+                        {fmt((toNum(summary?.commissions?.totalUniversityCollected) + toNum(summary?.serviceFees?.collected)) - toNum(summary?.commissions?.totalAgentPaid) - toNum(staffBonusGlobal?.totalPaid))}
                       </p>
                       <p className="text-xs text-emerald-500 mt-1">{t("financePage.includesServiceFee")}</p>
                     </div>
@@ -2278,6 +2335,12 @@ export default function FinancePage() {
                         <div className="flex justify-between text-sm">
                           <span className="text-slate-500">Sub Agent Payable</span>
                           <span className="text-purple-700">{fmt(toNum(summary?.commissions?.totalSubAgentCommission) - toNum(summary?.commissions?.totalSubAgentPaid))}</span>
+                        </div>
+                      )}
+                      {toNum(staffBonusGlobal?.totalPending) > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-500">{t("financePage.staffBonusPayable")}</span>
+                          <span className="text-violet-700">{fmt(staffBonusGlobal.totalPending)}</span>
                         </div>
                       )}
                       <div className="flex justify-between text-sm">

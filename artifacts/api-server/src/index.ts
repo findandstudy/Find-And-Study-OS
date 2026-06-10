@@ -562,6 +562,7 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS pdf_accent_color TEXT`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS agent_can_change_lead_stage BOOLEAN NOT NULL DEFAULT true`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS agent_can_change_student_app_stage BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS direct_student_enrollment_bonus_rate TEXT NOT NULL DEFAULT '0'`);
   } catch (err) {
     console.error("[migrate] offer-expiry columns:", err);
   }

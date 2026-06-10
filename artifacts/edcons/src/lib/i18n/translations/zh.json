@@ -2056,7 +2056,12 @@
     "cancel": "取消",
     "total": "总计",
     "currentDays": "当前 (0-30 天)",
-    "exportExcel": "导出 Excel"
+    "exportExcel": "导出 Excel",
+    "staff": "员工",
+    "agentFilter": "按代理筛选...",
+    "staffFilter": "按员工筛选...",
+    "staffBonusPaid": "员工奖金已付",
+    "staffBonusPayable": "员工奖金待付"
   },
   "studentsPage": {
     "addNewStudent": "添加新学生",
@@ -3217,7 +3222,11 @@
       "cancelled": "已取消",
       "totalPaid": "已付总额",
       "totalPending": "待付总额",
-      "empty": "尚无薪资记录"
+      "empty": "尚无薪资记录",
+      "bulkGenerate": "批量生成",
+      "bulkCount": "月数",
+      "bulkStartDate": "开始月份",
+      "bulkSuccess": "已创建 {{count}} 条薪资记录"
     },
     "commissions": {
       "studentId": "学生 ID",
@@ -3228,7 +3237,8 @@
       "totalPaid": "已付总额",
       "totalPending": "待付总额",
       "refs": "引用",
-      "empty": "尚无佣金记录"
+      "empty": "尚无佣金记录",
+      "totalPayable": "应付总额"
     },
     "tzVsAdmin": "相对管理员"
   },

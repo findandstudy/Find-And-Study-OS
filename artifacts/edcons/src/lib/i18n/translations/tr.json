@@ -2289,7 +2289,12 @@
     "cancel": "İptal",
     "total": "Toplam",
     "currentDays": "Güncel (0-30 gün)",
-    "exportExcel": "Excel İndir"
+    "exportExcel": "Excel İndir",
+    "staff": "Personel",
+    "agentFilter": "Acente filtrele...",
+    "staffFilter": "Personel filtrele...",
+    "staffBonusPaid": "Personel Bonusu Ödendi",
+    "staffBonusPayable": "Personel Bonusu Ödenecek"
   },
   "studentsPage": {
     "addNewStudent": "Yeni Öğrenci Ekle",
@@ -2975,7 +2980,11 @@
       "cancelled": "İptal",
       "totalPaid": "Toplam Ödenen",
       "totalPending": "Toplam Bekleyen",
-      "empty": "Henüz maaş kaydı yok"
+      "empty": "Henüz maaş kaydı yok",
+      "bulkGenerate": "Toplu Üret",
+      "bulkCount": "Ay Sayısı",
+      "bulkStartDate": "Başlangıç Ayı",
+      "bulkSuccess": "{{count}} maaş kaydı oluşturuldu"
     },
     "commissions": {
       "studentId": "Öğrenci ID",
@@ -2986,7 +2995,8 @@
       "totalPaid": "Toplam Ödenen",
       "totalPending": "Toplam Bekleyen",
       "refs": "Referanslar",
-      "empty": "Henüz komisyon kaydı yok"
+      "empty": "Henüz komisyon kaydı yok",
+      "totalPayable": "Ödenecek Toplam"
     },
     "tzVsAdmin": "yöneticiye göre"
   },
