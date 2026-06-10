@@ -1010,15 +1010,21 @@ router.get("/finance/staff-bonuses", requireAuth, requireRole(...FINANCE_ROLES),
   }
   const paidStudentIds = new Set(paidComms.map(c => c.studentId).filter(Boolean));
   const paidTotal = paidComms.reduce((s, c) => s + toNum(c.amount), 0);
-  const eligible = directStudents.filter(s => !paidStudentIds.has(s.id));
-  const confirmed = eligible.filter(s => s.status === "enrolled");
-  const potential = eligible.filter(s => s.status !== "enrolled");
+  // Separate enrolled vs potential, independent of paid status
+  const allEnrolled = directStudents.filter(s => s.status === "enrolled");
+  const allPotential = directStudents.filter(s => s.status !== "enrolled");
+  // Confirmed/potential buckets: exclude paid students from counts (they've been settled)
+  const confirmedUnpaid = allEnrolled.filter(s => !paidStudentIds.has(s.id));
+  const potentialUnpaid = allPotential.filter(s => !paidStudentIds.has(s.id));
+  // Pending amount: total eligible earned (ALL enrolled × rate) minus historically-paid amounts
+  // This ensures rate changes reprice the unpaid portion dynamically
+  const pendingAmount = Math.max(0, allEnrolled.length * rate - paidTotal);
   res.json({
     staffUserId: staffId, rate,
-    potential: { count: potential.length, amount: potential.length * rate },
-    confirmed: { count: confirmed.length, amount: confirmed.length * rate },
+    potential: { count: potentialUnpaid.length, amount: potentialUnpaid.length * rate },
+    confirmed: { count: confirmedUnpaid.length, amount: confirmedUnpaid.length * rate },
     paid: { count: paidComms.length, amount: paidTotal },
-    pending: { count: confirmed.length, amount: Math.max(0, confirmed.length * rate - paidTotal) },
+    pending: { count: confirmedUnpaid.length, amount: pendingAmount },
     directStudentCount: directStudents.length,
   });
 });

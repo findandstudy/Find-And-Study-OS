@@ -22,7 +22,7 @@ import {
   STAFF_SALARY_PERIODS,
   type StaffDocType,
 } from "@workspace/db";
-import { and, eq, gte, lte, sql, desc, isNull, ilike, or, inArray } from "drizzle-orm";
+import { and, eq, gte, lt, lte, sql, desc, isNull, ilike, or, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { userHasPermission } from "../lib/permissions";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
@@ -102,7 +102,7 @@ router.get("/staff-cards/me/revenue-month", requireAuth, async (req, res): Promi
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const pendingSalaries = await db.select({ amount: staffSalaryPaymentsTable.amount, currency: staffSalaryPaymentsTable.currency })
     .from(staffSalaryPaymentsTable)
-    .where(and(eq(staffSalaryPaymentsTable.userId, userId), eq(staffSalaryPaymentsTable.status, "pending"), gte(staffSalaryPaymentsTable.payDate, monthStart), lte(staffSalaryPaymentsTable.payDate, monthEnd)));
+    .where(and(eq(staffSalaryPaymentsTable.userId, userId), eq(staffSalaryPaymentsTable.status, "pending"), gte(staffSalaryPaymentsTable.payDate, monthStart), lt(staffSalaryPaymentsTable.payDate, monthEnd)));
   const pendingSalaryByCurrency: Record<string, number> = {};
   for (const p of pendingSalaries) {
     const cur = String(p.currency || "USD").toUpperCase();
