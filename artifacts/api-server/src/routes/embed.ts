@@ -250,7 +250,7 @@ function sanitizeWidget(widget: Record<string, any>, userRole: string): Record<s
   return rest;
 }
 
-router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const { page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
@@ -265,7 +265,7 @@ router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (re
 // Non-numeric ids fall through to sibling string paths like
 // `/embed/widgets/template` and `/embed/widgets/export` instead of
 // failing with a misleading "Invalid ID" 400.
-router.get("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+router.get("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res, next): Promise<void> => {
   if (!/^\d+$/.test(String(req.params.id))) { next(); return; }
   const id = parseInt(String(req.params.id), 10);
   const [widget] = await db.select().from(embedWidgetsTable).where(eq(embedWidgetsTable.id, id));
@@ -657,7 +657,7 @@ router.post("/embed/widgets/:id/rotate-key", requireAuth, requireRole(...ADMIN_R
   res.json({ embedApiKey: updated.embedApiKey });
 });
 
-router.get("/embed/widgets/:id/submissions", requireAuth, requireRole(...STAFF_ROLES), async (req, res, next): Promise<void> => {
+router.get("/embed/widgets/:id/submissions", requireAuth, requireRole(...ADMIN_ROLES), async (req, res, next): Promise<void> => {
   if (!/^\d+$/.test(String(req.params.id))) { next(); return; }
   const widgetId = parseInt(String(req.params.id), 10);
   const { page = "1", limit = "20" } = req.query as Record<string, string>;
@@ -672,7 +672,7 @@ router.get("/embed/widgets/:id/submissions", requireAuth, requireRole(...STAFF_R
   res.json({ data: rows, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
-router.get("/embed/submissions", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/embed/submissions", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const { page = "1", limit = "20", widgetId } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
