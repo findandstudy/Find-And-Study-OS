@@ -1,5 +1,5 @@
 import { db, programDocumentRequirementsTable, applicationsTable, documentsTable } from "@workspace/db";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 
 /**
@@ -50,7 +50,13 @@ export async function checkMandatoryDocsForStudent(
   const rows = await db
     .select({ type: documentsTable.type })
     .from(documentsTable)
-    .where(and(eq(documentsTable.studentId, studentId), isNull(documentsTable.deletedAt)));
+    .where(and(
+      eq(documentsTable.studentId, studentId),
+      isNull(documentsTable.deletedAt),
+      // Rejected documents do not satisfy mandatory requirements — the student
+      // must upload a replacement before the application can advance.
+      sql`${documentsTable.status} != 'rejected'`,
+    ));
 
   const uploadedTypes = rows.map((r) => String(r.type || "")).filter(Boolean);
   return checkMandatoryDocs(programId, uploadedTypes);

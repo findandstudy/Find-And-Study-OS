@@ -434,6 +434,18 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       const [existingStudent] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
       if (existingStudent) {
+        // Re-apply: only allow when the email address is verified so an
+        // unauthenticated third party who knows the email cannot mutate
+        // another student's record. Unverified accounts get the existing
+        // ACCOUNT_CONFLICT 409 (they should verify / log in first).
+        if (!existingUser.emailVerified) {
+          res.status(409).json({
+            error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
+            code: "ACCOUNT_CONFLICT",
+            loginUrl,
+          });
+          return;
+        }
         // Re-apply: existing verified student submits a new application.
         // We do NOT overwrite any student fields — only add an application
         // record and auto-link their existing documents below.

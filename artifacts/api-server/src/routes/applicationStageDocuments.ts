@@ -243,10 +243,6 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     ? documentNameOverride.trim()
     : stage;
   void handleMissingDocFulfillment(applicationId, fulfilmentSignal, user.id);
-  // Re-evaluate mandatory doc gate: if this application is parked in the
-  // "missing_docs" stage, check whether all mandatory docs are now present
-  // and advance it to "inquiry" automatically.
-  void reEvaluateMandatoryDocs(applicationId);
 
   // When a document is uploaded into the "missing_docs" stage (the shared
   // document-request workflow), also write it to the student's shared document
@@ -280,6 +276,11 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
       console.error("[STAGE-DOC] failed to mirror missing_docs upload to student pool:", e);
     }
   }
+
+  // Re-evaluate mandatory doc gate AFTER the mirror insert above so the
+  // just-uploaded document is already visible in documentsTable when the
+  // check runs. If all mandatory docs are now present, advance to "inquiry".
+  void reEvaluateMandatoryDocs(applicationId);
 
   res.status(201).json(doc);
 });

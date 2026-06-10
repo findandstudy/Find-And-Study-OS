@@ -1188,6 +1188,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   // ─────────────────────────────────────────────────────────────────────
   let resultStudentId: number | null = null;
   let resultAppId: number | null = null;
+  let embedMissingDocTypes: string[] = [];
   try {
     const normalizedEmail = String(email).toLowerCase().trim();
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
@@ -1400,6 +1401,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           const { missing } = await checkMandatoryDocsForStudent(programIdNum, resultStudentId);
           if (missing.length > 0) {
             await parkApplicationInMissingDocsStage(resultAppId);
+            embedMissingDocTypes = missing;
             const missingStr = missing.join(", ");
             const appIdForNotif = resultAppId;
             const studentIdForNotif = resultStudentId;
@@ -1441,7 +1443,16 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     console.error("[EMBED-APPLY] Post-processing (student/app/auto-convert) failed:", postErr);
   }
 
-  res.status(201).json({ success: true, submissionId: result.submissionId, leadId: result.leadId, studentId: resultStudentId, applicationId: resultAppId });
+  res.status(201).json({
+    success: true,
+    submissionId: result.submissionId,
+    leadId: result.leadId,
+    studentId: resultStudentId,
+    applicationId: resultAppId,
+    ...(embedMissingDocTypes.length > 0
+      ? { status: "missing_documents", missing: embedMissingDocTypes }
+      : { status: "inquiry" }),
+  });
 });
 
 router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
