@@ -14,11 +14,8 @@ import { ADMIN_ROLES } from "../lib/roles";
 import { withRenderLock } from "../lib/renderLock";
 import {
   deriveModuleName,
-  normalizeStoredModuleName,
   normalizeModuleBreakdown,
   clampSessionMetrics,
-  EXCLUDE_SEGMENT_RE,
-  DIRTY_LABEL_RE,
 } from "../lib/activityNormalize";
 import {
   loadBrandedPdfSettings,
