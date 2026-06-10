@@ -68,7 +68,7 @@ const COMM_STATUS: Record<string, { label: string; color: string }> = {
 
 const FEE_STATUS: Record<string, { label: string; color: string }> = {
   pending: { label: "statusPending", color: "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/60" },
-  partial: { label: "1st Paid", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60" },
+  partial: { label: "statusPartCollected", color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/60" },
   paid:    { label: "statusPaid", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-700/60" },
 };
 
@@ -443,7 +443,7 @@ function CommissionModal({
           <Button variant="outline" onClick={onClose}>{t("financePage.cancel")}</Button>
           <Button onClick={save} disabled={saving}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-            {editId ? "Update" : "Create"}
+            {editId ? t("financePage.update") : t("financePage.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -603,7 +603,7 @@ function ServiceFeeModal({
           <Button variant="outline" onClick={onClose}>{t("financePage.cancel")}</Button>
           <Button onClick={save} disabled={saving}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-            {editId ? "Update" : "Create"}
+            {editId ? t("financePage.update") : t("financePage.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -694,7 +694,7 @@ function TransactionModal({
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
       qc.invalidateQueries({ queryKey: ["financial-transactions"] });
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
-      toast({ title: type === "collection" ? "Collection recorded" : type === "agent_payment" ? "Agent payment recorded" : "Sub agent payment recorded" });
+      toast({ title: type === "collection" ? t("financePage.recordedCollection") : type === "agent_payment" ? t("financePage.recordedAgentPayment") : t("financePage.recordedSubAgentPayment") });
       onClose();
     } catch { toast({ title: t("financePage.errorSavingTransaction"), variant: "destructive" }); }
     finally { setSaving(false); }
@@ -709,7 +709,7 @@ function TransactionModal({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {isCollection ? "Record University Collection" : isSubAgentPayment ? "Record Sub Agent Payment" : "Record Agent Payment"}
+            {isCollection ? t("financePage.recordCollection") : isSubAgentPayment ? t("financePage.recordSubAgentPayment") : t("financePage.recordAgentPayment")}
           </DialogTitle>
         </DialogHeader>
         {commissionLabel && (
@@ -725,17 +725,17 @@ function TransactionModal({
             <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
           <div className="col-span-2">
-            <Label>Reference / Invoice #</Label>
+            <Label>{t("financePage.referenceLabel")}</Label>
             <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="INV-2025-001" />
           </div>
           {!isCollection && (
             <div className="col-span-2">
-              <Label>{isSubAgentPayment ? "Sub Agent Name" : "Agent Name"}</Label>
+              <Label>{isSubAgentPayment ? t("financePage.subAgentNameLabel") : t("financePage.agentNameLabel")}</Label>
               <Input value={agentName} onChange={e => setAgentName(e.target.value)} placeholder={isSubAgentPayment ? "Sub agent name" : "Agent name"} />
             </div>
           )}
           <div className="col-span-2">
-            <Label>Attach Document (Invoice / Receipt)</Label>
+            <Label>{t("financePage.attachDocument")}</Label>
             <div
               className="mt-1 border-2 border-dashed border-slate-200 rounded-lg p-4 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors"
               onClick={() => fileRef.current?.click()}
@@ -829,7 +829,7 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
                       <span className="text-xs text-slate-400">{tx.transactionDate}</span>
                     </div>
                     <p className="text-xs text-slate-500">
-                      {tx.type === "collection" ? "University Collection" : tx.type === "sub_agent_payment" ? `Sub Agent Payment${tx.agentName ? ` — ${tx.agentName}` : ""}` : `Agent Payment${tx.agentName ? ` — ${tx.agentName}` : ""}`}
+                      {tx.type === "collection" ? t("financePage.recordCollection") : tx.type === "sub_agent_payment" ? `${t("financePage.recordSubAgentPayment")}${tx.agentName ? ` — ${tx.agentName}` : ""}` : `${t("financePage.recordAgentPayment")}${tx.agentName ? ` — ${tx.agentName}` : ""}`}
                     </p>
                     {tx.reference && <p className="text-xs text-slate-400">Ref: {tx.reference}</p>}
                     {tx.fileName && (
@@ -1802,7 +1802,7 @@ export default function FinancePage() {
                           { key: "totalAgentPaid", label: t("financePage.agentPayout"), align: "text-right" },
                           { key: "totalStaffPaid", label: t("financePage.staff"), align: "text-right" },
                           { key: "netIncome", label: t("financePage.netIncome"), align: "text-right" },
-                          { key: "", label: "Collection %", align: "text-center", noSort: true },
+                          { key: "", label: t("financePage.collectionPct"), align: "text-center", noSort: true },
                           { key: "studentCount", label: t("financePage.students"), align: "text-center" },
                         ] as const).map((col: any) => {
                           const active = uniSort.key === col.key && !col.noSort;
@@ -2128,7 +2128,7 @@ export default function FinancePage() {
                                         <SelectContent>
                                           <SelectItem value="all">{t("financePage.allStatuses")}</SelectItem>
                                           {Object.entries(FEE_STATUS).map(([v, m]) => (
-                                            <SelectItem key={v} value={v}>{m.label}</SelectItem>
+                                            <SelectItem key={v} value={v}>{t(`financePage.${m.label}`)}</SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>
@@ -2181,7 +2181,7 @@ export default function FinancePage() {
                                 className="text-xs h-7 text-amber-700 border-amber-300 hover:bg-amber-50"
                                 onClick={() => markInstallment(f, 1)}
                               >
-                                {fmt(half, f.currency)} — Mark Paid
+                                {fmt(half, f.currency)} — {t("financePage.markPaid")}
                               </Button>
                             )}
                           </td>
@@ -2198,7 +2198,7 @@ export default function FinancePage() {
                                 onClick={() => markInstallment(f, 2)}
                                 disabled={!f.firstInstallmentPaidAt}
                               >
-                                {fmt(half, f.currency)} — Mark Paid
+                                {fmt(half, f.currency)} — {t("financePage.markPaid")}
                               </Button>
                             )}
                           </td>

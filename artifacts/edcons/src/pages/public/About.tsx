@@ -90,10 +90,10 @@ export default function About() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
-              { num: "10,000+", label: t("about.studentsPlaced") },
-              { num: "200+", label: t("about.partnerUniversities") },
-              { num: "40+", label: t("about.countriesServed") },
-              { num: "95%", label: t("about.visaSuccessRate") },
+              { num: t("about.studentsPlacedNum"), label: t("about.studentsPlaced") },
+              { num: t("about.partnerUniversitiesNum"), label: t("about.partnerUniversities") },
+              { num: t("about.countriesServedNum"), label: t("about.countriesServed") },
+              { num: t("about.visaSuccessRateNum"), label: t("about.visaSuccessRate") },
             ].map((s, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
                 <p className="text-4xl md:text-5xl font-display font-bold">{s.num}</p>
