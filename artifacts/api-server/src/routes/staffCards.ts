@@ -640,9 +640,10 @@ router.get("/staff-cards/:userId/activity", requireAuth, requireStaffCardAdmin, 
   const tz = u?.timezone || "UTC";
 
   let days = 7;
-  if (range === "monthly") days = 365;
-  else if (range === "weekly") days = 28;
-  else if (range === "daily") days = 7;
+  if (range === "yearly") days = 365;
+  else if (range === "monthly") days = 30;
+  else if (range === "weekly") days = 7;
+  else if (range === "daily") days = 1;
 
   const now = new Date();
   const todayKey = tzDayKey(now, tz);
@@ -714,7 +715,7 @@ router.get("/staff-cards/:userId/activity", requireAuth, requireStaffCardAdmin, 
 
   // Build breakdown — for monthly bucket per month (YYYY-MM); else per day.
   let breakdown: Array<{ day: string; plannedMinutes: number; actualMinutes: number; outsideMinutes: number; missingMinutes: number; overtimeMinutes: number }>;
-  if (range === "monthly") {
+  if (range === "yearly") {
     const byMonth: Record<string, { plannedMinutes: number; actualMinutes: number; outsideMinutes: number }> = {};
     for (const [day, v] of Object.entries(byDay)) {
       const mk = day.slice(0, 7);

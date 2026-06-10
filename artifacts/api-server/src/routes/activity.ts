@@ -12,6 +12,12 @@ import { eq, and, desc, sql, gte, lte, inArray, ne } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { withRenderLock } from "../lib/renderLock";
+import {
+  loadBrandedPdfSettings,
+  resolveBrandedAssets,
+  buildBrandedHtml,
+  buildDailyBarChartSvg,
+} from "../lib/pdf/brandedBase";
 
 const router: IRouter = Router();
 
@@ -22,7 +28,9 @@ async function closeStaleSession(sessionId: number, reason: string) {
   if (!session || !session.isActive) return;
 
   const endedAt = session.lastSeenAt;
-  const totalSec = Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000);
+  const wallClockSec = Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000);
+  const accSec = (session.activeDurationSeconds || 0) + (session.idleDurationSeconds || 0);
+  const totalSec = Math.max(wallClockSec, accSec);
   await db.update(userSessionsTable).set({
     isActive: false,
     endedAt,
@@ -152,7 +160,9 @@ router.post("/activity/session/end", requireAuth, async (req, res): Promise<void
       .where(and(eq(userSessionsTable.id, sessionId), eq(userSessionsTable.userId, userId)));
     if (session && session.isActive) {
       const now = new Date();
-      const totalSec = Math.floor((now.getTime() - session.startedAt.getTime()) / 1000);
+      const wallClockSec = Math.floor((now.getTime() - session.startedAt.getTime()) / 1000);
+      const accSec = (session.activeDurationSeconds || 0) + (session.idleDurationSeconds || 0);
+      const totalSec = Math.max(wallClockSec, accSec);
       await db.update(userSessionsTable).set({
         isActive: false, endedAt: now, endReason: reason, totalDurationSeconds: totalSec,
       }).where(eq(userSessionsTable.id, sessionId));
@@ -223,14 +233,19 @@ router.get("/activity/analytics", requireAuth, requireRole(...ADMIN_ROLES), asyn
   const presenceMap: Record<number, string> = {};
   for (const p of presences) presenceMap[p.userId] = p.status;
 
-  const data = sessions.map(s => ({
-    ...s,
-    totalDuration: Number(s.totalDuration) || 0,
-    activeDuration: Number(s.activeDuration) || 0,
-    idleDuration: Number(s.idleDuration) || 0,
-    sessionCount: Number(s.sessionCount) || 0,
-    status: presenceMap[s.userId] || "offline",
-  }));
+  const data = sessions.map(s => {
+    const totalDuration = Number(s.totalDuration) || 0;
+    const activeDuration = Number(s.activeDuration) || 0;
+    const idleDuration = Math.max(0, Math.min(Number(s.idleDuration) || 0, totalDuration - activeDuration));
+    return {
+      ...s,
+      totalDuration,
+      activeDuration,
+      idleDuration,
+      sessionCount: Number(s.sessionCount) || 0,
+      status: presenceMap[s.userId] || "offline",
+    };
+  });
 
   const totals = {
     totalDuration: data.reduce((sum, d) => sum + d.totalDuration, 0),
@@ -379,6 +394,9 @@ router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), asy
   const totalIdle = sessions.reduce((s, x) => s + (x.idleDurationSeconds || 0), 0);
   const totalTotal = sessions.reduce((s, x) => s + (x.totalDurationSeconds || 0), 0);
 
+  const fromLabel = dateFrom.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  const toLabel = dateTo.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+
   function fmtDur(s: number): string {
     if (!s || s < 0) return "—";
     const h = Math.floor(s / 3600);
@@ -388,64 +406,118 @@ router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), asy
     if (m > 0) return `${m}m ${sec}s`;
     return `${sec}s`;
   }
-  function esc(s: string): string {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  function pesc(v: string): string {
+    return v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  const fromLabel = dateFrom.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-  const toLabel = dateTo.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-  const generatedAt = new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const clampedIdle = Math.max(0, Math.min(totalIdle, totalTotal - totalActive));
 
-  const moduleRows = moduleBreakdown.map(m => {
+  const brandSettings = await loadBrandedPdfSettings();
+  const { logoUri, sealUri } = await resolveBrandedAssets(brandSettings);
+  const primary = brandSettings.pdfPrimaryColor || "#2563eb";
+  const accent = brandSettings.pdfAccentColor || "#0ea5e9";
+
+  const dailyChartData = dailyBreakdown.map(d => ({
+    day: String(d.day || ""),
+    activeDuration: Number(d.activeDuration) || 0,
+  }));
+
+  const barChart = dailyChartData.length > 1
+    ? buildDailyBarChartSvg(dailyChartData, primary, accent)
+    : "";
+
+  const maxModVisits = Math.max(...moduleBreakdown.map(m => Number(m.visitCount) || 0), 1);
+  const moduleRows = moduleBreakdown.map((m, idx) => {
     const vis = Number(m.visitCount) || 0;
     const dur = Number(m.totalDuration) || Number(m.activeDuration) || 0;
-    return `<tr><td>${esc(m.moduleName || "")}</td><td>${vis}</td><td>${fmtDur(dur)}</td></tr>`;
+    const pct = Math.round((vis / maxModVisits) * 100);
+    const bg = idx % 2 === 0 ? "#fff" : "#f8fafc";
+    return `<tr style="background:${bg}">
+      <td style="padding:5px 8px;font-size:9.5px;width:40%">${pesc(m.moduleName || "")}</td>
+      <td style="padding:5px 8px;font-size:9.5px;text-align:center;width:10%">${vis}</td>
+      <td style="padding:5px 8px;font-size:9.5px;width:15%">${fmtDur(dur)}</td>
+      <td style="padding:5px 8px;width:35%">
+        <div style="height:6px;background:${pesc(accent)}33;border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${pesc(primary)};border-radius:3px"></div>
+        </div>
+      </td>
+    </tr>`;
   }).join("");
 
-  const dailyRows = dailyBreakdown.map(d => {
-    const active = Number(d.activeDuration) || 0;
-    const sc = Number(d.sessionCount) || 0;
-    return `<tr><td>${esc(String(d.day || ""))}</td><td>${sc}</td><td>${fmtDur(active)}</td></tr>`;
-  }).join("");
-
-  const sessionRows = sessions.slice(0, 50).map(s => {
+  const sessionRows = sessions.slice(0, 50).map((s, idx) => {
     const start = s.startedAt ? new Date(s.startedAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
     const end = s.endedAt ? new Date(s.endedAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
-    const reason = s.endReason ? esc(s.endReason.replace(/_/g, " ")) : "—";
-    return `<tr><td>${start}</td><td>${end}</td><td>${fmtDur(s.totalDurationSeconds || 0)}</td><td>${fmtDur(s.activeDurationSeconds || 0)}</td><td>${reason}</td></tr>`;
+    const reason = s.endReason ? pesc(s.endReason.replace(/_/g, " ")) : "—";
+    const bg = idx % 2 === 0 ? "#fff" : "#f8fafc";
+    return `<tr style="background:${bg}">
+      <td style="padding:4px 8px;font-size:9px">${start}</td>
+      <td style="padding:4px 8px;font-size:9px">${end}</td>
+      <td style="padding:4px 8px;font-size:9px;font-family:monospace">${fmtDur(s.totalDurationSeconds || 0)}</td>
+      <td style="padding:4px 8px;font-size:9px;font-family:monospace;color:#16a34a">${fmtDur(s.activeDurationSeconds || 0)}</td>
+      <td style="padding:4px 8px;font-size:9px;color:#64748b">${reason}</td>
+    </tr>`;
   }).join("");
 
-  const html = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8" />
-<style>
-@page{size:A4;margin:16mm 14mm}
-*,*::before,*::after{box-sizing:border-box}
-body{font-family:'DejaVu Sans','Noto Sans',Arial,sans-serif;color:#0f172a;font-size:10px;line-height:1.5;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-h1{font-size:18px;font-weight:700;margin:0 0 2px}
-h2{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:16px 0 5px;border-bottom:1px solid #e2e8f0;padding-bottom:3px}
-.meta{color:#64748b;font-size:9px;margin-bottom:14px}
-.kpi-row{display:flex;gap:10px;margin-bottom:14px}
-.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;flex:1}
-.kpi-label{font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
-.kpi-value{font-size:15px;font-weight:700;color:#0f172a;margin-top:1px}
-table{width:100%;border-collapse:collapse;margin-bottom:6px}
-thead th{background:#f1f5f9;text-align:left;padding:4px 6px;font-size:8px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;border-bottom:2px solid #e2e8f0}
-tbody td{padding:3px 6px;border-bottom:1px solid #f8fafc}
-footer{position:fixed;bottom:6mm;left:14mm;right:14mm;font-size:8px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:3px;display:flex;justify-content:space-between}
-</style></head><body>
-<h1>${esc(`${user.firstName || ""} ${user.lastName || ""}`.trim())}</h1>
-<div class="meta">${esc(user.email || "")} &middot; ${esc(user.role || "")} &middot; ${fromLabel} &ndash; ${toLabel}</div>
-<div class="kpi-row">
-  <div class="kpi"><div class="kpi-label">Sessions</div><div class="kpi-value">${sessions.length}</div></div>
-  <div class="kpi"><div class="kpi-label">Total Time</div><div class="kpi-value">${fmtDur(totalTotal)}</div></div>
-  <div class="kpi"><div class="kpi-label">Active Time</div><div class="kpi-value">${fmtDur(totalActive)}</div></div>
-  <div class="kpi"><div class="kpi-label">Idle Time</div><div class="kpi-value">${fmtDur(totalIdle)}</div></div>
+  const body = `
+<p style="font-size:9px;color:#64748b;margin:-10px 0 16px">${pesc(user.email || "")} &middot; ${pesc(user.role || "")} &middot; ${fromLabel} &ndash; ${toLabel}</p>
+
+<div style="display:flex;gap:10px;margin-bottom:16px">
+  <div style="border:1px solid #e2e8f0;border-radius:7px;padding:9px 13px;flex:1;border-top:3px solid ${pesc(primary)};background:#f8fafc">
+    <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">Sessions</div>
+    <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:1px">${sessions.length}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:7px;padding:9px 13px;flex:1;border-top:3px solid ${pesc(primary)};background:#f8fafc">
+    <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">Total Time</div>
+    <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:1px">${fmtDur(totalTotal)}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:7px;padding:9px 13px;flex:1;border-top:3px solid #16a34a;background:#f8fafc">
+    <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">Active Time</div>
+    <div style="font-size:16px;font-weight:700;color:#16a34a;margin-top:1px">${fmtDur(totalActive)}</div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:7px;padding:9px 13px;flex:1;border-top:3px solid #d97706;background:#f8fafc">
+    <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">Idle Time</div>
+    <div style="font-size:16px;font-weight:700;color:#d97706;margin-top:1px">${fmtDur(clampedIdle)}</div>
+  </div>
 </div>
-${moduleBreakdown.length > 0 ? `<h2>Module Breakdown</h2><table><thead><tr><th>Module</th><th>Visits</th><th>Duration</th></tr></thead><tbody>${moduleRows}</tbody></table>` : ""}
-${dailyBreakdown.length > 0 ? `<h2>Daily Activity</h2><table><thead><tr><th>Date</th><th>Sessions</th><th>Active Time</th></tr></thead><tbody>${dailyRows}</tbody></table>` : ""}
-${sessions.length > 0 ? `<h2>Session History (last ${Math.min(sessions.length, 50)})</h2><table><thead><tr><th>Started</th><th>Ended</th><th>Total</th><th>Active</th><th>End Reason</th></tr></thead><tbody>${sessionRows}</tbody></table>` : ""}
-<footer><span>EduConsult OS &mdash; Activity Report</span><span>Generated: ${generatedAt}</span></footer>
-</body></html>`;
+
+${barChart ? `
+<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:6px;padding-bottom:3px;border-bottom:2px solid ${pesc(primary)}22">Daily Active Time</div>
+<div style="margin-bottom:16px">${barChart}</div>` : ""}
+
+${moduleBreakdown.length > 0 ? `
+<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:6px;padding-bottom:3px;border-bottom:2px solid ${pesc(primary)}22">Module Breakdown</div>
+<table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+  <thead><tr style="background:${pesc(primary)}">
+    <th style="color:#fff;text-align:left;padding:5px 8px;font-size:8.5px;text-transform:uppercase">Module</th>
+    <th style="color:#fff;text-align:center;padding:5px 8px;font-size:8.5px;text-transform:uppercase">Visits</th>
+    <th style="color:#fff;text-align:left;padding:5px 8px;font-size:8.5px;text-transform:uppercase">Duration</th>
+    <th style="color:#fff;text-align:left;padding:5px 8px;font-size:8.5px;text-transform:uppercase">Share</th>
+  </tr></thead>
+  <tbody>${moduleRows}</tbody>
+</table>` : ""}
+
+${sessions.length > 0 ? `
+<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:6px;padding-bottom:3px;border-bottom:2px solid ${pesc(primary)}22">Session History (last ${Math.min(sessions.length, 50)})</div>
+<table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+  <thead><tr style="background:${pesc(primary)}">
+    <th style="color:#fff;text-align:left;padding:5px 8px;font-size:8.5px;text-transform:uppercase">Started</th>
+    <th style="color:#fff;text-align:left;padding:5px 8px;font-size:8.5px;text-transform:uppercase">Ended</th>
+    <th style="color:#fff;text-align:left;padding:5px 8px;font-size:8.5px;text-transform:uppercase">Total</th>
+    <th style="color:#fff;text-align:left;padding:5px 8px;font-size:8.5px;text-transform:uppercase">Active</th>
+    <th style="color:#fff;text-align:left;padding:5px 8px;font-size:8.5px;text-transform:uppercase">End Reason</th>
+  </tr></thead>
+  <tbody>${sessionRows}</tbody>
+</table>` : ""}
+`;
+
+  const html = buildBrandedHtml({
+    title: `${(user.firstName || "")} ${(user.lastName || "")}`.trim() || "Activity Report",
+    subtitle: `Activity Report &mdash; ${fromLabel} &ndash; ${toLabel}`,
+    body,
+    settings: brandSettings,
+    logoBuri: logoUri,
+    sealUri,
+  });
 
   function resolveChromium(): string | undefined {
     const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
@@ -488,16 +560,48 @@ function deriveModuleName(route: string): string {
     "/staff/leads": "Leads", "/staff/students": "Students", "/staff/applications": "Applications",
     "/staff/documents": "Documents", "/staff/course-finder": "Course Finder", "/staff/agents": "Agents",
     "/staff/finance": "Finance", "/staff/messages": "Messages", "/staff/settings": "Settings",
+    "/staff/tasks": "Tasks",
     "/admin/users": "Users", "/admin/catalog": "Catalog", "/admin/audit": "Audit Log",
     "/admin/settings": "Settings", "/admin/activity": "Activity",
+    "/admin/staff-cards": "Staff Cards", "/admin/campaigns": "Campaigns",
+    "/admin/commissions": "Commissions", "/admin/finance": "Finance",
+    "/admin/reports": "Reports",
     "/student/applications": "Applications", "/student/account": "Account",
+    "/student/documents": "Documents", "/student/messages": "Messages",
     "/agent/referrals": "Referrals", "/agent/commissions": "Commissions", "/agent/account": "Account",
+    "/agent/leads": "Leads", "/agent/students": "Students", "/agent/finance": "Finance",
+    "/agent/messages": "Messages", "/agent/documents": "Documents",
   };
-  for (const [pattern, name] of Object.entries(map)) {
-    if (route === pattern || route.startsWith(pattern + "/")) return name;
+
+  const UUID_RE = /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+  const NUM_TAIL_RE = /\/\d+$/;
+  const LONG_TOKEN_RE = /\/[A-Za-z0-9_-]{20,}$/;
+
+  function tryMatch(r: string): string | null {
+    for (const [pattern, name] of Object.entries(map)) {
+      if (r === pattern || r.startsWith(pattern + "/")) return name;
+    }
+    return null;
   }
-  const parts = route.split("/").filter(Boolean);
-  return parts[parts.length - 1]?.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()) || "Unknown";
+
+  let hit = tryMatch(route);
+  if (hit) return hit;
+
+  const cleaned = route
+    .replace(UUID_RE, "")
+    .replace(NUM_TAIL_RE, "")
+    .replace(LONG_TOKEN_RE, "");
+
+  if (cleaned && cleaned !== route) {
+    hit = tryMatch(cleaned);
+    if (hit) return hit;
+  }
+
+  const base = cleaned || route;
+  const parts = base.split("/").filter(Boolean);
+  const last = parts[parts.length - 1];
+  if (!last || /^\d+$/.test(last) || last.length > 30) return "Other";
+  return last.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 export default router;
