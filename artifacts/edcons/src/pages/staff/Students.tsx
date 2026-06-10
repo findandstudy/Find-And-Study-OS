@@ -2064,18 +2064,6 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">{t("studentsPage.origin")}</Label>
-          <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
-            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
-              <SelectItem value="direct">{t("studentsPage.direct")}</SelectItem>
-              <SelectItem value="agent">{t("studentsPage.agentLabel")}</SelectItem>
-              <SelectItem value="sub_agent">{t("studentsPage.subAgent")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
           <Label className="text-xs">{t("studentsPage.createdDate")}</Label>
           <Select value={filters.dateRange} onValueChange={v => onChange({ ...filters, dateRange: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>

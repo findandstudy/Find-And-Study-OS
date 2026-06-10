@@ -1563,14 +1563,34 @@ function StuDeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: 
   );
 }
 
-function StuFilterPopover({ filters, onChange, stages, nationalities, t }: {
+type AgentStuFilters = { status: string; nationality: string; dateRange: string; followupRange: string };
+const DEFAULT_AGENT_STU_FILTERS: AgentStuFilters = { status: "all", nationality: "all", dateRange: "all", followupRange: "all" };
+
+function stuIsDateInRange(dateStr: string, range: string): boolean {
+  if (range === "all") return true;
+  const d = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (range === "today") return d >= today && d < new Date(today.getTime() + 86400000);
+  if (range === "yesterday") { const y = new Date(today); y.setDate(y.getDate() - 1); return d >= y && d < today; }
+  if (range === "last7") { const w = new Date(today); w.setDate(w.getDate() - 7); return d >= w; }
+  if (range === "thisMonth") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  if (range === "thisYear") return d.getFullYear() === now.getFullYear();
+  if (range === "upcoming7") { const w = new Date(today); w.setDate(w.getDate() + 7); return d >= today && d <= w; }
+  if (range === "overdue") return d < today;
+  if (range === "none") return false;
+  return true;
+}
+
+function StuFilterPopover({ filters, onChange, stages, nationalities }: {
   stages: PipelineStage[];
   nationalities: string[];
-  t: (key: string, vars?: Record<string, string | number>) => string;
-  filters: { status: string; nationality: string }; onChange: (f: { status: string; nationality: string }) => void;
+  filters: AgentStuFilters;
+  onChange: (f: AgentStuFilters) => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const hasActive = filters.status !== "all" || filters.nationality !== "all";
+  const hasActive = filters.status !== "all" || filters.nationality !== "all" || filters.dateRange !== "all" || filters.followupRange !== "all";
   return (
     <>
     <Popover open={open} onOpenChange={setOpen}>
@@ -1580,10 +1600,10 @@ function StuFilterPopover({ filters, onChange, stages, nationalities, t }: {
           {hasActive && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary" />}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-56 p-4 space-y-4" align="end">
+      <PopoverContent className="w-64 p-4 space-y-3 max-h-[70vh] overflow-y-auto" align="end">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">{t("agentStudents.filter.title")}</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ status: "all", nationality: "all" })}>{t("agentStudents.filter.clear")}</Button>}
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ ...DEFAULT_AGENT_STU_FILTERS })}>{t("agentStudents.filter.clear")}</Button>}
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">{t("agentStudents.filter.status")}</Label>
@@ -1602,6 +1622,33 @@ function StuFilterPopover({ filters, onChange, stages, nationalities, t }: {
             <SelectContent>
               <SelectItem value="all">{t("agentStudents.filter.all")}</SelectItem>
               {nationalities.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">{t("studentsPage.createdDate")}</Label>
+          <Select value={filters.dateRange} onValueChange={v => onChange({ ...filters, dateRange: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
+              <SelectItem value="today">{t("studentsPage.today")}</SelectItem>
+              <SelectItem value="yesterday">{t("studentsPage.yesterday")}</SelectItem>
+              <SelectItem value="last7">{t("studentsPage.last7days")}</SelectItem>
+              <SelectItem value="thisMonth">{t("studentsPage.thisMonth")}</SelectItem>
+              <SelectItem value="thisYear">{t("studentsPage.thisYear")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">{t("studentsPage.nextFollowup")}</Label>
+          <Select value={filters.followupRange} onValueChange={v => onChange({ ...filters, followupRange: v })}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("studentsPage.all")}</SelectItem>
+              <SelectItem value="overdue">{t("studentsPage.overdue")}</SelectItem>
+              <SelectItem value="today">{t("studentsPage.today")}</SelectItem>
+              <SelectItem value="upcoming7">{t("studentsPage.next7days")}</SelectItem>
+              <SelectItem value="none">{t("studentsPage.notSet")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1700,7 +1747,7 @@ export default function AgentStudentsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY_STU) as "pipeline" | "list") || "list");
-  const [filters, setFilters] = useState({ status: "all", nationality: "all" });
+  const [filters, setFilters] = useState<AgentStuFilters>({ ...DEFAULT_AGENT_STU_FILTERS });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
   const [editStudent, setEditStudent] = useState<any>(null);
@@ -1746,6 +1793,11 @@ export default function AgentStudentsPage() {
   const filteredStudents = allStudents.filter((s: any) => {
     if (filters.status !== "all" && s.status !== filters.status) return false;
     if (filters.nationality !== "all" && (s.nationality || "").trim() !== filters.nationality) return false;
+    if (filters.dateRange !== "all" && s.createdAt && !stuIsDateInRange(s.createdAt, filters.dateRange)) return false;
+    if (filters.followupRange !== "all") {
+      if (filters.followupRange === "none") { if (s.nextFollowup) return false; }
+      else if (!s.nextFollowup || !stuIsDateInRange(s.nextFollowup, filters.followupRange)) return false;
+    }
     return true;
   });
 
@@ -1894,7 +1946,7 @@ export default function AgentStudentsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} nationalities={nationalityOptions} t={t} />
+            <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} nationalities={nationalityOptions} />
             <Button variant="outline" className="rounded-full gap-2" onClick={() => handleExport("all")} title={t("agentStudents.export.button")}>
               <Download className="w-4 h-4" /> {t("agentStudents.export.button")}
             </Button>
