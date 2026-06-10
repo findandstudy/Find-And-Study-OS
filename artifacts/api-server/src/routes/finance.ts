@@ -971,21 +971,28 @@ router.get("/finance/staff-bonuses", requireAuth, requireRole(...FINANCE_ROLES),
   const [settingsRow] = await db.select({ directStudentEnrollmentBonusRate: settingsTable.directStudentEnrollmentBonusRate }).from(settingsTable);
   const rate = Number(settingsRow?.directStudentEnrollmentBonusRate ?? 0) || 0;
   if (!staffUserId) {
-    const [paidRow] = await db.select({ total: sql<string>`coalesce(sum(amount::numeric), 0)` }).from(staffCommissionsTable).where(eq(staffCommissionsTable.status, "paid"));
-    // Dynamic pending: enrolled direct students (no agent) that haven't been paid yet × current rate
+    // Domain: all direct/no-agent students (regardless of current status — to include historical paid)
+    const allDirectStudents = await db.select({ id: studentsTable.id })
+      .from(studentsTable)
+      .where(and(eq(studentsTable.originType, "direct"), isNull(studentsTable.agentId), isNull(studentsTable.deletedAt)));
+    const allDirectIds = allDirectStudents.map(s => s.id);
+
+    // totalPaid: paid commissions scoped to direct/no-agent domain only
+    let paidForDirectTotal = 0;
+    if (allDirectIds.length > 0) {
+      const [directPaidRow] = await db.select({ total: sql<string>`coalesce(sum(amount::numeric), 0)` })
+        .from(staffCommissionsTable)
+        .where(and(eq(staffCommissionsTable.status, "paid"), inArray(staffCommissionsTable.studentId, allDirectIds)));
+      paidForDirectTotal = toNum(directPaidRow?.total);
+    }
+
+    // totalPending: currently enrolled direct students × rate − historically-paid (rate changes reprice unpaid)
     const allEnrolledDirect = await db.select({ id: studentsTable.id })
       .from(studentsTable)
       .where(and(eq(studentsTable.originType, "direct"), isNull(studentsTable.agentId), isNull(studentsTable.deletedAt), eq(studentsTable.status, "enrolled")));
-    const allEnrolledIds = allEnrolledDirect.map(s => s.id);
-    let paidDirectComms: { studentId: number | null }[] = [];
-    if (allEnrolledIds.length > 0) {
-      paidDirectComms = await db.select({ studentId: staffCommissionsTable.studentId })
-        .from(staffCommissionsTable)
-        .where(and(eq(staffCommissionsTable.status, "paid"), inArray(staffCommissionsTable.studentId, allEnrolledIds)));
-    }
-    const paidDirectIds = new Set(paidDirectComms.map(c => c.studentId).filter(Boolean));
-    const unpaidEnrolledCount = allEnrolledDirect.filter(s => !paidDirectIds.has(s.id)).length;
-    res.json({ rate, totalPaid: toNum(paidRow?.total), totalPending: unpaidEnrolledCount * rate, perStaff: [] });
+    const totalPending = Math.max(0, allEnrolledDirect.length * rate - paidForDirectTotal);
+
+    res.json({ rate, totalPaid: paidForDirectTotal, totalPending, perStaff: [] });
     return;
   }
   const staffId = parseInt(staffUserId, 10);
