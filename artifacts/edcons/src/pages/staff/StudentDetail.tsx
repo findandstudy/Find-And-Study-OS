@@ -785,7 +785,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   )}
                 </div>
 
-                {!isAgent && (
                 <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
                   <h2 className="font-semibold text-foreground flex items-center gap-2">
                     <User className="w-4 h-4" />
@@ -840,7 +839,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     </div>
                   )}
                 </div>
-                )}
 
                 {!isAgent && (
                 <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
