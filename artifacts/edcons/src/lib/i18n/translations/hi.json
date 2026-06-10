@@ -64,19 +64,7 @@
     "ctaTitle": "अपनी यात्रा शुरू करने के लिए तैयार हैं?",
     "ctaSubtitle": "आज ही हमारे विशेषज्ञ सलाहकार के साथ मुफ्त परामर्श बुक करें।",
     "bookConsultation": "मुफ्त परामर्श बुक करें",
-    "browsePrograms": "कार्यक्रम देखें",
-    "team0Name": "Dr. Ayşe Yıldız",
-    "team0Role": "संस्थापक एवं CEO",
-    "team0Bio": "अंतर्राष्ट्रीय शिक्षा परामर्श में 15+ वर्षों का अनुभव।",
-    "team1Name": "Marcus Chen",
-    "team1Role": "प्रमुख प्रवेश अधिकारी",
-    "team1Bio": "30 देशों में 2,000+ छात्रों का मार्गदर्शन किया।",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "वीज़ा और आप्रवासन विशेषज्ञ",
-    "team2Bio": "छात्र वीज़ा प्रक्रियाओं में विशेषज्ञ।",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "क्षेत्रीय प्रबंधक - यूरोप",
-    "team3Bio": "यूरोपीय विश्वविद्यालय प्रवेश में विशेषज्ञ।"
+    "browsePrograms": "कार्यक्रम देखें"
   },
   "contact": {
     "badge": "हम मदद के लिए यहाँ हैं",
@@ -116,13 +104,7 @@
     "latinOnly": "केवल लैटिन अक्षर अनुमत हैं",
     "messageTooLong": "संदेश 400 अक्षरों से अधिक नहीं हो सकता",
     "phoneCode": "देश कोड",
-    "phoneCodeRequired": "कृपया देश कोड चुनें",
-    "office0City": "इस्तांबुल",
-    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
-    "office1City": "लंदन",
-    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
-    "office2City": "दुबई",
-    "office2Address": "Dubai Internet City, Building 4, Office 220"
+    "phoneCodeRequired": "कृपया देश कोड चुनें"
   },
   "blog": {
     "badge": "ब्लॉग",

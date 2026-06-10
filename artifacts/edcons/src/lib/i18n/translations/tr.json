@@ -64,19 +64,7 @@
     "ctaTitle": "Yolculuğunuza Başlamaya Hazır mısınız?",
     "ctaSubtitle": "Bugün uzman danışmanlarımızdan biriyle ücretsiz görüşme ayırtın.",
     "bookConsultation": "Ücretsiz Danışmanlık Ayırın",
-    "browsePrograms": "Programlara Göz At",
-    "team0Name": "Dr. Ayşe Yıldız",
-    "team0Role": "Kurucu & CEO",
-    "team0Bio": "Uluslararası eğitim danışmanlığında 15+ yıl deneyim. Önde gelen İngiltere üniversitelerinde eski kabul görevlisi.",
-    "team1Name": "Marcus Chen",
-    "team1Role": "Kabul Direktörü",
-    "team1Bio": "30 ülkede 2.000'den fazla öğrenciyi hayalindeki üniversitelere yönlendirdi.",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "Vize & Göç Uzmanı",
-    "team2Bio": "İngiltere, ABD, Kanada, Avustralya ve Avrupa için öğrenci vize süreçlerinde uzman.",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "Bölge Müdürü - Avrupa",
-    "team3Bio": "Avrupa üniversite yerleşimlerinde ve burs programlarında uzmanlaşmıştır."
+    "browsePrograms": "Programlara Göz At"
   },
   "contact": {
     "badge": "Yardıma Hazırız",
@@ -116,13 +104,7 @@
     "latinOnly": "Yalnızca Latin harfleri kullanılabilir",
     "messageTooLong": "Mesaj 400 karakteri geçemez",
     "phoneCode": "Ülke kodu",
-    "phoneCodeRequired": "Lütfen ülke kodunu seçin",
-    "office0City": "İstanbul",
-    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 İstanbul, Türkiye",
-    "office1City": "Londra",
-    "office1Address": "30 St Mary Axe, Londra EC3A 8BF, İngiltere",
-    "office2City": "Dubai",
-    "office2Address": "Dubai Internet City, Bina 4, Ofis 220"
+    "phoneCodeRequired": "Lütfen ülke kodunu seçin"
   },
   "blog": {
     "badge": "Blog",

@@ -71,6 +71,8 @@ router.get("/settings/branding", async (req, res): Promise<void> => {
     companyWebsite: settingsTable.companyWebsite,
     whatsappNumber: settingsTable.whatsappNumber,
     workingHours: settingsTable.workingHours,
+    supportEmail: settingsTable.supportEmail,
+    salesEmail: settingsTable.salesEmail,
     footerDescription: settingsTable.footerDescription,
     footerCopyright: settingsTable.footerCopyright,
     contactCtaText: settingsTable.contactCtaText,

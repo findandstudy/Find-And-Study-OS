@@ -32,8 +32,8 @@ export default function About() {
   const { t, lang, localePath } = useI18n();
 
   const { data: teamMembers = [] } = useQuery<TeamMember[]>({
-    queryKey: ["cms-team-members"],
-    queryFn: () => customFetch("/api/cms/team-members"),
+    queryKey: ["cms-team-members", lang],
+    queryFn: () => customFetch(`/api/cms/team-members?lang=${encodeURIComponent(lang)}`),
     staleTime: 5 * 60 * 1000,
   });
 

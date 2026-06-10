@@ -64,19 +64,7 @@
     "ctaTitle": "مستعد لبدء رحلتك؟",
     "ctaSubtitle": "احجز استشارة مجانية مع أحد مستشارينا الخبراء اليوم.",
     "bookConsultation": "احجز استشارة مجانية",
-    "browsePrograms": "تصفح البرامج",
-    "team0Name": "Dr. Ayşe Yıldız",
-    "team0Role": "المؤسسة والرئيسة التنفيذية",
-    "team0Bio": "أكثر من 15 عاماً في استشارات التعليم الدولي. موظفة قبول سابقة في أفضل الجامعات البريطانية.",
-    "team1Name": "Marcus Chen",
-    "team1Role": "رئيس القبول",
-    "team1Bio": "أرشد أكثر من 2000 طالب إلى جامعاتهم المفضلة في 30 دولة.",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "متخصصة في التأشيرات والهجرة",
-    "team2Bio": "خبيرة في إجراءات تأشيرة الطلاب للمملكة المتحدة والولايات المتحدة وكندا وأستراليا وأوروبا.",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "المديرة الإقليمية - أوروبا",
-    "team3Bio": "متخصصة في القبول بالجامعات الأوروبية وبرامج المنح الدراسية."
+    "browsePrograms": "تصفح البرامج"
   },
   "contact": {
     "badge": "نحن هنا للمساعدة",
@@ -116,13 +104,7 @@
     "latinOnly": "يُسمح فقط بالأحرف اللاتينية",
     "messageTooLong": "الرسالة لا يمكن أن تتجاوز 400 حرف",
     "phoneCode": "كود الدولة",
-    "phoneCodeRequired": "يرجى اختيار رمز الدولة",
-    "office0City": "إسطنبول",
-    "office0Address": "Levent Mahallesi, 34394 Istanbul, Türkiye",
-    "office1City": "لندن",
-    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
-    "office2City": "دبي",
-    "office2Address": "Dubai Internet City, Building 4, Office 220"
+    "phoneCodeRequired": "يرجى اختيار رمز الدولة"
   },
   "blog": {
     "badge": "المدونة",

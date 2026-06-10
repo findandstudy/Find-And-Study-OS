@@ -11,14 +11,25 @@ const adminOnly = [requireAuth, requireRole(...ADMIN_ROLES)] as const;
 // GET is public (no auth) — used by About page.
 // POST / PATCH / DELETE require admin and emit audit log entries.
 
-router.get("/cms/team-members", async (_req: Request, res: Response): Promise<void> => {
+router.get("/cms/team-members", async (req: Request, res: Response): Promise<void> => {
   try {
+    const lang = typeof req.query.lang === "string" ? req.query.lang.toLowerCase() : null;
     const rows = await db
       .select()
       .from(websiteCollectionsTeamMembersTable)
       .where(eq(websiteCollectionsTeamMembersTable.isActive, true))
       .orderBy(asc(websiteCollectionsTeamMembersTable.sortOrder), asc(websiteCollectionsTeamMembersTable.id));
-    res.json(rows);
+    const resolved = rows.map(row => {
+      if (!lang || !row.translationsJson) return row;
+      const tx = (row.translationsJson as Record<string, Record<string, string>>)[lang] ?? {};
+      return {
+        ...row,
+        name: tx.name ?? row.name,
+        title: tx.title !== undefined ? tx.title : row.title,
+        bio: tx.bio !== undefined ? tx.bio : row.bio,
+      };
+    });
+    res.json(resolved);
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
   }
@@ -91,14 +102,26 @@ router.delete("/cms/team-members/:id", ...adminOnly, async (req: Request, res: R
 // ── Offices ───────────────────────────────────────────────────────────────────
 // GET is public (no auth) — used by Contact page.
 
-router.get("/cms/offices", async (_req: Request, res: Response): Promise<void> => {
+router.get("/cms/offices", async (req: Request, res: Response): Promise<void> => {
   try {
+    const lang = typeof req.query.lang === "string" ? req.query.lang.toLowerCase() : null;
     const rows = await db
       .select()
       .from(websiteCollectionsOfficesTable)
       .where(eq(websiteCollectionsOfficesTable.isActive, true))
       .orderBy(asc(websiteCollectionsOfficesTable.sortOrder), asc(websiteCollectionsOfficesTable.id));
-    res.json(rows);
+    const resolved = rows.map(row => {
+      if (!lang || !row.translationsJson) return row;
+      const tx = (row.translationsJson as Record<string, Record<string, string>>)[lang] ?? {};
+      return {
+        ...row,
+        name: tx.name !== undefined ? tx.name : row.name,
+        city: tx.city !== undefined ? tx.city : row.city,
+        country: tx.country !== undefined ? tx.country : row.country,
+        address: tx.address !== undefined ? tx.address : row.address,
+      };
+    });
+    res.json(resolved);
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
   }

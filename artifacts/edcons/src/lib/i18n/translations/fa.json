@@ -64,19 +64,7 @@
     "ctaTitle": "آماده شروع سفر خود هستید؟",
     "ctaSubtitle": "یک مشاوره رایگان با متخصصان ما رزرو کنید.",
     "bookConsultation": "مشاوره رایگان",
-    "browsePrograms": "مشاهده برنامه‌ها",
-    "team0Name": "Dr. Ayşe Yıldız",
-    "team0Role": "بنیان‌گذار و مدیرعامل",
-    "team0Bio": "بیش از ۱۵ سال در مشاوره آموزش بین‌الملل.",
-    "team1Name": "Marcus Chen",
-    "team1Role": "رئیس پذیرش",
-    "team1Bio": "بیش از ۲۰۰۰ دانشجو را در ۳۰ کشور هدایت کرده است.",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "متخصص ویزا و مهاجرت",
-    "team2Bio": "متخصص در فرآیندهای ویزای دانشجویی.",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "مدیر منطقه‌ای - اروپا",
-    "team3Bio": "متخصص در پذیرش دانشگاه‌های اروپایی."
+    "browsePrograms": "مشاهده برنامه‌ها"
   },
   "contact": {
     "badge": "ما آماده کمک هستیم",
@@ -116,13 +104,7 @@
     "latinOnly": "فقط حروف لاتین مجاز هستند",
     "messageTooLong": "پیام نمی‌تواند بیش از ۴۰۰ کاراکتر باشد",
     "phoneCode": "کد کشور",
-    "phoneCodeRequired": "لطفاً کد کشور را انتخاب کنید",
-    "office0City": "استانبول",
-    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
-    "office1City": "لندن",
-    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
-    "office2City": "دبی",
-    "office2Address": "Dubai Internet City, Building 4, Office 220"
+    "phoneCodeRequired": "لطفاً کد کشور را انتخاب کنید"
   },
   "blog": {
     "badge": "وبلاگ",

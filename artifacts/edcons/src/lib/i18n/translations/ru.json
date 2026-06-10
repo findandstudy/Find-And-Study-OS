@@ -64,19 +64,7 @@
     "ctaTitle": "Готовы начать свой путь?",
     "ctaSubtitle": "Запишитесь на бесплатную консультацию с нашим экспертом.",
     "bookConsultation": "Бесплатная консультация",
-    "browsePrograms": "Смотреть программы",
-    "team0Name": "Dr. Ayşe Yıldız",
-    "team0Role": "Основатель и генеральный директор",
-    "team0Bio": "Более 15 лет в международном образовательном консалтинге. Бывший сотрудник по приёму в ведущих британских университетах.",
-    "team1Name": "Marcus Chen",
-    "team1Role": "Руководитель приёмной комиссии",
-    "team1Bio": "Помог более 2000 студентов поступить в университеты мечты в 30 странах.",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "Специалист по визам и миграции",
-    "team2Bio": "Эксперт в области студенческих виз для Великобритании, США, Канады, Австралии и Европы.",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "Региональный менеджер — Европа",
-    "team3Bio": "Специализируется на поступлении в европейские университеты и стипендиальных программах."
+    "browsePrograms": "Смотреть программы"
   },
   "contact": {
     "badge": "Мы готовы помочь",
@@ -116,13 +104,7 @@
     "latinOnly": "Допускаются только латинские символы",
     "messageTooLong": "Сообщение не может превышать 400 символов",
     "phoneCode": "Код страны",
-    "phoneCodeRequired": "Пожалуйста, выберите код страны",
-    "office0City": "Стамбул",
-    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
-    "office1City": "Лондон",
-    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
-    "office2City": "Дубай",
-    "office2Address": "Dubai Internet City, Building 4, Office 220"
+    "phoneCodeRequired": "Пожалуйста, выберите код страны"
   },
   "blog": {
     "badge": "Блог",

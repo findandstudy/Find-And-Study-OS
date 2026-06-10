@@ -64,19 +64,7 @@
     "ctaTitle": "Prêt à commencer votre parcours ?",
     "ctaSubtitle": "Réservez une consultation gratuite avec l'un de nos conseillers experts.",
     "bookConsultation": "Réservez une consultation gratuite",
-    "browsePrograms": "Parcourir les programmes",
-    "team0Name": "Dr. Ayşe Yıldız",
-    "team0Role": "Fondatrice et PDG",
-    "team0Bio": "Plus de 15 ans dans le conseil en éducation internationale. Ancienne chargée d'admissions dans les meilleures universités britanniques.",
-    "team1Name": "Marcus Chen",
-    "team1Role": "Responsable des admissions",
-    "team1Bio": "A guidé plus de 2 000 étudiants vers leurs universités de rêve dans 30 pays.",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "Spécialiste visa et immigration",
-    "team2Bio": "Experte des processus de visa étudiant pour le Royaume-Uni, les États-Unis, le Canada, l'Australie et l'Europe.",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "Directrice régionale - Europe",
-    "team3Bio": "Spécialisée dans les placements universitaires européens et les programmes de bourses."
+    "browsePrograms": "Parcourir les programmes"
   },
   "contact": {
     "badge": "Nous sommes là pour vous aider",
@@ -116,13 +104,7 @@
     "latinOnly": "Seuls les caractères latins sont autorisés",
     "messageTooLong": "Le message ne peut pas dépasser 400 caractères",
     "phoneCode": "Indicatif pays",
-    "phoneCodeRequired": "Veuillez sélectionner l'indicatif pays",
-    "office0City": "Istanbul",
-    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Turquie",
-    "office1City": "Londres",
-    "office1Address": "30 St Mary Axe, Londres EC3A 8BF, Royaume-Uni",
-    "office2City": "Dubaï",
-    "office2Address": "Dubai Internet City, Bâtiment 4, Bureau 220"
+    "phoneCodeRequired": "Veuillez sélectionner l'indicatif pays"
   },
   "blog": {
     "badge": "Le Blog",

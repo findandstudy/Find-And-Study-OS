@@ -64,19 +64,7 @@
     "ctaTitle": "Ready to Start Your Journey?",
     "ctaSubtitle": "Book a free consultation with one of our expert advisors today.",
     "bookConsultation": "Book Free Consultation",
-    "browsePrograms": "Browse Programs",
-    "team0Name": "Dr. Ayse Yildiz",
-    "team0Role": "Founder & CEO",
-    "team0Bio": "15+ years in international education consulting. Former admissions officer at top UK universities.",
-    "team1Name": "Marcus Chen",
-    "team1Role": "Head of Admissions",
-    "team1Bio": "Guided 2,000+ students to their dream universities across 30 countries.",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "Visa & Immigration Specialist",
-    "team2Bio": "Expert in student visa processes for UK, USA, Canada, Australia, and Europe.",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "Regional Manager - Europe",
-    "team3Bio": "Specializes in European university placements and scholarship programs."
+    "browsePrograms": "Browse Programs"
   },
   "contact": {
     "badge": "We're Here to Help",
@@ -116,13 +104,7 @@
     "latinOnly": "Only Latin characters are allowed",
     "messageTooLong": "Message cannot exceed 400 characters",
     "phoneCode": "Country code",
-    "phoneCodeRequired": "Please select the country code",
-    "office0City": "Istanbul",
-    "office0Address": "Levent Mahallesi, Buyukdere Cad. No:45, 34394 Istanbul, Turkiye",
-    "office1City": "London",
-    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
-    "office2City": "Dubai",
-    "office2Address": "Dubai Internet City, Building 4, Office 220"
+    "phoneCodeRequired": "Please select the country code"
   },
   "blog": {
     "badge": "The Blog",

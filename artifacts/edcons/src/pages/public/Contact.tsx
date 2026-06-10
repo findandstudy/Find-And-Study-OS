@@ -76,8 +76,8 @@ export default function Contact() {
   const { t, lang } = useI18n();
 
   const { data: offices = [] } = useQuery<Office[]>({
-    queryKey: ["cms-offices"],
-    queryFn: () => customFetch("/api/cms/offices"),
+    queryKey: ["cms-offices", lang],
+    queryFn: () => customFetch(`/api/cms/offices?lang=${encodeURIComponent(lang)}`),
     staleTime: 5 * 60 * 1000,
   });
 

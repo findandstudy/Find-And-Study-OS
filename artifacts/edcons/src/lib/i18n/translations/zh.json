@@ -64,19 +64,7 @@
     "ctaTitle": "准备开始您的旅程了吗？",
     "ctaSubtitle": "立即预约我们专家顾问的免费咨询。",
     "bookConsultation": "预约免费咨询",
-    "browsePrograms": "浏览项目",
-    "team0Name": "Dr. Ayşe Yıldız",
-    "team0Role": "创始人兼首席执行官",
-    "team0Bio": "在国际教育咨询领域拥有15年以上经验。曾任英国顶尖大学招生官。",
-    "team1Name": "Marcus Chen",
-    "team1Role": "招生主任",
-    "team1Bio": "已帮助2000多名学生成功进入30个国家的梦想大学。",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "签证与移民专家",
-    "team2Bio": "专精英国、美国、加拿大、澳大利亚和欧洲的学生签证流程。",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "欧洲区域经理",
-    "team3Bio": "专注于欧洲大学录取和奖学金项目。"
+    "browsePrograms": "浏览项目"
   },
   "contact": {
     "badge": "我们随时为您服务",
@@ -116,13 +104,7 @@
     "latinOnly": "仅允许拉丁字符",
     "messageTooLong": "消息不能超过400个字符",
     "phoneCode": "国家代码",
-    "phoneCodeRequired": "请选择国家代码",
-    "office0City": "伊斯坦布尔",
-    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
-    "office1City": "伦敦",
-    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
-    "office2City": "迪拜",
-    "office2Address": "Dubai Internet City, Building 4, Office 220"
+    "phoneCodeRequired": "请选择国家代码"
   },
   "blog": {
     "badge": "博客",

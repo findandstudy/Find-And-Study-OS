@@ -64,19 +64,7 @@
     "ctaTitle": "¿Listo para comenzar tu viaje?",
     "ctaSubtitle": "Reserva una consulta gratuita con uno de nuestros asesores expertos.",
     "bookConsultation": "Reservar consulta gratuita",
-    "browsePrograms": "Ver programas",
-    "team0Name": "Dr. Ayşe Yıldız",
-    "team0Role": "Fundadora y CEO",
-    "team0Bio": "Más de 15 años en consultoría de educación internacional. Exoficial de admisiones en las principales universidades del Reino Unido.",
-    "team1Name": "Marcus Chen",
-    "team1Role": "Jefe de Admisiones",
-    "team1Bio": "Ha guiado a más de 2.000 estudiantes a sus universidades de ensueño en 30 países.",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "Especialista en visados e inmigración",
-    "team2Bio": "Experta en procesos de visado estudiantil para Reino Unido, EE.UU., Canadá, Australia y Europa.",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "Directora Regional - Europa",
-    "team3Bio": "Especializada en colocaciones universitarias europeas y programas de becas."
+    "browsePrograms": "Ver programas"
   },
   "contact": {
     "badge": "Estamos aquí para ayudar",
@@ -116,13 +104,7 @@
     "latinOnly": "Solo se permiten caracteres latinos",
     "messageTooLong": "El mensaje no puede exceder 400 caracteres",
     "phoneCode": "Código de país",
-    "phoneCodeRequired": "Por favor seleccione el código de país",
-    "office0City": "Estambul",
-    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
-    "office1City": "Londres",
-    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
-    "office2City": "Dubái",
-    "office2Address": "Dubai Internet City, Building 4, Office 220"
+    "phoneCodeRequired": "Por favor seleccione el código de país"
   },
   "blog": {
     "badge": "El Blog",

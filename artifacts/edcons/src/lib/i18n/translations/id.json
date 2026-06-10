@@ -64,19 +64,7 @@
     "ctaTitle": "Siap Memulai Perjalanan Anda?",
     "ctaSubtitle": "Pesan konsultasi gratis dengan salah satu penasihat ahli kami.",
     "bookConsultation": "Pesan Konsultasi Gratis",
-    "browsePrograms": "Lihat Program",
-    "team0Name": "Dr. Ayşe Yıldız",
-    "team0Role": "Pendiri & CEO",
-    "team0Bio": "Lebih dari 15 tahun dalam konsultasi pendidikan internasional. Mantan petugas penerimaan di universitas terkemuka di Inggris.",
-    "team1Name": "Marcus Chen",
-    "team1Role": "Kepala Penerimaan",
-    "team1Bio": "Telah membimbing lebih dari 2.000 mahasiswa ke universitas impian mereka di 30 negara.",
-    "team2Name": "Fatima Al-Hassan",
-    "team2Role": "Spesialis Visa & Imigrasi",
-    "team2Bio": "Ahli dalam proses visa pelajar untuk UK, AS, Kanada, Australia, dan Eropa.",
-    "team3Name": "Olena Kovalenko",
-    "team3Role": "Manajer Regional - Eropa",
-    "team3Bio": "Spesialis dalam penempatan universitas Eropa dan program beasiswa."
+    "browsePrograms": "Lihat Program"
   },
   "contact": {
     "badge": "Kami Siap Membantu",
@@ -116,13 +104,7 @@
     "latinOnly": "Hanya karakter Latin yang diperbolehkan",
     "messageTooLong": "Pesan tidak boleh melebihi 400 karakter",
     "phoneCode": "Kode negara",
-    "phoneCodeRequired": "Silakan pilih kode negara",
-    "office0City": "Istanbul",
-    "office0Address": "Levent Mahallesi, Büyükdere Cad. No:45, 34394 Istanbul, Türkiye",
-    "office1City": "London",
-    "office1Address": "30 St Mary Axe, London EC3A 8BF, UK",
-    "office2City": "Dubai",
-    "office2Address": "Dubai Internet City, Building 4, Office 220"
+    "phoneCodeRequired": "Silakan pilih kode negara"
   },
   "blog": {
     "badge": "Blog",
