@@ -60,6 +60,12 @@ test("normalizeStoredModuleName: token-like strings → Other", () => {
   assert.equal(normalizeStoredModuleName("tok4en89"), "Other");
 });
 
+test("normalizeStoredModuleName: pure numeric labels → Other", () => {
+  assert.equal(normalizeStoredModuleName("123"), "Other");
+  assert.equal(normalizeStoredModuleName("987654"), "Other");
+  assert.equal(normalizeStoredModuleName("42"), "Other");
+});
+
 test("normalizeStoredModuleName: route paths delegate to deriveModuleName", () => {
   assert.equal(normalizeStoredModuleName("/staff/leads"), "Leads");
   assert.equal(normalizeStoredModuleName("/login"), "Other");

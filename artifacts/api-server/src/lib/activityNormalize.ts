@@ -62,28 +62,32 @@ export function normalizeStoredModuleName(name: string | null): string {
   if (!name) return "Other";
   if (name.startsWith("/")) return deriveModuleName(name);
   const trimmed = name.trim();
+  if (!trimmed) return "Other";
   if (DIRTY_LABEL_RE.test(trimmed)) return "Other";
   if (trimmed.length <= 2) return "Other";
+  if (/^\d+$/.test(trimmed)) return "Other";
   if (/^[a-z0-9_-]{6,}$/i.test(trimmed) && /\d/.test(trimmed) && /[a-zA-Z]/.test(trimmed)) return "Other";
   return trimmed;
 }
 
 export function normalizeModuleBreakdown<T extends { moduleName: string | null; visitCount?: number | null; totalDuration?: number | null; activeDuration?: number | null; idleDuration?: number | null }>(rows: T[]): T[] {
-  const acc = new Map<string, { row: T; visitCount: number; totalDuration: number; activeDuration: number; idleDuration: number }>();
+  const acc = new Map<string, { row: T; visitCount: number; totalDuration: number; activeDuration: number; idleDuration: number; uniqueUsers: number }>();
   for (const r of rows) {
     const name = normalizeStoredModuleName(r.moduleName);
     const vn = Number(r.visitCount) || 0;
     const td = Number(r.totalDuration) || 0;
     const ad = Number(r.activeDuration) || 0;
     const id_ = Number(r.idleDuration) || 0;
+    const uu = Number((r as any).uniqueUsers) || 0;
     const existing = acc.get(name);
     if (existing) {
       existing.visitCount += vn;
       existing.totalDuration += td;
       existing.activeDuration += ad;
       existing.idleDuration += id_;
+      existing.uniqueUsers = Math.max(existing.uniqueUsers, uu);
     } else {
-      acc.set(name, { row: r, visitCount: vn, totalDuration: td, activeDuration: ad, idleDuration: id_ });
+      acc.set(name, { row: r, visitCount: vn, totalDuration: td, activeDuration: ad, idleDuration: id_, uniqueUsers: uu });
     }
   }
   return Array.from(acc.entries()).map(([name, v]) => ({
@@ -93,6 +97,8 @@ export function normalizeModuleBreakdown<T extends { moduleName: string | null; 
     totalDuration: v.totalDuration,
     activeDuration: v.activeDuration,
     idleDuration: v.idleDuration,
+    uniqueUsers: v.uniqueUsers,
+    avgDuration: v.visitCount > 0 ? Math.round(v.totalDuration / v.visitCount) : 0,
   } as T)).sort((a, b) => (Number(b.visitCount) || 0) - (Number(a.visitCount) || 0));
 }
 
