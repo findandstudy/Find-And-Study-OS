@@ -809,14 +809,13 @@ async function main(): Promise<void> {
   sections.push(testEquivalenceUnits());
   sections.push(testCrossLevelReconciliation());
 
-  const server = await startApplyServer();
-  try {
-    sections.push(await testReuseSameLevel(server.url));
-    sections.push(await testReuseCrossLevel(server.url));
-    sections.push(await testFreshUploadSuppressesEquivalentReuse(server.url));
-  } finally {
-    await server.close();
-  }
+  // HTTP integration tests (b) same-level reuse, (c) cross-level reuse,
+  // (d) dedup-fresh-upload were removed: all three required the re-apply
+  // HTTP path (existing verified student submitting a second application via
+  // the public form), which was removed for security (unauthenticated callers
+  // who know a verified email could mutate student records without ownership
+  // proof). The equivalence / auto-link logic those tests validated is
+  // already fully covered by the pure-logic (a1) and (a2) suites above.
 
   let allOk = true;
   for (const s of sections) {

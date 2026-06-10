@@ -437,48 +437,16 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       const [existingStudent] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
       if (existingStudent) {
-        // Re-apply path: an existing verified student submits a new application
-        // via the public form. Only allowed when the email address is verified —
-        // unverified accounts cannot prove ownership and must log in first.
-        //
-        // SECURITY NOTE: emailVerified is a heuristic ownership signal, not a
-        // request-authentication proof. This is intentional for the public apply
-        // UX (agent embed / course-finder widget) and is accepted by product.
-        // The mandatory-doc gate parks new applications in "missing_docs" so
-        // staff review them before they enter the active pipeline. A stricter
-        // one-time-proof mechanism should be implemented if this surface is
-        // exposed to untrusted internet traffic without additional rate-limiting.
-        if (!existingUser.emailVerified) {
-          console.warn(`[PUBLIC-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (${normalizedEmail}) — account not verified`);
-          res.status(409).json({
-            error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
-            code: "ACCOUNT_CONFLICT",
-            loginUrl,
-          });
-          return;
-        }
-        resultStudentId = existingStudent.id;
-        const reApplyResult = await createApplicationForStudent(
-          existingStudent.id,
-          programIdNum,
-          programName || null,
-          universityName || null,
-          gpa || null,
-          languageScore || null,
-        );
-        if (reApplyResult.eligibilityErrors) {
-          res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: reApplyResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
-          return;
-        }
-        if (reApplyResult.quotaError) {
-          res.status(422).json({ error: reApplyResult.quotaError, code: "QUOTA_FULL" });
-          return;
-        }
-        resultAppId = reApplyResult.appId;
-        console.log(`[PUBLIC-APPLY] Re-apply: verified student #${existingStudent.id} → app #${resultAppId}`);
+        console.warn(`[PUBLIC-APPLY] Blocked unauthenticated attempt to create application on existing student #${existingStudent.id} (${normalizedEmail})`);
+        res.status(409).json({
+          error: `We couldn't process this application with the information provided. If you already have an account with us, please log in to continue: ${loginUrl}`,
+          code: "ACCOUNT_CONFLICT",
+          loginUrl,
+        });
+        return;
       }
       // No live student row — fall through to the new-account path below.
-      if (!existingStudent) console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
+      console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
     }
 
     if (!existingUser || resultStudentId === null) {
