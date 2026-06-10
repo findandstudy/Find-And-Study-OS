@@ -5,6 +5,7 @@ import { buildSignedPdf } from "./contractPdf";
 import { ObjectStorageService } from "./objectStorage";
 import { writeAudit } from "./auditLog";
 import { getAppBaseUrl } from "./email";
+import { withRenderLock } from "./renderLock";
 
 // Convert the canonical /objects/<entityId> key returned by uploadBuffer into a
 // browser-openable URL served by GET /api/storage/objects/*path (requireAuth).
@@ -42,20 +43,6 @@ export async function getNewestSignedContractUrl(agentId: number): Promise<strin
 }
 
 const objectStorage = new ObjectStorageService();
-
-// Serialize all headless-Chromium PDF renders across the instance. Chromium is
-// memory-heavy; two or more concurrent renders multiply RSS and were OOM-killing
-// the resource-constrained autoscale instance mid-request. A crashed process
-// makes the edge proxy return its own opaque "403 Forbidden" HTML page instead
-// of completing the request. This chain guarantees at most ONE render runs at a
-// time, keeping peak memory bounded to a single browser instance.
-let renderChain: Promise<unknown> = Promise.resolve();
-function withRenderLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = renderChain.then(fn, fn);
-  // Keep the chain alive regardless of outcome, without leaking rejections.
-  renderChain = run.then(() => undefined, () => undefined);
-  return run;
-}
 
 export type FinalizeSignResult =
   | { ok: true; signedContractId: number }

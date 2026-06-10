@@ -19,6 +19,7 @@ import {
   ArrowLeft, Trash2, Plus, Upload, Download, Loader2, FileText, BadgeCheck, AlertTriangle,
   Search, ArrowUpDown, ArrowUp, ArrowDown, Clock, Activity, Monitor, Pause, BarChart3, TrendingUp,
 } from "lucide-react";
+import { formatDuration } from "@/lib/formatDuration";
 
 const WEEKDAYS_KEYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -44,20 +45,6 @@ function minutesToHHMM(m: number): string {
 function hhmmToMinutes(s: string): number {
   const [h, m] = s.split(":").map(Number);
   return (h || 0) * 60 + (m || 0);
-}
-
-function fmtSec(seconds: number): string {
-  if (!seconds || seconds < 0) return "0d";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}s ${m}d`;
-  return `${m}d`;
-}
-function fmtMin(m: number): string {
-  if (!m || m < 0) return "0d";
-  const h = Math.floor(m / 60);
-  const mm = m % 60;
-  return h > 0 ? `${h}s ${mm}d` : `${mm}d`;
 }
 
 export default function StaffCardDetailPage({ userId }: { userId: number }) {
