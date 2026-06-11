@@ -82,9 +82,21 @@ function isValidStorageUrl(url: string): boolean {
   return url.startsWith("/api/storage/objects/") || url.startsWith("https://");
 }
 
-router.get("/agents/contract-alerts", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
+router.get("/agents/contract-alerts", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   try {
     const sixtyDaysFromNow = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+    const conditions: SQL[] = [
+      isNotNull(agentsTable.contractEndDate),
+      isNull(agentsTable.deletedAt),
+      eq(agentsTable.status, "active"),
+      sql`${agentsTable.contractEndDate} <= ${sixtyDaysFromNow.toISOString().split("T")[0]}`,
+    ];
+    // Branch scoping: restrict to agents the caller is allowed to see.
+    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    if (visible !== null) {
+      if (visible.length === 0) { res.json([]); return; }
+      conditions.push(sql`${agentsTable.id} IN (SELECT agent_id FROM agent_branches WHERE branch_id = ANY(${visible}))`);
+    }
     const rows = await db.select({
       id: agentsTable.id,
       firstName: agentsTable.firstName,
@@ -92,14 +104,7 @@ router.get("/agents/contract-alerts", requireAuth, requireRole(...STAFF_ROLES), 
       companyName: agentsTable.companyName,
       contractEndDate: agentsTable.contractEndDate,
     }).from(agentsTable)
-      .where(
-        and(
-          isNotNull(agentsTable.contractEndDate),
-          isNull(agentsTable.deletedAt),
-          eq(agentsTable.status, "active"),
-          sql`${agentsTable.contractEndDate} <= ${sixtyDaysFromNow.toISOString().split("T")[0]}`
-        )
-      )
+      .where(and(...conditions))
       .orderBy(agentsTable.contractEndDate);
     res.json(rows);
   } catch (e: any) {
@@ -1672,8 +1677,17 @@ router.post("/agents/bulk-delete", requireAuth, requireRole(...MANAGER_ROLES), a
     res.status(400).json({ error: "No valid IDs provided" });
     return;
   }
+  // Branch-scope enforcement: silently skip out-of-scope agent IDs (matches bulk-assign behaviour).
+  const scoped: number[] = [];
+  for (const aid of numIds) {
+    if (await isAgentInScope(req.user!.id, req.user!.role, aid)) scoped.push(aid);
+  }
+  if (scoped.length === 0) {
+    res.json({ success: true, count: 0, skipped: numIds.length });
+    return;
+  }
   const deleted = await db.transaction(async (tx) => {
-    const rows = await tx.delete(agentsTable).where(inArray(agentsTable.id, numIds)).returning();
+    const rows = await tx.delete(agentsTable).where(inArray(agentsTable.id, scoped)).returning();
     // Same cascade as the single-delete handler above — keep `users` and
     // `agents` in sync (and clear blocking FKs) so admin bulk-delete doesn't
     // leave orphan login rows or 500 on a dependent record.
@@ -1681,7 +1695,7 @@ router.post("/agents/bulk-delete", requireAuth, requireRole(...MANAGER_ROLES), a
     await clearUserReferencesAndDelete(tx, userIdsToRemove, req.user!.id);
     return rows;
   });
-  res.json({ success: true, count: deleted.length });
+  res.json({ success: true, count: deleted.length, skipped: numIds.length - deleted.length });
 });
 
 router.post("/agents/bulk-assign", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
@@ -1713,6 +1727,10 @@ router.patch("/agents/:id/status", requireAuth, requireRole(...MANAGER_ROLES), a
     res.status(400).json({ error: "status must be 'active' or 'inactive'" });
     return;
   }
+  if (!await isAgentInScope(req.user!.id, req.user!.role, id)) {
+    res.status(403).json({ error: "Unauthorised action: Agent is not within your branch scope." });
+    return;
+  }
   const [agent] = await db.update(agentsTable).set({ status }).where(eq(agentsTable.id, id)).returning();
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
   res.json(agent);
@@ -1738,6 +1756,10 @@ router.post("/agents/:id/set-password", requireAuth, async (req, res, next): Pro
   if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!await isAgentInScope(req.user!.id, req.user!.role, id)) {
+    res.status(403).json({ error: "Unauthorised action: Agent is not within your branch scope." });
+    return;
+  }
   if (!agent.userId) {
     res.status(400).json({ error: "Agent has no linked user account" });
     return;
@@ -1757,6 +1779,10 @@ router.post("/agents/:id/resend-credentials", requireAuth, async (req, res, next
   const id = parseInt(String(req.params.id), 10);
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!await isAgentInScope(req.user!.id, req.user!.role, id)) {
+    res.status(403).json({ error: "Unauthorised action: Agent is not within your branch scope." });
+    return;
+  }
 
   const newPassword = generateAgentPassword();
   const newHash = await bcrypt.hash(newPassword, 10);
@@ -1850,6 +1876,10 @@ router.post("/agents/:id/impersonate", requireAuth, async (req, res, next): Prom
   const id = parseInt(String(req.params.id), 10);
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!await isAgentInScope(req.user!.id, req.user!.role, id)) {
+    res.status(403).json({ error: "Unauthorised action: Agent is not within your branch scope." });
+    return;
+  }
   if (!agent.userId) {
     res.status(400).json({ error: "Agent has no linked user account" });
     return;
