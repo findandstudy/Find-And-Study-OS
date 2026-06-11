@@ -11,6 +11,15 @@ import router from "./routes";
 import webhooksRouter from "./routes/webhooks";
 
 const app: Express = express();
+
+// SECURITY (Rate-Limit IP Bypass): trust exactly one proxy hop — the Replit
+// edge. This makes `req.ip` reflect the real client IP (rightmost
+// X-Forwarded-For entry appended by the edge) rather than a client-injected
+// fake. Rate limiters and audit logs key on `req.ip` via `getRateLimitIp()`
+// in lib/clientIp.ts; all express-rate-limit instances bind an explicit
+// `keyGenerator` to that helper so the key never silently falls back to a
+// bypass-able header. If the deployment topology changes (e.g. two proxy hops
+// between the internet and the server), update this value accordingly.
 app.set("trust proxy", 1);
 
 const cspDirectives = {

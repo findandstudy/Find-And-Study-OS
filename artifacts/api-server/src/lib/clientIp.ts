@@ -3,38 +3,32 @@ import type { Request } from "express";
 /**
  * Resolve the real client IP from a request.
  *
- * SECURITY (IP Spoofing / Rate-Limit Bypass):
- * The app is behind exactly ONE trusted proxy (the Replit edge). With
- * `trust proxy = 1`, Express uses the LEFTMOST `X-Forwarded-For` entry as
- * `req.ip`. That entry is attacker-controlled: a client can inject an
- * arbitrary IP via `X-Forwarded-For: fake-ip` before the real IP is appended
- * by the edge, allowing them to rotate through fake IPs and bypass per-IP
- * rate limits entirely.
+ * SECURITY (Rate-Limit IP Bypass):
+ * The app is deployed behind exactly one trusted proxy (the Replit edge).
+ * `app.set("trust proxy", 1)` in app.ts tells Express to trust one proxy hop.
+ * Express then sets `req.ip` to the RIGHTMOST X-Forwarded-For entry added by
+ * that trusted proxy — the real client IP.
  *
- * The correct approach: read the RIGHTMOST (last) entry of `X-Forwarded-For`.
- * That entry is added by the outermost trusted proxy (Replit edge) and cannot
- * be injected by the client — the client's payload arrives at the edge before
- * the edge appends the actual remote address. Assuming exactly one trusted
- * proxy hop, the rightmost XFF entry is always the real client IP.
+ * We intentionally use `req.ip` rather than reading `X-Forwarded-For` directly.
+ * Direct header parsing would bypass the centralized `trust proxy` configuration
+ * and re-introduce the same bypass if the proxy topology changes (e.g., 2 hops).
+ * `req.ip` is the single source of truth; `trust proxy = 1` is the security gate.
  *
- * Falls back to `req.socket.remoteAddress` when XFF is absent (e.g. direct
- * connections in tests or non-proxied environments).
+ * With `trust proxy = 1` and an incoming `X-Forwarded-For: fake, real`:
+ *   - Express treats the socket address as the 1 trusted proxy
+ *   - Returns `real` (rightmost XFF entry, added by the edge) as `req.ip`
+ *   - The client-supplied `fake` entry is ignored by the IP chain
+ *
+ * Returns `null` — never the literal "unknown" — when no IP can be determined,
+ * so rate-limit keys and audit logs do not collapse all anonymous callers into
+ * a single bucket.
  */
 export function getClientIp(req: Request): string | null {
-  const xff = req.headers["x-forwarded-for"];
-  const xffStr = Array.isArray(xff) ? xff[xff.length - 1] : xff;
-  if (xffStr) {
-    const parts = xffStr.split(",");
-    const last = parts[parts.length - 1]?.trim();
-    if (last && last.toLowerCase() !== "unknown") return last;
-  }
-  // No XFF header — fall back to the raw socket address. In production this
-  // will be the Replit edge proxy IP, not the client, but it provides a stable
-  // non-null key so anonymous requesters still hit a single shared bucket
-  // rather than being ungated.
-  const socketIp = req.socket?.remoteAddress?.trim();
-  if (socketIp && socketIp.toLowerCase() !== "unknown") return socketIp;
-  return null;
+  const ip = req.ip;
+  if (!ip || typeof ip !== "string") return null;
+  const trimmed = ip.trim();
+  if (!trimmed || trimmed.toLowerCase() === "unknown") return null;
+  return trimmed;
 }
 
 /**
