@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { studentsTable } from "./students";
 import { applicationsTable } from "./applications";
 import { agentsTable } from "./agents";
+import { usersTable } from "./users";
 
 export const invoicesTable = pgTable("invoices", {
   id: serial("id").primaryKey(),
@@ -52,6 +53,10 @@ export const commissionsTable = pgTable("commissions", {
   subAgentCommissionRate: numeric("sub_agent_commission_rate", { precision: 5, scale: 2 }),
   subAgentCommissionAmount: numeric("sub_agent_commission_amount", { precision: 12, scale: 2 }),
   subAgentPaid: numeric("sub_agent_paid", { precision: 12, scale: 2 }).default("0"),
+
+  staffUserId: integer("staff_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  staffCommissionAmount: numeric("staff_commission_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  staffCommissionCurrency: text("staff_commission_currency"),
 
   status: text("status").notNull().default("potential"),
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
@@ -124,6 +129,21 @@ export const financialTransactionsTable = pgTable("financial_transactions", {
   index("fin_tx_type_idx").on(table.type),
 ]);
 
+export const staffCommissionPayoutsTable = pgTable("staff_commission_payouts", {
+  id: serial("id").primaryKey(),
+  commissionId: integer("commission_id").references(() => commissionsTable.id, { onDelete: "set null" }),
+  staffUserId: integer("staff_user_id").notNull().references(() => usersTable.id, { onDelete: "restrict" }),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("USD"),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  reference: text("reference"),
+  attachmentUrl: text("attachment_url"),
+  notes: text("notes"),
+  createdBy: integer("created_by").references(() => usersTable.id, { onDelete: "set null" }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Invoice = typeof invoicesTable.$inferSelect;
@@ -139,3 +159,7 @@ export type ServiceFee = typeof serviceFeesTable.$inferSelect;
 export const insertFinancialTransactionSchema = createInsertSchema(financialTransactionsTable).omit({ id: true, createdAt: true });
 export type InsertFinancialTransaction = z.infer<typeof insertFinancialTransactionSchema>;
 export type FinancialTransaction = typeof financialTransactionsTable.$inferSelect;
+
+export const insertStaffCommissionPayoutSchema = createInsertSchema(staffCommissionPayoutsTable).omit({ id: true, createdAt: true, deletedAt: true });
+export type InsertStaffCommissionPayout = z.infer<typeof insertStaffCommissionPayoutSchema>;
+export type StaffCommissionPayout = typeof staffCommissionPayoutsTable.$inferSelect;

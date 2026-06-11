@@ -712,6 +712,37 @@ async function seedClaudeIntegration() {
     console.error("[migrate] api_tokens table:", err);
   }
 
+  // Step 2b2d: Finance Sprint Phase 1 — staff commission fields on commissions +
+  // new staff_commission_payouts table.
+  // Mirrors lib/db migration 0014_finance_staff_columns. Idempotent (IF NOT EXISTS /
+  // ADD COLUMN IF NOT EXISTS) — prod migration path.
+  try {
+    await pool.query(`ALTER TABLE commissions ADD COLUMN IF NOT EXISTS staff_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE commissions ADD COLUMN IF NOT EXISTS staff_commission_amount NUMERIC(12,2) NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE commissions ADD COLUMN IF NOT EXISTS staff_commission_currency TEXT`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS staff_commission_payouts (
+        id SERIAL PRIMARY KEY,
+        commission_id INTEGER REFERENCES commissions(id) ON DELETE SET NULL,
+        staff_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        amount NUMERIC(12,2) NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        paid_at TIMESTAMP WITH TIME ZONE,
+        reference TEXT,
+        attachment_url TEXT,
+        notes TEXT,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        deleted_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS staff_commission_payouts_commission_id_idx ON staff_commission_payouts(commission_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS staff_commission_payouts_staff_user_id_idx ON staff_commission_payouts(staff_user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS staff_commission_payouts_deleted_at_idx ON staff_commission_payouts(deleted_at) WHERE deleted_at IS NULL`);
+  } catch (err) {
+    console.error("[migrate] finance staff commission tables:", err);
+  }
+
   // Step 2b2c: email_queue retry backoff columns.
   // retry_count — how many delivery attempts have been made so far.
   // max_retries — maximum attempts before the row is marked 'failed'.
