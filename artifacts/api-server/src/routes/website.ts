@@ -1,4 +1,5 @@
 import express, { Router, json, type Request, type Response } from "express";
+import { publicFormLimiter } from "../lib/limiters";
 import { db } from "@workspace/db";
 import { eq, asc, desc, inArray, and } from "drizzle-orm";
 import type { AnyPgTable, AnyPgColumn } from "drizzle-orm/pg-core";
@@ -852,7 +853,7 @@ router.get("/public/website-forms/:slug/check", async (req: Request, res: Respon
   }
 });
 
-router.post("/public/website-forms/:slug/submit", async (req: Request, res: Response): Promise<void> => {
+router.post("/public/website-forms/:slug/submit", publicFormLimiter, async (req: Request, res: Response): Promise<void> => {
   let formRecord: typeof websiteFormsTable.$inferSelect | undefined;
   try {
     const { slug } = req.params;
