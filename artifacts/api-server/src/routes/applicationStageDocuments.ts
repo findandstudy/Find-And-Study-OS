@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import express from "express";
 import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable, universitiesTable, programsTable, documentsTable } from "@workspace/db";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
@@ -45,19 +45,28 @@ async function getStageBehavior(stageKey: string): Promise<StageBehavior | null>
   };
 }
 
-async function verifyApplicationAccess(userId: number, role: string, applicationId: number): Promise<boolean> {
+async function verifyApplicationAccess(req: Request, applicationId: number): Promise<boolean> {
+  const user = req.user!;
   const [app] = await db.select().from(applicationsTable).where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)));
   if (!app) return false;
 
-  if (STAFF_ROLES.includes(role as any)) return true;
+  if (STAFF_ROLES.includes(user.role as any)) {
+    // Admin-level staff see all applications unconditionally.
+    if (ADMIN_ROLES.includes(user.role as any)) return true;
+    // Non-admin staff: must be able to access the application's student via the
+    // same assignment/branch/agency rules used by GET /students/:id and
+    // GET /applications/:id. Unconditional true was a bypass for any staff role.
+    const access = await assertCanAccessStudent(req, app.studentId);
+    return access.ok;
+  }
 
-  if (role === "student") {
-    const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
+  if (user.role === "student") {
+    const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
     return !!studentRec && studentRec.id === app.studentId;
   }
 
-  if (isAgentRole(role)) {
-    const visibleIds = await getAgentVisibleIds(userId, role);
+  if (isAgentRole(user.role)) {
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
     return !!app.agentId && visibleIds.includes(app.agentId);
   }
 
@@ -68,7 +77,7 @@ router.get("/applications/:id/stage-documents", requireAuth, requireAgentStaffPe
   const applicationId = parseInt(String(req.params.id), 10);
   const user = req.user!;
 
-  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  const hasAccess = await verifyApplicationAccess(req, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
   const { stage, page = "1", limit = "100" } = req.query as Record<string, string>;
@@ -109,7 +118,7 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
   const applicationId = parseInt(String(req.params.id), 10);
   const user = req.user!;
 
-  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  const hasAccess = await verifyApplicationAccess(req, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
   const { stage, fileName, fileData, fileUrl, mimeType, sizeBytes, validUntil, documentNameOverride } = req.body;
@@ -379,7 +388,7 @@ router.get("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaff
   const applicationId = parseInt(String(req.params.id), 10);
   const user = req.user!;
 
-  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  const hasAccess = await verifyApplicationAccess(req, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
   const { page = "1", limit = "200", stage } = req.query as Record<string, string>;
@@ -433,7 +442,7 @@ router.post("/applications/:id/missing-doc-notes", requireAuth, (req, res, next)
   const user = req.user!;
 
   // Task #167 — row-level authz before any read/write.
-  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  const hasAccess = await verifyApplicationAccess(req, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
   // Task #187 — new payload shape `items: [{documentType?, customTitle?, note?}]`
@@ -578,7 +587,7 @@ router.patch("/applications/:id/missing-doc-notes/:noteId", requireAuth, require
   const noteId = parseInt(String(req.params.noteId), 10);
   const user = req.user!;
 
-  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  const hasAccess = await verifyApplicationAccess(req, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
   const [row] = await db.select().from(applicationStageDocumentsTable).where(and(
@@ -604,7 +613,7 @@ router.delete("/applications/:id/missing-doc-notes/:noteId", requireAuth, requir
   const noteId = parseInt(String(req.params.noteId), 10);
   const user = req.user!;
 
-  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  const hasAccess = await verifyApplicationAccess(req, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
   const [row] = await db.select().from(applicationStageDocumentsTable).where(and(
@@ -670,7 +679,7 @@ router.get("/applications/:id/stage-documents/:docId/download", requireAuth, req
   const docId = parseInt(String(req.params.docId), 10);
   const user = req.user!;
 
-  const hasAccess = await verifyApplicationAccess(user.id, user.role, applicationId);
+  const hasAccess = await verifyApplicationAccess(req, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
   const [doc] = await db.select().from(applicationStageDocumentsTable)

@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db, documentsTable, studentsTable, applicationsTable } from "@workspace/db";
 import { eq, and, inArray, desc, isNull } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { STAFF_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
+import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
+import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
@@ -35,7 +36,7 @@ function isValidHttpUrl(value: string): boolean {
   }
 }
 
-router.get("/documents", requireAuth, async (req, res): Promise<void> => {
+router.get("/documents", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const { studentId, applicationId, type, status } = req.query as Record<string, string>;
 
   const conditions = [isNull(documentsTable.deletedAt)];
@@ -73,6 +74,26 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
       res.status(403).json({ error: "Access denied" });
       return;
     }
+  } else {
+    // Admin-level staff see all documents unconditionally.
+    // Non-admin staff are scoped to students they can access (same rules as
+    // GET /students/:id via assertCanAccessStudent).
+    const isAdmin = ADMIN_ROLES.includes(user.role as any);
+    if (!isAdmin) {
+      if (studentId) {
+        // Per-student access gate — closes the IDOR for ?studentId=<victim>.
+        const access = await assertCanAccessStudent(req, parseInt(studentId, 10));
+        if (!access.ok) { res.json([]); return; }
+      } else {
+        // No student filter: scope to directly-assigned students so the caller
+        // cannot browse the entire document corpus.
+        const myStudents = await db.select({ id: studentsTable.id }).from(studentsTable)
+          .where(and(eq(studentsTable.assignedToId, user.id), isNull(studentsTable.deletedAt)));
+        const myStudentIds = myStudents.map(s => s.id);
+        if (myStudentIds.length === 0) { res.json([]); return; }
+        conditions.push(inArray(documentsTable.studentId, myStudentIds));
+      }
+    }
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -80,7 +101,7 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
   res.json(docs);
 });
 
-router.post("/documents", requireAuth, async (req, res): Promise<void> => {
+router.post("/documents", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
   const { name, type, status = "pending", studentId, applicationId, fileUrl, fileKey, mimeType, sizeBytes, notes, originalFileName, respondingToNoteId } = req.body;
@@ -360,7 +381,7 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(doc);
 });
 
-router.get("/documents/:id/download", requireAuth, async (req, res): Promise<void> => {
+router.get("/documents/:id/download", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
@@ -384,6 +405,13 @@ router.get("/documents/:id/download", requireAuth, async (req, res): Promise<voi
     } else {
       res.status(403).json({ error: "Access denied" }); return;
     }
+  } else {
+    // Non-admin staff: row-level check against the document's student.
+    const isAdmin = ADMIN_ROLES.includes(user.role as any);
+    if (!isAdmin && doc.studentId) {
+      const access = await assertCanAccessStudent(req, doc.studentId);
+      if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+    }
   }
 
   const wantsAttachment = req.query.disposition !== "inline";
@@ -406,7 +434,7 @@ router.get("/documents/:id/download", requireAuth, async (req, res): Promise<voi
   }
 });
 
-router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {
+router.get("/documents/:id", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
@@ -432,6 +460,13 @@ router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {
       }
     } else {
       res.status(403).json({ error: "Access denied" }); return;
+    }
+  } else {
+    // Non-admin staff: row-level check against the document's student.
+    const isAdmin = ADMIN_ROLES.includes(user.role as any);
+    if (!isAdmin && doc.studentId) {
+      const access = await assertCanAccessStudent(req, doc.studentId);
+      if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
     }
   }
 
@@ -460,6 +495,13 @@ router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (
     return;
   }
   const [existingDoc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
+  if (!existingDoc) { res.status(404).json({ error: "Document not found" }); return; }
+  // Non-admin staff: row-level check before applying any mutation.
+  const isAdmin = ADMIN_ROLES.includes(req.user!.role as any);
+  if (!isAdmin && existingDoc.studentId) {
+    const access = await assertCanAccessStudent(req, existingDoc.studentId);
+    if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  }
   const [doc] = await db.update(documentsTable).set(updates).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt))).returning();
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
   await logAudit(req.user!.id, "update_document", "document", id, updates, req.ip);
@@ -504,6 +546,15 @@ router.post("/documents/bulk-delete", requireAuth, requireRole(...STAFF_ROLES), 
     res.status(404).json({ error: "No documents found" });
     return;
   }
+  // Non-admin staff: verify each targeted document's student is accessible.
+  const isAdmin = ADMIN_ROLES.includes(req.user!.role as any);
+  if (!isAdmin) {
+    for (const doc of docs) {
+      if (!doc.studentId) { res.status(403).json({ error: "Access denied" }); return; }
+      const access = await assertCanAccessStudent(req, doc.studentId);
+      if (!access.ok) { res.status(403).json({ error: "Access denied: one or more documents are outside your scope" }); return; }
+    }
+  }
   const activeIds = docs.map(d => d.id);
   await db.update(documentsTable).set({ deletedAt: new Date() }).where(inArray(documentsTable.id, activeIds));
   await logAudit(req.user!.id, "bulk_delete_documents", "document", null as any, { count: docs.length, ids: numericIds }, req.ip);
@@ -532,7 +583,7 @@ router.post("/documents/bulk-delete", requireAuth, requireRole(...STAFF_ROLES), 
   res.json({ deleted: docs.length });
 });
 
-router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
@@ -545,6 +596,13 @@ router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
     const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, doc.studentId));
     if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
       res.status(403).json({ error: "Access denied" }); return;
+    }
+  } else {
+    // Non-admin staff: row-level check before deletion.
+    const isAdmin = ADMIN_ROLES.includes(user.role as any);
+    if (!isAdmin && doc.studentId) {
+      const access = await assertCanAccessStudent(req, doc.studentId);
+      if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
     }
   }
 
@@ -571,7 +629,7 @@ router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
   res.sendStatus(204);
 });
 
-router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const studentId = parseInt(String(req.params.studentId), 10);
   if (isNaN(studentId)) { res.status(400).json({ error: "Invalid studentId" }); return; }
 
@@ -582,6 +640,13 @@ router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STA
     const visibleIds = await getAgentVisibleIds(req.user!.id, req.user!.role);
     if (!student.agentId || !visibleIds.includes(student.agentId)) {
       res.status(403).json({ error: "Access denied" }); return;
+    }
+  } else {
+    // Non-admin staff: row-level check for this specific student.
+    const isAdmin = ADMIN_ROLES.includes(req.user!.role as any);
+    if (!isAdmin) {
+      const access = await assertCanAccessStudent(req, studentId);
+      if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
     }
   }
 
@@ -645,8 +710,8 @@ router.get("/documents/download-zip/:studentId", requireAuth, requireRole(...STA
   await archive.finalize();
 });
 
-router.post("/documents/merge-pdf", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
-  const { documentIds, studentId } = req.body;
+router.post("/documents/merge-pdf", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
+  const { documentIds } = req.body;
 
   if (!Array.isArray(documentIds) || documentIds.length < 2) {
     res.status(400).json({ error: "At least 2 document IDs are required" });
@@ -664,11 +729,29 @@ router.post("/documents/merge-pdf", requireAuth, requireRole(...STAFF_ROLES, ...
     return;
   }
 
-  if (isAgentRole(req.user!.role) && studentId) {
-    const visibleIds = await getAgentVisibleIds(req.user!.id, req.user!.role);
-    const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, parseInt(studentId, 10)));
-    if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
-      res.status(403).json({ error: "Access denied" }); return;
+  const user = req.user!;
+  if (isAgentRole(user.role)) {
+    // Vuln 1 fix: check EVERY document's ownership, not just a supplied studentId.
+    // The old check (optional studentId + single student lookup) was an IDOR:
+    // an attacker could omit studentId or supply a decoy and include arbitrary
+    // victim document IDs in the merge request.
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    for (const doc of pdfDocs) {
+      if (!doc.studentId) { res.status(403).json({ error: "Access denied" }); return; }
+      const [student] = await db.select({ agentId: studentsTable.agentId }).from(studentsTable).where(eq(studentsTable.id, doc.studentId));
+      if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
+        res.status(403).json({ error: "Access denied" }); return;
+      }
+    }
+  } else {
+    // Non-admin staff: check each document's student.
+    const isAdmin = ADMIN_ROLES.includes(user.role as any);
+    if (!isAdmin) {
+      for (const doc of pdfDocs) {
+        if (!doc.studentId) { res.status(403).json({ error: "Access denied" }); return; }
+        const access = await assertCanAccessStudent(req, doc.studentId);
+        if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+      }
     }
   }
 
@@ -697,11 +780,27 @@ router.post("/documents/merge-pdf", requireAuth, requireRole(...STAFF_ROLES, ...
   }
 });
 
-router.post("/documents/:id/extract", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
+router.post("/documents/:id/extract", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [doc] = await db.select().from(documentsTable).where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+
+  const user = req.user!;
+  if (isAgentRole(user.role)) {
+    if (!doc.studentId) { res.status(403).json({ error: "Access denied" }); return; }
+    const visibleIds = await getAgentVisibleIds(user.id, user.role);
+    const [student] = await db.select({ agentId: studentsTable.agentId }).from(studentsTable).where(eq(studentsTable.id, doc.studentId));
+    if (!student || !student.agentId || !visibleIds.includes(student.agentId)) {
+      res.status(403).json({ error: "Access denied" }); return;
+    }
+  } else {
+    const isAdmin = ADMIN_ROLES.includes(user.role as any);
+    if (!isAdmin && doc.studentId) {
+      const access = await assertCanAccessStudent(req, doc.studentId);
+      if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+    }
+  }
 
   if (!doc.fileUrl) {
     res.status(422).json({ error: "Document has no file attached. Upload a file before extracting." });
