@@ -34,6 +34,7 @@ import {
   agentBranchesTable,
   contractTemplatesTable,
   signingSessionsTable,
+  signedContractsTable,
   emailVerificationCodesTable,
 } from "@workspace/db";
 import { createSigningToken } from "../src/lib/signingTokens.js";
@@ -101,6 +102,7 @@ async function apiReq(
 // ---------------------------------------------------------------------------
 // Seeding helpers
 // ---------------------------------------------------------------------------
+const cleanupSignedContractIds: number[] = [];
 const cleanupSessionIds: number[] = [];
 const cleanupTemplateIds: number[] = [];
 const cleanupAgentBranchLinks: Array<{ agentId: number; branchId: number }> = [];
@@ -156,6 +158,27 @@ async function createTemplate(): Promise<number> {
     })
     .returning({ id: contractTemplatesTable.id });
   cleanupTemplateIds.push(row.id);
+  return row.id;
+}
+
+async function createSignedContract(opts: {
+  sessionId: number;
+  agentId?: number | null;
+  templateId: number;
+  signerEmail: string;
+}): Promise<number> {
+  const [row] = await db.insert(signedContractsTable)
+    .values({
+      signingSessionId: opts.sessionId,
+      agentId: opts.agentId ?? null,
+      templateId: opts.templateId,
+      signerEmail: opts.signerEmail,
+      pdfObjectKey: null,
+      evidenceHash: null,
+      signedAt: new Date(),
+    })
+    .returning({ id: signedContractsTable.id });
+  cleanupSignedContractIds.push(row.id);
   return row.id;
 }
 
@@ -375,14 +398,55 @@ test("C2-3: DELETE /contracts/sessions/:id on cross-branch session → 403", asy
   assert.equal(r.status, 403, `Expected 403 cross-branch delete, got ${r.status}: ${JSON.stringify(r.data)}`);
 });
 
+test("C2-4: GET /contracts/signed — branch-limited manager sees only own branch", async () => {
+  const tplId = await createTemplate();
+  const branchG = await createBranch("G");
+  const branchH = await createBranch("H");
+  const managerUserId = await createUser("manager", branchG);
+  const agentGUserId = await createUser("agent");
+  const agentHUserId = await createUser("agent");
+  const agentG = await createAgent(agentGUserId);
+  const agentH = await createAgent(agentHUserId);
+  await linkAgentBranch(agentG, branchG);
+  await linkAgentBranch(agentH, branchH);
+
+  const { id: sessG } = await createSession({ templateId: tplId, agentId: agentG, mode: "admin_driven", signerEmail: "g@ex.com", status: "signed" });
+  const { id: sessH } = await createSession({ templateId: tplId, agentId: agentH, mode: "admin_driven", signerEmail: "h@ex.com", status: "signed" });
+  const scG = await createSignedContract({ sessionId: sessG, agentId: agentG, templateId: tplId, signerEmail: "g@ex.com" });
+  const scH = await createSignedContract({ sessionId: sessH, agentId: agentH, templateId: tplId, signerEmail: "h@ex.com" });
+
+  currentUser = { id: managerUserId, role: "manager", isActive: true, permissions: ["contracts.view"], branchId: branchG };
+  const r = await apiReq("GET", "/api/contracts/signed");
+  assert.equal(r.status, 200);
+  const ids = ((r.data as any)?.data ?? []).map((s: any) => s.id) as number[];
+  assert.ok(ids.includes(scG), `BranchG signed contract ${scG} should be visible`);
+  assert.ok(!ids.includes(scH), `BranchH signed contract ${scH} should NOT be visible`);
+});
+
+test("C2-5: GET /contracts/signed/:id/pdf — cross-branch signed contract → 403", async () => {
+  const tplId = await createTemplate();
+  const branchI = await createBranch("I");
+  const branchJ = await createBranch("J");
+  const managerUserId = await createUser("manager", branchI);
+  const agentJUserId = await createUser("agent");
+  const agentJ = await createAgent(agentJUserId);
+  await linkAgentBranch(agentJ, branchJ);
+
+  const { id: sessJ } = await createSession({ templateId: tplId, agentId: agentJ, mode: "admin_driven", signerEmail: "j@ex.com", status: "signed" });
+  const scJ = await createSignedContract({ sessionId: sessJ, agentId: agentJ, templateId: tplId, signerEmail: "j@ex.com" });
+
+  currentUser = { id: managerUserId, role: "manager", isActive: true, permissions: ["contracts.view"], branchId: branchI };
+  const r = await apiReq("GET", `/api/contracts/signed/${scJ}/pdf`);
+  assert.equal(r.status, 403, `Expected 403 for cross-branch PDF download, got ${r.status}: ${JSON.stringify(r.data)}`);
+});
+
 // ---------------------------------------------------------------------------
 // Teardown
 // ---------------------------------------------------------------------------
 after(async () => {
   try {
-    // Clean up email verification codes for test sessions
-    if (cleanupSessionIds.length) {
-      // sessions cleanup cascades nothing — just delete directly
+    if (cleanupSignedContractIds.length) {
+      await db.delete(signedContractsTable).where(inArray(signedContractsTable.id, cleanupSignedContractIds));
     }
     if (cleanupSessionIds.length) {
       await db.delete(signingSessionsTable).where(inArray(signingSessionsTable.id, cleanupSessionIds));
