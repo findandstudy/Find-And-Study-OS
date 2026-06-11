@@ -11,6 +11,7 @@ import { finalizeSign } from "../lib/signContract";
 import { writeAudit } from "../lib/auditLog";
 import { buildSignedContractEmail, buildSignVerificationCodeEmail, buildSignedContractAdminEmail, sendEmail, getAppBaseUrl } from "../lib/email";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
+import { getRateLimitIp, getClientIp } from "../lib/clientIp";
 
 const router: IRouter = Router();
 
@@ -30,6 +31,8 @@ const signLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new PgRateLimitStore(SIGN_WINDOW_MS, "sign"),
+  keyGenerator: (req) => getRateLimitIp(req),
+  skip: () => process.env.NODE_ENV === "test",
 });
 
 // Tighter limiter for sending verification codes: the signer types an
@@ -42,6 +45,8 @@ const codeLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new PgRateLimitStore(SIGN_WINDOW_MS, "sign-code"),
+  keyGenerator: (req) => getRateLimitIp(req),
+  skip: () => process.env.NODE_ENV === "test",
 });
 
 function generateVerificationCode(): string {
@@ -394,7 +399,7 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
       res.status(413).json({ error: "Signature image too large" }); return;
     }
 
-    const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;
+    const signerIp = getClientIp(req);
     const signerUserAgent = (req.headers["user-agent"] as string) || null;
     const finalSignerName = signerName ? String(signerName).slice(0, 200) : (r.session.signerName || null);
 

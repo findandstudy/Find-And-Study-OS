@@ -10,6 +10,7 @@ import { decryptConfig } from "../lib/encryption";
 import { logAudit } from "../lib/auth";
 import crypto from "crypto";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
+import { getRateLimitIp } from "../lib/clientIp";
 
 /**
  * Per-IP rate limiter for inbound webhook endpoints. Backed by PostgreSQL so
@@ -24,6 +25,7 @@ const webhookLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many webhook requests" },
   store: new PgRateLimitStore(WEBHOOK_WINDOW_MS, "webhook"),
+  keyGenerator: (req) => getRateLimitIp(req),
 });
 
 const router: IRouter = Router();

@@ -1,5 +1,6 @@
 import rateLimit from "express-rate-limit";
 import { PgRateLimitStore } from "./pgRateLimiter";
+import { getRateLimitIp } from "./clientIp";
 
 const WINDOW_MS = 15 * 60 * 1000;
 
@@ -10,6 +11,9 @@ export const publicLeadLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many submissions. Please try again later." },
   store: new PgRateLimitStore(WINDOW_MS, "lead"),
+  // SECURITY: use the rightmost XFF entry (real client IP) so clients cannot
+  // bypass the limit by injecting a fake IP in X-Forwarded-For.
+  keyGenerator: (req) => getRateLimitIp(req),
 });
 
 // Per-IP throttle for unauthenticated public website form submissions.
@@ -23,4 +27,5 @@ export const publicFormLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many submissions. Please try again later." },
   store: new PgRateLimitStore(WINDOW_MS, "website-form"),
+  keyGenerator: (req) => getRateLimitIp(req),
 });

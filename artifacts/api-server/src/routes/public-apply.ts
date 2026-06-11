@@ -11,6 +11,7 @@ import { resolveAgentCommission } from "../lib/agentCommission";
 import { isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
+import { getRateLimitIp } from "../lib/clientIp";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { getActiveExtractor, buildExtractionPrompt, isFallbackExtractor, recordExtractorRun } from "../lib/aiExtractorService";
 import { getCurrentSeason } from "../lib/season";
@@ -50,6 +51,7 @@ const applyLimiter = rateLimit({
   // Skip rate limiting only when the server is started in test mode (e.g.
   // in-process integration test harnesses that spawn the API directly).
   skip: () => process.env.NODE_ENV === "test",
+  keyGenerator: (req) => getRateLimitIp(req),
 });
 
 const aiExtractLimiter = rateLimit({
@@ -59,6 +61,7 @@ const aiExtractLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new PgRateLimitStore(APPLY_WINDOW_MS, "ai-extract"),
+  keyGenerator: (req) => getRateLimitIp(req),
 });
 
 /**

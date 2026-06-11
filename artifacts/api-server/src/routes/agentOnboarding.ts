@@ -1,5 +1,5 @@
 import express, { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { getRateLimitIp } from "../lib/clientIp";
+import { getRateLimitIp, getClientIp } from "../lib/clientIp";
 import crypto from "crypto";
 import { db, agentsTable, usersTable, signingSessionsTable, signedContractsTable, contractTemplatesTable, settingsTable, emailVerificationCodesTable } from "@workspace/db";
 import { and, eq, gt, desc, ilike } from "drizzle-orm";
@@ -687,7 +687,7 @@ router.post("/contracts/me/sign", signBodyParser, requireAuth, async (req: Reque
   if (signatureImagePngBase64.length > 2_800_000) {
     res.status(413).json({ error: "Signature image too large" }); return;
   }
-  const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;
+  const signerIp = getClientIp(req);
   const ua = (req.headers["user-agent"] as string) || null;
 
   let result;
@@ -856,7 +856,7 @@ router.post("/contracts/me/session/:id/sign", signBodyParser, requireAuth, async
   if (signatureImagePngBase64.length > 2_800_000) {
     res.status(413).json({ error: "Signature image too large" }); return;
   }
-  const signerIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || null;
+  const signerIp = getClientIp(req);
   const ua = (req.headers["user-agent"] as string) || null;
   let result;
   try {

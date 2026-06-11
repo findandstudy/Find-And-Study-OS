@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
+import { getRateLimitIp } from "../lib/clientIp";
 import { createApplicationForStudent } from "./public-apply";
 import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
@@ -81,6 +82,7 @@ const embedSubmitLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many submissions. Please try again later." },
   store: new PgRateLimitStore(EMBED_WINDOW_MS, "embed-submit"),
+  keyGenerator: (req) => getRateLimitIp(req),
 });
 
 // ─── Embed HMAC security helpers ─────────────────────────────────────────────
@@ -190,6 +192,7 @@ const embedTokenLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
   store: new PgRateLimitStore(EMBED_TOKEN_WINDOW_MS, "embed-token"),
+  keyGenerator: (req) => getRateLimitIp(req),
 });
 
 /**
