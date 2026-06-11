@@ -168,14 +168,26 @@ router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> =
   const [photoDoc] = await db.select({
       fileKey: documentsTable.fileKey,
       fileData: documentsTable.fileData,
+      fileUrl: documentsTable.fileUrl,
       mimeType: documentsTable.mimeType,
     })
     .from(documentsTable)
     .where(and(eq(documentsTable.studentId, studentId), or(eq(documentsTable.type, "photo"), eq(documentsTable.type, "photograph")), isNull(documentsTable.deletedAt)))
     .orderBy(desc(documentsTable.createdAt))
     .limit(1);
-  if (!photoDoc || (!photoDoc.fileKey && !photoDoc.fileData)) {
+  if (!photoDoc || (!photoDoc.fileKey && !photoDoc.fileData && !photoDoc.fileUrl)) {
     res.status(404).json({ error: "No photo" }); return;
+  }
+  // fileUrl-only documents (no object-storage key): redirect the browser so it
+  // fetches the file directly.  Only allow http/https to prevent SSRF via
+  // data: or file: URIs.
+  if (!photoDoc.fileKey && !photoDoc.fileData) {
+    const url = photoDoc.fileUrl!;
+    if (!/^https?:\/\//i.test(url)) {
+      res.status(422).json({ error: "Invalid photo URL" }); return;
+    }
+    res.redirect(302, url);
+    return;
   }
   // Use private caching so a shared proxy cannot serve one user's photo to
   // another user who happens to request the same URL.

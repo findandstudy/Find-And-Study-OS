@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo, useEffect, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import {
   useGetStudent,
@@ -36,6 +36,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+const LazyPdfPhotoAvatar = lazy(() => import("@/components/PdfPhotoAvatar"));
 
 const DOC_TYPES = [
   { key: "passport", label: "Passport" },
@@ -96,7 +98,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const documents: any[] = Array.isArray(documentsResp) ? documentsResp : (documentsResp as any)?.data || [];
 
   const photoDoc = useMemo(() => {
-    const photoDocs = documents.filter((d: any) => (d.type === "photo" || d.type === "photograph") && (d.fileKey || d.fileData));
+    const photoDocs = documents.filter((d: any) => (d.type === "photo" || d.type === "photograph") && (d.fileKey || d.fileUrl));
     if (photoDocs.length === 0) return null;
     return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }, [documents]);
@@ -603,11 +605,30 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             {isLoading ? (
               <Skeleton className="w-20 h-20 rounded-full" />
             ) : photoDoc ? (
-              <img
-                src={`${BASE_URL}/api/students/${id}/photo`}
-                alt={`${student?.firstName} ${student?.lastName}`}
-                className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
-              />
+              photoDoc.mimeType === "application/pdf" ? (
+                <Suspense fallback={
+                  <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/20">
+                    {(student?.firstName?.[0] ?? "").toUpperCase()}{(student?.lastName?.[0] ?? "").toUpperCase()}
+                  </div>
+                }>
+                  <LazyPdfPhotoAvatar
+                    src={`${BASE_URL}/api/students/${id}/photo`}
+                    alt={`${student?.firstName} ${student?.lastName}`}
+                    className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
+                    fallback={
+                      <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/20">
+                        {(student?.firstName?.[0] ?? "").toUpperCase()}{(student?.lastName?.[0] ?? "").toUpperCase()}
+                      </div>
+                    }
+                  />
+                </Suspense>
+              ) : (
+                <img
+                  src={`${BASE_URL}/api/students/${id}/photo`}
+                  alt={`${student?.firstName} ${student?.lastName}`}
+                  className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
+                />
+              )
             ) : (
               <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/20">
                 {(student?.firstName?.[0] ?? "").toUpperCase()}{(student?.lastName?.[0] ?? "").toUpperCase()}
