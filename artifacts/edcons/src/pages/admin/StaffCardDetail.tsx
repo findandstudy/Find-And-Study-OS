@@ -1048,7 +1048,7 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
   const paidAmt = bonusData?.paid?.amount ?? totals.paid;
   const pendingAmt = bonusData?.pending?.amount ?? totals.pending;
 
-  const [form, setForm] = useState({ amount: "", currency: "USD", studentId: "", agentId: "", applicationId: "", payDate: "", status: "pending", notes: "" });
+  const [form, setForm] = useState({ amount: "", currency: "USD", studentId: "", applicationId: "", payDate: "", status: "pending", notes: "" });
 
   const add = async () => {
     if (!form.amount) return;
@@ -1056,12 +1056,11 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
       const body: any = {
         amount: Number(form.amount), currency: form.currency,
         studentId: form.studentId ? Number(form.studentId) : null,
-        agentId: form.agentId ? Number(form.agentId) : null,
         applicationId: form.applicationId ? Number(form.applicationId) : null,
         status: form.status, payDate: form.payDate || null, notes: form.notes || null,
       };
       await customFetch(`/api/staff-cards/${userId}/commissions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      setForm({ amount: "", currency: "USD", studentId: "", agentId: "", applicationId: "", payDate: "", status: "pending", notes: "" });
+      setForm({ amount: "", currency: "USD", studentId: "", applicationId: "", payDate: "", status: "pending", notes: "" });
       onSaved();
     } catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
   };
@@ -1084,11 +1083,10 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
         <StatCard label={t("staffCards.commissions.totalPaid")} value={paidAmt.toFixed(2)} />
         <StatCard label={t("staffCards.commissions.pending")} value={pendingAmt.toFixed(2)} />
       </div>
-      <Card className="p-4 grid grid-cols-2 md:grid-cols-8 gap-2 items-end">
+      <Card className="p-4 grid grid-cols-2 md:grid-cols-7 gap-2 items-end">
         <div><Label>{t("staffCards.salary.amount")}</Label><Input type="number" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} /></div>
         <div><Label>{t("staffCards.salary.currency")}</Label><Input value={form.currency} onChange={(e) => setForm(f => ({ ...f, currency: e.target.value.toUpperCase() }))} /></div>
         <div><Label>{t("staffCards.commissions.studentId")}</Label><Input type="number" value={form.studentId} onChange={(e) => setForm(f => ({ ...f, studentId: e.target.value }))} /></div>
-        <div><Label>{t("staffCards.commissions.agentId")}</Label><Input type="number" value={form.agentId} onChange={(e) => setForm(f => ({ ...f, agentId: e.target.value }))} /></div>
         <div><Label>{t("staffCards.commissions.applicationId")}</Label><Input type="number" value={form.applicationId} onChange={(e) => setForm(f => ({ ...f, applicationId: e.target.value }))} /></div>
         <div><Label>{t("staffCards.salary.payDate")}</Label><Input type="date" value={form.payDate} onChange={(e) => setForm(f => ({ ...f, payDate: e.target.value }))} /></div>
         <div>

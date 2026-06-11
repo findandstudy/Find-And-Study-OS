@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { execSync } from "child_process";
+import fs from "fs";
 import {
   db,
   userSessionsTable,
@@ -23,6 +24,39 @@ import {
   buildBrandedHtml,
   buildDailyBarChartSvg,
 } from "../lib/pdf/brandedBase";
+
+const MAX_SESSION_SEC = 8 * 3600;
+
+function capSessionWallClock<T extends {
+  startedAt: Date | string | null;
+  endedAt: Date | string | null;
+  lastSeenAt: Date | string | null;
+  totalDurationSeconds: number | null;
+  activeDurationSeconds: number | null;
+  idleDurationSeconds: number | null;
+}>(s: T): T {
+  const active = s.activeDurationSeconds || 0;
+  const rawTotal = s.totalDurationSeconds || 0;
+  const rawIdle = s.idleDurationSeconds || 0;
+
+  const startMs = s.startedAt ? new Date(s.startedAt).getTime() : null;
+  const endMs = s.endedAt
+    ? new Date(s.endedAt).getTime()
+    : s.lastSeenAt
+      ? new Date(s.lastSeenAt).getTime()
+      : null;
+  const wallClockSec =
+    startMs && endMs && endMs > startMs
+      ? Math.round((endMs - startMs) / 1000)
+      : rawTotal;
+
+  const capSec = Math.min(MAX_SESSION_SEC, wallClockSec);
+  const cappedTotal = Math.min(rawTotal, capSec);
+  const cappedActive = Math.min(active, cappedTotal);
+  const cappedIdle = Math.max(0, Math.min(rawIdle, cappedTotal - cappedActive));
+
+  return { ...s, totalDurationSeconds: cappedTotal, activeDurationSeconds: cappedActive, idleDurationSeconds: cappedIdle };
+}
 
 const router: IRouter = Router();
 
@@ -314,14 +348,7 @@ router.get("/activity/user/:userId", requireAuth, requireRole(...ADMIN_ROLES), a
   const [user] = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email, role: usersTable.role })
     .from(usersTable).where(eq(usersTable.id, targetUserId));
 
-  const normalizedSessions = sessions.map(s => {
-    const active = s.activeDurationSeconds || 0;
-    const idle = s.idleDurationSeconds || 0;
-    const rawTotal = s.totalDurationSeconds || 0;
-    const clampedTotal = Math.max(rawTotal, active + idle);
-    const clampedIdle = Math.max(0, Math.min(idle, clampedTotal - active));
-    return { ...s, totalDurationSeconds: clampedTotal, idleDurationSeconds: clampedIdle };
-  });
+  const normalizedSessions = sessions.map(s => capSessionWallClock(s));
 
   res.json({
     user,
@@ -412,9 +439,10 @@ router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), asy
   .groupBy(sql`date(${userSessionsTable.startedAt})`)
   .orderBy(sql`date(${userSessionsTable.startedAt})`);
 
-  const totalActive = sessions.reduce((s, x) => s + (x.activeDurationSeconds || 0), 0);
-  const totalIdle = sessions.reduce((s, x) => s + (x.idleDurationSeconds || 0), 0);
-  const totalTotal = sessions.reduce((s, x) => s + (x.totalDurationSeconds || 0), 0);
+  const cappedPdfSessions = sessions.map(s => capSessionWallClock(s));
+  const totalActive = cappedPdfSessions.reduce((s, x) => s + (x.activeDurationSeconds || 0), 0);
+  const totalIdle = cappedPdfSessions.reduce((s, x) => s + (x.idleDurationSeconds || 0), 0);
+  const totalTotal = cappedPdfSessions.reduce((s, x) => s + (x.totalDurationSeconds || 0), 0);
 
   const fromLabel = dateFrom.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   const toLabel = dateTo.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -545,8 +573,20 @@ ${sessions.length > 0 ? `
   function resolveChromium(): string | undefined {
     const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
     if (fromEnv) return fromEnv;
+    // Nix store chromium (Replit / NixOS environment)
     try {
-      const found = execSync("which chromium", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+      const nixDir = "/nix/store";
+      if (fs.existsSync(nixDir)) {
+        const entries = fs.readdirSync(nixDir);
+        for (const entry of entries) {
+          if (!entry.includes("chromium")) continue;
+          const candidate = `${nixDir}/${entry}/bin/chromium`;
+          if (fs.existsSync(candidate)) return candidate;
+        }
+      }
+    } catch { /* fall through */ }
+    try {
+      const found = execSync("which chromium 2>/dev/null", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
       if (found) return found;
     } catch { /* fall through */ }
     return undefined;
@@ -558,23 +598,31 @@ ${sessions.length > 0 ? `
     "--disable-gpu", "--single-process",
   ];
 
-  const pdfBuffer = await withRenderLock(async () => {
-    const { chromium } = await import("playwright-core");
-    const executablePath = resolveChromium();
-    const browser = await chromium.launch({ executablePath, args: LAUNCH_ARGS });
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle" });
-      return await page.pdf({ format: "A4", printBackground: true });
-    } finally {
-      await browser.close();
-    }
-  });
+  try {
+    const pdfBuffer = await withRenderLock(async () => {
+      const { chromium } = await import("playwright-core");
+      const executablePath = resolveChromium();
+      const browser = await chromium.launch({ executablePath, args: LAUNCH_ARGS });
+      try {
+        const page = await browser.newPage();
+        page.setDefaultTimeout(30000);
+        await page.setContent(html, { waitUntil: "domcontentloaded" });
+        return await page.pdf({ format: "A4", printBackground: true });
+      } finally {
+        await browser.close();
+      }
+    });
 
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="activity-${targetUserId}.pdf"`);
-  res.setHeader("Content-Length", pdfBuffer.length);
-  res.send(pdfBuffer);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="activity-${targetUserId}.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (err: any) {
+    console.error("[ActivityPDF] Failed to generate PDF:", err?.message || err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to generate PDF", detail: String(err?.message || err) });
+    }
+  }
 });
 
 export default router;
