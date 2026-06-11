@@ -2115,7 +2115,16 @@
     "collectionPct": "% сбора",
     "staffCommission": "Комиссия сотрудника",
     "clear": "Сбросить",
-    "filterActive": "Фильтр активен"
+    "filterActive": "Фильтр активен",
+    "assignedStaff": "Назначенный сотрудник",
+    "noStaff": "Без сотрудника",
+    "staffCommissionAmount": "Сумма комиссии сотрудника",
+    "searchStudent": "Найти студента...",
+    "noStudentFound": "Студент не найден",
+    "typeToSearch": "Введите для поиска",
+    "clearStudent": "Убрать студента",
+    "selectApplication": "Выбрать заявку",
+    "noApplication": "Без заявки"
   },
   "studentsPage": {
     "addNewStudent": "Добавить студента",

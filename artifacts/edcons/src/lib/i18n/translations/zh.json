@@ -2064,7 +2064,16 @@
     "collectionPct": "收款%",
     "staffCommission": "员工佣金",
     "clear": "清除",
-    "filterActive": "筛选器已激活"
+    "filterActive": "筛选器已激活",
+    "assignedStaff": "指定员工",
+    "noStaff": "无员工",
+    "staffCommissionAmount": "员工佣金金额",
+    "searchStudent": "搜索学生...",
+    "noStudentFound": "未找到学生",
+    "typeToSearch": "输入以搜索学生",
+    "clearStudent": "清除学生",
+    "selectApplication": "选择申请",
+    "noApplication": "无申请"
   },
   "studentsPage": {
     "addNewStudent": "添加新学生",

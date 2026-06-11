@@ -2064,7 +2064,16 @@
     "collectionPct": "% Penerimaan",
     "staffCommission": "Komisi Staf",
     "clear": "Hapus",
-    "filterActive": "Filter aktif"
+    "filterActive": "Filter aktif",
+    "assignedStaff": "Staf yang ditugaskan",
+    "noStaff": "Tidak ada staf",
+    "staffCommissionAmount": "Jumlah komisi staf",
+    "searchStudent": "Cari siswa...",
+    "noStudentFound": "Siswa tidak ditemukan",
+    "typeToSearch": "Ketik untuk mencari siswa",
+    "clearStudent": "Hapus siswa",
+    "selectApplication": "Pilih lamaran",
+    "noApplication": "Tidak ada lamaran"
   },
   "studentsPage": {
     "addNewStudent": "Tambah Siswa Baru",

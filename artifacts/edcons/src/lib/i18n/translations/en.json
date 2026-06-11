@@ -2356,7 +2356,16 @@
     "collectionPct": "Collection %",
     "staffCommission": "Staff Commission",
     "clear": "Clear",
-    "filterActive": "Filter active"
+    "filterActive": "Filter active",
+    "assignedStaff": "Assigned Staff",
+    "noStaff": "No staff",
+    "staffCommissionAmount": "Staff Commission Amount",
+    "searchStudent": "Search student...",
+    "noStudentFound": "No student found",
+    "typeToSearch": "Type to search students",
+    "clearStudent": "Clear student",
+    "selectApplication": "Select application",
+    "noApplication": "No application"
   },
   "studentsPage": {
     "addNewStudent": "Add New Student",

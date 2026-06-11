@@ -2115,7 +2115,16 @@
     "collectionPct": "% de collecte",
     "staffCommission": "Commission du personnel",
     "clear": "Effacer",
-    "filterActive": "Filtre actif"
+    "filterActive": "Filtre actif",
+    "assignedStaff": "Personnel assigné",
+    "noStaff": "Pas de personnel",
+    "staffCommissionAmount": "Montant commission personnel",
+    "searchStudent": "Chercher un étudiant...",
+    "noStudentFound": "Aucun étudiant trouvé",
+    "typeToSearch": "Tapez pour chercher",
+    "clearStudent": "Effacer le choix",
+    "selectApplication": "Choisir la candidature",
+    "noApplication": "Pas de candidature"
   },
   "studentsPage": {
     "addNewStudent": "Ajouter un étudiant",

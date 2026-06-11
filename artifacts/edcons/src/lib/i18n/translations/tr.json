@@ -2297,7 +2297,16 @@
     "collectionPct": "Tahsilat %",
     "staffCommission": "Personel Komisyonu",
     "clear": "Temizle",
-    "filterActive": "Filtre aktif"
+    "filterActive": "Filtre aktif",
+    "assignedStaff": "Atanan Personel",
+    "noStaff": "Personel yok",
+    "staffCommissionAmount": "Personel Komisyon Tutarı",
+    "searchStudent": "Öğrenci ara...",
+    "noStudentFound": "Öğrenci bulunamadı",
+    "typeToSearch": "Öğrenci aramak için yazın",
+    "clearStudent": "Öğrenciyi temizle",
+    "selectApplication": "Başvuru seç",
+    "noApplication": "Başvuru yok"
   },
   "studentsPage": {
     "addNewStudent": "Yeni Öğrenci Ekle",

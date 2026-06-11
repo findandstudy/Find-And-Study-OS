@@ -2115,7 +2115,16 @@
     "collectionPct": "نسبة التحصيل %",
     "staffCommission": "عمولة الموظف",
     "clear": "مسح",
-    "filterActive": "الفلتر نشط"
+    "filterActive": "الفلتر نشط",
+    "assignedStaff": "الموظف المعين",
+    "noStaff": "لا يوجد موظف",
+    "staffCommissionAmount": "مبلغ عمولة الموظف",
+    "searchStudent": "ابحث عن طالب...",
+    "noStudentFound": "لا يوجد طالب",
+    "typeToSearch": "اكتب للبحث عن طالب",
+    "clearStudent": "مسح الطالب",
+    "selectApplication": "اختر الطلب",
+    "noApplication": "لا يوجد طلب"
   },
   "studentsPage": {
     "addNewStudent": "إضافة طالب جديد",

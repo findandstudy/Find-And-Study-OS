@@ -21,8 +21,9 @@ import {
   CheckCircle, Clock, AlertCircle, Loader2, RefreshCw, ArrowUpRight,
   Upload, FileText, Download, BarChart3, AlertTriangle, Calendar,
   Landmark, CreditCard, PiggyBank, Eye, ArrowUpDown, ArrowUp, ArrowDown,
-  Filter as FilterIcon, X,
+  Filter as FilterIcon, X, Check, ChevronsUpDown,
 } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
@@ -156,6 +157,11 @@ interface CommissionForm {
   subAgentPaid: string;
   offsetAmount: string;
   notes: string;
+  studentId: string;
+  applicationId: string;
+  staffUserId: string;
+  staffCommissionAmount: string;
+  staffCommissionCurrency: string;
 }
 
 const EMPTY_COMM: CommissionForm = {
@@ -166,6 +172,8 @@ const EMPTY_COMM: CommissionForm = {
   status: "potential",
   universityCollected: "0", agentPaid: "0", subAgentPaid: "0", offsetAmount: "0",
   notes: "",
+  studentId: "", applicationId: "",
+  staffUserId: "", staffCommissionAmount: "", staffCommissionCurrency: "USD",
 };
 
 function CommissionModal({
@@ -179,6 +187,11 @@ function CommissionModal({
   const [form, setForm] = useState<CommissionForm>(initial || EMPTY_COMM);
   const [saving, setSaving] = useState(false);
   const currencyOpts = useCatalogCurrencies();
+
+  const [stuPickerOpen, setStuPickerOpen] = useState(false);
+  const [stuQuery, setStuQuery] = useState("");
+  const [stuResults, setStuResults] = useState<any[]>([]);
+  const [stuSearching, setStuSearching] = useState(false);
 
   const { data: agentsResp } = useQuery({
     queryKey: ["agents-list"],
@@ -196,6 +209,42 @@ function CommissionModal({
   });
   const subAgents: any[] = subAgentsData || [];
 
+  const { data: staffUsersResp } = useQuery({
+    queryKey: ["staff-users-finance"],
+    queryFn: () => customFetch<any>(`${BASE}/api/users?roles=staff%2Cconsultant%2Ceditor%2Caccountant%2Cmanager%2Cadmin&limit=200`),
+    enabled: open,
+  });
+  const staffUsers: any[] = (staffUsersResp as any)?.data || (Array.isArray(staffUsersResp) ? staffUsersResp : []);
+
+  const { data: stuAppsResp } = useQuery({
+    queryKey: ["finance-student-apps", form.studentId],
+    queryFn: () => customFetch<any>(`${BASE}/api/finance/student-applications/${form.studentId}`),
+    enabled: !!form.studentId,
+  });
+  const stuApps: any[] = (stuAppsResp as any)?.data || [];
+
+  useEffect(() => {
+    if (stuQuery.length < 2) { setStuResults([]); setStuSearching(false); return; }
+    setStuSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await customFetch<any>(`${BASE}/api/finance/student-search?q=${encodeURIComponent(stuQuery)}&limit=10`);
+        setStuResults((res as any)?.data || []);
+      } catch { setStuResults([]); }
+      finally { setStuSearching(false); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [stuQuery]);
+
+  useEffect(() => {
+    if (open) {
+      setForm(initial || EMPTY_COMM);
+      setStuQuery("");
+      setStuResults([]);
+      setStuPickerOpen(false);
+    }
+  }, [open]);
+
   const uRate = toNum(form.universityCommissionRate);
   const aRate = toNum(form.agentCommissionRate);
   const saRate = toNum(form.subAgentCommissionRate);
@@ -203,7 +252,8 @@ function CommissionModal({
   const uAmt  = fee > 0 && uRate > 0 ? (fee * uRate) / 100 : 0;
   const aAmt  = uAmt > 0 && aRate > 0 ? (uAmt * aRate) / 100 : 0;
   const saAmt = aAmt > 0 && saRate > 0 ? (aAmt * saRate) / 100 : 0;
-  const netAgency = uAmt - aAmt;
+  const stAmt = toNum(form.staffCommissionAmount);
+  const netAgency = uAmt - aAmt - stAmt;
   const maxOffset = form.status !== "potential" && uAmt > 0 ? uAmt * 0.7 : 0;
 
   const set = (k: keyof CommissionForm) => (e: any) =>
@@ -247,6 +297,11 @@ function CommissionModal({
         subAgentCommissionAmount: saAmt || null,
         agentId: form.agentId ? parseInt(form.agentId, 10) : null,
         subAgentId: form.subAgentId ? parseInt(form.subAgentId, 10) : null,
+        studentId: form.studentId ? parseInt(form.studentId, 10) : null,
+        applicationId: form.applicationId ? parseInt(form.applicationId, 10) : null,
+        staffUserId: form.staffUserId ? parseInt(form.staffUserId, 10) : null,
+        staffCommissionAmount: stAmt || null,
+        staffCommissionCurrency: form.staffCommissionCurrency || null,
         universityCollected: toNum(form.universityCollected),
         agentPaid: toNum(form.agentPaid),
         subAgentPaid: toNum(form.subAgentPaid),
@@ -267,6 +322,9 @@ function CommissionModal({
     finally { setSaving(false); }
   }
 
+  const calcColsMap: Record<number, string> = { 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4" };
+  const calcCols = calcColsMap[[saAmt > 0, stAmt > 0].filter(Boolean).length + 2] ?? "grid-cols-4";
+
   return (
     <>
     <Dialog open={open} onOpenChange={onClose}>
@@ -275,20 +333,149 @@ function CommissionModal({
           <DialogTitle>{editId ? t("financePage.editCommission") : t("financePage.newCommission")}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-2">
-          <div className="col-span-2 grid grid-cols-2 gap-3">
-            <div>
-              <Label>{t("financePage.studentName")}</Label>
-              <Input value={form.studentName} onChange={set("studentName")} placeholder="Full name" />
+
+          {/* Student combobox */}
+          <div className="col-span-2">
+            <Label>{t("financePage.studentName")}</Label>
+            <Popover open={stuPickerOpen} onOpenChange={setStuPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between font-normal h-9 text-left"
+                >
+                  <span className={form.studentId ? "text-slate-800 dark:text-slate-100" : "text-slate-400"}>
+                    {form.studentId
+                      ? (form.studentName || `#${form.studentId}`)
+                      : (form.studentName || t("financePage.searchStudent"))}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[440px] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder={t("financePage.searchStudent")}
+                    value={stuQuery}
+                    onValueChange={setStuQuery}
+                  />
+                  <CommandList>
+                    {stuSearching && (
+                      <CommandEmpty>
+                        <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                      </CommandEmpty>
+                    )}
+                    {!stuSearching && stuQuery.length < 2 && (
+                      <CommandEmpty className="text-xs text-slate-400 py-3 text-center">
+                        {t("financePage.typeToSearch")}
+                      </CommandEmpty>
+                    )}
+                    {!stuSearching && stuQuery.length >= 2 && stuResults.length === 0 && (
+                      <CommandEmpty>{t("financePage.noStudentFound")}</CommandEmpty>
+                    )}
+                    {stuResults.length > 0 && (
+                      <CommandGroup>
+                        {stuResults.map((s: any) => (
+                          <CommandItem
+                            key={s.id}
+                            value={String(s.id)}
+                            onSelect={() => {
+                              setForm(f => ({
+                                ...f,
+                                studentId: String(s.id),
+                                studentName: s.name,
+                                applicationId: "",
+                                universityName: "",
+                                programName: "",
+                              }));
+                              setStuPickerOpen(false);
+                              setStuQuery("");
+                              setStuResults([]);
+                            }}
+                          >
+                            <Check className={`mr-2 h-4 w-4 ${form.studentId === String(s.id) ? "opacity-100" : "opacity-0"}`} />
+                            <span>{s.name}</span>
+                            {s.email && <span className="ml-2 text-xs text-slate-400">{s.email}</span>}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                    {form.studentId && (
+                      <CommandGroup>
+                        <CommandItem
+                          value="__clear__"
+                          onSelect={() => {
+                            setForm(f => ({ ...f, studentId: "", studentName: "", applicationId: "", universityName: "", programName: "" }));
+                            setStuPickerOpen(false);
+                          }}
+                          className="text-rose-600"
+                        >
+                          <X className="mr-2 h-4 w-4" />
+                          {t("financePage.clearStudent")}
+                        </CommandItem>
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Application picker — shown once a student is selected */}
+          {form.studentId && (
+            <div className="col-span-2">
+              <Label>{t("financePage.selectApplication")}</Label>
+              <Select
+                value={form.applicationId || "none"}
+                onValueChange={(val) => {
+                  if (val === "none") {
+                    setForm(f => ({ ...f, applicationId: "", universityName: "", programName: "" }));
+                  } else {
+                    const app = stuApps.find((a: any) => String(a.id) === val);
+                    setForm(f => ({
+                      ...f,
+                      applicationId: val,
+                      universityName: app?.universityName || f.universityName,
+                      programName: app?.programName || f.programName,
+                    }));
+                  }
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder={t("financePage.selectApplication")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("financePage.noApplication")}</SelectItem>
+                  {stuApps.map((a: any) => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {[a.universityName, a.programName].filter(Boolean).join(" / ") || `App #${a.id}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <Label>{t("financePage.universityName")}</Label>
-              <Input value={form.universityName} onChange={set("universityName")} placeholder="University" />
-            </div>
+          )}
+
+          {/* University / Program (locked when linked to application) */}
+          <div>
+            <Label>{t("financePage.universityName")}</Label>
+            <Input
+              value={form.universityName}
+              onChange={set("universityName")}
+              placeholder="University"
+              readOnly={!!form.applicationId}
+              className={form.applicationId ? "bg-slate-50 dark:bg-slate-800/40" : ""}
+            />
           </div>
           <div>
             <Label>{t("financePage.program")}</Label>
-            <Input value={form.programName} onChange={set("programName")} placeholder="Program name" />
+            <Input
+              value={form.programName}
+              onChange={set("programName")}
+              placeholder="Program name"
+              readOnly={!!form.applicationId}
+              className={form.applicationId ? "bg-slate-50 dark:bg-slate-800/40" : ""}
+            />
           </div>
+
           <div>
             <Label>{t("financePage.season")}</Label>
             <Select value={form.season} onValueChange={set("season")}>
@@ -315,6 +502,7 @@ function CommissionModal({
               </SelectContent>
             </Select>
           </div>
+          <div />
 
           <div className="col-span-2">
             <Label>{t("financePage.agent")}</Label>
@@ -337,6 +525,7 @@ function CommissionModal({
             </Select>
           </div>
 
+          {/* Commission calculation box */}
           <div className="col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 grid grid-cols-4 gap-3 dark:border-slate-700/60 dark:bg-slate-800/50">
             <div>
               <Label>Program Fee ({form.currency})</Label>
@@ -350,6 +539,7 @@ function CommissionModal({
               <Label>Agent Rate (%)</Label>
               <Input type="number" value={form.agentCommissionRate} onChange={set("agentCommissionRate")} placeholder="70" />
             </div>
+            <div />
             {subAgents.length > 0 && (
               <>
                 <div className="col-span-2">
@@ -372,8 +562,38 @@ function CommissionModal({
                 </div>
               </>
             )}
+
+            {/* Staff commission fields */}
+            <div className="col-span-2">
+              <Label>{t("financePage.assignedStaff")}</Label>
+              <Select value={form.staffUserId || "none"} onValueChange={(val) => setForm(f => ({ ...f, staffUserId: val === "none" ? "" : val }))}>
+                <SelectTrigger><SelectValue placeholder={t("financePage.noStaff")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("financePage.noStaff")}</SelectItem>
+                  {staffUsers.map((u: any) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{t("financePage.staffCommissionAmount")}</Label>
+              <Input type="number" value={form.staffCommissionAmount} onChange={set("staffCommissionAmount")} placeholder="0" />
+            </div>
+            <div>
+              <Label>{t("financePage.currency")}</Label>
+              <Select value={form.staffCommissionCurrency || form.currency} onValueChange={set("staffCommissionCurrency")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {currencyOpts.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
             {uAmt > 0 && (
-              <div className={`col-span-4 grid ${saAmt > 0 ? "grid-cols-4" : "grid-cols-3"} gap-2 pt-1 text-sm`}>
+              <div className={`col-span-4 grid ${calcCols} gap-2 pt-1 text-sm`}>
                 <div className="rounded bg-blue-50 border border-blue-200 p-2 text-center dark:bg-blue-900/20 dark:border-blue-700/40">
                   <div className="text-xs text-blue-600 font-medium dark:text-blue-400">{t("financePage.universityPaysAgency")}</div>
                   <div className="font-bold text-blue-700 dark:text-blue-300">{fmt(uAmt, form.currency)}</div>
@@ -386,6 +606,12 @@ function CommissionModal({
                   <div className="rounded bg-purple-50 border border-purple-200 p-2 text-center dark:bg-purple-900/20 dark:border-purple-700/40">
                     <div className="text-xs text-purple-600 font-medium dark:text-purple-400">{t("financePage.agentPaysSubAgent")}</div>
                     <div className="font-bold text-purple-700 dark:text-purple-300">{fmt(saAmt, form.currency)}</div>
+                  </div>
+                )}
+                {stAmt > 0 && (
+                  <div className="rounded bg-rose-50 border border-rose-200 p-2 text-center dark:bg-rose-900/20 dark:border-rose-700/40">
+                    <div className="text-xs text-rose-600 font-medium dark:text-rose-400">{t("financePage.staffCommission")}</div>
+                    <div className="font-bold text-rose-700 dark:text-rose-300">{fmt(stAmt, form.staffCommissionCurrency || form.currency)}</div>
                   </div>
                 )}
                 <div className="rounded bg-emerald-50 border border-emerald-200 p-2 text-center dark:bg-emerald-900/20 dark:border-emerald-700/40">
@@ -1744,6 +1970,11 @@ export default function FinancePage() {
                                     subAgentPaid: c.subAgentPaid || "0",
                                     offsetAmount: c.offsetAmount || "0",
                                     notes: c.notes || "",
+                                    studentId: c.studentId ? String(c.studentId) : "",
+                                    applicationId: c.applicationId ? String(c.applicationId) : "",
+                                    staffUserId: c.staffUserId ? String(c.staffUserId) : "",
+                                    staffCommissionAmount: c.staffCommissionAmount || "",
+                                    staffCommissionCurrency: c.staffCommissionCurrency || c.currency || "USD",
                                   },
                                 })}
                               >

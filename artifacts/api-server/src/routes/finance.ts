@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, agentsTable, programsTable, usersTable, studentsTable, applicationsTable, settingsTable, staffCommissionsTable, staffCommissionPayoutsTable } from "@workspace/db";
-import { eq, sql, and, desc, inArray, isNull } from "drizzle-orm";
+import { eq, sql, and, desc, inArray, isNull, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
+import { z } from "zod";
+import { validate, getValidated } from "../middlewares/validate";
 import { getAgentRecord } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { getCurrentSeason } from "../lib/season";
@@ -239,6 +241,45 @@ router.get("/currencies-in-use", requireAuth, requireRole(...FINANCE_ROLES), asy
   }
 });
 
+/* ─── FINANCE HELPER ENDPOINTS ──────────────────────────────── */
+
+router.get("/finance/student-search", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const q = String(req.query.q || "").trim();
+  const limit = Math.min(parseInt(String(req.query.limit || "10"), 10), 20);
+  if (q.length < 2) { res.json({ data: [] }); return; }
+  const term = `%${q}%`;
+  const rows = await db.select({
+    id: studentsTable.id,
+    firstName: studentsTable.firstName,
+    lastName: studentsTable.lastName,
+    email: studentsTable.email,
+  })
+  .from(studentsTable)
+  .where(and(
+    isNull(studentsTable.deletedAt),
+    sql`(${studentsTable.firstName} ilike ${term} OR ${studentsTable.lastName} ilike ${term} OR ${studentsTable.email} ilike ${term} OR concat(${studentsTable.firstName}, ' ', ${studentsTable.lastName}) ilike ${term})`
+  ))
+  .limit(limit);
+  res.json({ data: rows.map(r => ({ id: r.id, name: `${r.firstName || ""} ${r.lastName || ""}`.trim(), email: r.email })) });
+});
+
+router.get("/finance/student-applications/:studentId", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const studentId = parseInt(String(req.params.studentId), 10);
+  if (isNaN(studentId)) { res.json({ data: [] }); return; }
+  const rows = await db.select({
+    id: applicationsTable.id,
+    universityName: applicationsTable.universityName,
+    programName: applicationsTable.programName,
+    stage: applicationsTable.stage,
+    season: applicationsTable.season,
+  })
+  .from(applicationsTable)
+  .where(and(isNull(applicationsTable.deletedAt), eq(applicationsTable.studentId, studentId)))
+  .orderBy(desc(applicationsTable.createdAt))
+  .limit(30);
+  res.json({ data: rows });
+});
+
 /* ─── COMMISSIONS ────────────────────────────────────────────── */
 
 const COMMISSION_PATCH_FIELDS = [
@@ -345,17 +386,48 @@ router.get("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (re
   });
 });
 
-router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+const postCommissionBodySchema = z.object({
+  applicationId: z.number().int().optional().nullable(),
+  studentId: z.number().int().optional().nullable(),
+  agentId: z.number().int().optional().nullable(),
+  subAgentId: z.number().int().optional().nullable(),
+  staffUserId: z.number().int().optional().nullable(),
+  studentName: z.string().optional().nullable(),
+  universityName: z.string().optional().nullable(),
+  programName: z.string().optional().nullable(),
+  isStateUniversity: z.boolean().optional().default(false),
+  season: z.string().optional().nullable(),
+  currency: z.string().default("USD"),
+  programFee: z.number().optional().nullable(),
+  universityCommissionRate: z.number().optional().nullable(),
+  agentCommissionRate: z.number().optional().nullable(),
+  universityCommissionAmount: z.number().optional().nullable(),
+  agentCommissionAmount: z.number().optional().nullable(),
+  subAgentCommissionRate: z.number().optional().nullable(),
+  subAgentCommissionAmount: z.number().optional().nullable(),
+  staffCommissionAmount: z.number().optional().nullable(),
+  staffCommissionCurrency: z.string().optional().nullable(),
+  universityCollected: z.number().optional().default(0),
+  agentPaid: z.number().optional().default(0),
+  subAgentPaid: z.number().optional().default(0),
+  offsetAmount: z.number().optional().default(0),
+  status: z.string().default("potential"),
+  notes: z.string().optional().nullable(),
+});
+
+router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), validate({ body: postCommissionBodySchema }), async (req, res): Promise<void> => {
+  const body = getValidated<{ body: typeof postCommissionBodySchema }>(req).body;
   const {
-    applicationId, studentId, agentId, subAgentId,
+    applicationId, studentId, agentId, subAgentId, staffUserId,
     studentName, universityName, programName, isStateUniversity,
-    season: bodySeason,
-    currency = "USD",
+    season: bodySeason, currency,
     programFee, universityCommissionRate, agentCommissionRate,
     universityCommissionAmount, agentCommissionAmount,
     subAgentCommissionRate, subAgentCommissionAmount,
-    status = "potential", notes,
-  } = req.body;
+    staffCommissionAmount, staffCommissionCurrency,
+    universityCollected, agentPaid, subAgentPaid, offsetAmount,
+    status, notes,
+  } = body;
   const season = bodySeason || (await getCurrentSeason());
 
   const { uAmount, aAmount, saAmount } = calcCommissionAmounts({
@@ -365,28 +437,31 @@ router.post("/commissions", requireAuth, requireRole(...FINANCE_ROLES), async (r
   });
 
   const [commission] = await db.insert(commissionsTable).values({
-    applicationId: applicationId || null,
-    studentId: studentId || null,
-    agentId: agentId || null,
-    subAgentId: subAgentId || null,
+    applicationId: applicationId ?? null,
+    studentId: studentId ?? null,
+    agentId: agentId ?? null,
+    subAgentId: subAgentId ?? null,
+    staffUserId: staffUserId ?? null,
     studentName: studentName || null,
     universityName: universityName || null,
     programName: programName || null,
     isStateUniversity: isStateUniversity ?? false,
     season,
     currency,
-    programFee: programFee ? String(programFee) : null,
-    universityCommissionRate: universityCommissionRate ? String(universityCommissionRate) : null,
-    universityCommissionAmount: uAmount > 0 ? String(uAmount) : (universityCommissionAmount ? String(universityCommissionAmount) : null),
-    universityCollected: "0",
-    agentCommissionRate: agentCommissionRate ? String(agentCommissionRate) : null,
-    agentCommissionAmount: aAmount > 0 ? String(aAmount) : (agentCommissionAmount ? String(agentCommissionAmount) : null),
-    agentPaid: "0",
-    subAgentCommissionRate: subAgentCommissionRate ? String(subAgentCommissionRate) : null,
-    subAgentCommissionAmount: saAmount > 0 ? String(saAmount) : (subAgentCommissionAmount ? String(subAgentCommissionAmount) : null),
-    subAgentPaid: "0",
+    programFee: programFee != null ? String(programFee) : null,
+    universityCommissionRate: universityCommissionRate != null ? String(universityCommissionRate) : null,
+    universityCommissionAmount: uAmount > 0 ? String(uAmount) : (universityCommissionAmount != null ? String(universityCommissionAmount) : null),
+    universityCollected: String(universityCollected ?? 0),
+    agentCommissionRate: agentCommissionRate != null ? String(agentCommissionRate) : null,
+    agentCommissionAmount: aAmount > 0 ? String(aAmount) : (agentCommissionAmount != null ? String(agentCommissionAmount) : null),
+    agentPaid: String(agentPaid ?? 0),
+    subAgentCommissionRate: subAgentCommissionRate != null ? String(subAgentCommissionRate) : null,
+    subAgentCommissionAmount: saAmount > 0 ? String(saAmount) : (subAgentCommissionAmount != null ? String(subAgentCommissionAmount) : null),
+    subAgentPaid: String(subAgentPaid ?? 0),
+    staffCommissionAmount: staffCommissionAmount != null ? String(staffCommissionAmount) : undefined,
+    staffCommissionCurrency: staffCommissionCurrency || null,
     status,
-    offsetAmount: "0",
+    offsetAmount: String(offsetAmount ?? 0),
     notes: notes || null,
   }).returning();
 

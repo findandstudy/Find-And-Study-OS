@@ -2064,7 +2064,16 @@
     "collectionPct": "संग्रह %",
     "staffCommission": "स्टाफ कमीशन",
     "clear": "साफ़ करें",
-    "filterActive": "फ़िल्टर सक्रिय"
+    "filterActive": "फ़िल्टर सक्रिय",
+    "assignedStaff": "नियुक्त कर्मचारी",
+    "noStaff": "कोई कर्मचारी नहीं",
+    "staffCommissionAmount": "कर्मचारी कमीशन राशि",
+    "searchStudent": "छात्र खोजें...",
+    "noStudentFound": "कोई छात्र नहीं मिला",
+    "typeToSearch": "छात्र खोजने के लिए टाइप करें",
+    "clearStudent": "छात्र हटाएं",
+    "selectApplication": "आवेदन चुनें",
+    "noApplication": "कोई आवेदन नहीं"
   },
   "studentsPage": {
     "addNewStudent": "नया छात्र जोड़ें",

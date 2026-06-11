@@ -2064,7 +2064,16 @@
     "collectionPct": "درصد دریافت",
     "staffCommission": "کمیسیون کارمند",
     "clear": "پاک کردن",
-    "filterActive": "فیلتر فعال است"
+    "filterActive": "فیلتر فعال است",
+    "assignedStaff": "کارمند تعیین‌شده",
+    "noStaff": "بدون کارمند",
+    "staffCommissionAmount": "مبلغ کمیسیون کارمند",
+    "searchStudent": "جستجوی دانشجو...",
+    "noStudentFound": "دانشجویی یافت نشد",
+    "typeToSearch": "برای جستجو تایپ کنید",
+    "clearStudent": "حذف دانشجو",
+    "selectApplication": "انتخاب درخواست",
+    "noApplication": "بدون درخواست"
   },
   "studentsPage": {
     "addNewStudent": "افزودن دانشجوی جدید",

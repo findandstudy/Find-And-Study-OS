@@ -2064,7 +2064,16 @@
     "collectionPct": "% de cobro",
     "staffCommission": "Comisión del personal",
     "clear": "Borrar",
-    "filterActive": "Filtro activo"
+    "filterActive": "Filtro activo",
+    "assignedStaff": "Personal asignado",
+    "noStaff": "Sin personal",
+    "staffCommissionAmount": "Monto comisión personal",
+    "searchStudent": "Buscar estudiante...",
+    "noStudentFound": "No se encontró estudiante",
+    "typeToSearch": "Escriba para buscar",
+    "clearStudent": "Quitar estudiante",
+    "selectApplication": "Seleccionar solicitud",
+    "noApplication": "Sin solicitud"
   },
   "studentsPage": {
     "addNewStudent": "Agregar estudiante",
