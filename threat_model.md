@@ -30,6 +30,7 @@ EdCons OS, eğitim danışmanlığı şirketleri için geliştirilmiş çok kira
 - Hassas veri yüzeyi: document/contract/object storage akışları ve user/student/application CRUD yolları.
 - RBAC ve görünürlük anchor’ları: `src/routes/leads.ts`, `src/routes/students.ts`, `src/routes/applications.ts`, `src/lib/studentAccess.ts`, `src/lib/permissions.ts`, `src/lib/roles.ts`.
 - Özellikle tekrar kontrol edilmesi gereken yardımcı uçlar: follow-up, note, delete, export/import ve embed yönetim rotaları; bunlar ana liste/detay uçları kadar sıkı görünürlük kontrolü uygulamak zorundadır.
+- Tekrar eden kırılgan alanlar: `src/routes/agents.ts` içindeki helper/bulk yönetim uçları, `src/lib/branchScope.ts` ile aynı görünürlük modelini korumalıdır; `src/routes/tasks.ts` gibi staff-only modüller backend’de açık rol kontrolü taşımalıdır; `src/routes/documents.ts` ve `src/routes/applicationStageDocuments.ts` içindeki yardımcı dosya uçları ana student/application görünürlük kurallarını aynen uygulamalıdır.
 - Dev-only ve genelde dışlanacak alan: `artifacts/mockup-sandbox`, test yardımcıları, yalnızca geliştirme amaçlı scriptler.
 - Varsayımlar: üretimde `NODE_ENV=production`; Replit platform TLS’i tarayıcı↔uygulama trafiğini korur; public deployment internetten erişilebilir kabul edilir.
 
