@@ -295,3 +295,69 @@ test("F3-3b: GET /finance/student-applications/notanumber returns 200 with empty
     assert.equal(data.length, 0, `Expected empty array for NaN studentId, got ${data.length}`);
   });
 });
+
+// ---------------------------------------------------------------------------
+// F3-4: Net Income formula — summary deducts staffCommissionAmount
+//        totalNetAgency = uni − agent − subAgent − staff  (confirmed rows only)
+//        1200 − 300 − 80 − 120 = 700
+// ---------------------------------------------------------------------------
+test("F3-4: GET /commissions summary.byCurrency.totalNetAgency deducts staffCommissionAmount", async () => {
+  const NI_SEASON = `${SEASON}-ni`;
+  const [row] = await db.insert(commissionsTable).values({
+    season: NI_SEASON,
+    status: "confirmed",
+    studentName: `NI_Student_${RUN_ID}`,
+    universityName: `NI_Uni_${RUN_ID}`,
+    universityCommissionAmount: "1200.00",
+    agentCommissionAmount: "300.00",
+    subAgentCommissionAmount: "80.00",
+    staffCommissionAmount: "120.00",
+    currency: "USD",
+  } as any).returning({ id: commissionsTable.id });
+  createdCommissionIds.push(row.id);
+
+  const app = buildApp();
+  await withServer(app, async (server) => {
+    const r = await sendReq(server, "GET", `/api/commissions?season=${encodeURIComponent(NI_SEASON)}&limit=50`);
+    assert.equal(r.status, 200);
+    const byCurrency: Record<string, any> = r.body?.summary?.byCurrency ?? {};
+    const usd = byCurrency["USD"];
+    assert.ok(usd, `No USD bucket; got keys: ${Object.keys(byCurrency).join(",")}`);
+    const net = parseFloat(usd.totalNetAgency ?? "NaN");
+    assert.ok(!isNaN(net), `totalNetAgency is NaN: ${usd.totalNetAgency}`);
+    assert.equal(net, 700,
+      `Net Income wrong: got ${net}, expected 700 (1200−300−80−120; staff must be deducted)`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F3-5: Student → application chain
+//        Search for student by name → get their applications → shape check
+// ---------------------------------------------------------------------------
+test("F3-5: student-search then student-applications chain returns consistent studentId", async () => {
+  const studentId = await seedStudent("Delta");
+  const appId = await seedApplication(studentId);
+  const fragment = `SearchStudentDelta`;
+
+  const app = buildApp();
+  await withServer(app, async (server) => {
+    // Step 1: search
+    const search = await sendReq(server, "GET", `/api/finance/student-search?q=${encodeURIComponent(fragment)}`);
+    assert.equal(search.status, 200, `search step: expected 200, got ${search.status}`);
+    const students: any[] = search.body?.data ?? [];
+    const found = students.find((s: any) => s.id === studentId);
+    assert.ok(found, `Student (id=${studentId}) not found in search results`);
+    assert.ok(found.name, "Student row must have non-empty name");
+    assert.ok("email" in found, "Student row must have email field");
+
+    // Step 2: get applications for that student
+    const apps = await sendReq(server, "GET", `/api/finance/student-applications/${found.id}`);
+    assert.equal(apps.status, 200, `apps step: expected 200, got ${apps.status}`);
+    const appList: any[] = apps.body?.data ?? [];
+    const foundApp = appList.find((a: any) => a.id === appId);
+    assert.ok(foundApp, `Application (id=${appId}) not found for student ${found.id}`);
+    assert.ok(foundApp.universityName, "App row must have universityName");
+    assert.ok(foundApp.stage, "App row must have stage");
+    assert.ok(foundApp.season, "App row must have season");
+  });
+});
