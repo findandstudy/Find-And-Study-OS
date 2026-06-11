@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, agentsTable, programsTable, usersTable, studentsTable, applicationsTable, settingsTable, staffCommissionsTable, staffCommissionPayoutsTable } from "@workspace/db";
-import { eq, sql, and, desc, inArray, isNull, or } from "drizzle-orm";
+import { eq, sql, and, desc, asc, inArray, isNull, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { z } from "zod";
@@ -278,6 +278,142 @@ router.get("/finance/student-applications/:studentId", requireAuth, requireRole(
   .orderBy(desc(applicationsTable.createdAt))
   .limit(30);
   res.json({ data: rows });
+});
+
+/* ─── UNIVERSITY RECEIVABLES & COLLECTION ───────────────────── */
+
+router.get("/finance/university-receivables", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const { season } = req.query as Record<string, string>;
+  const conditions: any[] = [
+    sql`${commissionsTable.status} != 'potential'`,
+    sql`${commissionsTable.status} != 'excluded'`,
+  ];
+  if (season) conditions.push(eq(commissionsTable.season, season));
+
+  const rows = await db
+    .select({
+      universityName: commissionsTable.universityName,
+      currency: commissionsTable.currency,
+      totalConfirmed: sql<string>`COALESCE(SUM(${commissionsTable.universityCommissionAmount}::numeric), 0)`,
+      totalCollected: sql<string>`COALESCE(SUM(${commissionsTable.universityCollected}::numeric), 0)`,
+    })
+    .from(commissionsTable)
+    .where(and(...conditions))
+    .groupBy(commissionsTable.universityName, commissionsTable.currency)
+    .orderBy(asc(commissionsTable.universityName));
+
+  const data = rows
+    .filter(r => r.universityName)
+    .map(r => ({
+      universityName: r.universityName!,
+      currency: r.currency || "USD",
+      totalConfirmed: toNum(r.totalConfirmed),
+      totalCollected: toNum(r.totalCollected),
+      remaining: Math.max(0, toNum(r.totalConfirmed) - toNum(r.totalCollected)),
+    }))
+    .filter(r => r.remaining > 0.001);
+
+  res.json({ data });
+});
+
+const uniCollectionBodySchema = z.object({
+  universityName: z.string().min(1),
+  currency: z.string().min(1),
+  amount: z.number().positive(),
+  transactionDate: z.string().min(1),
+  reference: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+router.post("/finance/university-collection", requireAuth, requireRole(...FINANCE_ROLES), validate({ body: uniCollectionBodySchema }), async (req, res): Promise<void> => {
+  const { universityName, currency, amount, transactionDate, reference, notes } =
+    getValidated<{ body: typeof uniCollectionBodySchema }>(req).body;
+
+  // FIFO: confirmed/partial/full rows for this university+currency with remaining > 0
+  const rows = await db.select().from(commissionsTable)
+    .where(and(
+      eq(commissionsTable.universityName, universityName),
+      eq(commissionsTable.currency, currency),
+      sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full')`,
+      sql`${commissionsTable.universityCommissionAmount}::numeric > ${commissionsTable.universityCollected}::numeric`,
+    ))
+    .orderBy(asc(commissionsTable.confirmedAt), asc(commissionsTable.id));
+
+  if (rows.length === 0) {
+    res.status(400).json({ error: "No receivable balance for this university/currency" });
+    return;
+  }
+
+  const totalRemaining = rows.reduce((s, r) =>
+    s + Math.max(0, toNum(r.universityCommissionAmount) - toNum(r.universityCollected)), 0);
+
+  if (amount > totalRemaining + 0.001) {
+    res.status(400).json({ error: "Amount exceeds remaining balance", remaining: totalRemaining });
+    return;
+  }
+
+  // FIFO distribution
+  let leftover = amount;
+  const distributed: { commissionId: number; amount: number }[] = [];
+  for (const row of rows) {
+    if (leftover <= 0.001) break;
+    const rowRemaining = Math.max(0, toNum(row.universityCommissionAmount) - toNum(row.universityCollected));
+    if (rowRemaining <= 0.001) continue;
+    const toApply = Math.min(rowRemaining, leftover);
+    leftover -= toApply;
+    distributed.push({ commissionId: row.id, amount: toApply });
+  }
+
+  // Create transactions + recompute each row's denormalised totals
+  for (const d of distributed) {
+    const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, d.commissionId));
+
+    await db.insert(financialTransactionsTable).values({
+      commissionId: d.commissionId,
+      type: "collection",
+      amount: String(d.amount),
+      currency,
+      transactionDate: new Date(transactionDate),
+      reference: reference || null,
+      universityName,
+      notes: notes || null,
+    });
+
+    const allTx = await db.select().from(financialTransactionsTable)
+      .where(eq(financialTransactionsTable.commissionId, d.commissionId));
+
+    const totalColl = allTx.filter(t => t.type === "collection").reduce((s, t) => s + toNum(t.amount), 0);
+    const totalPaid = allTx.filter(t => t.type === "agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
+    const totalSubPaid = allTx.filter(t => t.type === "sub_agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
+    const uTotal = toNum(comm.universityCommissionAmount);
+    const aTotal = toNum(comm.agentCommissionAmount);
+    const saTotal = toNum(comm.subAgentCommissionAmount);
+    const agentFullyPaid = totalPaid >= aTotal;
+    const subAgentFullyPaid = saTotal <= 0 || totalSubPaid >= saTotal;
+
+    let newStatus = comm.status;
+    if (totalColl >= uTotal && agentFullyPaid && subAgentFullyPaid && uTotal > 0) {
+      newStatus = "settled";
+    } else if (totalColl >= uTotal && uTotal > 0) {
+      newStatus = "collected_full";
+    } else if (totalColl > 0) {
+      newStatus = "collected_partial";
+    }
+
+    await db.update(commissionsTable).set({
+      universityCollected: String(totalColl),
+      agentPaid: String(totalPaid),
+      subAgentPaid: String(totalSubPaid),
+      status: newStatus,
+    }).where(eq(commissionsTable.id, d.commissionId));
+  }
+
+  await logAudit(req.user!.id, "record_university_collection", "commission",
+    distributed[0]?.commissionId,
+    { universityName, currency, amount, count: distributed.length }, req.ip);
+
+  const updatedRemaining = Math.max(0, totalRemaining - amount);
+  res.status(201).json({ distributed, updatedRemaining });
 });
 
 /* ─── COMMISSIONS ────────────────────────────────────────────── */

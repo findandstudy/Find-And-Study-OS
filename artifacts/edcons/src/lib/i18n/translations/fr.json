@@ -2124,7 +2124,14 @@
     "typeToSearch": "Tapez pour chercher",
     "clearStudent": "Effacer le choix",
     "selectApplication": "Choisir la candidature",
-    "noApplication": "Pas de candidature"
+    "noApplication": "Pas de candidature",
+    "selectUniversity": "Sélectionner l'université",
+    "searchUniversity": "Rechercher une université...",
+    "noUniversity": "Aucune université trouvée",
+    "receivableRemaining": "Reste à percevoir",
+    "collectionAmount": "Montant de l'encaissement",
+    "exceedsRemaining": "Dépasse le solde restant",
+    "distributedAcross": "Distribué sur {n} commission(s)"
   },
   "studentsPage": {
     "addNewStudent": "Ajouter un étudiant",

@@ -2073,7 +2073,14 @@
     "typeToSearch": "برای جستجو تایپ کنید",
     "clearStudent": "حذف دانشجو",
     "selectApplication": "انتخاب درخواست",
-    "noApplication": "بدون درخواست"
+    "noApplication": "بدون درخواست",
+    "selectUniversity": "انتخاب دانشگاه",
+    "searchUniversity": "جستجوی دانشگاه...",
+    "noUniversity": "دانشگاهی پیدا نشد",
+    "receivableRemaining": "مانده دریافتنی",
+    "collectionAmount": "مبلغ دریافت",
+    "exceedsRemaining": "بیش از مانده است",
+    "distributedAcross": "در {n} کمیسیون توزیع شد"
   },
   "studentsPage": {
     "addNewStudent": "افزودن دانشجوی جدید",

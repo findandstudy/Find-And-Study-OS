@@ -1083,6 +1083,200 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
   );
 }
 
+function UniversityCollectionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { season } = useSeason();
+
+  const [uniOpen, setUniOpen] = useState(false);
+  const [selectedUni, setSelectedUni] = useState("");
+  const [selCurrency, setSelCurrency] = useState("");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [reference, setReference] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [uniSearch, setUniSearch] = useState("");
+
+  const { data: recvData, isLoading: recvLoading } = useQuery<any>({
+    queryKey: ["uni-receivables", season],
+    queryFn: () => customFetch(`${BASE}/api/finance/university-receivables?season=${season}`),
+    enabled: open,
+  });
+
+  const receivables: any[] = recvData?.data ?? [];
+
+  const universities = useMemo(() =>
+    [...new Set(receivables.map((r: any) => r.universityName as string))].sort()
+  , [receivables]);
+
+  const availableCurrencies = useMemo(() => {
+    if (!selectedUni) return [] as string[];
+    return receivables
+      .filter((r: any) => r.universityName === selectedUni && toNum(r.remaining) > 0)
+      .map((r: any) => r.currency as string);
+  }, [receivables, selectedUni]);
+
+  const remainingBalance = useMemo(() => {
+    if (!selectedUni || !selCurrency) return 0;
+    const r = receivables.find((r: any) => r.universityName === selectedUni && r.currency === selCurrency);
+    return r ? toNum(r.remaining) : 0;
+  }, [receivables, selectedUni, selCurrency]);
+
+  useEffect(() => {
+    if (availableCurrencies.length === 1) setSelCurrency(availableCurrencies[0]);
+    else setSelCurrency("");
+  }, [selectedUni]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filteredUnis = uniSearch
+    ? universities.filter(u => u.toLowerCase().includes(uniSearch.toLowerCase()))
+    : universities;
+
+  function resetForm() {
+    setSelectedUni(""); setSelCurrency(""); setAmount(""); setUniSearch("");
+    setDate(new Date().toISOString().split("T")[0]);
+    setReference(""); setNotes(""); setUniOpen(false);
+  }
+
+  async function save() {
+    if (!selectedUni || !selCurrency || !amount || !date) {
+      toast({ title: t("financePage.amountAndDateRequired"), variant: "destructive" }); return;
+    }
+    const num = toNum(amount);
+    if (num <= 0) { toast({ title: t("financePage.amountAndDateRequired"), variant: "destructive" }); return; }
+    if (num > remainingBalance + 0.001) {
+      toast({ title: t("financePage.exceedsRemaining"), variant: "destructive" }); return;
+    }
+    setSaving(true);
+    try {
+      const result: any = await customFetch(`${BASE}/api/finance/university-collection`, {
+        method: "POST",
+        body: JSON.stringify({
+          universityName: selectedUni,
+          currency: selCurrency,
+          amount: num,
+          transactionDate: date,
+          reference: reference || null,
+          notes: notes || null,
+        }),
+      });
+      qc.invalidateQueries({ queryKey: ["commissions"] });
+      qc.invalidateQueries({ queryKey: ["uni-receivables"] });
+      toast({
+        title: t("financePage.recordedCollection"),
+        description: t("financePage.distributedAcross", { n: result?.distributed?.length ?? 1 }),
+      });
+      resetForm();
+      onClose();
+    } catch {
+      toast({ title: t("financePage.errorSavingTransaction"), variant: "destructive" });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) { resetForm(); onClose(); } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("financePage.recordCollection")}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label>{t("financePage.selectUniversity")}</Label>
+            <Popover open={uniOpen} onOpenChange={setUniOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                  <span className="truncate">{selectedUni || t("financePage.selectUniversity")}</span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0" style={{ width: "var(--radix-popover-trigger-width)" }}>
+                <Command>
+                  <CommandInput
+                    placeholder={t("financePage.searchUniversity")}
+                    value={uniSearch}
+                    onValueChange={setUniSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>
+                      {recvLoading
+                        ? <Loader2 className="w-4 h-4 animate-spin mx-auto my-2" />
+                        : t("financePage.noUniversity")}
+                    </CommandEmpty>
+                    <CommandGroup>
+                      {filteredUnis.map(u => (
+                        <CommandItem key={u} value={u} onSelect={() => { setSelectedUni(u); setUniOpen(false); }}>
+                          <Check className={`mr-2 h-4 w-4 ${selectedUni === u ? "opacity-100" : "opacity-0"}`} />
+                          {u}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {selectedUni && (
+            <div className="space-y-1.5">
+              <Label>{t("financePage.currency")}</Label>
+              <Select value={selCurrency} onValueChange={setSelCurrency}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  {availableCurrencies.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {selectedUni && selCurrency && remainingBalance > 0 && (
+            <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 dark:bg-rose-900/20 dark:border-rose-700/40">
+              <div className="text-xs font-medium text-rose-600 dark:text-rose-400">{t("financePage.receivableRemaining")}</div>
+              <div className="text-lg font-bold text-rose-700 dark:text-rose-300">{fmt(remainingBalance, selCurrency)}</div>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label>{t("financePage.collectionAmount")}</Label>
+            <Input
+              type="number" min="0.01" step="0.01"
+              value={amount} onChange={e => setAmount(e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>{t("financePage.date")}</Label>
+            <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>{t("financePage.referenceLabel")}</Label>
+            <Input value={reference} onChange={e => setReference(e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>{t("financePage.notes")}</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => { resetForm(); onClose(); }}>{t("financePage.cancel")}</Button>
+          <Button
+            onClick={save}
+            disabled={saving || !selectedUni || !selCurrency || !amount || toNum(amount) <= 0}
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Landmark className="w-4 h-4 mr-1" />}
+            {t("financePage.recordCollection")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function FinancePage() {
   const { t } = useI18n();
   const qc = useQueryClient();
@@ -1103,6 +1297,7 @@ export default function FinancePage() {
     open: boolean; type: "collection" | "agent_payment" | "sub_agent_payment";
     commissionId?: number; commissionLabel?: string; universityName?: string;
   }>({ open: false, type: "collection" });
+  const [uniCollModal, setUniCollModal] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [commSelected, setCommSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -1613,8 +1808,8 @@ export default function FinancePage() {
                   {commExporting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Download className="w-4 h-4 mr-1" />}
                   {t("financePage.exportExcel")}
                 </Button>
-                <Button variant="outline" onClick={() => setTxModal({ open: true, type: "collection" })}>
-                  <Landmark className="w-4 h-4 mr-1" /> Record Collection
+                <Button variant="outline" onClick={() => setUniCollModal(true)}>
+                  <Landmark className="w-4 h-4 mr-1" /> {t("financePage.recordCollection")}
                 </Button>
                 <Button variant="outline" onClick={() => setTxModal({ open: true, type: "agent_payment" })}>
                   <CreditCard className="w-4 h-4 mr-1" /> Record Agent Payment
@@ -2796,6 +2991,7 @@ export default function FinancePage() {
           universityName={txModal.universityName}
         />
       )}
+      <UniversityCollectionModal open={uniCollModal} onClose={() => setUniCollModal(false)} />
     </>
   );
 }

@@ -2073,7 +2073,14 @@
     "typeToSearch": "Ketik untuk mencari siswa",
     "clearStudent": "Hapus siswa",
     "selectApplication": "Pilih lamaran",
-    "noApplication": "Tidak ada lamaran"
+    "noApplication": "Tidak ada lamaran",
+    "selectUniversity": "Pilih universitas",
+    "searchUniversity": "Cari universitas...",
+    "noUniversity": "Tidak ada universitas ditemukan",
+    "receivableRemaining": "Sisa Piutang",
+    "collectionAmount": "Jumlah Penerimaan",
+    "exceedsRemaining": "Melebihi saldo tersisa",
+    "distributedAcross": "Didistribusikan ke {n} komisi"
   },
   "studentsPage": {
     "addNewStudent": "Tambah Siswa Baru",

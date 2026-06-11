@@ -2124,7 +2124,14 @@
     "typeToSearch": "Введите для поиска",
     "clearStudent": "Убрать студента",
     "selectApplication": "Выбрать заявку",
-    "noApplication": "Без заявки"
+    "noApplication": "Без заявки",
+    "selectUniversity": "Выбрать университет",
+    "searchUniversity": "Поиск университета...",
+    "noUniversity": "Университет не найден",
+    "receivableRemaining": "Остаток к получению",
+    "collectionAmount": "Сумма оплаты",
+    "exceedsRemaining": "Превышает остаток",
+    "distributedAcross": "Распределено по {n} комиссии(-ям)"
   },
   "studentsPage": {
     "addNewStudent": "Добавить студента",

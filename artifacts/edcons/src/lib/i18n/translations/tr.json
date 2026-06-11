@@ -2306,7 +2306,14 @@
     "typeToSearch": "Öğrenci aramak için yazın",
     "clearStudent": "Öğrenciyi temizle",
     "selectApplication": "Başvuru seç",
-    "noApplication": "Başvuru yok"
+    "noApplication": "Başvuru yok",
+    "selectUniversity": "Üniversite Seç",
+    "searchUniversity": "Üniversite ara...",
+    "noUniversity": "Üniversite bulunamadı",
+    "receivableRemaining": "Kalan Alacak",
+    "collectionAmount": "Tahsilat Tutarı",
+    "exceedsRemaining": "Kalan bakiyeyi aşıyor",
+    "distributedAcross": "{n} komisyona dağıtıldı"
   },
   "studentsPage": {
     "addNewStudent": "Yeni Öğrenci Ekle",

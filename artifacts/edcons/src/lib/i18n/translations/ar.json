@@ -2124,7 +2124,14 @@
     "typeToSearch": "اكتب للبحث عن طالب",
     "clearStudent": "مسح الطالب",
     "selectApplication": "اختر الطلب",
-    "noApplication": "لا يوجد طلب"
+    "noApplication": "لا يوجد طلب",
+    "selectUniversity": "اختر الجامعة",
+    "searchUniversity": "ابحث عن الجامعة...",
+    "noUniversity": "لم يتم العثور على جامعة",
+    "receivableRemaining": "الرصيد المتبقي",
+    "collectionAmount": "مبلغ التحصيل",
+    "exceedsRemaining": "يتجاوز الرصيد المتبقي",
+    "distributedAcross": "موزع على {n} عمولة"
   },
   "studentsPage": {
     "addNewStudent": "إضافة طالب جديد",

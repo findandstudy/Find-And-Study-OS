@@ -2073,7 +2073,14 @@
     "typeToSearch": "छात्र खोजने के लिए टाइप करें",
     "clearStudent": "छात्र हटाएं",
     "selectApplication": "आवेदन चुनें",
-    "noApplication": "कोई आवेदन नहीं"
+    "noApplication": "कोई आवेदन नहीं",
+    "selectUniversity": "विश्वविद्यालय चुनें",
+    "searchUniversity": "विश्वविद्यालय खोजें...",
+    "noUniversity": "कोई विश्वविद्यालय नहीं मिला",
+    "receivableRemaining": "शेष प्राप्तियाँ",
+    "collectionAmount": "संग्रह राशि",
+    "exceedsRemaining": "शेष राशि से अधिक है",
+    "distributedAcross": "{n} कमीशन में वितरित"
   },
   "studentsPage": {
     "addNewStudent": "नया छात्र जोड़ें",

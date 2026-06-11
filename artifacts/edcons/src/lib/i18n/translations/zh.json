@@ -2073,7 +2073,14 @@
     "typeToSearch": "输入以搜索学生",
     "clearStudent": "清除学生",
     "selectApplication": "选择申请",
-    "noApplication": "无申请"
+    "noApplication": "无申请",
+    "selectUniversity": "选择大学",
+    "searchUniversity": "搜索大学...",
+    "noUniversity": "未找到大学",
+    "receivableRemaining": "剩余应收款",
+    "collectionAmount": "收款金额",
+    "exceedsRemaining": "超出剩余余额",
+    "distributedAcross": "已分配至 {n} 笔佣金"
   },
   "studentsPage": {
     "addNewStudent": "添加新学生",

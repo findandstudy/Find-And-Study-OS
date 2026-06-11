@@ -2365,7 +2365,14 @@
     "typeToSearch": "Type to search students",
     "clearStudent": "Clear student",
     "selectApplication": "Select application",
-    "noApplication": "No application"
+    "noApplication": "No application",
+    "selectUniversity": "Select University",
+    "searchUniversity": "Search university...",
+    "noUniversity": "No university found",
+    "receivableRemaining": "Remaining Receivable",
+    "collectionAmount": "Collection Amount",
+    "exceedsRemaining": "Exceeds remaining balance",
+    "distributedAcross": "Distributed across {n} commission(s)"
   },
   "studentsPage": {
     "addNewStudent": "Add New Student",

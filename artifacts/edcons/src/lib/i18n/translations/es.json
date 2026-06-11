@@ -2073,7 +2073,14 @@
     "typeToSearch": "Escriba para buscar",
     "clearStudent": "Quitar estudiante",
     "selectApplication": "Seleccionar solicitud",
-    "noApplication": "Sin solicitud"
+    "noApplication": "Sin solicitud",
+    "selectUniversity": "Seleccionar universidad",
+    "searchUniversity": "Buscar universidad...",
+    "noUniversity": "No se encontró universidad",
+    "receivableRemaining": "Saldo por cobrar",
+    "collectionAmount": "Importe del cobro",
+    "exceedsRemaining": "Supera el saldo restante",
+    "distributedAcross": "Distribuido en {n} comisión(-es)"
   },
   "studentsPage": {
     "addNewStudent": "Agregar estudiante",
