@@ -2086,7 +2086,17 @@
     "agentNoAgent": "कोई एजेंट नहीं मिला",
     "agentRemainingBalance": "शेष राशि",
     "agentPaymentExceedsBalance": "शेष राशि से अधिक",
-    "agentCurrencyLabel": "मुद्रा"
+    "agentCurrencyLabel": "मुद्रा",
+    "recordStaffCommission": "स्टाफ कमीशन दर्ज करें",
+    "staffSelectStaff": "स्टाफ सदस्य चुनें",
+    "staffSearchStaff": "स्टाफ खोजें...",
+    "staffNoStaff": "कोई स्टाफ नहीं मिला",
+    "staffRemainingBalance": "शेष राशि",
+    "staffPaymentExceedsBalance": "शेष राशि से अधिक",
+    "staffCurrencyLabel": "मुद्रा",
+    "recordedStaffPayment": "स्टाफ भुगतान दर्ज किया गया",
+    "staffPayoutsCard": "स्टाफ भुगतान",
+    "attachDocumentUrl": "दस्तावेज़ URL"
   },
   "studentsPage": {
     "addNewStudent": "नया छात्र जोड़ें",

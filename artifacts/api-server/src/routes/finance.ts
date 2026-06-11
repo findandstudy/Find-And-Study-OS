@@ -556,6 +556,141 @@ router.post("/finance/agent-payment", requireAuth, requireRole(...FINANCE_ROLES)
   res.status(201).json({ distributed, updatedRemaining: Math.max(0, totalRemaining - amount) });
 });
 
+/* ─── STAFF COMMISSION PAYABLES ─────────────────────────────── */
+
+router.get("/finance/staff-payables", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const { season } = req.query as Record<string, string>;
+
+  const rows = await db.execute<{
+    staffUserId: number;
+    staffName: string;
+    currency: string;
+    totalStaffCommission: string;
+    totalPaid: string;
+    remaining: string;
+  }>(sql`
+    SELECT
+      c.staff_user_id AS "staffUserId",
+      COALESCE(
+        NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''),
+        u.email,
+        CONCAT('Staff #', c.staff_user_id::text)
+      ) AS "staffName",
+      c.staff_commission_currency AS currency,
+      SUM(c.staff_commission_amount::numeric) AS "totalStaffCommission",
+      COALESCE(SUM(paid_sub.paid), 0) AS "totalPaid",
+      SUM(c.staff_commission_amount::numeric) - COALESCE(SUM(paid_sub.paid), 0) AS remaining
+    FROM commissions c
+    LEFT JOIN users u ON u.id = c.staff_user_id
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(p.amount::numeric), 0) AS paid
+      FROM staff_commission_payouts p
+      WHERE p.commission_id = c.id AND p.deleted_at IS NULL
+    ) paid_sub ON true
+    WHERE c.staff_user_id IS NOT NULL
+      AND c.status NOT IN ('potential', 'excluded')
+      AND c.staff_commission_amount::numeric > 0
+      ${season ? sql`AND c.season = ${season}` : sql``}
+    GROUP BY c.staff_user_id, u.first_name, u.last_name, u.email, c.staff_commission_currency
+    HAVING SUM(c.staff_commission_amount::numeric) - COALESCE(SUM(paid_sub.paid), 0) > 0.001
+    ORDER BY "staffName", c.staff_commission_currency
+  `);
+
+  res.json({ data: rows.rows });
+});
+
+const staffCommissionPaymentBodySchema = z.object({
+  staffUserId: z.number().int().positive(),
+  currency: z.string().min(1).max(10),
+  amount: z.number().positive(),
+  transactionDate: z.string().min(1),
+  reference: z.string().optional().nullable(),
+  attachmentUrl: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+router.post("/finance/staff-commission-payment", requireAuth, requireRole(...FINANCE_ROLES), validate({ body: staffCommissionPaymentBodySchema }), async (req, res): Promise<void> => {
+  const { staffUserId, currency, amount, transactionDate, reference, attachmentUrl, notes } =
+    getValidated<{ body: typeof staffCommissionPaymentBodySchema }>(req).body;
+
+  const [staffUser] = await db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName })
+    .from(usersTable).where(eq(usersTable.id, staffUserId));
+  if (!staffUser) {
+    res.status(400).json({ error: "Staff user not found" });
+    return;
+  }
+
+  const commRows = await db.select().from(commissionsTable)
+    .where(and(
+      eq(commissionsTable.staffUserId, staffUserId),
+      eq(commissionsTable.staffCommissionCurrency, currency),
+      sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full', 'settled')`,
+      sql`${commissionsTable.staffCommissionAmount}::numeric > 0`,
+    ))
+    .orderBy(asc(commissionsTable.confirmedAt), asc(commissionsTable.id));
+
+  if (commRows.length === 0) {
+    res.status(400).json({ error: "No staff commission balance for this staff/currency" });
+    return;
+  }
+
+  const commIds = commRows.map(r => r.id);
+  const payoutRows = await db.select({
+    commissionId: staffCommissionPayoutsTable.commissionId,
+    total: sql<string>`COALESCE(SUM(${staffCommissionPayoutsTable.amount}::numeric), 0)`,
+  }).from(staffCommissionPayoutsTable)
+    .where(and(
+      inArray(staffCommissionPayoutsTable.commissionId, commIds),
+      isNull(staffCommissionPayoutsTable.deletedAt),
+    ))
+    .groupBy(staffCommissionPayoutsTable.commissionId);
+
+  const payoutByComm: Record<number, number> = {};
+  for (const p of payoutRows) {
+    if (p.commissionId !== null) payoutByComm[p.commissionId] = toNum(p.total);
+  }
+
+  const eligibleRows = commRows
+    .map(r => ({ ...r, rowRemaining: toNum(r.staffCommissionAmount) - (payoutByComm[r.id] ?? 0) }))
+    .filter(r => r.rowRemaining > 0.001);
+
+  const totalRemaining = eligibleRows.reduce((s, r) => s + r.rowRemaining, 0);
+
+  if (amount > totalRemaining + 0.001) {
+    res.status(400).json({ error: "Amount exceeds remaining staff balance" });
+    return;
+  }
+
+  let toDistribute = amount;
+  const distributed: { commissionId: number; amount: number }[] = [];
+
+  for (const row of eligibleRows) {
+    if (toDistribute <= 0.001) break;
+    const take = Math.min(toDistribute, row.rowRemaining);
+    distributed.push({ commissionId: row.id, amount: parseFloat(take.toFixed(6)) });
+    toDistribute -= take;
+  }
+
+  const paidAt = new Date(transactionDate);
+  for (const d of distributed) {
+    await db.insert(staffCommissionPayoutsTable).values({
+      commissionId: d.commissionId,
+      staffUserId,
+      amount: String(d.amount),
+      currency,
+      paidAt,
+      reference: reference || null,
+      attachmentUrl: attachmentUrl || null,
+      notes: notes || null,
+      createdBy: req.user!.id,
+    });
+  }
+
+  await logAudit(req.user!.id, "create_staff_commission_payment", "staff_commission_payout", staffUserId, { staffUserId, currency, amount, count: distributed.length }, req.ip);
+
+  res.status(201).json({ distributed, updatedRemaining: Math.max(0, totalRemaining - amount) });
+});
+
 /* ─── COMMISSIONS ────────────────────────────────────────────── */
 
 const COMMISSION_PATCH_FIELDS = [

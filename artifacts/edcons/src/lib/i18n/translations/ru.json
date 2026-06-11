@@ -2137,7 +2137,17 @@
     "agentNoAgent": "Агент не найден",
     "agentRemainingBalance": "Остаток баланса",
     "agentPaymentExceedsBalance": "Превышает остаток баланса",
-    "agentCurrencyLabel": "Валюта"
+    "agentCurrencyLabel": "Валюта",
+    "recordStaffCommission": "Записать комиссию сотрудника",
+    "staffSelectStaff": "Выбрать сотрудника",
+    "staffSearchStaff": "Поиск сотрудника...",
+    "staffNoStaff": "Сотрудники не найдены",
+    "staffRemainingBalance": "Остаток баланса",
+    "staffPaymentExceedsBalance": "Превышает остаток",
+    "staffCurrencyLabel": "Валюта",
+    "recordedStaffPayment": "Платёж сотруднику записан",
+    "staffPayoutsCard": "Выплаты персоналу",
+    "attachDocumentUrl": "URL документа"
   },
   "studentsPage": {
     "addNewStudent": "Добавить студента",

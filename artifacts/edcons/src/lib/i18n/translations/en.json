@@ -2378,7 +2378,17 @@
     "agentNoAgent": "No agent found",
     "agentRemainingBalance": "Remaining Balance",
     "agentPaymentExceedsBalance": "Exceeds remaining balance",
-    "agentCurrencyLabel": "Currency"
+    "agentCurrencyLabel": "Currency",
+    "recordStaffCommission": "Record Staff Commission",
+    "staffSelectStaff": "Select staff member",
+    "staffSearchStaff": "Search staff...",
+    "staffNoStaff": "No staff found",
+    "staffRemainingBalance": "Remaining Balance",
+    "staffPaymentExceedsBalance": "Exceeds remaining balance",
+    "staffCurrencyLabel": "Currency",
+    "recordedStaffPayment": "Staff payment recorded",
+    "staffPayoutsCard": "Staff Payouts",
+    "attachDocumentUrl": "Attach Document URL"
   },
   "studentsPage": {
     "addNewStudent": "Add New Student",

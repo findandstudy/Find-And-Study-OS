@@ -2319,7 +2319,17 @@
     "agentNoAgent": "Acente bulunamadı",
     "agentRemainingBalance": "Kalan Bakiye",
     "agentPaymentExceedsBalance": "Kalan bakiyeyi aşıyor",
-    "agentCurrencyLabel": "Para Birimi"
+    "agentCurrencyLabel": "Para Birimi",
+    "recordStaffCommission": "Personel Komisyonu Kaydet",
+    "staffSelectStaff": "Personel seç",
+    "staffSearchStaff": "Personel ara...",
+    "staffNoStaff": "Personel bulunamadı",
+    "staffRemainingBalance": "Kalan Bakiye",
+    "staffPaymentExceedsBalance": "Kalan bakiyeyi aşıyor",
+    "staffCurrencyLabel": "Para Birimi",
+    "recordedStaffPayment": "Personel ödemesi kaydedildi",
+    "staffPayoutsCard": "Personel Ödemeleri",
+    "attachDocumentUrl": "Belge URL'si"
   },
   "studentsPage": {
     "addNewStudent": "Yeni Öğrenci Ekle",

@@ -2086,7 +2086,17 @@
     "agentNoAgent": "نماینده‌ای یافت نشد",
     "agentRemainingBalance": "موجودی باقی‌مانده",
     "agentPaymentExceedsBalance": "از موجودی باقی‌مانده بیشتر است",
-    "agentCurrencyLabel": "ارز"
+    "agentCurrencyLabel": "ارز",
+    "recordStaffCommission": "ثبت کمیسیون کارمند",
+    "staffSelectStaff": "انتخاب کارمند",
+    "staffSearchStaff": "جستجوی کارمند...",
+    "staffNoStaff": "کارمندی یافت نشد",
+    "staffRemainingBalance": "موجودی باقی‌مانده",
+    "staffPaymentExceedsBalance": "از موجودی باقی‌مانده بیشتر است",
+    "staffCurrencyLabel": "ارز",
+    "recordedStaffPayment": "پرداخت به کارمند ثبت شد",
+    "staffPayoutsCard": "پرداخت‌های کارمندان",
+    "attachDocumentUrl": "آدرس سند"
   },
   "studentsPage": {
     "addNewStudent": "افزودن دانشجوی جدید",

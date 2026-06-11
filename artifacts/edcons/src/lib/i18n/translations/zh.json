@@ -2086,7 +2086,17 @@
     "agentNoAgent": "未找到代理",
     "agentRemainingBalance": "剩余余额",
     "agentPaymentExceedsBalance": "超出剩余余额",
-    "agentCurrencyLabel": "货币"
+    "agentCurrencyLabel": "货币",
+    "recordStaffCommission": "记录员工佣金",
+    "staffSelectStaff": "选择员工",
+    "staffSearchStaff": "搜索员工...",
+    "staffNoStaff": "未找到员工",
+    "staffRemainingBalance": "剩余余额",
+    "staffPaymentExceedsBalance": "超过剩余余额",
+    "staffCurrencyLabel": "货币",
+    "recordedStaffPayment": "员工付款已记录",
+    "staffPayoutsCard": "员工付款",
+    "attachDocumentUrl": "文档URL"
   },
   "studentsPage": {
     "addNewStudent": "添加新学生",

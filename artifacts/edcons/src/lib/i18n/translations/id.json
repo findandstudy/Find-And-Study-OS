@@ -2086,7 +2086,17 @@
     "agentNoAgent": "Tidak ada agen ditemukan",
     "agentRemainingBalance": "Saldo tersisa",
     "agentPaymentExceedsBalance": "Melebihi saldo tersisa",
-    "agentCurrencyLabel": "Mata Uang"
+    "agentCurrencyLabel": "Mata Uang",
+    "recordStaffCommission": "Catat Komisi Staf",
+    "staffSelectStaff": "Pilih anggota staf",
+    "staffSearchStaff": "Cari staf...",
+    "staffNoStaff": "Staf tidak ditemukan",
+    "staffRemainingBalance": "Saldo tersisa",
+    "staffPaymentExceedsBalance": "Melebihi saldo tersisa",
+    "staffCurrencyLabel": "Mata Uang",
+    "recordedStaffPayment": "Pembayaran staf dicatat",
+    "staffPayoutsCard": "Pembayaran Staf",
+    "attachDocumentUrl": "URL Dokumen"
   },
   "studentsPage": {
     "addNewStudent": "Tambah Siswa Baru",

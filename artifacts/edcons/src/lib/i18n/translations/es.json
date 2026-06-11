@@ -2086,7 +2086,17 @@
     "agentNoAgent": "No se encontró agente",
     "agentRemainingBalance": "Saldo restante",
     "agentPaymentExceedsBalance": "Supera el saldo restante",
-    "agentCurrencyLabel": "Moneda"
+    "agentCurrencyLabel": "Moneda",
+    "recordStaffCommission": "Registrar comisión del personal",
+    "staffSelectStaff": "Seleccionar miembro del personal",
+    "staffSearchStaff": "Buscar personal...",
+    "staffNoStaff": "No se encontró personal",
+    "staffRemainingBalance": "Saldo restante",
+    "staffPaymentExceedsBalance": "Excede el saldo restante",
+    "staffCurrencyLabel": "Moneda",
+    "recordedStaffPayment": "Pago al personal registrado",
+    "staffPayoutsCard": "Pagos al personal",
+    "attachDocumentUrl": "URL del documento"
   },
   "studentsPage": {
     "addNewStudent": "Agregar estudiante",

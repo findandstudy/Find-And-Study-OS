@@ -2137,7 +2137,17 @@
     "agentNoAgent": "لم يُعثر على وكيل",
     "agentRemainingBalance": "الرصيد المتبقي",
     "agentPaymentExceedsBalance": "يتجاوز الرصيد المتبقي",
-    "agentCurrencyLabel": "العملة"
+    "agentCurrencyLabel": "العملة",
+    "recordStaffCommission": "تسجيل عمولة الموظف",
+    "staffSelectStaff": "اختر موظفًا",
+    "staffSearchStaff": "البحث عن موظف...",
+    "staffNoStaff": "لا يوجد موظف",
+    "staffRemainingBalance": "الرصيد المتبقي",
+    "staffPaymentExceedsBalance": "يتجاوز الرصيد المتبقي",
+    "staffCurrencyLabel": "العملة",
+    "recordedStaffPayment": "تم تسجيل دفعة الموظف",
+    "staffPayoutsCard": "مدفوعات الموظفين",
+    "attachDocumentUrl": "رابط المستند"
   },
   "studentsPage": {
     "addNewStudent": "إضافة طالب جديد",

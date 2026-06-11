@@ -2137,7 +2137,17 @@
     "agentNoAgent": "Aucun agent trouvé",
     "agentRemainingBalance": "Solde restant",
     "agentPaymentExceedsBalance": "Dépasse le solde restant",
-    "agentCurrencyLabel": "Devise"
+    "agentCurrencyLabel": "Devise",
+    "recordStaffCommission": "Enregistrer la commission du personnel",
+    "staffSelectStaff": "Sélectionner un membre du personnel",
+    "staffSearchStaff": "Rechercher du personnel...",
+    "staffNoStaff": "Aucun personnel trouvé",
+    "staffRemainingBalance": "Solde restant",
+    "staffPaymentExceedsBalance": "Dépasse le solde restant",
+    "staffCurrencyLabel": "Devise",
+    "recordedStaffPayment": "Paiement du personnel enregistré",
+    "staffPayoutsCard": "Paiements du personnel",
+    "attachDocumentUrl": "URL du document"
   },
   "studentsPage": {
     "addNewStudent": "Ajouter un étudiant",

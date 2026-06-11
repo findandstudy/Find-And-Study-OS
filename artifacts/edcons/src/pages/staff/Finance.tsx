@@ -1083,6 +1083,213 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
   );
 }
 
+function StaffCommissionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { season } = useSeason();
+
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [selStaffId, setSelStaffId] = useState<number | null>(null);
+  const [selCurrency, setSelCurrency] = useState("");
+  const [staffSearch, setStaffSearch] = useState("");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [reference, setReference] = useState("");
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setSelStaffId(null); setSelCurrency(""); setStaffSearch("");
+      setAmount(""); setDate(new Date().toISOString().split("T")[0]);
+      setReference(""); setAttachmentUrl(""); setNotes("");
+    }
+  }, [open]);
+
+  const { data: payablesData, isLoading: payablesLoading } = useQuery({
+    queryKey: ["staff-payables", season],
+    queryFn: () => customFetch<any>(`${BASE}/api/finance/staff-payables?season=${encodeURIComponent(season)}`),
+    enabled: open,
+  });
+
+  const payables: any[] = payablesData?.data || [];
+
+  const staffList = useMemo(() => {
+    const map = new Map<number, { id: number; name: string }>();
+    for (const p of payables) {
+      if (!map.has(Number(p.staffUserId))) {
+        map.set(Number(p.staffUserId), { id: Number(p.staffUserId), name: p.staffName });
+      }
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [payables]);
+
+  const filteredStaff = useMemo(() =>
+    staffSearch ? staffList.filter(s => s.name.toLowerCase().includes(staffSearch.toLowerCase())) : staffList,
+    [staffList, staffSearch]
+  );
+
+  const currencyOptions = useMemo(() =>
+    payables
+      .filter(p => Number(p.staffUserId) === selStaffId && toNum(p.remaining) > 0)
+      .map(p => ({ currency: p.currency, remaining: toNum(p.remaining) })),
+    [payables, selStaffId]
+  );
+
+  const remainingBalance = useMemo(() => {
+    const r = payables.find(p => Number(p.staffUserId) === selStaffId && p.currency === selCurrency);
+    return r ? toNum(r.remaining) : 0;
+  }, [payables, selStaffId, selCurrency]);
+
+  const selStaffName = staffList.find(s => s.id === selStaffId)?.name || "";
+
+  useEffect(() => { setSelCurrency(""); setAmount(""); }, [selStaffId]);
+  useEffect(() => { setAmount(""); }, [selCurrency]);
+
+  const numAmount = toNum(amount);
+  const exceedsBalance = numAmount > 0 && numAmount > remainingBalance + 0.001;
+
+  async function save() {
+    if (!selStaffId || !selCurrency || !amount || !date) {
+      toast({ title: t("financePage.amountAndDateRequired"), variant: "destructive" });
+      return;
+    }
+    if (exceedsBalance) return;
+    setSaving(true);
+    try {
+      const result: any = await customFetch(`${BASE}/api/finance/staff-commission-payment`, {
+        method: "POST",
+        body: JSON.stringify({
+          staffUserId: selStaffId,
+          currency: selCurrency,
+          amount: numAmount,
+          transactionDate: date,
+          reference: reference || null,
+          attachmentUrl: attachmentUrl || null,
+          notes: notes || null,
+        }),
+      });
+      qc.invalidateQueries({ queryKey: ["commissions"] });
+      qc.invalidateQueries({ queryKey: ["finance-summary"] });
+      qc.invalidateQueries({ queryKey: ["financial-transactions"] });
+      qc.invalidateQueries({ queryKey: ["staff-payables"] });
+      toast({
+        title: t("financePage.recordedStaffPayment"),
+        description: t("financePage.distributedAcross", { n: result.distributed?.length ?? 1 }),
+      });
+      onClose();
+    } catch {
+      toast({ title: t("financePage.errorSavingTransaction"), variant: "destructive" });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t("financePage.recordStaffCommission")}</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 py-2">
+          <div className="col-span-2">
+            <Label>{t("financePage.staffSelectStaff")}</Label>
+            <Popover open={staffOpen} onOpenChange={setStaffOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" aria-expanded={staffOpen}
+                  className="w-full justify-between mt-1 font-normal">
+                  {selStaffId ? selStaffName : t("financePage.staffSelectStaff")}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0" align="start">
+                <Command>
+                  <CommandInput placeholder={t("financePage.staffSearchStaff")} value={staffSearch} onValueChange={setStaffSearch} />
+                  <CommandList>
+                    {payablesLoading
+                      ? <div className="flex items-center justify-center p-4"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                      : filteredStaff.length === 0
+                        ? <CommandEmpty>{t("financePage.staffNoStaff")}</CommandEmpty>
+                        : <CommandGroup>
+                            {filteredStaff.map(s => (
+                              <CommandItem key={s.id} value={String(s.id)} onSelect={() => {
+                                setSelStaffId(s.id); setStaffOpen(false); setStaffSearch("");
+                              }}>
+                                <Check className={`mr-2 h-4 w-4 ${selStaffId === s.id ? "opacity-100" : "opacity-0"}`} />
+                                {s.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                    }
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {selStaffId !== null && (
+            <div className="col-span-2">
+              <Label>{t("financePage.staffCurrencyLabel")}</Label>
+              <Select value={selCurrency} onValueChange={setSelCurrency}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder={t("financePage.staffCurrencyLabel")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {currencyOptions.map(o => (
+                    <SelectItem key={o.currency} value={o.currency}>
+                      {o.currency} — {t("financePage.staffRemainingBalance")}: {fmt(o.remaining, o.currency)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {selStaffId !== null && selCurrency && remainingBalance > 0 && (
+            <div className="col-span-2 flex items-center gap-2 bg-amber-50 rounded-lg p-3 dark:bg-amber-900/20">
+              <span className="text-sm text-amber-600 dark:text-amber-300">{t("financePage.staffRemainingBalance")}:</span>
+              <div className="text-lg font-bold text-amber-700 dark:text-amber-300">{fmt(remainingBalance, selCurrency)}</div>
+            </div>
+          )}
+
+          <div>
+            <Label>{t("financePage.collectionAmount")}</Label>
+            <Input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0"
+              className={exceedsBalance ? "border-rose-400" : ""} />
+            {exceedsBalance && (
+              <p className="text-xs text-rose-600 mt-0.5">{t("financePage.staffPaymentExceedsBalance")}</p>
+            )}
+          </div>
+          <div>
+            <Label>{t("financePage.date")}</Label>
+            <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+
+          <div className="col-span-2">
+            <Label>{t("financePage.referenceLabel")}</Label>
+            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="PAY-2025-001" />
+          </div>
+          <div className="col-span-2">
+            <Label>{t("financePage.attachDocumentUrl")}</Label>
+            <Input value={attachmentUrl} onChange={e => setAttachmentUrl(e.target.value)} placeholder="https://..." />
+          </div>
+          <div className="col-span-2">
+            <Label>{t("financePage.notes")}</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>{t("financePage.cancel")}</Button>
+          <Button onClick={save} disabled={saving || !selStaffId || !selCurrency || !amount || exceedsBalance}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            {t("financePage.recordStaffCommission")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AgentPaymentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
@@ -1501,6 +1708,7 @@ export default function FinancePage() {
   }>({ open: false, type: "collection" });
   const [uniCollModal, setUniCollModal] = useState(false);
   const [agentPayModal, setAgentPayModal] = useState(false);
+  const [staffPayModal, setStaffPayModal] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [commSelected, setCommSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -1907,6 +2115,23 @@ export default function FinancePage() {
               ]}
             />
           )}
+          {Object.values(commByCur).some(b => toNum((b as any).totalStaffCommission) > 0) && (
+            <FinanceStatCard
+              icon={Users}
+              label={t("financePage.staffPayoutsCard")}
+              borderColor="border-t-violet-500"
+              color="text-violet-700"
+              rows={[
+                ...commRowsFor("totalStaffPayouts"),
+                ...activeCurrencies
+                  .filter(c => toNum((commByCur[c] || {}).staffPayable) > 0)
+                  .map(c => ({
+                    label: `${c} (${t("financePage.remaining")})`,
+                    value: fmt(toNum((commByCur[c] || {}).staffPayable), c),
+                  })),
+              ]}
+            />
+          )}
         </div>
 
         {offSummary.availableForOffset > 0 && (
@@ -2016,6 +2241,9 @@ export default function FinancePage() {
                 </Button>
                 <Button variant="outline" onClick={() => setAgentPayModal(true)}>
                   <CreditCard className="w-4 h-4 mr-1" /> {t("financePage.recordAgentPayment")}
+                </Button>
+                <Button variant="outline" onClick={() => setStaffPayModal(true)}>
+                  <Users className="w-4 h-4 mr-1" /> {t("financePage.recordStaffCommission")}
                 </Button>
                 <Button onClick={() => setCommModal({ open: true })}>
                   <Plus className="w-4 h-4 mr-1" /> New Commission
@@ -3196,6 +3424,7 @@ export default function FinancePage() {
       )}
       <UniversityCollectionModal open={uniCollModal} onClose={() => setUniCollModal(false)} />
       <AgentPaymentModal open={agentPayModal} onClose={() => setAgentPayModal(false)} />
+      <StaffCommissionModal open={staffPayModal} onClose={() => setStaffPayModal(false)} />
     </>
   );
 }
