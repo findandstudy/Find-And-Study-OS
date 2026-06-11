@@ -3261,20 +3261,20 @@ export default function FinancePage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <PiggyBank className="w-4 h-4 text-emerald-600" /> Cash Flow Summary
+                    <PiggyBank className="w-4 h-4 text-emerald-600" /> {t("financePage.cashFlowSummary")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className={`grid ${toNum(summary?.commissions?.totalSubAgentCommission) > 0 ? "grid-cols-3" : "grid-cols-2"} gap-3`}>
+                    <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-center">
-                        <p className="text-xs text-blue-600 font-medium uppercase">Inflow (Collected)</p>
+                        <p className="text-xs text-blue-600 font-medium uppercase">{t("financePage.inflowCollected")}</p>
                         <p className="text-lg font-bold text-blue-700">
                           {fmt(summary?.commissions?.totalUniversityCollected || 0)}
                         </p>
                       </div>
                       <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-center">
-                        <p className="text-xs text-amber-600 font-medium uppercase">Outflow (Agent Paid)</p>
+                        <p className="text-xs text-amber-600 font-medium uppercase">{t("financePage.outflowAgentPaid")}</p>
                         <p className="text-lg font-bold text-amber-700">
                           {fmt(summary?.commissions?.totalAgentPaid || 0)}
                         </p>
@@ -3284,6 +3284,14 @@ export default function FinancePage() {
                           <p className="text-xs text-purple-600 font-medium uppercase">{t("financePage.subAgentPaid")}</p>
                           <p className="text-lg font-bold text-purple-700">
                             {fmt(summary?.commissions?.totalSubAgentPaid || 0)}
+                          </p>
+                        </div>
+                      )}
+                      {toNum(summary?.commissions?.totalStaffPayouts) > 0 && (
+                        <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-center">
+                          <p className="text-xs text-rose-600 font-medium uppercase">{t("financePage.staffCommPaid")}</p>
+                          <p className="text-lg font-bold text-rose-700">
+                            {fmt(summary?.commissions?.totalStaffPayouts || 0)}
                           </p>
                         </div>
                       )}
@@ -3299,24 +3307,36 @@ export default function FinancePage() {
                     <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
                       <p className="text-xs text-emerald-600 font-medium uppercase">{t("financePage.netCashPosition")}</p>
                       <p className="text-2xl font-bold text-emerald-700">
-                        {fmt((toNum(summary?.commissions?.totalUniversityCollected) + toNum(summary?.serviceFees?.collected)) - toNum(summary?.commissions?.totalAgentPaid) - toNum(staffBonusGlobal?.totalPaid))}
+                        {fmt(
+                          (toNum(summary?.commissions?.totalUniversityCollected) + toNum(summary?.serviceFees?.collected))
+                          - toNum(summary?.commissions?.totalAgentPaid)
+                          - toNum(summary?.commissions?.totalSubAgentPaid)
+                          - toNum(summary?.commissions?.totalStaffPayouts)
+                          - toNum(staffBonusGlobal?.totalPaid)
+                        )}
                       </p>
                       <p className="text-xs text-emerald-500 mt-1">{t("financePage.includesServiceFee")}</p>
                     </div>
 
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Expected (Unconfirmed)</span>
+                        <span className="text-slate-500">{t("financePage.expectedUnconfirmed")}</span>
                         <span className="text-slate-700">{fmt(summary?.commissions?.totalUniversityCommission ? (toNum(summary.commissions.totalUniversityCommission) - toNum(summary.commissions.totalUniversityCollected)) : 0)}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Agent Payable</span>
+                        <span className="text-slate-500">{t("financePage.agentPayable")}</span>
                         <span className="text-slate-700">{fmt(summary?.commissions?.totalAgentPending || 0)}</span>
                       </div>
                       {toNum(summary?.commissions?.totalSubAgentCommission) > 0 && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-slate-500">Sub Agent Payable</span>
+                          <span className="text-slate-500">{t("financePage.subAgentPayable")}</span>
                           <span className="text-purple-700">{fmt(toNum(summary?.commissions?.totalSubAgentCommission) - toNum(summary?.commissions?.totalSubAgentPaid))}</span>
+                        </div>
+                      )}
+                      {toNum(summary?.commissions?.staffPayable) > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-500">{t("financePage.staffPayoutsCard")}</span>
+                          <span className="text-rose-700">{fmt(summary?.commissions?.staffPayable)}</span>
                         </div>
                       )}
                       {toNum(staffBonusGlobal?.totalPending) > 0 && (
@@ -3326,7 +3346,7 @@ export default function FinancePage() {
                         </div>
                       )}
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Service Fee Pending</span>
+                        <span className="text-slate-500">{t("financePage.serviceFeePending")}</span>
                         <span className="text-slate-700">{fmt(toNum(summary?.serviceFees?.total) - toNum(summary?.serviceFees?.collected))}</span>
                       </div>
                     </div>
@@ -3337,12 +3357,12 @@ export default function FinancePage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-indigo-600" /> Top Universities by Commission
+                    <Building2 className="w-4 h-4 text-indigo-600" /> {t("financePage.topUniversitiesByCommission")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {uniBreakdown.length === 0 ? (
-                    <p className="text-sm text-slate-400 text-center py-4">No data</p>
+                    <p className="text-sm text-slate-400 text-center py-4">{t("financePage.noDataShort")}</p>
                   ) : (
                     <div className="space-y-3">
                       {uniBreakdown.slice(0, 5).map((u: any, i: number) => (
@@ -3353,8 +3373,8 @@ export default function FinancePage() {
                           </div>
                           <ProgressBar value={u.totalCommission} max={uniBreakdown[0]?.totalCommission || 1} color="bg-indigo-500" />
                           <div className="flex justify-between text-xs text-slate-400 mt-0.5">
-                            <span>{u.commissionCount} students</span>
-                            <span>Net: {fmt(u.netIncome)}</span>
+                            <span>{t("financePage.studentsCount", { count: u.commissionCount })}</span>
+                            <span>{t("financePage.netLabel", { value: fmt(u.netIncome) })}</span>
                           </div>
                         </div>
                       ))}
