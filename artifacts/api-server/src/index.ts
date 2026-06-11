@@ -1018,6 +1018,27 @@ async function seedClaudeIntegration() {
     console.error("[migrate] revoke agent_staff/sub_agent sessions:", err);
   }
 
+  // Step 2b4: Dashboard FAZ 1 — entity_view_events table for per-entity view
+  // tracking (leadsViewed/studentsViewed/applicationsViewed/messagesViewed).
+  // Indexes: (userId, viewedAt) and (entityType, viewedAt).
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS entity_view_events (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        viewed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS entity_view_events_user_viewed_at_idx ON entity_view_events(user_id, viewed_at)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS entity_view_events_entity_type_viewed_at_idx ON entity_view_events(entity_type, viewed_at)`);
+  } catch (err) {
+    console.error("[migrate] entity_view_events:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

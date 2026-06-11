@@ -1946,6 +1946,67 @@ export const GetOverviewStatsResponse = zod.object({
 });
 
 /**
+ * @summary Get Kommo-style CRM summary metrics
+ */
+
+export const GetKommoSummaryQueryParams = zod.object({
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+  staffId: zod.coerce.number().min(1).optional(),
+});
+
+export const GetKommoSummaryResponse = zod.object({
+  avgReplyTime: zod
+    .number()
+    .describe("Average reply time in seconds (0 if no data)"),
+  medianReplyTime: zod
+    .number()
+    .describe("Median reply time in seconds (0 if no data)"),
+  activeLeads: zod.number(),
+  wonLeads: zod.number(),
+  lostLeads: zod.number(),
+  incomingMessages: zod.number(),
+  outgoingMessages: zod.number(),
+});
+
+/**
+ * @summary Record an entity view event (5-min dedup)
+ */
+
+export const RecordEntityViewBody = zod.object({
+  entityType: zod.enum(["lead", "student", "application", "message_thread"]),
+  entityId: zod.number().min(1),
+});
+
+export const RecordEntityViewResponse = zod.object({
+  ok: zod.boolean(),
+  deduplicated: zod.boolean(),
+});
+
+/**
+ * @summary Get entity view counts + session durations for a time range
+ */
+export const getActivitySummaryQueryRangeDefault = `daily`;
+
+export const GetActivitySummaryQueryParams = zod.object({
+  range: zod
+    .enum(["daily", "weekly", "monthly", "yearly"])
+    .default(getActivitySummaryQueryRangeDefault),
+  staffId: zod.coerce.number().min(1).optional(),
+});
+
+export const GetActivitySummaryResponse = zod.object({
+  range: zod.enum(["daily", "weekly", "monthly", "yearly"]),
+  leadsViewed: zod.number(),
+  studentsViewed: zod.number(),
+  applicationsViewed: zod.number(),
+  messagesViewed: zod.number(),
+  activeDurationSeconds: zod.number(),
+  idleDurationSeconds: zod.number(),
+  totalDurationSeconds: zod.number(),
+});
+
+/**
  * @summary List university contracts (admin)
  */
 export const listUniversityContractsQueryPageDefault = 1;

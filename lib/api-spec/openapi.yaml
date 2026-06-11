@@ -1718,6 +1718,73 @@ paths:
               schema:
                 $ref: "#/components/schemas/OverviewStats"
 
+  /stats/kommo-summary:
+    get:
+      operationId: getKommoSummary
+      tags: [settings]
+      summary: Get Kommo-style CRM summary metrics
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: staffId, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Kommo summary metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KommoSummary"
+
+  /v1/activity/view:
+    post:
+      operationId: recordEntityView
+      tags: [activity]
+      summary: Record an entity view event (5-min dedup)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordEntityViewBody"
+      responses:
+        "201":
+          description: View recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordEntityViewResponse"
+        "200":
+          description: Deduplicated (already recorded in last 5 min)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordEntityViewResponse"
+
+  /v1/activity/summary:
+    get:
+      operationId: getActivitySummary
+      tags: [activity]
+      summary: Get entity view counts + session durations for a time range
+      parameters:
+        - name: range
+          in: query
+          schema:
+            type: string
+            enum: [daily, weekly, monthly, yearly]
+            default: daily
+        - name: staffId
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Activity summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivitySummary"
+
   /university-contracts:
     get:
       operationId: listUniversityContracts
@@ -4271,6 +4338,51 @@ components:
       required:
         - title
         - scheduledAt
+
+    KommoSummary:
+      type: object
+      properties:
+        avgReplyTime: { type: integer, description: "Average reply time in seconds (0 if no data)" }
+        medianReplyTime: { type: integer, description: "Median reply time in seconds (0 if no data)" }
+        activeLeads: { type: integer }
+        wonLeads: { type: integer }
+        lostLeads: { type: integer }
+        incomingMessages: { type: integer }
+        outgoingMessages: { type: integer }
+      required: [avgReplyTime, medianReplyTime, activeLeads, wonLeads, lostLeads, incomingMessages, outgoingMessages]
+
+    RecordEntityViewBody:
+      type: object
+      properties:
+        entityType:
+          type: string
+          enum: [lead, student, application, message_thread]
+        entityId:
+          type: integer
+          minimum: 1
+      required: [entityType, entityId]
+
+    RecordEntityViewResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        deduplicated: { type: boolean }
+      required: [ok, deduplicated]
+
+    ActivitySummary:
+      type: object
+      properties:
+        range:
+          type: string
+          enum: [daily, weekly, monthly, yearly]
+        leadsViewed: { type: integer }
+        studentsViewed: { type: integer }
+        applicationsViewed: { type: integer }
+        messagesViewed: { type: integer }
+        activeDurationSeconds: { type: integer }
+        idleDurationSeconds: { type: integer }
+        totalDurationSeconds: { type: integer }
+      required: [range, leadsViewed, studentsViewed, applicationsViewed, messagesViewed, activeDurationSeconds, idleDurationSeconds, totalDurationSeconds]
 
     AddInboxConversationTaskResponse:
       type: object

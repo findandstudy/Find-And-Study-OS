@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  ActivitySummary,
   AddInboxConversationNoteBody,
   AddInboxConversationNoteResponse,
   AddInboxConversationTaskBody,
@@ -48,15 +49,18 @@ import type {
   Document,
   DocumentExtraction,
   ErrorResponse,
+  GetActivitySummaryParams,
   GetBlogPostParams,
   GetFinanceSummary200,
   GetFinanceSummaryParams,
+  GetKommoSummaryParams,
   GetOverviewStatsParams,
   GetUniversityContract200,
   HealthStatus,
   InboxConversationDetailResponse,
   Invoice,
   InvoicesListResponse,
+  KommoSummary,
   Lead,
   LeadsListResponse,
   ListAgentsParams,
@@ -82,6 +86,8 @@ import type {
   Program,
   ProgramsListResponse,
   PublicLeadBody,
+  RecordEntityViewBody,
+  RecordEntityViewResponse,
   ServiceFee,
   Settings,
   Student,
@@ -6803,6 +6809,283 @@ export function useGetOverviewStats<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetOverviewStatsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get Kommo-style CRM summary metrics
+ */
+export const getGetKommoSummaryUrl = (params?: GetKommoSummaryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/stats/kommo-summary?${stringifiedParams}`
+    : `/api/stats/kommo-summary`;
+};
+
+export const getKommoSummary = async (
+  params?: GetKommoSummaryParams,
+  options?: RequestInit,
+): Promise<KommoSummary> => {
+  return customFetch<KommoSummary>(getGetKommoSummaryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetKommoSummaryQueryKey = (params?: GetKommoSummaryParams) => {
+  return [`/api/stats/kommo-summary`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetKommoSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getKommoSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetKommoSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getKommoSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetKommoSummaryQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getKommoSummary>>> = ({
+    signal,
+  }) => getKommoSummary(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getKommoSummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetKommoSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getKommoSummary>>
+>;
+export type GetKommoSummaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get Kommo-style CRM summary metrics
+ */
+
+export function useGetKommoSummary<
+  TData = Awaited<ReturnType<typeof getKommoSummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetKommoSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getKommoSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetKommoSummaryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record an entity view event (5-min dedup)
+ */
+export const getRecordEntityViewUrl = () => {
+  return `/api/v1/activity/view`;
+};
+
+export const recordEntityView = async (
+  recordEntityViewBody: RecordEntityViewBody,
+  options?: RequestInit,
+): Promise<RecordEntityViewResponse> => {
+  return customFetch<RecordEntityViewResponse>(getRecordEntityViewUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(recordEntityViewBody),
+  });
+};
+
+export const getRecordEntityViewMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordEntityView>>,
+    TError,
+    { data: BodyType<RecordEntityViewBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recordEntityView>>,
+  TError,
+  { data: BodyType<RecordEntityViewBody> },
+  TContext
+> => {
+  const mutationKey = ["recordEntityView"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordEntityView>>,
+    { data: BodyType<RecordEntityViewBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return recordEntityView(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecordEntityViewMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recordEntityView>>
+>;
+export type RecordEntityViewMutationBody = BodyType<RecordEntityViewBody>;
+export type RecordEntityViewMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record an entity view event (5-min dedup)
+ */
+export const useRecordEntityView = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordEntityView>>,
+    TError,
+    { data: BodyType<RecordEntityViewBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordEntityView>>,
+  TError,
+  { data: BodyType<RecordEntityViewBody> },
+  TContext
+> => {
+  return useMutation(getRecordEntityViewMutationOptions(options));
+};
+
+/**
+ * @summary Get entity view counts + session durations for a time range
+ */
+export const getGetActivitySummaryUrl = (params?: GetActivitySummaryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/activity/summary?${stringifiedParams}`
+    : `/api/v1/activity/summary`;
+};
+
+export const getActivitySummary = async (
+  params?: GetActivitySummaryParams,
+  options?: RequestInit,
+): Promise<ActivitySummary> => {
+  return customFetch<ActivitySummary>(getGetActivitySummaryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetActivitySummaryQueryKey = (
+  params?: GetActivitySummaryParams,
+) => {
+  return [`/api/v1/activity/summary`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetActivitySummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getActivitySummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetActivitySummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getActivitySummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetActivitySummaryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getActivitySummary>>
+  > = ({ signal }) => getActivitySummary(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getActivitySummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetActivitySummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getActivitySummary>>
+>;
+export type GetActivitySummaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get entity view counts + session durations for a time range
+ */
+
+export function useGetActivitySummary<
+  TData = Awaited<ReturnType<typeof getActivitySummary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetActivitySummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getActivitySummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetActivitySummaryQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

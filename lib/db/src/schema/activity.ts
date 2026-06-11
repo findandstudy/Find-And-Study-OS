@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, boolean, jsonb, real } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean, jsonb, real, index } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const userSessionsTable = pgTable("user_sessions_activity", {
@@ -52,3 +52,21 @@ export type UserSessionActivity = typeof userSessionsTable.$inferSelect;
 export type UserPageVisit = typeof userPageVisitsTable.$inferSelect;
 export type UserActivityEvent = typeof userActivityEventsTable.$inferSelect;
 export type UserPresence = typeof userPresenceTable.$inferSelect;
+
+export const ENTITY_VIEW_TYPES = ["lead", "student", "application", "message_thread"] as const;
+export type EntityViewType = (typeof ENTITY_VIEW_TYPES)[number];
+
+export const entityViewEventsTable = pgTable("entity_view_events", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  entityType: text("entity_type").notNull().$type<EntityViewType>(),
+  entityId: integer("entity_id").notNull(),
+  viewedAt: timestamp("viewed_at", { withTimezone: true }).notNull().defaultNow(),
+  agentId: integer("agent_id").references(() => usersTable.id, { onDelete: "set null" }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+}, (table) => [
+  index("entity_view_events_user_viewed_at_idx").on(table.userId, table.viewedAt),
+  index("entity_view_events_entity_type_viewed_at_idx").on(table.entityType, table.viewedAt),
+]);
+
+export type EntityViewEvent = typeof entityViewEventsTable.$inferSelect;

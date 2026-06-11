@@ -1,10 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, applicationsTable, agentsTable, documentsTable, commissionsTable, pipelineStagesTable } from "@workspace/db";
-import { sql, eq, and, isNull, inArray, or } from "drizzle-orm";
+import { db, leadsTable, studentsTable, applicationsTable, agentsTable, documentsTable, commissionsTable, pipelineStagesTable, messagesTable, conversationsTable } from "@workspace/db";
+import { sql, eq, and, isNull, inArray, or, gte, ne, notInArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
-import { isAgentRole } from "../lib/roles";
+import { isAgentRole, isAdminRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { z } from "zod";
+import { validate, getValidated } from "../middlewares/validate";
 
 const router: IRouter = Router();
 
@@ -227,6 +229,125 @@ router.get("/stats/growth", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_RO
   }));
 
   res.json(result);
+});
+
+const kommoQuerySchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  staffId: z.coerce.number().int().positive().optional(),
+});
+
+router.get("/stats/kommo-summary", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), validate({ query: kommoQuerySchema }), async (req, res): Promise<void> => {
+  const user = req.user!;
+  const { from: fromStr, to: toStr, staffId: rawStaffId } = getValidated<{ query: typeof kommoQuerySchema }>(req).query;
+
+  const to = toStr ? new Date(toStr) : new Date();
+  const from = fromStr ? new Date(fromStr) : new Date(new Date().setHours(0, 0, 0, 0));
+  if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+    res.status(400).json({ error: "Invalid from/to date" });
+    return;
+  }
+
+  const isAdmin = isAdminRole(user.role);
+  const isAgent = isAgentRole(user.role);
+
+  let staffFilter: number | null = null;
+  let agentIds: number[] = [];
+
+  if (isAdmin) {
+    staffFilter = rawStaffId ?? null;
+  } else if (isAgent) {
+    agentIds = await getAgentVisibleIds(user.id, user.role);
+    if (agentIds.length === 0) {
+      res.json({ avgReplyTime: 0, medianReplyTime: 0, activeLeads: 0, wonLeads: 0, lostLeads: 0, incomingMessages: 0, outgoingMessages: 0 });
+      return;
+    }
+  } else {
+    staffFilter = rawStaffId && isAdmin ? rawStaffId : user.id;
+  }
+
+  const dateFrom = from.toISOString();
+  const dateTo = to.toISOString();
+
+  const wonLeadStatus = "won";
+  const lostLeadStatus = "lost";
+
+  let leadWhere = isNull(leadsTable.deletedAt);
+  let leadWhereWon = and(isNull(leadsTable.deletedAt), eq(leadsTable.status, wonLeadStatus));
+  let leadWhereLost = and(isNull(leadsTable.deletedAt), eq(leadsTable.status, lostLeadStatus));
+  let leadWhereActive = and(isNull(leadsTable.deletedAt), ne(leadsTable.status, wonLeadStatus), ne(leadsTable.status, lostLeadStatus));
+
+  if (isAgent) {
+    const agentFilter = inArray(leadsTable.agentId, agentIds);
+    leadWhere = and(isNull(leadsTable.deletedAt), agentFilter)!;
+    leadWhereWon = and(isNull(leadsTable.deletedAt), agentFilter, eq(leadsTable.status, wonLeadStatus))!;
+    leadWhereLost = and(isNull(leadsTable.deletedAt), agentFilter, eq(leadsTable.status, lostLeadStatus))!;
+    leadWhereActive = and(isNull(leadsTable.deletedAt), agentFilter, ne(leadsTable.status, wonLeadStatus), ne(leadsTable.status, lostLeadStatus))!;
+  } else if (staffFilter !== null) {
+    leadWhere = and(isNull(leadsTable.deletedAt), eq(leadsTable.assignedToId, staffFilter))!;
+    leadWhereWon = and(isNull(leadsTable.deletedAt), eq(leadsTable.assignedToId, staffFilter), eq(leadsTable.status, wonLeadStatus))!;
+    leadWhereLost = and(isNull(leadsTable.deletedAt), eq(leadsTable.assignedToId, staffFilter), eq(leadsTable.status, lostLeadStatus))!;
+    leadWhereActive = and(isNull(leadsTable.deletedAt), eq(leadsTable.assignedToId, staffFilter), ne(leadsTable.status, wonLeadStatus), ne(leadsTable.status, lostLeadStatus))!;
+  }
+
+  const [[{ active }], [{ won }], [{ lost }]] = await Promise.all([
+    db.select({ active: sql<number>`count(*)` }).from(leadsTable).where(leadWhereActive),
+    db.select({ won: sql<number>`count(*)` }).from(leadsTable).where(leadWhereWon),
+    db.select({ lost: sql<number>`count(*)` }).from(leadsTable).where(leadWhereLost),
+  ]);
+
+  let msgConvWhere: any = sql`created_at >= ${dateFrom} AND created_at <= ${dateTo}`;
+  if (staffFilter !== null) {
+    msgConvWhere = and(sql`created_at >= ${dateFrom} AND created_at <= ${dateTo}`, eq(messagesTable.senderId, staffFilter));
+  }
+
+  const convDateFilter = sql`last_message_at >= ${dateFrom} AND last_message_at <= ${dateTo}`;
+  let convWhere: any = convDateFilter;
+  if (staffFilter !== null) {
+    convWhere = and(convDateFilter, eq(conversationsTable.assignedToId, staffFilter));
+  } else if (isAgent && agentIds.length > 0) {
+    convWhere = and(convDateFilter, inArray(conversationsTable.createdById, agentIds));
+  }
+
+  const [msgCounts] = await db.select({
+    incoming: sql<number>`coalesce(sum(case when direction='inbound' then 1 else 0 end),0)`,
+    outgoing: sql<number>`coalesce(sum(case when direction='outbound' then 1 else 0 end),0)`,
+  }).from(messagesTable).where(sql`created_at >= ${dateFrom} AND created_at <= ${dateTo}`);
+
+  const replyRows = await db.execute<{ reply_seconds: string | null }>(sql`
+    WITH reply_pairs AS (
+      SELECT
+        m_in.id AS inbound_id,
+        EXTRACT(EPOCH FROM (MIN(m_out.created_at) - m_in.created_at)) AS reply_seconds
+      FROM messages m_in
+      JOIN messages m_out
+        ON m_out.conversation_id = m_in.conversation_id
+        AND m_out.created_at > m_in.created_at
+        AND m_out.direction = 'outbound'
+      WHERE m_in.direction = 'inbound'
+        AND m_in.created_at >= ${from}
+        AND m_in.created_at <= ${to}
+      GROUP BY m_in.id, m_in.created_at
+    )
+    SELECT
+      AVG(reply_seconds) AS avg_reply_seconds,
+      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY reply_seconds) AS median_reply_seconds
+    FROM reply_pairs
+  `);
+
+  const replyRow = ((replyRows as any).rows ?? (replyRows as any))?.[0] ?? {};
+  const avgReplyTime = replyRow.avg_reply_seconds != null ? Math.round(Number(replyRow.avg_reply_seconds)) : 0;
+  const medianReplyTime = replyRow.median_reply_seconds != null ? Math.round(Number(replyRow.median_reply_seconds)) : 0;
+
+  res.json({
+    avgReplyTime,
+    medianReplyTime,
+    activeLeads: Number(active),
+    wonLeads: Number(won),
+    lostLeads: Number(lost),
+    incomingMessages: Number(msgCounts?.incoming ?? 0),
+    outgoingMessages: Number(msgCounts?.outgoing ?? 0),
+  });
 });
 
 export default router;

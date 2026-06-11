@@ -1542,6 +1542,60 @@ export interface AddInboxConversationTaskBody {
   notes?: string;
 }
 
+export interface KommoSummary {
+  /** Average reply time in seconds (0 if no data) */
+  avgReplyTime: number;
+  /** Median reply time in seconds (0 if no data) */
+  medianReplyTime: number;
+  activeLeads: number;
+  wonLeads: number;
+  lostLeads: number;
+  incomingMessages: number;
+  outgoingMessages: number;
+}
+
+export type RecordEntityViewBodyEntityType =
+  (typeof RecordEntityViewBodyEntityType)[keyof typeof RecordEntityViewBodyEntityType];
+
+export const RecordEntityViewBodyEntityType = {
+  lead: "lead",
+  student: "student",
+  application: "application",
+  message_thread: "message_thread",
+} as const;
+
+export interface RecordEntityViewBody {
+  entityType: RecordEntityViewBodyEntityType;
+  /** @minimum 1 */
+  entityId: number;
+}
+
+export interface RecordEntityViewResponse {
+  ok: boolean;
+  deduplicated: boolean;
+}
+
+export type ActivitySummaryRange =
+  (typeof ActivitySummaryRange)[keyof typeof ActivitySummaryRange];
+
+export const ActivitySummaryRange = {
+  daily: "daily",
+  weekly: "weekly",
+  monthly: "monthly",
+  yearly: "yearly",
+} as const;
+
+export interface ActivitySummary {
+  range: ActivitySummaryRange;
+  leadsViewed: number;
+  studentsViewed: number;
+  applicationsViewed: number;
+  messagesViewed: number;
+  activeDurationSeconds: number;
+  idleDurationSeconds: number;
+  totalDurationSeconds: number;
+}
+
 export interface AddInboxConversationTaskResponse {
   data: FollowUp;
 }
@@ -1688,6 +1742,33 @@ export type ListAuditLogsParams = {
 export type GetOverviewStatsParams = {
   season?: string;
 };
+
+export type GetKommoSummaryParams = {
+  from?: string;
+  to?: string;
+  /**
+   * @minimum 1
+   */
+  staffId?: number;
+};
+
+export type GetActivitySummaryParams = {
+  range?: GetActivitySummaryRange;
+  /**
+   * @minimum 1
+   */
+  staffId?: number;
+};
+
+export type GetActivitySummaryRange =
+  (typeof GetActivitySummaryRange)[keyof typeof GetActivitySummaryRange];
+
+export const GetActivitySummaryRange = {
+  daily: "daily",
+  weekly: "weekly",
+  monthly: "monthly",
+  yearly: "yearly",
+} as const;
 
 export type ListUniversityContractsParams = {
   country?: string;
