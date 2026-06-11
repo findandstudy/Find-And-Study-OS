@@ -2112,7 +2112,10 @@
     "agentNameLabel": "Имя агента",
     "subAgentNameLabel": "Имя субагента",
     "attachDocument": "Прикрепить документ",
-    "collectionPct": "% сбора"
+    "collectionPct": "% сбора",
+    "staffCommission": "Комиссия сотрудника",
+    "clear": "Сбросить",
+    "filterActive": "Фильтр активен"
   },
   "studentsPage": {
     "addNewStudent": "Добавить студента",

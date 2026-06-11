@@ -2061,7 +2061,10 @@
     "agentNameLabel": "代理姓名",
     "subAgentNameLabel": "子代理姓名",
     "attachDocument": "附加文件",
-    "collectionPct": "收款%"
+    "collectionPct": "收款%",
+    "staffCommission": "员工佣金",
+    "clear": "清除",
+    "filterActive": "筛选器已激活"
   },
   "studentsPage": {
     "addNewStudent": "添加新学生",

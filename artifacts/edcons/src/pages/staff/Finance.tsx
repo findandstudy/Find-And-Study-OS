@@ -990,9 +990,10 @@ export default function FinancePage() {
         case "univComm": return dir * (toNum(a.universityCommissionAmount) - toNum(b.universityCommissionAmount));
         case "agentComm": return dir * (toNum(a.agentCommissionAmount) - toNum(b.agentCommissionAmount));
         case "saComm": return dir * (toNum(a.subAgentCommissionAmount) - toNum(b.subAgentCommissionAmount));
+        case "staffComm": return dir * (toNum(a.staffCommissionAmount) - toNum(b.staffCommissionAmount));
         case "netIncome": {
-          const netA = toNum(a.universityCommissionAmount) - toNum(a.agentCommissionAmount);
-          const netB = toNum(b.universityCommissionAmount) - toNum(b.agentCommissionAmount);
+          const netA = toNum(a.universityCommissionAmount) - toNum(a.agentCommissionAmount) - toNum(a.subAgentCommissionAmount) - toNum(a.staffCommissionAmount);
+          const netB = toNum(b.universityCommissionAmount) - toNum(b.agentCommissionAmount) - toNum(b.subAgentCommissionAmount) - toNum(b.staffCommissionAmount);
           return dir * (netA - netB);
         }
         case "collection": return dir * (toNum(a.universityCollected) - toNum(b.universityCollected));
@@ -1448,13 +1449,18 @@ export default function FinancePage() {
                         { key: "univComm", label: t("financePage.univCommission"), align: "text-right" },
                         { key: "agentComm", label: t("financePage.agentCommission"), align: "text-right" },
                         { key: "saComm", label: t("financePage.saCommission"), align: "text-right" },
+                        { key: "staffComm", label: t("financePage.staffCommission"), align: "text-right" },
                         { key: "netIncome", label: t("financePage.netIncome"), align: "text-right" },
                         { key: "collection", label: t("financePage.collection"), align: "text-center" },
                         { key: "status", label: t("financePage.statusLabel"), align: "text-center" },
                       ] as const).map(col => {
                         const active = commSort.key === col.key;
                         const isStatus = col.key === "status";
+                        const isAgent = col.key === "agent";
+                        const isStaff = col.key === "staff";
                         const statusFilterActive = commStatus !== "all";
+                        const agentFilterActive = commAgentId !== "all";
+                        const staffFilterActive = commStaffId !== "all";
                         return (
                           <th
                             key={col.key}
@@ -1467,12 +1473,88 @@ export default function FinancePage() {
                               <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => handleCommSort(col.key)}>
                                 {active ? (commSort.dir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3" />}
                               </button>
+                              {isAgent && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      title={agentFilterActive ? t("financePage.filterActive") : t("financePage.agentFilter")}
+                                      className={`relative inline-flex items-center justify-center transition-colors ${agentFilterActive ? "text-primary" : "text-slate-400 hover:text-slate-700"}`}
+                                    >
+                                      <FilterIcon className={`w-3 h-3 ${agentFilterActive ? "fill-primary/20" : ""}`} />
+                                      {agentFilterActive && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />
+                                      )}
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent align="start" className="w-56 p-3">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">{t("financePage.agent")}</Label>
+                                        {agentFilterActive && (
+                                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setCommAgentId("all")}>
+                                            <X className="w-3 h-3 mr-1" />{t("financePage.clear")}
+                                          </Button>
+                                        )}
+                                      </div>
+                                      <Select value={commAgentId} onValueChange={setCommAgentId}>
+                                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="all">{t("financePage.agentFilter")}</SelectItem>
+                                          {filterAgents.map((a: any) => (
+                                            <SelectItem key={a.id} value={String(a.id)}>{a.name || `Agent #${a.id}`}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                              {isStaff && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      title={staffFilterActive ? t("financePage.filterActive") : t("financePage.staffFilter")}
+                                      className={`relative inline-flex items-center justify-center transition-colors ${staffFilterActive ? "text-primary" : "text-slate-400 hover:text-slate-700"}`}
+                                    >
+                                      <FilterIcon className={`w-3 h-3 ${staffFilterActive ? "fill-primary/20" : ""}`} />
+                                      {staffFilterActive && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />
+                                      )}
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent align="start" className="w-56 p-3">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">{t("financePage.staff")}</Label>
+                                        {staffFilterActive && (
+                                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setCommStaffId("all")}>
+                                            <X className="w-3 h-3 mr-1" />{t("financePage.clear")}
+                                          </Button>
+                                        )}
+                                      </div>
+                                      <Select value={commStaffId} onValueChange={setCommStaffId}>
+                                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="all">{t("financePage.staffFilter")}</SelectItem>
+                                          {filterStaff.map((u: any) => (
+                                            <SelectItem key={u.id} value={String(u.id)}>
+                                              {[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
                               {isStatus && (
                                 <Popover>
                                   <PopoverTrigger asChild>
                                     <button
                                       type="button"
-                                      title={statusFilterActive ? "Filter active — click to edit" : "Filter"}
+                                      title={statusFilterActive ? t("financePage.filterActive") : t("financePage.statusLabel")}
                                       className={`relative inline-flex items-center justify-center transition-colors ${statusFilterActive ? "text-primary" : "text-slate-400 hover:text-slate-700"}`}
                                     >
                                       <FilterIcon className={`w-3 h-3 ${statusFilterActive ? "fill-primary/20" : ""}`} />
@@ -1487,7 +1569,7 @@ export default function FinancePage() {
                                         <Label className="text-xs font-semibold">{t("financePage.statusLabel")}</Label>
                                         {statusFilterActive && (
                                           <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setCommStatus("all")}>
-                                            <X className="w-3 h-3 mr-1" /> Clear
+                                            <X className="w-3 h-3 mr-1" />{t("financePage.clear")}
                                           </Button>
                                         )}
                                       </div>
@@ -1515,7 +1597,9 @@ export default function FinancePage() {
                     {pagedCommissions.map((c: any) => {
                       const uAmt = toNum(c.universityCommissionAmount);
                       const aAmt = toNum(c.agentCommissionAmount);
-                      const net  = uAmt - aAmt;
+                      const saAmt = toNum(c.subAgentCommissionAmount);
+                      const stAmt = toNum(c.staffCommissionAmount);
+                      const net  = uAmt - aAmt - saAmt - stAmt;
                       const uCollected = toNum(c.universityCollected);
                       const aPaid = toNum(c.agentPaid);
                       const uRemaining = uAmt - uCollected;
@@ -1559,6 +1643,13 @@ export default function FinancePage() {
                                 <div className="font-medium text-purple-700">{fmt(c.subAgentCommissionAmount, c.currency)}</div>
                                 <div className="text-xs text-slate-400">{c.subAgentCommissionRate || "—"}% · {fmt(c.subAgentPaid, c.currency)} paid</div>
                               </>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {stAmt > 0 ? (
+                              <div className="font-medium text-rose-700">{fmt(stAmt, c.staffCommissionCurrency || c.currency)}</div>
                             ) : (
                               <span className="text-slate-300">—</span>
                             )}

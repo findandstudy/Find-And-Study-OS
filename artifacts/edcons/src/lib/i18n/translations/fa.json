@@ -2061,7 +2061,10 @@
     "agentNameLabel": "نام نماینده",
     "subAgentNameLabel": "نام زیرنماینده",
     "attachDocument": "پیوست سند",
-    "collectionPct": "درصد دریافت"
+    "collectionPct": "درصد دریافت",
+    "staffCommission": "کمیسیون کارمند",
+    "clear": "پاک کردن",
+    "filterActive": "فیلتر فعال است"
   },
   "studentsPage": {
     "addNewStudent": "افزودن دانشجوی جدید",

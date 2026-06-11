@@ -2353,7 +2353,10 @@
     "agentNameLabel": "Agent Name",
     "subAgentNameLabel": "Sub Agent Name",
     "attachDocument": "Attach Document",
-    "collectionPct": "Collection %"
+    "collectionPct": "Collection %",
+    "staffCommission": "Staff Commission",
+    "clear": "Clear",
+    "filterActive": "Filter active"
   },
   "studentsPage": {
     "addNewStudent": "Add New Student",

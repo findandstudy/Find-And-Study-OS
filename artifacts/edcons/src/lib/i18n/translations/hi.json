@@ -2061,7 +2061,10 @@
     "agentNameLabel": "एजेंट का नाम",
     "subAgentNameLabel": "उप-एजेंट का नाम",
     "attachDocument": "दस्तावेज़ संलग्न करें",
-    "collectionPct": "संग्रह %"
+    "collectionPct": "संग्रह %",
+    "staffCommission": "स्टाफ कमीशन",
+    "clear": "साफ़ करें",
+    "filterActive": "फ़िल्टर सक्रिय"
   },
   "studentsPage": {
     "addNewStudent": "नया छात्र जोड़ें",

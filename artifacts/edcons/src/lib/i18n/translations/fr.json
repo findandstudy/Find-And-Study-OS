@@ -2112,7 +2112,10 @@
     "agentNameLabel": "Nom de l'agent",
     "subAgentNameLabel": "Nom du sous-agent",
     "attachDocument": "Joindre un document",
-    "collectionPct": "% de collecte"
+    "collectionPct": "% de collecte",
+    "staffCommission": "Commission du personnel",
+    "clear": "Effacer",
+    "filterActive": "Filtre actif"
   },
   "studentsPage": {
     "addNewStudent": "Ajouter un étudiant",

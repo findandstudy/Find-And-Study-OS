@@ -2112,7 +2112,10 @@
     "agentNameLabel": "اسم الوكيل",
     "subAgentNameLabel": "اسم الوكيل الفرعي",
     "attachDocument": "إرفاق مستند",
-    "collectionPct": "نسبة التحصيل %"
+    "collectionPct": "نسبة التحصيل %",
+    "staffCommission": "عمولة الموظف",
+    "clear": "مسح",
+    "filterActive": "الفلتر نشط"
   },
   "studentsPage": {
     "addNewStudent": "إضافة طالب جديد",

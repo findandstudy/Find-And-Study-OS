@@ -2061,7 +2061,10 @@
     "agentNameLabel": "Nama Agen",
     "subAgentNameLabel": "Nama Sub-Agen",
     "attachDocument": "Lampirkan Dokumen",
-    "collectionPct": "% Penerimaan"
+    "collectionPct": "% Penerimaan",
+    "staffCommission": "Komisi Staf",
+    "clear": "Hapus",
+    "filterActive": "Filter aktif"
   },
   "studentsPage": {
     "addNewStudent": "Tambah Siswa Baru",

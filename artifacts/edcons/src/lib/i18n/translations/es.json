@@ -2061,7 +2061,10 @@
     "agentNameLabel": "Nombre del agente",
     "subAgentNameLabel": "Nombre del subagente",
     "attachDocument": "Adjuntar documento",
-    "collectionPct": "% de cobro"
+    "collectionPct": "% de cobro",
+    "staffCommission": "Comisión del personal",
+    "clear": "Borrar",
+    "filterActive": "Filtro activo"
   },
   "studentsPage": {
     "addNewStudent": "Agregar estudiante",

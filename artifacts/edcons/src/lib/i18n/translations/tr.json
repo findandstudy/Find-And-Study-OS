@@ -2294,7 +2294,10 @@
     "agentNameLabel": "Acente Adı",
     "subAgentNameLabel": "Alt Acente Adı",
     "attachDocument": "Belge Ekle",
-    "collectionPct": "Tahsilat %"
+    "collectionPct": "Tahsilat %",
+    "staffCommission": "Personel Komisyonu",
+    "clear": "Temizle",
+    "filterActive": "Filtre aktif"
   },
   "studentsPage": {
     "addNewStudent": "Yeni Öğrenci Ekle",
