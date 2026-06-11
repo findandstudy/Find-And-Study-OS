@@ -663,6 +663,10 @@ async function seedClaudeIntegration() {
     // HTML "403 Forbidden" page. The GCS upload now happens lazily inside
     // ensureSignedContractPdf() on the first PDF download. Idempotent.
     await pool.query(`ALTER TABLE signed_contracts ADD COLUMN IF NOT EXISTS signature_image_base64 TEXT`);
+    // C1 fix: self-fill email rebind lock. Locks the signer email at session
+    // creation so send-code/verify-code cannot redirect a code to an arbitrary
+    // inbox after the link has been issued. Idempotent.
+    await pool.query(`ALTER TABLE signing_sessions ADD COLUMN IF NOT EXISTS expected_email TEXT`);
 
     // Backfill the new contract permissions for the default admin role.
     const newPerms = [

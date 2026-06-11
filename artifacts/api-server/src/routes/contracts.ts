@@ -386,6 +386,7 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
     const days = Number.isInteger(expiryDays) && expiryDays > 0 && expiryDays <= 90 ? expiryDays : DEFAULT_EXPIRY_DAYS;
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
+    const normalizedEmail = hasEmail ? String(signerEmail).toLowerCase().trim() : "";
     const [session] = await db.insert(signingSessionsTable).values({
       templateId: tpl.id,
       agentId: null,
@@ -393,7 +394,12 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
       mode: "self_fill",
       status: "intake_pending",
       intakeData: null,
-      signerEmail: hasEmail ? String(signerEmail).toLowerCase().trim() : "",
+      signerEmail: normalizedEmail,
+      // Lock the expected email at creation time. send-code/verify-code will
+      // reject any address that doesn't match, preventing a signer from
+      // redirecting the verification code to an arbitrary inbox after the link
+      // has been issued (email rebinding attack).
+      expectedEmail: hasEmail ? normalizedEmail : null,
       signerName: signerName ? String(signerName).slice(0, 200) : null,
       expiresAt,
       createdByUserId: (req as any).user?.id ?? null,

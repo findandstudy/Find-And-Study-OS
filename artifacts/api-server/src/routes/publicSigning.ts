@@ -228,6 +228,16 @@ router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Prom
         return;
       }
     }
+    // self_fill: if an expectedEmail was set at link-creation time, enforce it.
+    // This prevents anyone with the link from redirecting the code to a
+    // different inbox after the session was created (email rebinding attack).
+    if (r.session.mode === "self_fill" && r.session.expectedEmail) {
+      const expected = r.session.expectedEmail.trim().toLowerCase();
+      if (email !== expected) {
+        res.status(409).json({ error: "Email address does not match the address this link was created for", code: "email_mismatch" });
+        return;
+      }
+    }
     // Bind the code to this specific signing link by storing the same token
     // hash used for the session, so a code issued for one link cannot be
     // replayed against another link/flow for the same email.
@@ -282,6 +292,14 @@ router.post("/public/sign/:token/verify-code", codeLimiter, async (req, res): Pr
       const expected = (r.session.signerEmail || "").trim().toLowerCase();
       if (!expected || email !== expected) {
         res.status(403).json({ error: "Email address does not match the invited signer", code: "email_mismatch" });
+        return;
+      }
+    }
+    // self_fill: mirror the send-code check — enforce expectedEmail lock if set.
+    if (r.session.mode === "self_fill" && r.session.expectedEmail) {
+      const expected = r.session.expectedEmail.trim().toLowerCase();
+      if (email !== expected) {
+        res.status(409).json({ error: "Email address does not match the address this link was created for", code: "email_mismatch" });
         return;
       }
     }
