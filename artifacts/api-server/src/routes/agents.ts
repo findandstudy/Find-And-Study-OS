@@ -95,7 +95,16 @@ router.get("/agents/contract-alerts", requireAuth, requireRole(...STAFF_ROLES), 
     const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
     if (visible !== null) {
       if (visible.length === 0) { res.json([]); return; }
-      conditions.push(sql`${agentsTable.id} IN (SELECT agent_id FROM agent_branches WHERE branch_id = ANY(${visible}))`);
+      // Use inArray with a subquery — raw sql `ANY(${visible})` does not
+      // correctly serialize a JS number[] as a PostgreSQL array parameter.
+      conditions.push(
+        inArray(
+          agentsTable.id,
+          db.select({ id: agentBranchesTable.agentId })
+            .from(agentBranchesTable)
+            .where(inArray(agentBranchesTable.branchId, visible)),
+        ),
+      );
     }
     const rows = await db.select({
       id: agentsTable.id,
