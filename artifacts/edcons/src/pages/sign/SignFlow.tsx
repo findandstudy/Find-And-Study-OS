@@ -519,7 +519,9 @@ export default function SignFlow({ token }: { token: string }) {
         }
       >
         {/* admin_driven sessions skip the intake step, so verification happens
-            here. self_fill sessions are already verified by this point. */}
+            here. self_fill sessions are already verified by this point.
+            For admin_driven, the email is locked to the invited signer's address
+            (the backend enforces the same constraint). */}
         {!verified && (
           <div className="mb-4">
             <EmailVerify
@@ -536,6 +538,7 @@ export default function SignFlow({ token }: { token: string }) {
               codeError={codeError}
               onSend={sendCode}
               onVerify={verifyCode}
+              emailLocked={session.mode === "admin_driven"}
             />
           </div>
         )}
@@ -662,7 +665,7 @@ function Stepper({ step, labels }: { step: number; labels: string[] }) {
 
 function EmailVerify({
   t, label, email, onChangeEmail, codeSent, code, onChangeCode, verified,
-  sendingCode, verifyingCode, codeError, onSend, onVerify,
+  sendingCode, verifyingCode, codeError, onSend, onVerify, emailLocked,
 }: {
   t: Tfn;
   label: string;
@@ -677,6 +680,7 @@ function EmailVerify({
   codeError: string;
   onSend: () => void;
   onVerify: () => void;
+  emailLocked?: boolean;
 }) {
   return (
     <div>
@@ -684,7 +688,7 @@ function EmailVerify({
       <Input
         type="email"
         value={email}
-        disabled={verified}
+        disabled={verified || emailLocked}
         onChange={e => onChangeEmail(e.target.value)}
         placeholder="name@example.com"
         className="mt-1.5"

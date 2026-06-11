@@ -218,6 +218,16 @@ router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Prom
     if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
       res.status(400).json({ error: "A valid email is required" }); return;
     }
+    // admin_driven: the verification code must be sent to the invited signer's
+    // address only. Accepting an arbitrary email would allow anyone with the
+    // link to reroute the code to their own inbox and impersonate the signer.
+    if (r.session.mode === "admin_driven") {
+      const expected = (r.session.signerEmail || "").trim().toLowerCase();
+      if (!expected || email !== expected) {
+        res.status(403).json({ error: "Email address does not match the invited signer", code: "email_mismatch" });
+        return;
+      }
+    }
     // Bind the code to this specific signing link by storing the same token
     // hash used for the session, so a code issued for one link cannot be
     // replayed against another link/flow for the same email.
@@ -266,6 +276,15 @@ router.post("/public/sign/:token/verify-code", codeLimiter, async (req, res): Pr
     if (!email || !EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) {
       res.status(400).json({ error: "Email and 6-digit code are required" }); return;
     }
+    // admin_driven: only the invited signer's address is accepted — same rule
+    // as send-code so the two halves of the flow stay consistent.
+    if (r.session.mode === "admin_driven") {
+      const expected = (r.session.signerEmail || "").trim().toLowerCase();
+      if (!expected || email !== expected) {
+        res.status(403).json({ error: "Email address does not match the invited signer", code: "email_mismatch" });
+        return;
+      }
+    }
     // The code must have been issued for THIS signing link (token hash bound).
     const tokenHash = hashToken(String(req.params.token));
     const [record] = await db.select().from(emailVerificationCodesTable).where(and(
@@ -280,10 +299,12 @@ router.post("/public/sign/:token/verify-code", codeLimiter, async (req, res): Pr
     }
     await db.update(emailVerificationCodesTable).set({ used: true })
       .where(eq(emailVerificationCodesTable.id, record.id));
-    await db.update(signingSessionsTable).set({
-      verifiedEmail: email,
-      signerEmail: email,
-    }).where(eq(signingSessionsTable.id, r.session.id));
+    // self_fill: adopt the verified email as the signer email (signer supplies
+    // their own identity). admin_driven: signerEmail is fixed at dispatch time
+    // and must NEVER be overwritten — only mark the email as verified.
+    const sessionUpdate: Record<string, unknown> = { verifiedEmail: email };
+    if (r.session.mode === "self_fill") sessionUpdate.signerEmail = email;
+    await db.update(signingSessionsTable).set(sessionUpdate).where(eq(signingSessionsTable.id, r.session.id));
     res.json({ success: true, verifiedEmail: email });
   } catch (err) {
     console.error("[public-sign] verify-code:", err);

@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable } from "@workspace/db";
+import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, agentBranchesTable } from "@workspace/db";
 import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { createSigningToken } from "../lib/signingTokens";
 import { buildContractSignRequestEmail, sendEmail, getAppBaseUrl } from "../lib/email";
 import { signedContractFilename } from "../lib/contractRenderer";
+import { getVisibleBranchIds, isAgentInScope } from "../lib/branchScope";
 
 const router: IRouter = Router();
 
@@ -59,9 +60,26 @@ const ALLOWED_STATUSES: readonly SessionStatus[] = ["intake_pending", "review_pe
 
 router.get("/contracts/sessions", requireAuth, gateSessionList, async (req, res): Promise<void> => {
   try {
+    const me = (req as any).user!;
     const mode = (req.query.mode as string) || null;
     const filters: SQL<unknown>[] = [];
     if (mode === "self_fill" || mode === "admin_driven") filters.push(eq(signingSessionsTable.mode, mode));
+    // Branch-scope: non-super_admin users only see sessions whose agent is in
+    // their visible branches. agentId=null (self_fill with no agent) is always visible.
+    const visible = await getVisibleBranchIds(me.id, me.role);
+    if (visible !== null) {
+      if (visible.length > 0) {
+        const scopedAgents = await db
+          .select({ agentId: agentBranchesTable.agentId })
+          .from(agentBranchesTable)
+          .where(inArray(agentBranchesTable.branchId, visible));
+        const scopedIds = [...new Set(scopedAgents.map(r => r.agentId))];
+        filters.push(or(isNull(signingSessionsTable.agentId), scopedIds.length ? inArray(signingSessionsTable.agentId, scopedIds) : isNull(signingSessionsTable.agentId))!);
+      } else {
+        // No visible branches → only agentId=null records
+        filters.push(isNull(signingSessionsTable.agentId));
+      }
+    }
     const statusParam = (req.query.status as string) || "";
     if (statusParam) {
       const wanted = statusParam.split(",").map(s => s.trim()).filter((s): s is SessionStatus => (ALLOWED_STATUSES as readonly string[]).includes(s));
@@ -120,11 +138,32 @@ router.get("/contracts/sessions", requireAuth, gateSessionList, async (req, res)
   }
 });
 
-router.get("/contracts/signed", requireAuth, requirePermission("contracts.view"), async (_req, res): Promise<void> => {
+router.get("/contracts/signed", requireAuth, requirePermission("contracts.view"), async (req, res): Promise<void> => {
   try {
-    const rows = await db.select().from(signedContractsTable)
-      .orderBy(desc(signedContractsTable.signedAt))
-      .limit(500);
+    const me = (req as any).user!;
+    const visible = await getVisibleBranchIds(me.id, me.role);
+    let rows;
+    if (visible === null) {
+      // super_admin sees all
+      rows = await db.select().from(signedContractsTable)
+        .orderBy(desc(signedContractsTable.signedAt))
+        .limit(500);
+    } else if (visible.length > 0) {
+      const scopedAgents = await db
+        .select({ agentId: agentBranchesTable.agentId })
+        .from(agentBranchesTable)
+        .where(inArray(agentBranchesTable.branchId, visible));
+      const scopedIds = [...new Set(scopedAgents.map(r => r.agentId))];
+      rows = await db.select().from(signedContractsTable)
+        .where(scopedIds.length ? or(isNull(signedContractsTable.agentId), inArray(signedContractsTable.agentId, scopedIds)) : isNull(signedContractsTable.agentId))
+        .orderBy(desc(signedContractsTable.signedAt))
+        .limit(500);
+    } else {
+      rows = await db.select().from(signedContractsTable)
+        .where(isNull(signedContractsTable.agentId))
+        .orderBy(desc(signedContractsTable.signedAt))
+        .limit(500);
+    }
     res.json({ data: rows });
   } catch (err) {
     console.error("[contracts] signed list:", err);
@@ -146,6 +185,10 @@ router.delete("/contracts/signed/:id", requireAuth, requirePermission("contracts
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    if (row.agentId) {
+      const inScope = await isAgentInScope((req as any).user!.id, (req as any).user!.role, row.agentId);
+      if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
+    }
     await db.delete(signedContractsTable).where(eq(signedContractsTable.id, id));
     await writeAudit({
       userId: (req as any).user?.id ?? null,
@@ -169,6 +212,10 @@ router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contract
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    if (row.agentId) {
+      const inScope = await isAgentInScope((req as any).user!.id, (req as any).user!.role, row.agentId);
+      if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
+    }
     const pdfKey = row.pdfObjectKey;
     if (!pdfKey) {
       // PDF not yet rendered. The signed-contract delivery worker generates it
@@ -216,6 +263,10 @@ router.post("/contracts/signed/:id/regenerate", requireAuth, requirePermission("
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
+    if (row.agentId) {
+      const inScope = await isAgentInScope((req as any).user!.id, (req as any).user!.role, row.agentId);
+      if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
+    }
     await db.update(signedContractsTable)
       .set(REGENERATE_PDF_CACHE_RESET)
       .where(eq(signedContractsTable.id, id));
@@ -242,6 +293,8 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
     const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, aId));
     if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
     if (!agent.email) { res.status(400).json({ error: "Agent has no email on file" }); return; }
+    const inScope = await isAgentInScope((req as any).user!.id, (req as any).user!.role, aId);
+    if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
     if (agent.userId) {
       const [linkedUser] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, agent.userId));
       if (linkedUser && (linkedUser.role === "agent_staff" || linkedUser.role === "sub_agent")) {
@@ -382,8 +435,14 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
 async function gateSessionMutate(req: any, res: any, next: any) {
   const id = parseInt(String(req.params.id), 10);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [row] = await db.select({ mode: signingSessionsTable.mode }).from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
+  const [row] = await db.select({ mode: signingSessionsTable.mode, agentId: signingSessionsTable.agentId }).from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  // Branch-scope check: admin_driven sessions belong to an agent; verify
+  // the caller can see that agent's branch before allowing any mutation.
+  if (row.mode === "admin_driven" && row.agentId) {
+    const inScope = await isAgentInScope(req.user!.id, req.user!.role, row.agentId);
+    if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
+  }
   const need = row.mode === "self_fill" ? "self_fill_links.manage" : "contracts.manage";
   return requirePermission(need)(req, res, next);
 }
