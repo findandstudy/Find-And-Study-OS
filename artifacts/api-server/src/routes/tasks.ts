@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, tasksTable, usersTable, type TaskNote } from "@workspace/db";
 import { eq, and, desc, isNull, isNotNull, or, sql, inArray } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 
@@ -38,7 +38,7 @@ async function getUserDisplayName(userId: number): Promise<string> {
   return full || u.email || "Unknown";
 }
 
-router.get("/tasks", requireAuth, async (req, res): Promise<void> => {
+router.get("/tasks", requireAuth, requireRole(...STAFF_ROLES, "agent_staff"), requireAgentStaffPermission("tasks"), async (req, res): Promise<void> => {
   const archived = String(req.query.archived ?? "") === "true";
   const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
   const offset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
@@ -277,7 +277,7 @@ router.post("/tasks/restore/:id", requireAuth, requireRole(...ADMIN_ROLES), asyn
   res.json(updated);
 });
 
-router.post("/tasks/:id/notes", requireAuth, async (req, res): Promise<void> => {
+router.post("/tasks/:id/notes", requireAuth, requireRole(...STAFF_ROLES, "agent_staff"), requireAgentStaffPermission("tasks"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
