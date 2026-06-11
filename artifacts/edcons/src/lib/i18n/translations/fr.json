@@ -2131,7 +2131,13 @@
     "receivableRemaining": "Reste à percevoir",
     "collectionAmount": "Montant de l'encaissement",
     "exceedsRemaining": "Dépasse le solde restant",
-    "distributedAcross": "Distribué sur {n} commission(s)"
+    "distributedAcross": "Distribué sur {n} commission(s)",
+    "agentSelectAgent": "Sélectionner un agent",
+    "agentSearchAgent": "Rechercher un agent...",
+    "agentNoAgent": "Aucun agent trouvé",
+    "agentRemainingBalance": "Solde restant",
+    "agentPaymentExceedsBalance": "Dépasse le solde restant",
+    "agentCurrencyLabel": "Devise"
   },
   "studentsPage": {
     "addNewStudent": "Ajouter un étudiant",

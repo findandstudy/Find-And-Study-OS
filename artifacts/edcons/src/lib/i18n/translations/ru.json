@@ -2131,7 +2131,13 @@
     "receivableRemaining": "Остаток к получению",
     "collectionAmount": "Сумма оплаты",
     "exceedsRemaining": "Превышает остаток",
-    "distributedAcross": "Распределено по {n} комиссии(-ям)"
+    "distributedAcross": "Распределено по {n} комиссии(-ям)",
+    "agentSelectAgent": "Выбрать агента",
+    "agentSearchAgent": "Поиск агента...",
+    "agentNoAgent": "Агент не найден",
+    "agentRemainingBalance": "Остаток баланса",
+    "agentPaymentExceedsBalance": "Превышает остаток баланса",
+    "agentCurrencyLabel": "Валюта"
   },
   "studentsPage": {
     "addNewStudent": "Добавить студента",

@@ -2131,7 +2131,13 @@
     "receivableRemaining": "الرصيد المتبقي",
     "collectionAmount": "مبلغ التحصيل",
     "exceedsRemaining": "يتجاوز الرصيد المتبقي",
-    "distributedAcross": "موزع على {n} عمولة"
+    "distributedAcross": "موزع على {n} عمولة",
+    "agentSelectAgent": "اختر وكيلاً",
+    "agentSearchAgent": "ابحث عن وكيل...",
+    "agentNoAgent": "لم يُعثر على وكيل",
+    "agentRemainingBalance": "الرصيد المتبقي",
+    "agentPaymentExceedsBalance": "يتجاوز الرصيد المتبقي",
+    "agentCurrencyLabel": "العملة"
   },
   "studentsPage": {
     "addNewStudent": "إضافة طالب جديد",

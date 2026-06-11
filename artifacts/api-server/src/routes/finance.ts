@@ -416,6 +416,146 @@ router.post("/finance/university-collection", requireAuth, requireRole(...FINANC
   res.status(201).json({ distributed, updatedRemaining });
 });
 
+/* ─── AGENT PAYABLES & AGENT PAYMENT ────────────────────────── */
+
+router.get("/finance/agent-payables", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
+  const { season } = req.query as Record<string, string>;
+
+  const rows = await db.execute<{
+    agentId: number;
+    agentName: string;
+    currency: string;
+    totalAgentCommission: string;
+    totalAgentPaid: string;
+    remaining: string;
+  }>(sql`
+    SELECT
+      c.agent_id AS "agentId",
+      COALESCE(
+        NULLIF(TRIM(CONCAT(a.first_name, ' ', a.last_name)), ''),
+        a.company_name,
+        a.business_name,
+        CONCAT('Agent #', c.agent_id::text)
+      ) AS "agentName",
+      c.currency,
+      SUM(c.agent_commission_amount::numeric) AS "totalAgentCommission",
+      SUM(c.agent_paid::numeric)              AS "totalAgentPaid",
+      SUM(c.agent_commission_amount::numeric - c.agent_paid::numeric) AS remaining
+    FROM commissions c
+    LEFT JOIN agents a ON a.id = c.agent_id
+    WHERE c.agent_id IS NOT NULL
+      AND c.status NOT IN ('potential', 'excluded')
+      AND c.agent_commission_amount::numeric > 0
+      ${season ? sql`AND c.season = ${season}` : sql``}
+    GROUP BY c.agent_id, a.first_name, a.last_name, a.company_name, a.business_name, c.currency
+    HAVING SUM(c.agent_commission_amount::numeric - c.agent_paid::numeric) > 0.001
+    ORDER BY "agentName", c.currency
+  `);
+
+  res.json({ data: rows.rows });
+});
+
+const agentPaymentBodySchema = z.object({
+  agentId: z.number().int().positive(),
+  currency: z.string().min(1).max(10),
+  amount: z.number().positive(),
+  transactionDate: z.string().min(1),
+  reference: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+router.post("/finance/agent-payment", requireAuth, requireRole(...FINANCE_ROLES), validate({ body: agentPaymentBodySchema }), async (req, res): Promise<void> => {
+  const { agentId, currency, amount, transactionDate, reference, notes } =
+    getValidated<{ body: typeof agentPaymentBodySchema }>(req).body;
+
+  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
+  if (!agent) {
+    res.status(400).json({ error: "Agent not found" });
+    return;
+  }
+
+  const rows = await db.select().from(commissionsTable)
+    .where(and(
+      eq(commissionsTable.agentId, agentId),
+      eq(commissionsTable.currency, currency),
+      sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full', 'settled')`,
+      sql`${commissionsTable.agentCommissionAmount}::numeric > ${commissionsTable.agentPaid}::numeric`,
+    ))
+    .orderBy(asc(commissionsTable.confirmedAt), asc(commissionsTable.id));
+
+  if (rows.length === 0) {
+    res.status(400).json({ error: "No agent commission balance for this agent/currency" });
+    return;
+  }
+
+  const totalRemaining = rows.reduce((s, r) => s + toNum(r.agentCommissionAmount) - toNum(r.agentPaid), 0);
+  if (amount > totalRemaining + 0.001) {
+    res.status(400).json({ error: "Amount exceeds remaining agent balance" });
+    return;
+  }
+
+  let toDistribute = amount;
+  const distributed: { commissionId: number; amount: number }[] = [];
+
+  for (const row of rows) {
+    if (toDistribute <= 0.001) break;
+    const rowRemaining = toNum(row.agentCommissionAmount) - toNum(row.agentPaid);
+    if (rowRemaining <= 0.001) continue;
+    const take = Math.min(toDistribute, rowRemaining);
+    distributed.push({ commissionId: row.id, amount: parseFloat(take.toFixed(6)) });
+    toDistribute -= take;
+  }
+
+  const agentDisplayName = [agent.firstName, agent.lastName].filter(Boolean).join(" ") || agent.companyName || agent.businessName || null;
+
+  for (const d of distributed) {
+    const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, d.commissionId));
+
+    await db.insert(financialTransactionsTable).values({
+      commissionId: d.commissionId,
+      type: "agent_payment",
+      amount: String(d.amount),
+      currency,
+      transactionDate: new Date(transactionDate),
+      reference: reference || null,
+      agentId,
+      agentName: agentDisplayName,
+      notes: notes || null,
+    });
+
+    const allTx = await db.select().from(financialTransactionsTable)
+      .where(eq(financialTransactionsTable.commissionId, d.commissionId));
+
+    const totalCollected = allTx.filter(t => t.type === "collection").reduce((s, t) => s + toNum(t.amount), 0);
+    const totalPaid = allTx.filter(t => t.type === "agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
+    const totalSubPaid = allTx.filter(t => t.type === "sub_agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
+
+    const uTotal = toNum(comm.universityCommissionAmount);
+    const aTotal = toNum(comm.agentCommissionAmount);
+    const saTotal = toNum(comm.subAgentCommissionAmount);
+
+    let newStatus = comm.status;
+    const agentFullyPaid = aTotal <= 0 || totalPaid >= aTotal;
+    const subAgentFullyPaid = saTotal <= 0 || totalSubPaid >= saTotal;
+    if (totalCollected >= uTotal && agentFullyPaid && subAgentFullyPaid && uTotal > 0) {
+      newStatus = "settled";
+    } else if (totalCollected >= uTotal && uTotal > 0) {
+      newStatus = "collected_full";
+    } else if (totalCollected > 0) {
+      newStatus = "collected_partial";
+    }
+
+    await db.update(commissionsTable).set({
+      agentPaid: String(totalPaid),
+      status: newStatus,
+    }).where(eq(commissionsTable.id, d.commissionId));
+  }
+
+  await logAudit(req.user!.id, "create_agent_payment", "financial_transaction", agentId, { agentId, currency, amount }, req.ip);
+
+  res.status(201).json({ distributed, updatedRemaining: Math.max(0, totalRemaining - amount) });
+});
+
 /* ─── COMMISSIONS ────────────────────────────────────────────── */
 
 const COMMISSION_PATCH_FIELDS = [

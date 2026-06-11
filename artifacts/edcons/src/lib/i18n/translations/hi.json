@@ -2080,7 +2080,13 @@
     "receivableRemaining": "शेष प्राप्तियाँ",
     "collectionAmount": "संग्रह राशि",
     "exceedsRemaining": "शेष राशि से अधिक है",
-    "distributedAcross": "{n} कमीशन में वितरित"
+    "distributedAcross": "{n} कमीशन में वितरित",
+    "agentSelectAgent": "एजेंट चुनें",
+    "agentSearchAgent": "एजेंट खोजें...",
+    "agentNoAgent": "कोई एजेंट नहीं मिला",
+    "agentRemainingBalance": "शेष राशि",
+    "agentPaymentExceedsBalance": "शेष राशि से अधिक",
+    "agentCurrencyLabel": "मुद्रा"
   },
   "studentsPage": {
     "addNewStudent": "नया छात्र जोड़ें",

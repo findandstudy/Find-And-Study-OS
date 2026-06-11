@@ -2080,7 +2080,13 @@
     "receivableRemaining": "Saldo por cobrar",
     "collectionAmount": "Importe del cobro",
     "exceedsRemaining": "Supera el saldo restante",
-    "distributedAcross": "Distribuido en {n} comisión(-es)"
+    "distributedAcross": "Distribuido en {n} comisión(-es)",
+    "agentSelectAgent": "Seleccionar agente",
+    "agentSearchAgent": "Buscar agente...",
+    "agentNoAgent": "No se encontró agente",
+    "agentRemainingBalance": "Saldo restante",
+    "agentPaymentExceedsBalance": "Supera el saldo restante",
+    "agentCurrencyLabel": "Moneda"
   },
   "studentsPage": {
     "addNewStudent": "Agregar estudiante",

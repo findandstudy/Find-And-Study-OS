@@ -2080,7 +2080,13 @@
     "receivableRemaining": "مانده دریافتنی",
     "collectionAmount": "مبلغ دریافت",
     "exceedsRemaining": "بیش از مانده است",
-    "distributedAcross": "در {n} کمیسیون توزیع شد"
+    "distributedAcross": "در {n} کمیسیون توزیع شد",
+    "agentSelectAgent": "انتخاب نماینده",
+    "agentSearchAgent": "جستجوی نماینده...",
+    "agentNoAgent": "نماینده‌ای یافت نشد",
+    "agentRemainingBalance": "موجودی باقی‌مانده",
+    "agentPaymentExceedsBalance": "از موجودی باقی‌مانده بیشتر است",
+    "agentCurrencyLabel": "ارز"
   },
   "studentsPage": {
     "addNewStudent": "افزودن دانشجوی جدید",

@@ -2080,7 +2080,13 @@
     "receivableRemaining": "剩余应收款",
     "collectionAmount": "收款金额",
     "exceedsRemaining": "超出剩余余额",
-    "distributedAcross": "已分配至 {n} 笔佣金"
+    "distributedAcross": "已分配至 {n} 笔佣金",
+    "agentSelectAgent": "选择代理",
+    "agentSearchAgent": "搜索代理...",
+    "agentNoAgent": "未找到代理",
+    "agentRemainingBalance": "剩余余额",
+    "agentPaymentExceedsBalance": "超出剩余余额",
+    "agentCurrencyLabel": "货币"
   },
   "studentsPage": {
     "addNewStudent": "添加新学生",

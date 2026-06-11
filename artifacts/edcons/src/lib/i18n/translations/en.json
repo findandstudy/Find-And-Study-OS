@@ -2372,7 +2372,13 @@
     "receivableRemaining": "Remaining Receivable",
     "collectionAmount": "Collection Amount",
     "exceedsRemaining": "Exceeds remaining balance",
-    "distributedAcross": "Distributed across {n} commission(s)"
+    "distributedAcross": "Distributed across {n} commission(s)",
+    "agentSelectAgent": "Select Agent",
+    "agentSearchAgent": "Search agent...",
+    "agentNoAgent": "No agent found",
+    "agentRemainingBalance": "Remaining Balance",
+    "agentPaymentExceedsBalance": "Exceeds remaining balance",
+    "agentCurrencyLabel": "Currency"
   },
   "studentsPage": {
     "addNewStudent": "Add New Student",

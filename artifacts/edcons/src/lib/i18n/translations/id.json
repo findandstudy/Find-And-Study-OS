@@ -2080,7 +2080,13 @@
     "receivableRemaining": "Sisa Piutang",
     "collectionAmount": "Jumlah Penerimaan",
     "exceedsRemaining": "Melebihi saldo tersisa",
-    "distributedAcross": "Didistribusikan ke {n} komisi"
+    "distributedAcross": "Didistribusikan ke {n} komisi",
+    "agentSelectAgent": "Pilih agen",
+    "agentSearchAgent": "Cari agen...",
+    "agentNoAgent": "Tidak ada agen ditemukan",
+    "agentRemainingBalance": "Saldo tersisa",
+    "agentPaymentExceedsBalance": "Melebihi saldo tersisa",
+    "agentCurrencyLabel": "Mata Uang"
   },
   "studentsPage": {
     "addNewStudent": "Tambah Siswa Baru",

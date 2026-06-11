@@ -2313,7 +2313,13 @@
     "receivableRemaining": "Kalan Alacak",
     "collectionAmount": "Tahsilat Tutarı",
     "exceedsRemaining": "Kalan bakiyeyi aşıyor",
-    "distributedAcross": "{n} komisyona dağıtıldı"
+    "distributedAcross": "{n} komisyona dağıtıldı",
+    "agentSelectAgent": "Acente Seç",
+    "agentSearchAgent": "Acente ara...",
+    "agentNoAgent": "Acente bulunamadı",
+    "agentRemainingBalance": "Kalan Bakiye",
+    "agentPaymentExceedsBalance": "Kalan bakiyeyi aşıyor",
+    "agentCurrencyLabel": "Para Birimi"
   },
   "studentsPage": {
     "addNewStudent": "Yeni Öğrenci Ekle",

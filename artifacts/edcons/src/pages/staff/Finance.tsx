@@ -1083,6 +1083,208 @@ function TransactionHistory({ commissionId }: { commissionId: number }) {
   );
 }
 
+function AgentPaymentModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { season } = useSeason();
+
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [selAgentId, setSelAgentId] = useState<number | null>(null);
+  const [selCurrency, setSelCurrency] = useState("");
+  const [agentSearch, setAgentSearch] = useState("");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [reference, setReference] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setSelAgentId(null); setSelCurrency(""); setAgentSearch("");
+      setAmount(""); setDate(new Date().toISOString().split("T")[0]);
+      setReference(""); setNotes("");
+    }
+  }, [open]);
+
+  const { data: payablesData, isLoading: payablesLoading } = useQuery({
+    queryKey: ["agent-payables", season],
+    queryFn: () => customFetch<any>(`${BASE}/api/finance/agent-payables?season=${encodeURIComponent(season)}`),
+    enabled: open,
+  });
+
+  const payables: any[] = payablesData?.data || [];
+
+  const agentList = useMemo(() => {
+    const map = new Map<number, { id: number; name: string }>();
+    for (const p of payables) {
+      if (!map.has(Number(p.agentId))) {
+        map.set(Number(p.agentId), { id: Number(p.agentId), name: p.agentName });
+      }
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [payables]);
+
+  const filteredAgents = useMemo(() =>
+    agentSearch ? agentList.filter(a => a.name.toLowerCase().includes(agentSearch.toLowerCase())) : agentList,
+    [agentList, agentSearch]
+  );
+
+  const currencyOptions = useMemo(() =>
+    payables
+      .filter(p => Number(p.agentId) === selAgentId && toNum(p.remaining) > 0)
+      .map(p => ({ currency: p.currency, remaining: toNum(p.remaining) })),
+    [payables, selAgentId]
+  );
+
+  const remainingBalance = useMemo(() => {
+    const r = payables.find(p => Number(p.agentId) === selAgentId && p.currency === selCurrency);
+    return r ? toNum(r.remaining) : 0;
+  }, [payables, selAgentId, selCurrency]);
+
+  const selAgentName = agentList.find(a => a.id === selAgentId)?.name || "";
+
+  useEffect(() => { setSelCurrency(""); setAmount(""); }, [selAgentId]);
+  useEffect(() => { setAmount(""); }, [selCurrency]);
+
+  const numAmount = toNum(amount);
+  const exceedsBalance = numAmount > 0 && numAmount > remainingBalance + 0.001;
+
+  async function save() {
+    if (!selAgentId || !selCurrency || !amount || !date) {
+      toast({ title: t("financePage.amountAndDateRequired"), variant: "destructive" });
+      return;
+    }
+    if (exceedsBalance) return;
+    setSaving(true);
+    try {
+      const result: any = await customFetch(`${BASE}/api/finance/agent-payment`, {
+        method: "POST",
+        body: JSON.stringify({
+          agentId: selAgentId,
+          currency: selCurrency,
+          amount: numAmount,
+          transactionDate: date,
+          reference: reference || null,
+          notes: notes || null,
+        }),
+      });
+      qc.invalidateQueries({ queryKey: ["commissions"] });
+      qc.invalidateQueries({ queryKey: ["finance-summary"] });
+      qc.invalidateQueries({ queryKey: ["financial-transactions"] });
+      qc.invalidateQueries({ queryKey: ["university-breakdown"] });
+      qc.invalidateQueries({ queryKey: ["agent-payables"] });
+      toast({
+        title: t("financePage.recordedAgentPayment"),
+        description: t("financePage.distributedAcross", { n: result.distributed?.length ?? 1 }),
+      });
+      onClose();
+    } catch {
+      toast({ title: t("financePage.errorSavingTransaction"), variant: "destructive" });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t("financePage.recordAgentPayment")}</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 py-2">
+          <div className="col-span-2">
+            <Label>{t("financePage.agentSelectAgent")}</Label>
+            <Popover open={agentOpen} onOpenChange={setAgentOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" aria-expanded={agentOpen}
+                  className="w-full justify-between mt-1 font-normal">
+                  {selAgentId ? selAgentName : t("financePage.agentSelectAgent")}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0" align="start">
+                <Command>
+                  <CommandInput placeholder={t("financePage.agentSearchAgent")} value={agentSearch} onValueChange={setAgentSearch} />
+                  <CommandList>
+                    {payablesLoading
+                      ? <div className="flex items-center justify-center p-4"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                      : filteredAgents.length === 0
+                        ? <CommandEmpty>{t("financePage.agentNoAgent")}</CommandEmpty>
+                        : <CommandGroup>
+                            {filteredAgents.map(a => (
+                              <CommandItem key={a.id} value={String(a.id)} onSelect={() => {
+                                setSelAgentId(a.id); setAgentOpen(false); setAgentSearch("");
+                              }}>
+                                <Check className={`mr-2 h-4 w-4 ${selAgentId === a.id ? "opacity-100" : "opacity-0"}`} />
+                                {a.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                    }
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {selAgentId !== null && (
+            <div className="col-span-2">
+              <Label>{t("financePage.agentCurrencyLabel")}</Label>
+              <Select value={selCurrency} onValueChange={setSelCurrency}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder={t("financePage.agentCurrencyLabel")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {currencyOptions.map(o => (
+                    <SelectItem key={o.currency} value={o.currency}>
+                      {o.currency} — {t("financePage.agentRemainingBalance")}: {fmt(o.remaining, o.currency)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {selAgentId !== null && selCurrency && remainingBalance > 0 && (
+            <div className="col-span-2 flex items-center gap-2 bg-amber-50 rounded-lg p-3 dark:bg-amber-900/20">
+              <span className="text-sm text-amber-600 dark:text-amber-300">{t("financePage.agentRemainingBalance")}:</span>
+              <div className="text-lg font-bold text-amber-700 dark:text-amber-300">{fmt(remainingBalance, selCurrency)}</div>
+            </div>
+          )}
+
+          <div>
+            <Label>{t("financePage.collectionAmount")}</Label>
+            <Input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0"
+              className={exceedsBalance ? "border-rose-400" : ""} />
+            {exceedsBalance && (
+              <p className="text-xs text-rose-600 mt-0.5">{t("financePage.agentPaymentExceedsBalance")}</p>
+            )}
+          </div>
+          <div>
+            <Label>{t("financePage.date")}</Label>
+            <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+
+          <div className="col-span-2">
+            <Label>{t("financePage.referenceLabel")}</Label>
+            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="PAY-2025-001" />
+          </div>
+          <div className="col-span-2">
+            <Label>{t("financePage.notes")}</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>{t("financePage.cancel")}</Button>
+          <Button onClick={save} disabled={saving || !selAgentId || !selCurrency || !amount || exceedsBalance}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            {t("financePage.recordAgentPayment")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function UniversityCollectionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
@@ -1298,6 +1500,7 @@ export default function FinancePage() {
     commissionId?: number; commissionLabel?: string; universityName?: string;
   }>({ open: false, type: "collection" });
   const [uniCollModal, setUniCollModal] = useState(false);
+  const [agentPayModal, setAgentPayModal] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [commSelected, setCommSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -1811,8 +2014,8 @@ export default function FinancePage() {
                 <Button variant="outline" onClick={() => setUniCollModal(true)}>
                   <Landmark className="w-4 h-4 mr-1" /> {t("financePage.recordCollection")}
                 </Button>
-                <Button variant="outline" onClick={() => setTxModal({ open: true, type: "agent_payment" })}>
-                  <CreditCard className="w-4 h-4 mr-1" /> Record Agent Payment
+                <Button variant="outline" onClick={() => setAgentPayModal(true)}>
+                  <CreditCard className="w-4 h-4 mr-1" /> {t("financePage.recordAgentPayment")}
                 </Button>
                 <Button onClick={() => setCommModal({ open: true })}>
                   <Plus className="w-4 h-4 mr-1" /> New Commission
@@ -2992,6 +3195,7 @@ export default function FinancePage() {
         />
       )}
       <UniversityCollectionModal open={uniCollModal} onClose={() => setUniCollModal(false)} />
+      <AgentPaymentModal open={agentPayModal} onClose={() => setAgentPayModal(false)} />
     </>
   );
 }
