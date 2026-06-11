@@ -244,21 +244,29 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     : stage;
   void handleMissingDocFulfillment(applicationId, fulfilmentSignal, user.id);
 
-  // When a document is uploaded into the "missing_docs" stage (the shared
-  // document-request workflow), also write it to the student's shared document
-  // pool (documentsTable) so it is visible across all applications for that
-  // student and can be reused. The catalog type comes from documentNameOverride
-  // when the admin configured it, otherwise we fall back to the stage key.
-  if (stage === "missing_docs") {
-    try {
-      const [appRow] = await db
-        .select({ studentId: applicationsTable.studentId })
-        .from(applicationsTable)
-        .where(eq(applicationsTable.id, applicationId));
-      if (appRow?.studentId) {
-        const docType = (typeof documentNameOverride === "string" && documentNameOverride.trim())
-          ? documentNameOverride.trim()
-          : "missing_docs";
+  // Mirror ALL stage uploads to the student's shared document pool so they
+  // appear in the application detail (Program Document Requirements), the
+  // student Belgeler tab, and are counted by the mandatory-gate / automation.
+  // The catalog type comes from documentNameOverride when the admin configured
+  // it for this stage action, otherwise we fall back to the stage key.
+  // Idempotent: if a mirror already exists for this stage-doc ID, skip insert.
+  try {
+    const [appRow] = await db
+      .select({ studentId: applicationsTable.studentId })
+      .from(applicationsTable)
+      .where(eq(applicationsTable.id, applicationId));
+    if (appRow?.studentId) {
+      const docType = (typeof documentNameOverride === "string" && documentNameOverride.trim())
+        ? documentNameOverride.trim()
+        : stage;
+      const [existingMirror] = await db
+        .select({ id: documentsTable.id })
+        .from(documentsTable)
+        .where(and(
+          eq(documentsTable.sourceStageDocumentId, doc.id),
+          isNull(documentsTable.deletedAt)
+        ));
+      if (!existingMirror) {
         await db.insert(documentsTable).values({
           studentId: appRow.studentId,
           applicationId,
@@ -269,12 +277,13 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
           fileUrl: fileUrl || null,
           mimeType: mimeType || null,
           sizeBytes: sizeBytes ? Number(sizeBytes) : null,
+          sourceStageDocumentId: doc.id,
         });
       }
-    } catch (e) {
-      // Non-fatal: the stage document record was already saved; log and continue.
-      console.error("[STAGE-DOC] failed to mirror missing_docs upload to student pool:", e);
     }
+  } catch (e) {
+    // Non-fatal: the stage document record was already saved; log and continue.
+    console.error("[STAGE-DOC] failed to mirror stage upload to student pool:", e);
   }
 
   // Re-evaluate mandatory doc gate AFTER the mirror insert above so the
@@ -347,6 +356,20 @@ router.delete("/applications/:id/stage-documents/:docId", requireAuth, requireAg
 
   await db.delete(applicationStageDocumentsTable)
     .where(eq(applicationStageDocumentsTable.id, docId));
+
+  // Faz J — sync-delete the documents mirror that was created when this
+  // stage doc was uploaded so the application detail and student Belgeler
+  // tab no longer show the deleted document.
+  try {
+    await db.update(documentsTable)
+      .set({ deletedAt: new Date() })
+      .where(and(
+        eq(documentsTable.sourceStageDocumentId, docId),
+        isNull(documentsTable.deletedAt)
+      ));
+  } catch (e) {
+    console.error("[STAGE-DOC] failed to remove document mirror on stage-doc delete:", e);
+  }
 
   await logAudit(user.id, "delete_stage_document", "application", applicationId, { docId, stage: doc.stage }, req.ip);
   res.sendStatus(204);

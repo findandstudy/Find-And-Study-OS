@@ -23,6 +23,10 @@ export const documentsTable = pgTable("documents", {
   reviewedBy: integer("reviewed_by").references(() => usersTable.id, { onDelete: "set null" }),
   fileData: text("file_data"),
   notes: text("notes"),
+  // When this document was created by mirroring a stage-document upload,
+  // this points back to the originating application_stage_documents row so
+  // we can soft-delete the mirror when the stage doc is deleted (Faz J).
+  sourceStageDocumentId: integer("source_stage_document_id"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

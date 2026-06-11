@@ -74,7 +74,7 @@ export function buildBrandedHtml(opts: BuildBrandedHtmlOptions): string {
   const { title, subtitle, body, settings: s, logoBuri, sealUri } = opts;
   const primary = s.pdfPrimaryColor || "#2563eb";
   const accent = s.pdfAccentColor || "#0ea5e9";
-  const company = esc(s.companyName || "EduConsult OS");
+  const company = esc(s.companyName || "Find & Study");
   const footerText = esc(s.pdfFooterText || "");
   const generatedAt = new Date().toLocaleString("en-GB", {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",

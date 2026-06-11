@@ -669,7 +669,7 @@ router.get("/staff-cards/:userId/activity", requireAuth, requireStaffCardAdmin, 
     if (dayMs > now.getTime()) break;
     const key = tzDayKey(new Date(dayMs), tz);
     const wd = tzWeekday(new Date(dayMs + 12 * 60 * 60 * 1000), tz);
-    const planned = (scheduleByWeekday[wd] || []).reduce((sum, w) => sum + (w.endMinutes - w.startMinutes), 0);
+    const planned = Math.min(1440, (scheduleByWeekday[wd] || []).reduce((sum, w) => sum + (w.endMinutes - w.startMinutes), 0));
     byDay[key] = { plannedMinutes: planned, actualMinutes: 0, outsideMinutes: 0, weekday: wd };
   }
 
