@@ -11,6 +11,7 @@ import { getCsrfCookieOptions } from "./lib/cookieOptions";
 import { getCurrentSeason } from "./lib/season";
 import { seedDocumentTypes } from "./scripts/seedDocumentTypes";
 import { seedCurrencies } from "./scripts/seedCurrencies";
+import { HARDCODED_EXTRACTOR_FIELDS, HARDCODED_EXTRACTOR_RULES } from "./lib/aiDefaultConfigs";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -1116,10 +1117,48 @@ async function seedClaudeIntegration() {
           '["notification"]'::jsonb,
           'scheduled', '0 9 * * MON', NULL, '[]'::jsonb, false
         )
-      ON CONFLICT (slug) DO NOTHING
+      ON CONFLICT (slug) DO UPDATE SET is_active = true
     `);
   } catch (err) {
     console.error("[migrate] example ai_personas seed:", err);
+  }
+
+  // Step 2b7: Seed built-in Passport / Transcript extractor (idempotent via ON CONFLICT slug).
+  // Uses the shared HARDCODED_EXTRACTOR_FIELDS and HARDCODED_EXTRACTOR_RULES from aiDefaultConfigs.
+  try {
+    await pool.query(
+      `INSERT INTO ai_extractors
+         (name, slug, description, provider, model, system_prompt,
+          fields, rules, scopes, document_types,
+          temperature, max_tokens, is_active, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $13, $14)
+       ON CONFLICT (slug) DO UPDATE SET
+         fields        = EXCLUDED.fields,
+         rules         = EXCLUDED.rules,
+         model         = EXCLUDED.model,
+         temperature   = EXCLUDED.temperature,
+         max_tokens    = EXCLUDED.max_tokens,
+         is_active     = EXCLUDED.is_active,
+         is_default    = EXCLUDED.is_default`,
+      [
+        "Passport / Transcript",
+        "builtin-passport-transcript",
+        "Built-in extractor for passport and academic documents. Uses the shared field schema and global extraction rules.",
+        "anthropic",
+        "claude-sonnet-4-6",
+        "",
+        JSON.stringify(HARDCODED_EXTRACTOR_FIELDS),
+        JSON.stringify({ globalRules: HARDCODED_EXTRACTOR_RULES }),
+        JSON.stringify(["public_apply", "embed", "staff", "agent"]),
+        JSON.stringify(["passport", "diploma", "transcript"]),
+        0.20,
+        4096,
+        true,
+        true,
+      ]
+    );
+  } catch (err) {
+    console.error("[migrate] builtin extractor seed:", err);
   }
 
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
