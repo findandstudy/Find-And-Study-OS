@@ -64,6 +64,13 @@
       "when": 1749600000000,
       "tag": "0014_finance_staff_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1749686400000,
+      "tag": "0015_ai_default_configs",
+      "breakpoints": true
     }
   ]
 }

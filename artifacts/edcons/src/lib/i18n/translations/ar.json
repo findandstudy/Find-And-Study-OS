@@ -3116,6 +3116,25 @@
     "normalizeGpa100": "المعدل ← مقياس 0-100",
     "normalizeDateYmd": "التاريخ ← YYYY-MM-DD"
   },
+  "aiDefault": {
+    "sectionSubtitle": "عند عدم وجود مستخرج/شخصية مخصصة نشطة، تُستخدم هذه الإعدادات الافتراضية المدمجة. عدّلها لتخصيصها أو أعد الضبط للرجوع إلى القيم الأصلية.",
+    "extractorTitle": "إعدادات المستخرج المدمجة",
+    "personaTitle": "قوالب الشخصية الافتراضية",
+    "badgeCustom": "مخصص",
+    "badgeBuiltin": "مدمج",
+    "edit": "تعديل",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "saving": "جارٍ الحفظ…",
+    "reset": "إعادة الضبط إلى المدمج",
+    "resetting": "جارٍ الضبط…",
+    "confirmReset": "إعادة ضبط \"{key}\" إلى القيمة الافتراضية المدمجة؟ ستُفقد تخصيصاتك.",
+    "loading": "تحميل الإعدادات الافتراضية…",
+    "editPlaceholder": "أدخل القيمة…",
+    "toastSaved": "تم حفظ الإعداد الافتراضي",
+    "toastReset": "تمت إعادة الضبط إلى المدمج",
+    "toastError": "خطأ"
+  },
   "exportImport": {
     "exportAll": "تصدير الكل (Excel)",
     "exportSelected": "تصدير المحدد ({count}) (Excel)",

@@ -1039,6 +1039,89 @@ async function seedClaudeIntegration() {
     console.error("[migrate] entity_view_events:", err);
   }
 
+  // Step 2b5: ai_default_configs — editable built-in defaults for AI extractors
+  // and personas. Admin can override via the UI; DELETE reverts to hardcoded.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ai_default_configs (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL DEFAULT '{}',
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  } catch (err) {
+    console.error("[migrate] ai_default_configs:", err);
+  }
+
+  // Step 2b6: Seed 4 example AI personas (idempotent via ON CONFLICT DO NOTHING
+  // on slug). All are seeded inactive so admins activate after review.
+  try {
+    await pool.query(`
+      INSERT INTO ai_personas
+        (name, slug, persona_type, description, provider, model, system_prompt,
+         guidelines, negative_prompt, allowed_data_scopes, tools_enabled,
+         trigger_mode, schedule_cron, event_subscriptions, output_targets, is_active)
+      VALUES
+        (
+          'System Audit',
+          'system-audit',
+          'advisor',
+          'Read-only system auditor — analyses audit logs, finance and HR data and produces structured reports.',
+          'anthropic', 'claude-sonnet-4-6',
+          'You are an expert system auditor for an international education consultancy. Analyse the provided system data and produce a concise, structured audit report. Do not take any actions — advisory only.',
+          E'- Present findings in a structured format with clear sections\n- Highlight anomalies, suspicious patterns or data inconsistencies\n- Include counts and timestamps where relevant\n- Keep the report objective and factual',
+          '',
+          '["audit","finance","hr"]'::jsonb,
+          '[]'::jsonb,
+          'manual', NULL, NULL, '[]'::jsonb, false
+        ),
+        (
+          'Blog Yazarı Zeynep',
+          'blog-yazar-zeynep',
+          'advisor',
+          'Creative blog writer persona — drafts SEO-friendly education content in Turkish and English.',
+          'anthropic', 'claude-sonnet-4-6',
+          'Zeynep, uluslararası eğitim danışmanlığı şirketimiz için blog içerikleri yazan yaratıcı bir yazarsın. Hem Türkçe hem İngilizce içerik üretebilirsin. Hedef kitleye uygun, SEO dostu ve bilgilendirici yazılar hazırlarsın.',
+          E'- Her yazıda net bir başlık, giriş, ana bölümler ve sonuç bulunmalı\n- Yurt dışı eğitim fırsatlarına odaklan\n- SEO anahtar kelimelerini doğal şekilde kullan\n- Akademik ama ulaşılabilir bir dil kullan',
+          'Clickbait başlık, yanıltıcı bilgi veya garanti vaat etme.',
+          '["blog"]'::jsonb,
+          '["blog_draft"]'::jsonb,
+          'manual', NULL, NULL, '[]'::jsonb, false
+        ),
+        (
+          'Lead Özetleyici',
+          'lead-summarizer',
+          'advisor',
+          'Summarises lead records — highlights key info, conversion likelihood and recommended next steps.',
+          'anthropic', 'claude-sonnet-4-6',
+          'You are a lead analysis specialist for an international education consultancy. Given lead data provided as context, produce concise summaries highlighting the most important information, conversion likelihood indicators, and recommended next actions for the sales team.',
+          E'- Summarise in 3-5 bullet points maximum\n- Highlight urgency indicators (deadline, hot lead, stalled)\n- End with one clear recommended next action\n- Use plain, direct language',
+          'Do not invent data not present in the context. Do not make promises on behalf of the company.',
+          '[]'::jsonb,
+          '[]'::jsonb,
+          'manual', NULL, NULL, '[]'::jsonb, false
+        ),
+        (
+          'Takip Hatırlatıcı',
+          'followup-reminder',
+          'operator',
+          'Scheduled operator — composes a weekly follow-up reminder notification for the team. Actions go to Approval Queue.',
+          'anthropic', 'claude-sonnet-4-6',
+          'You are a follow-up reminder operator for an international education consultancy. Every week, compose a brief, actionable notification message reminding the team of pending leads and follow-up priorities. Be concise, professional, and motivating.',
+          E'- Keep the message under 150 words\n- Mention the day/week context\n- Include a call-to-action\n- Use a friendly but professional tone',
+          'Do not include specific student names or confidential data in the notification body.',
+          '[]'::jsonb,
+          '["notification"]'::jsonb,
+          'scheduled', '0 9 * * MON', NULL, '[]'::jsonb, false
+        )
+      ON CONFLICT (slug) DO NOTHING
+    `);
+  } catch (err) {
+    console.error("[migrate] example ai_personas seed:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

@@ -3116,6 +3116,25 @@
     "normalizeGpa100": "Moyenne → échelle 0-100",
     "normalizeDateYmd": "Date → AAAA-MM-JJ"
   },
+  "aiDefault": {
+    "sectionSubtitle": "Lorsqu'aucun extracteur/persona personnalisé n'est actif, ces paramètres par défaut intégrés sont utilisés. Modifiez-les pour les personnaliser ou réinitialisez-les aux valeurs d'origine.",
+    "extractorTitle": "Paramètres intégrés de l'extracteur",
+    "personaTitle": "Modèles par défaut des personas",
+    "badgeCustom": "Personnalisé",
+    "badgeBuiltin": "Intégré",
+    "edit": "Modifier",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "reset": "Réinitialiser aux valeurs intégrées",
+    "resetting": "Réinitialisation…",
+    "confirmReset": "Réinitialiser \"{key}\" à la valeur intégrée codée en dur ? Votre personnalisation sera perdue.",
+    "loading": "Chargement des paramètres par défaut…",
+    "editPlaceholder": "Saisissez une valeur…",
+    "toastSaved": "Valeur par défaut enregistrée",
+    "toastReset": "Réinitialisé aux valeurs intégrées",
+    "toastError": "Erreur"
+  },
   "exportImport": {
     "exportAll": "Tout exporter (Excel)",
     "exportSelected": "Exporter la sélection ({count}) (Excel)",

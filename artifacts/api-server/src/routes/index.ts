@@ -29,6 +29,7 @@ import embedRouter from "./embed";
 import publicApplyRouter from "./public-apply";
 import aiPersonasRouter from "./ai-personas";
 import aiExtractorsRouter from "./ai-extractors";
+import aiDefaultsRouter from "./ai-defaults";
 import destinationsRouter from "./destinations";
 import quickLinksRouter from "./quickLinks";
 import exportRouter from "./export";
@@ -180,6 +181,7 @@ router.use(leadAssignmentRulesRouter);
 router.use(staffCardsRouter);
 router.use(aiPersonasRouter);
 router.use(aiExtractorsRouter);
+router.use(aiDefaultsRouter);
 router.use(apiTokensRouter);
 router.use(cmsRouter);
 

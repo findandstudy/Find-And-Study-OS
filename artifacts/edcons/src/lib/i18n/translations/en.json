@@ -3549,6 +3549,25 @@
     "normalizeGpa100": "GPA → 0-100 scale",
     "normalizeDateYmd": "Date → YYYY-MM-DD"
   },
+  "aiDefault": {
+    "sectionSubtitle": "When no custom extractor/persona is active, these built-in defaults are used. Edit to customize; reset to revert to the original hardcoded values.",
+    "extractorTitle": "Extractor Built-in Settings",
+    "personaTitle": "Persona Template Defaults",
+    "badgeCustom": "Customized",
+    "badgeBuiltin": "Built-in",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…",
+    "reset": "Reset to Built-in",
+    "resetting": "Resetting…",
+    "confirmReset": "Reset \"{key}\" to the hardcoded built-in value? Your customization will be lost.",
+    "loading": "Loading defaults…",
+    "editPlaceholder": "Enter value…",
+    "toastSaved": "Default saved",
+    "toastReset": "Reset to built-in",
+    "toastError": "Error"
+  },
   "exportImport": {
     "exportAll": "Export all (Excel)",
     "exportSelected": "Export selected ({count}) (Excel)",

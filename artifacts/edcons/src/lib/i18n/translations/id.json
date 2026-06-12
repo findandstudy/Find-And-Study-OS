@@ -3065,6 +3065,25 @@
     "normalizeGpa100": "GPA → skala 0-100",
     "normalizeDateYmd": "Tanggal → YYYY-MM-DD"
   },
+  "aiDefault": {
+    "sectionSubtitle": "Ketika tidak ada ekstraktor/persona kustom yang aktif, nilai default bawaan ini digunakan. Edit untuk menyesuaikan; reset untuk kembali ke nilai hardcoded asli.",
+    "extractorTitle": "Pengaturan Bawaan Ekstraktor",
+    "personaTitle": "Template Default Persona",
+    "badgeCustom": "Disesuaikan",
+    "badgeBuiltin": "Bawaan",
+    "edit": "Edit",
+    "cancel": "Batal",
+    "save": "Simpan",
+    "saving": "Menyimpan…",
+    "reset": "Reset ke Bawaan",
+    "resetting": "Mereset…",
+    "confirmReset": "Reset \"{key}\" ke nilai bawaan yang ter-hardcode? Kustomisasi Anda akan hilang.",
+    "loading": "Memuat default…",
+    "editPlaceholder": "Masukkan nilai…",
+    "toastSaved": "Default disimpan",
+    "toastReset": "Direset ke bawaan",
+    "toastError": "Kesalahan"
+  },
   "exportImport": {
     "exportAll": "Ekspor semua (Excel)",
     "exportSelected": "Ekspor terpilih ({count}) (Excel)",

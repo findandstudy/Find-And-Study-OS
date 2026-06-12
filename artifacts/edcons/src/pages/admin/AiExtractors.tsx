@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { FileSearch, Plus, Trash2, Star } from "lucide-react";
+import AiBuiltinDefaults, { type DefaultFieldDef } from "./AiBuiltinDefaults";
 
 type Extractor = {
   id: number;
@@ -23,6 +24,27 @@ type Extractor = {
   usage?: { runs: number; lastRunAt: string | null };
   updatedAt: string;
 };
+
+const EXTRACTOR_DEFAULT_FIELDS: DefaultFieldDef[] = [
+  {
+    key: "extractor.builtin.systemPrompt",
+    label: "System Prompt",
+    editType: "text",
+    description: "Role / tone intro sent before the field schema. Leave empty to use the auto-generated intro.",
+  },
+  {
+    key: "extractor.builtin.rules",
+    label: "Extraction Rules",
+    editType: "lines",
+    description: "One rule per line. These are appended as a bullet list after the field schema.",
+  },
+  {
+    key: "extractor.builtin.fields",
+    label: "Extracted Fields (JSON)",
+    editType: "json",
+    description: "JSON array of field definitions used when no custom extractor covers a scope.",
+  },
+];
 
 export default function AiExtractors() {
   const { t } = useI18n();
@@ -128,6 +150,12 @@ export default function AiExtractors() {
           </Card>
         ))}
       </div>
+
+      <AiBuiltinDefaults
+        fields={EXTRACTOR_DEFAULT_FIELDS}
+        title={t("aiDefault.extractorTitle")}
+        subtitle={t("aiDefault.sectionSubtitle")}
+      />
     </div>
   );
 }

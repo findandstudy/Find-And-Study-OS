@@ -1,40 +1,12 @@
 import { db, aiExtractorsTable, aiExtractorRunsTable, type AiExtractor, type ExtractorFieldDef } from "@workspace/db";
 import { and, eq, desc, sql } from "drizzle-orm";
+import {
+  HARDCODED_EXTRACTOR_FIELDS,
+  HARDCODED_EXTRACTOR_RULES,
+  readDefaultConfig,
+} from "./aiDefaultConfigs";
 
 export type ExtractorScope = "public_apply" | "embed" | "staff" | "agent";
-
-const FALLBACK_FIELDS: ExtractorFieldDef[] = [
-  { key: "firstName", label: "First name", type: "string", description: "Exactly as printed on the document" },
-  { key: "lastName", label: "Last name", type: "string", description: "Exactly as printed on the document" },
-  { key: "dateOfBirth", label: "Date of birth", type: "date", normalize: "dateYmd", format: "YYYY-MM-DD" },
-  { key: "nationality", label: "Nationality", type: "string", description: "Full country name (e.g. 'Turkey' not 'Turkish')" },
-  { key: "passportNumber", label: "Passport number", type: "string" },
-  { key: "passportIssueDate", label: "Passport issue date", type: "date", normalize: "dateYmd", format: "YYYY-MM-DD" },
-  { key: "passportExpiry", label: "Passport expiry", type: "date", normalize: "dateYmd", format: "YYYY-MM-DD" },
-  { key: "passportExpired", label: "Passport expired", type: "boolean" },
-  { key: "motherName", label: "Mother's name", type: "string" },
-  { key: "fatherName", label: "Father's name", type: "string" },
-  { key: "email", label: "Email", type: "string" },
-  { key: "phone", label: "Phone", type: "string" },
-  { key: "address", label: "Address", type: "string" },
-  { key: "highSchool", label: "High school", type: "string" },
-  { key: "graduationYear", label: "Graduation year", type: "number" },
-  { key: "gpa", label: "GPA", type: "string", normalize: "gpa100" },
-  { key: "languageScore", label: "Language score", type: "string" },
-  { key: "documentType", label: "Document type", type: "enum", enumValues: ["passport", "diploma", "transcript", "photo", "other"] },
-  { key: "confidence", label: "Confidence", type: "enum", enumValues: ["high", "medium", "low"] },
-  { key: "extractedNotes", label: "Notes", type: "string" },
-];
-
-const FALLBACK_RULES = [
-  "CRITICAL - Names: Extract names EXACTLY as they appear on the passport or official document. The passport is the authoritative source. Do NOT modify, translate, or reformat names.",
-  "CRITICAL - Date format awareness: Different countries use different date formats. Most countries use DD/MM/YYYY; USA uses MM/DD/YYYY; East Asia uses YYYY/MM/DD. Use the issuing country's convention; always output YYYY-MM-DD.",
-  "CRITICAL - Passport expiry: Compare expiry date to today; set passportExpired true if past.",
-  "For nationality: always return the full official country name. Convert any demonym or adjective form to the country name (e.g. 'Afghan' → 'Afghanistan', 'Turkish' → 'Turkey').",
-  "Always normalize dates to YYYY-MM-DD format.",
-  "Return ONLY the JSON object, no other text.",
-  "Set null for fields you cannot find or are not sure about.",
-];
 
 export const FALLBACK_EXTRACTOR: AiExtractor = {
   id: 0,
@@ -45,8 +17,8 @@ export const FALLBACK_EXTRACTOR: AiExtractor = {
   model: "claude-sonnet-4-6",
   systemPrompt: "",
   systemPromptByLang: {},
-  fields: FALLBACK_FIELDS,
-  rules: { globalRules: FALLBACK_RULES },
+  fields: HARDCODED_EXTRACTOR_FIELDS,
+  rules: { globalRules: HARDCODED_EXTRACTOR_RULES },
   scopes: ["public_apply", "embed", "staff", "agent"],
   documentTypes: ["passport", "diploma", "transcript", "photo", "other"],
   temperature: "0.20",
@@ -58,12 +30,30 @@ export const FALLBACK_EXTRACTOR: AiExtractor = {
   updatedAt: new Date(0),
 } as AiExtractor;
 
+async function getFallbackExtractor(): Promise<AiExtractor> {
+  try {
+    const [systemPromptCfg, fieldsCfg, rulesCfg] = await Promise.all([
+      readDefaultConfig("extractor.builtin.systemPrompt"),
+      readDefaultConfig("extractor.builtin.fields"),
+      readDefaultConfig("extractor.builtin.rules"),
+    ]);
+    return {
+      ...FALLBACK_EXTRACTOR,
+      systemPrompt: systemPromptCfg.text ?? "",
+      fields: Array.isArray(fieldsCfg.fields) ? fieldsCfg.fields : HARDCODED_EXTRACTOR_FIELDS,
+      rules: { globalRules: Array.isArray(rulesCfg.globalRules) ? rulesCfg.globalRules : HARDCODED_EXTRACTOR_RULES },
+    };
+  } catch {
+    return FALLBACK_EXTRACTOR;
+  }
+}
+
 /**
  * Pick the best extractor for a given scope. Only extractors that explicitly
  * include the requested scope are considered. Preference:
  *   1. Active + isDefault + scope in scopes
  *   2. Active + scope in scopes (most recently updated)
- *   3. FALLBACK_EXTRACTOR (no DB row matches the scope)
+ *   3. DB-backed built-in defaults (then true FALLBACK_EXTRACTOR)
  *
  * Extractors that do not list the scope are NEVER applied to that scope —
  * this avoids leaking, say, a "staff" extractor onto "public_apply" traffic.
@@ -76,11 +66,11 @@ export async function getActiveExtractor(scope: ExtractorScope): Promise<AiExtra
       .where(eq(aiExtractorsTable.isActive, true))
       .orderBy(desc(aiExtractorsTable.isDefault), desc(aiExtractorsTable.updatedAt));
     const inScope = rows.filter((r) => Array.isArray(r.scopes) && (r.scopes as string[]).includes(scope));
-    if (inScope.length === 0) return FALLBACK_EXTRACTOR;
+    if (inScope.length === 0) return getFallbackExtractor();
     const def = inScope.find((r) => r.isDefault);
     return def ?? inScope[0];
   } catch {
-    return FALLBACK_EXTRACTOR;
+    return getFallbackExtractor();
   }
 }
 

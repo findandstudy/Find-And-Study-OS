@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { Sparkles, Plus, Trash2, Settings as SettingsIcon } from "lucide-react";
+import AiBuiltinDefaults, { type DefaultFieldDef } from "./AiBuiltinDefaults";
 
 type Persona = {
   id: number;
@@ -23,6 +24,21 @@ type Persona = {
   triggerMode: string;
   createdAt: string;
 };
+
+const PERSONA_DEFAULT_FIELDS: DefaultFieldDef[] = [
+  {
+    key: "persona.builtin.systemPrompt",
+    label: "Default System Prompt",
+    editType: "text",
+    description: "Template pre-filled in the system prompt field when creating a new persona.",
+  },
+  {
+    key: "persona.builtin.guidelines",
+    label: "Default Guidelines",
+    editType: "text",
+    description: "Template pre-filled in the guidelines field when creating a new persona.",
+  },
+];
 
 export default function AiPersonas() {
   const { t } = useI18n();
@@ -104,6 +120,12 @@ export default function AiPersonas() {
           </CardContent>
         </Card>
       )}
+
+      <AiBuiltinDefaults
+        fields={PERSONA_DEFAULT_FIELDS}
+        title={t("aiDefault.personaTitle")}
+        subtitle={t("aiDefault.sectionSubtitle")}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {personas.map((p) => (

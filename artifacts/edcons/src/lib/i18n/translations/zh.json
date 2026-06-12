@@ -3065,6 +3065,25 @@
     "normalizeGpa100": "GPA → 0-100 制",
     "normalizeDateYmd": "日期 → YYYY-MM-DD"
   },
+  "aiDefault": {
+    "sectionSubtitle": "当没有自定义提取器/角色处于活跃状态时，将使用这些内置默认值。编辑以自定义；重置以恢复原始硬编码值。",
+    "extractorTitle": "提取器内置设置",
+    "personaTitle": "角色模板默认值",
+    "badgeCustom": "已自定义",
+    "badgeBuiltin": "内置",
+    "edit": "编辑",
+    "cancel": "取消",
+    "save": "保存",
+    "saving": "保存中…",
+    "reset": "重置为内置",
+    "resetting": "重置中…",
+    "confirmReset": "将「{key}」重置为硬编码内置值？您的自定义将丢失。",
+    "loading": "加载默认值…",
+    "editPlaceholder": "输入值…",
+    "toastSaved": "默认值已保存",
+    "toastReset": "已重置为内置",
+    "toastError": "错误"
+  },
   "exportImport": {
     "exportAll": "全部导出（Excel）",
     "exportSelected": "导出所选（{count}）（Excel）",

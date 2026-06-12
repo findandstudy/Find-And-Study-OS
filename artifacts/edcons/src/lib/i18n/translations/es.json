@@ -3065,6 +3065,25 @@
     "normalizeGpa100": "GPA → escala 0-100",
     "normalizeDateYmd": "Fecha → AAAA-MM-DD"
   },
+  "aiDefault": {
+    "sectionSubtitle": "Cuando no hay extractor/persona personalizado activo, se usan estos valores predeterminados integrados. Edítalos para personalizar; restablécelos para volver a los valores originales.",
+    "extractorTitle": "Configuración integrada del extractor",
+    "personaTitle": "Plantillas predeterminadas de personas",
+    "badgeCustom": "Personalizado",
+    "badgeBuiltin": "Integrado",
+    "edit": "Editar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "reset": "Restablecer al integrado",
+    "resetting": "Restableciendo…",
+    "confirmReset": "¿Restablecer \"{key}\" al valor integrado predeterminado? Tu personalización se perderá.",
+    "loading": "Cargando valores predeterminados…",
+    "editPlaceholder": "Ingresa un valor…",
+    "toastSaved": "Valor predeterminado guardado",
+    "toastReset": "Restablecido al integrado",
+    "toastError": "Error"
+  },
   "exportImport": {
     "exportAll": "Exportar todo (Excel)",
     "exportSelected": "Exportar seleccionados ({count}) (Excel)",

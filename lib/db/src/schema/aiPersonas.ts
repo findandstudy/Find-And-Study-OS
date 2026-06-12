@@ -155,3 +155,16 @@ export type AiPersona = typeof aiPersonasTable.$inferSelect;
 export type InsertAiPersona = typeof aiPersonasTable.$inferInsert;
 export type AiPersonaRun = typeof aiPersonaRunsTable.$inferSelect;
 export type AiActionQueueItem = typeof aiActionQueueTable.$inferSelect;
+
+export const aiDefaultConfigsTable = pgTable("ai_default_configs", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull().$type<unknown>(),
+  updatedBy: integer("updated_by").references(() => usersTable.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export type AiDefaultConfig = typeof aiDefaultConfigsTable.$inferSelect;

@@ -3490,6 +3490,25 @@
     "normalizeGpa100": "Not → 0-100 ölçeği",
     "normalizeDateYmd": "Tarih → YYYY-AA-GG"
   },
+  "aiDefault": {
+    "sectionSubtitle": "Özel extractor/persona aktif değilken bu yerleşik varsayılanlar kullanılır. Düzenleyerek özelleştirebilir, Sıfırla ile orijinal kodlanmış değere dönebilirsiniz.",
+    "extractorTitle": "Extractor Yerleşik Ayarları",
+    "personaTitle": "Persona Şablon Varsayılanları",
+    "badgeCustom": "Özelleştirilmiş",
+    "badgeBuiltin": "Yerleşik",
+    "edit": "Düzenle",
+    "cancel": "İptal",
+    "save": "Kaydet",
+    "saving": "Kaydediliyor…",
+    "reset": "Yerleşike Sıfırla",
+    "resetting": "Sıfırlanıyor…",
+    "confirmReset": "\"{key}\" yerleşik varsayılan değere sıfırlansın mı? Özelleştirmeniz kaybolacak.",
+    "loading": "Varsayılanlar yükleniyor…",
+    "editPlaceholder": "Değer girin…",
+    "toastSaved": "Varsayılan kaydedildi",
+    "toastReset": "Yerleşike sıfırlandı",
+    "toastError": "Hata"
+  },
   "exportImport": {
     "exportAll": "Tümünü dışa aktar (Excel)",
     "exportSelected": "Seçilenleri dışa aktar ({count}) (Excel)",
