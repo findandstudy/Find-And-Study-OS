@@ -35,7 +35,7 @@ router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
   const role = asStr(req.query.role);
   const roles = asStr(req.query.roles);
   const search = asStr(req.query.search);
-  const pageParams = parsePaginationParams(req, { defaultLimit: 50, maxLimit: "small" });
+  const pageParams = parsePaginationParams(req, { defaultLimit: 50, maxLimit: "large" });
 
   const conditions = [isNull(usersTable.deletedAt)];
   if (role) conditions.push(eq(usersTable.role, role));

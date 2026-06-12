@@ -150,7 +150,10 @@ function UsersTab() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [sort, setSort] = useState<{ key: UserSortKey; dir: SortDir }>({ key: "user", dir: "asc" });
-  const { data: usersResp, isLoading, refetch } = useListUsers({ limit: 100 }, { query: { queryKey: ['admin-users'] } as any });
+  const { data: usersResp, isLoading, refetch } = useListUsers(
+    { limit: 500, roles: "super_admin,admin,manager,staff,consultant,accountant,editor,agent,sub_agent,agent_staff,pending" } as any,
+    { query: { queryKey: ['admin-users'] } as any }
+  );
   const users: any[] = (usersResp as any)?.data || usersResp || [];
   const [roles, setRoles] = useState<RoleData[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
