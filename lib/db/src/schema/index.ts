@@ -42,3 +42,4 @@ export * from "./staffCards";
 export * from "./objectOwners";
 export * from "./aiPersonas";
 export * from "./aiExtractors";
+export * from "./portalSubmissions";

@@ -71,6 +71,13 @@
       "when": 1749686400000,
       "tag": "0015_ai_default_configs",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1749772800000,
+      "tag": "0016_portal_submissions",
+      "breakpoints": true
     }
   ]
 }
