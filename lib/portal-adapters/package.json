@@ -1,0 +1,19 @@
+{
+  "name": "@workspace/portal-adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test:program-match": "tsx --test ./scripts/test-program-match.ts"
+  },
+  "dependencies": {
+    "playwright-core": "^1.59.1"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:"
+  }
+}
