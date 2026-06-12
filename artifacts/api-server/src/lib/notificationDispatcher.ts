@@ -229,43 +229,49 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
       }
     }
 
+    // Email and WhatsApp deliveries are fire-and-forget: they do NOT block the
+    // caller (e.g. webhook handler) so that SMTP rate-limits or slow WA API
+    // calls never stall the request path. The in_app DB insert above is
+    // always awaited — tests that check notification counts rely on it.
     if (channels.includes("email")) {
-      try {
-        const users = await db.select({ id: usersTable.id, email: usersTable.email, language: usersTable.language })
-          .from(usersTable)
-          .where(and(
-            inArray(usersTable.id, userIds),
-            eq(usersTable.isActive, true)
-          ));
+      (async () => {
+        try {
+          const users = await db.select({ id: usersTable.id, email: usersTable.email, language: usersTable.language })
+            .from(usersTable)
+            .where(and(
+              inArray(usersTable.id, userIds),
+              eq(usersTable.isActive, true)
+            ));
 
-        for (const user of users) {
-          if (!user.email) continue;
-          try {
-            let emailContent = ctx.emailOverride;
-            if (!emailContent) {
-              const localized = resolveTemplate(template, user.language);
-              const subject = localized?.subject
-                ? replaceVars(localized.subject, vars)
-                : ctx.title;
-              const bodyHtml = localized?.body
-                ? renderBodyHtml(localized.body, vars)
-                : bodyToHtml(ctx.body);
-              emailContent = await buildNotificationEmail({
-                subject,
-                bodyHtml,
-                actionUrl: ctx.actionUrl,
-                actionLabel: "View Details",
-                subtitle: "Notification",
-              });
+          for (const user of users) {
+            if (!user.email) continue;
+            try {
+              let emailContent = ctx.emailOverride;
+              if (!emailContent) {
+                const localized = resolveTemplate(template, user.language);
+                const subject = localized?.subject
+                  ? replaceVars(localized.subject, vars)
+                  : ctx.title;
+                const bodyHtml = localized?.body
+                  ? renderBodyHtml(localized.body, vars)
+                  : bodyToHtml(ctx.body);
+                emailContent = await buildNotificationEmail({
+                  subject,
+                  bodyHtml,
+                  actionUrl: ctx.actionUrl,
+                  actionLabel: "View Details",
+                  subtitle: "Notification",
+                });
+              }
+              await sendEmail(user.email, emailContent);
+            } catch (err) {
+              console.error(`[NOTIFY] Failed to send email to ${user.email}:`, err);
             }
-            await sendEmail(user.email, emailContent);
-          } catch (err) {
-            console.error(`[NOTIFY] Failed to send email to ${user.email}:`, err);
           }
+        } catch (err) {
+          console.error(`[NOTIFY] Email dispatch error for ${ctx.event}:`, err);
         }
-      } catch (err) {
-        console.error(`[NOTIFY] Email dispatch error for ${ctx.event}:`, err);
-      }
+      })();
     }
 
     // WhatsApp: actually deliver through the configured WA Cloud integration.
@@ -274,44 +280,46 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
     // template (HSM) messaging is a separate concern. In development (without
     // ALLOW_LIVE_INTEGRATIONS) sendWhatsAppText returns a simulated success.
     if (channels.includes("whatsapp")) {
-      try {
-        const waUsers = await db
-          .select({ id: usersTable.id, phoneE164: usersTable.phoneE164, language: usersTable.language })
-          .from(usersTable)
-          .where(and(
-            inArray(usersTable.id, userIds),
-            eq(usersTable.isActive, true)
-          ));
-        const recipients = waUsers.filter(u => u.phoneE164);
-        if (recipients.length > 0) {
-          const config = await getWhatsAppConfig();
-          if (!config) {
-            console.error(`[NOTIFY] WhatsApp channel enabled for ${ctx.event} but no integration configured`);
-          } else {
-            for (const user of recipients) {
-              try {
-                const localized = resolveTemplate(template, user.language);
-                const rawBody = localized?.body
-                  ? replaceVars(localized.body, vars)
-                  : ctx.body;
-                const text = stripHtml(rawBody) || ctx.title;
-                const result = await sendWhatsAppText({
-                  config,
-                  toPhoneE164: user.phoneE164!,
-                  text,
-                });
-                if (!result.ok) {
-                  console.error(`[NOTIFY] WhatsApp send failed to user ${user.id}: ${result.error}`);
+      (async () => {
+        try {
+          const waUsers = await db
+            .select({ id: usersTable.id, phoneE164: usersTable.phoneE164, language: usersTable.language })
+            .from(usersTable)
+            .where(and(
+              inArray(usersTable.id, userIds),
+              eq(usersTable.isActive, true)
+            ));
+          const recipients = waUsers.filter(u => u.phoneE164);
+          if (recipients.length > 0) {
+            const config = await getWhatsAppConfig();
+            if (!config) {
+              console.error(`[NOTIFY] WhatsApp channel enabled for ${ctx.event} but no integration configured`);
+            } else {
+              for (const user of recipients) {
+                try {
+                  const localized = resolveTemplate(template, user.language);
+                  const rawBody = localized?.body
+                    ? replaceVars(localized.body, vars)
+                    : ctx.body;
+                  const text = stripHtml(rawBody) || ctx.title;
+                  const result = await sendWhatsAppText({
+                    config,
+                    toPhoneE164: user.phoneE164!,
+                    text,
+                  });
+                  if (!result.ok) {
+                    console.error(`[NOTIFY] WhatsApp send failed to user ${user.id}: ${result.error}`);
+                  }
+                } catch (err) {
+                  console.error(`[NOTIFY] WhatsApp send error to user ${user.id}:`, err);
                 }
-              } catch (err) {
-                console.error(`[NOTIFY] WhatsApp send error to user ${user.id}:`, err);
               }
             }
           }
+        } catch (err) {
+          console.error(`[NOTIFY] WhatsApp dispatch error for ${ctx.event}:`, err);
         }
-      } catch (err) {
-        console.error(`[NOTIFY] WhatsApp dispatch error for ${ctx.event}:`, err);
-      }
+      })();
     }
   } catch (err) {
     console.error(`[NOTIFY] Dispatch error for ${ctx.event}:`, err);

@@ -329,6 +329,8 @@ export async function processInboundMessage(opts: {
     };
 
     // Always dispatch inbox.new_message on every new inbound (per spec).
+    // dispatchNotification writes in_app DB records synchronously then fires
+    // email/WA delivery in the background — so await here is safe and fast.
     await dispatchNotification({
       event: "inbox.new_message",
       title: `New ${channel} message from ${contact.displayName || contact.phone || "contact"}`,

@@ -405,6 +405,7 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
   setConfirmed: (b: boolean) => void;
   error: string;
 }) {
+  const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [drawing, setDrawing] = useState(false);

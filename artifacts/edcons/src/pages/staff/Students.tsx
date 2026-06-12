@@ -760,6 +760,7 @@ function AddStudentModal({
           });
         } catch (err) {
           console.error(`[STUDENTS] upload failed for ${label}:`, err);
+          return null;
         }
       })
     );

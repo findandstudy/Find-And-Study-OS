@@ -709,6 +709,7 @@ function _AddStudentModalInline_REMOVED({
           });
         } catch (err) {
           console.error(`[AGENT_STUDENTS] upload failed for ${label}:`, err);
+          return null;
         }
       })
     );
