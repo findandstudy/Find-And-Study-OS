@@ -50,6 +50,7 @@ import leadAssignmentRulesRouter from "./leadAssignmentRules";
 import staffCardsRouter from "./staffCards";
 import apiTokensRouter from "./apiTokens";
 import cmsRouter from "./cms";
+import portalAutomationRouter from "./portalAutomation";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
 const router: IRouter = Router();
@@ -184,5 +185,6 @@ router.use(aiExtractorsRouter);
 router.use(aiDefaultsRouter);
 router.use(apiTokensRouter);
 router.use(cmsRouter);
+router.use(portalAutomationRouter);
 
 export default router;

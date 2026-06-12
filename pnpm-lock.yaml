@@ -218,6 +218,9 @@ importers:
       '@workspace/pagination':
         specifier: workspace:*
         version: link:../../lib/pagination
+      '@workspace/portal-adapters':
+        specifier: workspace:*
+        version: link:../../lib/portal-adapters
       '@workspace/roles':
         specifier: workspace:*
         version: link:../../lib/roles

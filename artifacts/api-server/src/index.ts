@@ -1220,6 +1220,50 @@ async function seedClaudeIntegration() {
     console.error("[migrate] restore apply@findandstudy.com:", err);
   }
 
+  // Step 2b11: Portal Automation — portal_submissions table + enums (idempotent).
+  try {
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE "public"."portal_submission_mode" AS ENUM('dry', 'real');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE "public"."portal_submission_status" AS ENUM('queued', 'running', 'submitted', 'already_exists', 'program_missing', 'failed', 'canceled');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_submissions (
+        id SERIAL PRIMARY KEY,
+        application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+        student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        university_key TEXT NOT NULL,
+        university_name TEXT NOT NULL,
+        mode portal_submission_mode NOT NULL DEFAULT 'dry',
+        status portal_submission_status NOT NULL DEFAULT 'queued',
+        external_ref TEXT,
+        result_json JSONB,
+        screenshot_urls JSONB,
+        error TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        locked_at TIMESTAMPTZ,
+        locked_by TEXT,
+        enqueued_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_submissions_application_id_idx ON portal_submissions USING btree (application_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_submissions_status_idx ON portal_submissions USING btree (status)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_submissions_locked_at_idx ON portal_submissions USING btree (locked_at)`);
+  } catch (err) {
+    console.error("[migrate] portal_submissions:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

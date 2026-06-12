@@ -37,6 +37,8 @@ tags:
     description: Inbox conversations (multi-channel messaging)
   - name: ai
     description: AI-powered features
+  - name: portal-automation
+    description: University portal submission automation
 
 paths:
   /healthz:
@@ -2097,6 +2099,191 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  # PORTAL AUTOMATION
+  /applications/{appId}/portal-submissions:
+    post:
+      operationId: enqueuePortalSubmission
+      tags: [portal-automation]
+      summary: Enqueue a portal submission for an application
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnqueuePortalSubmissionBody"
+      responses:
+        "201":
+          description: Submission queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalSubmission"
+        "404":
+          description: Application not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Confirm required for real mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-submissions:
+    get:
+      operationId: listPortalSubmissions
+      tags: [portal-automation]
+      summary: List portal submissions (paginated)
+      parameters:
+        - name: applicationId
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [queued, running, submitted, already_exists, program_missing, failed, canceled]
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [dry, real]
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PortalSubmission"
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+                  totalPages: { type: integer }
+                required: [data, total, page, limit, totalPages]
+
+  /portal-submissions/{id}:
+    get:
+      operationId: getPortalSubmission
+      tags: [portal-automation]
+      summary: Get a single portal submission
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Portal submission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalSubmission"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-submissions/{id}/retry:
+    post:
+      operationId: retryPortalSubmission
+      tags: [portal-automation]
+      summary: Retry a failed or canceled portal submission
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Retried
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                required: [ok]
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Not retryable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-submissions/{id}/cancel:
+    post:
+      operationId: cancelPortalSubmission
+      tags: [portal-automation]
+      summary: Cancel a queued or running portal submission
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Canceled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                required: [ok]
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Not cancelable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /university-portals:
+    get:
+      operationId: listUniversityPortals
+      tags: [portal-automation]
+      summary: List configured university portals with credential status
+      responses:
+        "200":
+          description: List of university portals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UniversityPortal"
 
 components:
   schemas:
@@ -4391,3 +4578,49 @@ components:
           $ref: "#/components/schemas/FollowUp"
       required:
         - data
+
+    PortalSubmission:
+      type: object
+      properties:
+        id: { type: integer }
+        applicationId: { type: integer }
+        studentId: { type: integer }
+        universityKey: { type: string }
+        universityName: { type: string }
+        mode:
+          type: string
+          enum: [dry, real]
+        status:
+          type: string
+          enum: [queued, running, submitted, already_exists, program_missing, failed, canceled]
+        externalRef: { type: string, nullable: true }
+        resultJson: { type: object, nullable: true }
+        screenshotUrls: { type: array, items: { type: string }, nullable: true }
+        error: { type: string, nullable: true }
+        attempts: { type: integer }
+        maxAttempts: { type: integer }
+        lockedAt: { type: string, format: date-time, nullable: true }
+        lockedBy: { type: string, nullable: true }
+        enqueuedBy: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: string, format: date-time, nullable: true }
+      required: [id, applicationId, studentId, universityKey, universityName, mode, status, attempts, maxAttempts, createdAt, updatedAt]
+
+    EnqueuePortalSubmissionBody:
+      type: object
+      properties:
+        universityKey: { type: string, minLength: 1 }
+        mode:
+          type: string
+          enum: [dry, real]
+        confirm: { type: boolean }
+      required: [universityKey, mode]
+
+    UniversityPortal:
+      type: object
+      properties:
+        key: { type: string }
+        label: { type: string }
+        hasCredentials: { type: boolean }
+      required: [key, label, hasCredentials]
