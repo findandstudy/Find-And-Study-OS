@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db, apiTokensTable, usersTable } from "@workspace/db";
 import { generateToken, validateScopes } from "../src/lib/apiToken";
 import { lookupApiToken } from "../src/lib/apiTokenAuth";
@@ -13,7 +13,7 @@ test("api-token CRUD lifecycle (real DB)", async () => {
   const [owner] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.isActive, true))
+    .where(and(eq(usersTable.isActive, true), isNull(usersTable.deletedAt)))
     .limit(1);
   assert.ok(owner, "expected at least one active user to own the token");
 
