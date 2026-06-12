@@ -1209,6 +1209,17 @@ async function seedClaudeIntegration() {
     console.error("[migrate] playwright staff cleanup:", err);
   }
 
+  // Step 2b10: Restore apply@findandstudy.com (PLAY WRITE, id=2803) — was
+  // accidentally soft-deleted by step 2b9; user is intentionally kept.
+  try {
+    await pool.query(
+      `UPDATE users SET deleted_at = NULL, updated_at = NOW()
+       WHERE id = 2803 AND email = 'apply@findandstudy.com' AND deleted_at IS NOT NULL`
+    );
+  } catch (err) {
+    console.error("[migrate] restore apply@findandstudy.com:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
