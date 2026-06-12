@@ -1161,6 +1161,36 @@ async function seedClaudeIntegration() {
     console.error("[migrate] builtin extractor seed:", err);
   }
 
+  // Step 2b8: One-shot data fix — move Tayma (2716) and Sarah (2717) from the
+  // accidental "Genel Şube" branch (1373) back to the main "Find And Study"
+  // branch (1). Also moves any leads or students stuck in branch 1373 to
+  // branch 1 so their assignments remain visible in the main branch UI.
+  try {
+    const branchFix = await pool.query(
+      `INSERT INTO system_flags (key) VALUES ('staff_branch_fix_v1') ON CONFLICT DO NOTHING RETURNING key`
+    );
+    if (branchFix.rows.length > 0) {
+      const uResult = await pool.query(
+        `UPDATE users SET branch_id = 1, updated_at = NOW()
+         WHERE id IN (2716, 2717) AND branch_id = 1373`
+      );
+      const lResult = await pool.query(
+        `UPDATE leads SET branch_id = NULL, updated_at = NOW()
+         WHERE branch_id = 1373`
+      );
+      const sResult = await pool.query(
+        `UPDATE students SET branch_id = NULL, updated_at = NOW()
+         WHERE branch_id = 1373`
+      );
+      console.log(
+        `[migrate] staff branch fix: ${uResult.rowCount} user(s), ` +
+        `${lResult.rowCount} lead(s), ${sResult.rowCount} student(s) moved from branch 1373 → main`
+      );
+    }
+  } catch (err) {
+    console.error("[migrate] staff branch fix:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

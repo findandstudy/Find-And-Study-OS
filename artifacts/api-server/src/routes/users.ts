@@ -28,7 +28,7 @@ const createUserBodySchema = z.object({
 const router: IRouter = Router();
 
 const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "avatarUrl", "startDate", "homeAddress", "passportNumber", "contractUrl", "passportUrl", "emergencyContactName", "emergencyContactPhone"];
-const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive", "permissionOverrides"];
+const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive", "permissionOverrides", "branchId"];
 
 router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const asStr = (v: unknown): string => (Array.isArray(v) ? v.join(",") : v == null ? "" : String(v));
