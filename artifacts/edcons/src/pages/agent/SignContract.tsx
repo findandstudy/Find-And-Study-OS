@@ -454,8 +454,8 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
   }
   function handleFile(file: File | undefined | null) {
     if (!file) return;
-    if (!file.type.startsWith("image/")) { setUploadErr("Lütfen bir resim dosyası seçin (PNG, JPG)."); return; }
-    if (file.size > 5 * 1024 * 1024) { setUploadErr("Dosya boyutu 5MB'tan küçük olmalı."); return; }
+    if (!file.type.startsWith("image/")) { setUploadErr(t("agentContract.errInvalidImageType")); return; }
+    if (file.size > 5 * 1024 * 1024) { setUploadErr(t("agentContract.errFileTooLarge")); return; }
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
@@ -480,15 +480,15 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
           scale *= 0.7;
           url = encode(scale);
         }
-        if (!url) { setUploadErr("Resim işlenemedi."); return; }
-        if (url.length > LIMIT) { setUploadErr("İmza görseli çok büyük, lütfen daha sade bir görsel deneyin."); return; }
+        if (!url) { setUploadErr(t("agentContract.errImageProcessing")); return; }
+        if (url.length > LIMIT) { setUploadErr(t("agentContract.errImageTooLarge")); return; }
         setUploadedUrl(url);
         setUploadErr("");
       };
-      img.onerror = () => setUploadErr("Resim yüklenemedi, lütfen başka bir dosya deneyin.");
+      img.onerror = () => setUploadErr(t("agentContract.errImageLoad"));
       img.src = reader.result as string;
     };
-    reader.onerror = () => setUploadErr("Dosya okunamadı.");
+    reader.onerror = () => setUploadErr(t("agentContract.errFileRead"));
     reader.readAsDataURL(file);
   }
   function clearUpload() {
@@ -510,20 +510,20 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
   return (
     <div className="space-y-4">
       <div>
-        <Label>İsim Soyisim *</Label>
+        <Label>{t("agentContract.signerNameLabel")}</Label>
         <Input value={signerName} onChange={e => onChangeName(e.target.value)} />
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
-          <Label>İmzanız *</Label>
+          <Label>{t("agentContract.signatureLabel")}</Label>
           <div className="inline-flex rounded-lg border p-0.5 bg-muted/40">
             <button type="button" onClick={() => { setMode("draw"); setUploadErr(""); }}
               className={`text-xs px-2.5 py-1 rounded-md transition-colors ${mode === "draw" ? "bg-white shadow-sm font-medium" : "text-muted-foreground"}`}>
-              Çiz
+              {t("agentContract.drawMode")}
             </button>
             <button type="button" onClick={() => setMode("upload")}
               className={`text-xs px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${mode === "upload" ? "bg-white shadow-sm font-medium" : "text-muted-foreground"}`}>
-              <Upload className="w-3 h-3" /> Yükle
+              <Upload className="w-3 h-3" /> {t("agentContract.uploadMode")}
             </button>
           </div>
         </div>
@@ -532,7 +532,7 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
             <canvas ref={canvasRef} className="w-full h-full touch-none rounded-lg"
               onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} />
             <button type="button" onClick={clear} className="absolute top-2 right-2 text-xs text-muted-foreground flex items-center gap-1 bg-white/80 px-2 py-1 rounded">
-              <Eraser className="w-3 h-3" /> Temizle
+              <Eraser className="w-3 h-3" /> {t("agentContract.clearSignature")}
             </button>
           </div>
         ) : (
@@ -568,10 +568,10 @@ function SignaturePad({ onSubmit, submitting, onCancel, signerName, onChangeName
         </div>
       )}
       <div className="flex justify-between">
-        <Button variant="outline" onClick={onCancel}>Geri</Button>
+        <Button variant="outline" onClick={onCancel}>{t("common.back")}</Button>
         <Button onClick={submit} disabled={!hasSignature || !confirmed || !signerName.trim() || submitting}>
           {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileSignature className="w-4 h-4 mr-2" />}
-          İmzala ve gönder
+          {t("agentContract.signAndSend")}
         </Button>
       </div>
     </div>

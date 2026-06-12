@@ -4581,7 +4581,19 @@
     "uploadSignatureHint": "Cliquez pour télécharger la signature",
     "uploadSignatureFormat": "PNG ou JPG, max 5 Mo",
     "removeSignature": "Supprimer",
-    "confirmText": "Je confirme avoir lu et compris ce contrat, et que ma signature électronique sera considérée comme valide."
+    "confirmText": "Je confirme avoir lu et compris ce contrat, et que ma signature électronique sera considérée comme valide.",
+    "signerNameLabel": "Full Name *",
+    "signatureLabel": "Signature *",
+    "drawMode": "Draw",
+    "uploadMode": "Upload",
+    "clearSignature": "Clear",
+    "signAndSend": "Sign & Send",
+    "errInvalidImageType": "Please select an image file (PNG, JPG).",
+    "errFileTooLarge": "File size must be less than 5MB.",
+    "errImageProcessing": "Image could not be processed.",
+    "errImageTooLarge": "Signature image is too large, please try a simpler image.",
+    "errImageLoad": "Image could not be loaded, please try another file.",
+    "errFileRead": "File could not be read."
   },
   "mandatoryDocs": {
     "title": "Documents manquants",

@@ -4581,7 +4581,19 @@
     "uploadSignatureHint": "İmza görselini yüklemek için tıklayın",
     "uploadSignatureFormat": "PNG veya JPG, en fazla 5MB",
     "removeSignature": "Kaldır",
-    "confirmText": "Bu sözleşmeyi okuduğumu, anladığımı ve elektronik imzamın geçerli kabul edileceğini onaylıyorum."
+    "confirmText": "Bu sözleşmeyi okuduğumu, anladığımı ve elektronik imzamın geçerli kabul edileceğini onaylıyorum.",
+    "signerNameLabel": "İsim Soyisim *",
+    "signatureLabel": "İmzanız *",
+    "drawMode": "Çiz",
+    "uploadMode": "Yükle",
+    "clearSignature": "Temizle",
+    "signAndSend": "İmzala ve gönder",
+    "errInvalidImageType": "Lütfen bir resim dosyası seçin (PNG, JPG).",
+    "errFileTooLarge": "Dosya boyutu 5MB'tan küçük olmalı.",
+    "errImageProcessing": "Resim işlenemedi.",
+    "errImageTooLarge": "İmza görseli çok büyük, lütfen daha sade bir görsel deneyin.",
+    "errImageLoad": "Resim yüklenemedi, lütfen başka bir dosya deneyin.",
+    "errFileRead": "Dosya okunamadı."
   },
   "mandatoryDocs": {
     "title": "Eksik Belgeler",

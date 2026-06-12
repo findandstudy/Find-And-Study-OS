@@ -2991,8 +2991,8 @@ export default function FinancePage() {
                       {([
                         { key: "studentName", label: t("financePage.student"), align: "text-left" },
                         { key: "universityName", label: t("financePage.university"), align: "text-left", hasUniFilter: true },
-                        { key: "agentName", label: t("financePage.agentFilter"), align: "text-left", noSort: true },
-                        { key: "staffName", label: t("financePage.staffFilter"), align: "text-left", noSort: true },
+                        { key: "agentName", label: t("financePage.agentFilter"), align: "text-left", noSort: true, hasAgentFilter: true },
+                        { key: "staffName", label: t("financePage.staffFilter"), align: "text-left", noSort: true, hasStaffFilter: true },
                         { key: "", label: t("financePage.payer"), align: "text-left", noSort: true },
                         { key: "totalAmount", label: t("financePage.total"), align: "text-right" },
                         { key: "", label: "1st Installment (50%)", align: "text-center", noSort: true },
@@ -3002,6 +3002,8 @@ export default function FinancePage() {
                         const active = feeSort.key === col.key && !col.noSort && col.key !== "";
                         const feeUniActive = feeUniFilter.trim().length > 0;
                         const feeStatusActive = feeStatusFilter !== "all";
+                        const feeAgentFilterActive = feeAgentId !== "all";
+                        const feeStaffFilterActive = feeStaffId !== "all";
                         return (
                           <th
                             key={col.key || col.label}
@@ -3077,6 +3079,78 @@ export default function FinancePage() {
                                           <SelectItem value="all">{t("financePage.allStatuses")}</SelectItem>
                                           {Object.entries(FEE_STATUS).map(([v, m]) => (
                                             <SelectItem key={v} value={v}>{t(`financePage.${m.label}`)}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                              {col.hasAgentFilter && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      title={feeAgentFilterActive ? t("financePage.filterActive") : t("financePage.agentFilter")}
+                                      className={`relative inline-flex items-center justify-center transition-colors ${feeAgentFilterActive ? "text-primary" : "text-slate-400 hover:text-slate-700"}`}
+                                    >
+                                      <FilterIcon className={`w-3 h-3 ${feeAgentFilterActive ? "fill-primary/20" : ""}`} />
+                                      {feeAgentFilterActive && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />}
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent align="start" className="w-56 p-3">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">{t("financePage.agent")}</Label>
+                                        {feeAgentFilterActive && (
+                                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setFeeAgentId("all")}>
+                                            <X className="w-3 h-3 mr-1" />{t("financePage.clear")}
+                                          </Button>
+                                        )}
+                                      </div>
+                                      <Select value={feeAgentId} onValueChange={setFeeAgentId}>
+                                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="all">{t("financePage.agentFilter")}</SelectItem>
+                                          {filterAgents.map((a: any) => (
+                                            <SelectItem key={a.id} value={String(a.id)}>{a.name || `Agent #${a.id}`}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                              {col.hasStaffFilter && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      title={feeStaffFilterActive ? t("financePage.filterActive") : t("financePage.staffFilter")}
+                                      className={`relative inline-flex items-center justify-center transition-colors ${feeStaffFilterActive ? "text-primary" : "text-slate-400 hover:text-slate-700"}`}
+                                    >
+                                      <FilterIcon className={`w-3 h-3 ${feeStaffFilterActive ? "fill-primary/20" : ""}`} />
+                                      {feeStaffFilterActive && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary" />}
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent align="start" className="w-56 p-3">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">{t("financePage.staffFilter")}</Label>
+                                        {feeStaffFilterActive && (
+                                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setFeeStaffId("all")}>
+                                            <X className="w-3 h-3 mr-1" />{t("financePage.clear")}
+                                          </Button>
+                                        )}
+                                      </div>
+                                      <Select value={feeStaffId} onValueChange={setFeeStaffId}>
+                                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="all">{t("financePage.staffFilter")}</SelectItem>
+                                          {filterStaff.map((u: any) => (
+                                            <SelectItem key={u.id} value={String(u.id)}>
+                                              {[u.firstName, u.lastName].filter(Boolean).join(" ") || `User #${u.id}`}
+                                            </SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>

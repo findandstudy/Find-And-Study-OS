@@ -4581,7 +4581,19 @@
     "uploadSignatureHint": "برای آپلود امضا کلیک کنید",
     "uploadSignatureFormat": "PNG یا JPG، حداکثر ۵ مگابایت",
     "removeSignature": "حذف",
-    "confirmText": "تأیید می‌کنم که این قرارداد را خوانده و درک کرده‌ام و امضای الکترونیکی من معتبر تلقی می‌شود."
+    "confirmText": "تأیید می‌کنم که این قرارداد را خوانده و درک کرده‌ام و امضای الکترونیکی من معتبر تلقی می‌شود.",
+    "signerNameLabel": "Full Name *",
+    "signatureLabel": "Signature *",
+    "drawMode": "Draw",
+    "uploadMode": "Upload",
+    "clearSignature": "Clear",
+    "signAndSend": "Sign & Send",
+    "errInvalidImageType": "Please select an image file (PNG, JPG).",
+    "errFileTooLarge": "File size must be less than 5MB.",
+    "errImageProcessing": "Image could not be processed.",
+    "errImageTooLarge": "Signature image is too large, please try a simpler image.",
+    "errImageLoad": "Image could not be loaded, please try another file.",
+    "errFileRead": "File could not be read."
   },
   "mandatoryDocs": {
     "title": "اسناد مفقود",

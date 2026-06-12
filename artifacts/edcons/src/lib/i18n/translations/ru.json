@@ -4581,7 +4581,19 @@
     "uploadSignatureHint": "Нажмите для загрузки подписи",
     "uploadSignatureFormat": "PNG или JPG, максимум 5 МБ",
     "removeSignature": "Удалить",
-    "confirmText": "Подтверждаю, что прочитал и понял данный контракт, и что моя электронная подпись будет считаться действительной."
+    "confirmText": "Подтверждаю, что прочитал и понял данный контракт, и что моя электронная подпись будет считаться действительной.",
+    "signerNameLabel": "Full Name *",
+    "signatureLabel": "Signature *",
+    "drawMode": "Draw",
+    "uploadMode": "Upload",
+    "clearSignature": "Clear",
+    "signAndSend": "Sign & Send",
+    "errInvalidImageType": "Please select an image file (PNG, JPG).",
+    "errFileTooLarge": "File size must be less than 5MB.",
+    "errImageProcessing": "Image could not be processed.",
+    "errImageTooLarge": "Signature image is too large, please try a simpler image.",
+    "errImageLoad": "Image could not be loaded, please try another file.",
+    "errFileRead": "File could not be read."
   },
   "mandatoryDocs": {
     "title": "Отсутствующие документы",

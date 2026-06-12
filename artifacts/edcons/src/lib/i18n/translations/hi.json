@@ -4581,7 +4581,19 @@
     "uploadSignatureHint": "हस्ताक्षर छवि अपलोड करने के लिए क्लिक करें",
     "uploadSignatureFormat": "PNG या JPG, अधिकतम 5MB",
     "removeSignature": "हटाएं",
-    "confirmText": "मैं पुष्टि करता/करती हूं कि मैंने इस अनुबंध को पढ़ा और समझा है, और मेरा इलेक्ट्रॉनिक हस्ताक्षर वैध माना जाएगा।"
+    "confirmText": "मैं पुष्टि करता/करती हूं कि मैंने इस अनुबंध को पढ़ा और समझा है, और मेरा इलेक्ट्रॉनिक हस्ताक्षर वैध माना जाएगा।",
+    "signerNameLabel": "Full Name *",
+    "signatureLabel": "Signature *",
+    "drawMode": "Draw",
+    "uploadMode": "Upload",
+    "clearSignature": "Clear",
+    "signAndSend": "Sign & Send",
+    "errInvalidImageType": "Please select an image file (PNG, JPG).",
+    "errFileTooLarge": "File size must be less than 5MB.",
+    "errImageProcessing": "Image could not be processed.",
+    "errImageTooLarge": "Signature image is too large, please try a simpler image.",
+    "errImageLoad": "Image could not be loaded, please try another file.",
+    "errFileRead": "File could not be read."
   },
   "mandatoryDocs": {
     "title": "अनुपस्थित दस्तावेज़",

@@ -4581,7 +4581,19 @@
     "uploadSignatureHint": "Klik untuk mengunggah tanda tangan",
     "uploadSignatureFormat": "PNG atau JPG, maksimal 5MB",
     "removeSignature": "Hapus",
-    "confirmText": "Saya mengonfirmasi bahwa saya telah membaca dan memahami kontrak ini, dan tanda tangan elektronik saya akan dianggap sah."
+    "confirmText": "Saya mengonfirmasi bahwa saya telah membaca dan memahami kontrak ini, dan tanda tangan elektronik saya akan dianggap sah.",
+    "signerNameLabel": "Full Name *",
+    "signatureLabel": "Signature *",
+    "drawMode": "Draw",
+    "uploadMode": "Upload",
+    "clearSignature": "Clear",
+    "signAndSend": "Sign & Send",
+    "errInvalidImageType": "Please select an image file (PNG, JPG).",
+    "errFileTooLarge": "File size must be less than 5MB.",
+    "errImageProcessing": "Image could not be processed.",
+    "errImageTooLarge": "Signature image is too large, please try a simpler image.",
+    "errImageLoad": "Image could not be loaded, please try another file.",
+    "errFileRead": "File could not be read."
   },
   "mandatoryDocs": {
     "title": "Dokumen Kurang",

@@ -4581,7 +4581,19 @@
     "uploadSignatureHint": "点击上传签名图片",
     "uploadSignatureFormat": "PNG或JPG，最大5MB",
     "removeSignature": "移除",
-    "confirmText": "我确认已阅读并理解本合同，且我的电子签名将被视为有效。"
+    "confirmText": "我确认已阅读并理解本合同，且我的电子签名将被视为有效。",
+    "signerNameLabel": "Full Name *",
+    "signatureLabel": "Signature *",
+    "drawMode": "Draw",
+    "uploadMode": "Upload",
+    "clearSignature": "Clear",
+    "signAndSend": "Sign & Send",
+    "errInvalidImageType": "Please select an image file (PNG, JPG).",
+    "errFileTooLarge": "File size must be less than 5MB.",
+    "errImageProcessing": "Image could not be processed.",
+    "errImageTooLarge": "Signature image is too large, please try a simpler image.",
+    "errImageLoad": "Image could not be loaded, please try another file.",
+    "errFileRead": "File could not be read."
   },
   "mandatoryDocs": {
     "title": "缺少文件",
