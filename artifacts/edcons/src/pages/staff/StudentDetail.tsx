@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo, useEffect, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
+import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
   useGetStudent,
   useListApplications,
@@ -88,6 +89,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
+  useEntityViewTracker("student", id);
   const isAgent = basePath === "/agent";
 
   const { data: student, isLoading } = useGetStudent(id) as { data: any; isLoading: boolean };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, Link } from "wouter";
+import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
   useGetLead,
   useUpdateLead,
@@ -97,6 +98,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, hasPermission } = useAuth(true);
+  useEntityViewTracker("lead", id);
   const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState("");
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
   useGetApplication,
   useUpdateApplication,
@@ -68,6 +69,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   const { labelOf: studyLabelOf } = useStudyLevels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  useEntityViewTracker("application", id);
   const queryClient = useQueryClient();
   const isAgent = basePath === "/agent";
   const [noteText, setNoteText] = useState("");

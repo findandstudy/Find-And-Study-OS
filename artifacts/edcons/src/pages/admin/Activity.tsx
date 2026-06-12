@@ -1,19 +1,35 @@
 import { useState, useEffect, useMemo } from "react";
 import { customFetch } from "@workspace/api-client-react";
+import {
+  useGetActivitySummary,
+  useGetKommoSummary,
+  useListUsers,
+} from "@workspace/api-client-react";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Users, Clock, Activity, Monitor, ArrowLeft, Search,
   ArrowUpDown, ArrowUp, ArrowDown, Eye, Wifi,
   Timer, BarChart3, TrendingUp, Pause, Download, Loader2,
+  MessageCircle, Target, Trophy, TrendingDown, MessageSquare,
+  CheckSquare, CalendarClock, Zap, Phone, Send,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatDuration } from "@/lib/formatDuration";
 import { useToast } from "@/hooks/use-toast";
+
+const STAFF_ROLES = new Set(["super_admin","admin","manager","staff","consultant","editor","accountant","agent_staff"]);
 
 function fmtTime(dateStr: string | null) {
   if (!dateStr) return "—";
@@ -59,7 +75,8 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge className={`text-xs capitalize ${styles[status] || styles.offline}`}>{status}</Badge>;
 }
 
-type DatePreset = "today" | "yesterday" | "7days" | "30days" | "custom";
+type DatePreset = "today" | "yesterday" | "7days" | "30days";
+type PanelPreset = "today" | "yesterday" | "week" | "month" | "custom";
 
 function getDateRange(preset: DatePreset): { from: string; to: string } {
   const now = new Date();
@@ -82,6 +99,344 @@ function getDateRange(preset: DatePreset): { from: string; to: string } {
     default:
       return { from: todayStart.toISOString(), to: now.toISOString() };
   }
+}
+
+function getPanelKommoRange(preset: PanelPreset, customFrom: string, customTo: string): { from: Date; to: Date } {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (preset) {
+    case "today": return { from: todayStart, to: now };
+    case "yesterday": {
+      const ys = new Date(todayStart); ys.setDate(ys.getDate() - 1);
+      return { from: ys, to: todayStart };
+    }
+    case "week": {
+      const w = new Date(todayStart); w.setDate(w.getDate() - 7);
+      return { from: w, to: now };
+    }
+    case "month": {
+      const m = new Date(todayStart); m.setDate(m.getDate() - 30);
+      return { from: m, to: now };
+    }
+    case "custom":
+      return {
+        from: customFrom ? new Date(customFrom) : todayStart,
+        to: customTo ? new Date(customTo) : now,
+      };
+  }
+}
+
+function getPanelActivityRange(preset: PanelPreset): "daily" | "weekly" | "monthly" | "yearly" {
+  switch (preset) {
+    case "today":
+    case "yesterday":
+    case "custom":
+      return "daily";
+    case "week":
+      return "weekly";
+    case "month":
+      return "monthly";
+  }
+}
+
+function fmtSeconds(sec: number): string {
+  if (!sec || sec === 0) return "—";
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  }
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function MetricCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  colorClass,
+  loading,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ElementType;
+  colorClass: string;
+  loading?: boolean;
+}) {
+  return (
+    <Card className="p-4 border-none shadow-md shadow-black/5">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted-foreground truncate">{label}</p>
+          <p className="text-xl font-display font-bold">
+            {loading ? <span className="inline-block h-5 w-12 bg-secondary animate-pulse rounded" /> : value}
+          </p>
+          {sub && (
+            <p className="text-[11px] text-muted-foreground truncate">
+              {loading ? "" : sub}
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+const PANEL_PRESETS: { key: PanelPreset; i18nKey: string }[] = [
+  { key: "today", i18nKey: "adminActivity.preset.today" },
+  { key: "yesterday", i18nKey: "adminActivity.preset.yesterday" },
+  { key: "week", i18nKey: "adminActivity.presetWeek" },
+  { key: "month", i18nKey: "adminActivity.presetMonth" },
+  { key: "custom", i18nKey: "adminActivity.presetCustom" },
+];
+
+const CHANNELS = [
+  { key: "whatsapp", i18nKey: "adminActivity.channelWhatsapp" as const, icon: Phone },
+  { key: "telegram", i18nKey: "adminActivity.channelTelegram" as const, icon: Send },
+  { key: "instagram", i18nKey: "adminActivity.channelInstagram" as const, icon: MessageSquare },
+  { key: "live_chat", i18nKey: "adminActivity.channelLiveChat" as const, icon: MessageCircle },
+  { key: "other", i18nKey: "adminActivity.channelOther" as const, icon: MessageSquare },
+] as const;
+
+function PanelPage() {
+  const { t } = useI18n();
+  const [preset, setPreset] = useState<PanelPreset>("today");
+  const [staffId, setStaffId] = useState<number | undefined>(undefined);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const { from, to } = useMemo(
+    () => getPanelKommoRange(preset, customFrom, customTo),
+    [preset, customFrom, customTo],
+  );
+  const activityRange = useMemo(() => getPanelActivityRange(preset), [preset]);
+
+  const staffQuery = useListUsers({ limit: 200 });
+  const staffList = useMemo(() => {
+    const data = (staffQuery.data as any);
+    const arr: any[] = Array.isArray(data) ? data : (data?.data ?? data?.items ?? []);
+    return arr.filter((u: any) => STAFF_ROLES.has(u.role));
+  }, [staffQuery.data]);
+
+  const activityQuery = useGetActivitySummary({ range: activityRange, staffId });
+  const kommoQuery = useGetKommoSummary({ from: from.toISOString(), to: to.toISOString(), staffId });
+
+  const act = activityQuery.data;
+  const kom = kommoQuery.data;
+  const loadingAct = activityQuery.isLoading;
+  const loadingKom = kommoQuery.isLoading;
+
+  return (
+    <div className="space-y-6">
+      {/* Control bar */}
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-xl border border-border bg-secondary/30 p-1 gap-1">
+            {PANEL_PRESETS.map(({ key, i18nKey }) => (
+              <Button
+                key={key}
+                size="sm"
+                variant={preset === key ? "default" : "ghost"}
+                className="rounded-lg h-7 text-xs px-3"
+                onClick={() => setPreset(key)}
+              >
+                {t(i18nKey as any)}
+              </Button>
+            ))}
+          </div>
+          {preset === "custom" && (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">{t("adminActivity.customFrom")}</span>
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={e => setCustomFrom(e.target.value)}
+                  className="h-7 text-xs border border-border rounded-lg px-2 bg-background text-foreground"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">{t("adminActivity.customTo")}</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={e => setCustomTo(e.target.value)}
+                  className="h-7 text-xs border border-border rounded-lg px-2 bg-background text-foreground"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Staff picker */}
+        <Select
+          value={staffId !== undefined ? String(staffId) : "all"}
+          onValueChange={v => setStaffId(v === "all" ? undefined : Number(v))}
+        >
+          <SelectTrigger className="w-44 h-8 text-xs rounded-xl">
+            <SelectValue placeholder={t("adminActivity.staffAll")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("adminActivity.staffAll")}</SelectItem>
+            {staffList.map((u: any) => (
+              <SelectItem key={u.id} value={String(u.id)}>
+                {u.firstName} {u.lastName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Section 1: Record Views */}
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+          <Eye className="w-3.5 h-3.5" /> {t("adminActivity.viewsSection")}
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricCard label={t("adminActivity.leadsViewed")} value={act?.leadsViewed ?? 0} icon={Users} colorClass="text-blue-500 bg-blue-50 dark:bg-blue-500/10" loading={loadingAct} />
+          <MetricCard label={t("adminActivity.studentsViewed")} value={act?.studentsViewed ?? 0} icon={Eye} colorClass="text-purple-500 bg-purple-50 dark:bg-purple-500/10" loading={loadingAct} />
+          <MetricCard label={t("adminActivity.applicationsViewed")} value={act?.applicationsViewed ?? 0} icon={CheckSquare} colorClass="text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10" loading={loadingAct} />
+          <MetricCard label={t("adminActivity.messagesViewed")} value={act?.messagesViewed ?? 0} icon={MessageCircle} colorClass="text-cyan-500 bg-cyan-50 dark:bg-cyan-500/10" loading={loadingAct} />
+        </div>
+      </div>
+
+      {/* Sections 2, 3, 4 — 3 cols */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Section 2: Response Times */}
+        <Card className="p-5 border-none shadow-md shadow-black/5">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
+            <Zap className="w-3.5 h-3.5 text-amber-500" /> {t("adminActivity.replySection")}
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{t("adminActivity.avgReplyTime")}</span>
+              <span className="text-sm font-semibold font-mono">
+                {loadingKom ? "..." : fmtSeconds(kom?.avgReplyTime ?? 0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{t("adminActivity.medianReplyTime")}</span>
+              <span className="text-sm font-semibold font-mono">
+                {loadingKom ? "..." : fmtSeconds(kom?.medianReplyTime ?? 0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{t("adminActivity.longestAwaiting")}</span>
+              <span className="text-sm font-semibold text-muted-foreground">—</span>
+            </div>
+          </div>
+        </Card>
+
+        {/* Section 3: Lead Outcomes */}
+        <Card className="p-5 border-none shadow-md shadow-black/5">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
+            <Target className="w-3.5 h-3.5 text-blue-500" /> {t("adminActivity.leadsSection")}
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                {t("adminActivity.activeLeads")}
+              </span>
+              <span className="text-sm font-semibold font-mono">
+                {loadingKom ? "..." : (kom?.activeLeads ?? 0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground flex items-center gap-2">
+                <Trophy className="w-3.5 h-3.5 text-emerald-500" />
+                {t("adminActivity.wonLeads")}
+              </span>
+              <span className="text-sm font-semibold font-mono text-emerald-600">
+                {loadingKom ? "..." : (kom?.wonLeads ?? 0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground flex items-center gap-2">
+                <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
+                {t("adminActivity.lostLeads")}
+              </span>
+              <span className="text-sm font-semibold font-mono text-rose-600">
+                {loadingKom ? "..." : (kom?.lostLeads ?? 0)}
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        {/* Section 4: Messages total */}
+        <Card className="p-5 border-none shadow-md shadow-black/5">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
+            <MessageCircle className="w-3.5 h-3.5 text-cyan-500" /> {t("adminActivity.messagesSection")}
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground flex items-center gap-2">
+                <ArrowDown className="w-3.5 h-3.5 text-blue-500" />
+                {t("adminActivity.incoming")}
+              </span>
+              <span className="text-sm font-semibold font-mono">
+                {loadingKom ? "..." : (kom?.incomingMessages ?? 0)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground flex items-center gap-2">
+                <ArrowUp className="w-3.5 h-3.5 text-emerald-500" />
+                {t("adminActivity.outgoing")}
+              </span>
+              <span className="text-sm font-semibold font-mono">
+                {loadingKom ? "..." : (kom?.outgoingMessages ?? 0)}
+              </span>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Section 4b: Channel breakdown */}
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+          <MessageSquare className="w-3.5 h-3.5" /> {t("adminActivity.messagesSection")} — {t("adminActivity.incoming")} / {t("adminActivity.outgoing")}
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {CHANNELS.map(({ key, i18nKey, icon: ChIcon }) => (
+            <Card key={key} className="p-4 border-none shadow-sm shadow-black/5">
+              <div className="flex items-center gap-2 mb-2">
+                <ChIcon className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs font-medium text-foreground">{t(i18nKey)}</span>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] text-muted-foreground">{t("adminActivity.incoming")}</span>
+                  <span className="text-xs font-mono font-semibold">0</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] text-muted-foreground">{t("adminActivity.outgoing")}</span>
+                  <span className="text-xs font-mono font-semibold">0</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground/70 mt-2 leading-tight">
+                {t("adminActivity.notConnected")} · {t("adminActivity.connectNote")}
+              </p>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Section 5: Tasks/Follow-ups placeholder */}
+      <Card className="p-5 border-none shadow-md shadow-black/5 border-dashed border border-border/40">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+          <CalendarClock className="w-3.5 h-3.5 text-violet-500" /> {t("adminActivity.tasksSection")}
+        </h3>
+        <p className="text-sm text-muted-foreground">{t("adminActivity.noDataAvailable")}</p>
+      </Card>
+    </div>
+  );
 }
 
 function OverviewPage() {
@@ -186,19 +541,13 @@ function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">{t("adminActivity.title")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{t("adminActivity.subtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {(["today", "yesterday", "7days", "30days"] as DatePreset[]).map(p => (
-            <Button key={p} size="sm" variant={preset === p ? "default" : "outline"} className="rounded-xl text-xs"
-              onClick={() => setPreset(p)}>
-              {t(`adminActivity.preset.${p}` as any)}
-            </Button>
-          ))}
-        </div>
+      <div className="flex items-center justify-end gap-2 flex-wrap">
+        {(["today", "yesterday", "7days", "30days"] as DatePreset[]).map(p => (
+          <Button key={p} size="sm" variant={preset === p ? "default" : "outline"} className="rounded-xl text-xs"
+            onClick={() => setPreset(p)}>
+            {t(`adminActivity.preset.${p}` as any)}
+          </Button>
+        ))}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -604,9 +953,39 @@ function UserDetailPage({ userId }: { userId: number }) {
 }
 
 export default function AdminActivity({ userId }: { userId?: number }) {
+  const { t } = useI18n();
+  const [activeTab, setActiveTab] = useState<"panel" | "overview">("panel");
+
+  if (userId) return <UserDetailPage userId={userId} />;
+
   return (
-    <>
-      {userId ? <UserDetailPage userId={userId} /> : <OverviewPage />}
-    </>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-foreground">{t("adminActivity.title")}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{t("adminActivity.subtitle")}</p>
+        </div>
+        <div className="inline-flex rounded-xl border border-border bg-secondary/30 p-1 gap-1">
+          <Button
+            size="sm"
+            variant={activeTab === "panel" ? "default" : "ghost"}
+            className="rounded-lg h-8 text-xs px-4"
+            onClick={() => setActiveTab("panel")}
+          >
+            {t("adminActivity.panelTab")}
+          </Button>
+          <Button
+            size="sm"
+            variant={activeTab === "overview" ? "default" : "ghost"}
+            className="rounded-lg h-8 text-xs px-4"
+            onClick={() => setActiveTab("overview")}
+          >
+            {t("adminActivity.overviewTab")}
+          </Button>
+        </div>
+      </div>
+
+      {activeTab === "panel" ? <PanelPage /> : <OverviewPage />}
+    </div>
   );
 }

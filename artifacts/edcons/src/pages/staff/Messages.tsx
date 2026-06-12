@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
   customFetch,
   useSummarizeInboxConversation,
@@ -2055,6 +2056,11 @@ function TemplatesTab() {
 
 const BROADCAST_ROLES = ["super_admin", "admin", "manager"];
 
+function MessageConvTracker({ convId }: { convId: number | null }) {
+  useEntityViewTracker("message_thread", convId ?? undefined);
+  return null;
+}
+
 export default function MessagesPage() {
   const { t } = useI18n();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -2179,7 +2185,10 @@ export default function MessagesPage() {
                       <p className="text-sm mt-1">{t("messagesPage.orStartNewOne")}</p>
                     </div>
                   ) : (
-                    <MessageThread conversationId={selectedConv} onBack={() => setSelectedConv(null)} />
+                    <>
+                      <MessageConvTracker convId={selectedConv} />
+                      <MessageThread conversationId={selectedConv} onBack={() => setSelectedConv(null)} />
+                    </>
                   )}
                 </div>
               </div>
