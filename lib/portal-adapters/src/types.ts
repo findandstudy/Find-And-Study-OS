@@ -1,15 +1,6 @@
 import type { Page } from "playwright-core";
 
 // ---------------------------------------------------------------------------
-// Credentials — injected by the caller (never read from .env or portalCreds)
-// ---------------------------------------------------------------------------
-export interface PortalCredentials {
-  user: string;
-  password: string;
-  extra?: Record<string, string>;
-}
-
-// ---------------------------------------------------------------------------
 // Session returned by adapter.login()
 // ---------------------------------------------------------------------------
 export interface AdapterSession {
@@ -73,13 +64,9 @@ export interface UniversityAdapter {
 
   /**
    * Opens a browser session authenticated to the portal.
-   * Credentials are always supplied by the caller — the adapter MUST NOT
-   * read them from process.env or any config file.
+   * Credentials are read from process.env inside the adapter via portalCreds().
    */
-  login(opts: {
-    headless?: boolean;
-    credentials: PortalCredentials;
-  }): Promise<AdapterSession>;
+  login(opts?: { headless?: boolean }): Promise<AdapterSession>;
 
   /** Fills and submits the application form. */
   submit(

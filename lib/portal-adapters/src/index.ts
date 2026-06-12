@@ -2,15 +2,17 @@
 // @workspace/portal-adapters — public API
 // ---------------------------------------------------------------------------
 
-// Core types
+// Core types (PortalCredentials removed — credentials live in .env)
 export type {
-  PortalCredentials,
   AdapterSession,
   SubmitResult,
   SubmitProfile,
   SubmitFiles,
   UniversityAdapter,
 } from "./types.js";
+
+// Credential helper — reads from process.env
+export { portalCreds, type ResolvedCreds } from "./portalCreds.js";
 
 // Browser utilities
 export {

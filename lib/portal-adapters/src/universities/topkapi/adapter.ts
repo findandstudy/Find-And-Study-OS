@@ -4,11 +4,12 @@ import type {
   SubmitProfile,
   SubmitFiles,
   SubmitResult,
-  PortalCredentials,
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
+import { portalCreds } from "../../portalCreds.js";
 import { fold } from "../../programMatch.js";
 
+// Credentials read from: TOPKAPI_USER + TOPKAPI_PASSWORD
 const PORTAL_URL = "https://apply.topkapi.edu.tr"; // TODO: confirm URL
 
 export const topkapiAdapter: UniversityAdapter = {
@@ -20,23 +21,19 @@ export const topkapiAdapter: UniversityAdapter = {
     return f.includes("topkapi") || f.includes("topkap");
   },
 
-  async login(opts: {
-    headless?: boolean;
-    credentials: PortalCredentials;
-  }): Promise<AdapterSession> {
-    // credentials.user / credentials.password are injected by the caller.
-    // This adapter MUST NOT read from process.env or any config file.
-    const session = await launchPortal({ headless: opts.headless ?? true });
+  async login(opts?: { headless?: boolean }): Promise<AdapterSession> {
+    const { user, password } = portalCreds("topkapi");
+    const session = await launchPortal({ headless: opts?.headless ?? true });
     logger.info("[topkapi] login — navigating to portal");
 
     // TODO: implement actual login flow
     //   await session.page.goto(PORTAL_URL);
-    //   await session.page.fill("#username", opts.credentials.user);
-    //   await session.page.fill("#password", opts.credentials.password);
+    //   await session.page.fill("#username", user);
+    //   await session.page.fill("#password", password);
     //   await session.page.click("button[type=submit]");
     //   await session.page.waitForNavigation();
 
-    void PORTAL_URL; // suppress unused-var until TODO is implemented
+    void PORTAL_URL; void user; void password;
     return session;
   },
 
@@ -52,6 +49,7 @@ export const topkapiAdapter: UniversityAdapter = {
     //   await session.page.fill("#firstName", profile.firstName);
     //   ...
 
+    void session;
     return { alreadyExists: false, submitted: false, programMissing: true };
   },
 };
