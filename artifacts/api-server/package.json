@@ -46,7 +46,8 @@
     "test:agent-commission": "tsx ./scripts/test-agent-commission.ts",
     "test:contract-sign-smoke": "tsx ./scripts/test-contract-sign-smoke.ts",
     "test:contract-sign": "tsx --test ./scripts/test-contract-sign.ts",
-    "test:object-authz-signed-contract": "tsx --test ./scripts/test-object-authz-signed-contract.ts"
+    "test:object-authz-signed-contract": "tsx --test ./scripts/test-object-authz-signed-contract.ts",
+    "test:dashboard-faz3": "tsx --test ./scripts/test-dashboard-faz3.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
