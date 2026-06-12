@@ -1191,6 +1191,24 @@ async function seedClaudeIntegration() {
     console.error("[migrate] staff branch fix:", err);
   }
 
+  // Step 2b9: One-shot cleanup — soft-delete the "PLAY WRITE" Playwright test
+  // staff account (id=2803, apply@findandstudy.com) from production so it no
+  // longer appears in the Users list.
+  try {
+    const playwrightFix = await pool.query(
+      `INSERT INTO system_flags (key) VALUES ('cleanup_playwright_staff_v1') ON CONFLICT DO NOTHING RETURNING key`
+    );
+    if (playwrightFix.rows.length > 0) {
+      const result = await pool.query(
+        `UPDATE users SET deleted_at = NOW(), updated_at = NOW()
+         WHERE id = 2803 AND role = 'staff' AND deleted_at IS NULL`
+      );
+      console.log(`[migrate] playwright staff cleanup: ${result.rowCount} user(s) soft-deleted`);
+    }
+  } catch (err) {
+    console.error("[migrate] playwright staff cleanup:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
