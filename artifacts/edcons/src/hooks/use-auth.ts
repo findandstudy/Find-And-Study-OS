@@ -84,7 +84,7 @@ export function useAuth(requireAuth = false, allowedRoles?: readonly string[]) {
     }
   }, [user, isLoading, error, requireAuth, allowedRoles, setLocation]);
 
-  const role = (user as any)?.role as string | undefined;
+  const role = user?.role;
   const permissions = (((user as any)?.permissions) as string[] | undefined) ?? [];
 
   // Admin and super admin always have full visibility regardless of granular
@@ -101,8 +101,7 @@ export function useAuth(requireAuth = false, allowedRoles?: readonly string[]) {
   // `agentStaffPermissions`. Only the agent_staff role is restricted by this
   // layer; every other role is unaffected here (their access is governed by
   // role/hasPermission instead).
-  const agentStaffPermissions =
-    (((user as any)?.agentStaffPermissions) as string[] | undefined) ?? [];
+  const agentStaffPermissions = (user?.agentStaffPermissions as string[] | undefined) ?? [];
   const hasAgentStaffPermission = (key: string): boolean => {
     if (role !== "agent_staff") return true;
     return agentStaffPermissions.includes(key);

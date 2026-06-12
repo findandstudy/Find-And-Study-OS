@@ -44,6 +44,11 @@ export interface UserProfile {
   isActive: boolean;
   /** @nullable */
   agentStaffPermissions?: string[] | null;
+  emailVerified?: boolean;
+  /** @nullable */
+  permissions?: string[] | null;
+  /** @nullable */
+  createdFromSource?: string | null;
   createdAt: string;
 }
 

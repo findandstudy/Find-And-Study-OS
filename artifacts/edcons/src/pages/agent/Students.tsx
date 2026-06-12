@@ -1768,7 +1768,7 @@ export default function AgentStudentsPage() {
   const stageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
   const { season } = useSeason();
-  const { data, isLoading } = useListStudents({ search, season, limit: 500 } as any);
+  const { data, isLoading } = useListStudents({ search, season, limit: 500 });
   const allStudents: any[] = data?.data ?? [];
 
   // Only a parent agent ("agent" role) can transfer students to its OWN

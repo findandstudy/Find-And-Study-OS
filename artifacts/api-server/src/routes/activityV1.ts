@@ -109,6 +109,7 @@ router.get(
     const user = req.user!;
     const { range, staffId: rawStaffId } = getValidated<{ query: typeof summaryQuerySchema }>(req).query;
     const { from, to } = getRangeBounds(range);
+    const periodSeconds = Math.max(0, (to.getTime() - from.getTime()) / 1000);
     const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
     const isAgentStaff = user.role === "agent_staff";
 
@@ -181,15 +182,20 @@ router.get(
       totalDurationSeconds: Number(sessionAgg?.totalDurationSeconds) || 0,
     });
 
+    // Clamp against period wall-clock: no metric can exceed elapsed time in range
+    const totalSeconds = Math.min(clamped.totalDurationSeconds, periodSeconds);
+    const activeSeconds = Math.min(clamped.activeDurationSeconds, totalSeconds);
+    const idleSeconds = Math.min(clamped.idleDurationSeconds, totalSeconds - activeSeconds);
+
     res.json({
       range,
       leadsViewed: counts["lead"] ?? 0,
       studentsViewed: counts["student"] ?? 0,
       applicationsViewed: counts["application"] ?? 0,
       messagesViewed: counts["message_thread"] ?? 0,
-      activeDurationSeconds: clamped.activeDurationSeconds,
-      idleDurationSeconds: clamped.idleDurationSeconds,
-      totalDurationSeconds: clamped.totalDurationSeconds,
+      activeDurationSeconds: activeSeconds,
+      idleDurationSeconds: idleSeconds,
+      totalDurationSeconds: totalSeconds,
     });
   }
 );
