@@ -4299,7 +4299,12 @@
     "fieldTypeCheckbox": "Kotak Centang",
     "fieldTypeNumber": "Angka",
     "fieldTypeDate": "Tanggal",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "Domain yang Diizinkan",
+    "allDomains": "Semua domain",
+    "copyCode": "Salin kode",
+    "disable": "Nonaktifkan",
+    "enable": "Aktifkan"
   },
   "websiteTranslations": {
     "title": "Terjemahan",

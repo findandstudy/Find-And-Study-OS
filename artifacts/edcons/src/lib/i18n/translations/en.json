@@ -4299,7 +4299,12 @@
     "fieldTypeCheckbox": "Checkbox",
     "fieldTypeNumber": "Number",
     "fieldTypeDate": "Date",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "Allowed Domains",
+    "allDomains": "All domains",
+    "copyCode": "Copy code",
+    "disable": "Disable",
+    "enable": "Enable"
   },
   "websiteTranslations": {
     "title": "Translations",

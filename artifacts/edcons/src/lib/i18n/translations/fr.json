@@ -4299,7 +4299,12 @@
     "fieldTypeCheckbox": "Case à cocher",
     "fieldTypeNumber": "Nombre",
     "fieldTypeDate": "Date",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "Domaines autorisés",
+    "allDomains": "Tous les domaines",
+    "copyCode": "Copier le code",
+    "disable": "Désactiver",
+    "enable": "Activer"
   },
   "websiteTranslations": {
     "title": "Traductions",

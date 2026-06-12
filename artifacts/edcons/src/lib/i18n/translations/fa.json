@@ -4299,7 +4299,12 @@
     "fieldTypeCheckbox": "کادر علامت‌گذاری",
     "fieldTypeNumber": "عدد",
     "fieldTypeDate": "تاریخ",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "دامنه‌های مجاز",
+    "allDomains": "همه دامنه‌ها",
+    "copyCode": "کپی کد",
+    "disable": "غیرفعال کردن",
+    "enable": "فعال‌سازی"
   },
   "websiteTranslations": {
     "title": "ترجمه‌ها",

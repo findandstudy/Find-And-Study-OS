@@ -4299,7 +4299,12 @@
     "fieldTypeCheckbox": "Casilla de verificación",
     "fieldTypeNumber": "Número",
     "fieldTypeDate": "Fecha",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "Dominios permitidos",
+    "allDomains": "Todos los dominios",
+    "copyCode": "Copiar código",
+    "disable": "Desactivar",
+    "enable": "Activar"
   },
   "websiteTranslations": {
     "title": "Traducciones",

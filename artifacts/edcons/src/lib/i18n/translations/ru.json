@@ -4299,7 +4299,12 @@
     "fieldTypeCheckbox": "Флажок",
     "fieldTypeNumber": "Число",
     "fieldTypeDate": "Дата",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "Разрешённые домены",
+    "allDomains": "Все домены",
+    "copyCode": "Копировать код",
+    "disable": "Отключить",
+    "enable": "Включить"
   },
   "websiteTranslations": {
     "title": "Переводы",

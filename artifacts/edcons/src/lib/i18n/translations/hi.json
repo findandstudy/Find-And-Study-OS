@@ -4299,7 +4299,12 @@
     "fieldTypeCheckbox": "चेकबॉक्स",
     "fieldTypeNumber": "संख्या",
     "fieldTypeDate": "तारीख",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "अनुमत डोमेन",
+    "allDomains": "सभी डोमेन",
+    "copyCode": "कोड कॉपी करें",
+    "disable": "अक्षम करें",
+    "enable": "सक्षम करें"
   },
   "websiteTranslations": {
     "title": "अनुवाद",

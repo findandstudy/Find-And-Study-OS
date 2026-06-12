@@ -2029,6 +2029,7 @@ type LeadFormWidget = {
 };
 
 function WebToLeadTab() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { user } = useAuth(true);
@@ -2082,21 +2083,21 @@ function WebToLeadTab() {
           </div>
           {isAdmin && (
             <Button onClick={() => setCreating(true)} className="gap-1.5 shrink-0">
-              <Plus className="w-4 h-4" /> Yeni Form
+              <Plus className="w-4 h-4" /> {t("websiteForms.newForm")}
             </Button>
           )}
         </div>
 
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Yükleniyor...</p>
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
         ) : widgets.length === 0 ? (
           <div className="text-center py-12 border-2 border-dashed rounded-xl">
             <Code className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-            <p className="text-sm font-medium mb-1">Henüz form yok</p>
-            <p className="text-xs text-muted-foreground mb-4">İlk web-to-lead formunuzu oluşturun.</p>
+            <p className="text-sm font-medium mb-1">{t("websiteForms.noFormsYet")}</p>
+            <p className="text-xs text-muted-foreground mb-4">{t("websiteForms.noFormsDesc")}</p>
             {isAdmin && (
               <Button size="sm" onClick={() => setCreating(true)} className="gap-1.5">
-                <Plus className="w-3.5 h-3.5" /> Form Oluştur
+                <Plus className="w-3.5 h-3.5" /> {t("websiteForms.createForm")}
               </Button>
             )}
           </div>
@@ -2105,10 +2106,10 @@ function WebToLeadTab() {
             <table className="w-full text-sm">
               <thead className="bg-secondary/50">
                 <tr className="text-left">
-                  <th className="px-4 py-2.5 font-semibold">Ad</th>
-                  <th className="px-4 py-2.5 font-semibold">Slug</th>
-                  <th className="px-4 py-2.5 font-semibold">İzinli Domainler</th>
-                  <th className="px-4 py-2.5 font-semibold">Durum</th>
+                  <th className="px-4 py-2.5 font-semibold">{t("common.name")}</th>
+                  <th className="px-4 py-2.5 font-semibold">{t("websiteForms.slug")}</th>
+                  <th className="px-4 py-2.5 font-semibold">{t("websiteForms.colAllowedDomains")}</th>
+                  <th className="px-4 py-2.5 font-semibold">{t("common.status")}</th>
                   <th className="px-4 py-2.5"></th>
                 </tr>
               </thead>
@@ -2118,27 +2119,27 @@ function WebToLeadTab() {
                     <td className="px-4 py-2.5 font-medium">{w.name}</td>
                     <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{w.slug}</td>
                     <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                      {w.allowedDomains?.length ? w.allowedDomains.join(", ") : "Tüm domainler"}
+                      {w.allowedDomains?.length ? w.allowedDomains.join(", ") : t("websiteForms.allDomains")}
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge variant={w.isActive ? "default" : "secondary"} className="text-[10px]">
-                        {w.isActive ? "Aktif" : "Pasif"}
+                        {w.isActive ? t("common.active") : t("common.inactive")}
                       </Badge>
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => setCodeFor(w)} title="Kodu kopyala">
+                        <Button size="sm" variant="ghost" onClick={() => setCodeFor(w)} title={t("websiteForms.copyCode")}>
                           <Code className="w-3.5 h-3.5" />
                         </Button>
                         {isAdmin && (
                           <>
-                            <Button size="sm" variant="ghost" onClick={() => setEditing(w)} title="Düzenle">
+                            <Button size="sm" variant="ghost" onClick={() => setEditing(w)} title={t("common.edit")}>
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => toggleActive(w)} title={w.isActive ? "Devre dışı" : "Etkinleştir"}>
+                            <Button size="sm" variant="ghost" onClick={() => toggleActive(w)} title={w.isActive ? t("websiteForms.disable") : t("websiteForms.enable")}>
                               {w.isActive ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => deleteWidget(w.id)} title="Sil">
+                            <Button size="sm" variant="ghost" onClick={() => deleteWidget(w.id)} title={t("common.delete")}>
                               <Trash2 className="w-3.5 h-3.5 text-red-500" />
                             </Button>
                           </>

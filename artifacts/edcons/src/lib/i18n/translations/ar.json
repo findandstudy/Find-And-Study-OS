@@ -4299,7 +4299,12 @@
     "fieldTypeCheckbox": "خانة اختيار",
     "fieldTypeNumber": "رقم",
     "fieldTypeDate": "تاريخ",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "النطاقات المسموح بها",
+    "allDomains": "جميع النطاقات",
+    "copyCode": "نسخ الكود",
+    "disable": "تعطيل",
+    "enable": "تفعيل"
   },
   "websiteTranslations": {
     "title": "الترجمات",

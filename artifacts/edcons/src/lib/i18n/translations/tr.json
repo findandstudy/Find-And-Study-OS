@@ -4240,7 +4240,12 @@
     "fieldTypeCheckbox": "Onay Kutusu",
     "fieldTypeNumber": "Sayı",
     "fieldTypeDate": "Tarih",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "İzinli Domainler",
+    "allDomains": "Tüm domainler",
+    "copyCode": "Kodu kopyala",
+    "disable": "Devre dışı",
+    "enable": "Etkinleştir"
   },
   "websiteTranslations": {
     "title": "Çeviriler",

@@ -4299,7 +4299,12 @@
     "fieldTypeCheckbox": "复选框",
     "fieldTypeNumber": "数字",
     "fieldTypeDate": "日期",
-    "fieldTypeUrl": "URL"
+    "fieldTypeUrl": "URL",
+    "colAllowedDomains": "允许的域",
+    "allDomains": "所有域",
+    "copyCode": "复制代码",
+    "disable": "停用",
+    "enable": "启用"
   },
   "websiteTranslations": {
     "title": "翻译",

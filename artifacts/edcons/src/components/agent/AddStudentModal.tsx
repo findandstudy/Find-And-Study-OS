@@ -14,6 +14,7 @@ import {
   AlertCircle, Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
@@ -143,10 +144,11 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const { toast } = useToast();
+  const { t } = useI18n();
 
   async function handleFile(file: File) {
     const validation = validateFile(file);
-    if (!validation.valid) { toast({ title: "Dosya hatası", description: validation.message, variant: "destructive" }); return; }
+    if (!validation.valid) { toast({ title: t("apply.fileError"), description: validation.message, variant: "destructive" }); return; }
     const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
     const { file: prepared, mediaType, isImage } = await prepareDocumentFile(safeFile);
     onUpload({ key: docType.key, label: docType.label, file: prepared, mediaType, isImage });

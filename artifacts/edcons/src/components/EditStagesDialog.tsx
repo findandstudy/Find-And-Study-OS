@@ -650,8 +650,6 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent
         className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0"
-        onInteractOutside={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
       >
         <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
           <DialogTitle className="text-base">
