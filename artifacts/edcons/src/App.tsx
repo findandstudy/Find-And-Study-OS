@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { useCustomBrowserLocation } from "@/lib/navigation";
+import { useCustomBrowserLocation, getSavedNavPath } from "@/lib/navigation";
 import { getAuthCache, setAuthCache, clearAuthCache, getStickyUser, setStickyUser } from "@/lib/auth-cache";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { PublicLayout } from "@/components/layout/PublicLayout";
@@ -735,10 +735,17 @@ function setupUnauthorizedHandler() {
     if (redirecting) return;
 
     const { pathname, search } = window.location;
+    // The SPA uses in-memory routing so window.location.pathname is always
+    // "/" in the Replit preview. Read the real SPA path from the localStorage
+    // nav session (written by useCustomBrowserLocation on every navigation).
+    // Fall back to window.location.pathname for normal deployments where the
+    // URL does reflect the SPA route.
+    const spaPath = getSavedNavPath() ?? pathname;
+
     // Don't redirect away from the login page or the public site.
     const langSegment = pathname.split("/")[1] || DEFAULT_LANGUAGE;
-    const isOnLogin = /\/login(\/|$|\?)/.test(pathname);
-    const isOnPublic = !/\/(admin|agent|student|staff)(\/|$)/.test(pathname);
+    const isOnLogin = /\/login(\/|$|\?)/.test(spaPath);
+    const isOnPublic = !/\/(admin|agent|student|staff)(\/|$)/.test(spaPath);
     // Public agent flows: the email-verification page is reachable BEFORE
     // login (the user has only clicked the link in their inbox), and the
     // public sign flow obviously can't require an active session either.
@@ -747,10 +754,10 @@ function setupUnauthorizedHandler() {
     // Anchor at the language-prefixed root so an unrelated "/.../sign/" or
     // "/.../agent/onboarding-..." segment can't accidentally bypass the
     // login redirect in the future.
-    const isOnAgentOnboarding = /^\/[a-z]{2}\/agent\/onboarding(?:\/|$)/.test(pathname)
-      || /^\/agent\/onboarding(?:\/|$)/.test(pathname);
-    const isOnPublicSign = /^\/[a-z]{2}\/sign\//.test(pathname)
-      || pathname.startsWith("/sign/");
+    const isOnAgentOnboarding = /^\/[a-z]{2}\/agent\/onboarding(?:\/|$)/.test(spaPath)
+      || /^\/agent\/onboarding(?:\/|$)/.test(spaPath);
+    const isOnPublicSign = /^\/[a-z]{2}\/sign\//.test(spaPath)
+      || spaPath.startsWith("/sign/");
     if (isOnLogin || isOnPublic || isOnAgentOnboarding || isOnPublicSign) return;
 
     redirecting = true;
@@ -761,7 +768,7 @@ function setupUnauthorizedHandler() {
     try { queryClient.clear(); } catch {}
 
     const lang = isValidLanguage(langSegment) ? langSegment : DEFAULT_LANGUAGE;
-    const returnTo = encodeURIComponent(pathname + search);
+    const returnTo = encodeURIComponent(spaPath + search);
     window.location.replace(`/${lang}/login?returnTo=${returnTo}`);
   });
 }
