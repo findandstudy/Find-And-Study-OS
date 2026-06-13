@@ -1611,6 +1611,8 @@ async function seedClaudeIntegration() {
     startAssignmentConsistencyChecker();
     const { startFollowUpChecker } = await import("./lib/followUpChecker");
     startFollowUpChecker();
+    const { startPortalStuckReset } = await import("./routes/portalAutomation");
+    startPortalStuckReset();
   }
 
   serveStaticFrontend();

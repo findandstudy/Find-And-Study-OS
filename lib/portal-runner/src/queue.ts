@@ -185,9 +185,9 @@ export async function claimById(
  * Resets submissions that have been in "running" state longer than
  * `thresholdMs` milliseconds back to "queued" (worker crash recovery).
  *
- * Returns the number of rows reset.
+ * Returns the IDs of rows that were reset.
  */
-export async function releaseStale(thresholdMs: number): Promise<number> {
+export async function releaseStale(thresholdMs: number): Promise<number[]> {
   const res = await pool.query<{ id: number }>(
     `UPDATE portal_submissions
      SET status     = 'queued',
@@ -200,5 +200,59 @@ export async function releaseStale(thresholdMs: number): Promise<number> {
      RETURNING id`,
     [thresholdMs],
   );
-  return res.rowCount ?? 0;
+  return (res.rows ?? []).map((r) => r.id);
+}
+
+// ---------------------------------------------------------------------------
+// heartbeat
+// ---------------------------------------------------------------------------
+
+/**
+ * Refreshes locked_at for an active running submission.
+ * Call periodically while processing to prevent stuck-reset from firing.
+ * Guards on locked_by when workerId is provided so only the owning worker
+ * can extend the lease.
+ */
+export async function heartbeat(id: number, workerId?: string): Promise<void> {
+  if (workerId) {
+    await pool.query(
+      `UPDATE portal_submissions
+       SET locked_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND status = 'running' AND locked_by = $2`,
+      [id, workerId],
+    );
+  } else {
+    await pool.query(
+      `UPDATE portal_submissions
+       SET locked_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND status = 'running'`,
+      [id],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// requeueStuck
+// ---------------------------------------------------------------------------
+
+/**
+ * Atomically requeues a specific running submission back to "queued".
+ * Only acts if the row is still owned by `workerId` (locked_by guard).
+ * Returns true if the row was actually reset.
+ */
+export async function requeueStuck(id: number, workerId: string): Promise<boolean> {
+  const res = await pool.query<{ id: number }>(
+    `UPDATE portal_submissions
+     SET status     = 'queued',
+         locked_at  = NULL,
+         locked_by  = NULL,
+         updated_at = NOW()
+     WHERE id = $1
+       AND status   = 'running'
+       AND locked_by = $2
+       AND deleted_at IS NULL
+     RETURNING id`,
+    [id, workerId],
+  );
+  return (res.rowCount ?? 0) > 0;
 }

@@ -4829,7 +4829,12 @@
       "processAllSuccess": "{{count}} सबमिशन प्रोसेस किए गए।",
       "processError": "प्रोसेसिंग विफल हो गई।",
       "processAllError": "सबमिशन प्रोसेस करने में विफल।",
-      "alreadyRunning": "एक प्रोसेस पहले से चल रहा है, कृपया प्रतीक्षा करें।"
+      "alreadyRunning": "एक प्रोसेस पहले से चल रहा है, कृपया प्रतीक्षा करें।",
+      "resetStuckButton": "फंसे हुए रीसेट करें",
+      "resetStuckSuccess": "{{count}} फंसे हुए सबमिशन पुनः कतार में डाले गए।",
+      "resetStuckNone": "कोई फंसा हुआ सबमिशन नहीं मिला।",
+      "resetStuckError": "रीसेट विफल रहा।",
+      "requeuedMessage": "प्रोसेसिंग में बहुत समय लगा; शेड्यूल्ड ड्रेन द्वारा पूरा किया जाएगा।"
     },
     "auditLog": {
       "title": "Audit Log",

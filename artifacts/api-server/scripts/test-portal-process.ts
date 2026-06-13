@@ -20,7 +20,7 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
 import express, { type Express } from "express";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   db,
   applicationsTable,
@@ -233,6 +233,60 @@ test("TP5: POST /portal-submissions/process-queued as student returns 403", asyn
   try {
     const res = await sendReq(server, "POST", "/api/portal-submissions/process-queued");
     assert.equal(res.status, 403, `Expected 403, got ${res.status}: ${JSON.stringify(res.body)}`);
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// TP6 — POST /portal-submissions/reset-stuck with no stuck rows → {reset:0}
+// ---------------------------------------------------------------------------
+test("TP6: POST /portal-submissions/reset-stuck with no stuck rows returns reset>=0", async () => {
+  const app    = buildApp();
+  const server = await listen(app);
+  try {
+    const res = await sendReq(server, "POST", "/api/portal-submissions/reset-stuck", {});
+    assert.equal(res.status, 200, `Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.equal(typeof res.body.reset, "number", "Expected reset to be a number");
+    assert.ok(Array.isArray(res.body.ids), "Expected ids to be an array");
+    assert.ok(res.body.reset >= 0, `Expected reset>=0, got ${res.body.reset}`);
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// TP7 — POST /portal-submissions/reset-stuck resets a 15-min-old running row
+// ---------------------------------------------------------------------------
+test("TP7: POST /portal-submissions/reset-stuck resets an old running submission to queued", async () => {
+  const studentId    = await seedStudent();
+  const appId        = await seedApp(studentId);
+  const submissionId = await seedSubmission(appId, studentId, "queued");
+
+  // Manually set the row to 'running' with a locked_at 15 minutes in the past.
+  await db.execute(
+    sql`UPDATE portal_submissions
+        SET status = 'running',
+            locked_at = NOW() - INTERVAL '15 minutes',
+            locked_by = 'test-old-worker'
+        WHERE id = ${submissionId}`,
+  );
+
+  const app    = buildApp();
+  const server = await listen(app);
+  try {
+    const res = await sendReq(server, "POST", "/api/portal-submissions/reset-stuck", { thresholdMinutes: 10 });
+    assert.equal(res.status, 200, `Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.ok(
+      (res.body.ids as number[]).includes(submissionId),
+      `Expected ids to include ${submissionId}, got ${JSON.stringify(res.body.ids)}`,
+    );
+
+    const [row] = await db
+      .select({ status: portalSubmissionsTable.status })
+      .from(portalSubmissionsTable)
+      .where(eq(portalSubmissionsTable.id, submissionId));
+    assert.equal(row?.status, "queued", `Expected status=queued, got ${row?.status}`);
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
   }

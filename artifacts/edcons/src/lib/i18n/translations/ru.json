@@ -4829,7 +4829,12 @@
       "processAllSuccess": "Обработано {{count}} заявок.",
       "processError": "Ошибка обработки.",
       "processAllError": "Не удалось обработать заявки.",
-      "alreadyRunning": "Обработка уже выполняется, подождите."
+      "alreadyRunning": "Обработка уже выполняется, подождите.",
+      "resetStuckButton": "Сбросить зависшие",
+      "resetStuckSuccess": "{{count}} зависшая(-их) заявка(-ок) возвращена в очередь.",
+      "resetStuckNone": "Зависших заявок не найдено.",
+      "resetStuckError": "Не удалось сбросить зависшие заявки.",
+      "requeuedMessage": "Обработка заняла слишком много времени; будет завершена плановым заданием."
     },
     "auditLog": {
       "title": "Audit Log",

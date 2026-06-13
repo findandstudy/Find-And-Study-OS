@@ -4829,7 +4829,12 @@
       "processAllSuccess": "{{count}} ارسال پردازش شد.",
       "processError": "پردازش ناموفق بود.",
       "processAllError": "پردازش ارسال‌ها ناموفق بود.",
-      "alreadyRunning": "یک پردازش در حال انجام است، لطفاً صبر کنید."
+      "alreadyRunning": "یک پردازش در حال انجام است، لطفاً صبر کنید.",
+      "resetStuckButton": "بازنشانی گیرکرده‌ها",
+      "resetStuckSuccess": "{{count}} ارسال گیرکرده به صف برگردانده شد.",
+      "resetStuckNone": "هیچ ارسال گیرکرده‌ای یافت نشد.",
+      "resetStuckError": "بازنشانی ناموفق بود.",
+      "requeuedMessage": "پردازش خیلی طول کشید؛ توسط وظیفه زمان‌بندی‌شده تکمیل خواهد شد."
     },
     "auditLog": {
       "title": "Audit Log",

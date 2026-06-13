@@ -4829,7 +4829,12 @@
       "processAllSuccess": "{{count}} pengiriman diproses.",
       "processError": "Pemrosesan gagal.",
       "processAllError": "Gagal memproses pengiriman.",
-      "alreadyRunning": "Pemrosesan sudah berjalan, harap tunggu."
+      "alreadyRunning": "Pemrosesan sudah berjalan, harap tunggu.",
+      "resetStuckButton": "Reset yang Macet",
+      "resetStuckSuccess": "{{count}} pengiriman yang macet direset ke antrean.",
+      "resetStuckNone": "Tidak ada pengiriman yang macet.",
+      "resetStuckError": "Gagal mereset pengiriman yang macet.",
+      "requeuedMessage": "Pemrosesan terlalu lama; akan diselesaikan oleh jadwal drain."
     },
     "auditLog": {
       "title": "Audit Log",

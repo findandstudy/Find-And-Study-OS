@@ -4829,7 +4829,12 @@
       "processAllSuccess": "تمت معالجة {{count}} إرسال.",
       "processError": "فشلت المعالجة.",
       "processAllError": "فشلت معالجة الإرسالات.",
-      "alreadyRunning": "تجري معالجة حالياً، يرجى الانتظار."
+      "alreadyRunning": "تجري معالجة حالياً، يرجى الانتظار.",
+      "resetStuckButton": "إعادة تعيين المتوقفة",
+      "resetStuckSuccess": "تمت إعادة {{count}} إرسال متوقف إلى قائمة الانتظار.",
+      "resetStuckNone": "لا توجد إرسالات متوقفة.",
+      "resetStuckError": "فشلت إعادة التعيين.",
+      "requeuedMessage": "استغرقت المعالجة وقتاً طويلاً، ستكتمل بواسطة المهمة المجدولة."
     },
     "auditLog": {
       "title": "Audit Log",

@@ -4829,7 +4829,12 @@
       "processAllSuccess": "{{count}} submission(s) processed.",
       "processError": "Processing failed.",
       "processAllError": "Failed to process submissions.",
-      "alreadyRunning": "A run is already in progress, please wait."
+      "alreadyRunning": "A run is already in progress, please wait.",
+      "resetStuckButton": "Reset Stuck",
+      "resetStuckSuccess": "{{count}} stuck submission(s) reset to queued.",
+      "resetStuckNone": "No stuck submissions found.",
+      "resetStuckError": "Failed to reset stuck submissions.",
+      "requeuedMessage": "Processing took too long; will be completed by the scheduled drain."
     },
     "auditLog": {
       "title": "Audit Log",

@@ -12,9 +12,13 @@ import { getValidated, validate } from "../middlewares/validate";
 import {
   claimById,
   claimNext,
+  releaseStale,
+  heartbeat,
+  requeueStuck,
   buildStudentProfile,
   runSubmission,
   writebackResult,
+  type ClaimedSubmission,
 } from "@workspace/portal-runner";
 import { batchPortalCredentialKeys, resolvePortalCreds } from "../lib/portalCreds.js";
 
@@ -292,6 +296,12 @@ router.post(
 /** Module-level mutex: prevents concurrent manual process runs. */
 let _processMutex = false;
 
+/** Submissions running longer than this are candidates for stuck-reset. */
+const STUCK_THRESHOLD_MS = 10 * 60_000; // 10 minutes
+
+/** Inline process timeout: responds early and requeues if work exceeds this. */
+const INLINE_TIMEOUT_MS = 50_000; // 50 seconds
+
 /**
  * Looks up the adapterKey for a universityKey from the portal_universities table.
  * Falls back to universityKey itself when the row isn't found (backward compat).
@@ -316,32 +326,40 @@ async function lookupAdapterKey(universityKey: string): Promise<string> {
 
 interface ProcessSingleResult {
   id: number;
-  status: "submitted" | "already_exists" | "program_missing" | "failed" | "dry_run" | "skipped";
+  status: "submitted" | "already_exists" | "program_missing" | "failed" | "dry_run" | "skipped" | "requeued";
   error?: string;
+  message?: string;
 }
 
 /**
- * Claims and processes a single submission by id.
- * Returns null if the submission cannot be claimed (not queued / exhausted / locked).
+ * Processes a pre-claimed submission with a heartbeat and hard inline timeout.
+ *
+ * Heartbeat (every 20s): keeps locked_at fresh so the periodic stuck-reset
+ * job never fires while work is in flight.
+ *
+ * Timeout (INLINE_TIMEOUT_MS): if the run takes longer than the inline limit
+ * the row is atomically requeued (locked_by guard prevents clobbering if
+ * drain-once reclaims the row before we write back) and the caller receives
+ * { status: "requeued" }.  The background browser process continues; when it
+ * eventually calls writebackResult the locked_by guard makes the write a
+ * no-op on a re-claimed row.
  */
-async function processSingle(
-  submissionId: number,
+async function runWithTimeout(
+  sub: ClaimedSubmission,
   workerId: string,
+  timeoutMs = INLINE_TIMEOUT_MS,
 ): Promise<ProcessSingleResult> {
-  const sub = await claimById(submissionId, workerId);
-  if (!sub) {
-    return { id: submissionId, status: "skipped" };
-  }
+  const hbInterval = setInterval(() => {
+    heartbeat(sub.id, workerId).catch(() => {});
+  }, 20_000);
 
-  try {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+
+  const workPromise = (async (): Promise<ProcessSingleResult> => {
     const profileResult = await buildStudentProfile(sub.id);
-
-    // Resolve creds for both real and dry modes.
-    // Dry mode now uses the browser (doSubmit=false); creds needed for login.
-    // Look up canonical adapterKey from portal_universities first so that
-    // resolvePortalCreds searches DB with the right key (e.g. "topkapi" not
-    // "topkapi_university").
     const adapterKey = await lookupAdapterKey(sub.universityKey);
+
     let creds: { user: string; password: string } | undefined;
     try {
       creds = await resolvePortalCreds(sub.universityKey, adapterKey);
@@ -357,30 +375,77 @@ async function processSingle(
       profileResult.tempDir,
       creds,
     );
-
-    await writebackResult(sub.id, runResult);
+    await writebackResult(sub.id, runResult, undefined, workerId);
 
     const status: ProcessSingleResult["status"] = runResult.meta["dryRun"]
       ? "dry_run"
-      : runResult.result.submitted
-        ? "submitted"
-        : runResult.result.alreadyExists
-          ? "already_exists"
-          : runResult.result.programMissing
-            ? "program_missing"
-            : "failed";
+      : runResult.result.submitted      ? "submitted"
+      : runResult.result.alreadyExists  ? "already_exists"
+      : runResult.result.programMissing ? "program_missing"
+      : "failed";
 
     return { id: sub.id, status };
+  })();
+
+  // Attach a no-op catch so that if the timeout fires first and the background
+  // work eventually rejects, we don't get an UnhandledPromiseRejection.
+  workPromise.catch(() => {});
+
+  const timeoutPromise = new Promise<ProcessSingleResult>((resolve) => {
+    timeoutHandle = setTimeout(async () => {
+      timedOut = true;
+      try {
+        const requeued = await requeueStuck(sub.id, workerId);
+        if (requeued) {
+          console.log(
+            `[portal-process] #${sub.id} timed out after ${timeoutMs}ms — requeued for drain-once`,
+          );
+        }
+      } catch { /* best-effort */ }
+      resolve({
+        id: sub.id,
+        status: "requeued",
+        message: `İşlem ${Math.round(timeoutMs / 1000)}sn'yi aştı, drain-once tarafından tamamlanacak`,
+      });
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([workPromise, timeoutPromise]);
+    clearTimeout(timeoutHandle);
+    return result;
   } catch (err) {
+    clearTimeout(timeoutHandle);
+    if (timedOut) {
+      // Timeout already resolved; background work threw after the race settled.
+      // writebackResult's locked_by guard prevents any DB clobbering.
+      return { id: sub.id, status: "requeued" };
+    }
     const msg = err instanceof Error ? err.message : String(err);
-    await writebackResult(sub.id, null, msg);
+    await writebackResult(sub.id, null, msg, workerId);
     return { id: sub.id, status: "failed", error: msg };
+  } finally {
+    clearInterval(hbInterval);
   }
+}
+
+/**
+ * Claims and processes a single submission by id.
+ * Returns "skipped" if the row cannot be claimed (not queued / exhausted / locked).
+ */
+async function processSingle(
+  submissionId: number,
+  workerId: string,
+): Promise<ProcessSingleResult> {
+  const sub = await claimById(submissionId, workerId);
+  if (!sub) return { id: submissionId, status: "skipped" };
+  return runWithTimeout(sub, workerId);
 }
 
 // ---------------------------------------------------------------------------
 // POST /portal-submissions/process-queued
 // Processes ALL queued submissions sequentially; eşzaman 1.
+// Runs releaseStale first, then drains with per-submission timeout + heartbeat.
 // ---------------------------------------------------------------------------
 router.post(
   "/portal-submissions/process-queued",
@@ -402,79 +467,46 @@ router.post(
     const results: ProcessSingleResult[] = [];
 
     try {
+      // Release stale locks first (crash recovery: inline requests that died
+      // without requeuing leave orphan 'running' rows).
+      const staleIds = await releaseStale(STUCK_THRESHOLD_MS);
+      if (staleIds.length > 0) {
+        console.log(
+          `[portal-process-queued] Released ${staleIds.length} stale submission(s): ${staleIds.join(",")}`,
+        );
+      }
+
       // eslint-disable-next-line no-constant-condition
       while (true) {
         const sub = await claimNext(workerId);
         if (!sub) break;
 
-        console.log(`[portal-process] Processing #${sub.id} uni=${sub.universityKey} mode=${sub.mode}`);
-
-        // Look up canonical adapterKey from portal_universities first so that
-        // resolvePortalCreds searches DB with the right key (e.g. "topkapi" not
-        // "topkapi_university").
-        const adapterKey = await lookupAdapterKey(sub.universityKey);
-
-        // Resolve creds for both real and dry modes.
-        // Dry mode now uses the browser (doSubmit=false); creds needed for login.
-        let creds: { user: string; password: string } | undefined;
-        try {
-          creds = await resolvePortalCreds(sub.universityKey, adapterKey);
-        } catch (err) {
-          if (sub.mode === "real") {
-            const msg = err instanceof Error ? err.message : String(err);
-            await writebackResult(sub.id, null, msg);
-            results.push({ id: sub.id, status: "failed", error: msg });
-            continue;
-          }
-          // dry mode: missing creds → adapter login will fail and be caught below
-          console.warn(
-            `[portal-process] No creds for "${sub.universityKey}" (adapterKey="${adapterKey}", dry mode — will attempt env fallback)`,
-          );
-        }
-
-        try {
-          const profileResult = await buildStudentProfile(sub.id);
-          const runResult = await runSubmission(
-            sub,
-            profileResult.profile,
-            profileResult.files,
-            profileResult.tempDir,
-            creds,
-          );
-
-          await writebackResult(sub.id, runResult);
-
-          const status: ProcessSingleResult["status"] = runResult.meta["dryRun"]
-            ? "dry_run"
-            : runResult.result.submitted
-              ? "submitted"
-              : runResult.result.alreadyExists
-                ? "already_exists"
-                : runResult.result.programMissing
-                  ? "program_missing"
-                  : "failed";
-
-          results.push({ id: sub.id, status });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          await writebackResult(sub.id, null, msg);
-          results.push({ id: sub.id, status: "failed", error: msg });
-        }
+        console.log(
+          `[portal-process] Processing #${sub.id} uni=${sub.universityKey} mode=${sub.mode} attempt=${sub.attempts}/${sub.maxAttempts}`,
+        );
+        results.push(await runWithTimeout(sub, workerId));
       }
     } finally {
       _processMutex = false;
     }
+
+    const processedCount = results.filter(
+      (r) => r.status !== "skipped" && r.status !== "requeued",
+    ).length;
 
     await logAudit(
       user.id,
       "process_portal_submissions",
       "portal_submission",
       undefined,
-      { processed: results.length, results: results.map(r => ({ id: r.id, status: r.status })) },
+      {
+        processed: processedCount,
+        results: results.map((r) => ({ id: r.id, status: r.status })),
+      },
       req.ip,
     );
 
-    res.json({ processed: results.length, results });
+    res.json({ processed: processedCount, results });
   },
 );
 
@@ -533,10 +565,52 @@ router.post(
         req.ip,
       );
 
-      res.json({ processed: result.status !== "skipped" ? 1 : 0, results: [result] });
+      res.json({ processed: result.status !== "skipped" && result.status !== "requeued" ? 1 : 0, results: [result] });
     } finally {
       _processMutex = false;
     }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-submissions/reset-stuck
+// Resets "running" submissions that have been locked longer than
+// thresholdMinutes (default 10) back to "queued".
+// Safe to call at any time (idempotent) — used by admin button + startup.
+// ---------------------------------------------------------------------------
+const resetStuckBodySchema = z.object({
+  thresholdMinutes: z.number().int().positive().min(1).max(60).default(10),
+});
+type ResetStuckSchemas = { body: typeof resetStuckBodySchema };
+
+router.post(
+  "/portal-submissions/reset-stuck",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ body: resetStuckBodySchema }),
+  async (req, res): Promise<void> => {
+    const user = req.user!;
+    const { thresholdMinutes } = getValidated<ResetStuckSchemas>(req).body;
+    const thresholdMs = thresholdMinutes * 60_000;
+
+    const ids = await releaseStale(thresholdMs);
+
+    if (ids.length > 0) {
+      console.log(
+        `[portal-stuck-reset] Manual reset: ${ids.length} submission(s) — ids: ${ids.join(",")}`,
+      );
+    }
+
+    await logAudit(
+      user.id,
+      "reset_stuck_portal_submissions",
+      "portal_submission",
+      undefined,
+      { thresholdMinutes, reset: ids.length, ids },
+      req.ip,
+    );
+
+    res.json({ reset: ids.length, ids });
   },
 );
 
@@ -597,5 +671,34 @@ router.get("/university-portals", requireAuth, async (_req, res): Promise<void> 
 
   res.json(result);
 });
+
+// ---------------------------------------------------------------------------
+// Background job: periodic stuck-reset
+// ---------------------------------------------------------------------------
+
+/**
+ * Starts a setInterval that periodically resets stuck portal_submissions.
+ * Call once at api-server startup (safe on every instance — releaseStale is
+ * idempotent and the DB UPDATE is atomic).
+ */
+export function startPortalStuckReset(intervalMs = 5 * 60_000): void {
+  const run = (): void => {
+    releaseStale(STUCK_THRESHOLD_MS)
+      .then((ids) => {
+        if (ids.length > 0) {
+          console.log(
+            `[portal-stuck-reset] Auto-reset ${ids.length} submission(s): ${ids.join(",")}`,
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("[portal-stuck-reset] Error:", err);
+      });
+  };
+  setInterval(run, intervalMs);
+  console.log(
+    `[portal-stuck-reset] Started — interval=${intervalMs}ms threshold=${STUCK_THRESHOLD_MS}ms`,
+  );
+}
 
 export default router;

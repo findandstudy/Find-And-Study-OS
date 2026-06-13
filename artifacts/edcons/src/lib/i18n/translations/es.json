@@ -4829,7 +4829,12 @@
       "processAllSuccess": "{{count}} envío(s) procesado(s).",
       "processError": "Error al procesar.",
       "processAllError": "Error al procesar los envíos.",
-      "alreadyRunning": "Ya hay un proceso en curso, por favor espere."
+      "alreadyRunning": "Ya hay un proceso en curso, por favor espere.",
+      "resetStuckButton": "Reiniciar bloqueados",
+      "resetStuckSuccess": "{{count}} envío(s) bloqueado(s) devuelto(s) a la cola.",
+      "resetStuckNone": "No se encontraron envíos bloqueados.",
+      "resetStuckError": "Error al reiniciar los envíos bloqueados.",
+      "requeuedMessage": "El procesamiento tardó demasiado; será completado por la tarea programada."
     },
     "auditLog": {
       "title": "Audit Log",

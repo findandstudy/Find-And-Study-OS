@@ -4829,7 +4829,12 @@
       "processAllSuccess": "{{count}} soumission(s) traitée(s).",
       "processError": "Le traitement a échoué.",
       "processAllError": "Échec du traitement des soumissions.",
-      "alreadyRunning": "Un traitement est déjà en cours, veuillez patienter."
+      "alreadyRunning": "Un traitement est déjà en cours, veuillez patienter.",
+      "resetStuckButton": "Réinitialiser les bloqués",
+      "resetStuckSuccess": "{{count}} soumission(s) bloquée(s) remise(s) en file d'attente.",
+      "resetStuckNone": "Aucune soumission bloquée.",
+      "resetStuckError": "Échec de la réinitialisation.",
+      "requeuedMessage": "Le traitement a pris trop de temps ; il sera complété par la tâche planifiée."
     },
     "auditLog": {
       "title": "Audit Log",

@@ -4829,7 +4829,12 @@
       "processAllSuccess": "已处理 {{count}} 条提交。",
       "processError": "处理失败。",
       "processAllError": "提交处理失败。",
-      "alreadyRunning": "正在处理中，请稍候。"
+      "alreadyRunning": "正在处理中，请稍候。",
+      "resetStuckButton": "重置卡住的",
+      "resetStuckSuccess": "已将{{count}}个卡住的提交重置至队列。",
+      "resetStuckNone": "未发现卡住的提交。",
+      "resetStuckError": "重置失败。",
+      "requeuedMessage": "处理时间过长，将由计划任务完成。"
     },
     "auditLog": {
       "title": "Audit Log",

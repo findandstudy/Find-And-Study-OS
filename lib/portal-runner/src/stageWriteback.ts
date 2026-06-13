@@ -78,11 +78,17 @@ function resolveTarget(
  * @param submissionId  The ID of the portal_submissions row
  * @param runResult     Null when the run threw an error
  * @param errorMessage  Set when runResult is null
+ * @param workerId      When provided the UPDATE is guarded with
+ *                      `locked_by = workerId` so a stale background write
+ *                      (e.g. after an inline timeout + requeue) cannot
+ *                      clobber a row that has since been re-claimed by
+ *                      drain-once or another worker.
  */
 export async function writebackResult(
   submissionId: number,
   runResult: RunResult | null,
   errorMessage?: string,
+  workerId?: string,
 ): Promise<void> {
   const result = runResult?.result ?? null;
   const { submissionStatus, stageKey } = resolveTarget(result, runResult?.meta);
@@ -102,6 +108,9 @@ export async function writebackResult(
   }
 
   // ----- 2. Update portal_submissions -------------------------------------
+  // If workerId is provided we guard with locked_by = workerId so that a
+  // stale background write (from an inline process that timed out and was
+  // requeued) cannot clobber a row that has since been re-claimed.
   await db
     .update(portalSubmissionsTable)
     .set({
@@ -117,7 +126,14 @@ export async function writebackResult(
       lockedBy:       null,
       updatedAt:      new Date(),
     })
-    .where(eq(portalSubmissionsTable.id, submissionId));
+    .where(
+      workerId !== undefined
+        ? and(
+            eq(portalSubmissionsTable.id, submissionId),
+            eq(portalSubmissionsTable.lockedBy, workerId),
+          )
+        : eq(portalSubmissionsTable.id, submissionId),
+    );
 
   // ----- 3. Best-effort application stage update --------------------------
   if (stageKey && sub.applicationId) {

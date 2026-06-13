@@ -4829,7 +4829,12 @@
       "processAllSuccess": "{{count}} gönderim işlendi.",
       "processError": "İşleme başarısız oldu.",
       "processAllError": "Gönderimler işlenemedi.",
-      "alreadyRunning": "Bir işlem zaten devam ediyor, lütfen bekleyin."
+      "alreadyRunning": "Bir işlem zaten devam ediyor, lütfen bekleyin.",
+      "resetStuckButton": "Takılıları Sıfırla",
+      "resetStuckSuccess": "{{count}} takılı gönderim kuyruğa alındı.",
+      "resetStuckNone": "Takılı gönderim bulunamadı.",
+      "resetStuckError": "Sıfırlama başarısız.",
+      "requeuedMessage": "İşlem 50sn'yi aştı, drain-once tarafından tamamlanacak."
     },
     "auditLog": {
       "title": "Denetim Günlüğü",

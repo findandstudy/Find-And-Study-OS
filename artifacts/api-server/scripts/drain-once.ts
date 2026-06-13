@@ -29,6 +29,7 @@ import os from "node:os";
 import {
   claimNext,
   releaseStale,
+  heartbeat,
   buildStudentProfile,
   runSubmission,
   writebackResult,
@@ -54,10 +55,10 @@ function sleep(ms: number): Promise<void> {
 async function drain(): Promise<void> {
   console.log(`[drain-once] Starting — id=${WORKER_ID}`);
 
-  // Release stale locks first (crash recovery)
-  const released = await releaseStale(STALE_MS);
-  if (released > 0) {
-    console.log(`[drain-once] Released ${released} stale submission(s)`);
+  // Release stale locks first (crash recovery for previous crashes)
+  const staleIds = await releaseStale(STALE_MS);
+  if (staleIds.length > 0) {
+    console.log(`[drain-once] Released ${staleIds.length} stale submission(s): ${staleIds.join(",")}`);
   }
 
   const results: DrainResult[] = [];
@@ -77,6 +78,12 @@ async function drain(): Promise<void> {
     console.log(
       `[drain-once] Processing #${sub.id} — uni=${sub.universityKey} mode=${sub.mode} attempt=${sub.attempts}/${sub.maxAttempts}`,
     );
+
+    // Heartbeat: refresh locked_at every 30s so the periodic stuck-reset
+    // job (threshold 10 min) never fires while this job is actively running.
+    const hbInterval = setInterval(() => {
+      heartbeat(sub.id, WORKER_ID).catch(() => {});
+    }, 30_000);
 
     try {
       const profileResult = await buildStudentProfile(sub.id);
@@ -118,7 +125,7 @@ async function drain(): Promise<void> {
         creds,
       );
 
-      await writebackResult(sub.id, runResult);
+      await writebackResult(sub.id, runResult, undefined, WORKER_ID);
 
       const status = runResult.meta["dryRun"]
         ? "dry_run"
@@ -135,8 +142,10 @@ async function drain(): Promise<void> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[drain-once] #${sub.id} failed: ${msg}`);
-      await writebackResult(sub.id, null, msg);
+      await writebackResult(sub.id, null, msg, WORKER_ID);
       results.push({ id: sub.id, status: "failed", error: msg });
+    } finally {
+      clearInterval(hbInterval);
     }
 
     processed++;
