@@ -38,34 +38,41 @@ export async function resolvePortalCreds(
   portalKey: string,
   adapterKey?: string,
 ): Promise<ResolvedPortalCreds> {
-  const [row] = await db
-    .select()
-    .from(portalCredentialsTable)
-    .where(
-      and(
-        eq(portalCredentialsTable.portalKey, portalKey),
-        isNull(portalCredentialsTable.deletedAt),
-        eq(portalCredentialsTable.isActive, true),
-      ),
-    )
-    .limit(1);
+  // DB lookup: try adapterKey first (canonical), then portalKey (universityKey) as fallback.
+  const dbKeys = adapterKey && adapterKey !== portalKey
+    ? [adapterKey, portalKey]
+    : [portalKey];
 
-  if (row) {
-    const user     = decryptString(row.usernameEnc);
-    const password = decryptString(row.passwordEnc);
-    let extra: Record<string, unknown> | undefined;
-    if (row.extraEnc) {
-      try { extra = JSON.parse(decryptString(row.extraEnc)); } catch {}
+  for (const key of dbKeys) {
+    const [row] = await db
+      .select()
+      .from(portalCredentialsTable)
+      .where(
+        and(
+          eq(portalCredentialsTable.portalKey, key),
+          isNull(portalCredentialsTable.deletedAt),
+          eq(portalCredentialsTable.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (row) {
+      const user     = decryptString(row.usernameEnc);
+      const password = decryptString(row.passwordEnc);
+      let extra: Record<string, unknown> | undefined;
+      if (row.extraEnc) {
+        try { extra = JSON.parse(decryptString(row.extraEnc)); } catch {}
+      }
+      return { user, password, extra };
     }
-    return { user, password, extra };
   }
 
-  const c = envCreds(portalKey) ?? (adapterKey ? envCreds(adapterKey) : null);
+  const c = envCreds(adapterKey ?? portalKey) ?? envCreds(portalKey);
   if (c) return c;
 
   throw new Error(
     `[portalCreds] No credentials configured for portal key "${portalKey}". ` +
-    `Add them via the panel or set ${portalKey.toUpperCase()}_EMAIL + _PASSWORD in .env`,
+    `Add them via the panel or set ${(adapterKey ?? portalKey).toUpperCase()}_EMAIL + _PASSWORD in .env`,
   );
 }
 
@@ -76,23 +83,30 @@ export async function checkHasPortalCredentials(
   portalKey: string,
   adapterKey?: string,
 ): Promise<boolean> {
+  // DB: try adapterKey first (canonical), then portalKey (universityKey) as fallback.
+  const dbKeys = adapterKey && adapterKey !== portalKey
+    ? [adapterKey, portalKey]
+    : [portalKey];
+
   try {
-    const [row] = await db
-      .select({ id: portalCredentialsTable.id })
-      .from(portalCredentialsTable)
-      .where(
-        and(
-          eq(portalCredentialsTable.portalKey, portalKey),
-          isNull(portalCredentialsTable.deletedAt),
-          eq(portalCredentialsTable.isActive, true),
-        ),
-      )
-      .limit(1);
-    if (row) return true;
+    for (const key of dbKeys) {
+      const [row] = await db
+        .select({ id: portalCredentialsTable.id })
+        .from(portalCredentialsTable)
+        .where(
+          and(
+            eq(portalCredentialsTable.portalKey, key),
+            isNull(portalCredentialsTable.deletedAt),
+            eq(portalCredentialsTable.isActive, true),
+          ),
+        )
+        .limit(1);
+      if (row) return true;
+    }
   } catch { /* DB unreachable — fall through to env */ }
 
-  if (envCreds(portalKey)) return true;
   if (adapterKey && envCreds(adapterKey)) return true;
+  if (envCreds(portalKey)) return true;
   return false;
 }
 

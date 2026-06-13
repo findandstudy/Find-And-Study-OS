@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { db, applicationsTable, portalSubmissionsTable } from "@workspace/db";
+import { db, applicationsTable, portalSubmissionsTable, portalUniversitiesTable } from "@workspace/db";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import { adapterMetadata } from "@workspace/portal-adapters";
 import { isAgentRole } from "@workspace/roles";
@@ -16,7 +16,7 @@ import {
   runSubmission,
   writebackResult,
 } from "@workspace/portal-runner";
-import { resolvePortalCreds } from "../lib/portalCreds.js";
+import { batchPortalCredentialKeys, resolvePortalCreds } from "../lib/portalCreds.js";
 
 const router: IRouter = Router();
 
@@ -511,17 +511,39 @@ router.post(
 
 // ---------------------------------------------------------------------------
 // GET /university-portals
+// Returns active portal universities that have credentials configured.
+// Used by app-detail Submit dropdown — shows only credential-ready entries.
 // ---------------------------------------------------------------------------
 router.get("/university-portals", requireAuth, async (_req, res): Promise<void> => {
-  const meta = adapterMetadata();
-  const result = meta.map(({ key, label }) => {
-    const K = key.toUpperCase().replace(/-/g, "_");
-    const hasCredentials = !!(
-      (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
-      process.env[`${K}_PASSWORD`]
-    );
-    return { key, label, hasCredentials };
-  });
+  const [dbCredKeys, unis] = await Promise.all([
+    batchPortalCredentialKeys(),
+    db
+      .select({
+        universityKey: portalUniversitiesTable.universityKey,
+        universityName: portalUniversitiesTable.universityName,
+        adapterKey: portalUniversitiesTable.adapterKey,
+      })
+      .from(portalUniversitiesTable)
+      .where(
+        and(
+          eq(portalUniversitiesTable.isActive, true),
+          isNull(portalUniversitiesTable.deletedAt),
+        ),
+      ),
+  ]);
+
+  const result = unis
+    .map(({ universityKey, universityName, adapterKey }) => {
+      const K = adapterKey.toUpperCase().replace(/-/g, "_");
+      const envHas = !!(
+        (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
+        process.env[`${K}_PASSWORD`]
+      );
+      const hasCredentials = dbCredKeys.has(adapterKey) || dbCredKeys.has(universityKey) || envHas;
+      return { key: universityKey, label: universityName, adapterKey, hasCredentials };
+    })
+    .filter((u) => u.hasCredentials);
+
   res.json(result);
 });
 

@@ -28,6 +28,8 @@ import {
   writebackResult,
 } from "@workspace/portal-runner";
 import { resolvePortalCreds } from "../src/lib/portalCreds.js";
+import { db, portalUniversitiesTable } from "@workspace/db";
+import { and, eq, isNull } from "drizzle-orm";
 
 const WORKER_ID  = `drain-once-${os.hostname()}-${process.pid}`;
 const STALE_MS   = 5 * 60 * 1000; // 5 minutes
@@ -62,10 +64,25 @@ async function drain(): Promise<void> {
 
       // Resolve creds for both real and dry modes.
       // Dry mode uses the browser (doSubmit=false), so credentials are needed.
-      // If no creds exist for dry mode, login will fail and be caught below.
+      // Credentials are stored under adapterKey (canonical); look it up from portal_universities.
+      let adapterKey = sub.universityKey; // fallback: same as universityKey
+      try {
+        const [uniRow] = await db
+          .select({ adapterKey: portalUniversitiesTable.adapterKey })
+          .from(portalUniversitiesTable)
+          .where(
+            and(
+              eq(portalUniversitiesTable.universityKey, sub.universityKey),
+              isNull(portalUniversitiesTable.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (uniRow) adapterKey = uniRow.adapterKey;
+      } catch {}
+
       let creds: { user: string; password: string } | undefined;
       try {
-        creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+        creds = await resolvePortalCreds(sub.universityKey, adapterKey);
       } catch (credsErr) {
         if (sub.mode === "real") throw credsErr; // required for real mode
         // dry mode: missing creds → adapter will throw at login → caught below

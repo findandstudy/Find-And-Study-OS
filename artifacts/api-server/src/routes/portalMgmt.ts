@@ -211,8 +211,8 @@ router.get(
       .limit(pageParams.limit)
       .offset(pageParams.offset);
 
-    // Attach hasCredentials boolean — DB-first (batch, no N+1), then env fallback.
-    // NEVER expose actual credential values.
+    // Attach hasCredentials boolean — DB-first by adapterKey (canonical), then universityKey
+    // as fallback, then env. NEVER expose actual credential values.
     const dbCredKeys = await batchPortalCredentialKeys();
     const rowsWithCreds = rows.map((row) => {
       const K = row.adapterKey.toUpperCase().replace(/-/g, "_");
@@ -220,7 +220,7 @@ router.get(
         (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
         process.env[`${K}_PASSWORD`]
       );
-      const hasCredentials = dbCredKeys.has(row.universityKey) || envHas;
+      const hasCredentials = dbCredKeys.has(row.adapterKey) || dbCredKeys.has(row.universityKey) || envHas;
       return { ...row, hasCredentials };
     });
 
@@ -640,12 +640,15 @@ router.get(
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (_req, res): Promise<void> => {
     // Registry (code + declarative from declarativeConfigs.ts) — read-only
+    // hasCredentials: DB-first by adapterKey (canonical), then env fallback.
+    const dbCredKeys = await batchPortalCredentialKeys();
     const registry = adapterMetadata().map(({ key, label, kind }) => {
       const K = key.toUpperCase().replace(/-/g, "_");
-      const hasCredentials = !!(
+      const envHas = !!(
         (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
         process.env[`${K}_PASSWORD`]
       );
+      const hasCredentials = dbCredKeys.has(key) || envHas;
       return { key, label, kind, hasCredentials };
     });
 
@@ -828,8 +831,9 @@ router.put(
     const { username, password, extra } = getValidated<CredentialsBodySchemas>(req).body;
 
     // Verify the portalKey belongs to an active portal_universities row
+    // Select adapterKey too — credentials are stored under adapterKey (canonical).
     const [uni] = await db
-      .select({ id: portalUniversitiesTable.id })
+      .select({ id: portalUniversitiesTable.id, adapterKey: portalUniversitiesTable.adapterKey })
       .from(portalUniversitiesTable)
       .where(
         and(
@@ -844,6 +848,9 @@ router.put(
       return;
     }
 
+    // Store under adapterKey (canonical) so all adapter surfaces resolve correctly.
+    const storageKey = uni.adapterKey;
+
     const usernameEnc = encryptString(username);
     const passwordEnc = encryptString(password);
     const extraEnc    = extra ? encryptString(JSON.stringify(extra)) : null;
@@ -851,7 +858,7 @@ router.put(
     await db
       .insert(portalCredentialsTable)
       .values({
-        portalKey,
+        portalKey: storageKey,
         usernameEnc,
         passwordEnc,
         ...(extraEnc !== null ? { extraEnc } : {}),
@@ -875,7 +882,7 @@ router.put(
       "upsert_portal_credentials",
       "portal_credentials",
       uni.id,
-      { portalKey },
+      { portalKey, storageKey },
       req.ip,
     );
 
@@ -895,12 +902,25 @@ router.delete(
   async (req, res): Promise<void> => {
     const { portalKey } = getValidated<PortalKeySchemas>(req).params;
 
+    // Look up the university to get its adapterKey (canonical storage key).
+    const [uni] = await db
+      .select({ id: portalUniversitiesTable.id, adapterKey: portalUniversitiesTable.adapterKey })
+      .from(portalUniversitiesTable)
+      .where(and(eq(portalUniversitiesTable.universityKey, portalKey), isNull(portalUniversitiesTable.deletedAt)))
+      .limit(1);
+
+    const storageKey = uni?.adapterKey ?? portalKey;
+
+    // Delete by adapterKey (canonical) OR universityKey (backward compat).
     const result = await db
       .update(portalCredentialsTable)
       .set({ deletedAt: new Date() })
       .where(
         and(
-          eq(portalCredentialsTable.portalKey, portalKey),
+          or(
+            eq(portalCredentialsTable.portalKey, storageKey),
+            eq(portalCredentialsTable.portalKey, portalKey),
+          ),
           isNull(portalCredentialsTable.deletedAt),
         ),
       )

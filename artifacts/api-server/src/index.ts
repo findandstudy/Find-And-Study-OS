@@ -1373,6 +1373,21 @@ async function seedClaudeIntegration() {
     console.error("[migrate] portal_credentials:", err);
   }
 
+  // Step 2b12b: Backfill portal_credentials stored under universityKey → adapterKey (canonical).
+  // Idempotent: only updates rows where portal_key differs from the university's adapter_key.
+  try {
+    await pool.query(`
+      UPDATE portal_credentials pc
+      SET portal_key = pu.adapter_key, updated_at = NOW()
+      FROM portal_universities pu
+      WHERE pc.portal_key = pu.university_key
+        AND pc.portal_key != pu.adapter_key
+        AND pc.deleted_at IS NULL
+    `);
+  } catch (err) {
+    console.error("[migrate] portal_credentials backfill universityKey→adapterKey:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

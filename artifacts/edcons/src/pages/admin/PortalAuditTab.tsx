@@ -31,13 +31,12 @@ interface AuditEntry {
   changes: Record<string, unknown> | null;
   ipAddress: string | null;
   createdAt: string;
-  userFullName: string | null;
-  userEmail: string | null;
+  userName: string | null;
 }
 
 interface AuditResponse {
-  logs: AuditEntry[];
-  total: number;
+  data: AuditEntry[];
+  meta: { total: number; page: number; limit: number; totalPages: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -88,9 +87,9 @@ export default function PortalAuditTab() {
         limit:  String(limit),
         page:   String(p),
       });
-      const res = await customFetch<AuditResponse>(`/api/audit-log?${params}`);
-      const logs = res.logs ?? [];
-      setTotal(res.total ?? 0);
+      const res = await customFetch<AuditResponse>(`/api/audit?${params}`);
+      const logs = res.data ?? [];
+      setTotal(res.meta?.total ?? 0);
       setEntries((prev) => append ? [...prev, ...logs] : logs);
     } catch {
       toast({ title: t("portalAutomation.auditLog.loadError"), variant: "destructive" });
@@ -175,7 +174,7 @@ export default function PortalAuditTab() {
               {/* Actor + time */}
               <div className="text-right shrink-0">
                 <p className="text-xs font-medium text-foreground">
-                  {e.userFullName ?? e.userEmail ?? "System"}
+                  {e.userName ?? "System"}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   {new Date(e.createdAt).toLocaleString()}
