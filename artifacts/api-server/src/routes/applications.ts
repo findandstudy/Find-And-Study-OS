@@ -20,6 +20,7 @@ import { findActiveCampaign, applyCampaignToFees } from "../lib/campaigns";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 import { getCurrentSeason } from "../lib/season";
+import { maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 
 const router: IRouter = Router();
 
@@ -1307,6 +1308,20 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         templateVars: { studentName: sName5, universityName: app.universityName || "" },
       }).catch(() => {});
     }
+  }
+
+  // Portal automation auto-trigger (fire-and-forget — never blocks response)
+  if (updates.stage !== undefined) {
+    maybeEnqueuePortalSubmission({
+      applicationId: app.id,
+      studentId:     app.studentId,
+      newStage:      String(updates.stage),
+      universityName: app.universityName ?? null,
+      universityId:   app.universityId ?? null,
+      actorUserId:   req.user!.id,
+    }).catch((err) =>
+      console.error("[portal-auto] Trigger failed for app", app.id, ":", err),
+    );
   }
 
   res.json(app);

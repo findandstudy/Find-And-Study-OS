@@ -1264,6 +1264,53 @@ async function seedClaudeIntegration() {
     console.error("[migrate] portal_submissions:", err);
   }
 
+  // Step 2b12: Portal Automation — portal_automation_settings + portal_universities (idempotent).
+  try {
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE "public"."portal_automation_mode" AS ENUM('dry', 'real');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE "public"."portal_automation_scope" AS ENUM('only_applied', 'selected', 'all');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_automation_settings (
+        id SERIAL PRIMARY KEY,
+        is_enabled BOOLEAN NOT NULL DEFAULT false,
+        trigger_stages JSONB NOT NULL DEFAULT '[]',
+        mode portal_automation_mode NOT NULL DEFAULT 'dry',
+        scope portal_automation_scope NOT NULL DEFAULT 'only_applied',
+        selected_university_keys JSONB NOT NULL DEFAULT '[]',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_universities (
+        id SERIAL PRIMARY KEY,
+        university_key TEXT NOT NULL,
+        university_name TEXT NOT NULL,
+        adapter_key TEXT NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        crm_university_id INTEGER,
+        defaults JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_uni_university_key_uniq ON portal_universities (university_key)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_uni_adapter_key_idx ON portal_universities (adapter_key)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_uni_is_active_idx ON portal_universities (is_active)`);
+  } catch (err) {
+    console.error("[migrate] portal_automation_settings/portal_universities:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
