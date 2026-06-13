@@ -1,0 +1,363 @@
+/**
+ * PortalSubmissionsTab.tsx — SUB-STEP G
+ *
+ * Portal submission tracking board.
+ * GET  /api/portal-submissions  (with status/mode filters)
+ * POST /api/portal-submissions/:id/retry
+ * POST /api/portal-submissions/:id/cancel
+ */
+
+import { useState, useEffect, useCallback } from "react";
+import { customFetch } from "@workspace/api-client-react";
+import { useI18n } from "@/hooks/use-i18n";
+import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
+  CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type SubmissionStatus =
+  | "queued" | "running" | "submitted" | "already_exists"
+  | "program_missing" | "failed" | "canceled";
+
+type SubmissionMode = "dry" | "real";
+
+interface PortalSubmission {
+  id: number;
+  applicationId: number;
+  studentId: number;
+  universityKey: string;
+  universityName: string;
+  mode: SubmissionMode;
+  status: SubmissionStatus;
+  externalRef: string | null;
+  error: string | null;
+  attempts: number;
+  maxAttempts: number;
+  enqueuedBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ListResponse {
+  data: PortalSubmission[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+// ---------------------------------------------------------------------------
+// Status helpers
+// ---------------------------------------------------------------------------
+
+const STATUS_CONFIG: Record<SubmissionStatus, {
+  icon: React.ElementType;
+  className: string;
+}> = {
+  queued:          { icon: Clock,       className: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400" },
+  running:         { icon: Play,        className: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400" },
+  submitted:       { icon: CheckCircle2, className: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400" },
+  already_exists:  { icon: CheckCircle2, className: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400" },
+  program_missing: { icon: SkipForward, className: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400" },
+  failed:          { icon: AlertCircle, className: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400" },
+  canceled:        { icon: MinusCircle, className: "bg-muted text-muted-foreground" },
+};
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+// ---------------------------------------------------------------------------
+// Submission row
+// ---------------------------------------------------------------------------
+
+interface RowProps {
+  sub: PortalSubmission;
+  onRetry: (id: number) => Promise<void>;
+  onCancel: (id: number) => Promise<void>;
+  retryingId: number | null;
+  cancelingId: number | null;
+}
+
+function SubmissionRow({ sub, onRetry, onCancel, retryingId, cancelingId }: RowProps) {
+  const { t } = useI18n();
+  const cfg = STATUS_CONFIG[sub.status];
+  const Icon = cfg.icon;
+  const isRetrying  = retryingId  === sub.id;
+  const isCanceling = cancelingId === sub.id;
+
+  const statusLabel: Record<SubmissionStatus, string> = {
+    queued:          t("portalAutomation.submissions.statusPending"),
+    running:         t("portalAutomation.submissions.statusRunning"),
+    submitted:       t("portalAutomation.submissions.statusSuccess"),
+    already_exists:  t("portalAutomation.submissions.statusSuccess"),
+    program_missing: t("portalAutomation.submissions.statusSkipped"),
+    failed:          t("portalAutomation.submissions.statusFailed"),
+    canceled:        "İptal",
+  };
+
+  const canRetry  = sub.status === "failed" || sub.status === "canceled";
+  const canCancel = sub.status === "queued"  || sub.status === "running";
+
+  return (
+    <Card className="rounded-xl">
+      <CardContent className="p-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          {/* Status + meta */}
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge className={cn("gap-1 text-xs py-0", cfg.className)}>
+                <Icon className="w-3 h-3" />
+                {statusLabel[sub.status]}
+              </Badge>
+              <Badge variant={sub.mode === "real" ? "default" : "secondary"} className="text-xs py-0">
+                {sub.mode === "real" ? "Real" : "Dry Run"}
+              </Badge>
+              <span className="text-xs text-muted-foreground font-medium">
+                {sub.universityName}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+              <span>#{sub.applicationId}</span>
+              {sub.externalRef && (
+                <>
+                  <span>·</span>
+                  <code className="bg-muted px-1 rounded text-[11px]">{sub.externalRef}</code>
+                </>
+              )}
+              {sub.error && (
+                <>
+                  <span>·</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-destructive truncate max-w-[200px]">{sub.error}</span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm">
+                        <p className="text-xs break-words">{sub.error}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </>
+              )}
+              <span>·</span>
+              <span>{new Date(sub.createdAt).toLocaleString()}</span>
+              <span>·</span>
+              <span>Deneme {sub.attempts}/{sub.maxAttempts}</span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5"
+              asChild
+            >
+              <a href={`${BASE_URL}/staff/applications/${sub.applicationId}`} target="_blank" rel="noreferrer">
+                <ExternalLink className="w-3.5 h-3.5" />
+                {t("portalAutomation.submissions.viewApplication")}
+              </a>
+            </Button>
+            {canRetry && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => onRetry(sub.id)}
+                disabled={isRetrying}
+              >
+                {isRetrying
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <RotateCcw className="w-3.5 h-3.5" />}
+                Yeniden Dene
+              </Button>
+            )}
+            {canCancel && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-destructive hover:text-destructive"
+                onClick={() => onCancel(sub.id)}
+                disabled={isCanceling}
+              >
+                {isCanceling
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <XCircle className="w-3.5 h-3.5" />}
+                İptal
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+export default function PortalSubmissionsTab() {
+  const { t } = useI18n();
+  const { toast } = useToast();
+
+  const [subs, setSubs]       = useState<PortalSubmission[]>([]);
+  const [total, setTotal]     = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage]       = useState(1);
+  const limit                 = 20;
+
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [modeFilter, setModeFilter]     = useState<string>("all");
+  const [retryingId,  setRetryingId]    = useState<number | null>(null);
+  const [cancelingId, setCancelingId]   = useState<number | null>(null);
+
+  const load = useCallback(async (p: number, status: string, mode: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(p), limit: String(limit) });
+      if (status !== "all") params.set("status", status);
+      if (mode   !== "all") params.set("mode",   mode);
+      const res = await customFetch<ListResponse>(`/api/portal-submissions?${params}`);
+      setSubs(res.data ?? []);
+      setTotal(res.total ?? 0);
+    } catch {
+      toast({ title: t("portalAutomation.submissions.loadError"), variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [t, toast]);
+
+  useEffect(() => { load(page, statusFilter, modeFilter); }, [load, page, statusFilter, modeFilter]);
+
+  const handleRetry = async (id: number) => {
+    setRetryingId(id);
+    try {
+      await customFetch(`/api/portal-submissions/${id}/retry`, { method: "POST" });
+      setSubs((prev) => prev.map((s) => s.id === id ? { ...s, status: "queued", error: null, attempts: 0 } : s));
+      toast({ title: "Gönderim yeniden kuyruğa alındı." });
+    } catch {
+      toast({ title: "Yeniden deneme başarısız.", variant: "destructive" });
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const handleCancel = async (id: number) => {
+    setCancelingId(id);
+    try {
+      await customFetch(`/api/portal-submissions/${id}/cancel`, { method: "POST" });
+      setSubs((prev) => prev.map((s) => s.id === id ? { ...s, status: "canceled" } : s));
+      toast({ title: "Gönderim iptal edildi." });
+    } catch {
+      toast({ title: "İptal başarısız.", variant: "destructive" });
+    } finally {
+      setCancelingId(null);
+    }
+  };
+
+  const totalPages = Math.ceil(total / limit);
+
+  return (
+    <div className="space-y-4 py-2">
+      {/* Filters + refresh */}
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex gap-2 flex-wrap">
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-40 h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("portalAutomation.submissions.filterAll")}</SelectItem>
+              <SelectItem value="queued">{t("portalAutomation.submissions.statusPending")}</SelectItem>
+              <SelectItem value="running">{t("portalAutomation.submissions.statusRunning")}</SelectItem>
+              <SelectItem value="submitted">{t("portalAutomation.submissions.statusSuccess")}</SelectItem>
+              <SelectItem value="failed">{t("portalAutomation.submissions.statusFailed")}</SelectItem>
+              <SelectItem value="canceled">İptal</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={modeFilter} onValueChange={(v) => { setModeFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-32 h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("portalAutomation.submissions.filterAll")}</SelectItem>
+              <SelectItem value="dry">Dry Run</SelectItem>
+              <SelectItem value="real">Real</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          variant="outline" size="sm" className="h-9 gap-1.5"
+          onClick={() => load(page, statusFilter, modeFilter)}
+          disabled={loading}
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Yenile
+        </Button>
+      </div>
+
+      {/* List */}
+      {loading ? (
+        <div className="space-y-3">
+          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+        </div>
+      ) : subs.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground text-sm">
+          {t("portalAutomation.submissions.noData")}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {subs.map((sub) => (
+            <SubmissionRow
+              key={sub.id}
+              sub={sub}
+              onRetry={handleRetry}
+              onCancel={handleCancel}
+              retryingId={retryingId}
+              cancelingId={cancelingId}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <Button
+            variant="outline" size="sm"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1 || loading}
+          >
+            Önceki
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {page} / {totalPages}
+          </span>
+          <Button
+            variant="outline" size="sm"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages || loading}
+          >
+            Sonraki
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}

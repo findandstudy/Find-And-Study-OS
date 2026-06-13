@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
@@ -14,6 +14,7 @@ import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
 import { StageDocRequestDialog } from "@/components/StageDocRequestDialog";
 import { StageDocsIncompleteDialog } from "@/components/StageDocsIncompleteDialog";
 import { requestStageChange, type MissingDocEntry } from "@/lib/stageTransition";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   ArrowLeft, MessageSquare, User, BookOpen, DollarSign,
   MapPin, GraduationCap, Globe, Calendar, Pencil, TrendingUp,
-  CalendarClock, CheckCircle2, Clock, Plus,
+  CalendarClock, CheckCircle2, Clock, Plus, Send, RotateCcw, XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { QuickContactButtons } from "@/components/QuickContact";
@@ -62,6 +63,190 @@ function getStageColor(stageKey: string) {
 interface Props {
   id: number;
   basePath?: string;
+}
+
+// ---------------------------------------------------------------------------
+// PortalSubmitSection — SUB-STEP I
+// Shows active portal universities + enqueue trigger (admin only)
+// POST /api/applications/:appId/portal-submissions
+// ---------------------------------------------------------------------------
+
+interface UniversityPortal { key: string; label: string; hasCredentials: boolean; }
+type PortalSubmissionStatus = "queued"|"running"|"submitted"|"already_exists"|"program_missing"|"failed"|"canceled";
+interface AppPortalSubmission {
+  id: number; universityName: string; universityKey: string;
+  mode: "dry"|"real"; status: PortalSubmissionStatus;
+  error: string|null; createdAt: string;
+}
+
+function PortalSubmitSection({ applicationId }: { applicationId: number }) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const [unis, setUnis] = useState<UniversityPortal[]>([]);
+  const [subs, setSubs] = useState<AppPortalSubmission[]>([]);
+  const [selectedKey, setSelectedKey] = useState("");
+  const [mode, setMode] = useState<"dry"|"real">("dry");
+  const [confirm, setConfirm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [retryingId, setRetryingId] = useState<number|null>(null);
+
+  useEffect(() => {
+    apiFetch("/api/university-portals").then(r => r.json()).then(setUnis).catch(() => {});
+    apiFetch(`/api/portal-submissions?applicationId=${applicationId}&limit=10`).then(r => r.json()).then((d: {data: AppPortalSubmission[]}) => setSubs(d.data ?? [])).catch(() => {});
+  }, [applicationId]);
+
+  const submit = async () => {
+    if (!selectedKey) return;
+    setSubmitting(true);
+    try {
+      const body: Record<string,unknown> = { universityKey: selectedKey, mode };
+      if (mode === "real" && confirm) body.confirm = true;
+      const r = await apiFetch(`/api/applications/${applicationId}/portal-submissions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({})) as Record<string,unknown>;
+        if ((e as any)?.error === "CONFIRM_REQUIRED") {
+          setConfirm(true);
+          toast({ title: "Gerçek gönderim için onay kutusunu işaretleyin.", variant: "destructive" });
+          return;
+        }
+        throw new Error();
+      }
+      const newSub = await r.json() as AppPortalSubmission;
+      setSubs(prev => [newSub, ...prev].slice(0, 10));
+      toast({ title: t("applicationDetailPage.portalSubmitSuccess") });
+    } catch {
+      toast({ title: t("applicationDetailPage.portalSubmitError"), variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const retry = async (id: number) => {
+    setRetryingId(id);
+    try {
+      const r = await apiFetch(`/api/portal-submissions/${id}/retry`, { method: "POST" });
+      if (!r.ok) throw new Error();
+      setSubs(prev => prev.map(s => s.id === id ? { ...s, status: "queued" as const, error: null } : s));
+      toast({ title: "Yeniden kuyruğa alındı." });
+    } catch {
+      toast({ title: "Yeniden deneme başarısız.", variant: "destructive" });
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const STATUS_COLORS: Record<PortalSubmissionStatus, string> = {
+    queued: "bg-yellow-100 text-yellow-700", running: "bg-blue-100 text-blue-700",
+    submitted: "bg-emerald-100 text-emerald-700", already_exists: "bg-emerald-100 text-emerald-700",
+    program_missing: "bg-orange-100 text-orange-700", failed: "bg-red-100 text-red-700",
+    canceled: "bg-muted text-muted-foreground",
+  };
+
+  const activeUnis = unis.filter(u => u.hasCredentials);
+
+  return (
+    <Card className="rounded-2xl border shadow-sm mt-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Send className="w-4 h-4" />
+          {t("applicationDetailPage.portalSubmitTitle")}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{t("applicationDetailPage.portalSubmitDescription")}</p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Trigger form */}
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="space-y-1 min-w-[200px]">
+            <Label className="text-xs">{t("applicationDetailPage.portalSelectUniversity")}</Label>
+            <Select value={selectedKey} onValueChange={setSelectedKey}>
+              <SelectTrigger className="h-9 w-[220px]">
+                <SelectValue placeholder={t("applicationDetailPage.portalSelectUniversity")} />
+              </SelectTrigger>
+              <SelectContent>
+                {activeUnis.length === 0
+                  ? <SelectItem value="__none__" disabled>{t("applicationDetailPage.portalNoUniversities")}</SelectItem>
+                  : activeUnis.map(u => (
+                    <SelectItem key={u.key} value={u.key}>{u.label}</SelectItem>
+                  ))
+                }
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{t("applicationDetailPage.portalMode")}</Label>
+            <Select value={mode} onValueChange={(v) => { setMode(v as "dry"|"real"); setConfirm(false); }}>
+              <SelectTrigger className="h-9 w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dry">{t("applicationDetailPage.portalModeDry")}</SelectItem>
+                <SelectItem value="real">{t("applicationDetailPage.portalModeReal")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {mode === "real" && (
+            <div className="flex items-center gap-2 h-9">
+              <input
+                type="checkbox"
+                id="portal-confirm"
+                checked={confirm}
+                onChange={e => setConfirm(e.target.checked)}
+                className="w-4 h-4 rounded border-border"
+              />
+              <Label htmlFor="portal-confirm" className="text-xs cursor-pointer">
+                {t("applicationDetailPage.portalConfirmReal")}
+              </Label>
+            </div>
+          )}
+          <Button
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={submit}
+            disabled={!selectedKey || activeUnis.length === 0 || submitting || (mode === "real" && !confirm)}
+          >
+            {submitting
+              ? <><span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" /> {t("applicationDetailPage.portalSubmitting")}</>
+              : <><Send className="w-3.5 h-3.5" /> {t("applicationDetailPage.portalSubmitButton")}</>
+            }
+          </Button>
+        </div>
+
+        {/* Recent submissions */}
+        {subs.length > 0 && (
+          <div className="space-y-2 pt-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              {t("applicationDetailPage.portalRecentTitle")}
+            </p>
+            <div className="rounded-lg border divide-y divide-border overflow-hidden">
+              {subs.map(s => (
+                <div key={s.id} className="flex items-center gap-2 px-3 py-2 text-xs bg-card flex-wrap">
+                  <Badge className={`text-[11px] py-0 h-4 ${STATUS_COLORS[s.status]}`}>
+                    {s.status}
+                  </Badge>
+                  <span className="font-medium">{s.universityName}</span>
+                  <Badge variant={s.mode === "real" ? "default" : "secondary"} className="text-[11px] py-0 h-4">
+                    {s.mode}
+                  </Badge>
+                  {s.error && <span className="text-destructive truncate max-w-[200px]">{s.error}</span>}
+                  <span className="text-muted-foreground ml-auto">{new Date(s.createdAt).toLocaleString()}</span>
+                  {(s.status === "failed" || s.status === "canceled") && (
+                    <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[11px] gap-1" onClick={() => retry(s.id)} disabled={retryingId === s.id}>
+                      <RotateCcw className="w-2.5 h-2.5" />
+                      {t("applicationDetailPage.portalRetry")}
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
@@ -716,6 +901,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           </div>
         </div>
         {app && <AuditLogSection resource="application" resourceId={app.id} />}
+        {app && isAdmin && <PortalSubmitSection applicationId={app.id} />}
       </div>
 
       {app && (

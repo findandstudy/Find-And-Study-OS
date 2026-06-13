@@ -25,6 +25,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bot, Construction, Save } from "lucide-react";
 import PortalUniversitiesTab from "./PortalUniversitiesTab";
+import PortalProgramMappingTab from "./PortalProgramMappingTab";
+import PortalAdaptersTab from "./PortalAdaptersTab";
+import PortalSubmissionsTab from "./PortalSubmissionsTab";
+import PortalAuditTab from "./PortalAuditTab";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -370,6 +374,8 @@ export default function PortalAutomation() {
           <TabsTrigger value="universities">{t("portalAutomation.tabs.universities")}</TabsTrigger>
           <TabsTrigger value="programMapping">{t("portalAutomation.tabs.programMapping")}</TabsTrigger>
           <TabsTrigger value="adapters">{t("portalAutomation.tabs.adapters")}</TabsTrigger>
+          <TabsTrigger value="submissions">{t("portalAutomation.tabs.submissions")}</TabsTrigger>
+          <TabsTrigger value="auditLog">{t("portalAutomation.tabs.auditLog")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="rules">
@@ -381,11 +387,19 @@ export default function PortalAutomation() {
         </TabsContent>
 
         <TabsContent value="programMapping">
-          <ComingSoon />
+          <PortalProgramMappingTab />
         </TabsContent>
 
         <TabsContent value="adapters">
-          <ComingSoon />
+          <PortalAdaptersTab />
+        </TabsContent>
+
+        <TabsContent value="submissions">
+          <PortalSubmissionsTab />
+        </TabsContent>
+
+        <TabsContent value="auditLog">
+          <PortalAuditTab />
         </TabsContent>
       </Tabs>
     </div>
