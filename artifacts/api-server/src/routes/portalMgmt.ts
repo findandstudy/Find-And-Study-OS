@@ -22,7 +22,10 @@ import {
   db,
   portalAutomationSettingsTable,
   portalUniversitiesTable,
+  portalAdaptersTable,
+  portalProgramMappingTable,
 } from "@workspace/db";
+import { adapterByKey, adapterMetadata } from "@workspace/portal-adapters";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -445,6 +448,349 @@ router.delete(
       {},
       req.ip,
     );
+
+    res.json({ ok: true });
+  },
+);
+
+// ===========================================================================
+// TEST LOGIN
+// ===========================================================================
+
+const PORTAL_LOGIN_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(msg)), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
+
+function hasPortalCredentials(adapterKey: string): boolean {
+  const K = adapterKey.toUpperCase().replace(/-/g, "_");
+  return !!(
+    (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
+    process.env[`${K}_PASSWORD`]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// POST /portal-universities/:id/test-login
+// ---------------------------------------------------------------------------
+router.post(
+  "/portal-universities/:id/test-login",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: idParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { id } = getValidated<IdSchemas>(req).params;
+
+    const [uni] = await db
+      .select()
+      .from(portalUniversitiesTable)
+      .where(and(eq(portalUniversitiesTable.id, id), isNull(portalUniversitiesTable.deletedAt)));
+
+    if (!uni) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    // Gate 1: credentials configured?
+    if (!hasPortalCredentials(uni.adapterKey)) {
+      res.json({
+        ok: false,
+        message: `Kimlik bilgileri yapılandırılmamış (.env'de ${uni.adapterKey.toUpperCase()}_EMAIL/_USER + _PASSWORD eksik)`,
+      });
+      return;
+    }
+
+    // Gate 2: adapter registered?
+    const adapter = adapterByKey(uni.adapterKey);
+    if (!adapter) {
+      res.json({
+        ok: false,
+        message: `Adapter bulunamadı: '${uni.adapterKey}' — önce portal adapter kaydı gerekli`,
+      });
+      return;
+    }
+
+    // Gate 3: headless login attempt — fire-and-forget close on finish
+    let session: Awaited<ReturnType<typeof adapter.login>> | null = null;
+    try {
+      session = await withTimeout(
+        adapter.login({ headless: true }),
+        PORTAL_LOGIN_TIMEOUT_MS,
+        "Login zaman aşımına uğradı (30s)",
+      );
+      res.json({ ok: true, message: "Login başarılı" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Strip any credential-looking content from message before sending
+      const safe = msg.replace(/password[^\s]*/gi, "***").replace(/token[^\s]*/gi, "***");
+      res.json({ ok: false, message: safe });
+    } finally {
+      session?.close().catch(() => {});
+    }
+
+    logAudit(req.user!.id, "test_portal_login", "portal_university", id, { adapterKey: uni.adapterKey }, req.ip);
+  },
+);
+
+// ===========================================================================
+// PROGRAM MAPPING
+// ===========================================================================
+
+const uniKeyParamsSchema = z.object({ universityKey: z.string().min(1) });
+type UniKeySchemas = { params: typeof uniKeyParamsSchema };
+
+// ---------------------------------------------------------------------------
+// GET /portal-program-mapping/:universityKey
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-program-mapping/:universityKey",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: uniKeyParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { universityKey } = getValidated<UniKeySchemas>(req).params;
+
+    const [row] = await db
+      .select()
+      .from(portalProgramMappingTable)
+      .where(eq(portalProgramMappingTable.universityKey, universityKey));
+
+    if (!row) {
+      res.json({ universityKey, mappings: {}, id: null, createdAt: null, updatedAt: null });
+      return;
+    }
+
+    res.json(row);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// PUT /portal-program-mapping/:universityKey
+// ---------------------------------------------------------------------------
+const putMappingBodySchema = z.object({
+  mappings: z.record(z.string()),
+});
+type PutMappingSchemas = { params: typeof uniKeyParamsSchema; body: typeof putMappingBodySchema };
+
+router.put(
+  "/portal-program-mapping/:universityKey",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: uniKeyParamsSchema, body: putMappingBodySchema }),
+  async (req, res): Promise<void> => {
+    const { universityKey } = getValidated<PutMappingSchemas>(req).params;
+    const { mappings }      = getValidated<PutMappingSchemas>(req).body;
+    const user = req.user!;
+
+    const [existing] = await db
+      .select({ id: portalProgramMappingTable.id })
+      .from(portalProgramMappingTable)
+      .where(eq(portalProgramMappingTable.universityKey, universityKey));
+
+    let row;
+    if (existing) {
+      [row] = await db
+        .update(portalProgramMappingTable)
+        .set({ mappings, updatedAt: new Date() })
+        .where(eq(portalProgramMappingTable.id, existing.id))
+        .returning();
+    } else {
+      [row] = await db
+        .insert(portalProgramMappingTable)
+        .values({ universityKey, mappings })
+        .returning();
+    }
+
+    logAudit(
+      user.id,
+      "update_portal_program_mapping",
+      "portal_program_mapping",
+      row.id,
+      { universityKey, count: Object.keys(mappings).length },
+      req.ip,
+    );
+
+    res.json(row);
+  },
+);
+
+// ===========================================================================
+// PORTAL ADAPTERS (DB-stored declarative configs)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// GET /portal-adapters — registry metadata + DB-stored adapters
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-adapters",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    // Registry (code + declarative from declarativeConfigs.ts) — read-only
+    const registry = adapterMetadata().map(({ key, label, kind }) => {
+      const K = key.toUpperCase().replace(/-/g, "_");
+      const hasCredentials = !!(
+        (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
+        process.env[`${K}_PASSWORD`]
+      );
+      return { key, label, kind, hasCredentials };
+    });
+
+    // DB-stored adapters — manageable via UI
+    const dbAdapters = await db
+      .select()
+      .from(portalAdaptersTable)
+      .where(isNull(portalAdaptersTable.deletedAt))
+      .orderBy(asc(portalAdaptersTable.key));
+
+    res.json({ registry, db: dbAdapters });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-adapters
+// ---------------------------------------------------------------------------
+const createAdapterBodySchema = z.object({
+  key:        z.string().min(1).regex(/^[a-z0-9_-]+$/, "Only lowercase letters, digits, underscores and hyphens"),
+  label:      z.string().min(1),
+  baseUrl:    z.string().min(1),
+  matchNames: z.string().min(1),
+  kind:       z.enum(["declarative", "code"]).optional(),
+  configJson: z.record(z.unknown()).optional(),
+  isActive:   z.boolean().optional(),
+});
+type CreateAdapterSchemas = { body: typeof createAdapterBodySchema };
+
+router.post(
+  "/portal-adapters",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ body: createAdapterBodySchema }),
+  async (req, res): Promise<void> => {
+    const body = getValidated<CreateAdapterSchemas>(req).body;
+    const user = req.user!;
+
+    const [dup] = await db
+      .select({ id: portalAdaptersTable.id })
+      .from(portalAdaptersTable)
+      .where(eq(portalAdaptersTable.key, body.key))
+      .limit(1);
+
+    if (dup) {
+      res.status(409).json({
+        error: "DUPLICATE_KEY",
+        message: `Adapter key '${body.key}' already exists`,
+      });
+      return;
+    }
+
+    const [row] = await db
+      .insert(portalAdaptersTable)
+      .values({
+        key:        body.key,
+        label:      body.label,
+        baseUrl:    body.baseUrl,
+        matchNames: body.matchNames,
+        kind:       body.kind ?? "declarative",
+        configJson: body.configJson ?? null,
+        isActive:   body.isActive ?? true,
+      })
+      .returning();
+
+    logAudit(user.id, "create_portal_adapter", "portal_adapter", row.id, { key: row.key }, req.ip);
+
+    res.status(201).json(row);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// PATCH /portal-adapters/:id
+// ---------------------------------------------------------------------------
+const updateAdapterBodySchema = z.object({
+  label:      z.string().min(1).optional(),
+  baseUrl:    z.string().min(1).optional(),
+  matchNames: z.string().min(1).optional(),
+  kind:       z.enum(["declarative", "code"]).optional(),
+  configJson: z.record(z.unknown()).nullable().optional(),
+  isActive:   z.boolean().optional(),
+}).strict();
+type UpdateAdapterSchemas = { params: typeof idParamsSchema; body: typeof updateAdapterBodySchema };
+
+router.patch(
+  "/portal-adapters/:id",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: idParamsSchema, body: updateAdapterBodySchema }),
+  async (req, res): Promise<void> => {
+    const { id } = getValidated<UpdateAdapterSchemas>(req).params;
+    const body   = getValidated<UpdateAdapterSchemas>(req).body;
+    const user   = req.user!;
+
+    const [row] = await db
+      .select({ id: portalAdaptersTable.id })
+      .from(portalAdaptersTable)
+      .where(and(eq(portalAdaptersTable.id, id), isNull(portalAdaptersTable.deletedAt)));
+
+    if (!row) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    const patch: Partial<typeof portalAdaptersTable.$inferInsert> = { updatedAt: new Date() };
+    if (body.label      !== undefined) patch.label      = body.label;
+    if (body.baseUrl    !== undefined) patch.baseUrl    = body.baseUrl;
+    if (body.matchNames !== undefined) patch.matchNames = body.matchNames;
+    if (body.kind       !== undefined) patch.kind       = body.kind;
+    if ("configJson" in body)          patch.configJson = body.configJson ?? null;
+    if (body.isActive   !== undefined) patch.isActive   = body.isActive;
+
+    const [updated] = await db
+      .update(portalAdaptersTable)
+      .set(patch)
+      .where(eq(portalAdaptersTable.id, id))
+      .returning();
+
+    logAudit(user.id, "update_portal_adapter", "portal_adapter", id, body, req.ip);
+
+    res.json(updated);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// DELETE /portal-adapters/:id  (soft-delete)
+// ---------------------------------------------------------------------------
+router.delete(
+  "/portal-adapters/:id",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: idParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { id } = getValidated<IdSchemas>(req).params;
+    const user   = req.user!;
+
+    const [row] = await db
+      .select({ id: portalAdaptersTable.id })
+      .from(portalAdaptersTable)
+      .where(and(eq(portalAdaptersTable.id, id), isNull(portalAdaptersTable.deletedAt)));
+
+    if (!row) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    await db
+      .update(portalAdaptersTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(portalAdaptersTable.id, id));
+
+    logAudit(user.id, "delete_portal_adapter", "portal_adapter", id, {}, req.ip);
 
     res.json({ ok: true });
   },

@@ -1311,6 +1311,45 @@ async function seedClaudeIntegration() {
     console.error("[migrate] portal_automation_settings/portal_universities:", err);
   }
 
+  // Step 2b13: Portal Adapters table + Program Mapping table (idempotent).
+  try {
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE "public"."portal_adapter_kind" AS ENUM('code', 'declarative');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_adapters (
+        id SERIAL PRIMARY KEY,
+        key TEXT NOT NULL,
+        label TEXT NOT NULL,
+        base_url TEXT NOT NULL DEFAULT '',
+        match_names TEXT NOT NULL DEFAULT '',
+        kind portal_adapter_kind NOT NULL DEFAULT 'code',
+        config_json JSONB,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_adp_key_uniq ON portal_adapters (key)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_adp_is_active_idx ON portal_adapters (is_active)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_program_mapping (
+        id SERIAL PRIMARY KEY,
+        university_key TEXT NOT NULL,
+        mappings JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_prog_map_key_uniq ON portal_program_mapping (university_key)`);
+  } catch (err) {
+    console.error("[migrate] portal_adapters/portal_program_mapping:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
