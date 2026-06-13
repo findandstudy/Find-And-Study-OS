@@ -53,5 +53,48 @@ module.exports = {
       // Hata izleri için kaynak haritaları
       node_args: "--enable-source-maps",
     },
+
+    // -------------------------------------------------------------------------
+    // Portal Automation Worker
+    // -------------------------------------------------------------------------
+    // Fork mode — tekil instance (SKIP LOCKED sayesinde birden fazla çalışmak
+    // güvenli, ama bellek maliyeti yüksek; gerekirse instances artırılabilir).
+    // tsx yorumlayıcısı sayesinde TypeScript kaynak dosyasını doğrudan çalıştırır
+    // (workspace deps'in TS source export ettiği monorepo yapısıyla uyumlu).
+    {
+      name: "findandstudy-portal-worker",
+      script: "./artifacts/portal-automation-worker/src/worker.ts",
+      interpreter: "./node_modules/.bin/tsx",
+
+      exec_mode: "fork",
+      instances: 1,
+
+      // Chromium process'leri için 1 GB heap
+      max_memory_restart: "1G",
+
+      watch: false,
+
+      env_production: {
+        NODE_ENV: "production",
+        // tsx heap + kaynak haritaları
+        NODE_OPTIONS: "--max-old-space-size=512 --enable-source-maps",
+        PLAYWRIGHT_HEADLESS: "true",
+      },
+
+      // Loglar — API server'dan ayrı dosyalar
+      out_file: "./logs/portal-worker-out.log",
+      error_file: "./logs/portal-worker-error.log",
+      merge_logs: true,
+      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
+
+      // Graceful shutdown — Chromium'un temiz kapanması için
+      kill_timeout: 15000,
+
+      autorestart: true,
+      exp_backoff_restart_delay: 100,
+      max_restarts: 10,
+      restart_delay: 5000,
+      min_uptime: "10s",
+    },
   ],
 };
