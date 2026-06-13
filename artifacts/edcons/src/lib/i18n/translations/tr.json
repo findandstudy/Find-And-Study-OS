@@ -436,7 +436,8 @@
     "selfFillLinks": "Self-Fill Bağlantıları",
     "aiPersonas": "AI Personaları",
     "aiActionQueue": "AI Aksiyon Kuyruğu",
-    "apiTokens": "API Anahtarları"
+    "apiTokens": "API Anahtarları",
+    "portalAutomation": "Portal Otomasyonu"
   },
   "notFound": {
     "title": "Sayfa Bulunamadı",
@@ -4602,5 +4603,41 @@
     "parkedNotice": "Başvuru beklemede — zorunlu belgeler eksik",
     "staffNotice": "Başvuru askıya alındı: eksik zorunlu belgeler: {missing}",
     "studentNotice": "Başvurunuz için gerekli belgeler eksik: {missing}"
+  },
+  "portalAutomation": {
+    "pageTitle": "Portal Otomasyonu",
+    "tabs": {
+      "rules": "Otomasyon Kuralları",
+      "universities": "Üniversiteler",
+      "programMapping": "Program Haritalama",
+      "adapters": "Adapter Yönetimi"
+    },
+    "rules": {
+      "title": "Otomasyon Kuralları",
+      "description": "Başvuruların üniversite portallarına ne zaman ve nasıl otomatik gönderileceğini yapılandırın.",
+      "enabledLabel": "Portal Otomasyonunu Etkinleştir",
+      "enabledDescription": "Etkinleştirildiğinde, yapılandırılan kriterlere uyan başvurular otomatik olarak gönderilecektir.",
+      "triggerStagesLabel": "Tetikleyici Aşamalar",
+      "triggerStagesHint": "Otomatik portal gönderimini tetikleyecek başvuru aşamalarını seçin.",
+      "modeLabel": "Gönderim Modu",
+      "modeDry": "Test Modu",
+      "modeDryHint": "Tarayıcı çalışır, form doldurulur; ancak gönder butonuna basılmaz.",
+      "modeReal": "Canlı Mod",
+      "modeRealHint": "Gerçek gönderim — form doldurulur ve portala iletilir.",
+      "scopeLabel": "Hedef Kapsam",
+      "scopeOnlyApplied": "Yalnızca 'Başvuruldu' statüsündeki üniversiteler",
+      "scopeSelected": "Yalnızca seçili üniversiteler",
+      "scopeAll": "Tüm üniversiteler",
+      "selectedUniversitiesLabel": "Seçili Üniversiteler",
+      "selectedUniversitiesHint": "Yalnızca aşağıdaki üniversiteler için gönderimler otomatikleştirilecektir.",
+      "noUniversities": "Yapılandırılmış portal üniversitesi bulunmuyor.",
+      "saveButton": "Ayarları Kaydet",
+      "saving": "Kaydediliyor…",
+      "saveSuccess": "Ayarlar başarıyla kaydedildi.",
+      "saveError": "Ayarlar kaydedilemedi.",
+      "loadError": "Ayarlar yüklenemedi."
+    },
+    "comingSoon": "Yakında",
+    "comingSoonHint": "Bu bölüm yapım aşamasındadır."
   }
 }

@@ -436,7 +436,8 @@
     "aiPersonas": "AI पर्सोना",
     "aiActionQueue": "AI एक्शन क्यू",
     "staffCards": "स्टाफ़ कार्ड",
-    "apiTokens": "API टोकन"
+    "apiTokens": "API टोकन",
+    "portalAutomation": "Portal Automation"
   },
   "notFound": {
     "title": "पृष्ठ नहीं मिला",
@@ -4602,5 +4603,41 @@
     "parkedNotice": "आवेदन लंबित — आवश्यक दस्तावेज़ अनुपस्थित",
     "staffNotice": "आवेदन रुका हुआ है: अनिवार्य दस्तावेज़ अनुपस्थित: {missing}",
     "studentNotice": "आपके आवेदन के लिए आवश्यक दस्तावेज़ अनुपस्थित हैं: {missing}"
+  },
+  "portalAutomation": {
+    "pageTitle": "Portal Automation",
+    "tabs": {
+      "rules": "Automation Rules",
+      "universities": "Universities",
+      "programMapping": "Program Mapping",
+      "adapters": "Adapter Management"
+    },
+    "rules": {
+      "title": "Automation Rules",
+      "description": "Configure when and how applications are automatically submitted to university portals.",
+      "enabledLabel": "Enable Portal Automation",
+      "enabledDescription": "When active, applications matching the configured criteria will be submitted automatically.",
+      "triggerStagesLabel": "Trigger Stages",
+      "triggerStagesHint": "Select the application stages that will trigger an automatic portal submission.",
+      "modeLabel": "Submission Mode",
+      "modeDry": "Test Mode",
+      "modeDryHint": "Browser runs and form is filled, but the submit button is never clicked.",
+      "modeReal": "Live Mode",
+      "modeRealHint": "Real submission — the form is filled and submitted to the university portal.",
+      "scopeLabel": "Target Scope",
+      "scopeOnlyApplied": "Only universities with 'Applied' status",
+      "scopeSelected": "Selected universities only",
+      "scopeAll": "All universities",
+      "selectedUniversitiesLabel": "Selected Universities",
+      "selectedUniversitiesHint": "Only submissions targeting these universities will be automated.",
+      "noUniversities": "No portal universities configured.",
+      "saveButton": "Save Settings",
+      "saving": "Saving…",
+      "saveSuccess": "Settings saved successfully.",
+      "saveError": "Failed to save settings.",
+      "loadError": "Failed to load settings."
+    },
+    "comingSoon": "Coming Soon",
+    "comingSoonHint": "This section is under construction."
   }
 }

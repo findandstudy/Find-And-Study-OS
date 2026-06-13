@@ -65,6 +65,7 @@ import {
   ListChecks,
   FileSearch,
   KeyRound,
+  Bot,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -148,6 +149,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
       { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
       ...(isAdmin ? [{ title: t("dashboard.apiTokens"), icon: KeyRound, url: '/admin/api-tokens' }] : []),
       { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
+      ...(isAdmin ? [{ title: t("dashboard.portalAutomation"), icon: Bot, url: '/admin/portal-automation' }] : []),
     ];
 
     const groups = [
