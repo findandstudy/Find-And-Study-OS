@@ -223,7 +223,7 @@ test("F3-2a: GET /finance/student-search with q='a' returns empty data array (mi
 // ---------------------------------------------------------------------------
 test("F3-2b: GET /finance/student-search returns seeded student by name fragment", async () => {
   const studentId = await seedStudent("Alpha");
-  const uniqueFragment = `SearchStudentAlpha`;
+  const uniqueFragment = `SearchStudentAlpha ${RUN_ID}`;
 
   const app = buildApp();
   await withServer(app, async (server) => {
@@ -337,7 +337,7 @@ test("F3-4: GET /commissions summary.byCurrency.totalNetAgency deducts staffComm
 test("F3-5: student-search then student-applications chain returns consistent studentId", async () => {
   const studentId = await seedStudent("Delta");
   const appId = await seedApplication(studentId);
-  const fragment = `SearchStudentDelta`;
+  const fragment = `SearchStudentDelta ${RUN_ID}`;
 
   const app = buildApp();
   await withServer(app, async (server) => {

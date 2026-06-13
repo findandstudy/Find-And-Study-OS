@@ -259,6 +259,7 @@ router.get("/finance/student-search", requireAuth, requireRole(...FINANCE_ROLES)
     isNull(studentsTable.deletedAt),
     sql`(${studentsTable.firstName} ilike ${term} OR ${studentsTable.lastName} ilike ${term} OR ${studentsTable.email} ilike ${term} OR concat(${studentsTable.firstName}, ' ', ${studentsTable.lastName}) ilike ${term})`
   ))
+  .orderBy(desc(studentsTable.id))
   .limit(limit);
   res.json({ data: rows.map(r => ({ id: r.id, name: `${r.firstName || ""} ${r.lastName || ""}`.trim(), email: r.email })) });
 });
