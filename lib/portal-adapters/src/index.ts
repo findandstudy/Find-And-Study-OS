@@ -11,8 +11,8 @@ export type {
   UniversityAdapter,
 } from "./types.js";
 
-// Credential helper — reads from process.env
-export { portalCreds, type ResolvedCreds } from "./portalCreds.js";
+// Credential helper — reads from process.env (or injected override)
+export { portalCreds, setCredsOverride, clearCredsOverride, type ResolvedCreds } from "./portalCreds.js";
 
 // Browser utilities
 export {

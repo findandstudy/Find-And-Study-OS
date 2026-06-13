@@ -4708,7 +4708,26 @@
       "toggleSuccess": "Durum güncellendi.",
       "toggleError": "Durum güncellenemedi.",
       "noData": "Yapılandırılmış portal üniversitesi bulunmuyor.",
-      "loadError": "Üniversiteler yüklenemedi."
+      "loadError": "Üniversiteler yüklenemedi.",
+      "credsButton": "Kimlik Bilgileri",
+      "credsDialog": {
+        "title": "Kimlik Bilgilerini Yönet",
+        "description": "Portal giriş bilgilerini girin. Değerler şifreli olarak saklanır ve bir daha görüntülenmez.",
+        "usernameLabel": "Kullanıcı Adı / E-posta",
+        "passwordLabel": "Şifre",
+        "extraLabel": "Ekstra alanlar (JSON, isteğe bağlı)",
+        "extraHint": "Ek alanlar için isteğe bağlı JSON nesnesi (örn. öğrenci ID, token).",
+        "extraInvalidJson": "Geçersiz JSON — lütfen kaydetmeden önce düzeltin.",
+        "saveButton": "Kaydet",
+        "saving": "Kaydediliyor…",
+        "saveSuccess": "Kimlik bilgileri başarıyla kaydedildi.",
+        "saveError": "Kimlik bilgileri kaydedilemedi.",
+        "clearButton": "Kimlik Bilgilerini Sil",
+        "clearing": "Siliniyor…",
+        "clearConfirm": "Silmeyi onaylamak için tekrar tıklayın",
+        "clearSuccess": "Kimlik bilgileri silindi.",
+        "clearError": "Kimlik bilgileri silinemedi."
+      }
     },
     "programMapping": {
       "title": "Program Haritalama",

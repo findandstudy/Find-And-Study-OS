@@ -4708,7 +4708,26 @@
       "toggleSuccess": "Status updated.",
       "toggleError": "Failed to update status.",
       "noData": "No portal universities configured.",
-      "loadError": "Failed to load universities."
+      "loadError": "Failed to load universities.",
+      "credsButton": "क्रेडेंशियल",
+      "credsDialog": {
+        "title": "क्रेडेंशियल प्रबंधन",
+        "description": "पोर्टल लॉगिन क्रेडेंशियल दर्ज करें। मान एन्क्रिप्टेड रूप में संग्रहीत होते हैं और दोबारा नहीं दिखाए जाते।",
+        "usernameLabel": "उपयोगकर्ता नाम / ई-मेल",
+        "passwordLabel": "पासवर्ड",
+        "extraLabel": "अतिरिक्त फ़ील्ड (JSON, वैकल्पिक)",
+        "extraHint": "अतिरिक्त फ़ील्ड के लिए वैकल्पिक JSON ऑब्जेक्ट (जैसे छात्र ID, टोकन)।",
+        "extraInvalidJson": "अमान्य JSON — सहेजने से पहले कृपया ठीक करें।",
+        "saveButton": "सहेजें",
+        "saving": "सहेज रहे हैं…",
+        "saveSuccess": "क्रेडेंशियल सफलतापूर्वक सहेजे गए।",
+        "saveError": "क्रेडेंशियल सहेजने में विफल।",
+        "clearButton": "क्रेडेंशियल हटाएं",
+        "clearing": "हटा रहे हैं…",
+        "clearConfirm": "हटाने की पुष्टि के लिए फिर से क्लिक करें",
+        "clearSuccess": "क्रेडेंशियल हटाए गए।",
+        "clearError": "क्रेडेंशियल हटाने में विफल।"
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

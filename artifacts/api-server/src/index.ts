@@ -1350,6 +1350,26 @@ async function seedClaudeIntegration() {
     console.error("[migrate] portal_adapters/portal_program_mapping:", err);
   }
 
+  // Step 2b12: portal_credentials — encrypted per-portal username/password (AES-256-GCM).
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_credentials (
+        id SERIAL PRIMARY KEY,
+        portal_key TEXT NOT NULL,
+        username_enc TEXT NOT NULL,
+        password_enc TEXT NOT NULL,
+        extra_enc TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_creds_portal_key_uniq ON portal_credentials (portal_key)`);
+  } catch (err) {
+    console.error("[migrate] portal_credentials:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

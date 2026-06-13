@@ -4708,7 +4708,26 @@
       "toggleSuccess": "Status updated.",
       "toggleError": "Failed to update status.",
       "noData": "No portal universities configured.",
-      "loadError": "Failed to load universities."
+      "loadError": "Failed to load universities.",
+      "credsButton": "Identifiants",
+      "credsDialog": {
+        "title": "Gérer les identifiants",
+        "description": "Saisissez les identifiants de connexion au portail. Les valeurs sont stockées de façon chiffrée et ne seront plus affichées.",
+        "usernameLabel": "Nom d'utilisateur / E-mail",
+        "passwordLabel": "Mot de passe",
+        "extraLabel": "Champs supplémentaires (JSON, optionnel)",
+        "extraHint": "Objet JSON optionnel pour des champs supplémentaires (ex : ID étudiant, jeton).",
+        "extraInvalidJson": "JSON invalide — veuillez corriger avant d'enregistrer.",
+        "saveButton": "Enregistrer",
+        "saving": "Enregistrement…",
+        "saveSuccess": "Identifiants enregistrés avec succès.",
+        "saveError": "Échec de l'enregistrement des identifiants.",
+        "clearButton": "Supprimer les identifiants",
+        "clearing": "Suppression…",
+        "clearConfirm": "Cliquez à nouveau pour confirmer la suppression",
+        "clearSuccess": "Identifiants supprimés.",
+        "clearError": "Échec de la suppression des identifiants."
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

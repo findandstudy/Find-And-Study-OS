@@ -6,18 +6,21 @@
  *             resultJson.dryRun:true so the writeback can record the attempt
  *             without touching the external portal.
  *
- * Real mode — resolves the adapter, reads credentials from .env, calls
- *             adapter.login() then adapter.submit(), captures screenshots.
+ * Real mode — resolves credentials (DB-first, env fallback) via credResolver,
+ *             injects them into the adapter via setCredsOverride() before
+ *             calling adapter.login(), then clears the override in finally.
  */
 
 import fs from "node:fs/promises";
 import {
   adapterByKey,
   adapterForUniversity,
-  portalCreds,
+  setCredsOverride,
+  clearCredsOverride,
 } from "@workspace/portal-adapters";
 import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 import type { ClaimedSubmission } from "./queue.js";
+import { resolvePortalCreds } from "./credResolver.js";
 
 // ---------------------------------------------------------------------------
 // Result shape returned to stageWriteback
@@ -70,14 +73,18 @@ export async function runSubmission(
     };
   }
 
-  // ----- 3. Real mode — validate credentials first ------------------------
-  // portalCreds() throws when env vars are missing; let the error propagate
-  // so the submission lands in "failed" with a clear message.
-  portalCreds(adapter.key);
+  // ----- 3. Real mode — resolve credentials (DB-first, env fallback) ------
+  // resolvePortalCreds() throws when no credentials are found anywhere;
+  // let the error propagate so the submission lands in "failed" with a clear message.
+  const creds = await resolvePortalCreds(submission.universityKey, adapter.key);
 
   // ----- 4. Login + submit -------------------------------------------------
   const screenshotUrls: string[] = [];
   let session: Awaited<ReturnType<typeof adapter.login>> | null = null;
+
+  // Inject resolved creds so the adapter's internal portalCreds() call
+  // picks them up without relying on env vars.
+  setCredsOverride(adapter.key, { user: creds.user, password: creds.password });
 
   try {
     session = await adapter.login({ headless: true });
@@ -88,8 +95,6 @@ export async function runSubmission(
     try {
       const buf = await (session as unknown as { page: { screenshot(): Promise<Buffer> } })
         .page.screenshot();
-      // In production the caller would upload buf to object storage and push
-      // the URL; here we record a placeholder string so the shape is correct.
       screenshotUrls.push(`data:image/png;base64,${buf.toString("base64").slice(0, 64)}…`);
     } catch {
       // Screenshot failure is non-fatal
@@ -101,6 +106,7 @@ export async function runSubmission(
       meta: { adapterKey: adapter.key },
     };
   } finally {
+    clearCredsOverride(adapter.key);
     await session?.close().catch(() => {});
     await cleanup(tempDir);
   }

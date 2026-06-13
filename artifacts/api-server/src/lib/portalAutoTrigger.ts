@@ -12,7 +12,7 @@
  *        only_applied → university row exists + isActive (default)
  *        selected     → additionally, universityKey ∈ selectedUniversityKeys
  *        all          → same as only_applied (row must still exist + isActive)
- *   5. hasCredentials — env vars <ADAPTER_KEY>_EMAIL/_USER + _PASSWORD set
+ *   5. hasCredentials — DB row (portal_credentials) or env vars set
  *   6. Dedup — skip when a queued/running/submitted submission already exists
  *              for this application × universityKey pair
  *
@@ -28,22 +28,7 @@ import {
   portalSubmissionsTable,
 } from "@workspace/db";
 import { logAudit } from "./auth.js";
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Checks whether process.env contains the portal credentials for the given
- * adapterKey following the <KEY>_EMAIL (or <KEY>_USER) + <KEY>_PASSWORD
- * convention used by portalCreds().
- */
-function hasPortalCredentials(adapterKey: string): boolean {
-  const K = adapterKey.toUpperCase().replace(/-/g, "_");
-  const user = process.env[`${K}_EMAIL`] ?? process.env[`${K}_USER`];
-  const password = process.env[`${K}_PASSWORD`];
-  return !!(user && password);
-}
+import { checkHasPortalCredentials } from "./portalCreds.js";
 
 // ---------------------------------------------------------------------------
 // maybeEnqueuePortalSubmission
@@ -126,8 +111,8 @@ export async function maybeEnqueuePortalSubmission(
   }
   // scope='only_applied' and scope='all' both pass when a portal_uni row exists
 
-  // ----- Gate 4: credentials check -------------------------------------
-  if (!hasPortalCredentials(portalUni.adapterKey)) return;
+  // ----- Gate 4: credentials check (DB-first + env fallback) -----------
+  if (!await checkHasPortalCredentials(portalUni.universityKey, portalUni.adapterKey)) return;
 
   // ----- Gate 5: dedup --------------------------------------------------
   const [existing] = await db

@@ -16,7 +16,7 @@
  */
 
 import { Router, type IRouter } from "express";
-import { and, asc, count, eq, ilike, isNull, or, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, ilike, isNull, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
@@ -24,12 +24,15 @@ import {
   portalUniversitiesTable,
   portalAdaptersTable,
   portalProgramMappingTable,
+  portalCredentialsTable,
 } from "@workspace/db";
-import { adapterByKey, adapterMetadata } from "@workspace/portal-adapters";
+import { adapterByKey, adapterMetadata, setCredsOverride, clearCredsOverride } from "@workspace/portal-adapters";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import { getValidated, validate } from "../middlewares/validate";
+import { encryptString } from "../lib/encryption";
+import { batchPortalCredentialKeys, checkHasPortalCredentials, resolvePortalCreds } from "../lib/portalCreds";
 
 const router: IRouter = Router();
 
@@ -38,6 +41,9 @@ const router: IRouter = Router();
 // ---------------------------------------------------------------------------
 const idParamsSchema = z.object({ id: z.coerce.number().int().positive() });
 type IdSchemas = { params: typeof idParamsSchema };
+
+const portalKeyParamsSchema = z.object({ portalKey: z.string().min(1) });
+type PortalKeySchemas = { params: typeof portalKeyParamsSchema };
 
 // ===========================================================================
 // SETTINGS
@@ -205,13 +211,16 @@ router.get(
       .limit(pageParams.limit)
       .offset(pageParams.offset);
 
-    // Attach hasCredentials boolean; NEVER expose actual credential values
+    // Attach hasCredentials boolean — DB-first (batch, no N+1), then env fallback.
+    // NEVER expose actual credential values.
+    const dbCredKeys = await batchPortalCredentialKeys();
     const rowsWithCreds = rows.map((row) => {
       const K = row.adapterKey.toUpperCase().replace(/-/g, "_");
-      const hasCredentials = !!(
+      const envHas = !!(
         (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
         process.env[`${K}_PASSWORD`]
       );
+      const hasCredentials = dbCredKeys.has(row.universityKey) || envHas;
       return { ...row, hasCredentials };
     });
 
@@ -469,13 +478,8 @@ function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
   });
 }
 
-function hasPortalCredentials(adapterKey: string): boolean {
-  const K = adapterKey.toUpperCase().replace(/-/g, "_");
-  return !!(
-    (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
-    process.env[`${K}_PASSWORD`]
-  );
-}
+// Credentials check now delegated to lib/portalCreds (DB-first + env fallback).
+// The local env-only helper is removed; callers use checkHasPortalCredentials().
 
 // ---------------------------------------------------------------------------
 // POST /portal-universities/:id/test-login
@@ -498,11 +502,11 @@ router.post(
       return;
     }
 
-    // Gate 1: credentials configured?
-    if (!hasPortalCredentials(uni.adapterKey)) {
+    // Gate 1: credentials configured? (DB-first, then env)
+    if (!await checkHasPortalCredentials(uni.universityKey, uni.adapterKey)) {
       res.json({
         ok: false,
-        message: `Kimlik bilgileri yapılandırılmamış (.env'de ${uni.adapterKey.toUpperCase()}_EMAIL/_USER + _PASSWORD eksik)`,
+        message: `Kimlik bilgileri yapılandırılmamış — panelden ekleyin veya .env'de ${uni.adapterKey.toUpperCase()}_EMAIL/_USER + _PASSWORD ayarlayın`,
       });
       return;
     }
@@ -517,9 +521,11 @@ router.post(
       return;
     }
 
-    // Gate 3: headless login attempt — fire-and-forget close on finish
+    // Gate 3: resolve creds + headless login attempt
     let session: Awaited<ReturnType<typeof adapter.login>> | null = null;
     try {
+      const creds = await resolvePortalCreds(uni.universityKey, uni.adapterKey);
+      setCredsOverride(adapter.key, { user: creds.user, password: creds.password });
       session = await withTimeout(
         adapter.login({ headless: true }),
         PORTAL_LOGIN_TIMEOUT_MS,
@@ -528,10 +534,10 @@ router.post(
       res.json({ ok: true, message: "Login başarılı" });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Strip any credential-looking content from message before sending
       const safe = msg.replace(/password[^\s]*/gi, "***").replace(/token[^\s]*/gi, "***");
       res.json({ ok: false, message: safe });
     } finally {
+      clearCredsOverride(adapter.key);
       session?.close().catch(() => {});
     }
 
@@ -791,6 +797,128 @@ router.delete(
       .where(eq(portalAdaptersTable.id, id));
 
     logAudit(user.id, "delete_portal_adapter", "portal_adapter", id, {}, req.ip);
+
+    res.json({ ok: true });
+  },
+);
+
+// ===========================================================================
+// PORTAL CREDENTIALS  (admin / super_admin only — NEVER expose plaintext)
+// ===========================================================================
+
+const credentialsBodySchema = z.object({
+  username: z.string().min(1, "username required"),
+  password: z.string().min(1, "password required"),
+  extra: z.record(z.unknown()).optional(),
+});
+type CredentialsBodySchemas = { body: typeof credentialsBodySchema };
+
+// ---------------------------------------------------------------------------
+// PUT /portal-universities/:portalKey/credentials
+// Upsert encrypted credentials for a portal university.
+// Response: { ok: true } — plaintext is NEVER returned.
+// ---------------------------------------------------------------------------
+router.put(
+  "/portal-universities/:portalKey/credentials",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: portalKeyParamsSchema, body: credentialsBodySchema }),
+  async (req, res): Promise<void> => {
+    const { portalKey } = getValidated<PortalKeySchemas>(req).params;
+    const { username, password, extra } = getValidated<CredentialsBodySchemas>(req).body;
+
+    // Verify the portalKey belongs to an active portal_universities row
+    const [uni] = await db
+      .select({ id: portalUniversitiesTable.id })
+      .from(portalUniversitiesTable)
+      .where(
+        and(
+          eq(portalUniversitiesTable.universityKey, portalKey),
+          isNull(portalUniversitiesTable.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!uni) {
+      res.status(404).json({ error: "NOT_FOUND", message: `Portal university "${portalKey}" not found` });
+      return;
+    }
+
+    const usernameEnc = encryptString(username);
+    const passwordEnc = encryptString(password);
+    const extraEnc    = extra ? encryptString(JSON.stringify(extra)) : null;
+
+    await db
+      .insert(portalCredentialsTable)
+      .values({
+        portalKey,
+        usernameEnc,
+        passwordEnc,
+        ...(extraEnc !== null ? { extraEnc } : {}),
+        isActive:  true,
+        deletedAt: null,
+      })
+      .onConflictDoUpdate({
+        target: portalCredentialsTable.portalKey,
+        set: {
+          usernameEnc,
+          passwordEnc,
+          extraEnc:  extraEnc ?? sql`NULL`,
+          isActive:  true,
+          deletedAt: null,
+          updatedAt: new Date(),
+        },
+      });
+
+    logAudit(
+      req.user!.id,
+      "upsert_portal_credentials",
+      "portal_credentials",
+      uni.id,
+      { portalKey },
+      req.ip,
+    );
+
+    res.json({ ok: true });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// DELETE /portal-universities/:portalKey/credentials
+// Soft-deletes the stored credentials for a portal university.
+// ---------------------------------------------------------------------------
+router.delete(
+  "/portal-universities/:portalKey/credentials",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: portalKeyParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { portalKey } = getValidated<PortalKeySchemas>(req).params;
+
+    const result = await db
+      .update(portalCredentialsTable)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(portalCredentialsTable.portalKey, portalKey),
+          isNull(portalCredentialsTable.deletedAt),
+        ),
+      )
+      .returning({ id: portalCredentialsTable.id });
+
+    if (!result.length) {
+      res.status(404).json({ error: "NOT_FOUND", message: "No active credentials found for this portal key" });
+      return;
+    }
+
+    logAudit(
+      req.user!.id,
+      "delete_portal_credentials",
+      "portal_credentials",
+      result[0].id,
+      { portalKey },
+      req.ip,
+    );
 
     res.json({ ok: true });
   },

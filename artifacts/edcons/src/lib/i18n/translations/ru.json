@@ -4708,7 +4708,26 @@
       "toggleSuccess": "Status updated.",
       "toggleError": "Failed to update status.",
       "noData": "No portal universities configured.",
-      "loadError": "Failed to load universities."
+      "loadError": "Failed to load universities.",
+      "credsButton": "Учётные данные",
+      "credsDialog": {
+        "title": "Управление учётными данными",
+        "description": "Введите данные для входа в портал. Значения хранятся в зашифрованном виде и больше не отображаются.",
+        "usernameLabel": "Имя пользователя / E-mail",
+        "passwordLabel": "Пароль",
+        "extraLabel": "Дополнительные поля (JSON, необязательно)",
+        "extraHint": "Необязательный JSON-объект для дополнительных полей (напр., ID студента, токен).",
+        "extraInvalidJson": "Неверный JSON — исправьте перед сохранением.",
+        "saveButton": "Сохранить",
+        "saving": "Сохранение…",
+        "saveSuccess": "Учётные данные успешно сохранены.",
+        "saveError": "Не удалось сохранить учётные данные.",
+        "clearButton": "Удалить учётные данные",
+        "clearing": "Удаление…",
+        "clearConfirm": "Нажмите снова для подтверждения удаления",
+        "clearSuccess": "Учётные данные удалены.",
+        "clearError": "Не удалось удалить учётные данные."
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

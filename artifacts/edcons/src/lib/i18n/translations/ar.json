@@ -4708,7 +4708,26 @@
       "toggleSuccess": "Status updated.",
       "toggleError": "Failed to update status.",
       "noData": "No portal universities configured.",
-      "loadError": "Failed to load universities."
+      "loadError": "Failed to load universities.",
+      "credsButton": "بيانات الاعتماد",
+      "credsDialog": {
+        "title": "إدارة بيانات الاعتماد",
+        "description": "أدخل بيانات تسجيل الدخول للبوابة. تُخزَّن القيم مشفرة ولا تُعرض مجددًا.",
+        "usernameLabel": "اسم المستخدم / البريد الإلكتروني",
+        "passwordLabel": "كلمة المرور",
+        "extraLabel": "حقول إضافية (JSON، اختياري)",
+        "extraHint": "كائن JSON اختياري لحقول إضافية (مثل رقم الطالب، الرمز المميز).",
+        "extraInvalidJson": "JSON غير صالح — يرجى التصحيح قبل الحفظ.",
+        "saveButton": "حفظ",
+        "saving": "جارٍ الحفظ…",
+        "saveSuccess": "تم حفظ بيانات الاعتماد بنجاح.",
+        "saveError": "فشل حفظ بيانات الاعتماد.",
+        "clearButton": "إزالة بيانات الاعتماد",
+        "clearing": "جارٍ الإزالة…",
+        "clearConfirm": "انقر مرة أخرى لتأكيد الإزالة",
+        "clearSuccess": "تمت إزالة بيانات الاعتماد.",
+        "clearError": "فشل إزالة بيانات الاعتماد."
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

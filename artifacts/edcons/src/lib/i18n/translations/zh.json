@@ -4708,7 +4708,26 @@
       "toggleSuccess": "Status updated.",
       "toggleError": "Failed to update status.",
       "noData": "No portal universities configured.",
-      "loadError": "Failed to load universities."
+      "loadError": "Failed to load universities.",
+      "credsButton": "凭据",
+      "credsDialog": {
+        "title": "管理凭据",
+        "description": "输入门户登录凭据。值以加密方式存储，不会再次显示。",
+        "usernameLabel": "用户名 / 电子邮件",
+        "passwordLabel": "密码",
+        "extraLabel": "额外字段（JSON，可选）",
+        "extraHint": "用于额外字段的可选 JSON 对象（如学生 ID、令牌）。",
+        "extraInvalidJson": "JSON 无效——请在保存前修正。",
+        "saveButton": "保存",
+        "saving": "保存中…",
+        "saveSuccess": "凭据保存成功。",
+        "saveError": "凭据保存失败。",
+        "clearButton": "删除凭据",
+        "clearing": "删除中…",
+        "clearConfirm": "再次点击以确认删除",
+        "clearSuccess": "凭据已删除。",
+        "clearError": "删除凭据失败。"
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

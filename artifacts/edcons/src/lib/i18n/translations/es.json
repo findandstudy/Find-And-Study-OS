@@ -4708,7 +4708,26 @@
       "toggleSuccess": "Status updated.",
       "toggleError": "Failed to update status.",
       "noData": "No portal universities configured.",
-      "loadError": "Failed to load universities."
+      "loadError": "Failed to load universities.",
+      "credsButton": "Credenciales",
+      "credsDialog": {
+        "title": "Gestionar credenciales",
+        "description": "Introduce las credenciales de acceso al portal. Los valores se almacenan cifrados y no se volverán a mostrar.",
+        "usernameLabel": "Usuario / Correo electrónico",
+        "passwordLabel": "Contraseña",
+        "extraLabel": "Campos adicionales (JSON, opcional)",
+        "extraHint": "Objeto JSON opcional para campos adicionales (p. ej. ID de estudiante, token).",
+        "extraInvalidJson": "JSON no válido — corríjalo antes de guardar.",
+        "saveButton": "Guardar",
+        "saving": "Guardando…",
+        "saveSuccess": "Credenciales guardadas correctamente.",
+        "saveError": "Error al guardar las credenciales.",
+        "clearButton": "Eliminar credenciales",
+        "clearing": "Eliminando…",
+        "clearConfirm": "Haz clic de nuevo para confirmar la eliminación",
+        "clearSuccess": "Credenciales eliminadas.",
+        "clearError": "Error al eliminar las credenciales."
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

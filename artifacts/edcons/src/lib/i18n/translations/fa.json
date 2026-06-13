@@ -4708,7 +4708,26 @@
       "toggleSuccess": "Status updated.",
       "toggleError": "Failed to update status.",
       "noData": "No portal universities configured.",
-      "loadError": "Failed to load universities."
+      "loadError": "Failed to load universities.",
+      "credsButton": "اعتبارنامه‌ها",
+      "credsDialog": {
+        "title": "مدیریت اعتبارنامه‌ها",
+        "description": "اطلاعات ورود به پورتال را وارد کنید. مقادیر رمزگذاری‌شده ذخیره می‌شوند و دیگر نمایش داده نمی‌شوند.",
+        "usernameLabel": "نام کاربری / ایمیل",
+        "passwordLabel": "رمز عبور",
+        "extraLabel": "فیلدهای اضافی (JSON، اختیاری)",
+        "extraHint": "شی JSON اختیاری برای فیلدهای اضافی (مثل شناسه دانشجو، توکن).",
+        "extraInvalidJson": "JSON نامعتبر — لطفاً قبل از ذخیره اصلاح کنید.",
+        "saveButton": "ذخیره",
+        "saving": "در حال ذخیره…",
+        "saveSuccess": "اعتبارنامه‌ها با موفقیت ذخیره شدند.",
+        "saveError": "ذخیره اعتبارنامه‌ها ناموفق بود.",
+        "clearButton": "حذف اعتبارنامه‌ها",
+        "clearing": "در حال حذف…",
+        "clearConfirm": "برای تأیید حذف دوباره کلیک کنید",
+        "clearSuccess": "اعتبارنامه‌ها حذف شدند.",
+        "clearError": "حذف اعتبارنامه‌ها ناموفق بود."
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

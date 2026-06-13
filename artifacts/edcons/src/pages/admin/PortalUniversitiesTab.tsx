@@ -50,7 +50,11 @@ import {
   Settings2,
   FlaskConical,
   KeySquare,
+  Eye,
+  EyeOff,
+  Trash2,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -409,6 +413,208 @@ function EditDefaultsDialog({ uni, onClose, onSaved }: EditDefaultsDialogProps) 
 }
 
 // ---------------------------------------------------------------------------
+// CredentialsDialog — write-only; never shows plaintext credentials
+// ---------------------------------------------------------------------------
+
+interface CredentialsDialogProps {
+  uni: PortalUniversity | null;
+  onClose: () => void;
+  onSaved:  (portalKey: string) => void;
+  onCleared:(portalKey: string) => void;
+}
+
+function CredentialsDialog({ uni, onClose, onSaved, onCleared }: CredentialsDialogProps) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw,   setShowPw]   = useState(false);
+  const [extra,    setExtra]    = useState("");
+  const [saving,   setSaving]   = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [extraError, setExtraError] = useState("");
+
+  useEffect(() => {
+    if (uni) {
+      setUsername("");
+      setPassword("");
+      setShowPw(false);
+      setExtra("");
+      setExtraError("");
+      setConfirmClear(false);
+    }
+  }, [uni]);
+
+  const validateExtra = (v: string): boolean => {
+    if (!v.trim()) { setExtraError(""); return true; }
+    try { JSON.parse(v); setExtraError(""); return true; }
+    catch { setExtraError(t("portalAutomation.unis.credsDialog.extraInvalidJson")); return false; }
+  };
+
+  const handleSave = async () => {
+    if (!uni || !username.trim() || !password.trim()) return;
+    if (!validateExtra(extra)) return;
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = { username: username.trim(), password: password.trim() };
+      if (extra.trim()) body.extra = JSON.parse(extra.trim());
+      await customFetch(`/api/portal-universities/${uni.universityKey}/credentials`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      toast({ title: t("portalAutomation.unis.credsDialog.saveSuccess") });
+      onSaved(uni.universityKey);
+      onClose();
+    } catch {
+      toast({ title: t("portalAutomation.unis.credsDialog.saveError"), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    if (!uni || !confirmClear) { setConfirmClear(true); return; }
+    setClearing(true);
+    try {
+      await customFetch(`/api/portal-universities/${uni.universityKey}/credentials`, {
+        method: "DELETE",
+      });
+      toast({ title: t("portalAutomation.unis.credsDialog.clearSuccess") });
+      onCleared(uni.universityKey);
+      onClose();
+    } catch {
+      toast({ title: t("portalAutomation.unis.credsDialog.clearError"), variant: "destructive" });
+    } finally {
+      setClearing(false);
+      setConfirmClear(false);
+    }
+  };
+
+  const canSave = username.trim() && password.trim() && !saving && !clearing;
+
+  return (
+    <Dialog open={!!uni} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {t("portalAutomation.unis.credsDialog.title")}
+            {uni && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                — {uni.universityName}
+              </span>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        <p className="text-sm text-muted-foreground">
+          {t("portalAutomation.unis.credsDialog.description")}
+        </p>
+
+        <div className="space-y-4 py-1">
+          {/* Username */}
+          <div className="space-y-1.5">
+            <Label htmlFor="cred-username">
+              {t("portalAutomation.unis.credsDialog.usernameLabel")}
+            </Label>
+            <Input
+              id="cred-username"
+              autoComplete="off"
+              autoFocus
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="portal@example.com"
+            />
+          </div>
+
+          {/* Password */}
+          <div className="space-y-1.5">
+            <Label htmlFor="cred-password">
+              {t("portalAutomation.unis.credsDialog.passwordLabel")}
+            </Label>
+            <div className="relative">
+              <Input
+                id="cred-password"
+                type={showPw ? "text" : "password"}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowPw((v) => !v)}
+                tabIndex={-1}
+              >
+                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Extra JSON (optional) */}
+          <div className="space-y-1.5">
+            <Label htmlFor="cred-extra">
+              {t("portalAutomation.unis.credsDialog.extraLabel")}
+            </Label>
+            <Textarea
+              id="cred-extra"
+              value={extra}
+              onChange={(e) => { setExtra(e.target.value); validateExtra(e.target.value); }}
+              placeholder='{"token": "..."}'
+              rows={3}
+              className="font-mono text-xs resize-none"
+            />
+            {extraError ? (
+              <p className="text-xs text-destructive">{extraError}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t("portalAutomation.unis.credsDialog.extraHint")}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {/* Clear credentials (only when creds exist) */}
+          {uni?.hasCredentials && (
+            <Button
+              variant={confirmClear ? "destructive" : "outline"}
+              size="sm"
+              disabled={saving || clearing}
+              onClick={handleClear}
+              className="sm:mr-auto gap-1.5"
+            >
+              {clearing
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Trash2 className="w-3.5 h-3.5" />}
+              {clearing
+                ? t("portalAutomation.unis.credsDialog.clearing")
+                : confirmClear
+                  ? t("portalAutomation.unis.credsDialog.clearConfirm")
+                  : t("portalAutomation.unis.credsDialog.clearButton")}
+            </Button>
+          )}
+
+          <Button variant="outline" onClick={onClose} disabled={saving || clearing}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={handleSave} disabled={!canSave}>
+            {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {saving
+              ? t("portalAutomation.unis.credsDialog.saving")
+              : t("portalAutomation.unis.credsDialog.saveButton")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // UniversityRow
 // ---------------------------------------------------------------------------
 
@@ -417,11 +623,12 @@ interface RowProps {
   onToggle: (id: number, active: boolean) => Promise<void>;
   onTestLogin: (id: number) => Promise<void>;
   onEditDefaults: (uni: PortalUniversity) => void;
+  onManageCreds: (uni: PortalUniversity) => void;
   togglingId: number | null;
   testingId:  number | null;
 }
 
-function UniversityRow({ uni, onToggle, onTestLogin, onEditDefaults, togglingId, testingId }: RowProps) {
+function UniversityRow({ uni, onToggle, onTestLogin, onEditDefaults, onManageCreds, togglingId, testingId }: RowProps) {
   const { t } = useI18n();
   const isToggling = togglingId === uni.id;
   const isTesting  = testingId  === uni.id;
@@ -526,6 +733,26 @@ function UniversityRow({ uni, onToggle, onTestLogin, onEditDefaults, togglingId,
               </Tooltip>
             </TooltipProvider>
 
+            {/* Credentials button */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`h-8 gap-1.5 ${!uni.hasCredentials ? "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950" : ""}`}
+                    onClick={() => onManageCreds(uni)}
+                  >
+                    <KeySquare className="w-3.5 h-3.5" />
+                    {t("portalAutomation.unis.credsButton")}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {t("portalAutomation.unis.credsDialog.description")}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
             {/* Test Login button */}
             <Button
               variant="outline"
@@ -567,6 +794,7 @@ export default function PortalUniversitiesTab() {
 
   const [addOpen, setAddOpen]         = useState(false);
   const [editTarget, setEditTarget]   = useState<PortalUniversity | null>(null);
+  const [credsTarget, setCredsTarget] = useState<PortalUniversity | null>(null);
   const [registryAdapters, setRegistryAdapters] = useState<RegistryAdapter[]>([]);
 
   // Load universities
@@ -664,6 +892,16 @@ export default function PortalUniversitiesTab() {
     setUnis((prev) => prev.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)));
   };
 
+  // After credentials saved — mark hasCredentials=true
+  const handleCredsSaved = (portalKey: string) => {
+    setUnis((prev) => prev.map((u) => u.universityKey === portalKey ? { ...u, hasCredentials: true } : u));
+  };
+
+  // After credentials cleared — mark hasCredentials=false
+  const handleCredsCleared = (portalKey: string) => {
+    setUnis((prev) => prev.map((u) => u.universityKey === portalKey ? { ...u, hasCredentials: false } : u));
+  };
+
   return (
     <div className="space-y-4 py-2">
       {/* Toolbar */}
@@ -704,6 +942,7 @@ export default function PortalUniversitiesTab() {
               onToggle={handleToggle}
               onTestLogin={handleTestLogin}
               onEditDefaults={setEditTarget}
+              onManageCreds={setCredsTarget}
               togglingId={togglingId}
               testingId={testingId}
             />
@@ -729,6 +968,14 @@ export default function PortalUniversitiesTab() {
         uni={editTarget}
         onClose={() => setEditTarget(null)}
         onSaved={handleDefaultsSaved}
+      />
+
+      {/* Credentials dialog */}
+      <CredentialsDialog
+        uni={credsTarget}
+        onClose={() => setCredsTarget(null)}
+        onSaved={handleCredsSaved}
+        onCleared={handleCredsCleared}
       />
     </div>
   );

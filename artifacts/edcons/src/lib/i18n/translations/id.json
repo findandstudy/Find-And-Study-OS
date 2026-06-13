@@ -4708,7 +4708,26 @@
       "toggleSuccess": "Status updated.",
       "toggleError": "Failed to update status.",
       "noData": "No portal universities configured.",
-      "loadError": "Failed to load universities."
+      "loadError": "Failed to load universities.",
+      "credsButton": "Kredensial",
+      "credsDialog": {
+        "title": "Kelola Kredensial",
+        "description": "Masukkan kredensial login portal. Nilai disimpan terenkripsi dan tidak akan ditampilkan lagi.",
+        "usernameLabel": "Nama Pengguna / Email",
+        "passwordLabel": "Kata Sandi",
+        "extraLabel": "Kolom tambahan (JSON, opsional)",
+        "extraHint": "Objek JSON opsional untuk kolom tambahan (mis. ID mahasiswa, token).",
+        "extraInvalidJson": "JSON tidak valid — harap perbaiki sebelum menyimpan.",
+        "saveButton": "Simpan",
+        "saving": "Menyimpan…",
+        "saveSuccess": "Kredensial berhasil disimpan.",
+        "saveError": "Gagal menyimpan kredensial.",
+        "clearButton": "Hapus Kredensial",
+        "clearing": "Menghapus…",
+        "clearConfirm": "Klik lagi untuk konfirmasi penghapusan",
+        "clearSuccess": "Kredensial dihapus.",
+        "clearError": "Gagal menghapus kredensial."
+      }
     },
     "programMapping": {
       "title": "Program Mapping",
