@@ -4638,6 +4638,60 @@
       "loadError": "Failed to load settings."
     },
     "comingSoon": "Coming Soon",
-    "comingSoonHint": "This section is under construction."
+    "comingSoonHint": "This section is under construction.",
+    "unis": {
+      "title": "Portal Universities",
+      "description": "Configure the universities where applications will be automatically submitted.",
+      "addButton": "Add University",
+      "searchPlaceholder": "Search universities…",
+      "credentialsOk": "Credentials OK",
+      "credentialsMissing": "Credentials Missing",
+      "testLoginButton": "Test Login",
+      "testLoginTesting": "Testing…",
+      "testLoginSuccess": "Login successful",
+      "testLoginFailed": "Login failed",
+      "activeLabel": "Active",
+      "defaultsButton": "Defaults",
+      "addDialog": {
+        "title": "Add University",
+        "nameLabel": "University Name",
+        "keyLabel": "University Key",
+        "keyHint": "Lowercase letters, digits, underscores and hyphens only.",
+        "adapterLabel": "Portal Adapter",
+        "adapterHint": "Select the automation adapter for this university's portal.",
+        "isActiveLabel": "Activate immediately",
+        "saveButton": "Add",
+        "saving": "Adding…",
+        "saveSuccess": "University added successfully.",
+        "saveError": "Failed to add university.",
+        "duplicateKey": "This key already exists.",
+        "noAdapters": "No adapters available."
+      },
+      "defaultsDialog": {
+        "title": "Edit Defaults",
+        "description": "Set the default values pre-filled when submitting to this portal.",
+        "intakeLabel": "Default Intake Type",
+        "intakeNone": "— None —",
+        "intakeFall": "Fall",
+        "intakeSpring": "Spring",
+        "intakeSummer": "Summer",
+        "intakeRolling": "Rolling",
+        "semesterLabel": "Default Semester",
+        "semesterPlaceholder": "e.g. 2025-fall",
+        "degreeLevelLabel": "Default Degree Level",
+        "degreeLevelNone": "— None —",
+        "degreeBachelor": "Bachelor",
+        "degreeMaster": "Master",
+        "degreePhd": "PhD",
+        "saveButton": "Save",
+        "saving": "Saving…",
+        "saveSuccess": "Defaults saved successfully.",
+        "saveError": "Failed to save defaults."
+      },
+      "toggleSuccess": "Status updated.",
+      "toggleError": "Failed to update status.",
+      "noData": "No portal universities configured.",
+      "loadError": "Failed to load universities."
+    }
   }
 }

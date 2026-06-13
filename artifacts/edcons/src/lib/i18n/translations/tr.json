@@ -4638,6 +4638,60 @@
       "loadError": "Ayarlar yüklenemedi."
     },
     "comingSoon": "Yakında",
-    "comingSoonHint": "Bu bölüm yapım aşamasındadır."
+    "comingSoonHint": "Bu bölüm yapım aşamasındadır.",
+    "unis": {
+      "title": "Portal Üniversiteleri",
+      "description": "Başvuruların otomatik gönderileceği üniversiteleri yapılandırın.",
+      "addButton": "Üniversite Ekle",
+      "searchPlaceholder": "Üniversite ara…",
+      "credentialsOk": "Kimlik Bilgileri Tamam",
+      "credentialsMissing": "Kimlik Bilgileri Eksik",
+      "testLoginButton": "Test Login",
+      "testLoginTesting": "Test ediliyor…",
+      "testLoginSuccess": "Giriş başarılı",
+      "testLoginFailed": "Giriş başarısız",
+      "activeLabel": "Aktif",
+      "defaultsButton": "Varsayılanlar",
+      "addDialog": {
+        "title": "Üniversite Ekle",
+        "nameLabel": "Üniversite Adı",
+        "keyLabel": "Üniversite Anahtarı",
+        "keyHint": "Yalnızca küçük harf, rakam, alt çizgi ve tire kullanılabilir.",
+        "adapterLabel": "Portal Adapter",
+        "adapterHint": "Bu üniversitenin portalı için otomasyon adapter'ı seçin.",
+        "isActiveLabel": "Hemen etkinleştir",
+        "saveButton": "Ekle",
+        "saving": "Ekleniyor…",
+        "saveSuccess": "Üniversite başarıyla eklendi.",
+        "saveError": "Üniversite eklenemedi.",
+        "duplicateKey": "Bu anahtar zaten kullanılıyor.",
+        "noAdapters": "Kullanılabilir adapter bulunmuyor."
+      },
+      "defaultsDialog": {
+        "title": "Varsayılanları Düzenle",
+        "description": "Bu portala gönderimde önceden doldurulacak varsayılan değerleri ayarlayın.",
+        "intakeLabel": "Varsayılan Başvuru Dönemi",
+        "intakeNone": "— Yok —",
+        "intakeFall": "Güz",
+        "intakeSpring": "Bahar",
+        "intakeSummer": "Yaz",
+        "intakeRolling": "Sürekli",
+        "semesterLabel": "Varsayılan Dönem",
+        "semesterPlaceholder": "örn. 2025-guz",
+        "degreeLevelLabel": "Varsayılan Derece Seviyesi",
+        "degreeLevelNone": "— Yok —",
+        "degreeBachelor": "Lisans",
+        "degreeMaster": "Yüksek Lisans",
+        "degreePhd": "Doktora",
+        "saveButton": "Kaydet",
+        "saving": "Kaydediliyor…",
+        "saveSuccess": "Varsayılanlar başarıyla kaydedildi.",
+        "saveError": "Varsayılanlar kaydedilemedi."
+      },
+      "toggleSuccess": "Durum güncellendi.",
+      "toggleError": "Durum güncellenemedi.",
+      "noData": "Yapılandırılmış portal üniversitesi bulunmuyor.",
+      "loadError": "Üniversiteler yüklenemedi."
+    }
   }
 }

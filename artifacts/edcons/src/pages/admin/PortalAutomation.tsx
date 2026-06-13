@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bot, Construction, Save } from "lucide-react";
+import PortalUniversitiesTab from "./PortalUniversitiesTab";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -376,7 +377,7 @@ export default function PortalAutomation() {
         </TabsContent>
 
         <TabsContent value="universities">
-          <ComingSoon />
+          <PortalUniversitiesTab />
         </TabsContent>
 
         <TabsContent value="programMapping">
