@@ -4652,7 +4652,18 @@
       "saving": "Saving…",
       "saveSuccess": "Settings saved successfully.",
       "saveError": "Failed to save settings.",
-      "loadError": "Failed to load settings."
+      "loadError": "Failed to load settings.",
+      "autoProcess": {
+        "title": "Scheduled Auto-Process",
+        "description": "When enabled, the scheduled deployment (drain-once.ts) will automatically process queued submissions for universities with auto-process switched on.",
+        "enabledLabel": "Enable Scheduled Auto-Process",
+        "enabledDescription": "Queued submissions for auto-process universities will be processed automatically on each scheduled run.",
+        "intervalLabel": "Processing Interval",
+        "interval10": "Every 10 minutes",
+        "interval20": "Every 20 minutes",
+        "interval30": "Every 30 minutes",
+        "interval60": "Every hour"
+      }
     },
     "comingSoon": "Coming Soon",
     "comingSoonHint": "This section is under construction.",
@@ -4668,6 +4679,7 @@
       "testLoginSuccess": "Login successful",
       "testLoginFailed": "Login failed",
       "activeLabel": "Active",
+      "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
       "addDialog": {
         "title": "Add University",

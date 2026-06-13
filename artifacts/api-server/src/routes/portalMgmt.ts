@@ -2,13 +2,14 @@
  * portalMgmt.ts — Portal Otomasyon Yönetim Route'ları
  *
  * Kapsam:
- *   GET  /portal-automation/settings           — ayarları getir
- *   PUT  /portal-automation/settings           — ayarları kaydet (upsert)
- *   GET  /portal-universities                  — üniversite listesi (filtre + paginasyon)
- *   POST /portal-universities                  — üniversite ekle
- *   PATCH /portal-universities/:id             — üniversite güncelle
- *   DELETE /portal-universities/:id            — üniversite sil (soft)
- *   PATCH /portal-universities/:id/active      — isActive toggle
+ *   GET  /portal-automation/settings                  — ayarları getir
+ *   PUT  /portal-automation/settings                  — ayarları kaydet (upsert)
+ *   GET  /portal-universities                         — üniversite listesi (filtre + paginasyon)
+ *   POST /portal-universities                         — üniversite ekle
+ *   PATCH /portal-universities/:id                    — üniversite güncelle
+ *   DELETE /portal-universities/:id                   — üniversite sil (soft)
+ *   PATCH /portal-universities/:id/active             — isActive toggle
+ *   PATCH /portal-universities/:id/auto-process       — autoProcess toggle
  *
  * Kurallar: validate+getValidated (ASLA req.body), zod, logAudit,
  *           requireRole(STAFF|ADMIN), izolasyon: yok (yönetim-only).
@@ -72,6 +73,9 @@ router.get(
         mode: "dry",
         scope: "only_applied",
         selectedUniversityKeys: [],
+        autoProcessEnabled: false,
+        autoProcessIntervalMinutes: 20,
+        lastAutoDrainAt: null,
         createdAt: null,
         updatedAt: null,
       });
@@ -91,6 +95,8 @@ const putSettingsBodySchema = z.object({
   mode: z.enum(["dry", "real"]),
   scope: z.enum(["only_applied", "selected", "all"]),
   selectedUniversityKeys: z.array(z.string()),
+  autoProcessEnabled: z.boolean().optional(),
+  autoProcessIntervalMinutes: z.number().int().min(1).max(1440).optional(),
 });
 type PutSettingsSchemas = { body: typeof putSettingsBodySchema };
 
@@ -114,12 +120,14 @@ router.put(
       [row] = await db
         .update(portalAutomationSettingsTable)
         .set({
-          isEnabled:              body.isEnabled,
-          triggerStages:          body.triggerStages,
-          mode:                   body.mode,
-          scope:                  body.scope,
-          selectedUniversityKeys: body.selectedUniversityKeys,
-          updatedAt:              new Date(),
+          isEnabled:                   body.isEnabled,
+          triggerStages:               body.triggerStages,
+          mode:                        body.mode,
+          scope:                       body.scope,
+          selectedUniversityKeys:      body.selectedUniversityKeys,
+          ...(body.autoProcessEnabled !== undefined && { autoProcessEnabled: body.autoProcessEnabled }),
+          ...(body.autoProcessIntervalMinutes !== undefined && { autoProcessIntervalMinutes: body.autoProcessIntervalMinutes }),
+          updatedAt:                   new Date(),
         })
         .where(eq(portalAutomationSettingsTable.id, existing.id))
         .returning();
@@ -127,11 +135,13 @@ router.put(
       [row] = await db
         .insert(portalAutomationSettingsTable)
         .values({
-          isEnabled:              body.isEnabled,
-          triggerStages:          body.triggerStages,
-          mode:                   body.mode,
-          scope:                  body.scope,
-          selectedUniversityKeys: body.selectedUniversityKeys,
+          isEnabled:                   body.isEnabled,
+          triggerStages:               body.triggerStages,
+          mode:                        body.mode,
+          scope:                       body.scope,
+          selectedUniversityKeys:      body.selectedUniversityKeys,
+          autoProcessEnabled:          body.autoProcessEnabled ?? false,
+          autoProcessIntervalMinutes:  body.autoProcessIntervalMinutes ?? 20,
         })
         .returning();
     }
@@ -146,6 +156,8 @@ router.put(
         mode: body.mode,
         scope: body.scope,
         triggerStagesCount: body.triggerStages.length,
+        autoProcessEnabled: body.autoProcessEnabled,
+        autoProcessIntervalMinutes: body.autoProcessIntervalMinutes,
       },
       req.ip,
     );
@@ -287,6 +299,56 @@ router.post(
     );
 
     res.status(201).json(row);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// PATCH /portal-universities/:id/auto-process  — toggle (must be BEFORE /:id)
+// ---------------------------------------------------------------------------
+const toggleAutoProcessBodySchema = z.object({
+  autoProcess: z.boolean(),
+});
+type ToggleAutoProcessSchemas = { params: typeof idParamsSchema; body: typeof toggleAutoProcessBodySchema };
+
+router.patch(
+  "/portal-universities/:id/auto-process",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: idParamsSchema, body: toggleAutoProcessBodySchema }),
+  async (req, res): Promise<void> => {
+    const { id } = getValidated<ToggleAutoProcessSchemas>(req).params;
+    const { autoProcess } = getValidated<ToggleAutoProcessSchemas>(req).body;
+    const user = req.user!;
+
+    const [row] = await db
+      .select({ id: portalUniversitiesTable.id })
+      .from(portalUniversitiesTable)
+      .where(and(
+        eq(portalUniversitiesTable.id, id),
+        isNull(portalUniversitiesTable.deletedAt),
+      ));
+
+    if (!row) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    const [updated] = await db
+      .update(portalUniversitiesTable)
+      .set({ autoProcess, updatedAt: new Date() })
+      .where(eq(portalUniversitiesTable.id, id))
+      .returning();
+
+    logAudit(
+      user.id,
+      autoProcess ? "enable_portal_auto_process" : "disable_portal_auto_process",
+      "portal_university",
+      id,
+      { autoProcess },
+      req.ip,
+    );
+
+    res.json(updated);
   },
 );
 

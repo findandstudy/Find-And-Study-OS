@@ -67,6 +67,7 @@ interface PortalUniversity {
   adapterKey: string;
   defaults: Record<string, unknown> | null;
   isActive: boolean;
+  autoProcess: boolean;
   hasCredentials: boolean;
   createdAt: string;
 }
@@ -621,17 +622,20 @@ function CredentialsDialog({ uni, onClose, onSaved, onCleared }: CredentialsDial
 interface RowProps {
   uni: PortalUniversity;
   onToggle: (id: number, active: boolean) => Promise<void>;
+  onToggleAutoProcess: (id: number, autoProcess: boolean) => Promise<void>;
   onTestLogin: (id: number) => Promise<void>;
   onEditDefaults: (uni: PortalUniversity) => void;
   onManageCreds: (uni: PortalUniversity) => void;
-  togglingId: number | null;
-  testingId:  number | null;
+  togglingId:             number | null;
+  togglingAutoProcessId:  number | null;
+  testingId:              number | null;
 }
 
-function UniversityRow({ uni, onToggle, onTestLogin, onEditDefaults, onManageCreds, togglingId, testingId }: RowProps) {
+function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, togglingId, togglingAutoProcessId, testingId }: RowProps) {
   const { t } = useI18n();
-  const isToggling = togglingId === uni.id;
-  const isTesting  = testingId  === uni.id;
+  const isToggling            = togglingId            === uni.id;
+  const isTogglingAutoProcess = togglingAutoProcessId === uni.id;
+  const isTesting             = testingId             === uni.id;
   const defaults   = (uni.defaults ?? {}) as UniversityDefaults;
   const hasDefaults = !!(defaults.intakeType || defaults.semester || defaults.degreeLevel);
 
@@ -713,6 +717,22 @@ function UniversityRow({ uni, onToggle, onTestLogin, onEditDefaults, onManageCre
               </span>
             </div>
 
+            {/* autoProcess toggle */}
+            <div className="flex items-center gap-1.5">
+              {isTogglingAutoProcess
+                ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                : (
+                  <Switch
+                    checked={uni.autoProcess}
+                    onCheckedChange={(v) => onToggleAutoProcess(uni.id, v)}
+                    aria-label={t("portalAutomation.unis.autoProcessLabel")}
+                  />
+                )}
+              <span className="text-xs text-muted-foreground">
+                {t("portalAutomation.unis.autoProcessLabel")}
+              </span>
+            </div>
+
             {/* Defaults button */}
             <TooltipProvider>
               <Tooltip>
@@ -789,7 +809,8 @@ export default function PortalUniversitiesTab() {
   const [search, setSearch]   = useState("");
   const searchTimer           = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [togglingId, setTogglingId]                         = useState<number | null>(null);
+  const [togglingAutoProcessId, setTogglingAutoProcessId]   = useState<number | null>(null);
   const [testingId,  setTestingId]  = useState<number | null>(null);
 
   const [addOpen, setAddOpen]         = useState(false);
@@ -854,6 +875,27 @@ export default function PortalUniversitiesTab() {
       toast({ title: t("portalAutomation.unis.toggleError"), variant: "destructive" });
     } finally {
       setTogglingId(null);
+    }
+  };
+
+  // Toggle autoProcess
+  const handleToggleAutoProcess = async (id: number, autoProcess: boolean) => {
+    setTogglingAutoProcessId(id);
+    try {
+      const updated = await customFetch<PortalUniversity>(
+        `/api/portal-universities/${id}/auto-process`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ autoProcess }),
+        },
+      );
+      setUnis((prev) => prev.map((u) => (u.id === id ? { ...u, ...updated } : u)));
+      toast({ title: t("portalAutomation.unis.toggleSuccess") });
+    } catch {
+      toast({ title: t("portalAutomation.unis.toggleError"), variant: "destructive" });
+    } finally {
+      setTogglingAutoProcessId(null);
     }
   };
 
@@ -940,10 +982,12 @@ export default function PortalUniversitiesTab() {
               key={uni.id}
               uni={uni}
               onToggle={handleToggle}
+              onToggleAutoProcess={handleToggleAutoProcess}
               onTestLogin={handleTestLogin}
               onEditDefaults={setEditTarget}
               onManageCreds={setCredsTarget}
               togglingId={togglingId}
+              togglingAutoProcessId={togglingAutoProcessId}
               testingId={testingId}
             />
           ))}

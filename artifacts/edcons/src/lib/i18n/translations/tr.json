@@ -4652,7 +4652,18 @@
       "saving": "Kaydediliyor…",
       "saveSuccess": "Ayarlar başarıyla kaydedildi.",
       "saveError": "Ayarlar kaydedilemedi.",
-      "loadError": "Ayarlar yüklenemedi."
+      "loadError": "Ayarlar yüklenemedi.",
+      "autoProcess": {
+        "title": "Zamanlanmış Otomatik İşlem",
+        "description": "Etkinleştirildiğinde, zamanlanmış deployment (drain-once.ts) otomatik işlem açık olan üniversitelerin kuyruktaki başvurularını otomatik olarak işler.",
+        "enabledLabel": "Zamanlanmış Otomatik İşlemi Etkinleştir",
+        "enabledDescription": "Otomatik işlem üniversitelerinin kuyruktaki başvuruları her zamanlanmış çalışmada otomatik olarak işlenecektir.",
+        "intervalLabel": "İşleme Aralığı",
+        "interval10": "Her 10 dakikada",
+        "interval20": "Her 20 dakikada",
+        "interval30": "Her 30 dakikada",
+        "interval60": "Her saat"
+      }
     },
     "comingSoon": "Yakında",
     "comingSoonHint": "Bu bölüm yapım aşamasındadır.",
@@ -4668,6 +4679,7 @@
       "testLoginSuccess": "Giriş başarılı",
       "testLoginFailed": "Giriş başarısız",
       "activeLabel": "Aktif",
+      "autoProcessLabel": "Otomatik İşlem",
       "defaultsButton": "Varsayılanlar",
       "addDialog": {
         "title": "Üniversite Ekle",

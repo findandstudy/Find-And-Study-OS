@@ -4,6 +4,8 @@
  * claimNext()    — atomically grabs the oldest queued submission using
  *                  FOR UPDATE SKIP LOCKED so concurrent workers never
  *                  double-process the same row.
+ *                  Optional `universityKeys` param restricts to specific
+ *                  universities (used by auto-drain to honour autoProcess flag).
  *
  * claimById()    — atomically claims a specific submission by id (for
  *                  the manual "process now" endpoint). Returns null if
@@ -69,25 +71,46 @@ const CLAIM_COLS = `
  * Uses BEGIN / SELECT ... FOR UPDATE SKIP LOCKED / UPDATE / COMMIT
  * so concurrent workers never attempt the same row.
  *
+ * @param universityKeys  Optional allowlist of university_key values.
+ *   When provided (non-empty), only submissions belonging to these
+ *   universities are considered. Used by auto-drain to respect the
+ *   per-university `autoProcess` flag.
+ *
  * Returns null when the queue is empty or all rows are locked / exhausted.
  */
 export async function claimNext(
   workerId: string,
+  universityKeys?: string[],
 ): Promise<ClaimedSubmission | null> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    const sel = await client.query<ClaimedSubmission>(`
-      SELECT ${CLAIM_COLS}
-      FROM portal_submissions
-      WHERE status = 'queued'
-        AND attempts < max_attempts
-        AND deleted_at IS NULL
-      ORDER BY created_at ASC
-      LIMIT 1
-      FOR UPDATE SKIP LOCKED
-    `);
+    let sel: { rows: ClaimedSubmission[] };
+    if (universityKeys && universityKeys.length > 0) {
+      sel = await client.query<ClaimedSubmission>(`
+        SELECT ${CLAIM_COLS}
+        FROM portal_submissions
+        WHERE status = 'queued'
+          AND attempts < max_attempts
+          AND deleted_at IS NULL
+          AND university_key = ANY($1::text[])
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      `, [universityKeys]);
+    } else {
+      sel = await client.query<ClaimedSubmission>(`
+        SELECT ${CLAIM_COLS}
+        FROM portal_submissions
+        WHERE status = 'queued'
+          AND attempts < max_attempts
+          AND deleted_at IS NULL
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      `);
+    }
 
     if (sel.rows.length === 0) {
       await client.query("COMMIT");

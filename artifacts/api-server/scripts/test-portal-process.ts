@@ -30,11 +30,13 @@ import {
   db,
   applicationsTable,
   portalSubmissionsTable,
+  portalAutomationSettingsTable,
+  portalUniversitiesTable,
   studentsTable,
 } from "@workspace/db";
 import portalAutomationRouter from "../src/routes/portalAutomation.js";
 import { mapDocType, REQUIRED_DOCS } from "@workspace/portal-adapters";
-import { writebackResult } from "@workspace/portal-runner";
+import { claimNext, writebackResult } from "@workspace/portal-runner";
 
 // ---------------------------------------------------------------------------
 // Run-specific tag (avoids cross-run pollution)
@@ -44,9 +46,11 @@ const RUN_ID = `pp_${Date.now().toString(36)}_${Math.random().toString(36).slice
 // ---------------------------------------------------------------------------
 // Cleanup registry
 // ---------------------------------------------------------------------------
-const cleanupStudentIds:     number[] = [];
-const cleanupAppIds:         number[] = [];
-const cleanupSubmissionIds:  number[] = [];
+const cleanupStudentIds:      number[] = [];
+const cleanupAppIds:          number[] = [];
+const cleanupSubmissionIds:   number[] = [];
+const cleanupUniIds:          number[] = [];
+const cleanupSettingsIds:     number[] = [];
 
 after(async () => {
   for (const id of cleanupSubmissionIds) {
@@ -57,6 +61,12 @@ after(async () => {
   }
   for (const id of cleanupStudentIds) {
     await db.delete(studentsTable).where(eq(studentsTable.id, id)).catch(() => {});
+  }
+  for (const id of cleanupUniIds) {
+    await db.delete(portalUniversitiesTable).where(eq(portalUniversitiesTable.id, id)).catch(() => {});
+  }
+  for (const id of cleanupSettingsIds) {
+    await db.delete(portalAutomationSettingsTable).where(eq(portalAutomationSettingsTable.id, id)).catch(() => {});
   }
   setImmediate(() => process.exit(process.exitCode ?? 0));
 });
@@ -145,14 +155,15 @@ async function seedSubmission(
   appId: number,
   studentId: number,
   status: "queued" | "canceled" | "failed" = "queued",
+  universityKey = "topkapi",
 ): Promise<number> {
   const [row] = await db
     .insert(portalSubmissionsTable)
     .values({
       applicationId: appId,
       studentId,
-      universityKey: "topkapi",
-      universityName: "Topkapi University (Test)",
+      universityKey,
+      universityName: `${universityKey} University (Test)`,
       mode: "dry",
       status,
       attempts: 0,
@@ -434,4 +445,96 @@ test("TSR2: writebackResult stores filledSlots and missingSlots from meta in res
     `Unexpected filledSlots: ${JSON.stringify(rj?.["filledSlots"])}`);
   assert.deepEqual(rj?.["missingSlots"], [],
     `Unexpected missingSlots: ${JSON.stringify(rj?.["missingSlots"])}`);
+});
+
+// ===========================================================================
+// TAP1: claimNext with universityKeys filter excludes non-matching submissions
+// ===========================================================================
+
+test("TAP1: claimNext(worker, [keyA]) does not claim a queued submission for keyB", async () => {
+  const KEY_A = `tap1_a_${RUN_ID}`;
+  const KEY_B = `tap1_b_${RUN_ID}`;
+
+  const studentId = await seedStudent();
+  const appId     = await seedApp(studentId);
+  // Seed a submission for KEY_A
+  const subId = await seedSubmission(appId, studentId, "queued", KEY_A);
+  const WORKER = `TAP1_${RUN_ID}`;
+
+  try {
+    // Filter for KEY_B only — KEY_A submission must NOT be claimed
+    const sub = await claimNext(WORKER, [KEY_B]);
+    assert.equal(sub, null, `claimNext filtered for [${KEY_B}] should return null — KEY_A submission must not be claimed`);
+  } finally {
+    // Release if accidentally locked by a parallel worker
+    await db
+      .update(portalSubmissionsTable)
+      .set({ status: "queued", lockedBy: null, lockedAt: null } as any)
+      .where(eq(portalSubmissionsTable.id, subId))
+      .catch(() => {});
+  }
+});
+
+// ===========================================================================
+// TAP2: claimNext with matching universityKeys filter claims the submission
+// ===========================================================================
+
+test("TAP2: claimNext(worker, [keyA]) claims a queued submission for keyA", async () => {
+  const KEY_A = `tap2_a_${RUN_ID}`;
+  const WORKER = `TAP2_${RUN_ID}`;
+
+  const studentId = await seedStudent();
+  const appId     = await seedApp(studentId);
+  const subId     = await seedSubmission(appId, studentId, "queued", KEY_A);
+
+  const sub = await claimNext(WORKER, [KEY_A]);
+  try {
+    assert.ok(sub !== null, `claimNext filtered for [${KEY_A}] should claim the submission`);
+    assert.equal(sub!.id, subId, `Expected claimed submission id=${subId}, got ${sub?.id}`);
+    assert.equal(sub!.universityKey, KEY_A, `Expected universityKey=${KEY_A}, got ${sub?.universityKey}`);
+  } finally {
+    // Release the claim so cleanup can delete the row
+    if (sub) {
+      await db
+        .update(portalSubmissionsTable)
+        .set({ status: "failed", lockedBy: null, lockedAt: null } as any)
+        .where(eq(portalSubmissionsTable.id, sub.id))
+        .catch(() => {});
+    }
+  }
+});
+
+// ===========================================================================
+// TAP3: claimNext without filter claims submissions for any university
+// ===========================================================================
+
+test("TAP3: claimNext(worker) without filter claims any queued submission regardless of university", async () => {
+  const KEY_ANY = `tap3_any_${RUN_ID}`;
+  const WORKER  = `TAP3_${RUN_ID}`;
+
+  const studentId = await seedStudent();
+  const appId     = await seedApp(studentId);
+  const subId     = await seedSubmission(appId, studentId, "queued", KEY_ANY);
+
+  // Call claimNext without any universityKeys filter
+  const sub = await claimNext(WORKER);
+  try {
+    assert.ok(sub !== null, "claimNext without filter should claim a queued submission");
+    // The claimed submission should be ours (may pick up other test submissions but that's OK)
+    assert.ok(typeof sub!.id === "number", "Claimed submission must have a numeric id");
+  } finally {
+    if (sub) {
+      await db
+        .update(portalSubmissionsTable)
+        .set({ status: "failed", lockedBy: null, lockedAt: null } as any)
+        .where(eq(portalSubmissionsTable.id, sub.id))
+        .catch(() => {});
+    }
+    // Ensure our seeded submission is also cleaned up if it wasn't claimed
+    await db
+      .update(portalSubmissionsTable)
+      .set({ status: "failed" } as any)
+      .where(eq(portalSubmissionsTable.id, subId))
+      .catch(() => {});
+  }
 });

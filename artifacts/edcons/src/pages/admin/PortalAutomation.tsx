@@ -23,7 +23,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, Construction, Save } from "lucide-react";
+import { Bot, Construction, Save, Timer } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import PortalUniversitiesTab from "./PortalUniversitiesTab";
 import PortalProgramMappingTab from "./PortalProgramMappingTab";
 import PortalAdaptersTab from "./PortalAdaptersTab";
@@ -43,6 +46,8 @@ interface PortalSettings {
   selectedUniversityKeys: string[];
   concurrency: number;
   maxRetries: number;
+  autoProcessEnabled: boolean;
+  autoProcessIntervalMinutes: number;
 }
 
 interface PortalUniversity {
@@ -61,6 +66,8 @@ const DEFAULTS: PortalSettings = {
   selectedUniversityKeys: [],
   concurrency: 2,
   maxRetries: 2,
+  autoProcessEnabled: false,
+  autoProcessIntervalMinutes: 20,
 };
 
 // ---------------------------------------------------------------------------
@@ -129,6 +136,8 @@ function AutomationRulesTab() {
           selectedUniversityKeys: settings.selectedUniversityKeys,
           concurrency: settings.concurrency,
           maxRetries: settings.maxRetries,
+          autoProcessEnabled: settings.autoProcessEnabled,
+          autoProcessIntervalMinutes: settings.autoProcessIntervalMinutes,
         }),
       });
       toast({ title: t("portalAutomation.rules.saveSuccess") });
@@ -331,6 +340,66 @@ function AutomationRulesTab() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ── Scheduled Auto-Process ──────────────────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Timer className="w-4 h-4 text-muted-foreground" />
+            {t("portalAutomation.rules.autoProcess.title")}
+          </CardTitle>
+          <CardDescription>
+            {t("portalAutomation.rules.autoProcess.description")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Enable toggle */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-medium text-sm">{t("portalAutomation.rules.autoProcess.enabledLabel")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("portalAutomation.rules.autoProcess.enabledDescription")}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Switch
+                id="pa-auto-process-enabled"
+                checked={settings.autoProcessEnabled}
+                onCheckedChange={(v) => setSettings((p) => ({ ...p, autoProcessEnabled: v }))}
+              />
+              <Badge
+                variant={settings.autoProcessEnabled ? "default" : "secondary"}
+                className="text-xs"
+              >
+                {settings.autoProcessEnabled ? "ON" : "OFF"}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Interval dropdown — only meaningful when enabled */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <Label htmlFor="pa-auto-interval" className="text-sm font-medium shrink-0">
+              {t("portalAutomation.rules.autoProcess.intervalLabel")}
+            </Label>
+            <Select
+              value={String(settings.autoProcessIntervalMinutes)}
+              onValueChange={(v) =>
+                setSettings((p) => ({ ...p, autoProcessIntervalMinutes: Number(v) }))
+              }
+            >
+              <SelectTrigger id="pa-auto-interval" className="w-48 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">{t("portalAutomation.rules.autoProcess.interval10")}</SelectItem>
+                <SelectItem value="20">{t("portalAutomation.rules.autoProcess.interval20")}</SelectItem>
+                <SelectItem value="30">{t("portalAutomation.rules.autoProcess.interval30")}</SelectItem>
+                <SelectItem value="60">{t("portalAutomation.rules.autoProcess.interval60")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 

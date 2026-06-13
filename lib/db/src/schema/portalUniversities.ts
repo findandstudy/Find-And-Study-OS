@@ -22,6 +22,8 @@ export const portalUniversitiesTable = pgTable(
     universityName: text("university_name").notNull(),
     adapterKey: text("adapter_key").notNull(),
     isActive: boolean("is_active").notNull().default(true),
+    /** When true, scheduled drain-once.ts will include this university's queued submissions. */
+    autoProcess: boolean("auto_process").notNull().default(false),
     crmUniversityId: integer("crm_university_id"),
     defaults: jsonb("defaults").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
