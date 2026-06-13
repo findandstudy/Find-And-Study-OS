@@ -1245,6 +1245,8 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
         const parsed = JSON.parse(desc);
         if (parsed?.missingFields) {
           desc = `Student is missing required fields: ${parsed.missingFields.join(", ")}. Please complete the student profile first.`;
+        } else if (parsed?.code === "STUDENT_DOCS_REQUIRED" && Array.isArray(parsed?.missingDocTypes)) {
+          desc = `Missing required documents: ${parsed.missingDocTypes.join(", ")}. Please upload them to the student profile first.`;
         } else if (parsed?.error) {
           desc = parsed.error;
         }

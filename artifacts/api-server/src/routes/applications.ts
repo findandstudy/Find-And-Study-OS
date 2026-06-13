@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, programDocumentRequirementsTable, documentsTable, settingsTable, softDelete } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable, catalogOptionsTable, documentsTable, settingsTable, softDelete } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull, isNotNull, ne } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -362,36 +362,63 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     return;
   }
 
-  // A1 gate: block application creation when the selected program has
-  // mandatory document requirements the student has not satisfied (using
-  // doc-type equivalence). Mirrors the documents_collected stage gate so
-  // an application is never created with missing mandatory documents.
-  if (programId) {
-    const progIdNum = parseInt(String(programId), 10);
+  // A1 gate: block application creation when mandatory documents (program-level
+  // OR degree-level) are missing for the student. Runs whenever a programId
+  // OR a level is supplied — guards against applications created without a
+  // photo, passport, or other degree-level required document even when no
+  // specific program is selected yet.
+  if (programId || level) {
     const studentIdNum = parseInt(String(studentId), 10);
-    const [mandatoryReqs, studentDocs] = await Promise.all([
-      db.select({ documentType: programDocumentRequirementsTable.documentType })
-        .from(programDocumentRequirementsTable)
-        .where(and(
-          eq(programDocumentRequirementsTable.programId, progIdNum),
-          eq(programDocumentRequirementsTable.mandatory, true),
-        )),
+
+    // Fetch student docs + program requirements (if programId given) + degree requirements (if level given) — all in parallel
+    const [studentDocs, programReqs, degreeOptRow] = await Promise.all([
       db.select({ type: documentsTable.type })
         .from(documentsTable)
         .where(and(
           eq(documentsTable.studentId, studentIdNum),
           isNull(documentsTable.deletedAt),
         )),
+      programId
+        ? db.select({ documentType: programDocumentRequirementsTable.documentType })
+            .from(programDocumentRequirementsTable)
+            .where(and(
+              eq(programDocumentRequirementsTable.programId, parseInt(String(programId), 10)),
+              eq(programDocumentRequirementsTable.mandatory, true),
+            ))
+        : Promise.resolve([] as { documentType: string }[]),
+      level
+        ? db.select({ id: catalogOptionsTable.id })
+            .from(catalogOptionsTable)
+            .where(and(
+              eq(catalogOptionsTable.category, "degree"),
+              eq(catalogOptionsTable.value, String(level)),
+            ))
+        : Promise.resolve([] as { id: number }[]),
     ]);
-    if (mandatoryReqs.length > 0) {
+
+    // Fetch degree-level mandatory requirements when a matching catalog option was found
+    const degreeOpt = degreeOptRow[0] ?? null;
+    const degreeReqs = degreeOpt
+      ? await db.select({ documentType: degreeDocumentRequirementsTable.documentType })
+          .from(degreeDocumentRequirementsTable)
+          .where(and(
+            eq(degreeDocumentRequirementsTable.catalogOptionId, degreeOpt.id),
+            eq(degreeDocumentRequirementsTable.mandatory, true),
+          ))
+      : [];
+
+    // Merge both requirement sets (deduplicated)
+    const allMandatoryTypes = Array.from(new Set([
+      ...programReqs.map(r => r.documentType),
+      ...degreeReqs.map(r => r.documentType),
+    ]));
+
+    if (allMandatoryTypes.length > 0) {
       const uploadedTypes = new Set<string>(studentDocs.map((d: { type: string | null }) => (d.type || "").toLowerCase()));
-      const missingDocTypes = findMissingMandatoryTypes(
-        mandatoryReqs.map(r => r.documentType),
-        uploadedTypes,
-      );
+      const missingDocTypes = findMissingMandatoryTypes(allMandatoryTypes, uploadedTypes);
       if (missingDocTypes.length > 0) {
         res.status(422).json({
-          error: "Mandatory student documents are missing for this application's program",
+          error: "Mandatory student documents are missing for this application",
           code: "STUDENT_DOCS_REQUIRED",
           missingDocTypes,
         });
