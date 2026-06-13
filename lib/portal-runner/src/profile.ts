@@ -17,7 +17,7 @@ import {
   documentsTable,
 } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
-import { buildProfile, mapDocType } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 
 // ---------------------------------------------------------------------------
@@ -29,6 +29,10 @@ export interface StudentProfileResult {
   files: SubmitFiles;
   /** Caller is responsible for removing this directory after use. */
   tempDir: string;
+  /** SubmitFiles keys that were successfully downloaded (for logging / resultJson). */
+  filledSlots: string[];
+  /** REQUIRED_DOCS slots with no downloaded file (for logging / resultJson). */
+  missingSlots: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +140,15 @@ export async function buildStudentProfile(
     }),
   );
 
-  return { profile, files, tempDir };
+  const filledSlots  = REQUIRED_DOCS.filter((slot) => !!files[slot]);
+  const missingSlots = REQUIRED_DOCS.filter((slot) => !files[slot]);
+
+  console.log(
+    `[portal-profile] #${submissionId} doc slots — filled: [${filledSlots.join(", ")}]` +
+    (missingSlots.length > 0 ? ` | missing: [${missingSlots.join(", ")}]` : " | all 4 filled"),
+  );
+
+  return { profile, files, tempDir, filledSlots, missingSlots };
 }
 
 // ---------------------------------------------------------------------------

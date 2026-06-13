@@ -375,6 +375,9 @@ async function runWithTimeout(
       profileResult.tempDir,
       creds,
     );
+    // Enrich resultJson with doc-slot info so skip reasons are surfaced in the UI
+    runResult.meta["filledSlots"]  = profileResult.filledSlots;
+    runResult.meta["missingSlots"] = profileResult.missingSlots;
     await writebackResult(sub.id, runResult, undefined, workerId);
 
     const status: ProcessSingleResult["status"] = runResult.meta["dryRun"]

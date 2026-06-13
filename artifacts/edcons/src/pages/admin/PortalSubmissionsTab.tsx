@@ -26,7 +26,7 @@ import {
 import {
   RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
   CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
-  PlayCircle, ListStart,
+  PlayCircle, ListStart, Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,9 +36,23 @@ import { cn } from "@/lib/utils";
 
 type SubmissionStatus =
   | "queued" | "running" | "submitted" | "already_exists"
-  | "program_missing" | "failed" | "canceled";
+  | "program_missing" | "failed" | "canceled" | "dry_run";
 
 type SubmissionMode = "dry" | "real";
+
+interface SubmissionResultJson {
+  adapterKey?: string;
+  dryRun?: boolean;
+  filledSlots?: string[];
+  missingSlots?: string[];
+  result?: {
+    submitted?: boolean;
+    alreadyExists?: boolean;
+    programMissing?: boolean;
+    /** Human-readable skip/failure detail from the adapter. */
+    detail?: string;
+  };
+}
 
 interface PortalSubmission {
   id: number;
@@ -50,6 +64,7 @@ interface PortalSubmission {
   status: SubmissionStatus;
   externalRef: string | null;
   error: string | null;
+  resultJson: SubmissionResultJson | null;
   attempts: number;
   maxAttempts: number;
   enqueuedBy: number | null;
@@ -79,6 +94,7 @@ const STATUS_CONFIG: Record<SubmissionStatus, {
   program_missing: { icon: SkipForward, className: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400" },
   failed:          { icon: AlertCircle, className: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400" },
   canceled:        { icon: MinusCircle, className: "bg-muted text-muted-foreground" },
+  dry_run:         { icon: Eye, className: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400" },
 };
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -117,9 +133,10 @@ function SubmissionRow({
     program_missing: t("portalAutomation.submissions.statusSkipped"),
     failed:          t("portalAutomation.submissions.statusFailed"),
     canceled:        "İptal",
+    dry_run:         t("portalAutomation.submissions.statusDryRun"),
   };
 
-  const canRetry   = sub.status === "failed" || sub.status === "canceled";
+  const canRetry   = sub.status === "failed" || sub.status === "canceled" || sub.status === "dry_run";
   const canCancel  = sub.status === "queued"  || sub.status === "running";
   const canProcess = sub.status === "queued";
 
@@ -162,6 +179,31 @@ function SubmissionRow({
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
+                </>
+              )}
+              {sub.resultJson?.result?.detail && (
+                <>
+                  <span>·</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-orange-600 dark:text-orange-400 truncate max-w-[220px]">
+                          {t("portalAutomation.submissions.skipDetailLabel")}: {sub.resultJson.result.detail}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm">
+                        <p className="text-xs break-words">{sub.resultJson.result.detail}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </>
+              )}
+              {sub.resultJson?.missingSlots && sub.resultJson.missingSlots.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="text-destructive">
+                    {t("portalAutomation.submissions.missingDocSlotsLabel")}: {sub.resultJson.missingSlots.join(", ")}
+                  </span>
                 </>
               )}
               <span>·</span>

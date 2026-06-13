@@ -15,6 +15,8 @@ export interface SubmitResult {
   alreadyExists: boolean;
   submitted: boolean;
   programMissing: boolean;
+  /** Human-readable explanation for skips and failures (e.g. program not found detail). */
+  detail?: string;
 }
 
 // ---------------------------------------------------------------------------

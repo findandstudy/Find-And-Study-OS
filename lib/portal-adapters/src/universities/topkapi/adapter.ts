@@ -364,7 +364,12 @@ export const topkapiAdapter: UniversityAdapter = {
         "[topkapi] No program match. Available options:",
         programOptions.map((o) => o.name),
       );
-      return { programMissing: true, submitted: false, alreadyExists: false };
+      return {
+        programMissing: true,
+        submitted: false,
+        alreadyExists: false,
+        detail: `Program "${profile.programName}" not found in dropdown (${programOptions.length} option(s) available)`,
+      };
     }
 
     logger.info(
@@ -382,7 +387,12 @@ export const topkapiAdapter: UniversityAdapter = {
     );
     if (!selVal || selVal === "0" || selVal === "") {
       logger.warn("[topkapi] Program select verify failed after selection");
-      return { programMissing: true, submitted: false, alreadyExists: false };
+      return {
+        programMissing: true,
+        submitted: false,
+        alreadyExists: false,
+        detail: `Program select verify failed — matched "${matchResult.match.name}" but selection value was empty`,
+      };
     }
 
     await selectByBest(page, "select[name=needsScholarship]", "0");
@@ -435,6 +445,11 @@ export const topkapiAdapter: UniversityAdapter = {
     }
 
     logger.warn("[topkapi] application-save.php returned HTTP", saveResp.status());
-    return { submitted: false, alreadyExists: false, programMissing: false };
+    return {
+      submitted: false,
+      alreadyExists: false,
+      programMissing: false,
+      detail: `application-save.php returned HTTP ${saveResp.status()}`,
+    };
   },
 };

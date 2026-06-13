@@ -1,16 +1,21 @@
 /**
- * test-portal-process.ts — A6 regression tests (TP1–TP5)
+ * test-portal-process.ts — A6 regression tests (TP1–TP7) +
+ *                          Doc-slot mapping (TMD1–TMD10) +
+ *                          Skip-reason surface (TSR1–TSR2)
  *
  * TP1: POST /portal-submissions/process-queued with empty queue → 200, processed=0
  * TP2: POST /portal-submissions/:id/process → 404 on nonexistent id
  * TP3: POST /portal-submissions/:id/process on a canceled submission → 409 NOT_QUEUED
  * TP4: POST /portal-submissions/:id/process → 403 when user lacks required role
  * TP5: POST /portal-submissions/process-queued → 403 when user lacks required role
+ * TP6: POST /portal-submissions/reset-stuck with no stuck rows → {reset>=0}
+ * TP7: POST /portal-submissions/reset-stuck resets a 15-min-old running row
  *
- * Note: Tests TP1–TP3 use a running API server stub backed by real DB.
- * The process endpoints are not tested with actual browser runs here
- * (covered by drain-once integration smoke in CI/manual); this suite
- * validates auth, validation, and control-flow guardrails.
+ * TMD1–TMD10: mapDocType canonical cases including #2103 document types
+ * TSR1: writebackResult stores result.detail in resultJson for program_missing
+ * TSR2: filledSlots/missingSlots stored in resultJson from meta
+ *
+ * Note: TP1–TP3 use a running API server stub backed by real DB.
  *
  * Run:
  *   pnpm --filter @workspace/api-server run test:portal-process
@@ -28,6 +33,8 @@ import {
   studentsTable,
 } from "@workspace/db";
 import portalAutomationRouter from "../src/routes/portalAutomation.js";
+import { mapDocType, REQUIRED_DOCS } from "@workspace/portal-adapters";
+import { writebackResult } from "@workspace/portal-runner";
 
 // ---------------------------------------------------------------------------
 // Run-specific tag (avoids cross-run pollution)
@@ -290,4 +297,141 @@ test("TP7: POST /portal-submissions/reset-stuck resets an old running submission
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
   }
+});
+
+// ===========================================================================
+// TMD1–TMD10: mapDocType canonical cases
+// ===========================================================================
+
+test("TMD1: passport → 'passport'", () => {
+  assert.equal(mapDocType("passport"), "passport");
+});
+
+test("TMD2: photo → 'photo'", () => {
+  assert.equal(mapDocType("photo"), "photo");
+});
+
+test("TMD3: photograph → 'photo'", () => {
+  assert.equal(mapDocType("photograph"), "photo");
+});
+
+test("TMD4: class_12th_hsc_marks_sheet → 'transcript' (#2103 transcript doc)", () => {
+  assert.equal(mapDocType("class_12th_hsc_marks_sheet"), "transcript");
+});
+
+test("TMD5: high_school_diploma_translation → 'diploma' (#2103 diploma doc)", () => {
+  assert.equal(mapDocType("high_school_diploma_translation"), "diploma");
+});
+
+test("TMD6: hsc standalone → 'transcript' (new hsc keyword)", () => {
+  assert.equal(mapDocType("hsc"), "transcript");
+});
+
+test("TMD7: hsc_marksheet → 'transcript' (hsc+marksheet, transcript wins)", () => {
+  assert.equal(mapDocType("hsc_marksheet"), "transcript");
+});
+
+test("TMD8: bachelors_certificate → 'diploma' (new certificate keyword)", () => {
+  assert.equal(mapDocType("bachelors_certificate"), "diploma");
+});
+
+test("TMD9: unknown_document_type → null (unmapped returns null)", () => {
+  assert.equal(mapDocType("unknown_document_type"), null);
+});
+
+test("TMD10: #2103 scenario — all 4 REQUIRED_DOCS slots filled by the student's doc types", () => {
+  const studentDocTypes = [
+    "photo",
+    "passport",
+    "class_12th_hsc_marks_sheet",
+    "high_school_diploma_translation",
+  ];
+  const mappedSlots = new Set(
+    studentDocTypes.map(mapDocType).filter((s): s is string => s !== null),
+  );
+  for (const required of REQUIRED_DOCS) {
+    assert.ok(
+      mappedSlots.has(required),
+      `Required slot "${required}" not covered. Mapped: [${[...mappedSlots].join(", ")}]`,
+    );
+  }
+  assert.equal(
+    mappedSlots.size, 4,
+    `Expected 4 unique slots, got ${mappedSlots.size}: [${[...mappedSlots].join(", ")}]`,
+  );
+});
+
+// ===========================================================================
+// TSR1: writebackResult stores result.detail in resultJson for program_missing
+// ===========================================================================
+
+test("TSR1: writebackResult stores result.detail in resultJson for program_missing", async () => {
+  const studentId    = await seedStudent();
+  const appId        = await seedApp(studentId);
+  const submissionId = await seedSubmission(appId, studentId, "queued");
+
+  await writebackResult(submissionId, {
+    result: {
+      submitted:      false,
+      alreadyExists:  false,
+      programMissing: true,
+      detail:         `Program "Computer Science" not found in dropdown (12 option(s) available)`,
+    },
+    screenshotUrls: [],
+    meta: { adapterKey: "topkapi" },
+  });
+
+  const [row] = await db
+    .select({ status: portalSubmissionsTable.status, resultJson: portalSubmissionsTable.resultJson })
+    .from(portalSubmissionsTable)
+    .where(eq(portalSubmissionsTable.id, submissionId));
+
+  assert.equal(row?.status, "program_missing",
+    `Expected status=program_missing, got ${row?.status}`);
+
+  const rj     = row?.resultJson as Record<string, unknown> | null;
+  const result = rj?.["result"] as Record<string, unknown> | undefined;
+  assert.ok(result, "resultJson.result should be set");
+  assert.equal(
+    result["detail"],
+    `Program "Computer Science" not found in dropdown (12 option(s) available)`,
+    `Unexpected resultJson.result.detail: ${JSON.stringify(result["detail"])}`,
+  );
+});
+
+// ===========================================================================
+// TSR2: filledSlots/missingSlots stored in resultJson from meta
+// ===========================================================================
+
+test("TSR2: writebackResult stores filledSlots and missingSlots from meta in resultJson", async () => {
+  const studentId    = await seedStudent();
+  const appId        = await seedApp(studentId);
+  const submissionId = await seedSubmission(appId, studentId, "queued");
+
+  await writebackResult(submissionId, {
+    result: {
+      submitted:      false,
+      alreadyExists:  false,
+      programMissing: true,
+      detail:         `Program "Computer Science" not found in dropdown (5 option(s) available)`,
+    },
+    screenshotUrls: [],
+    meta: {
+      adapterKey:   "topkapi",
+      filledSlots:  ["photo", "passport", "transcript", "diploma"],
+      missingSlots: [] as string[],
+    },
+  });
+
+  const [row] = await db
+    .select({ resultJson: portalSubmissionsTable.resultJson })
+    .from(portalSubmissionsTable)
+    .where(eq(portalSubmissionsTable.id, submissionId));
+
+  const rj = row?.resultJson as Record<string, unknown> | null;
+  assert.ok(rj, "resultJson should be set");
+  assert.deepEqual(rj?.["filledSlots"],  ["photo", "passport", "transcript", "diploma"],
+    `Unexpected filledSlots: ${JSON.stringify(rj?.["filledSlots"])}`);
+  assert.deepEqual(rj?.["missingSlots"], [],
+    `Unexpected missingSlots: ${JSON.stringify(rj?.["missingSlots"])}`);
 });

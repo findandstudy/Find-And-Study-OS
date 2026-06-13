@@ -54,7 +54,8 @@
     "test:portal-auto-trigger": "tsx --test ./scripts/test-portal-auto-trigger.ts",
     "test:portal-mgmt": "tsx --test ./scripts/test-portal-mgmt.ts",
     "test:portal-mgmt-b": "tsx --test ./scripts/test-portal-mgmt-b.ts",
-    "test:portal-process": "tsx --test ./scripts/test-portal-process.ts"
+    "test:portal-process": "tsx --test ./scripts/test-portal-process.ts",
+    "test:doc-slot-mapping": "tsx --test ./scripts/test-portal-process.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

@@ -14,10 +14,12 @@ export type DocType = keyof SubmitFiles;
  */
 export function mapDocType(raw: string): DocType | null {
   const f = fold(raw);
-  if (/photo|resim|fotograf|foto\b/.test(f))                               return "photo";
-  if (/passport|pasaport/.test(f))                                         return "passport";
-  if (/transcript|marks|marksheet|result|grade/.test(f))                   return "transcript";
-  if (/diploma|degree|mezuniyet/.test(f))                                   return "diploma";
+  if (/photo|resim|fotograf|foto\b/.test(f))                                          return "photo";
+  if (/passport|pasaport/.test(f))                                                    return "passport";
+  // transcript: includes hsc (Higher Secondary Certificate) mark/result documents
+  if (/transcript|marks|marksheet|result|grade|hsc/.test(f))                         return "transcript";
+  // diploma: includes generic certificate types and translated copies of diplomas
+  if (/diploma|degree|mezuniyet|certificate|translation/.test(f))                    return "diploma";
   return null;
 }
 
