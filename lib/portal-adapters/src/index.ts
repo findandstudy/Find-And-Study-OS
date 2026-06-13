@@ -46,4 +46,20 @@ export {
   adapterByKey,
   allAdapterKeys,
   adapterMetadata,
+  declarativeAdapterKeys,
 } from "./registry.js";
+
+// Declarative adapter engine
+export {
+  createDeclarativeAdapter,
+  executeStep,
+  runSteps,
+  checkResult,
+  type DeclarativeConfig,
+  type DeclarativeStep,
+  type DeclarativeCredentials,
+  type SubmitCheck,
+  type MinimalPage,
+  type ProfileField,
+  type FileField,
+} from "./declarativeAdapter.js";
