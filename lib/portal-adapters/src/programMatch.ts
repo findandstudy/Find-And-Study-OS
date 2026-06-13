@@ -53,6 +53,96 @@ const CONF_THRESHOLD   = 0.6;
 const MARGIN_THRESHOLD = 0.15;
 
 // ---------------------------------------------------------------------------
+// EN↔TR synonym groups (sourced from data/fields.json)
+//
+// Each inner array is an equivalence class of folded tokens.
+// When scoring Jaccard, if no primary match is found, tokens are expanded
+// with all synonyms from their group before re-scoring (see expandTokens).
+// ---------------------------------------------------------------------------
+const SYNONYM_GROUPS: readonly string[][] = [
+  ["bilgisayar", "computer", "computing"],
+  ["muhendislik", "muhendisligi", "engineering"],
+  ["isletme", "business", "management", "yonetim"],
+  ["ekonomi", "economics"],
+  ["iletisim", "communication", "communications"],
+  ["hukuk", "law"],
+  ["tip", "medicine", "medical", "tibbi"],
+  ["mimarlik", "architecture", "architectural"],
+  ["psikoloji", "psychology"],
+  ["egitim", "education"],
+  ["matematik", "mathematics", "math"],
+  ["fizik", "physics"],
+  ["kimya", "chemistry"],
+  ["biyoloji", "biology"],
+  ["sosyoloji", "sociology"],
+  ["tarih", "history"],
+  ["cografi", "geography"],
+  ["felsefe", "philosophy"],
+  ["sanat", "art", "arts"],
+  ["muzik", "music"],
+  ["tiyatro", "theater", "theatre"],
+  ["uluslararasi", "international"],
+  ["iliskiler", "relations"],
+  ["siyasi", "political"],
+  ["bilim", "science", "sciences"],
+  ["yazilim", "software"],
+  ["endustri", "industrial"],
+  ["makine", "mechanical"],
+  ["insaat", "civil", "construction"],
+  ["elektrik", "electrical", "electric"],
+  ["elektronik", "electronics", "electronic"],
+  ["cevre", "environmental", "environment"],
+  ["malzeme", "materials"],
+  ["tekstil", "textile"],
+  ["gida", "food"],
+  ["tarim", "agriculture", "agricultural"],
+  ["orman", "forestry", "forest"],
+  ["basin", "media"],
+  ["finans", "finance", "financial"],
+  ["bankacilik", "banking"],
+  ["muhasebe", "accounting"],
+  ["saglik", "health"],
+  ["hemsirelik", "nursing"],
+  ["eczacilik", "pharmacy", "pharmaceutical"],
+  ["teknoloji", "teknolojisi", "technology"],
+  ["yonetim", "administration", "management"],
+  ["halkla", "public"],
+  ["grafik", "graphic"],
+  ["tasarim", "design"],
+  ["fotograf", "photography"],
+  ["sinema", "cinema", "film"],
+  ["gazetecilik", "journalism"],
+  ["turizm", "tourism", "hospitality"],
+  ["spor", "sports", "sport"],
+  ["sosyal", "social"],
+  ["siyaset", "politics", "political"],
+];
+
+/** token → Set<synonyms> (built once at module load) */
+const _synonymMap = new Map<string, Set<string>>();
+for (const group of SYNONYM_GROUPS) {
+  for (const term of group) {
+    const synonyms = _synonymMap.get(term) ?? new Set<string>();
+    for (const other of group) {
+      if (other !== term) synonyms.add(other);
+    }
+    _synonymMap.set(term, synonyms);
+  }
+}
+
+/** Expand a token set by adding all dictionary synonyms of each token. */
+function expandTokens(tokens: Set<string>): Set<string> {
+  const expanded = new Set<string>(tokens);
+  for (const t of tokens) {
+    const syns = _synonymMap.get(t);
+    if (syns) {
+      for (const s of syns) expanded.add(s);
+    }
+  }
+  return expanded;
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -110,13 +200,34 @@ function applyHardFilters(
 }
 
 // ---------------------------------------------------------------------------
+// scorePool — score candidates with optional token expansion
+// ---------------------------------------------------------------------------
+type Scored = { candidate: ProgramCandidate; conf: number };
+
+function scorePool(
+  queryTokens: Set<string>,
+  pool: ProgramCandidate[],
+  expand: boolean,
+): Scored[] {
+  const qt = expand ? expandTokens(queryTokens) : queryTokens;
+  return pool
+    .map(c => {
+      const ct = expand ? expandTokens(tokenize(c.name)) : tokenize(c.name);
+      return { candidate: c, conf: jaccard(qt, ct) };
+    })
+    .filter(x => x.conf >= CONF_THRESHOLD)
+    .sort((a, b) => b.conf - a.conf);
+}
+
+// ---------------------------------------------------------------------------
 // matchProgram — main entry point
 //
 // Resolution order:
 //   1. programMap[programId] → conf 1.0 (manual override)
 //   2. Hard degree/thesis/language filter
-//   3. Token-Jaccard scoring
-//   4. Confidence gate: conf ≥ 0.6 AND (single candidate OR margin ≥ 0.15)
+//   3. Token-Jaccard scoring (primary — no expansion)
+//   4. EN↔TR synonym expansion (fallback — only when step 3 finds NO candidates)
+//   5. Confidence gate: conf ≥ 0.6 AND (single candidate OR margin ≥ 0.15)
 // ---------------------------------------------------------------------------
 export function matchProgram(
   programName: string,
@@ -142,18 +253,21 @@ export function matchProgram(
   const queryFolded = fold(programName);
   const pool = applyHardFilters(queryFolded, candidates);
 
-  // --- 3. Token-Jaccard scoring ---
+  // --- 3. Primary Jaccard (no expansion) ---
   const queryTokens = tokenize(programName);
+  let scored = scorePool(queryTokens, pool, false);
 
-  type Scored = { candidate: ProgramCandidate; conf: number };
-  const scored: Scored[] = pool
-    .map(c => ({ candidate: c, conf: jaccard(queryTokens, tokenize(c.name)) }))
-    .filter(x => x.conf >= CONF_THRESHOLD)
-    .sort((a, b) => b.conf - a.conf);
+  // --- 4. EN↔TR expansion fallback ---
+  // Only triggered when NO primary candidate scores ≥ CONF_THRESHOLD.
+  // Deliberately NOT triggered for the ambiguity case (margin < 0.15) —
+  // that ambiguity result is intentional and must not be overridden.
+  if (scored.length === 0) {
+    scored = scorePool(queryTokens, pool, true);
+  }
 
   if (scored.length === 0) return null;
 
-  // --- 4. Confidence gate ---
+  // --- 5. Confidence gate ---
   if (scored.length === 1) {
     return { match: scored[0].candidate, conf: scored[0].conf };
   }

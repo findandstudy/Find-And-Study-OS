@@ -4,6 +4,7 @@ import type {
   SubmitProfile,
   SubmitFiles,
   SubmitResult,
+  LoginOpts,
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
@@ -11,35 +12,39 @@ import { fold } from "../../programMatch.js";
 
 // ---------------------------------------------------------------------------
 // SIT portal allowlist — EXACTLY 11 universities (do not add/remove)
-// Credentials: SIT_USER + SIT_PASSWORD
+// Credentials: SIT_USER + SIT_PASSWORD (or inject via opts.credentials)
 // ---------------------------------------------------------------------------
-const SIT_ALLOWLIST_FOLDED: readonly string[] = [
-  "halic",
-  "atlas",
-  "ankara medipol",
-  "galata",
-  "istanbul yeni yuzyil",
-  "istinye",
-  "istanbul aydin",
-  "istanbul kent",
-  "fenerbahce",
-  "istanbul kultur",
-  "ted",
+export const SIT_ALLOWLIST: readonly string[] = [
+  "Haliç Üniversitesi",
+  "Atlas Üniversitesi",
+  "Ankara Medipol Üniversitesi",
+  "Galata Üniversitesi",
+  "İstanbul Yeni Yüzyıl Üniversitesi",
+  "İstinye Üniversitesi",
+  "İstanbul Aydın Üniversitesi",
+  "İstanbul Kent Üniversitesi",
+  "Fenerbahçe Üniversitesi",
+  "İstanbul Kültür Üniversitesi",
+  "TED Üniversitesi",
 ] as const;
+
+/** Pre-folded entries for fast matches() lookup. */
+const SIT_ALLOWLIST_FOLDED: readonly string[] = SIT_ALLOWLIST.map(fold);
 
 const PORTAL_URL = "https://sit.universite-yonetim.com"; // TODO: confirm URL
 
 export const sitAdapter: UniversityAdapter = {
-  key:   "sit",
-  label: "SIT Portal",
+  key:       "sit",
+  label:     "SIT Portal",
+  allowlist: [...SIT_ALLOWLIST],
 
   matches(name: string): boolean {
     const f = fold(name);
-    return SIT_ALLOWLIST_FOLDED.some(entry => f.includes(entry));
+    return SIT_ALLOWLIST_FOLDED.some(entry => f.includes(entry) || entry.includes(f));
   },
 
-  async login(opts?: { headless?: boolean }): Promise<AdapterSession> {
-    const { user, password } = portalCreds("sit");
+  async login(opts?: LoginOpts): Promise<AdapterSession> {
+    const { user, password } = opts?.credentials ?? portalCreds("sit");
     const session = await launchPortal({ headless: opts?.headless ?? true });
     logger.info("[sit] login — navigating to portal");
 

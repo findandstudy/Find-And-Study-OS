@@ -8,7 +8,9 @@
   },
   "scripts": {
     "test:program-match": "tsx --test ./scripts/test-program-match.ts",
-    "test:declarative": "tsx --test ./scripts/test-declarative.ts"
+    "test:registry": "tsx --test ./scripts/test-registry.ts",
+    "test:declarative": "tsx --test ./scripts/test-declarative.ts",
+    "test:adapters": "tsx --test ./scripts/*.ts"
   },
   "dependencies": {
     "playwright-core": "^1.59.1"

@@ -44,6 +44,7 @@ import type {
   SubmitProfile,
   SubmitFiles,
   SubmitResult,
+  LoginOpts,
 } from "./types.js";
 import { launchPortal, logger } from "./browser.js";
 import { portalCreds } from "./portalCreds.js";
@@ -291,8 +292,8 @@ export function createDeclarativeAdapter(
       return config.matches.some((pattern) => f.includes(fold(pattern)));
     },
 
-    async login(opts?: { headless?: boolean }): Promise<AdapterSession> {
-      const { user, password } = portalCreds(config.key);
+    async login(opts?: LoginOpts): Promise<AdapterSession> {
+      const { user, password } = opts?.credentials ?? portalCreds(config.key);
       const session = await launchPortal({ headless: opts?.headless ?? true });
       const page = session.page as unknown as MinimalPage;
 

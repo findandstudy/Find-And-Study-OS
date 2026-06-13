@@ -55,20 +55,50 @@ export interface SubmitFiles {
 }
 
 // ---------------------------------------------------------------------------
+// Login credentials (injected by the worker from DB / env)
+// ---------------------------------------------------------------------------
+export interface AdapterCredentials {
+  user: string;
+  password: string;
+}
+
+// ---------------------------------------------------------------------------
+// Login options
+// ---------------------------------------------------------------------------
+export interface LoginOpts {
+  headless?: boolean;
+  /**
+   * Portal credentials.  The worker resolves these from the DB-backed
+   * portal_credentials table (or process.env via portalCreds() fallback) and
+   * passes them here.  Adapters MUST NOT hard-code credentials.
+   */
+  credentials?: AdapterCredentials;
+}
+
+// ---------------------------------------------------------------------------
 // Adapter interface — one implementation per portal family
 // ---------------------------------------------------------------------------
 export interface UniversityAdapter {
   key: string;
   label: string;
 
+  /**
+   * Optional human-readable list of university names handled by this adapter.
+   * Returned by adapterMetadata() for UI / API display.
+   */
+  allowlist?: string[];
+
   /** Returns true when this adapter handles the given university name. */
   matches(name: string): boolean;
 
   /**
    * Opens a browser session authenticated to the portal.
-   * Credentials are read from process.env inside the adapter via portalCreds().
+   *
+   * Credentials are resolved (in priority order):
+   *   1. opts.credentials  — injected by the worker from DB
+   *   2. portalCreds(key)  — reads from process.env (legacy / dev fallback)
    */
-  login(opts?: { headless?: boolean }): Promise<AdapterSession>;
+  login(opts?: LoginOpts): Promise<AdapterSession>;
 
   /**
    * Fills and (optionally) submits the application form.

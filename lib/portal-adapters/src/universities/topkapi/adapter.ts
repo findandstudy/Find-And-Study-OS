@@ -4,6 +4,7 @@ import type {
   SubmitProfile,
   SubmitFiles,
   SubmitResult,
+  LoginOpts,
 } from "../../types.js";
 import type { Page } from "playwright-core";
 import { launchPortal, saveState, logger } from "../../browser.js";
@@ -167,8 +168,8 @@ export const topkapiAdapter: UniversityAdapter = {
   // -------------------------------------------------------------------------
   // login
   // -------------------------------------------------------------------------
-  async login(opts?: { headless?: boolean }): Promise<AdapterSession> {
-    const { user, password } = portalCreds("topkapi");
+  async login(opts?: LoginOpts): Promise<AdapterSession> {
+    const { user, password } = opts?.credentials ?? portalCreds("topkapi");
 
     const storagePath = existsSync(STORAGE_PATH) ? STORAGE_PATH : undefined;
     const session = await launchPortal({

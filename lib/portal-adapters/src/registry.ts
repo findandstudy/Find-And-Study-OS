@@ -44,26 +44,46 @@ export function allAdapterKeys(): string[] {
   return adapters.map((a) => a.key);
 }
 
-/**
- * Returns lightweight metadata for all adapters.
- * Safe for logging / API responses — contains NO credentials.
- */
+// ---------------------------------------------------------------------------
+// Adapter family classification
+// ---------------------------------------------------------------------------
+
+type AdapterFamily = "metronic" | "salesforce" | "sit" | "united" | "declarative";
+
+function resolveFamily(adapterKey: string): AdapterFamily {
+  if (adapterKey === topkapiAdapter.key) return "metronic";
+  if (salesforceAdapters.some((a) => a.key === adapterKey)) return "salesforce";
+  if (adapterKey === sitAdapter.key) return "sit";
+  if (adapterKey === unitedAdapter.key) return "united";
+  return "declarative";
+}
+
+// ---------------------------------------------------------------------------
+// adapterMetadata — lightweight summary safe for API / logging
+// Returns NO credentials.
+// ---------------------------------------------------------------------------
 export function adapterMetadata(): {
   key: string;
   label: string;
-  kind: "code" | "declarative";
+  family: AdapterFamily;
+  allowlist?: string[];
 }[] {
-  const codeKeys = new Set<string>([
-    topkapiAdapter.key,
-    ...salesforceAdapters.map((a) => a.key),
-    sitAdapter.key,
-    unitedAdapter.key,
-  ]);
-  return adapters.map((a) => ({
-    key:  a.key,
-    label: a.label,
-    kind: codeKeys.has(a.key) ? "code" : "declarative",
-  }));
+  return adapters.map((a) => {
+    const entry: {
+      key: string;
+      label: string;
+      family: AdapterFamily;
+      allowlist?: string[];
+    } = {
+      key:    a.key,
+      label:  a.label,
+      family: resolveFamily(a.key),
+    };
+    if (a.allowlist !== undefined) {
+      entry.allowlist = a.allowlist;
+    }
+    return entry;
+  });
 }
 
 /** Keys of declarative-only adapters (useful for admin tooling). */

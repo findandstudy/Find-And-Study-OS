@@ -4,6 +4,7 @@ import type {
   SubmitProfile,
   SubmitFiles,
   SubmitResult,
+  LoginOpts,
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
@@ -11,27 +12,31 @@ import { fold } from "../../programMatch.js";
 
 // ---------------------------------------------------------------------------
 // United portal allowlist — EXACTLY 3 universities (do not add/remove)
-// Credentials: UNITED_USER + UNITED_PASSWORD
+// Credentials: UNITED_USER + UNITED_PASSWORD (or inject via opts.credentials)
 // ---------------------------------------------------------------------------
-const UNITED_ALLOWLIST_FOLDED: readonly string[] = [
-  "biruni",
-  "nisantasi",
-  "ankara bilim",
+export const UNITED_ALLOWLIST: readonly string[] = [
+  "Biruni Üniversitesi",
+  "Nişantaşı Üniversitesi",
+  "Ankara Bilim Üniversitesi",
 ] as const;
+
+/** Pre-folded entries for fast matches() lookup. */
+const UNITED_ALLOWLIST_FOLDED: readonly string[] = UNITED_ALLOWLIST.map(fold);
 
 const PORTAL_URL = "https://portal.united.com.tr"; // TODO: confirm URL
 
 export const unitedAdapter: UniversityAdapter = {
-  key:   "united",
-  label: "United Portal",
+  key:       "united",
+  label:     "United Portal",
+  allowlist: [...UNITED_ALLOWLIST],
 
   matches(name: string): boolean {
     const f = fold(name);
-    return UNITED_ALLOWLIST_FOLDED.some(entry => f.includes(entry));
+    return UNITED_ALLOWLIST_FOLDED.some(entry => f.includes(entry) || entry.includes(f));
   },
 
-  async login(opts?: { headless?: boolean }): Promise<AdapterSession> {
-    const { user, password } = portalCreds("united");
+  async login(opts?: LoginOpts): Promise<AdapterSession> {
+    const { user, password } = opts?.credentials ?? portalCreds("united");
     const session = await launchPortal({ headless: opts?.headless ?? true });
     logger.info("[united] login — navigating to portal");
 

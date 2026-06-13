@@ -2,14 +2,19 @@
  * Unit tests for programMatch.ts and profile.ts (mapDocType).
  *
  * Scenarios:
- *   PM1 — programMap override → conf exactly 1.0
- *   PM2 — token-Jaccard match, single clear winner ≥ 0.6
- *   PM3 — ambiguous: two candidates tie (margin < 0.15) → null
- *   DT1 — mapDocType("marks") → "transcript"
- *   DT2 — mapDocType("marksheet") → "transcript"
- *   DT3 — mapDocType("result") → "transcript"
- *   DT4 — mapDocType("grade") → "transcript"
- *   DT5 — mapDocType("diploma") → "diploma"
+ *   fold   — Turkish chars mapped correctly before toLower
+ *   PM1    — programMap override → conf exactly 1.0
+ *   PM2    — token-Jaccard match, single clear winner ≥ 0.6
+ *   PM3    — ambiguous: two candidates tie (margin < 0.15) → null
+ *   TESZ1  — tezli/tezsiz hard filter: tezli query only matches tezli candidates
+ *   LANG1  — language hard filter: English query only matches English-medium candidates
+ *   DICT1  — EN↔TR dictionary: English query matches Turkish candidate via expansion
+ *   DICT2  — EN↔TR dictionary: Turkish query matches English candidate via expansion
+ *   DT1    — mapDocType("marks") → "transcript"
+ *   DT2    — mapDocType("marksheet") → "transcript"
+ *   DT3    — mapDocType("result") → "transcript"
+ *   DT4    — mapDocType("grade") → "transcript"
+ *   DT5    — mapDocType("diploma") → "diploma"
  *
  * Run with:
  *   pnpm --filter @workspace/portal-adapters run test:program-match
@@ -36,6 +41,8 @@ test("fold — Turkish chars mapped correctly before toLower", () => {
   assert.equal(fold("ışık"),         "isik");
   // Non-alpha replaced by space, collapsed
   assert.equal(fold("A  B--C"),      "a b c");
+  // Key test from spec: İletişim → iletisim (no combining marks remain)
+  assert.equal(fold("İletişim"),     "iletisim");
 });
 
 // ---------------------------------------------------------------------------
@@ -49,7 +56,6 @@ test("PM1 — programMap override → conf 1.0", () => {
     { id: "it-301", name: "Information Technology" },
   ];
 
-  // programMap maps CRM programId → candidate id
   const result = matchProgram(
     "Bilgisayar Mühendisliği",
     candidates,
@@ -73,7 +79,6 @@ test("PM2 — high Jaccard score, clear single winner", () => {
     { id: "ee-1", name: "Elektrik Elektronik Mühendisliği" },
   ];
 
-  // "Makine Muhendisligi" should fold-match "Makine Mühendisliği" with high Jaccard
   // fold("Makine Muhendisligi")  = "makine muhendisligi"  → tokens {makine, muhendisligi}
   // fold("Makine Mühendisliği") = "makine muhendisligi"  → tokens {makine, muhendisligi}
   // Jaccard = 2/2 = 1.0 for the first candidate; others will score much lower
@@ -101,6 +106,81 @@ test("PM3 — tied candidates (margin < 0.15) → null", () => {
   const result = matchProgram("Insaat ve Cevre", candidates);
 
   assert.equal(result, null, "Tied candidates must return null (ambiguous)");
+});
+
+// ---------------------------------------------------------------------------
+// TESZ1 — tezli/tezsiz hard filter
+// ---------------------------------------------------------------------------
+
+test("TESZ1 — tezli query only matches tezli candidates", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "mba-t",  name: "İşletme Yönetimi (Tezli)" },
+    { id: "mba-nt", name: "İşletme Yönetimi (Tezsiz)" },
+    { id: "eco-t",  name: "Ekonomi (Tezli)" },
+  ];
+
+  const result = matchProgram("Isletme Yonetimi Tezli", candidates);
+
+  assert.ok(result !== null,               "Expected a tezli match");
+  assert.equal(result.match.id, "mba-t",  "Must match the tezli variant, not tezsiz");
+});
+
+// ---------------------------------------------------------------------------
+// LANG1 — language hard filter (English-medium)
+// ---------------------------------------------------------------------------
+
+test("LANG1 — English query only matches English-medium candidates", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "psy-tr", name: "Psikoloji" },
+    { id: "psy-en", name: "Psychology (English)" },
+  ];
+
+  // Query specifies English → hard filter keeps only English-medium candidates
+  const result = matchProgram("Psikoloji English", candidates);
+
+  assert.ok(result !== null,               "Expected an English-medium match");
+  assert.equal(result.match.id, "psy-en", "Must match the English variant");
+});
+
+// ---------------------------------------------------------------------------
+// DICT1 — EN↔TR dictionary: English query → Turkish candidate
+// ---------------------------------------------------------------------------
+
+test("DICT1 — English query matches Turkish candidate via synonym expansion", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "be-1", name: "Bilgisayar Mühendisliği" },
+    { id: "me-1", name: "Makine Mühendisliği" },
+    { id: "ee-1", name: "Elektrik Elektronik Mühendisliği" },
+  ];
+
+  // "Computer Engineering" has no raw token overlap with any Turkish name
+  // but the synonym groups expand "computer" → "bilgisayar" and
+  // "engineering" ↔ "muhendislik/muhendisligi", giving conf 1.0 for be-1.
+  const result = matchProgram("Computer Engineering", candidates);
+
+  assert.ok(result !== null,               "Dictionary expansion must find a match");
+  assert.equal(result.match.id, "be-1",   "Computer Engineering → Bilgisayar Mühendisliği");
+  assert.ok(result.conf >= 0.6,           `conf ${result.conf} should be ≥ 0.6`);
+});
+
+// ---------------------------------------------------------------------------
+// DICT2 — EN↔TR dictionary: Turkish query → English candidate
+// ---------------------------------------------------------------------------
+
+test("DICT2 — Turkish query matches English candidate via synonym expansion", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "bm-en", name: "Business Management" },
+    { id: "ec-en", name: "Economics" },
+    { id: "cs-en", name: "Computer Science" },
+  ];
+
+  // "Isletme Yonetimi" has no raw overlap with English names
+  // but synonym expansion maps isletme → business/management, yonetim → administration/management
+  const result = matchProgram("Isletme Yonetimi", candidates);
+
+  assert.ok(result !== null,               "Dictionary expansion must find a match");
+  assert.equal(result.match.id, "bm-en",  "İşletme Yönetimi → Business Management");
+  assert.ok(result.conf >= 0.6,           `conf ${result.conf} should be ≥ 0.6`);
 });
 
 // ---------------------------------------------------------------------------

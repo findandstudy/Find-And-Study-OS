@@ -4,6 +4,7 @@ import type {
   SubmitProfile,
   SubmitFiles,
   SubmitResult,
+  LoginOpts,
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
@@ -13,8 +14,9 @@ import { SALESFORCE_SCHOOLS, type SalesforceSchoolConfig } from "./config.js";
 // ---------------------------------------------------------------------------
 // Factory — one UniversityAdapter per SALESFORCE_SCHOOLS entry
 //
-// Credentials are read from process.env by portalCreds(cfg.key).
-// Convention: ${KEY}_EMAIL  +  ${KEY}_PASSWORD  (e.g. USKUDAR_EMAIL)
+// Credentials priority:
+//   1. opts.credentials (injected by worker from DB)
+//   2. portalCreds(cfg.key) (reads from process.env — legacy / dev fallback)
 // ---------------------------------------------------------------------------
 function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
   return {
@@ -26,8 +28,8 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       return cfg.namePatterns.some(p => f.includes(p));
     },
 
-    async login(opts?: { headless?: boolean }): Promise<AdapterSession> {
-      const { user, password } = portalCreds(cfg.key);
+    async login(opts?: LoginOpts): Promise<AdapterSession> {
+      const { user, password } = opts?.credentials ?? portalCreds(cfg.key);
       const session = await launchPortal({ headless: opts?.headless ?? true });
       logger.info(`[salesforce:${cfg.key}] login → ${cfg.portalUrl}`);
 
