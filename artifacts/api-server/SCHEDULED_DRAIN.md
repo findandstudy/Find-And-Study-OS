@@ -35,8 +35,10 @@ Her drain çalışması `audit_logs` tablosuna kayıt düşer:
 ## Çalıştırma Komutu
 
 ```bash
-pnpm --filter @workspace/api-server exec tsx scripts/drain-once.ts
+pnpm --filter @workspace/api-server run drain-once
 ```
+
+> `drain-once` script'i `package.json`'da `NODE_OPTIONS=--max-old-space-size=512 tsx scripts/drain-once.ts` olarak tanımlıdır — `run drain-once` bu memory limitini otomatik uygular.
 
 ## Gerekli Environment Değişkenleri
 
@@ -54,13 +56,10 @@ pnpm --filter @workspace/api-server exec tsx scripts/drain-once.ts
 3. Deployment tipini **Scheduled** olarak ayarlayın
 4. **Command** alanına:
    ```
-   pnpm --filter @workspace/api-server exec tsx scripts/drain-once.ts
+   pnpm --filter @workspace/api-server run drain-once
    ```
-5. **Schedule** (önerilen):
-   - Her 5 dakikada bir: `*/5 * * * *`
-   - Her 10 dakikada bir: `*/10 * * * *`
-   - Her 20 dakikada bir: `*/20 * * * *`
-   > Not: Cron schedule, panel'deki `auto_process_interval_minutes` değerinden bağımsızdır. Script, interval geçmemişse zaten kendi kendini durdurur — bu nedenle cron'u agresif bir frekansa ayarlamanın sakıncası yoktur.
+5. **Schedule** — **`*/10 * * * *`** (önerilen: her 10 dakikada bir)
+   > Cron frekansı panel'deki `auto_process_interval_minutes` değerinden bağımsızdır. Script interval geçmemişse kendi kendini durdurur; cron sık olsa da sorun yaratmaz. Cron en az paneldeki interval kadar sık olmalıdır.
 6. **Environment Variables** bölümünde `DATABASE_URL`, `ENCRYPTION_KEY`, `SESSION_SECRET` ekleyin
 
 ## Önemli Notlar
@@ -77,7 +76,7 @@ Dev ortamında test için:
 
 ```bash
 # Auto-process kapısını atlayıp tüm kuyruğu zorla işle (env ile kap devre dışı bırakılabilir)
-pnpm --filter @workspace/api-server exec tsx scripts/drain-once.ts
+pnpm --filter @workspace/api-server run drain-once
 
 # Çıktı örneği (kapı geçildi, 1 submission işlendi):
 # [drain-once] Starting — id=drain-once-hostname-12345

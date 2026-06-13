@@ -1,7 +1,8 @@
 /**
  * test-portal-process.ts — A6 regression tests (TP1–TP7) +
  *                          Doc-slot mapping (TMD1–TMD10) +
- *                          Skip-reason surface (TSR1–TSR2)
+ *                          Skip-reason surface (TSR1–TSR2) +
+ *                          Queue mechanics (TAP1–TAP5)
  *
  * TP1: POST /portal-submissions/process-queued with empty queue → 200, processed=0
  * TP2: POST /portal-submissions/:id/process → 404 on nonexistent id
@@ -14,6 +15,12 @@
  * TMD1–TMD10: mapDocType canonical cases including #2103 document types
  * TSR1: writebackResult stores result.detail in resultJson for program_missing
  * TSR2: filledSlots/missingSlots stored in resultJson from meta
+ *
+ * TAP1: claimNext(worker,[keyA]) does NOT claim a submission for keyB
+ * TAP2: claimNext(worker,[keyA]) claims the matching submission
+ * TAP3: claimNext(worker) without filter claims any queued submission
+ * TAP4: claimNext claims a queued submission even when attempts == max_attempts
+ * TAP5: releaseStale resets attempts=0 on crash-recovered submissions
  *
  * Note: TP1–TP3 use a running API server stub backed by real DB.
  *
@@ -36,7 +43,7 @@ import {
 } from "@workspace/db";
 import portalAutomationRouter from "../src/routes/portalAutomation.js";
 import { mapDocType, REQUIRED_DOCS } from "@workspace/portal-adapters";
-import { claimNext, writebackResult } from "@workspace/portal-runner";
+import { claimNext, releaseStale, writebackResult } from "@workspace/portal-runner";
 
 // ---------------------------------------------------------------------------
 // Run-specific tag (avoids cross-run pollution)
@@ -537,4 +544,82 @@ test("TAP3: claimNext(worker) without filter claims any queued submission regard
       .where(eq(portalSubmissionsTable.id, subId))
       .catch(() => {});
   }
+});
+
+// ===========================================================================
+// TAP4: claimNext claims a queued submission even when attempts == max_attempts
+// ===========================================================================
+
+test("TAP4: claimNext claims a queued submission whose attempts equals max_attempts", async () => {
+  const KEY = `tap4_${RUN_ID}`;
+  const WORKER = `TAP4_${RUN_ID}`;
+
+  const studentId = await seedStudent();
+  const appId     = await seedApp(studentId);
+  const subId     = await seedSubmission(appId, studentId, "queued", KEY);
+
+  // Exhaust all attempts so attempts == max_attempts (3 == 3)
+  await db
+    .update(portalSubmissionsTable)
+    .set({ attempts: sql`max_attempts` } as any)
+    .where(eq(portalSubmissionsTable.id, subId));
+
+  const sub = await claimNext(WORKER, [KEY]);
+  try {
+    assert.ok(
+      sub !== null,
+      `claimNext must claim a queued submission even when attempts == max_attempts (got null — permanent-lock bug)`,
+    );
+    assert.equal(sub!.id, subId);
+  } finally {
+    await db
+      .update(portalSubmissionsTable)
+      .set({ status: "failed", lockedBy: null, lockedAt: null } as any)
+      .where(eq(portalSubmissionsTable.id, subId))
+      .catch(() => {});
+  }
+});
+
+// ===========================================================================
+// TAP5: releaseStale resets attempts = 0 on crash-recovered submissions
+// ===========================================================================
+
+test("TAP5: releaseStale resets attempts to 0 for crash-recovered running submissions", async () => {
+  const KEY = `tap5_${RUN_ID}`;
+  const WORKER = `TAP5_${RUN_ID}`;
+
+  const studentId = await seedStudent();
+  const appId     = await seedApp(studentId);
+  const subId     = await seedSubmission(appId, studentId, "queued", KEY);
+
+  // Simulate a crashed worker: mark the row running with max attempts, 1 hour ago
+  await db
+    .update(portalSubmissionsTable)
+    .set({
+      status:   "running",
+      lockedBy: WORKER,
+      lockedAt: sql`NOW() - INTERVAL '1 hour'`,
+      attempts: sql`max_attempts`,
+    } as any)
+    .where(eq(portalSubmissionsTable.id, subId));
+
+  // releaseStale with 10-minute threshold — the 1-hour-old row must be reset
+  const resetIds = await releaseStale(10 * 60 * 1000);
+  assert.ok(resetIds.includes(subId), `releaseStale must include subId=${subId} in returned ids`);
+
+  // Verify attempts were reset to 0 (not left at max_attempts)
+  const [after] = await db
+    .select({ status: portalSubmissionsTable.status, attempts: portalSubmissionsTable.attempts })
+    .from(portalSubmissionsTable)
+    .where(eq(portalSubmissionsTable.id, subId));
+
+  assert.equal(after.status,   "queued", "releaseStale must reset status to queued");
+  assert.equal(after.attempts, 0,        "releaseStale must reset attempts to 0 (permanent-lock fix)");
+
+  // Cleanup
+  await db
+    .update(portalSubmissionsTable)
+    .set({ status: "failed" } as any)
+    .where(eq(portalSubmissionsTable.id, subId))
+    .catch(() => {});
 });

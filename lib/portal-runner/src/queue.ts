@@ -6,10 +6,13 @@
  *                  double-process the same row.
  *                  Optional `universityKeys` param restricts to specific
  *                  universities (used by auto-drain to honour autoProcess flag).
+ *                  Any status='queued' row is claimable regardless of
+ *                  attempt count — if it's queued, it was explicitly
+ *                  authorised for (re-)processing by admin/reset-stuck.
  *
  * claimById()    — atomically claims a specific submission by id (for
  *                  the manual "process now" endpoint). Returns null if
- *                  the row is not queued, already locked, or exhausted.
+ *                  the row is not queued or already locked by another worker.
  *
  * releaseStale() — resets submissions that have been running longer than
  *                  thresholdMs back to "queued" (crash-recovery).
@@ -76,7 +79,7 @@ const CLAIM_COLS = `
  *   universities are considered. Used by auto-drain to respect the
  *   per-university `autoProcess` flag.
  *
- * Returns null when the queue is empty or all rows are locked / exhausted.
+ * Returns null when the queue is empty or all rows are locked by other workers.
  */
 export async function claimNext(
   workerId: string,
@@ -92,7 +95,6 @@ export async function claimNext(
         SELECT ${CLAIM_COLS}
         FROM portal_submissions
         WHERE status = 'queued'
-          AND attempts < max_attempts
           AND deleted_at IS NULL
           AND university_key = ANY($1::text[])
         ORDER BY created_at ASC
@@ -104,7 +106,6 @@ export async function claimNext(
         SELECT ${CLAIM_COLS}
         FROM portal_submissions
         WHERE status = 'queued'
-          AND attempts < max_attempts
           AND deleted_at IS NULL
         ORDER BY created_at ASC
         LIMIT 1
@@ -150,8 +151,10 @@ export async function claimNext(
  * Returns null if the row:
  *   - doesn't exist or is soft-deleted
  *   - is not in 'queued' status
- *   - has reached maxAttempts
  *   - is already locked by another worker (SKIP LOCKED)
+ *
+ * Note: attempt count is NOT checked — any queued row is claimable.
+ * If status='queued' it was explicitly authorised for (re-)processing.
  */
 export async function claimById(
   id: number,
@@ -166,7 +169,6 @@ export async function claimById(
       FROM portal_submissions
       WHERE id = $1
         AND status = 'queued'
-        AND attempts < max_attempts
         AND deleted_at IS NULL
       LIMIT 1
       FOR UPDATE SKIP LOCKED
@@ -208,12 +210,19 @@ export async function claimById(
  * Resets submissions that have been in "running" state longer than
  * `thresholdMs` milliseconds back to "queued" (worker crash recovery).
  *
+ * Also resets attempts = 0 so the row is immediately claimable again —
+ * without this, a submission whose attempts reached max_attempts while
+ * running would be requeued into a state that claimNext could never pick up
+ * (permanent lock). Clearing attempts on crash-recovery is safe: the crash
+ * itself is the reason we're retrying.
+ *
  * Returns the IDs of rows that were reset.
  */
 export async function releaseStale(thresholdMs: number): Promise<number[]> {
   const res = await pool.query<{ id: number }>(
     `UPDATE portal_submissions
      SET status     = 'queued',
+         attempts   = 0,
          locked_at  = NULL,
          locked_by  = NULL,
          updated_at = NOW()
