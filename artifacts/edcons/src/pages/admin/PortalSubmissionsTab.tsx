@@ -309,10 +309,17 @@ export default function PortalSubmissionsTab() {
         `/api/portal-submissions/${id}/process`,
         { method: "POST" },
       );
-      toast({ title: t("portalAutomation.submissions.processSuccess") });
-      // Refresh list to get updated statuses
+      const failed = data.results.find(r => r.status === "failed");
+      if (failed) {
+        toast({
+          title: t("portalAutomation.submissions.processError"),
+          description: failed.error ? failed.error.slice(0, 120) : undefined,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: t("portalAutomation.submissions.processSuccess") });
+      }
       await load(page, statusFilter, modeFilter);
-      void data;
     } catch (err: unknown) {
       const body = err && typeof err === "object" && "error" in err
         ? (err as { error: string }).error
@@ -338,9 +345,19 @@ export default function PortalSubmissionsTab() {
         "/api/portal-submissions/process-queued",
         { method: "POST" },
       );
-      toast({
-        title: t("portalAutomation.submissions.processAllSuccess", { count: String(data.processed) }),
-      });
+      const failedCount = data.results.filter(r => r.status === "failed").length;
+      const firstErr = data.results.find(r => r.status === "failed")?.error;
+      if (failedCount > 0) {
+        toast({
+          title: t("portalAutomation.submissions.processAllError"),
+          description: firstErr ? firstErr.slice(0, 120) : `${failedCount} failed`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: t("portalAutomation.submissions.processAllSuccess", { count: String(data.processed) }),
+        });
+      }
       await load(page, statusFilter, modeFilter);
     } catch (err: unknown) {
       const body = err && typeof err === "object" && "error" in err

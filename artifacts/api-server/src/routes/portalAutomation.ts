@@ -292,6 +292,28 @@ router.post(
 /** Module-level mutex: prevents concurrent manual process runs. */
 let _processMutex = false;
 
+/**
+ * Looks up the adapterKey for a universityKey from the portal_universities table.
+ * Falls back to universityKey itself when the row isn't found (backward compat).
+ */
+async function lookupAdapterKey(universityKey: string): Promise<string> {
+  try {
+    const [row] = await db
+      .select({ adapterKey: portalUniversitiesTable.adapterKey })
+      .from(portalUniversitiesTable)
+      .where(
+        and(
+          eq(portalUniversitiesTable.universityKey, universityKey),
+          isNull(portalUniversitiesTable.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row?.adapterKey ?? universityKey;
+  } catch {
+    return universityKey;
+  }
+}
+
 interface ProcessSingleResult {
   id: number;
   status: "submitted" | "already_exists" | "program_missing" | "failed" | "dry_run" | "skipped";
@@ -316,9 +338,13 @@ async function processSingle(
 
     // Resolve creds for both real and dry modes.
     // Dry mode now uses the browser (doSubmit=false); creds needed for login.
+    // Look up canonical adapterKey from portal_universities first so that
+    // resolvePortalCreds searches DB with the right key (e.g. "topkapi" not
+    // "topkapi_university").
+    const adapterKey = await lookupAdapterKey(sub.universityKey);
     let creds: { user: string; password: string } | undefined;
     try {
-      creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+      creds = await resolvePortalCreds(sub.universityKey, adapterKey);
     } catch (credsErr) {
       if (sub.mode === "real") throw credsErr;
       // dry mode: missing creds → adapter login will fail and be caught
@@ -383,11 +409,16 @@ router.post(
 
         console.log(`[portal-process] Processing #${sub.id} uni=${sub.universityKey} mode=${sub.mode}`);
 
+        // Look up canonical adapterKey from portal_universities first so that
+        // resolvePortalCreds searches DB with the right key (e.g. "topkapi" not
+        // "topkapi_university").
+        const adapterKey = await lookupAdapterKey(sub.universityKey);
+
         // Resolve creds for both real and dry modes.
         // Dry mode now uses the browser (doSubmit=false); creds needed for login.
         let creds: { user: string; password: string } | undefined;
         try {
-          creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+          creds = await resolvePortalCreds(sub.universityKey, adapterKey);
         } catch (err) {
           if (sub.mode === "real") {
             const msg = err instanceof Error ? err.message : String(err);
@@ -397,7 +428,7 @@ router.post(
           }
           // dry mode: missing creds → adapter login will fail and be caught below
           console.warn(
-            `[portal-process] No creds for "${sub.universityKey}" (dry mode — will attempt env fallback)`,
+            `[portal-process] No creds for "${sub.universityKey}" (adapterKey="${adapterKey}", dry mode — will attempt env fallback)`,
           );
         }
 
@@ -532,17 +563,37 @@ router.get("/university-portals", requireAuth, async (_req, res): Promise<void> 
       ),
   ]);
 
-  const result = unis
-    .map(({ universityKey, universityName, adapterKey }) => {
-      const K = adapterKey.toUpperCase().replace(/-/g, "_");
-      const envHas = !!(
-        (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
-        process.env[`${K}_PASSWORD`]
-      );
-      const hasCredentials = dbCredKeys.has(adapterKey) || dbCredKeys.has(universityKey) || envHas;
-      return { key: universityKey, label: universityName, adapterKey, hasCredentials };
-    })
-    .filter((u) => u.hasCredentials);
+  function envHasKey(k: string): boolean {
+    const K = k.toUpperCase().replace(/-/g, "_");
+    return !!(
+      (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
+      process.env[`${K}_PASSWORD`]
+    );
+  }
+
+  // --- Step 1: DB-registered universities with credentials ---
+  const seenAdapterKeys = new Set<string>();
+  const result: { key: string; label: string; adapterKey: string; hasCredentials: boolean }[] = [];
+
+  for (const { universityKey, universityName, adapterKey } of unis) {
+    const hasCredentials =
+      dbCredKeys.has(adapterKey) || dbCredKeys.has(universityKey) || envHasKey(adapterKey);
+    if (hasCredentials) {
+      result.push({ key: universityKey, label: universityName, adapterKey, hasCredentials: true });
+      seenAdapterKeys.add(adapterKey);
+    }
+  }
+
+  // --- Step 2: Registry adapters with credentials NOT yet in the DB list ---
+  // Covers the case where portal_credentials has the key but portal_universities
+  // hasn't been seeded yet (e.g. fresh PROD deploy).
+  for (const { key: aKey, label } of adapterMetadata()) {
+    if (seenAdapterKeys.has(aKey)) continue;
+    const hasCredentials = dbCredKeys.has(aKey) || envHasKey(aKey);
+    if (hasCredentials) {
+      result.push({ key: aKey, label, adapterKey: aKey, hasCredentials: true });
+    }
+  }
 
   res.json(result);
 });
