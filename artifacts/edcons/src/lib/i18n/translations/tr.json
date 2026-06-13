@@ -4822,7 +4822,14 @@
       "bulkTriggerButton": "Seçilenleri Portala Gönder",
       "bulkTriggerSuccess": "{{count}} gönderim kuyruğa alındı.",
       "bulkTriggerError": "Toplu gönderim kuyruğa alınamadı.",
-      "viewApplication": "Başvuruyu Görüntüle"
+      "viewApplication": "Başvuruyu Görüntüle",
+      "processButton": "İşle",
+      "processAllButton": "Tüm Bekleyenleri İşle",
+      "processSuccess": "Gönderim başarıyla işlendi.",
+      "processAllSuccess": "{{count}} gönderim işlendi.",
+      "processError": "İşleme başarısız oldu.",
+      "processAllError": "Gönderimler işlenemedi.",
+      "alreadyRunning": "Bir işlem zaten devam ediyor, lütfen bekleyin."
     },
     "auditLog": {
       "title": "Denetim Günlüğü",

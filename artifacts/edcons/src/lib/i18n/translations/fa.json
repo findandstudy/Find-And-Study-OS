@@ -4822,7 +4822,14 @@
       "bulkTriggerButton": "Submit Selected to Portal",
       "bulkTriggerSuccess": "{{count}} submission(s) queued.",
       "bulkTriggerError": "Failed to queue bulk submissions.",
-      "viewApplication": "View Application"
+      "viewApplication": "View Application",
+      "processButton": "پردازش",
+      "processAllButton": "پردازش همه در صف",
+      "processSuccess": "ارسال با موفقیت پردازش شد.",
+      "processAllSuccess": "{{count}} ارسال پردازش شد.",
+      "processError": "پردازش ناموفق بود.",
+      "processAllError": "پردازش ارسال‌ها ناموفق بود.",
+      "alreadyRunning": "یک پردازش در حال انجام است، لطفاً صبر کنید."
     },
     "auditLog": {
       "title": "Audit Log",

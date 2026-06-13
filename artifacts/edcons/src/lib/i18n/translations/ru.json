@@ -4822,7 +4822,14 @@
       "bulkTriggerButton": "Submit Selected to Portal",
       "bulkTriggerSuccess": "{{count}} submission(s) queued.",
       "bulkTriggerError": "Failed to queue bulk submissions.",
-      "viewApplication": "View Application"
+      "viewApplication": "View Application",
+      "processButton": "Обработать",
+      "processAllButton": "Обработать все в очереди",
+      "processSuccess": "Заявка успешно обработана.",
+      "processAllSuccess": "Обработано {{count}} заявок.",
+      "processError": "Ошибка обработки.",
+      "processAllError": "Не удалось обработать заявки.",
+      "alreadyRunning": "Обработка уже выполняется, подождите."
     },
     "auditLog": {
       "title": "Audit Log",

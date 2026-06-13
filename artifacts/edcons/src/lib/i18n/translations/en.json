@@ -4822,7 +4822,14 @@
       "bulkTriggerButton": "Submit Selected to Portal",
       "bulkTriggerSuccess": "{{count}} submission(s) queued.",
       "bulkTriggerError": "Failed to queue bulk submissions.",
-      "viewApplication": "View Application"
+      "viewApplication": "View Application",
+      "processButton": "Process",
+      "processAllButton": "Process All Queued",
+      "processSuccess": "Submission processed successfully.",
+      "processAllSuccess": "{{count}} submission(s) processed.",
+      "processError": "Processing failed.",
+      "processAllError": "Failed to process submissions.",
+      "alreadyRunning": "A run is already in progress, please wait."
     },
     "auditLog": {
       "title": "Audit Log",

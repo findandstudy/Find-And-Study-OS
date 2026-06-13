@@ -4822,7 +4822,14 @@
       "bulkTriggerButton": "Submit Selected to Portal",
       "bulkTriggerSuccess": "{{count}} submission(s) queued.",
       "bulkTriggerError": "Failed to queue bulk submissions.",
-      "viewApplication": "View Application"
+      "viewApplication": "View Application",
+      "processButton": "Proses",
+      "processAllButton": "Proses Semua yang Tertunda",
+      "processSuccess": "Pengiriman berhasil diproses.",
+      "processAllSuccess": "{{count}} pengiriman diproses.",
+      "processError": "Pemrosesan gagal.",
+      "processAllError": "Gagal memproses pengiriman.",
+      "alreadyRunning": "Pemrosesan sudah berjalan, harap tunggu."
     },
     "auditLog": {
       "title": "Audit Log",

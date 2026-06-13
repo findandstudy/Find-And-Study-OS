@@ -221,6 +221,9 @@ importers:
       '@workspace/portal-adapters':
         specifier: workspace:*
         version: link:../../lib/portal-adapters
+      '@workspace/portal-runner':
+        specifier: workspace:*
+        version: link:../../lib/portal-runner
       '@workspace/roles':
         specifier: workspace:*
         version: link:../../lib/roles
@@ -734,6 +737,9 @@ importers:
       '@workspace/portal-adapters':
         specifier: workspace:*
         version: link:../../lib/portal-adapters
+      '@workspace/portal-runner':
+        specifier: workspace:*
+        version: link:../../lib/portal-runner
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@types/pg@8.18.0)(pg@8.20.0)
@@ -827,6 +833,25 @@ importers:
       playwright-core:
         specifier: ^1.59.1
         version: 1.59.1
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.3.5
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
+
+  lib/portal-runner:
+    dependencies:
+      '@workspace/db':
+        specifier: workspace:*
+        version: link:../db
+      '@workspace/portal-adapters':
+        specifier: workspace:*
+        version: link:../portal-adapters
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2(@types/pg@8.18.0)(pg@8.20.0)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -3592,7 +3617,7 @@ packages:
     engines: {node: '>=0.10.0'}
 
   npm-run-path@6.0.0:
-    resolution: {integrity: sha512-9qny7Z9DsQU8Ou39ERsPU4OZQlSTP47ShQzuKZ6PRXpYLtIFgl/DEBYEXKlvcEa+9tHVcK8CF81Y2V72qaZhWA==}
+    resolution: {integrity: sha512-9qny7Z9DsQU8Ou39ERsPU4OZQlSTP47ShQzuKZ6PRXpYLtIFgl/DEBYEXKlvcEa+9tHVcK8CF81Y2V72qaZhWA==, tarball: https://registry.npmjs.org/npm-run-path/-/npm-run-path-6.0.0.tgz}
     engines: {node: '>=18'}
 
   oauth4webapi@3.8.5:

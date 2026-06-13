@@ -4822,7 +4822,14 @@
       "bulkTriggerButton": "Submit Selected to Portal",
       "bulkTriggerSuccess": "{{count}} submission(s) queued.",
       "bulkTriggerError": "Failed to queue bulk submissions.",
-      "viewApplication": "View Application"
+      "viewApplication": "View Application",
+      "processButton": "प्रोसेस करें",
+      "processAllButton": "सभी प्रतीक्षारत सबमिशन प्रोसेस करें",
+      "processSuccess": "सबमिशन सफलतापूर्वक प्रोसेस किया गया।",
+      "processAllSuccess": "{{count}} सबमिशन प्रोसेस किए गए।",
+      "processError": "प्रोसेसिंग विफल हो गई।",
+      "processAllError": "सबमिशन प्रोसेस करने में विफल।",
+      "alreadyRunning": "एक प्रोसेस पहले से चल रहा है, कृपया प्रतीक्षा करें।"
     },
     "auditLog": {
       "title": "Audit Log",

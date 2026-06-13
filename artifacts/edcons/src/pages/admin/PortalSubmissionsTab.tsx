@@ -5,6 +5,8 @@
  * GET  /api/portal-submissions  (with status/mode filters)
  * POST /api/portal-submissions/:id/retry
  * POST /api/portal-submissions/:id/cancel
+ * POST /api/portal-submissions/:id/process       ← A4: manual process
+ * POST /api/portal-submissions/process-queued    ← A4: drain all queued
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -24,6 +26,7 @@ import {
 import {
   RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
   CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
+  PlayCircle, ListStart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -88,16 +91,23 @@ interface RowProps {
   sub: PortalSubmission;
   onRetry: (id: number) => Promise<void>;
   onCancel: (id: number) => Promise<void>;
+  onProcess: (id: number) => Promise<void>;
   retryingId: number | null;
   cancelingId: number | null;
+  processingId: number | null;
+  processingAll: boolean;
 }
 
-function SubmissionRow({ sub, onRetry, onCancel, retryingId, cancelingId }: RowProps) {
+function SubmissionRow({
+  sub, onRetry, onCancel, onProcess,
+  retryingId, cancelingId, processingId, processingAll,
+}: RowProps) {
   const { t } = useI18n();
   const cfg = STATUS_CONFIG[sub.status];
   const Icon = cfg.icon;
-  const isRetrying  = retryingId  === sub.id;
-  const isCanceling = cancelingId === sub.id;
+  const isRetrying   = retryingId  === sub.id;
+  const isCanceling  = cancelingId === sub.id;
+  const isProcessing = processingId === sub.id;
 
   const statusLabel: Record<SubmissionStatus, string> = {
     queued:          t("portalAutomation.submissions.statusPending"),
@@ -109,8 +119,9 @@ function SubmissionRow({ sub, onRetry, onCancel, retryingId, cancelingId }: RowP
     canceled:        "İptal",
   };
 
-  const canRetry  = sub.status === "failed" || sub.status === "canceled";
-  const canCancel = sub.status === "queued"  || sub.status === "running";
+  const canRetry   = sub.status === "failed" || sub.status === "canceled";
+  const canCancel  = sub.status === "queued"  || sub.status === "running";
+  const canProcess = sub.status === "queued";
 
   return (
     <Card className="rounded-xl">
@@ -173,6 +184,20 @@ function SubmissionRow({ sub, onRetry, onCancel, retryingId, cancelingId }: RowP
                 {t("portalAutomation.submissions.viewApplication")}
               </a>
             </Button>
+            {canProcess && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-primary hover:text-primary"
+                onClick={() => onProcess(sub.id)}
+                disabled={isProcessing || processingAll || processingId !== null}
+              >
+                {isProcessing
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <PlayCircle className="w-3.5 h-3.5" />}
+                {t("portalAutomation.submissions.processButton")}
+              </Button>
+            )}
             {canRetry && (
               <Button
                 variant="outline"
@@ -224,8 +249,10 @@ export default function PortalSubmissionsTab() {
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [modeFilter, setModeFilter]     = useState<string>("all");
-  const [retryingId,  setRetryingId]    = useState<number | null>(null);
-  const [cancelingId, setCancelingId]   = useState<number | null>(null);
+  const [retryingId,   setRetryingId]   = useState<number | null>(null);
+  const [cancelingId,  setCancelingId]  = useState<number | null>(null);
+  const [processingId, setProcessingId] = useState<number | null>(null);
+  const [processingAll, setProcessingAll] = useState(false);
 
   const load = useCallback(async (p: number, status: string, mode: string) => {
     setLoading(true);
@@ -271,11 +298,71 @@ export default function PortalSubmissionsTab() {
     }
   };
 
+  const handleProcess = async (id: number) => {
+    setProcessingId(id);
+    try {
+      interface ProcessResult {
+        processed: number;
+        results: { id: number; status: string; error?: string }[];
+      }
+      const data = await customFetch<ProcessResult>(
+        `/api/portal-submissions/${id}/process`,
+        { method: "POST" },
+      );
+      toast({ title: t("portalAutomation.submissions.processSuccess") });
+      // Refresh list to get updated statuses
+      await load(page, statusFilter, modeFilter);
+      void data;
+    } catch (err: unknown) {
+      const body = err && typeof err === "object" && "error" in err
+        ? (err as { error: string }).error
+        : null;
+      if (body === "ALREADY_RUNNING") {
+        toast({ title: t("portalAutomation.submissions.alreadyRunning"), variant: "destructive" });
+      } else {
+        toast({ title: t("portalAutomation.submissions.processError"), variant: "destructive" });
+      }
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleProcessAll = async () => {
+    setProcessingAll(true);
+    try {
+      interface ProcessAllResult {
+        processed: number;
+        results: { id: number; status: string; error?: string }[];
+      }
+      const data = await customFetch<ProcessAllResult>(
+        "/api/portal-submissions/process-queued",
+        { method: "POST" },
+      );
+      toast({
+        title: t("portalAutomation.submissions.processAllSuccess", { count: String(data.processed) }),
+      });
+      await load(page, statusFilter, modeFilter);
+    } catch (err: unknown) {
+      const body = err && typeof err === "object" && "error" in err
+        ? (err as { error: string }).error
+        : null;
+      if (body === "ALREADY_RUNNING") {
+        toast({ title: t("portalAutomation.submissions.alreadyRunning"), variant: "destructive" });
+      } else {
+        toast({ title: t("portalAutomation.submissions.processAllError"), variant: "destructive" });
+      }
+    } finally {
+      setProcessingAll(false);
+      await load(page, statusFilter, modeFilter);
+    }
+  };
+
   const totalPages = Math.ceil(total / limit);
+  const hasQueued  = subs.some((s) => s.status === "queued");
 
   return (
     <div className="space-y-4 py-2">
-      {/* Filters + refresh */}
+      {/* Filters + actions */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <div className="flex gap-2 flex-wrap">
           <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
@@ -302,14 +389,30 @@ export default function PortalSubmissionsTab() {
             </SelectContent>
           </Select>
         </div>
-        <Button
-          variant="outline" size="sm" className="h-9 gap-1.5"
-          onClick={() => load(page, statusFilter, modeFilter)}
-          disabled={loading}
-        >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          Yenile
-        </Button>
+        <div className="flex gap-2">
+          {hasQueued && (
+            <Button
+              variant="default"
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={handleProcessAll}
+              disabled={processingAll || processingId !== null || loading}
+            >
+              {processingAll
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <ListStart className="w-3.5 h-3.5" />}
+              {t("portalAutomation.submissions.processAllButton")}
+            </Button>
+          )}
+          <Button
+            variant="outline" size="sm" className="h-9 gap-1.5"
+            onClick={() => load(page, statusFilter, modeFilter)}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Yenile
+          </Button>
+        </div>
       </div>
 
       {/* List */}
@@ -329,8 +432,11 @@ export default function PortalSubmissionsTab() {
               sub={sub}
               onRetry={handleRetry}
               onCancel={handleCancel}
+              onProcess={handleProcess}
               retryingId={retryingId}
               cancelingId={cancelingId}
+              processingId={processingId}
+              processingAll={processingAll}
             />
           ))}
         </div>

@@ -4822,7 +4822,14 @@
       "bulkTriggerButton": "Submit Selected to Portal",
       "bulkTriggerSuccess": "{{count}} submission(s) queued.",
       "bulkTriggerError": "Failed to queue bulk submissions.",
-      "viewApplication": "View Application"
+      "viewApplication": "View Application",
+      "processButton": "处理",
+      "processAllButton": "处理所有待处理提交",
+      "processSuccess": "提交处理成功。",
+      "processAllSuccess": "已处理 {{count}} 条提交。",
+      "processError": "处理失败。",
+      "processAllError": "提交处理失败。",
+      "alreadyRunning": "正在处理中，请稍候。"
     },
     "auditLog": {
       "title": "Audit Log",

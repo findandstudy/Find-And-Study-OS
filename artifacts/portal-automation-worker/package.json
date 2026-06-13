@@ -12,6 +12,7 @@
   "dependencies": {
     "@workspace/db": "workspace:*",
     "@workspace/portal-adapters": "workspace:*",
+    "@workspace/portal-runner": "workspace:*",
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {

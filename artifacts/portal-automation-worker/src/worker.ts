@@ -11,10 +11,14 @@
  */
 
 import os from "node:os";
-import { claimNext, releaseStale } from "./queue.js";
-import { buildStudentProfile } from "./profile.js";
-import { runSubmission } from "./runner.js";
-import { writebackResult } from "./stageWriteback.js";
+import {
+  claimNext,
+  releaseStale,
+  buildStudentProfile,
+  runSubmission,
+  writebackResult,
+} from "@workspace/portal-runner";
+import { resolvePortalCreds } from "./credResolver.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -46,17 +50,22 @@ async function tick(): Promise<void> {
   );
 
   let runResult = null;
-  let tempDir: string | undefined;
 
   try {
     const profileResult = await buildStudentProfile(sub.id);
-    tempDir = profileResult.tempDir;
+
+    // Resolve credentials (DB-first, env fallback) — worker-specific resolver
+    let creds: { user: string; password: string } | undefined;
+    if (sub.mode === "real") {
+      creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+    }
 
     runResult = await runSubmission(
       sub,
       profileResult.profile,
       profileResult.files,
-      tempDir,
+      profileResult.tempDir,
+      creds,
     );
 
     console.log(

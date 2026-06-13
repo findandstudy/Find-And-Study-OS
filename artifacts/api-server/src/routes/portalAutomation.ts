@@ -9,6 +9,14 @@ import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import { getValidated, validate } from "../middlewares/validate";
+import {
+  claimById,
+  claimNext,
+  buildStudentProfile,
+  runSubmission,
+  writebackResult,
+} from "@workspace/portal-runner";
+import { resolvePortalCreds } from "../lib/portalCreds.js";
 
 const router: IRouter = Router();
 
@@ -274,6 +282,219 @@ router.post(
     await logAudit(user.id, "cancel_portal_submission", "portal_submission", id, {}, req.ip);
 
     res.json({ ok: true });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Process-once helper — sequential, eşzaman 1 guaranteed by mutex flag.
+// ---------------------------------------------------------------------------
+
+/** Module-level mutex: prevents concurrent manual process runs. */
+let _processMutex = false;
+
+interface ProcessSingleResult {
+  id: number;
+  status: "submitted" | "already_exists" | "program_missing" | "failed" | "dry_run" | "skipped";
+  error?: string;
+}
+
+/**
+ * Claims and processes a single submission by id.
+ * Returns null if the submission cannot be claimed (not queued / exhausted / locked).
+ */
+async function processSingle(
+  submissionId: number,
+  workerId: string,
+): Promise<ProcessSingleResult> {
+  const sub = await claimById(submissionId, workerId);
+  if (!sub) {
+    return { id: submissionId, status: "skipped" };
+  }
+
+  try {
+    const profileResult = await buildStudentProfile(sub.id);
+
+    let creds: { user: string; password: string } | undefined;
+    if (sub.mode === "real") {
+      creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+    }
+
+    const runResult = await runSubmission(
+      sub,
+      profileResult.profile,
+      profileResult.files,
+      profileResult.tempDir,
+      creds,
+    );
+
+    await writebackResult(sub.id, runResult);
+
+    const status: ProcessSingleResult["status"] = runResult.meta["dryRun"]
+      ? "dry_run"
+      : runResult.result.submitted
+        ? "submitted"
+        : runResult.result.alreadyExists
+          ? "already_exists"
+          : runResult.result.programMissing
+            ? "program_missing"
+            : "failed";
+
+    return { id: sub.id, status };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await writebackResult(sub.id, null, msg);
+    return { id: sub.id, status: "failed", error: msg };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /portal-submissions/process-queued
+// Processes ALL queued submissions sequentially; eşzaman 1.
+// ---------------------------------------------------------------------------
+router.post(
+  "/portal-submissions/process-queued",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    if (_processMutex) {
+      res.status(409).json({
+        error: "ALREADY_RUNNING",
+        message: "A portal process run is already in progress on this instance",
+      });
+      return;
+    }
+
+    const user = req.user!;
+    const workerId = `api-manual-${user.id}-${Date.now()}`;
+
+    _processMutex = true;
+    const results: ProcessSingleResult[] = [];
+
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const sub = await claimNext(workerId);
+        if (!sub) break;
+
+        console.log(`[portal-process] Processing #${sub.id} uni=${sub.universityKey} mode=${sub.mode}`);
+
+        let creds: { user: string; password: string } | undefined;
+        if (sub.mode === "real") {
+          try {
+            creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            await writebackResult(sub.id, null, msg);
+            results.push({ id: sub.id, status: "failed", error: msg });
+            continue;
+          }
+        }
+
+        try {
+          const profileResult = await buildStudentProfile(sub.id);
+          const runResult = await runSubmission(
+            sub,
+            profileResult.profile,
+            profileResult.files,
+            profileResult.tempDir,
+            creds,
+          );
+
+          await writebackResult(sub.id, runResult);
+
+          const status: ProcessSingleResult["status"] = runResult.meta["dryRun"]
+            ? "dry_run"
+            : runResult.result.submitted
+              ? "submitted"
+              : runResult.result.alreadyExists
+                ? "already_exists"
+                : runResult.result.programMissing
+                  ? "program_missing"
+                  : "failed";
+
+          results.push({ id: sub.id, status });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          await writebackResult(sub.id, null, msg);
+          results.push({ id: sub.id, status: "failed", error: msg });
+        }
+      }
+    } finally {
+      _processMutex = false;
+    }
+
+    await logAudit(
+      user.id,
+      "process_portal_submissions",
+      "portal_submission",
+      undefined,
+      { processed: results.length, results: results.map(r => ({ id: r.id, status: r.status })) },
+      req.ip,
+    );
+
+    res.json({ processed: results.length, results });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-submissions/:id/process
+// Processes a SINGLE submission by id; eşzaman 1.
+// ---------------------------------------------------------------------------
+router.post(
+  "/portal-submissions/:id/process",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: idParamsSchema }),
+  async (req, res): Promise<void> => {
+    if (_processMutex) {
+      res.status(409).json({
+        error: "ALREADY_RUNNING",
+        message: "A portal process run is already in progress on this instance",
+      });
+      return;
+    }
+
+    const user = req.user!;
+    const { id } = getValidated<IdSchemas>(req).params;
+    const workerId = `api-manual-${user.id}-${Date.now()}`;
+
+    // Verify the submission exists and is queued before acquiring mutex
+    const [row] = await db
+      .select({ id: portalSubmissionsTable.id, status: portalSubmissionsTable.status })
+      .from(portalSubmissionsTable)
+      .where(and(eq(portalSubmissionsTable.id, id), isNull(portalSubmissionsTable.deletedAt)));
+
+    if (!row) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    if (row.status !== "queued") {
+      res.status(409).json({
+        error: "NOT_QUEUED",
+        message: `Submission #${id} is ${row.status}, not queued`,
+      });
+      return;
+    }
+
+    _processMutex = true;
+
+    try {
+      const result = await processSingle(id, workerId);
+
+      await logAudit(
+        user.id,
+        "process_portal_submission",
+        "portal_submission",
+        id,
+        { status: result.status, error: result.error },
+        req.ip,
+      );
+
+      res.json({ processed: result.status !== "skipped" ? 1 : 0, results: [result] });
+    } finally {
+      _processMutex = false;
+    }
   },
 );
 
