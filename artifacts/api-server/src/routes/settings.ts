@@ -210,7 +210,7 @@ router.get("/settings/branding/logo", async (req, res): Promise<void> => {
     res.setHeader("Cache-Control", "public, max-age=3600");
 
     if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
+      const nodeStream = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
       nodeStream.pipe(res);
     } else {
       res.end();

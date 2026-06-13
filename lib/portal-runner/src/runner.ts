@@ -75,40 +75,29 @@ export async function runSubmission(
     );
   }
 
-  // ----- 2. Dry mode — no real browser interaction ------------------------
-  if (submission.mode !== "real") {
-    await cleanup(tempDir);
-    return {
-      result: {
-        submitted:      false,
-        alreadyExists:  false,
-        programMissing: false,
-      },
-      screenshotUrls: [],
-      meta: { dryRun: true, adapterKey: adapter.key },
-    };
-  }
+  // ----- 2. Creds required for real mode; optional for dry (browser dry run) --
+  const isDry = submission.mode !== "real";
 
-  // ----- 3. Real mode — creds required ------------------------------------
-  if (!creds) {
+  if (!isDry && !creds) {
     await cleanup(tempDir);
     throw new Error(
       `MISSING_CREDS: real mode requires resolved credentials for key="${submission.universityKey}"`,
     );
   }
 
-  // ----- 4. Login + submit -------------------------------------------------
+  // ----- 3. Login + submit -------------------------------------------------
+  // doSubmit=true for real mode; doSubmit=false for dry mode (fill form, no click)
   const screenshotUrls: string[] = [];
   let session: Awaited<ReturnType<typeof adapter.login>> | null = null;
 
-  // Inject resolved creds so the adapter's internal portalCreds() call
-  // picks them up without relying on env vars.
-  setCredsOverride(adapter.key, { user: creds.user, password: creds.password });
+  if (creds) {
+    setCredsOverride(adapter.key, { user: creds.user, password: creds.password });
+  }
 
   try {
     session = await adapter.login({ headless: true });
 
-    const result = await adapter.submit(session, profile, files);
+    const result = await adapter.submit(session, profile, files, !isDry);
 
     // Capture post-submit screenshot (best-effort)
     try {
@@ -122,10 +111,13 @@ export async function runSubmission(
     return {
       result,
       screenshotUrls,
-      meta: { adapterKey: adapter.key },
+      meta: {
+        adapterKey: adapter.key,
+        ...(isDry ? { dryRun: true } : {}),
+      },
     };
   } finally {
-    clearCredsOverride(adapter.key);
+    if (creds) clearCredsOverride(adapter.key);
     await session?.close().catch(() => {});
     await cleanup(tempDir);
   }

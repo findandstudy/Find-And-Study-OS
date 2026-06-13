@@ -60,9 +60,18 @@ async function drain(): Promise<void> {
     try {
       const profileResult = await buildStudentProfile(sub.id);
 
+      // Resolve creds for both real and dry modes.
+      // Dry mode uses the browser (doSubmit=false), so credentials are needed.
+      // If no creds exist for dry mode, login will fail and be caught below.
       let creds: { user: string; password: string } | undefined;
-      if (sub.mode === "real") {
+      try {
         creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+      } catch (credsErr) {
+        if (sub.mode === "real") throw credsErr; // required for real mode
+        // dry mode: missing creds → adapter will throw at login → caught below
+        console.warn(
+          `[drain-once] No creds for "${sub.universityKey}" (dry mode — will attempt env fallback)`,
+        );
       }
 
       const runResult = await runSubmission(

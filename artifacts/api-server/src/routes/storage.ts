@@ -124,7 +124,7 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
     response.headers.forEach((value, key) => res.setHeader(key, value));
 
     if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
+      const nodeStream = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
       nodeStream.pipe(res);
     } else {
       res.end();
@@ -174,7 +174,7 @@ router.get("/storage/objects/*path", requireAuth, async (req: Request, res: Resp
     }
 
     if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
+      const nodeStream = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
       nodeStream.pipe(res);
     } else {
       res.end();

@@ -58,7 +58,9 @@ export async function launchPortal(opts: LaunchOpts = {}): Promise<AdapterSessio
   const executablePath = resolveChromiumPath();
   const browser = await chromium.launch({ headless, ...(executablePath ? { executablePath } : {}) });
   const context = await browser.newContext(
-    storagePath ? { storageState: storagePath } : {},
+    storagePath
+      ? { storageState: storagePath, ignoreHTTPSErrors: true }
+      : { ignoreHTTPSErrors: true },
   );
   const page = await context.newPage();
 

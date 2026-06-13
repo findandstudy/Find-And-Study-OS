@@ -68,10 +68,17 @@ export interface UniversityAdapter {
    */
   login(opts?: { headless?: boolean }): Promise<AdapterSession>;
 
-  /** Fills and submits the application form. */
+  /**
+   * Fills and (optionally) submits the application form.
+   *
+   * @param doSubmit  true (default) = click the final submit button.
+   *                  false = fill all steps but stop before submitting —
+   *                  useful for dry-run smoke tests of the form flow.
+   */
   submit(
     session: AdapterSession,
     profile: SubmitProfile,
     files: SubmitFiles,
+    doSubmit?: boolean,
   ): Promise<SubmitResult>;
 }

@@ -314,9 +314,14 @@ async function processSingle(
   try {
     const profileResult = await buildStudentProfile(sub.id);
 
+    // Resolve creds for both real and dry modes.
+    // Dry mode now uses the browser (doSubmit=false); creds needed for login.
     let creds: { user: string; password: string } | undefined;
-    if (sub.mode === "real") {
+    try {
       creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+    } catch (credsErr) {
+      if (sub.mode === "real") throw credsErr;
+      // dry mode: missing creds → adapter login will fail and be caught
     }
 
     const runResult = await runSubmission(
@@ -378,16 +383,22 @@ router.post(
 
         console.log(`[portal-process] Processing #${sub.id} uni=${sub.universityKey} mode=${sub.mode}`);
 
+        // Resolve creds for both real and dry modes.
+        // Dry mode now uses the browser (doSubmit=false); creds needed for login.
         let creds: { user: string; password: string } | undefined;
-        if (sub.mode === "real") {
-          try {
-            creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
-          } catch (err) {
+        try {
+          creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+        } catch (err) {
+          if (sub.mode === "real") {
             const msg = err instanceof Error ? err.message : String(err);
             await writebackResult(sub.id, null, msg);
             results.push({ id: sub.id, status: "failed", error: msg });
             continue;
           }
+          // dry mode: missing creds → adapter login will fail and be caught below
+          console.warn(
+            `[portal-process] No creds for "${sub.universityKey}" (dry mode — will attempt env fallback)`,
+          );
         }
 
         try {
