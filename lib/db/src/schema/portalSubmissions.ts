@@ -8,6 +8,8 @@ import {
   jsonb,
   index,
 } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
 import { applicationsTable } from "./applications";
 import { studentsTable } from "./students";
 import { usersTable } from "./users";
@@ -39,13 +41,17 @@ export const portalSubmissionsTable = pgTable(
   {
     id: serial("id").primaryKey(),
 
+    /** Multi-tenant org ID — matches other tables' pattern. */
+    organizationId: integer("organization_id"),
+
     applicationId: integer("application_id")
       .notNull()
       .references(() => applicationsTable.id, { onDelete: "cascade" }),
 
-    studentId: integer("student_id")
-      .notNull()
-      .references(() => studentsTable.id, { onDelete: "cascade" }),
+    /** Nullable: preserved as evidence even if student record is deleted. */
+    studentId: integer("student_id").references(() => studentsTable.id, {
+      onDelete: "set null",
+    }),
 
     universityKey:  text("university_key").notNull(),
     universityName: text("university_name").notNull(),
@@ -83,5 +89,26 @@ export const portalSubmissionsTable = pgTable(
     index("portal_submissions_application_id_idx").on(table.applicationId),
     index("portal_submissions_status_idx").on(table.status),
     index("portal_submissions_locked_at_idx").on(table.lockedAt),
+    // Added: worker poll filter by universityKey
+    index("portal_submissions_university_key_idx").on(table.universityKey),
+    // Added: worker poll query — multi-tenant status filter
+    index("portal_submissions_org_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Zod schemas & TS types
+// ---------------------------------------------------------------------------
+export const insertPortalSubmissionSchema = createInsertSchema(
+  portalSubmissionsTable,
+  {
+    universityKey:  z.string().min(1),
+    universityName: z.string().min(1),
+  },
+);
+
+export type PortalSubmission    = typeof portalSubmissionsTable.$inferSelect;
+export type NewPortalSubmission = typeof portalSubmissionsTable.$inferInsert;
