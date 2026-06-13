@@ -4863,6 +4863,47 @@
       "noData": "Denetim günlüğü kaydı yok.",
       "loadError": "Denetim günlüğü yüklenemedi.",
       "loadMore": "Daha Fazla Yükle"
+    },
+    "panel": {
+      "panelTitle": "Portala Gönder",
+      "target": "Hedef Üniversite",
+      "modeDry": "Test (Kuru Çalışma)",
+      "modeReal": "Gerçek Başvuru",
+      "confirmRealTitle": "Gerçek Gönderimi Onayla",
+      "confirmRealBody": "Bu işlem üniversite portalına gerçek bir başvuru gönderecektir. Devam etmek istediğinizden emin misiniz?",
+      "enqueue": "Portala Gönder",
+      "submitting": "Gönderiliyor…",
+      "enqueuedSuccess": "Başarıyla sıraya alındı.",
+      "enqueuedError": "Sıraya alma başarısız.",
+      "retrySuccess": "Yeniden sıraya alındı.",
+      "retryError": "Yeniden deneme başarısız.",
+      "noPortals": "Aktif portal üniversitesi yapılandırılmamış.",
+      "recentTitle": "Son Gönderimleri",
+      "externalRef": "Ref",
+      "retry": "Tekrar Dene",
+      "outOfScope": "Kapsam dışı",
+      "status": {
+        "queued": "Sırada",
+        "running": "İşleniyor",
+        "submitted": "Gönderildi",
+        "already_exists": "Zaten Kayıtlı",
+        "program_missing": "Program Bulunamadı",
+        "failed": "Başarısız",
+        "canceled": "İptal Edildi",
+        "dry_run": "Test Modu"
+      }
+    },
+    "credentials": {
+      "pageTitle": "Portal Kimlik Bilgileri",
+      "description": "Üniversite portalı otomasyonu için giriş bilgilerini yönetin.",
+      "usernameLabel": "Kullanıcı Adı / E-posta",
+      "passwordLabel": "Şifre",
+      "saved": "Kimlik bilgileri başarıyla kaydedildi.",
+      "save": "Kaydet",
+      "saving": "Kaydediliyor…",
+      "noPortals": "Yapılandırılmış portal üniversitesi yok.",
+      "credentialsSet": "Kimlik Bilgileri Ayarlı",
+      "noCredentials": "Kimlik Bilgisi Yok"
     }
   }
 }

@@ -99,6 +99,7 @@ const AdminContracts = lazyRetry(() => import("@/pages/admin/Contracts"));
 const AdminSelfFillLinks = lazyRetry(() => import("@/pages/admin/SelfFillLinks"));
 const AdminUniversityContracts = lazyRetry(() => import("@/pages/admin/UniversityContracts"));
 const AdminPortalAutomation = lazyRetry(() => import("@/pages/admin/PortalAutomation"));
+const AdminPortalCredentials = lazyRetry(() => import("@/pages/admin/PortalCredentials"));
 const PublicSignFlow = lazyRetry(() => import("@/pages/sign/SignFlow"));
 
 const WebsitePages = lazyRetry(() => import("@/pages/admin/website/Pages"));
@@ -373,6 +374,9 @@ function StaffAdminShell() {
           </Route>
           <Route path="/admin/portal-automation">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminPortalAutomation /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/portal-credentials">
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminPortalCredentials /></ProtectedRoute>
           </Route>
           <Route path="/admin/website/pages/:id/edit">
             {(params) => <ProtectedRoute allowedRoles={WEBSITE_ADMIN_ROLES}><WebsitePageEditor id={Number(params.id)} /></ProtectedRoute>}

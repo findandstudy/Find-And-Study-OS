@@ -4863,6 +4863,47 @@
       "noData": "No audit log entries.",
       "loadError": "Failed to load audit log.",
       "loadMore": "Load More"
+    },
+    "panel": {
+      "panelTitle": "Submit to Portal",
+      "target": "Target University",
+      "modeDry": "Test (Dry Run)",
+      "modeReal": "Live Submission",
+      "confirmRealTitle": "Confirm Real Submission",
+      "confirmRealBody": "This will submit a real application to the university portal. Are you sure you want to proceed?",
+      "enqueue": "Send to Portal",
+      "submitting": "Sending…",
+      "enqueuedSuccess": "Queued successfully.",
+      "enqueuedError": "Failed to queue submission.",
+      "retrySuccess": "Re-queued successfully.",
+      "retryError": "Retry failed.",
+      "noPortals": "No active portal universities configured.",
+      "recentTitle": "Recent Submissions",
+      "externalRef": "Ref",
+      "retry": "Retry",
+      "outOfScope": "Out of scope",
+      "status": {
+        "queued": "Queued",
+        "running": "Running",
+        "submitted": "Submitted",
+        "already_exists": "Already Registered",
+        "program_missing": "Program Missing",
+        "failed": "Failed",
+        "canceled": "Canceled",
+        "dry_run": "Dry Run"
+      }
+    },
+    "credentials": {
+      "pageTitle": "Portal Credentials",
+      "description": "Manage login credentials for university portal automation.",
+      "usernameLabel": "Username / Email",
+      "passwordLabel": "Password",
+      "saved": "Credentials saved successfully.",
+      "save": "Save Credentials",
+      "saving": "Saving…",
+      "noPortals": "No portal universities configured.",
+      "credentialsSet": "Credentials Set",
+      "noCredentials": "No Credentials"
     }
   }
 }
