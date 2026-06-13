@@ -30,6 +30,7 @@ import type {
   AuditLogsListResponse,
   BlogPost,
   BlogPostsListResponse,
+  CancelPortalSubmission200,
   Commission,
   CreateAgentBody,
   CreateAnnouncementBody,
@@ -48,6 +49,7 @@ import type {
   CreateUserBody,
   Document,
   DocumentExtraction,
+  EnqueuePortalSubmissionBody,
   ErrorResponse,
   GetActivitySummaryParams,
   GetBlogPostParams,
@@ -55,6 +57,8 @@ import type {
   GetFinanceSummaryParams,
   GetKommoSummaryParams,
   GetOverviewStatsParams,
+  GetPortalSubmissions200,
+  GetPortalSubmissionsParams,
   GetUniversityContract200,
   HealthStatus,
   InboxConversationDetailResponse,
@@ -82,13 +86,17 @@ import type {
   ListUniversityContractsParams,
   ListUsersParams,
   Note,
+  OkResponse,
   OverviewStats,
+  PortalSubmission,
   Program,
   ProgramsListResponse,
   PublicLeadBody,
   RecordEntityViewBody,
   RecordEntityViewResponse,
+  RetryPortalSubmission200,
   ServiceFee,
+  SetPortalCredentialsBody,
   Settings,
   Student,
   StudentsListResponse,
@@ -97,6 +105,7 @@ import type {
   UniversitiesListResponse,
   University,
   UniversityContractWriteBody,
+  UniversityPortal,
   UpdateAgentBody,
   UpdateAnnouncementBody,
   UpdateApplicationBody,
@@ -8004,4 +8013,703 @@ export const useAddInboxConversationTask = <
   TContext
 > => {
   return useMutation(getAddInboxConversationTaskMutationOptions(options));
+};
+
+/**
+ * @summary Enqueue a portal submission for an application
+ */
+export const getEnqueuePortalSubmissionUrl = (appId: number) => {
+  return `/api/applications/${appId}/portal-submissions`;
+};
+
+export const enqueuePortalSubmission = async (
+  appId: number,
+  enqueuePortalSubmissionBody: EnqueuePortalSubmissionBody,
+  options?: RequestInit,
+): Promise<PortalSubmission> => {
+  return customFetch<PortalSubmission>(getEnqueuePortalSubmissionUrl(appId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(enqueuePortalSubmissionBody),
+  });
+};
+
+export const getEnqueuePortalSubmissionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enqueuePortalSubmission>>,
+    TError,
+    { appId: number; data: BodyType<EnqueuePortalSubmissionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof enqueuePortalSubmission>>,
+  TError,
+  { appId: number; data: BodyType<EnqueuePortalSubmissionBody> },
+  TContext
+> => {
+  const mutationKey = ["enqueuePortalSubmission"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof enqueuePortalSubmission>>,
+    { appId: number; data: BodyType<EnqueuePortalSubmissionBody> }
+  > = (props) => {
+    const { appId, data } = props ?? {};
+
+    return enqueuePortalSubmission(appId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EnqueuePortalSubmissionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof enqueuePortalSubmission>>
+>;
+export type EnqueuePortalSubmissionMutationBody =
+  BodyType<EnqueuePortalSubmissionBody>;
+export type EnqueuePortalSubmissionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Enqueue a portal submission for an application
+ */
+export const useEnqueuePortalSubmission = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enqueuePortalSubmission>>,
+    TError,
+    { appId: number; data: BodyType<EnqueuePortalSubmissionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof enqueuePortalSubmission>>,
+  TError,
+  { appId: number; data: BodyType<EnqueuePortalSubmissionBody> },
+  TContext
+> => {
+  return useMutation(getEnqueuePortalSubmissionMutationOptions(options));
+};
+
+/**
+ * @summary List portal submissions (paginated)
+ */
+export const getGetPortalSubmissionsUrl = (
+  params?: GetPortalSubmissionsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/portal-submissions?${stringifiedParams}`
+    : `/api/portal-submissions`;
+};
+
+export const getPortalSubmissions = async (
+  params?: GetPortalSubmissionsParams,
+  options?: RequestInit,
+): Promise<GetPortalSubmissions200> => {
+  return customFetch<GetPortalSubmissions200>(
+    getGetPortalSubmissionsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetPortalSubmissionsQueryKey = (
+  params?: GetPortalSubmissionsParams,
+) => {
+  return [`/api/portal-submissions`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetPortalSubmissionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPortalSubmissions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetPortalSubmissionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPortalSubmissions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPortalSubmissionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPortalSubmissions>>
+  > = ({ signal }) =>
+    getPortalSubmissions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPortalSubmissions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPortalSubmissionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPortalSubmissions>>
+>;
+export type GetPortalSubmissionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List portal submissions (paginated)
+ */
+
+export function useGetPortalSubmissions<
+  TData = Awaited<ReturnType<typeof getPortalSubmissions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetPortalSubmissionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPortalSubmissions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPortalSubmissionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a single portal submission
+ */
+export const getGetPortalSubmissionUrl = (id: number) => {
+  return `/api/portal-submissions/${id}`;
+};
+
+export const getPortalSubmission = async (
+  id: number,
+  options?: RequestInit,
+): Promise<PortalSubmission> => {
+  return customFetch<PortalSubmission>(getGetPortalSubmissionUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPortalSubmissionQueryKey = (id: number) => {
+  return [`/api/portal-submissions/${id}`] as const;
+};
+
+export const getGetPortalSubmissionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPortalSubmission>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPortalSubmission>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPortalSubmissionQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPortalSubmission>>
+  > = ({ signal }) => getPortalSubmission(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPortalSubmission>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPortalSubmissionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPortalSubmission>>
+>;
+export type GetPortalSubmissionQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a single portal submission
+ */
+
+export function useGetPortalSubmission<
+  TData = Awaited<ReturnType<typeof getPortalSubmission>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPortalSubmission>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPortalSubmissionQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Retry a failed or canceled portal submission
+ */
+export const getRetryPortalSubmissionUrl = (id: number) => {
+  return `/api/portal-submissions/${id}/retry`;
+};
+
+export const retryPortalSubmission = async (
+  id: number,
+  options?: RequestInit,
+): Promise<RetryPortalSubmission200> => {
+  return customFetch<RetryPortalSubmission200>(
+    getRetryPortalSubmissionUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRetryPortalSubmissionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryPortalSubmission>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof retryPortalSubmission>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["retryPortalSubmission"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof retryPortalSubmission>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return retryPortalSubmission(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RetryPortalSubmissionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof retryPortalSubmission>>
+>;
+
+export type RetryPortalSubmissionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Retry a failed or canceled portal submission
+ */
+export const useRetryPortalSubmission = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryPortalSubmission>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof retryPortalSubmission>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRetryPortalSubmissionMutationOptions(options));
+};
+
+/**
+ * @summary Cancel a queued or running portal submission
+ */
+export const getCancelPortalSubmissionUrl = (id: number) => {
+  return `/api/portal-submissions/${id}/cancel`;
+};
+
+export const cancelPortalSubmission = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CancelPortalSubmission200> => {
+  return customFetch<CancelPortalSubmission200>(
+    getCancelPortalSubmissionUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getCancelPortalSubmissionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelPortalSubmission>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof cancelPortalSubmission>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["cancelPortalSubmission"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof cancelPortalSubmission>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return cancelPortalSubmission(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CancelPortalSubmissionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof cancelPortalSubmission>>
+>;
+
+export type CancelPortalSubmissionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Cancel a queued or running portal submission
+ */
+export const useCancelPortalSubmission = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelPortalSubmission>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof cancelPortalSubmission>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getCancelPortalSubmissionMutationOptions(options));
+};
+
+/**
+ * @summary List configured university portals with credential status
+ */
+export const getGetUniversityPortalsUrl = () => {
+  return `/api/university-portals`;
+};
+
+export const getUniversityPortals = async (
+  options?: RequestInit,
+): Promise<UniversityPortal[]> => {
+  return customFetch<UniversityPortal[]>(getGetUniversityPortalsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetUniversityPortalsQueryKey = () => {
+  return [`/api/university-portals`] as const;
+};
+
+export const getGetUniversityPortalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getUniversityPortals>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getUniversityPortals>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetUniversityPortalsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getUniversityPortals>>
+  > = ({ signal }) => getUniversityPortals({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getUniversityPortals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetUniversityPortalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getUniversityPortals>>
+>;
+export type GetUniversityPortalsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List configured university portals with credential status
+ */
+
+export function useGetUniversityPortals<
+  TData = Awaited<ReturnType<typeof getUniversityPortals>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getUniversityPortals>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetUniversityPortalsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Upsert encrypted credentials for a university portal (admin only)
+ */
+export const getSetPortalCredentialsUrl = (portalKey: string) => {
+  return `/api/university-portals/${portalKey}/credentials`;
+};
+
+export const setPortalCredentials = async (
+  portalKey: string,
+  setPortalCredentialsBody: SetPortalCredentialsBody,
+  options?: RequestInit,
+): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getSetPortalCredentialsUrl(portalKey), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setPortalCredentialsBody),
+  });
+};
+
+export const getSetPortalCredentialsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setPortalCredentials>>,
+    TError,
+    { portalKey: string; data: BodyType<SetPortalCredentialsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setPortalCredentials>>,
+  TError,
+  { portalKey: string; data: BodyType<SetPortalCredentialsBody> },
+  TContext
+> => {
+  const mutationKey = ["setPortalCredentials"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setPortalCredentials>>,
+    { portalKey: string; data: BodyType<SetPortalCredentialsBody> }
+  > = (props) => {
+    const { portalKey, data } = props ?? {};
+
+    return setPortalCredentials(portalKey, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetPortalCredentialsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setPortalCredentials>>
+>;
+export type SetPortalCredentialsMutationBody =
+  BodyType<SetPortalCredentialsBody>;
+export type SetPortalCredentialsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Upsert encrypted credentials for a university portal (admin only)
+ */
+export const useSetPortalCredentials = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setPortalCredentials>>,
+    TError,
+    { portalKey: string; data: BodyType<SetPortalCredentialsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setPortalCredentials>>,
+  TError,
+  { portalKey: string; data: BodyType<SetPortalCredentialsBody> },
+  TContext
+> => {
+  return useMutation(getSetPortalCredentialsMutationOptions(options));
+};
+
+/**
+ * @summary Soft-delete stored credentials for a university portal (admin only)
+ */
+export const getDeletePortalCredentialsUrl = (portalKey: string) => {
+  return `/api/university-portals/${portalKey}/credentials`;
+};
+
+export const deletePortalCredentials = async (
+  portalKey: string,
+  options?: RequestInit,
+): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getDeletePortalCredentialsUrl(portalKey), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeletePortalCredentialsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePortalCredentials>>,
+    TError,
+    { portalKey: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePortalCredentials>>,
+  TError,
+  { portalKey: string },
+  TContext
+> => {
+  const mutationKey = ["deletePortalCredentials"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deletePortalCredentials>>,
+    { portalKey: string }
+  > = (props) => {
+    const { portalKey } = props ?? {};
+
+    return deletePortalCredentials(portalKey, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePortalCredentialsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deletePortalCredentials>>
+>;
+
+export type DeletePortalCredentialsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Soft-delete stored credentials for a university portal (admin only)
+ */
+export const useDeletePortalCredentials = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePortalCredentials>>,
+    TError,
+    { portalKey: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePortalCredentials>>,
+  TError,
+  { portalKey: string },
+  TContext
+> => {
+  return useMutation(getDeletePortalCredentialsMutationOptions(options));
 };

@@ -44,11 +44,6 @@ export interface UserProfile {
   isActive: boolean;
   /** @nullable */
   agentStaffPermissions?: string[] | null;
-  emailVerified?: boolean;
-  /** @nullable */
-  permissions?: string[] | null;
-  /** @nullable */
-  createdFromSource?: string | null;
   createdAt: string;
 }
 
@@ -1605,6 +1600,86 @@ export interface AddInboxConversationTaskResponse {
   data: FollowUp;
 }
 
+export type PortalSubmissionMode =
+  (typeof PortalSubmissionMode)[keyof typeof PortalSubmissionMode];
+
+export const PortalSubmissionMode = {
+  dry: "dry",
+  real: "real",
+} as const;
+
+export type PortalSubmissionStatus =
+  (typeof PortalSubmissionStatus)[keyof typeof PortalSubmissionStatus];
+
+export const PortalSubmissionStatus = {
+  queued: "queued",
+  running: "running",
+  submitted: "submitted",
+  already_exists: "already_exists",
+  program_missing: "program_missing",
+  failed: "failed",
+  canceled: "canceled",
+} as const;
+
+export type PortalSubmissionResultJson = { [key: string]: unknown } | null;
+
+export interface PortalSubmission {
+  id: number;
+  applicationId: number;
+  studentId: number;
+  universityKey: string;
+  universityName: string;
+  mode: PortalSubmissionMode;
+  status: PortalSubmissionStatus;
+  externalRef?: string | null;
+  resultJson?: PortalSubmissionResultJson;
+  screenshotUrls?: string[] | null;
+  error?: string | null;
+  attempts: number;
+  maxAttempts: number;
+  lockedAt?: string | null;
+  lockedBy?: string | null;
+  enqueuedBy?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
+export type EnqueuePortalSubmissionBodyMode =
+  (typeof EnqueuePortalSubmissionBodyMode)[keyof typeof EnqueuePortalSubmissionBodyMode];
+
+export const EnqueuePortalSubmissionBodyMode = {
+  dry: "dry",
+  real: "real",
+} as const;
+
+export interface EnqueuePortalSubmissionBody {
+  /** @minLength 1 */
+  universityKey: string;
+  mode: EnqueuePortalSubmissionBodyMode;
+  confirm?: boolean;
+}
+
+export interface UniversityPortal {
+  key: string;
+  label: string;
+  hasCredentials: boolean;
+}
+
+export type SetPortalCredentialsBodyExtra = { [key: string]: unknown } | null;
+
+export interface SetPortalCredentialsBody {
+  /** @minLength 1 */
+  username: string;
+  /** @minLength 1 */
+  password: string;
+  extra?: SetPortalCredentialsBodyExtra;
+}
+
+export interface OkResponse {
+  ok: boolean;
+}
+
 export type ListUsersParams = {
   role?: string;
   search?: string;
@@ -1815,4 +1890,56 @@ export type GetUniversityContract200 = {
 
 export type UpdateUniversityContract200 = {
   data: UniversityContract;
+};
+
+export type GetPortalSubmissionsParams = {
+  applicationId?: number;
+  status?: GetPortalSubmissionsStatus;
+  mode?: GetPortalSubmissionsMode;
+  /**
+   * @minimum 1
+   */
+  page?: number;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+};
+
+export type GetPortalSubmissionsStatus =
+  (typeof GetPortalSubmissionsStatus)[keyof typeof GetPortalSubmissionsStatus];
+
+export const GetPortalSubmissionsStatus = {
+  queued: "queued",
+  running: "running",
+  submitted: "submitted",
+  already_exists: "already_exists",
+  program_missing: "program_missing",
+  failed: "failed",
+  canceled: "canceled",
+} as const;
+
+export type GetPortalSubmissionsMode =
+  (typeof GetPortalSubmissionsMode)[keyof typeof GetPortalSubmissionsMode];
+
+export const GetPortalSubmissionsMode = {
+  dry: "dry",
+  real: "real",
+} as const;
+
+export type GetPortalSubmissions200 = {
+  data: PortalSubmission[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+export type RetryPortalSubmission200 = {
+  ok: boolean;
+};
+
+export type CancelPortalSubmission200 = {
+  ok: boolean;
 };

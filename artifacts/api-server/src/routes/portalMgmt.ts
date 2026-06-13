@@ -32,8 +32,8 @@ import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import { getValidated, validate } from "../middlewares/validate";
-import { encryptString } from "../lib/encryption";
 import { batchPortalCredentialKeys, checkHasPortalCredentials, resolvePortalCreds } from "../lib/portalCreds";
+import { setPortalCredentials } from "../lib/portalCredentials.js";
 
 const router: IRouter = Router();
 
@@ -704,14 +704,14 @@ router.get(
     // Registry (code + declarative from declarativeConfigs.ts) — read-only
     // hasCredentials: DB-first by adapterKey (canonical), then env fallback.
     const dbCredKeys = await batchPortalCredentialKeys();
-    const registry = adapterMetadata().map(({ key, label, kind }) => {
+    const registry = adapterMetadata().map(({ key, label, family }) => {
       const K = key.toUpperCase().replace(/-/g, "_");
       const envHas = !!(
         (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
         process.env[`${K}_PASSWORD`]
       );
       const hasCredentials = dbCredKeys.has(key) || envHas;
-      return { key, label, kind, hasCredentials };
+      return { key, label, family, hasCredentials };
     });
 
     // DB-stored adapters — manageable via UI
@@ -879,12 +879,12 @@ const credentialsBodySchema = z.object({
 type CredentialsBodySchemas = { body: typeof credentialsBodySchema };
 
 // ---------------------------------------------------------------------------
-// PUT /portal-universities/:portalKey/credentials
+// PUT /university-portals/:portalKey/credentials
 // Upsert encrypted credentials for a portal university.
 // Response: { ok: true } — plaintext is NEVER returned.
 // ---------------------------------------------------------------------------
 router.put(
-  "/portal-universities/:portalKey/credentials",
+  "/university-portals/:portalKey/credentials",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ params: portalKeyParamsSchema, body: credentialsBodySchema }),
@@ -913,31 +913,11 @@ router.put(
     // Store under adapterKey (canonical) so all adapter surfaces resolve correctly.
     const storageKey = uni.adapterKey;
 
-    const usernameEnc = encryptString(username);
-    const passwordEnc = encryptString(password);
-    const extraEnc    = extra ? encryptString(JSON.stringify(extra)) : null;
-
-    await db
-      .insert(portalCredentialsTable)
-      .values({
-        portalKey: storageKey,
-        usernameEnc,
-        passwordEnc,
-        ...(extraEnc !== null ? { extraEnc } : {}),
-        isActive:  true,
-        deletedAt: null,
-      })
-      .onConflictDoUpdate({
-        target: portalCredentialsTable.portalKey,
-        set: {
-          usernameEnc,
-          passwordEnc,
-          extraEnc:  extraEnc ?? sql`NULL`,
-          isActive:  true,
-          deletedAt: null,
-          updatedAt: new Date(),
-        },
-      });
+    // setPortalCredentials handles encryption + manual upsert.
+    // The unique index is (organizationId, portalKey); since orgId is null for
+    // management-plane credentials, onConflictDoUpdate can't be used directly
+    // (PostgreSQL won't raise a conflict when a composite key contains NULL).
+    await setPortalCredentials(null, storageKey, { username, password, extra });
 
     logAudit(
       req.user!.id,
@@ -953,11 +933,11 @@ router.put(
 );
 
 // ---------------------------------------------------------------------------
-// DELETE /portal-universities/:portalKey/credentials
+// DELETE /university-portals/:portalKey/credentials
 // Soft-deletes the stored credentials for a portal university.
 // ---------------------------------------------------------------------------
 router.delete(
-  "/portal-universities/:portalKey/credentials",
+  "/university-portals/:portalKey/credentials",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ params: portalKeyParamsSchema }),

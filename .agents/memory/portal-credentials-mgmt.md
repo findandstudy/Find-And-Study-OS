@@ -27,12 +27,22 @@ description: How encrypted portal credentials are stored, resolved, and injected
 
 ## Role gate
 
-PUT/DELETE `/portal-universities/:portalKey/credentials` → `ADMIN_ROLES` only (admin, super_admin). Not STAFF_ROLES. Response NEVER includes plaintext credentials — only `{ ok: true }`.
+PUT/DELETE `/university-portals/:portalKey/credentials` → `ADMIN_ROLES` only (admin, super_admin). Not STAFF_ROLES. Response NEVER includes plaintext credentials — only `{ ok: true }`.
 
 ## Soft-delete convention
 
-DELETE endpoint sets `deletedAt = NOW()`, never hard-deletes. Upsert (PUT) restores by setting `deletedAt = NULL` + `isActive = true` via `onConflictDoUpdate`.
+DELETE endpoint sets `deletedAt = NOW()`, never hard-deletes. PUT uses manual check-then-update/insert (NOT `onConflictDoUpdate`) because the unique index is composite `(organizationId, portalKey)` and PostgreSQL does NOT raise a conflict when any part of a composite unique key is NULL.
+
+**Why**: `onConflictDoUpdate({ target: portalCredentialsTable.portalKey })` was the old code and silently broke after schema change. The fix is in `api-server/src/lib/portalCredentials.ts`: `setPortalCredentials(orgId, key, {username, password, extra})`.
+
+## adapterMetadata() field name
+
+`adapterMetadata()` (from `@workspace/portal-adapters`) returns `{ key, label, family: AdapterFamily, allowlist? }` — the field is `family` NOT `kind`. Destructuring `kind` silently gives `undefined`.
+
+## GET /university-portals behavior
+
+Only returns portals WITH active credentials (intent: Submit dropdown). After DELETE, portal disappears from list entirely — it does NOT appear with `hasCredentials: false`. Tests should assert absence not `hasCredentials=false`.
 
 ## Test location
 
-`artifacts/api-server/scripts/test-portal-credentials.ts` — 7 tests covering round-trip, encrypt/no-plaintext-in-DB, hasCredentials, resolve, soft-delete, env-fallback, throws-when-missing. Run with `pnpm --filter @workspace/api-server exec tsx scripts/test-portal-credentials.ts`.
+`artifacts/api-server/scripts/test-portal-api.ts` — TPA1–TPA7, 9 tests: enqueue dry, real-without-confirm 422, agent RBAC 403, credentials PUT/GET/DELETE round-trip. Run with `pnpm --filter @workspace/api-server test:portal`.

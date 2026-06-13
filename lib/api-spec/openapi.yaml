@@ -2139,7 +2139,7 @@ paths:
 
   /portal-submissions:
     get:
-      operationId: listPortalSubmissions
+      operationId: getPortalSubmissions
       tags: [portal-automation]
       summary: List portal submissions (paginated)
       parameters:
@@ -2272,7 +2272,7 @@ paths:
 
   /university-portals:
     get:
-      operationId: listUniversityPortals
+      operationId: getUniversityPortals
       tags: [portal-automation]
       summary: List configured university portals with credential status
       responses:
@@ -2284,6 +2284,58 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/UniversityPortal"
+
+  /university-portals/{portalKey}/credentials:
+    put:
+      operationId: setPortalCredentials
+      tags: [portal-automation]
+      summary: Upsert encrypted credentials for a university portal (admin only)
+      parameters:
+        - name: portalKey
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPortalCredentialsBody"
+      responses:
+        "200":
+          description: Credentials saved (plaintext never returned)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          description: Portal university not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deletePortalCredentials
+      tags: [portal-automation]
+      summary: Soft-delete stored credentials for a university portal (admin only)
+      parameters:
+        - name: portalKey
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Credentials deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          description: No active credentials found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -4624,3 +4676,20 @@ components:
         label: { type: string }
         hasCredentials: { type: boolean }
       required: [key, label, hasCredentials]
+
+    SetPortalCredentialsBody:
+      type: object
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+        extra:
+          type: object
+          additionalProperties: true
+          nullable: true
+      required: [username, password]
+
+    OkResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+      required: [ok]

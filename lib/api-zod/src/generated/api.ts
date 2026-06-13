@@ -2399,3 +2399,181 @@ export const AddInboxConversationTaskBody = zod.object({
   assignedToId: zod.number().min(1).optional(),
   notes: zod.string().max(addInboxConversationTaskBodyNotesMax).optional(),
 });
+
+/**
+ * @summary Enqueue a portal submission for an application
+ */
+export const EnqueuePortalSubmissionParams = zod.object({
+  appId: zod.coerce.number(),
+});
+
+export const EnqueuePortalSubmissionBody = zod.object({
+  universityKey: zod.string().min(1),
+  mode: zod.enum(["dry", "real"]),
+  confirm: zod.boolean().optional(),
+});
+
+/**
+ * @summary List portal submissions (paginated)
+ */
+
+export const getPortalSubmissionsQueryLimitMax = 100;
+
+export const GetPortalSubmissionsQueryParams = zod.object({
+  applicationId: zod.coerce.number().optional(),
+  status: zod
+    .enum([
+      "queued",
+      "running",
+      "submitted",
+      "already_exists",
+      "program_missing",
+      "failed",
+      "canceled",
+    ])
+    .optional(),
+  mode: zod.enum(["dry", "real"]).optional(),
+  page: zod.coerce.number().min(1).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(getPortalSubmissionsQueryLimitMax)
+    .optional(),
+});
+
+export const GetPortalSubmissionsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      applicationId: zod.number(),
+      studentId: zod.number(),
+      universityKey: zod.string(),
+      universityName: zod.string(),
+      mode: zod.enum(["dry", "real"]),
+      status: zod.enum([
+        "queued",
+        "running",
+        "submitted",
+        "already_exists",
+        "program_missing",
+        "failed",
+        "canceled",
+      ]),
+      externalRef: zod.string().nullish(),
+      resultJson: zod.object({}).passthrough().nullish(),
+      screenshotUrls: zod.array(zod.string()).nullish(),
+      error: zod.string().nullish(),
+      attempts: zod.number(),
+      maxAttempts: zod.number(),
+      lockedAt: zod.date().nullish(),
+      lockedBy: zod.string().nullish(),
+      enqueuedBy: zod.number().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+      deletedAt: zod.date().nullish(),
+    }),
+  ),
+  total: zod.number(),
+  page: zod.number(),
+  limit: zod.number(),
+  totalPages: zod.number(),
+});
+
+/**
+ * @summary Get a single portal submission
+ */
+export const GetPortalSubmissionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetPortalSubmissionResponse = zod.object({
+  id: zod.number(),
+  applicationId: zod.number(),
+  studentId: zod.number(),
+  universityKey: zod.string(),
+  universityName: zod.string(),
+  mode: zod.enum(["dry", "real"]),
+  status: zod.enum([
+    "queued",
+    "running",
+    "submitted",
+    "already_exists",
+    "program_missing",
+    "failed",
+    "canceled",
+  ]),
+  externalRef: zod.string().nullish(),
+  resultJson: zod.object({}).passthrough().nullish(),
+  screenshotUrls: zod.array(zod.string()).nullish(),
+  error: zod.string().nullish(),
+  attempts: zod.number(),
+  maxAttempts: zod.number(),
+  lockedAt: zod.date().nullish(),
+  lockedBy: zod.string().nullish(),
+  enqueuedBy: zod.number().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  deletedAt: zod.date().nullish(),
+});
+
+/**
+ * @summary Retry a failed or canceled portal submission
+ */
+export const RetryPortalSubmissionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RetryPortalSubmissionResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Cancel a queued or running portal submission
+ */
+export const CancelPortalSubmissionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CancelPortalSubmissionResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary List configured university portals with credential status
+ */
+export const GetUniversityPortalsResponseItem = zod.object({
+  key: zod.string(),
+  label: zod.string(),
+  hasCredentials: zod.boolean(),
+});
+export const GetUniversityPortalsResponse = zod.array(
+  GetUniversityPortalsResponseItem,
+);
+
+/**
+ * @summary Upsert encrypted credentials for a university portal (admin only)
+ */
+export const SetPortalCredentialsParams = zod.object({
+  portalKey: zod.coerce.string(),
+});
+
+export const SetPortalCredentialsBody = zod.object({
+  username: zod.string().min(1),
+  password: zod.string().min(1),
+  extra: zod.record(zod.string(), zod.unknown()).nullish(),
+});
+
+export const SetPortalCredentialsResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Soft-delete stored credentials for a university portal (admin only)
+ */
+export const DeletePortalCredentialsParams = zod.object({
+  portalKey: zod.coerce.string(),
+});
+
+export const DeletePortalCredentialsResponse = zod.object({
+  ok: zod.boolean(),
+});
