@@ -32,7 +32,8 @@ type SubmissionStatus =
   | "submitted"
   | "program_missing"
   | "already_exists"
-  | "failed";
+  | "failed"
+  | "dry_run";
 
 interface WritebackTarget {
   submissionStatus: SubmissionStatus;
@@ -44,9 +45,16 @@ interface WritebackTarget {
 // Rule resolution
 // ---------------------------------------------------------------------------
 
-function resolveTarget(result: SubmitResult | null): WritebackTarget {
+function resolveTarget(
+  result: SubmitResult | null,
+  meta?: Record<string, unknown>,
+): WritebackTarget {
   if (!result) {
     return { submissionStatus: "failed", stageKey: null };
+  }
+  // Dry runs: pipeline smoke-test only, no real portal interaction → dry_run status
+  if (meta?.["dryRun"]) {
+    return { submissionStatus: "dry_run", stageKey: null };
   }
   if (result.submitted) {
     return { submissionStatus: "submitted",      stageKey: "awaiting_offer_letter" };
@@ -77,7 +85,7 @@ export async function writebackResult(
   errorMessage?: string,
 ): Promise<void> {
   const result = runResult?.result ?? null;
-  const { submissionStatus, stageKey } = resolveTarget(result);
+  const { submissionStatus, stageKey } = resolveTarget(result, runResult?.meta);
 
   // ----- 1. Load submission to get applicationId --------------------------
   const [sub] = await db

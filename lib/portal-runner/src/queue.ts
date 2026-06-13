@@ -11,6 +11,10 @@
  *
  * releaseStale() — resets submissions that have been running longer than
  *                  thresholdMs back to "queued" (crash-recovery).
+ *
+ * NOTE: raw pg `SELECT *` returns snake_case column names. All three
+ * claim queries use explicit AS aliases to produce camelCase keys that
+ * match the ClaimedSubmission TypeScript type.
  */
 
 import { pool } from "@workspace/db";
@@ -36,6 +40,26 @@ export interface ClaimedSubmission {
 }
 
 // ---------------------------------------------------------------------------
+// Shared column list (explicit camelCase aliases)
+// ---------------------------------------------------------------------------
+
+const CLAIM_COLS = `
+  id,
+  application_id    AS "applicationId",
+  student_id        AS "studentId",
+  university_key    AS "universityKey",
+  university_name   AS "universityName",
+  mode,
+  status,
+  attempts,
+  max_attempts      AS "maxAttempts",
+  locked_at         AS "lockedAt",
+  locked_by         AS "lockedBy",
+  enqueued_by       AS "enqueuedBy",
+  created_at        AS "createdAt"
+`;
+
+// ---------------------------------------------------------------------------
 // claimNext
 // ---------------------------------------------------------------------------
 
@@ -55,7 +79,7 @@ export async function claimNext(
     await client.query("BEGIN");
 
     const sel = await client.query<ClaimedSubmission>(`
-      SELECT *
+      SELECT ${CLAIM_COLS}
       FROM portal_submissions
       WHERE status = 'queued'
         AND attempts < max_attempts
@@ -115,7 +139,7 @@ export async function claimById(
     await client.query("BEGIN");
 
     const sel = await client.query<ClaimedSubmission>(`
-      SELECT *
+      SELECT ${CLAIM_COLS}
       FROM portal_submissions
       WHERE id = $1
         AND status = 'queued'

@@ -1235,6 +1235,9 @@ async function seedClaudeIntegration() {
       END $$
     `);
     await pool.query(`
+      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'dry_run'
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS portal_submissions (
         id SERIAL PRIMARY KEY,
         application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
