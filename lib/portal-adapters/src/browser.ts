@@ -1,4 +1,5 @@
 import { chromium } from "playwright-core";
+import { execSync } from "node:child_process";
 import type { Page } from "playwright-core";
 import type { AdapterSession } from "./types.js";
 
@@ -10,6 +11,29 @@ export const logger = {
   warn:  (...args: unknown[]): void => console.warn( "[portal-adapters]", ...args),
   error: (...args: unknown[]): void => console.error("[portal-adapters]", ...args),
 };
+
+// ---------------------------------------------------------------------------
+// Chromium binary resolution
+//
+// On Replit the browser is provided by Nix (pkgs.chromium in replit.nix) rather
+// than downloaded by Playwright, so we point playwright-core at it explicitly.
+// .replit exports PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH; if missing we fall back
+// to `which chromium` on PATH.  Returning undefined lets playwright-core try its
+// own bundled lookup as a last resort (works in vanilla Node environments).
+// ---------------------------------------------------------------------------
+function resolveChromiumPath(): string | undefined {
+  const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  if (fromEnv) return fromEnv;
+  try {
+    const found = execSync("which chromium", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+    if (found) return found;
+  } catch {
+    /* fall through */
+  }
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Launch options
@@ -31,7 +55,8 @@ export interface LaunchOpts {
 export async function launchPortal(opts: LaunchOpts = {}): Promise<AdapterSession> {
   const { headless = true, storagePath } = opts;
 
-  const browser = await chromium.launch({ headless });
+  const executablePath = resolveChromiumPath();
+  const browser = await chromium.launch({ headless, ...(executablePath ? { executablePath } : {}) });
   const context = await browser.newContext(
     storagePath ? { storageState: storagePath } : {},
   );
