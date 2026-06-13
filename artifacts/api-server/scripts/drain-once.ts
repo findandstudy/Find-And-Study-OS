@@ -10,9 +10,15 @@
  *   4. Adapter login + submit (browser closed after each run — minimal memory)
  *   5. Result written back to portal_submissions + application stage updated
  *
+ * Memory discipline:
+ *   - Concurrency = 1 (submissions processed one at a time)
+ *   - 2-second cooldown between submissions gives the V8 GC time to reclaim
+ *     memory freed by browser.close() before the next Chromium process starts
+ *   - Run with NODE_OPTIONS=--max-old-space-size=512 (set in package.json script)
+ *
  * Usage:
  *   DATABASE_URL=... ENCRYPTION_KEY=... \
- *   pnpm --filter @workspace/api-server exec tsx scripts/drain-once.ts
+ *   pnpm --filter @workspace/api-server drain-once
  *
  * Exit codes:
  *   0 — completed (even if some submissions failed — failures are recorded in DB)
@@ -31,13 +37,18 @@ import { resolvePortalCreds } from "../src/lib/portalCreds.js";
 import { db, portalUniversitiesTable } from "@workspace/db";
 import { and, eq, isNull } from "drizzle-orm";
 
-const WORKER_ID  = `drain-once-${os.hostname()}-${process.pid}`;
-const STALE_MS   = 5 * 60 * 1000; // 5 minutes
+const WORKER_ID         = `drain-once-${os.hostname()}-${process.pid}`;
+const STALE_MS          = 5 * 60 * 1000; // 5 minutes
+const INTER_JOB_SLEEP_MS = 2_000;        // GC cooldown between browser sessions
 
 interface DrainResult {
   id: number;
   status: "submitted" | "already_exists" | "program_missing" | "failed" | "dry_run";
   error?: string;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function drain(): Promise<void> {
@@ -50,10 +61,18 @@ async function drain(): Promise<void> {
   }
 
   const results: DrainResult[] = [];
+  let processed = 0;
 
   while (true) {
     const sub = await claimNext(WORKER_ID);
     if (!sub) break; // Queue drained
+
+    // Cooldown between jobs: let V8 GC reclaim the previous browser's heap
+    // before allocating a new Chromium process (skip on first job).
+    if (processed > 0) {
+      console.log(`[drain-once] Cooldown ${INTER_JOB_SLEEP_MS}ms before next job…`);
+      await sleep(INTER_JOB_SLEEP_MS);
+    }
 
     console.log(
       `[drain-once] Processing #${sub.id} — uni=${sub.universityKey} mode=${sub.mode} attempt=${sub.attempts}/${sub.maxAttempts}`,
@@ -119,6 +138,8 @@ async function drain(): Promise<void> {
       await writebackResult(sub.id, null, msg);
       results.push({ id: sub.id, status: "failed", error: msg });
     }
+
+    processed++;
   }
 
   console.log(`\n[drain-once] Done — ${results.length} submission(s) processed`);

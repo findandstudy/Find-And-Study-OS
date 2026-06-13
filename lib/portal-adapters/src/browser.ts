@@ -1,6 +1,6 @@
 import { chromium } from "playwright-core";
 import { execSync } from "node:child_process";
-import type { Page } from "playwright-core";
+import type { Page, BrowserContext, Browser } from "playwright-core";
 import type { AdapterSession } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -36,9 +36,36 @@ function resolveChromiumPath(): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// Memory-optimised Chromium launch args
+//
+// These flags are mandatory for Replit (constrained RAM + no /dev/shm):
+//   --disable-dev-shm-usage   use /tmp instead of /dev/shm (prevents ENOMEM)
+//   --no-sandbox              required when running as root inside container
+//   --disable-gpu             no GPU on server; avoids GPU-process memory overhead
+//   --disable-extensions      no extensions — saves ~20 MB per browser instance
+//   --disable-background-networking  stops background XHRs that keep V8 alive
+// ---------------------------------------------------------------------------
+const MEM_ARGS: string[] = [
+  "--disable-dev-shm-usage",
+  "--no-sandbox",
+  "--disable-gpu",
+  "--disable-extensions",
+  "--disable-background-networking",
+  "--disable-sync",
+  "--disable-translate",
+  "--metrics-recording-only",
+  "--mute-audio",
+  "--no-first-run",
+];
+
+// ---------------------------------------------------------------------------
 // Launch options
 // ---------------------------------------------------------------------------
 export interface LaunchOpts {
+  /**
+   * Ignored — browser is ALWAYS launched headless to minimise RAM usage.
+   * Kept in the interface for backwards-compat; callers need not change.
+   */
   headless?: boolean;
   /**
    * Absolute path to a Playwright storageState JSON file.
@@ -51,23 +78,39 @@ export interface LaunchOpts {
 
 // ---------------------------------------------------------------------------
 // launchPortal — open a browser and return an AdapterSession
+//
+// Browser is ALWAYS headless regardless of the opts.headless field.
+// Each submission must open its own browser and close it via session.close()
+// in a finally block — never reuse a browser across submissions.
 // ---------------------------------------------------------------------------
 export async function launchPortal(opts: LaunchOpts = {}): Promise<AdapterSession> {
-  const { headless = true, storagePath } = opts;
+  const { storagePath } = opts;
 
   const executablePath = resolveChromiumPath();
-  const browser = await chromium.launch({ headless, ...(executablePath ? { executablePath } : {}) });
-  const context = await browser.newContext(
+
+  const browser: Browser = await chromium.launch({
+    headless: true,
+    args: MEM_ARGS,
+    ...(executablePath ? { executablePath } : {}),
+  });
+
+  const context: BrowserContext = await browser.newContext(
     storagePath
       ? { storageState: storagePath, ignoreHTTPSErrors: true }
       : { ignoreHTTPSErrors: true },
   );
-  const page = await context.newPage();
+  const page: Page = await context.newPage();
 
   return {
     page,
+    /**
+     * Close in dependency order: page → context → browser.
+     * Each step is wrapped so a failure in one doesn't prevent the others.
+     */
     async close(): Promise<void> {
-      await browser.close();
+      try { await page.close();    } catch { /* ignore */ }
+      try { await context.close(); } catch { /* ignore */ }
+      try { await browser.close(); } catch { /* ignore */ }
     },
   };
 }

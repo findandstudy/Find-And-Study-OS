@@ -14,9 +14,17 @@
  * NOTE: The browser is launched and closed INSIDE this function for each
  * submission. Callers processing multiple submissions sequentially should
  * call runSubmission once per submission — this keeps peak memory minimal.
+ *
+ * Memory discipline:
+ *   - Screenshots are written directly to a /tmp file; no PNG buffer is
+ *     held in the JS heap.  fullPage is always false (viewport only).
+ *   - session.close() closes page → context → browser in order.
+ *   - tempDir (containing downloaded document files) is deleted in finally.
  */
 
 import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   adapterByKey,
   adapterForUniversity,
@@ -99,11 +107,18 @@ export async function runSubmission(
 
     const result = await adapter.submit(session, profile, files, !isDry);
 
-    // Capture post-submit screenshot (best-effort)
+    // Capture post-submit screenshot (best-effort).
+    // Written directly to a /tmp file — no PNG buffer held in JS heap.
+    // fullPage:false keeps the capture small (viewport only).
     try {
-      const buf = await (session as unknown as { page: { screenshot(): Promise<Buffer> } })
-        .page.screenshot();
-      screenshotUrls.push(`data:image/png;base64,${buf.toString("base64").slice(0, 64)}…`);
+      const shotPath = path.join(
+        os.tmpdir(),
+        `portal-shot-${submission.id}-${Date.now()}.png`,
+      );
+      await (session as unknown as {
+        page: { screenshot(opts: { path: string; fullPage: boolean }): Promise<void> };
+      }).page.screenshot({ path: shotPath, fullPage: false });
+      screenshotUrls.push(shotPath);
     } catch {
       // Screenshot failure is non-fatal
     }
@@ -118,6 +133,7 @@ export async function runSubmission(
     };
   } finally {
     if (creds) clearCredsOverride(adapter.key);
+    // Close page → context → browser in order (see browser.ts)
     await session?.close().catch(() => {});
     await cleanup(tempDir);
   }
