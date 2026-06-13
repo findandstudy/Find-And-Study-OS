@@ -61,6 +61,8 @@ export async function buildStudentProfile(
   if (!app) throw new Error(`Application ${sub.applicationId} not found`);
 
   // ----- 3. Load student ---------------------------------------------------
+  if (!sub.studentId) throw new Error(`Submission ${submissionId} has no studentId`);
+
   const [student] = await db
     .select()
     .from(studentsTable)
@@ -98,7 +100,7 @@ export async function buildStudentProfile(
     .from(documentsTable)
     .where(
       and(
-        eq(documentsTable.studentId, sub.studentId),
+        eq(documentsTable.studentId, sub.studentId!),
         isNull(documentsTable.deletedAt),
       ),
     );

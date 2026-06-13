@@ -37,8 +37,8 @@ console.log(`[portal-worker] Starting — id=${WORKER_ID} poll=${POLL_MS}ms stal
 async function tick(): Promise<void> {
   // Reset stale locks on every tick (cheap, idempotent)
   const released = await releaseStale(STALE_MS);
-  if (released > 0) {
-    console.log(`[portal-worker] Released ${released} stale submission(s)`);
+  if (released.length > 0) {
+    console.log(`[portal-worker] Released ${released.length} stale submission(s)`);
   }
 
   const sub = await claimNext(WORKER_ID);

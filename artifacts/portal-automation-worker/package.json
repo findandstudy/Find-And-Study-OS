@@ -7,7 +7,8 @@
     "start": "NODE_OPTIONS=--max-old-space-size=512 tsx ./src/worker.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:queue": "tsx --test ./scripts/test-portal-queue.ts",
-    "test:writeback": "tsx --test ./scripts/test-portal-writeback.ts"
+    "test:writeback": "tsx --test ./scripts/test-portal-writeback.ts",
+    "run-once": "NODE_OPTIONS=--max-old-space-size=512 tsx ./scripts/run-once.ts"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
