@@ -43,3 +43,6 @@ export * from "./objectOwners";
 export * from "./aiPersonas";
 export * from "./aiExtractors";
 export * from "./portalSubmissions";
+export * from "./portalAutomationSettings";
+export * from "./portalUniversities";
+export * from "./portalAdapters";

@@ -1,0 +1,45 @@
+import {
+  pgTable,
+  serial,
+  text,
+  boolean,
+  integer,
+  jsonb,
+  timestamp,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/pg-core";
+
+// ---------------------------------------------------------------------------
+// Table
+// ---------------------------------------------------------------------------
+
+export const portalUniversitiesTable = pgTable(
+  "portal_universities",
+  {
+    id: serial("id").primaryKey(),
+    universityKey: text("university_key").notNull(),
+    universityName: text("university_name").notNull(),
+    adapterKey: text("adapter_key").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    crmUniversityId: integer("crm_university_id"),
+    defaults: jsonb("defaults").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("portal_uni_university_key_uniq").on(table.universityKey),
+    index("portal_uni_adapter_key_idx").on(table.adapterKey),
+    index("portal_uni_is_active_idx").on(table.isActive),
+  ],
+);
+
+export type PortalUniversity = typeof portalUniversitiesTable.$inferSelect;
+export type InsertPortalUniversity =
+  typeof portalUniversitiesTable.$inferInsert;
