@@ -57,13 +57,13 @@ function resolveTarget(
     return { submissionStatus: "dry_run", stageKey: null };
   }
   if (result.submitted) {
-    return { submissionStatus: "submitted",       stageKey: "awaiting_offer_letter" };
+    return { submissionStatus: "submitted",       stageKey: "awaiting_offer" };
   }
   if (result.programMissing) {
     return { submissionStatus: "program_missing", stageKey: "documents_collected" };
   }
   if (result.alreadyExists) {
-    return { submissionStatus: "already_exists",  stageKey: "already_registered" };
+    return { submissionStatus: "already_exists",  stageKey: "all_registered" };
   }
   return { submissionStatus: "failed", stageKey: null };
 }
