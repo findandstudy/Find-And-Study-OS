@@ -96,7 +96,13 @@ export async function buildStudentProfile(
   );
 
   const docs = await db
-    .select({ type: documentsTable.type, fileUrl: documentsTable.fileUrl, fileKey: documentsTable.fileKey })
+    .select({
+      type: documentsTable.type,
+      fileUrl: documentsTable.fileUrl,
+      fileKey: documentsTable.fileKey,
+      fileData: documentsTable.fileData,
+      name: documentsTable.name,
+    })
     .from(documentsTable)
     .where(
       and(
@@ -109,8 +115,7 @@ export async function buildStudentProfile(
 
   await Promise.all(
     docs.map(async (doc) => {
-      const url = doc.fileUrl ?? doc.fileKey;
-      if (!url || !doc.type) return;
+      if (!doc.type) return;
 
       const docKey = mapDocType(doc.type);
       if (!docKey) return;
@@ -118,13 +123,33 @@ export async function buildStudentProfile(
       // Skip if we already mapped this slot (first-wins)
       if (files[docKey]) return;
 
-      try {
-        const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "bin";
-        const dest = path.join(tempDir, `${docKey}.${ext}`);
-        await downloadFile(url, dest);
-        files[docKey] = dest;
-      } catch {
-        // Non-fatal — adapter will handle missing optional files
+      const url = doc.fileUrl ?? doc.fileKey ?? null;
+
+      if (url) {
+        // Prefer remote URL / GCS key
+        try {
+          const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "bin";
+          const dest = path.join(tempDir, `${docKey}.${ext}`);
+          await downloadFile(url, dest);
+          files[docKey] = dest;
+        } catch {
+          // Non-fatal — fall through to file_data fallback below
+        }
+      }
+
+      if (!files[docKey] && doc.fileData) {
+        // Fallback: file_data column stores the raw base64 content
+        try {
+          const rawName = doc.name ?? `${docKey}`;
+          const extMatch = rawName.match(/\.([a-z0-9]+)$/i);
+          const ext = extMatch ? extMatch[1].toLowerCase() : "bin";
+          const dest = path.join(tempDir, `${docKey}.${ext}`);
+          const buf = Buffer.from(doc.fileData, "base64");
+          await fs.writeFile(dest, buf);
+          files[docKey] = dest;
+        } catch {
+          // Non-fatal
+        }
       }
     }),
   );
