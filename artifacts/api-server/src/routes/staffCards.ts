@@ -409,12 +409,14 @@ router.post("/staff-cards/:userId/assigned-students", requireAuth, requireStaffC
   logAudit(req.user!.id, "staff_card.assigned_student.add", "user", userId, { studentId }, req.ip);
   const canCascadeAdd = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
   if (canCascadeAdd) {
-    cascadeStudentAssignment({
+    await cascadeStudentAssignment({
       studentId,
       newAssignedToId: userId,
       actorUserId: req.user!.id,
       ipAddress: req.ip,
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error("[staff-cards] cascade assignment failed:", err);
+    });
   }
   res.json({ success: true });
 });
@@ -427,12 +429,14 @@ router.delete("/staff-cards/:userId/assigned-students/:studentId", requireAuth, 
   logAudit(req.user!.id, "staff_card.assigned_student.remove", "user", userId, { studentId }, req.ip);
   const canCascadeRemove = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
   if (canCascadeRemove) {
-    cascadeStudentAssignment({
+    await cascadeStudentAssignment({
       studentId,
       newAssignedToId: null,
       actorUserId: req.user!.id,
       ipAddress: req.ip,
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error("[staff-cards] cascade unassignment failed:", err);
+    });
   }
   res.sendStatus(204);
 });

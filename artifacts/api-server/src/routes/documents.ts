@@ -30,7 +30,23 @@ const DOC_PATCH_FIELDS = ["name", "type", "status", "studentId", "applicationId"
 function isValidHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    const host = url.hostname.toLowerCase();
+    // Block SSRF targets: loopback, link-local, private ranges
+    if (
+      host === "localhost" ||
+      host.endsWith(".localhost") ||
+      host === "0.0.0.0" ||
+      host === "::1" ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^fc[0-9a-f]{2}:/i.test(host) ||
+      /^fd[0-9a-f]{2}:/i.test(host)
+    ) return false;
+    return true;
   } catch {
     return false;
   }

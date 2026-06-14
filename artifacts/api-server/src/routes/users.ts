@@ -387,6 +387,12 @@ router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), 
   const [targetUser] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
 
+  // Prevent privilege escalation: only super_admin may impersonate super_admin
+  if (targetUser.role === "super_admin" && req.user!.role !== "super_admin") {
+    res.status(403).json({ error: "Cannot impersonate a super administrator" });
+    return;
+  }
+
   const currentSid = req.cookies[SESSION_COOKIE];
   if (!currentSid) { res.status(400).json({ error: "Session cookie required for impersonation" }); return; }
 

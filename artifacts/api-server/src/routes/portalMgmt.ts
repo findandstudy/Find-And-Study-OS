@@ -711,7 +711,8 @@ router.get(
         process.env[`${K}_PASSWORD`]
       );
       const hasCredentials = dbCredKeys.has(key) || envHas;
-      return { key, label, family, hasCredentials };
+      const kind: "declarative" | "code" = family === "declarative" ? "declarative" : "code";
+      return { key, label, family, kind, hasCredentials };
     });
 
     // DB-stored adapters — manageable via UI
