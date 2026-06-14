@@ -12,6 +12,8 @@ import { portalCreds } from "../../portalCreds.js";
 import { matchProgram } from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
 import { existsSync } from "node:fs";
+import path from "node:path";
+import os from "node:os";
 
 const PORTAL_URL   = "https://apply.topkapi.edu.tr";
 const STORAGE_PATH = "/tmp/topkapi-portal-state.json";
@@ -150,6 +152,24 @@ async function selectByBest(
 }
 
 // ---------------------------------------------------------------------------
+// Screenshot helper — writes a viewport PNG to /tmp and returns the path.
+// Returns null and logs a warning on any failure (non-fatal).
+// ---------------------------------------------------------------------------
+async function takeShot(page: Page, step: string): Promise<string | null> {
+  try {
+    const p = path.join(
+      os.tmpdir(),
+      `portal-shot-na-${step}-${Date.now()}.png`,
+    );
+    await page.screenshot({ path: p, fullPage: false });
+    return p;
+  } catch (err) {
+    logger.warn(`[topkapi] screenshot failed at step=${step}:`, err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Adapter
 // ---------------------------------------------------------------------------
 export const topkapiAdapter: UniversityAdapter = {
@@ -216,6 +236,7 @@ export const topkapiAdapter: UniversityAdapter = {
     const { page } = session;
     const country  = resolveCountry(profile.nationality);
     const eduLevel = mapEduLevel(profile.level);
+    const screenshots: string[] = [];
 
     logger.info(
       "[topkapi] submit — program:", profile.programName,
@@ -226,6 +247,9 @@ export const topkapiAdapter: UniversityAdapter = {
     await page.goto(`${PORTAL_URL}/panel/applications/add`, {
       waitUntil: "networkidle",
     });
+
+    // ── STEP 0: form loaded ──────────────────────────────────────────────────
+    { const s = await takeShot(page, "step0-form"); if (s) screenshots.push(s); }
 
     // ── STEP 1: email + passport ─────────────────────────────────────────────
     logger.info("[topkapi] Step 1: email + passport");
@@ -238,11 +262,13 @@ export const topkapiAdapter: UniversityAdapter = {
     await clickNext(page);
     await checkResp;
 
+    { const s = await takeShot(page, "step1-email"); if (s) screenshots.push(s); }
+
     try {
       await page.waitForSelector("input[name=studentName]", { timeout: 8000 });
     } catch {
       logger.warn("[topkapi] studentName not visible after AJAX — student already exists");
-      return { alreadyExists: true, submitted: false, programMissing: false };
+      return { alreadyExists: true, submitted: false, programMissing: false, screenshots };
     }
 
     // ── STEP 2: personal info ────────────────────────────────────────────────
@@ -266,6 +292,8 @@ export const topkapiAdapter: UniversityAdapter = {
     await page.fill("input[name=mobilePhone]", profile.phone);
 
     await clickNext(page);
+
+    { const s = await takeShot(page, "step2-personal"); if (s) screenshots.push(s); }
 
     // ── STEP 3: education background ─────────────────────────────────────────
     logger.info("[topkapi] Step 3: education background");
@@ -309,6 +337,8 @@ export const topkapiAdapter: UniversityAdapter = {
     }
 
     await clickNext(page);
+
+    { const s = await takeShot(page, "step3-education"); if (s) screenshots.push(s); }
 
     // ── STEP 4: program selection (AJAX) ─────────────────────────────────────
     logger.info("[topkapi] Step 4: program selection (AJAX)");
@@ -365,11 +395,13 @@ export const topkapiAdapter: UniversityAdapter = {
         "[topkapi] No program match. Available options:",
         programOptions.map((o) => o.name),
       );
+      { const s = await takeShot(page, "step4-no-program"); if (s) screenshots.push(s); }
       return {
         programMissing: true,
         submitted: false,
         alreadyExists: false,
         detail: `Program "${profile.programName}" not found in dropdown (${programOptions.length} option(s) available)`,
+        screenshots,
       };
     }
 
@@ -388,16 +420,20 @@ export const topkapiAdapter: UniversityAdapter = {
     );
     if (!selVal || selVal === "0" || selVal === "") {
       logger.warn("[topkapi] Program select verify failed after selection");
+      { const s = await takeShot(page, "step4-select-fail"); if (s) screenshots.push(s); }
       return {
         programMissing: true,
         submitted: false,
         alreadyExists: false,
         detail: `Program select verify failed — matched "${matchResult.match.name}" but selection value was empty`,
+        screenshots,
       };
     }
 
     await selectByBest(page, "select[name=needsScholarship]", "0");
     await clickNext(page);
+
+    { const s = await takeShot(page, "step4-program"); if (s) screenshots.push(s); }
 
     // ── STEP 5: document uploads ─────────────────────────────────────────────
     logger.info("[topkapi] Step 5: document uploads");
@@ -408,9 +444,11 @@ export const topkapiAdapter: UniversityAdapter = {
     if (files.transcript) { try { await page.setInputFiles("input[name=fileTranscript]", files.transcript); } catch { /* optional */ } }
     if (files.diploma)    { try { await page.setInputFiles("input[name=fileDiploma]",    files.diploma);    } catch { /* optional */ } }
 
+    { const s = await takeShot(page, "step5-docs"); if (s) screenshots.push(s); }
+
     if (!doSubmit) {
       logger.info("[topkapi] doSubmit=false — stopping before final submit (dry run)");
-      return { submitted: false, alreadyExists: false, programMissing: false };
+      return { submitted: false, alreadyExists: false, programMissing: false, screenshots };
     }
 
     // ── FINAL SUBMIT ─────────────────────────────────────────────────────────
@@ -440,9 +478,12 @@ export const topkapiAdapter: UniversityAdapter = {
     } catch { /* no modal — direct submit */ }
 
     const saveResp = await saveRespPromise;
+
+    { const s = await takeShot(page, "final"); if (s) screenshots.push(s); }
+
     if (saveResp.status() >= 200 && saveResp.status() < 400) {
       logger.info("[topkapi] application submitted ✓ (HTTP", saveResp.status(), ")");
-      return { submitted: true, alreadyExists: false, programMissing: false };
+      return { submitted: true, alreadyExists: false, programMissing: false, screenshots };
     }
 
     logger.warn("[topkapi] application-save.php returned HTTP", saveResp.status());
@@ -451,6 +492,8 @@ export const topkapiAdapter: UniversityAdapter = {
       alreadyExists: false,
       programMissing: false,
       detail: `application-save.php returned HTTP ${saveResp.status()}`,
+      screenshots,
     };
   },
 };
+

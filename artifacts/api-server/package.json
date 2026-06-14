@@ -65,6 +65,7 @@
     "@types/archiver": "^7.0.0",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/object-storage": "workspace:*",
     "@workspace/doc-equivalence": "workspace:*",
     "@workspace/file-upload-validation": "workspace:*",
     "@workspace/i18n": "workspace:*",

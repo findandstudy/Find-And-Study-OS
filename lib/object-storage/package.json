@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/portal-runner",
+  "name": "@workspace/object-storage",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,10 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@workspace/db": "workspace:*",
-    "@workspace/object-storage": "workspace:*",
-    "@workspace/portal-adapters": "workspace:*",
-    "drizzle-orm": "catalog:"
+    "@google-cloud/storage": "^7.19.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",

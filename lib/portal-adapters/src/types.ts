@@ -17,6 +17,24 @@ export interface SubmitResult {
   programMissing: boolean;
   /** Human-readable explanation for skips and failures (e.g. program not found detail). */
   detail?: string;
+  /**
+   * Local /tmp file paths of screenshots taken during the submission flow.
+   * The runner uploads these to Object Storage and replaces them with
+   * persistent /objects/... references in portal_submissions.screenshotUrls.
+   * Optional — adapters that do not capture screenshots omit this field.
+   */
+  screenshots?: string[];
+  /**
+   * External reference assigned by the portal (e.g. application UUID from the
+   * confirmation page). Optional — not all portals expose this.
+   */
+  externalRef?: string;
+  /**
+   * Document type slots that were required but not supplied to the adapter
+   * (e.g. ["passport", "transcript"]). Optional — set by adapters when they
+   * detect missing uploads.
+   */
+  missingDocuments?: string[];
 }
 
 // ---------------------------------------------------------------------------

@@ -2,28 +2,32 @@
  * runner.ts — orchestrates the adapter login + submit flow for a single
  * portal submission.
  *
- * Dry mode  — skips login/submit entirely; returns a synthetic result with
- *             resultJson.dryRun:true so the writeback can record the attempt
- *             without touching the external portal.
+ * Dry mode  — skips the final portal submit click (doSubmit=false) but still
+ *             performs a real browser login and fills every form step.
+ *             Credentials are therefore required for dry mode as well.
  *
  * Real mode — caller resolves credentials (DB-first, env fallback) and
  *             passes them as `creds`. The runner injects them into the
  *             adapter via setCredsOverride() before calling adapter.login(),
  *             then clears the override in finally.
  *
- * NOTE: The browser is launched and closed INSIDE this function for each
- * submission. Callers processing multiple submissions sequentially should
- * call runSubmission once per submission — this keeps peak memory minimal.
+ * Screenshot flow:
+ *   Adapters capture per-step screenshots and return local /tmp paths in
+ *   result.screenshots.  The runner reads each file, uploads it to Object
+ *   Storage (PRIVATE_OBJECT_DIR), and stores the persistent /objects/…
+ *   reference in RunResult.screenshotUrls.  Upload failures are non-fatal
+ *   (e.g. when PRIVATE_OBJECT_DIR is not configured in dev environments).
+ *   Local /tmp screenshot files are cleaned up in the finally block.
  *
  * Memory discipline:
- *   - Screenshots are written directly to a /tmp file; no PNG buffer is
- *     held in the JS heap.  fullPage is always false (viewport only).
+ *   - Screenshots are written directly to /tmp by the adapter (no PNG buffer
+ *     held in the JS heap during submission). The runner reads one at a time
+ *     for upload, then deletes the local file.
  *   - session.close() closes page → context → browser in order.
  *   - tempDir (containing downloaded document files) is deleted in finally.
  */
 
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import {
   adapterByKey,
@@ -32,6 +36,10 @@ import {
   clearCredsOverride,
 } from "@workspace/portal-adapters";
 import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
+import {
+  uploadBufferToGcs,
+  resolveObjectPaths,
+} from "@workspace/object-storage";
 import type { ClaimedSubmission } from "./queue.js";
 
 // ---------------------------------------------------------------------------
@@ -61,8 +69,10 @@ export interface RunResult {
  * @param profile     Built student profile
  * @param files       Downloaded document paths
  * @param tempDir     Temp directory to clean up in finally
- * @param creds       Resolved portal credentials (required when mode='real';
- *                    ignored for dry runs). Caller is responsible for resolution.
+ * @param creds       Resolved portal credentials.  Required for BOTH real and
+ *                    dry mode — dry mode still performs a full browser login
+ *                    and form-fill smoke test; only the final submit click is
+ *                    skipped.
  */
 export async function runSubmission(
   submission: Pick<ClaimedSubmission, "id" | "universityKey" | "universityName" | "mode">,
@@ -95,7 +105,7 @@ export async function runSubmission(
 
   // ----- 3. Login + submit -------------------------------------------------
   // doSubmit=true for real mode; doSubmit=false for dry mode (fill form, no click)
-  const screenshotUrls: string[] = [];
+  const localScreenshots: string[] = [];
   let session: Awaited<ReturnType<typeof adapter.login>> | null = null;
 
   if (creds) {
@@ -107,25 +117,34 @@ export async function runSubmission(
 
     const result = await adapter.submit(session, profile, files, !isDry);
 
-    // Capture post-submit screenshot (best-effort).
-    // Written directly to a /tmp file — no PNG buffer held in JS heap.
-    // fullPage:false keeps the capture small (viewport only).
-    try {
-      const shotPath = path.join(
-        os.tmpdir(),
-        `portal-shot-${submission.id}-${Date.now()}.png`,
-      );
-      await (session as unknown as {
-        page: { screenshot(opts: { path: string; fullPage: boolean }): Promise<void> };
-      }).page.screenshot({ path: shotPath, fullPage: false });
-      screenshotUrls.push(shotPath);
-    } catch {
-      // Screenshot failure is non-fatal
+    // ----- 4. Upload per-step screenshots to Object Storage ----------------
+    // Adapters write screenshots to /tmp and return local paths in
+    // result.screenshots.  We upload each one and store the /objects/…
+    // reference.  Non-fatal: if PRIVATE_OBJECT_DIR is not set (dev
+    // environments) or upload fails, screenshotUrls is simply empty.
+    const rawShots = result.screenshots ?? [];
+    const persistentUrls: string[] = [];
+
+    for (let i = 0; i < rawShots.length; i++) {
+      const shotPath = rawShots[i];
+      if (!shotPath) continue;
+      localScreenshots.push(shotPath);
+      try {
+        const buffer = await fs.readFile(shotPath);
+        const basename = path.basename(shotPath);
+        const { gcsPath, objectsRef } = resolveObjectPaths(
+          `portal-submissions/${submission.id}/${i}-${basename}`,
+        );
+        await uploadBufferToGcs({ gcsPath, buffer, contentType: "image/png" });
+        persistentUrls.push(objectsRef);
+      } catch {
+        // Non-fatal — PRIVATE_OBJECT_DIR not set, GCS unavailable, etc.
+      }
     }
 
     return {
       result,
-      screenshotUrls,
+      screenshotUrls: persistentUrls,
       meta: {
         adapterKey: adapter.key,
         ...(isDry ? { dryRun: true } : {}),
@@ -136,6 +155,10 @@ export async function runSubmission(
     // Close page → context → browser in order (see browser.ts)
     await session?.close().catch(() => {});
     await cleanup(tempDir);
+    // Clean up local /tmp screenshot files written by the adapter
+    for (const p of localScreenshots) {
+      await fs.unlink(p).catch(() => {});
+    }
   }
 }
 

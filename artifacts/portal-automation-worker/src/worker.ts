@@ -54,11 +54,11 @@ async function tick(): Promise<void> {
   try {
     const profileResult = await buildStudentProfile(sub.id);
 
-    // Resolve credentials (DB-first, env fallback) — worker-specific resolver
-    let creds: { user: string; password: string } | undefined;
-    if (sub.mode === "real") {
-      creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
-    }
+    // Resolve credentials (DB-first, env fallback) — worker-specific resolver.
+    // Both dry AND real modes need credentials because dry mode still performs
+    // a real browser login to smoke-test the full form-fill flow; only the
+    // final submit click is skipped (doSubmit=false).
+    const creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
 
     runResult = await runSubmission(
       sub,

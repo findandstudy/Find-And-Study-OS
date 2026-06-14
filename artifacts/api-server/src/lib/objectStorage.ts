@@ -1,6 +1,10 @@
-import { Storage, File } from "@google-cloud/storage";
+import { File } from "@google-cloud/storage";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
+import {
+  createGcsClient,
+  ObjectUploadTimeoutError,
+} from "@workspace/object-storage";
 import {
   ObjectAclPolicy,
   ObjectPermission,
@@ -9,6 +13,10 @@ import {
   setObjectAclPolicy,
 } from "./objectAcl";
 
+export { ObjectUploadTimeoutError };
+
+// Replit sidecar endpoint — used by signObjectURL for pre-signed URL generation.
+// The GCS client credential setup has moved to @workspace/object-storage.
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
 // Hard upper bound for a single GCS object upload (file.save). Without a timeout,
@@ -18,31 +26,8 @@ const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 // surface a clear, actionable error to the caller instead.
 const UPLOAD_TIMEOUT_MS = 30_000;
 
-export class ObjectUploadTimeoutError extends Error {
-  constructor(timeoutMs: number) {
-    super(`Object upload timed out after ${timeoutMs}ms`);
-    this.name = "ObjectUploadTimeoutError";
-    Object.setPrototypeOf(this, ObjectUploadTimeoutError.prototype);
-  }
-}
-
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
-      },
-    },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
+// Process-lifetime singleton — shared across all ObjectStorageService instances.
+export const objectStorageClient = createGcsClient();
 
 export class ObjectNotFoundError extends Error {
   constructor() {

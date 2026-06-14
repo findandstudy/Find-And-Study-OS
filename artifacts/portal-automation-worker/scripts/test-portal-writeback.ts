@@ -1,9 +1,9 @@
 /**
  * test-portal-writeback.ts — TW1 / TW2 / TW3 / TW4
  *
- * TW1: writebackResult(submitted=true)      → status='submitted',      stage='awaiting_offer_letter'
- * TW2: writebackResult(programMissing=true) → status='program_missing', stage='documents'
- * TW3: writebackResult(alreadyExists=true)  → status='already_exists', stage='already_registered'
+ * TW1: writebackResult(submitted=true)      → status='submitted',       stage='awaiting_offer_letter'
+ * TW2: writebackResult(programMissing=true) → status='program_missing', stage='documents_collected'
+ * TW3: writebackResult(alreadyExists=true)  → status='already_exists',  stage='already_registered'
  * TW4: writebackResult(null / error)        → status='failed', application stage unchanged
  *
  * Run:
@@ -20,8 +20,7 @@ import {
   pipelineStagesTable,
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
-import { writebackResult } from "../src/stageWriteback.js";
-import type { RunResult } from "../src/runner.js";
+import { writebackResult, type RunResult } from "@workspace/portal-runner";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -129,7 +128,7 @@ test("TW1: submitted=true → status=submitted, stage=awaiting_offer_letter (if 
 // TW2 — programMissing
 // ---------------------------------------------------------------------------
 
-test("TW2: programMissing=true → status=program_missing, stage=documents (if stage exists)", async () => {
+test("TW2: programMissing=true → status=program_missing, stage=documents_collected (if stage exists)", async () => {
   const { subId, appId } = await seedRunningSubmission();
 
   await writebackResult(subId, makeRunResult({ programMissing: true }));
@@ -138,9 +137,9 @@ test("TW2: programMissing=true → status=program_missing, stage=documents (if s
   assert.equal(sub.status, "program_missing", "submission status=program_missing");
 
   const [app] = await db.select({ stage: applicationsTable.stage }).from(applicationsTable).where(eq(applicationsTable.id, appId));
-  const stageExists = await lookupStageKey("documents");
+  const stageExists = await lookupStageKey("documents_collected");
   if (stageExists) {
-    assert.equal(app.stage, "documents", "app stage → documents");
+    assert.equal(app.stage, "documents_collected", "app stage → documents_collected");
   } else {
     assert.equal(app.stage, "inquiry", "app stage unchanged (stage not in pipeline)");
   }

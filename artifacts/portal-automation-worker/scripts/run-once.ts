@@ -19,10 +19,9 @@
 import os from "node:os";
 import { db, portalSubmissionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { claimNext, claimById } from "@workspace/portal-runner";
+import { claimNext, claimById, writebackResult } from "@workspace/portal-runner";
 import { buildStudentProfile } from "../src/profile.js";
 import { runSubmission } from "../src/runner.js";
-import { writebackResult } from "../src/stageWriteback.js";
 
 // ---------------------------------------------------------------------------
 // Args
