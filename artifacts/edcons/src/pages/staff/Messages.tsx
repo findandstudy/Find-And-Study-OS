@@ -257,6 +257,12 @@ function InboxTab() {
   const [matchOpen, setMatchOpen] = useState(false);
   const [matchSuggestions, setMatchSuggestions] = useState<any | null>(null);
   const [sidebarSheetOpen, setSidebarSheetOpen] = useState(false);
+  const [createLeadOpen, setCreateLeadOpen] = useState(false);
+  const [createLeadLoading, setCreateLeadLoading] = useState(false);
+  const [createLeadSubmitting, setCreateLeadSubmitting] = useState(false);
+  const [createLeadForm, setCreateLeadForm] = useState({ fullName: "", email: "", phone: "" });
+  const [createLeadAiFields, setCreateLeadAiFields] = useState<Set<string>>(new Set());
+  const [createLeadDuplicate, setCreateLeadDuplicate] = useState<null | { id: number; firstName: string; lastName: string; email: string | null; phone: string | null; status: string }>(null);
   const [tplOpen, setTplOpen] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [tplId, setTplId] = useState<string>("");
@@ -430,16 +436,87 @@ function InboxTab() {
     }
   }
 
-  async function createNewLead() {
+  async function openCreateLeadDialog() {
     if (!selectedId) return;
+    setCreateLeadForm({ fullName: "", email: "", phone: "" });
+    setCreateLeadAiFields(new Set());
+    setCreateLeadDuplicate(null);
+    setCreateLeadOpen(true);
+    setMatchOpen(false);
+    setCreateLeadLoading(true);
     try {
-      await customFetch(`/api/inbox/conversations/${selectedId}/match/new-lead`, { method: "POST" });
-      toast({ title: t("messagesPage.newLeadCreated") });
-      setMatchOpen(false);
-      fetchInbox();
-      fetchDetail(selectedId);
+      const r: any = await customFetch(`/api/inbox/conversations/${selectedId}/lead-suggestion`);
+      const s = r?.suggestion || {};
+      const aiFields = new Set<string>();
+      const form = {
+        fullName: "",
+        email: "",
+        phone: (s.phone as string) || "",
+      };
+      if (s.displayName && !s.fullName) {
+        form.fullName = s.displayName as string;
+      }
+      if (s.fullName) {
+        form.fullName = s.fullName as string;
+        if (s.fullNameLowConfidence) aiFields.add("fullName");
+      }
+      if (s.email) {
+        form.email = s.email as string;
+        if (s.emailLowConfidence) aiFields.add("email");
+      }
+      setCreateLeadForm(form);
+      setCreateLeadAiFields(aiFields);
     } catch {
-      toast({ title: t("messagesPage.failedToCreateLead"), variant: "destructive" });
+      // leave form empty — user can type manually
+    } finally {
+      setCreateLeadLoading(false);
+    }
+  }
+
+  async function submitCreateLead() {
+    if (!selectedId || !createLeadForm.fullName.trim()) return;
+    setCreateLeadSubmitting(true);
+    setCreateLeadDuplicate(null);
+    try {
+      await customFetch(`/api/inbox/conversations/${selectedId}/create-lead`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: createLeadForm.fullName.trim(),
+          email: createLeadForm.email.trim() || null,
+          phone: createLeadForm.phone.trim() || null,
+        }),
+      });
+      toast({ title: t("messagesPage.newLeadCreated") });
+      setCreateLeadOpen(false);
+      fetchInbox();
+      if (selectedId) fetchDetail(selectedId);
+    } catch (err: any) {
+      const body = err?.body ?? err?.data;
+      if (body?.error === "LEAD_EXISTS" && body?.candidate) {
+        setCreateLeadDuplicate(body.candidate);
+      } else {
+        toast({ title: t("messagesPage.failedToCreateLead"), variant: "destructive" });
+      }
+    } finally {
+      setCreateLeadSubmitting(false);
+    }
+  }
+
+  async function linkToExistingLead() {
+    if (!selectedId || !createLeadDuplicate) return;
+    try {
+      await customFetch(`/api/inbox/conversations/${selectedId}/match`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "lead", entityId: createLeadDuplicate.id }),
+      });
+      toast({ title: t("messagesPage.linked") });
+      setCreateLeadOpen(false);
+      fetchInbox();
+      if (selectedId) fetchDetail(selectedId);
+    } catch {
+      toast({ title: t("messagesPage.failedToLink"), variant: "destructive" });
     }
   }
 
@@ -945,7 +1022,94 @@ function InboxTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMatchOpen(false)}>{t("messagesPage.cancel")}</Button>
-            <Button onClick={createNewLead} className="gap-1"><Plus className="w-3 h-3" /> {t("messagesPage.createNewLead")}</Button>
+            <Button onClick={openCreateLeadDialog} className="gap-1"><Plus className="w-3 h-3" /> {t("messagesPage.createNewLead")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createLeadOpen} onOpenChange={(open) => { if (!createLeadSubmitting) setCreateLeadOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Plus className="w-4 h-4" /> {t("messagesPage.createLeadFromConversation")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {createLeadDuplicate && (
+              <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 space-y-2">
+                <p className="text-xs font-semibold text-amber-900">{t("messagesPage.duplicateLeadFound")}</p>
+                <p className="text-xs text-amber-800">{t("messagesPage.duplicateLeadMessage")}</p>
+                <div className="flex items-center justify-between text-xs border border-amber-200 rounded p-2 bg-white">
+                  <span className="font-medium">{createLeadDuplicate.firstName} {createLeadDuplicate.lastName}</span>
+                  <span className="text-muted-foreground">{createLeadDuplicate.email || createLeadDuplicate.phone || ""}</span>
+                </div>
+                <Button size="sm" variant="outline" className="w-full gap-1 h-8 text-xs" onClick={linkToExistingLead}>
+                  <Link2 className="w-3 h-3" /> {t("messagesPage.linkToExistingLead")}
+                </Button>
+              </div>
+            )}
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">{t("messagesPage.fullName")} *</Label>
+                {createLeadAiFields.has("fullName") && (
+                  <Badge variant="secondary" className="text-[9px] h-4 px-1 gap-0.5 bg-purple-100 text-purple-700">
+                    <span>✦</span> {t("messagesPage.aiSuggestion")}
+                  </Badge>
+                )}
+              </div>
+              {createLeadLoading ? (
+                <div className="h-9 rounded-md bg-muted animate-pulse" />
+              ) : (
+                <Input
+                  value={createLeadForm.fullName}
+                  onChange={(e) => setCreateLeadForm((f) => ({ ...f, fullName: e.target.value }))}
+                  placeholder={t("messagesPage.fullName")}
+                  className="h-9"
+                />
+              )}
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">{t("messagesPage.emailAddress")}</Label>
+                {createLeadAiFields.has("email") && (
+                  <Badge variant="secondary" className="text-[9px] h-4 px-1 gap-0.5 bg-purple-100 text-purple-700">
+                    <span>✦</span> {t("messagesPage.aiSuggestion")}
+                  </Badge>
+                )}
+              </div>
+              {createLeadLoading ? (
+                <div className="h-9 rounded-md bg-muted animate-pulse" />
+              ) : (
+                <Input
+                  type="email"
+                  value={createLeadForm.email}
+                  onChange={(e) => setCreateLeadForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder={t("messagesPage.emailAddress")}
+                  className="h-9"
+                />
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("messagesPage.phoneNumber")}</Label>
+              {createLeadLoading ? (
+                <div className="h-9 rounded-md bg-muted animate-pulse" />
+              ) : (
+                <Input
+                  value={createLeadForm.phone}
+                  onChange={(e) => setCreateLeadForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder={t("messagesPage.phoneNumber")}
+                  className="h-9"
+                />
+              )}
+            </div>
+            {createLeadLoading && (
+              <p className="text-[11px] text-muted-foreground text-center animate-pulse">{t("messagesPage.loadingAiSuggestion")}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateLeadOpen(false)} disabled={createLeadSubmitting}>{t("messagesPage.cancel")}</Button>
+            <Button onClick={submitCreateLead} disabled={createLeadLoading || createLeadSubmitting || !createLeadForm.fullName.trim()} className="gap-1">
+              {createLeadSubmitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+              {t("messagesPage.createLead")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

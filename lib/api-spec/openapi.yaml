@@ -2051,6 +2051,98 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /inbox/conversations/{id}/lead-suggestion:
+    get:
+      operationId: getInboxLeadSuggestion
+      tags: [inbox, ai]
+      summary: Get AI-prefilled lead suggestion for an unmatched conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Suggestion data (may be empty if AI fails)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxLeadSuggestionResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inbox/conversations/{id}/create-lead:
+    post:
+      operationId: createLeadFromConversation
+      tags: [inbox]
+      summary: Create a new lead from an unmatched conversation with duplicate protection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeadFromConversationBody"
+      responses:
+        "201":
+          description: Lead created and conversation linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateLeadFromConversationResponse"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Duplicate lead exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadExistsConflict"
+
   /inbox/conversations/{id}/tasks:
     post:
       operationId: addInboxConversationTask
@@ -4630,6 +4722,87 @@ components:
           $ref: "#/components/schemas/FollowUp"
       required:
         - data
+
+    InboxLeadSuggestionData:
+      type: object
+      properties:
+        phone:
+          type: ["string", "null"]
+        displayName:
+          type: ["string", "null"]
+        fullName:
+          type: ["string", "null"]
+        fullNameLowConfidence:
+          type: boolean
+        email:
+          type: ["string", "null"]
+        emailLowConfidence:
+          type: boolean
+
+    InboxLeadSuggestionResponse:
+      type: object
+      properties:
+        suggestion:
+          $ref: "#/components/schemas/InboxLeadSuggestionData"
+      required:
+        - suggestion
+
+    CreateLeadFromConversationBody:
+      type: object
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        email:
+          type: ["string", "null"]
+          format: email
+        phone:
+          type: ["string", "null"]
+          maxLength: 50
+      required:
+        - fullName
+
+    CreateLeadFromConversationResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        leadId:
+          type: integer
+      required:
+        - ok
+        - leadId
+
+    LeadExistsConflict:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: [LEAD_EXISTS]
+        candidate:
+          type: object
+          properties:
+            id:
+              type: integer
+            firstName:
+              type: string
+            lastName:
+              type: string
+            email:
+              type: ["string", "null"]
+            phone:
+              type: ["string", "null"]
+            status:
+              type: string
+          required:
+            - id
+            - firstName
+            - lastName
+            - status
+      required:
+        - error
+        - candidate
 
     PortalSubmission:
       type: object

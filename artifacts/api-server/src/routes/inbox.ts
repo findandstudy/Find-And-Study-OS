@@ -23,7 +23,7 @@ import { z } from "zod";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
 import { validate, getValidated } from "../middlewares/validate";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { toLatinUpper, normalizePhoneField } from "../lib/textNormalize";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { resolveIdentity } from "../lib/inbox/identityResolver";
@@ -568,6 +568,218 @@ router.get(
   },
 );
 
+// ---------------------------------------------------------------------------
+// Shared param schema (used by Faz 1 routes below and Phase 2 routes further below)
+// ---------------------------------------------------------------------------
+
+const conversationIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+// ---------------------------------------------------------------------------
+// Faz 1 — Smart lead creation from conversation (AI pre-fill + duplicate guard)
+// ---------------------------------------------------------------------------
+
+const LEAD_EXTRACTION_MODEL = "claude-haiku-4-5-20251001";
+
+router.get(
+  "/inbox/conversations/:id/lead-suggestion",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireAgentStaffPermission("leads"),
+  validate({ params: conversationIdParamSchema }),
+  async (req, res): Promise<void> => {
+    const { params } = getValidated<{ params: typeof conversationIdParamSchema }>(req);
+    const id = params.id;
+
+    const [conv] = await db
+      .select({ id: conversationsTable.id, externalContactId: conversationsTable.externalContactId })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, id));
+    if (!conv) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    const suggestion: Record<string, unknown> = {};
+
+    if (conv.externalContactId) {
+      const [contact] = await db
+        .select()
+        .from(externalContactsTable)
+        .where(eq(externalContactsTable.id, conv.externalContactId));
+      if (contact) {
+        if (contact.phoneE164 || contact.phone) {
+          suggestion.phone = contact.phoneE164 || contact.phone;
+        }
+        if (contact.displayName) {
+          suggestion.displayName = contact.displayName;
+        }
+      }
+    }
+
+    // AI extraction from transcript — never throws (errors silently fold to empty suggestion)
+    try {
+      const transcript = await db
+        .select({ direction: messagesTable.direction, content: messagesTable.content })
+        .from(messagesTable)
+        .where(eq(messagesTable.conversationId, id))
+        .orderBy(asc(messagesTable.createdAt))
+        .limit(30);
+
+      if (transcript.length > 0) {
+        const text = transcript
+          .map((m) => `[${m.direction === "inbound" ? "Customer" : "Agent"}] ${m.content}`)
+          .join("\n");
+
+        const anthropic = await getAnthropicClient();
+        const aiResponse = await anthropic.messages.create({
+          model: LEAD_EXTRACTION_MODEL,
+          max_tokens: 200,
+          system:
+            "You are a CRM data extractor. Extract contact information from the conversation. " +
+            "Return ONLY valid JSON with this exact shape — no markdown, no explanation:\n" +
+            '{ "fullName": string|null, "email": string|null, "fullNameConfidence": "high"|"low", "emailConfidence": "high"|"low" }\n' +
+            '"high" = information is explicitly and clearly stated in the conversation.\n' +
+            '"low" = inferred, ambiguous, or uncertain.',
+          messages: [{ role: "user", content: `Conversation:\n${text}` }],
+        });
+
+        const textBlock = aiResponse.content.find((b) => b.type === "text");
+        if (textBlock && textBlock.type === "text") {
+          const aiResultSchema = z.object({
+            fullName: z.string().nullable(),
+            email: z.string().nullable(),
+            fullNameConfidence: z.enum(["high", "low"]),
+            emailConfidence: z.enum(["high", "low"]),
+          });
+          const raw = JSON.parse(textBlock.text.trim());
+          const validated = aiResultSchema.parse(raw);
+
+          if (validated.fullName) {
+            suggestion.fullName = validated.fullName;
+            if (validated.fullNameConfidence === "low") suggestion.fullNameLowConfidence = true;
+          }
+          if (validated.email) {
+            suggestion.email = validated.email;
+            if (validated.emailConfidence === "low") suggestion.emailLowConfidence = true;
+          }
+        }
+      }
+    } catch {
+      // Swallow all AI / parse errors — return partial suggestion
+    }
+
+    res.json({ suggestion });
+  },
+);
+
+const createLeadFromConversationBodySchema = z.object({
+  fullName: z.string().min(1).max(200),
+  email: z.string().email().nullable().optional(),
+  phone: z.string().max(50).nullable().optional(),
+});
+
+router.post(
+  "/inbox/conversations/:id/create-lead",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireAgentStaffPermission("leads"),
+  validate({ params: conversationIdParamSchema, body: createLeadFromConversationBodySchema }),
+  async (req, res): Promise<void> => {
+    const { params, body } = getValidated<{
+      params: typeof conversationIdParamSchema;
+      body: typeof createLeadFromConversationBodySchema;
+    }>(req);
+    const id = params.id;
+
+    const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id));
+    if (!conv || !conv.externalContactId) {
+      res.status(404).json({ error: "Conversation not found or has no external contact" });
+      return;
+    }
+    const [contact] = await db
+      .select()
+      .from(externalContactsTable)
+      .where(eq(externalContactsTable.id, conv.externalContactId));
+    if (!contact) {
+      res.status(404).json({ error: "External contact not found" });
+      return;
+    }
+
+    // Parse fullName into first/last
+    const trimmedName = body.fullName.trim();
+    const parts = trimmedName.split(/\s+/).filter(Boolean);
+    const firstName = parts[0] || trimmedName;
+    const lastName = parts.slice(1).join(" ") || "Contact";
+
+    const email = body.email?.trim().toLowerCase() || contact.email || null;
+    const phoneForCheck = body.phone?.trim() || contact.phone || null;
+
+    // Duplicate lead guard — uses resolveIdentity to avoid re-implementing phone/email normalisation
+    const resolution = await resolveIdentity({ phone: phoneForCheck, email });
+    const existingLead = resolution.candidates.find((c) => c.type === "lead");
+    if (existingLead) {
+      const [candidate] = await db
+        .select({
+          id: leadsTable.id,
+          firstName: leadsTable.firstName,
+          lastName: leadsTable.lastName,
+          email: leadsTable.email,
+          phone: leadsTable.phone,
+          status: leadsTable.status,
+        })
+        .from(leadsTable)
+        .where(and(eq(leadsTable.id, existingLead.id), isNull(leadsTable.deletedAt)));
+      if (candidate) {
+        res.status(409).json({ error: "LEAD_EXISTS", candidate });
+        return;
+      }
+    }
+
+    // Single TX: insert lead + link external_contact + mark conversation matched
+    const lead = await db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(leadsTable)
+        .values({
+          firstName: toLatinUpper(firstName).slice(0, 100),
+          lastName: toLatinUpper(lastName).slice(0, 100),
+          email: email || null,
+          phone: phoneForCheck ? normalizePhoneField(phoneForCheck) : null,
+          phoneE164: contact.phoneE164 || null,
+          source: conv.channel,
+          status: "new",
+          ...directOrigin(),
+        })
+        .returning();
+
+      await tx
+        .update(externalContactsTable)
+        .set({ leadId: inserted.id })
+        .where(eq(externalContactsTable.id, contact.id));
+
+      await tx
+        .update(conversationsTable)
+        .set({ unmatched: false })
+        .where(eq(conversationsTable.id, id));
+
+      return inserted;
+    });
+
+    await applyLeadAssignmentRules(lead, req.ip);
+    logAudit(
+      req.user!.id,
+      "create_lead_from_inbox_smart",
+      "lead",
+      lead.id,
+      { conversationId: id, method: "ai_prefill" },
+      req.ip,
+    );
+
+    res.status(201).json({ ok: true, leadId: lead.id });
+  },
+);
+
 router.post(
   "/inbox/conversations/:id/match/new-lead",
   requireAuth,
@@ -945,10 +1157,6 @@ router.get(
 // ---------------------------------------------------------------------------
 // Phase 2 — AI summarize + inline notes + inline follow-up tasks
 // ---------------------------------------------------------------------------
-
-const conversationIdParamSchema = z.object({
-  id: z.coerce.number().int().positive(),
-});
 
 router.post(
   "/inbox/conversations/:id/summarize",
