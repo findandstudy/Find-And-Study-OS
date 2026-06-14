@@ -125,6 +125,54 @@ async function generateConversationSummary(input: SummarizeInput): Promise<{ con
   return __aiSummaryOverride ? __aiSummaryOverride(input) : defaultGenerateSummary(input);
 }
 
+// Injection seam: the lead-suggestion endpoint calls `extractLeadFromTranscript`,
+// which by default goes to Anthropic. Tests can override this to assert field
+// extraction + lowConfidence flag behavior without spending tokens or needing a key.
+export interface LeadExtractionInput {
+  transcript: string;
+}
+export interface LeadExtractionResult {
+  fullName: string | null;
+  email: string | null;
+  fullNameConfidence: "high" | "low";
+  emailConfidence: "high" | "low";
+}
+let __aiLeadSuggestionOverride:
+  | ((input: LeadExtractionInput) => Promise<LeadExtractionResult>)
+  | null = null;
+export function __setAiLeadSuggestionOverrideForTests(
+  fn: ((input: LeadExtractionInput) => Promise<LeadExtractionResult>) | null,
+): void {
+  __aiLeadSuggestionOverride = fn;
+}
+
+const LEAD_EXTRACTION_SYSTEM =
+  "You are a CRM data extractor. Extract contact information from the conversation. " +
+  "Return ONLY valid JSON with this exact shape — no markdown, no explanation:\n" +
+  '{ "fullName": string|null, "email": string|null, "fullNameConfidence": "high"|"low", "emailConfidence": "high"|"low" }\n' +
+  '"high" = information is explicitly and clearly stated in the conversation.\n' +
+  '"low" = inferred, ambiguous, or uncertain.';
+
+async function extractLeadFromTranscript(input: LeadExtractionInput): Promise<LeadExtractionResult> {
+  if (__aiLeadSuggestionOverride) return __aiLeadSuggestionOverride(input);
+  const anthropic = await getAnthropicClient();
+  const aiResponse = await anthropic.messages.create({
+    model: LEAD_EXTRACTION_MODEL,
+    max_tokens: 200,
+    system: LEAD_EXTRACTION_SYSTEM,
+    messages: [{ role: "user", content: `Conversation:\n${input.transcript}` }],
+  });
+  const textBlock = aiResponse.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error("AI returned no text");
+  const aiResultSchema = z.object({
+    fullName: z.string().nullable(),
+    email: z.string().nullable(),
+    fullNameConfidence: z.enum(["high", "low"]),
+    emailConfidence: z.enum(["high", "low"]),
+  });
+  return aiResultSchema.parse(JSON.parse(textBlock.text.trim()));
+}
+
 interface ConversationLink {
   conversationId: number;
   leadId: number | null;
@@ -632,38 +680,14 @@ router.get(
           .map((m) => `[${m.direction === "inbound" ? "Customer" : "Agent"}] ${m.content}`)
           .join("\n");
 
-        const anthropic = await getAnthropicClient();
-        const aiResponse = await anthropic.messages.create({
-          model: LEAD_EXTRACTION_MODEL,
-          max_tokens: 200,
-          system:
-            "You are a CRM data extractor. Extract contact information from the conversation. " +
-            "Return ONLY valid JSON with this exact shape — no markdown, no explanation:\n" +
-            '{ "fullName": string|null, "email": string|null, "fullNameConfidence": "high"|"low", "emailConfidence": "high"|"low" }\n' +
-            '"high" = information is explicitly and clearly stated in the conversation.\n' +
-            '"low" = inferred, ambiguous, or uncertain.',
-          messages: [{ role: "user", content: `Conversation:\n${text}` }],
-        });
-
-        const textBlock = aiResponse.content.find((b) => b.type === "text");
-        if (textBlock && textBlock.type === "text") {
-          const aiResultSchema = z.object({
-            fullName: z.string().nullable(),
-            email: z.string().nullable(),
-            fullNameConfidence: z.enum(["high", "low"]),
-            emailConfidence: z.enum(["high", "low"]),
-          });
-          const raw = JSON.parse(textBlock.text.trim());
-          const validated = aiResultSchema.parse(raw);
-
-          if (validated.fullName) {
-            suggestion.fullName = validated.fullName;
-            if (validated.fullNameConfidence === "low") suggestion.fullNameLowConfidence = true;
-          }
-          if (validated.email) {
-            suggestion.email = validated.email;
-            if (validated.emailConfidence === "low") suggestion.emailLowConfidence = true;
-          }
+        const extracted = await extractLeadFromTranscript({ transcript: text });
+        if (extracted.fullName) {
+          suggestion.fullName = extracted.fullName;
+          if (extracted.fullNameConfidence === "low") suggestion.fullNameLowConfidence = true;
+        }
+        if (extracted.email) {
+          suggestion.email = extracted.email;
+          if (extracted.emailConfidence === "low") suggestion.emailLowConfidence = true;
         }
       }
     } catch {

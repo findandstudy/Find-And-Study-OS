@@ -182,7 +182,7 @@ function toTrDate(iso: string): string {
 // Dismiss any open jconfirm dialog via direct DOM click (bypasses overlay).
 // Logs the dialog text + all button labels for debugging.
 // ---------------------------------------------------------------------------
-async function dismissJconfirm(page: Page, logger: ReturnType<typeof getLogger>): Promise<boolean> {
+async function dismissJconfirm(page: Page, logger: typeof import("../../browser.js").logger): Promise<boolean> {
   try {
     const info = await page.evaluate(() => {
       const dlg = document.querySelector(".jconfirm.jconfirm-open") as HTMLElement | null;
@@ -213,7 +213,7 @@ async function dismissJconfirm(page: Page, logger: ReturnType<typeof getLogger>)
 // step), then post-dismisses one that may open as a result (e.g. new-student
 // confirmation). DOM-click used to bypass Playwright overlay detection.
 // ---------------------------------------------------------------------------
-async function clickNext(page: Page, logger: ReturnType<typeof getLogger>): Promise<void> {
+async function clickNext(page: Page, logger: typeof import("../../browser.js").logger): Promise<void> {
   // Pre-dismiss any leftover modal before attempting the click
   await dismissJconfirm(page, logger);
 
