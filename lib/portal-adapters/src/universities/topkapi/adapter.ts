@@ -256,18 +256,46 @@ export const topkapiAdapter: UniversityAdapter = {
     await page.fill("input[name=email]",          profile.email);
     await page.fill("input[name=passportNumber]", profile.passportNumber);
 
-    const checkResp = page.waitForResponse(
+    const checkRespPromise = page.waitForResponse(
       (r) => r.url().includes("application-check-student-exists.php"),
     );
     await clickNext(page);
-    await checkResp;
+    const checkRespObj = await checkRespPromise;
+
+    // Read response body to detect existing-student status directly
+    let checkBody = "";
+    try { checkBody = await checkRespObj.text(); } catch { /**/ }
+    // Log first 300 chars (no personal data — this is just a status response)
+    logger.info("[topkapi] check-student-exists response:", checkBody.slice(0, 300));
 
     { const s = await takeShot(page, "step1-email"); if (s) screenshots.push(s); }
 
+    // Detect existing student from response body.
+    // Topkapi returns {"status":"exists","message":"..."} for known students,
+    // or {"status":"new"} (or empty/null) for first-time applicants.
+    const bodyLc = checkBody.toLowerCase();
+    const existsByBody = bodyLc.includes('"status":"exists"') || bodyLc.includes('"status": "exists"');
+    const newByBody   = bodyLc.includes('"status":"new"')    || bodyLc.includes('"status": "new"')
+                     || checkBody.trim() === "" || checkBody.trim() === "null"
+                     || checkBody.trim() === "{}" || checkBody.trim() === "[]";
+
+    if (existsByBody) {
+      logger.warn("[topkapi] check-student-exists: student already registered");
+      return { alreadyExists: true, submitted: false, programMissing: false, screenshots };
+    }
+
+    if (!newByBody) {
+      // Unknown response format — log and treat as alreadyExists to be safe
+      logger.warn("[topkapi] check-student-exists: unknown response format, treating as exists");
+      return { alreadyExists: true, submitted: false, programMissing: false, screenshots };
+    }
+
+    // Student is new — wait for name input field to appear
+    await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
     try {
-      await page.waitForSelector("input[name=studentName]", { timeout: 8000 });
+      await page.waitForSelector("input[name=studentName]", { timeout: 20000 });
     } catch {
-      logger.warn("[topkapi] studentName not visible after AJAX — student already exists");
+      logger.warn("[topkapi] studentName not visible after 20s — treating as already exists");
       return { alreadyExists: true, submitted: false, programMissing: false, screenshots };
     }
 
