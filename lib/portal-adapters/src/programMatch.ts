@@ -8,6 +8,7 @@
 //   4. Strip combining diacritics (0300-036F)
 //   5. Replace any non-alphanumeric run with a single space
 //   6. Trim & collapse interior whitespace
+//   7. Compound-word normalisation (runs on clean ASCII from step 6)
 // ---------------------------------------------------------------------------
 export function fold(s: string): string {
   return s
@@ -30,7 +31,15 @@ export function fold(s: string): string {
     .replace(/[^a-z0-9]+/g, " ")
     // --- Step 6: trim & collapse ---
     .trim()
-    .replace(/\s+/g, " ");
+    .replace(/\s+/g, " ")
+    // --- Step 7: Compound-word normalisation ---
+    // "yuksek lisans" is the Turkish two-word spelling of "Yüksek Lisans"
+    // (master's degree). Without merging, the token "lisans" maps to the
+    // ["lisans", "bachelor", "undergraduate"] synonym group, causing master's
+    // portal options to score as near-matches for bachelor queries (and vice
+    // versa). Merging into the single token "yukseklisans" correctly picks up
+    // the ["yukseklisans", "master", "masters", "graduate"] synonym group.
+    .replace(/\byuksek lisans\b/g, "yukseklisans");
 }
 
 // ---------------------------------------------------------------------------
@@ -126,8 +135,15 @@ const SYNONYM_GROUPS: readonly string[][] = [
   // Degree-level synonyms
   ["lisans", "bachelor", "undergraduate"],
   ["onlisans", "associate"],
-  ["yukseklisans", "master", "masters", "graduate"],
+  ["yukseklisans", "master", "masters", "graduate"],  // NOTE: fold() merges "yuksek lisans" → "yukseklisans" (Step 7)
   ["doktora", "doctorate", "phd", "doctoral"],
+  // Thesis mode synonyms (used by hasTez / hasTezsiz hard filters)
+  ["tezli", "thesis"],
+  ["tezsiz", "nothesis"],   // "non-thesis" → after fold step 5 becomes "non thesis" → two tokens; kept for safety
+  // Subject-area additions (found in Topkapi programs not covered above)
+  ["ticaret", "trade", "commerce", "commercial"],
+  ["bilisim", "informatics", "information", "systems"],
+  ["sistemleri", "systems"],
 ];
 
 /** token → Set<synonyms> (built once at module load) */

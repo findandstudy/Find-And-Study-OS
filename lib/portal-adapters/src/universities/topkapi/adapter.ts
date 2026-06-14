@@ -19,10 +19,37 @@ const PORTAL_URL   = "https://apply.topkapi.edu.tr";
 const STORAGE_PATH = "/tmp/topkapi-portal-state.json";
 
 /**
- * Manual override map: CRM programId → portal <option> value.
- * Populated when the automatic Jaccard match is not confident enough.
+ * Manual override map: CRM programId → portal <option> value OR option text.
+ *
+ * matchProgram() resolves the override as:
+ *   1. candidates.find(c => c.id === override)       — by numeric option value
+ *   2. candidates.find(c => fold(c.name) === fold(override)) — by option text
+ *
+ * Values here are the Turkish portal option texts (best-effort).
+ * After running `dump-program-options` script against the live portal, replace
+ * each value with the exact numeric <option value="..."> string for conf=1.0
+ * matching that is immune to portal wording changes.
+ *
+ * HOW TO UPDATE:
+ *   pnpm --filter @workspace/portal-automation-worker dump-program-options
+ *   # Then copy the numeric IDs from /tmp/topkapi-program-options.json here.
  */
-const PROGRAM_MAP: Record<string, string> = {};
+const PROGRAM_MAP: Record<string, string> = {
+  // ── Bachelor programmes ──────────────────────────────────────────────────
+  "9303":  "Bilgisayar Mühendisliği (İngilizce)",
+  "9298":  "İşletme (İngilizce)",
+  "9299":  "İşletme (Türkçe)",
+  "9316":  "Uluslararası Ticaret ve İşletme (İngilizce)",
+  "9325":  "Psikoloji (İngilizce)",
+  // ── Master programmes ────────────────────────────────────────────────────
+  "9339":  "İşletme Yüksek Lisans (Tezsiz) (Türkçe)",
+  "13583": "Elektrik-Elektronik Mühendisliği Yüksek Lisans (Tezsiz) (İngilizce)",
+  "13588": "İşletme Yüksek Lisans (Tezli) (İngilizce)",
+  "13589": "İşletme Yüksek Lisans (Tezsiz) (İngilizce)",
+  "13607": "Yönetim Bilişim Sistemleri Yüksek Lisans (Tezsiz) (İngilizce)",
+  // ── Bachelor (EEE) ───────────────────────────────────────────────────────
+  "13610": "Elektrik-Elektronik Mühendisliği (İngilizce)",
+};
 
 // ---------------------------------------------------------------------------
 // Country resolution — nationality text → Topkapi portal dropdown label (Turkish)

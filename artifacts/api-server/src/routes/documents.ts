@@ -274,7 +274,13 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
   // application. This keeps the student's own documents and each application's
   // documents independent — uploading a passport for one application no longer
   // wipes the student's profile passport or another application's copy.
-  if (resolvedStudentId && type) {
+  //
+  // GUARD: only retire the old record when the NEW upload has verified content
+  // (fileKey or fileUrl). Without this guard a request that omits both fields
+  // (e.g. a metadata-only POST or an abandoned GCS upload) would soft-delete
+  // the existing content-bearing record and leave an empty stub in its place —
+  // the exact pattern that produced the 2026-06-02 data corruption.
+  if (resolvedStudentId && type && (fileKey || fileUrl)) {
     const scopeCondition = targetApplicationId
       ? eq(documentsTable.applicationId, targetApplicationId)
       : isNull(documentsTable.applicationId);

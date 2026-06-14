@@ -53,3 +53,5 @@
 - [Portal credentials management](portal-credentials-mgmt.md) — DB-first AES-256-GCM resolver (portalKey key); adapter login uses setCredsOverride/clearCredsOverride override map (not env mutation); list endpoint uses batchPortalCredentialKeys() for N+1-free hasCredentials.
 - [Portal process cred key + dropdown registry fallback](portal-process-cred-key.md) — processSingle/process-queued must call lookupAdapterKey(universityKey) before resolvePortalCreds; /university-portals must merge adapterMetadata() fallback for fresh PROD deploys.
 - [Topkapi adapter quirks](topkapi-adapter-quirks.md) — ALL-CAPS Turkish options (ÖZBEKİSTAN); esbuild __name in $eval; jconfirm "Exclusive bölge" on Step2 next; mode enum is dry/real not dry/live.
+- [Portal document stub-vs-content fix](portal-doc-stub-fix.md) — POST /documents replace guard must check fileKey||fileUrl before retiring old content-bearing records.
+- [programMatch fold Step 7 fix](programMatch-yuksek-lisans-fix.md) — 'yuksek lisans' two-word form wrongly tokenises as 'bachelor'; fold Step 7 merges to 'yukseklisans'.
