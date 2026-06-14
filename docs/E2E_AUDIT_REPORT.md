@@ -26,10 +26,10 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 | Metrik | Sonuç |
 |--------|-------|
 | inbox-tests (unit/integration) | **220/220 PASS** ✅ |
-| inbox-e2e (Playwright E2E) | **17/25 PASS** (5 altyapı hatası, 3 çalışmadı) |
+| inbox-e2e (Playwright E2E) | **21/25 PASS** (4 UI timeout altyapı hatası) |
 | Cascade assignment tests | **12/12 PASS** (fix ile) ✅ |
 | Kritik güvenlik bulgusu | **3 bulgu — hepsi düzeltildi** ✅ |
-| Bug düzeltmesi | **5 fix (3 güvenlik + 2 davranış bug)** |
+| Bug düzeltmesi | **6 fix (3 güvenlik + 3 davranış bug)** |
 | Typecheck (api-server + edcons) | **PASS** ✅ |
 
 ---
@@ -349,6 +349,18 @@ DOMPurify sanitize eklendi. Bkz. SEC-003.
 
 ---
 
+### BUG-006: E2E Fixture Öğrenci — Zorunlu Belge Eksikliği (agent-apply 422)
+**Dosya:** `artifacts/api-server/scripts/e2e-db-setup.ts`  
+**Durum:** ✅ DÜZELTİLDİ
+
+**Sorun:**  
+`e2e-db-setup.ts` fixture öğrencisi oluştururken Bachelor seviyesinin zorunlu belgelerini (high_school_diploma_translation, diploma_transcript, passport, photo) seed etmiyordu. Bunun sonucunda `POST /api/applications` A1 belgesi kontrolü 422 STUDENT_DOCS_REQUIRED döndürüyor, `(b) agent-apply` E2E testi başarısız oluyordu.
+
+**Düzeltme:**  
+Setup'a adım 6 eklendi: fixture öğrencisi için Bachelor zorunlu belgelerini DB'den dinamik sorgulayarak placeholder kayıtları oluşturuyor (`status: "approved"`). Her çalıştırmada belgeler zaten mevcutsa atlar (idempotent).
+
+---
+
 ### BUG-005: GET /portal-adapters — Registry'de `kind` Alanı Eksik
 **Dosya:** `artifacts/api-server/src/routes/portalMgmt.ts`  
 **Satır:** 707–719  
@@ -414,6 +426,7 @@ artifacts/api-server/src/routes/documents.ts    — SSRF: isValidHttpUrl private
 artifacts/api-server/src/routes/users.ts         — Privilege escalation: super_admin guard
 artifacts/api-server/src/routes/staffCards.ts    — Cascade: fire-and-forget → awaited (x2)
 artifacts/api-server/src/routes/portalMgmt.ts    — BUG-005: registry entries now include kind field
+artifacts/api-server/scripts/e2e-db-setup.ts     — BUG-006: seed Bachelor mandatory docs for fixture student
 artifacts/edcons/src/pages/sign/SignFlow.tsx      — XSS: DOMPurify.sanitize
 artifacts/edcons/src/pages/agent/SignContract.tsx — XSS: DOMPurify.sanitize
 ```

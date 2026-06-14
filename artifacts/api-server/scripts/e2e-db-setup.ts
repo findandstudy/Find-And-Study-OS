@@ -27,8 +27,11 @@ import {
   universitiesTable,
   programsTable,
   studentsTable,
+  documentsTable,
+  degreeDocumentRequirementsTable,
+  catalogOptionsTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { encryptConfig, decryptConfig } from "../src/lib/encryption";
 
 const stateFile = path.resolve(
@@ -228,6 +231,58 @@ async function seedApplyFlowFixtures() {
       .where(eq(studentsTable.id, studentRow.id));
     console.log(`[e2e-setup] Fixture student already exists #${studentRow.id} (refreshed agentId=${agentId} + required fields)`);
     fixtureStudentId = studentRow.id;
+  }
+
+  // 6. Seed placeholder documents for the fixture student so that mandatory
+  //    degree-level (Bachelor) and program-level document checks in
+  //    POST /api/applications do not block the agent-apply E2E smoke test.
+  //    We query the live DB for mandatory types so this stays in sync as
+  //    requirements evolve; we insert a placeholder stub (no fileKey/fileUrl)
+  //    for each missing type.
+  const [bachelorOpt] = await db
+    .select({ id: catalogOptionsTable.id })
+    .from(catalogOptionsTable)
+    .where(and(eq(catalogOptionsTable.category, "degree"), eq(catalogOptionsTable.value, "Bachelor")));
+
+  const mandatoryTypes: string[] = [];
+
+  if (bachelorOpt) {
+    const degreeReqs = await db
+      .select({ documentType: degreeDocumentRequirementsTable.documentType })
+      .from(degreeDocumentRequirementsTable)
+      .where(and(
+        eq(degreeDocumentRequirementsTable.catalogOptionId, bachelorOpt.id),
+        eq(degreeDocumentRequirementsTable.mandatory, true),
+      ));
+    mandatoryTypes.push(...degreeReqs.map(r => r.documentType));
+  }
+
+  if (mandatoryTypes.length > 0) {
+    const existingDocs = await db
+      .select({ type: documentsTable.type })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.studentId, fixtureStudentId),
+        isNull(documentsTable.deletedAt),
+      ));
+    const existingTypes = new Set(existingDocs.map(d => (d.type || "").toLowerCase()));
+
+    for (const docType of mandatoryTypes) {
+      if (!existingTypes.has(docType.toLowerCase())) {
+        await db.insert(documentsTable).values({
+          studentId: fixtureStudentId,
+          name: `[E2E Placeholder] ${docType}`,
+          type: docType,
+          status: "approved",
+        });
+        console.log(`[e2e-setup] Seeded placeholder document: ${docType} for student #${fixtureStudentId}`);
+      }
+    }
+    if (mandatoryTypes.every(t => existingTypes.has(t.toLowerCase()))) {
+      console.log(`[e2e-setup] Fixture student #${fixtureStudentId} already has all ${mandatoryTypes.length} mandatory docs`);
+    }
+  } else {
+    console.log(`[e2e-setup] No mandatory Bachelor degree documents configured — skipping doc seed`);
   }
 
   fs.writeFileSync(
