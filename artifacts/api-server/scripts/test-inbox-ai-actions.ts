@@ -18,16 +18,13 @@
  * Run with:
  *   pnpm --filter @workspace/api-server run test:inbox-ai-actions
  */
-import { test, after } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 
 // Hard exit after all tests complete — inbox.ts wires up an Anthropic
 // integration client and the db pool keeps connections open via a LISTEN
 // session held by the inbox event bus, so node would otherwise hang on a
 // live handle. Matches the `process.exit` pattern used by test-inbox-suite.
-after(() => {
-  setImmediate(() => process.exit(process.exitCode ?? 0));
-});
 import http from "http";
 import express, { type Express } from "express";
 import { eq } from "drizzle-orm";
@@ -36,7 +33,26 @@ import {
   conversationsTable,
   messagesTable,
   externalContactsTable,
+  usersTable,
 } from "@workspace/db";
+
+// Real DB user seeded before tests so logAudit FK constraint is satisfied.
+const RUN_ID_AI = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+let ACTOR_USER_ID = 0;
+before(async () => {
+  const [u] = await db
+    .insert(usersTable)
+    .values({ email: `test-inbox-ai-actor-${RUN_ID_AI}@test.internal` })
+    .returning({ id: usersTable.id });
+  ACTOR_USER_ID = u.id;
+});
+
+after(async () => {
+  if (ACTOR_USER_ID) {
+    await db.delete(usersTable).where(eq(usersTable.id, ACTOR_USER_ID));
+  }
+  setImmediate(() => process.exit(process.exitCode ?? 0));
+});
 
 import inboxRouter, { __setAiSummaryOverrideForTests } from "../src/routes/inbox.js";
 
@@ -122,7 +138,7 @@ function buildApp(): Express {
     // Inject a fake staff user — bypasses requireAuth's body parsing of
     // sessions but still exercises requireRole + the handler body.
     (req as unknown as { user: Record<string, unknown> }).user = {
-      id: 999_999_001,
+      id: ACTOR_USER_ID,
       role: "admin",
       isActive: true,
     };

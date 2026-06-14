@@ -14,7 +14,7 @@
  *   pnpm --filter @workspace/api-server exec tsx ./scripts/test-inbox-create-lead.ts
  */
 
-import { test, after } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
 import express, { type Express } from "express";
@@ -25,6 +25,7 @@ import {
   messagesTable,
   externalContactsTable,
   leadsTable,
+  usersTable,
 } from "@workspace/db";
 
 import inboxRouter, {
@@ -33,22 +34,35 @@ import inboxRouter, {
 } from "../src/routes/inbox.js";
 import { processInboundMessage } from "../src/lib/inbox/processInbound.js";
 
-after(() => {
-  setImmediate(() => process.exit(process.exitCode ?? 0));
-});
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 const RUN_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+// Real DB user seeded before tests so logAudit FK constraint is satisfied.
+let ACTOR_USER_ID = 0;
+before(async () => {
+  const [u] = await db
+    .insert(usersTable)
+    .values({ email: `test-inbox-lead-actor-${RUN_ID}@test.internal` })
+    .returning({ id: usersTable.id });
+  ACTOR_USER_ID = u.id;
+});
+
+after(async () => {
+  if (ACTOR_USER_ID) {
+    await db.delete(usersTable).where(eq(usersTable.id, ACTOR_USER_ID));
+  }
+  setImmediate(() => process.exit(process.exitCode ?? 0));
+});
+
 function buildApp(): Express {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     (req as unknown as { user: Record<string, unknown> }).user = {
-      id: 999_999_001,
+      id: ACTOR_USER_ID,
       role: "admin",
       isActive: true,
     };
