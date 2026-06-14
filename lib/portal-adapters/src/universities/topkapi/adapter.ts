@@ -251,16 +251,51 @@ export const topkapiAdapter: UniversityAdapter = {
     // ── STEP 0: form loaded ──────────────────────────────────────────────────
     { const s = await takeShot(page, "step0-form"); if (s) screenshots.push(s); }
 
+    // Debug: log semester / intake dropdown options
+    const semesterOpts = await page.evaluate(() => {
+      const sel = document.querySelector<HTMLSelectElement>("select[name=semesterId], select[name=semester], select[name=intake], #semesterId, #semester");
+      if (!sel) return null;
+      return Array.from(sel.options).map((o) => ({ value: o.value, text: o.text.trim(), selected: o.defaultSelected || o.selected }));
+    });
+    if (semesterOpts) {
+      logger.info("[topkapi] semester options:", JSON.stringify(semesterOpts));
+    } else {
+      // Fallback: log all selects on the page
+      const allSelects = await page.evaluate(() =>
+        Array.from(document.querySelectorAll("select")).map((s) => ({
+          name: s.name, id: s.id,
+          opts: Array.from(s.options).map((o) => ({ v: o.value, t: o.text.trim(), sel: o.selected })).slice(0, 10),
+        })),
+      );
+      logger.info("[topkapi] all selects on form:", JSON.stringify(allSelects));
+    }
+
     // ── STEP 1: email + passport ─────────────────────────────────────────────
     logger.info("[topkapi] Step 1: email + passport");
     await page.fill("input[name=email]",          profile.email);
     await page.fill("input[name=passportNumber]", profile.passportNumber);
+
+    // Debug: verify actual field values after fill
+    const filledEmail = await page.$eval("input[name=email]", (el) => (el as HTMLInputElement).value).catch(() => "NOT_FOUND");
+    const filledPP    = await page.$eval("input[name=passportNumber]", (el) => (el as HTMLInputElement).value).catch(() => "NOT_FOUND");
+    logger.info("[topkapi] Step 1 field values — email:", filledEmail || "(empty)", "passport:", filledPP || "(empty)");
+
+    // Intercept the outgoing check request to log its POST body
+    let checkRequestBody = "";
+    const reqHandler = (req: import("playwright-core").Request) => {
+      if (req.url().includes("application-check-student-exists.php")) {
+        checkRequestBody = req.postData() ?? "(no body)";
+      }
+    };
+    page.on("request", reqHandler);
 
     const checkRespPromise = page.waitForResponse(
       (r) => r.url().includes("application-check-student-exists.php"),
     );
     await clickNext(page);
     const checkRespObj = await checkRespPromise;
+    page.off("request", reqHandler);
+    logger.info("[topkapi] check-student-exists request body:", checkRequestBody.slice(0, 300));
 
     // Read response body to detect existing-student status directly
     let checkBody = "";
