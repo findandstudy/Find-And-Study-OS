@@ -116,6 +116,18 @@ const SYNONYM_GROUPS: readonly string[][] = [
   ["spor", "sports", "sport"],
   ["sosyal", "social"],
   ["siyaset", "politics", "political"],
+  // Language-of-instruction synonyms (portal uses Turkish language names)
+  ["ingilizce", "english"],
+  ["turkce", "turkish"],
+  ["fransizca", "french"],
+  ["almanca", "german"],
+  ["arapca", "arabic"],
+  ["rusca", "russian"],
+  // Degree-level synonyms
+  ["lisans", "bachelor", "undergraduate"],
+  ["onlisans", "associate"],
+  ["yukseklisans", "master", "masters", "graduate"],
+  ["doktora", "doctorate", "phd", "doctoral"],
 ];
 
 /** token → Set<synonyms> (built once at module load) */

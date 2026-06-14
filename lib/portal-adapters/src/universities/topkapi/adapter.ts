@@ -25,52 +25,102 @@ const STORAGE_PATH = "/tmp/topkapi-portal-state.json";
 const PROGRAM_MAP: Record<string, string> = {};
 
 // ---------------------------------------------------------------------------
-// Country resolution — nationality text → portal dropdown label
+// Country resolution — nationality text → Topkapi portal dropdown label (Turkish)
+//
+// The Topkapi portal uses Turkish country names in all dropdowns.
+// Values here must match the portal's <option> text exactly (or a substring of it)
+// so that selectByBest's partial-label match finds the right option.
 // ---------------------------------------------------------------------------
 const COUNTRY_MAP: Record<string, string> = {
-  afghan:         "Afghanistan",
-  algerian:       "Algeria",
-  azerbaijani:    "Azerbaijan",
-  azerbaijanian:  "Azerbaijan",
-  bahraini:       "Bahrain",
-  bangladeshi:    "Bangladesh",
-  british:        "United Kingdom",
-  chinese:        "China",
-  egyptian:       "Egypt",
-  emirati:        "United Arab Emirates",
-  french:         "France",
-  german:         "Germany",
-  iranian:        "Iran",
-  iraqi:          "Iraq",
-  jordanian:      "Jordan",
-  kazakh:         "Kazakhstan",
-  kuwaiti:        "Kuwait",
-  kyrgyz:         "Kyrgyzstan",
-  lebanese:       "Lebanon",
+  afghan:         "Afganistan",
+  algerian:       "Cezayir",
+  azerbaijani:    "Azerbaycan",
+  azerbaijanian:  "Azerbaycan",
+  bahraini:       "Bahreyn",
+  bangladeshi:    "Bangladeş",
+  british:        "Birleşik Krallık",
+  chinese:        "Çin",
+  egyptian:       "Mısır",
+  emirati:        "Birleşik Arap Emirlikleri",
+  french:         "Fransa",
+  german:         "Almanya",
+  indian:         "Hindistan",
+  iranian:        "İran",
+  iraqi:          "Irak",
+  jordanian:      "Ürdün",
+  kazakh:         "Kazakistan",
+  kuwaiti:        "Kuveyt",
+  kyrgyz:         "Kırgızistan",
+  lebanese:       "Lübnan",
   libyan:         "Libya",
-  moroccan:       "Morocco",
-  nigerian:       "Nigeria",
-  omani:          "Oman",
+  moroccan:       "Fas",
+  nigerian:       "Nijerya",
+  omani:          "Umman",
   pakistani:      "Pakistan",
-  palestinian:    "Palestine",
-  qatari:         "Qatar",
-  russian:        "Russia",
-  saudi:          "Saudi Arabia",
-  somali:         "Somalia",
+  palestinian:    "Filistin",
+  qatari:         "Katar",
+  russian:        "Rusya",
+  saudi:          "Suudi Arabistan",
+  somali:         "Somali",
   sudanese:       "Sudan",
-  syrian:         "Syria",
-  tajik:          "Tajikistan",
-  tunisian:       "Tunisia",
-  turk:           "Turkey",
-  turkish:        "Turkey",
-  turkmen:        "Turkmenistan",
-  ukrainian:      "Ukraine",
-  uzbek:          "Uzbekistan",
+  syrian:         "Suriye",
+  tajik:          "Tacikistan",
+  tunisian:       "Tunus",
+  turk:           "Türkiye",
+  turkish:        "Türkiye",
+  turkmen:        "Türkmenistan",
+  ukrainian:      "Ukrayna",
+  uzbek:          "Özbekistan",
   yemeni:         "Yemen",
 };
 
+// Also map commonly-seen raw country-name values (not adjectives) to Turkish.
+// Handles cases where student.nationality stores "Uzbekistan" instead of "Uzbek".
+const COUNTRY_NAME_MAP: Record<string, string> = {
+  afghanistan:              "Afganistan",
+  algeria:                  "Cezayir",
+  azerbaijan:               "Azerbaycan",
+  bahrain:                  "Bahreyn",
+  bangladesh:               "Bangladeş",
+  china:                    "Çin",
+  egypt:                    "Mısır",
+  "united arab emirates":   "Birleşik Arap Emirlikleri",
+  france:                   "Fransa",
+  germany:                  "Almanya",
+  india:                    "Hindistan",
+  iran:                     "İran",
+  iraq:                     "Irak",
+  jordan:                   "Ürdün",
+  kazakhstan:               "Kazakistan",
+  kuwait:                   "Kuveyt",
+  kyrgyzstan:               "Kırgızistan",
+  lebanon:                  "Lübnan",
+  libya:                    "Libya",
+  morocco:                  "Fas",
+  nigeria:                  "Nijerya",
+  oman:                     "Umman",
+  pakistan:                 "Pakistan",
+  palestine:                "Filistin",
+  qatar:                    "Katar",
+  russia:                   "Rusya",
+  "saudi arabia":           "Suudi Arabistan",
+  somalia:                  "Somali",
+  sudan:                    "Sudan",
+  syria:                    "Suriye",
+  tajikistan:               "Tacikistan",
+  tunisia:                  "Tunus",
+  turkey:                   "Türkiye",
+  turkmenistan:             "Türkmenistan",
+  ukraine:                  "Ukrayna",
+  uzbekistan:               "Özbekistan",
+  yemen:                    "Yemen",
+};
+
 function resolveCountry(nationality: string): string {
-  const lower = nationality.toLowerCase();
+  const lower = nationality.toLowerCase().trim();
+  // 1. Exact country-name match (e.g. "Uzbekistan" → "Özbekistan")
+  if (COUNTRY_NAME_MAP[lower]) return COUNTRY_NAME_MAP[lower];
+  // 2. Nationality-adjective substring match (e.g. "uzbek" in "Uzbekistani" → "Özbekistan")
   for (const [key, value] of Object.entries(COUNTRY_MAP)) {
     if (lower.includes(key)) return value;
   }
@@ -102,12 +152,53 @@ function toTrDate(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Click the visible "Sonraki Adım" button
+// Dismiss any open jconfirm dialog via direct DOM click (bypasses overlay).
+// Logs the dialog text + all button labels for debugging.
 // ---------------------------------------------------------------------------
-async function clickNext(page: Page): Promise<void> {
+async function dismissJconfirm(page: Page, logger: ReturnType<typeof getLogger>): Promise<boolean> {
+  try {
+    const info = await page.evaluate(() => {
+      const dlg = document.querySelector(".jconfirm.jconfirm-open") as HTMLElement | null;
+      if (!dlg) return null;
+      const msg = (dlg.querySelector(".jconfirm-content, .jconfirm-message") as HTMLElement | null)?.innerText ?? "";
+      const btns = Array.from(dlg.querySelectorAll("button")).map((b) => ({
+        text: (b as HTMLElement).innerText.trim(),
+        cls: (b as HTMLElement).className,
+      }));
+      // Click the first button (usually the confirm/OK button)
+      const first = dlg.querySelector("button") as HTMLElement | null;
+      if (first) first.click();
+      return { msg, btns, clicked: !!first };
+    });
+    if (!info) return false;
+    logger.info("[topkapi] jconfirm dismissed — msg:", info.msg.slice(0, 200), "btns:", JSON.stringify(info.btns), "clicked:", info.clicked);
+    // Give the dialog animation time to close
+    await page.waitForSelector(".jconfirm.jconfirm-open", { state: "hidden", timeout: 2000 }).catch(() => {});
+    return info.clicked;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Click the visible "Sonraki Adım" button.
+// Pre-dismisses any open jconfirm before clicking (e.g. lingering from prev
+// step), then post-dismisses one that may open as a result (e.g. new-student
+// confirmation). DOM-click used to bypass Playwright overlay detection.
+// ---------------------------------------------------------------------------
+async function clickNext(page: Page, logger: ReturnType<typeof getLogger>): Promise<void> {
+  // Pre-dismiss any leftover modal before attempting the click
+  await dismissJconfirm(page, logger);
+
   const btn = page.getByRole("button", { name: /Sonraki Adım/i });
   await btn.waitFor({ state: "visible", timeout: 8000 });
   await btn.click();
+
+  // Post-dismiss any modal that opened as a result of the click
+  try {
+    await page.waitForSelector(".jconfirm.jconfirm-open", { timeout: 3000 });
+    await dismissJconfirm(page, logger);
+  } catch { /* no modal — continue */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -132,13 +223,19 @@ async function selectByBest(
     if (v && v !== "0" && v !== "") return true;
   } catch { /* try partial */ }
 
-  // 3. Partial label (case-insensitive) — $eval<R, Arg> returns R=string
+  // 3. Partial label — Unicode-normalised, diacritic-stripped, case-insensitive.
+  //    Handles Turkish ALL-CAPS option texts like "ÖZBEKİSTAN" where
+  //    "İ" (U+0130) decomposes to "i" + combining dot via plain toLowerCase().
+  //    IMPORTANT: no named inner functions — esbuild wraps them with __name()
+  //    which does not exist inside page.$eval's browser sandbox.
   const optVal = await page.$eval<string, string>(
     selector,
     (el, v) => {
+      // Inline normaliser: Turkish İ → i, NFD decompose, strip combining diacritics, lowercase
+      const nv = v.replace(/\u0130/gi, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const sel = el as HTMLSelectElement;
       const opt = Array.from(sel.options).find(
-        (o) => o.text.toLowerCase().includes(v.toLowerCase()),
+        (o) => o.text.replace(/\u0130/gi, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(nv),
       );
       return opt?.value ?? "";
     },
@@ -244,6 +341,10 @@ export const topkapiAdapter: UniversityAdapter = {
       "doSubmit:", doSubmit,
     );
 
+    // Reduce default action timeout so missing/invisible elements fail fast
+    // (default Playwright timeout is 30 s — we want ~8 s to avoid long hangs).
+    page.setDefaultTimeout(8000);
+
     await page.goto(`${PORTAL_URL}/panel/applications/add`, {
       waitUntil: "networkidle",
     });
@@ -292,7 +393,7 @@ export const topkapiAdapter: UniversityAdapter = {
     const checkRespPromise = page.waitForResponse(
       (r) => r.url().includes("application-check-student-exists.php"),
     );
-    await clickNext(page);
+    await clickNext(page, logger);
     const checkRespObj = await checkRespPromise;
     page.off("request", reqHandler);
     logger.info("[topkapi] check-student-exists request body:", checkRequestBody.slice(0, 300));
@@ -309,8 +410,11 @@ export const topkapiAdapter: UniversityAdapter = {
     // Topkapi returns {"status":"exists","message":"..."} for known students,
     // or {"status":"new"} (or empty/null) for first-time applicants.
     const bodyLc = checkBody.toLowerCase();
+    // Topkapi returns {"status":"exists"} for known students.
+    // For new students it returns {"status":"new"}, {"status":"success"}, or an empty/null body.
     const existsByBody = bodyLc.includes('"status":"exists"') || bodyLc.includes('"status": "exists"');
-    const newByBody   = bodyLc.includes('"status":"new"')    || bodyLc.includes('"status": "new"')
+    const newByBody   = bodyLc.includes('"status":"new"')     || bodyLc.includes('"status": "new"')
+                     || bodyLc.includes('"status":"success"') || bodyLc.includes('"status": "success"')
                      || checkBody.trim() === "" || checkBody.trim() === "null"
                      || checkBody.trim() === "{}" || checkBody.trim() === "[]";
 
@@ -354,18 +458,33 @@ export const topkapiAdapter: UniversityAdapter = {
     try { await page.fill("input[name=addressCity]", "-"); } catch { /* field optional */ }
     await page.fill("input[name=mobilePhone]", profile.phone);
 
-    await clickNext(page);
+    await clickNext(page, logger);
+    logger.info("[topkapi] Step 2 clickNext done — waiting for Step 3 form");
+
+    // Wait for Step 3 education section to appear before filling it.
+    // Without this, the wizard AJAX transition may not have rendered the fields yet.
+    try {
+      await page.waitForSelector(
+        'select[name="applicationEducationInformationEducationLevel[]"]',
+        { timeout: 20000 },
+      );
+      logger.info("[topkapi] Step 3 education level select is visible");
+    } catch {
+      logger.warn("[topkapi] Step 3 education level select not visible after 20s — form may not have advanced");
+    }
 
     { const s = await takeShot(page, "step2-personal"); if (s) screenshots.push(s); }
 
     // ── STEP 3: education background ─────────────────────────────────────────
     logger.info("[topkapi] Step 3: education background");
+    logger.info("[topkapi] Step 3a: selecting education level");
     await selectByBest(
       page,
       'select[name="applicationEducationInformationEducationLevel[]"]',
       eduLevel,
     );
 
+    logger.info("[topkapi] Step 3b: filling school name");
     try {
       await page.fill('input[name="schoolName[]"]', profile.schoolName ?? "-");
     } catch {
@@ -373,6 +492,7 @@ export const topkapiAdapter: UniversityAdapter = {
       catch { /* optional */ }
     }
 
+    logger.info("[topkapi] Step 3c: filling GPA");
     try {
       await page.fill(
         'input[name="GPA[]"]',
@@ -380,6 +500,7 @@ export const topkapiAdapter: UniversityAdapter = {
       );
     } catch { /* optional */ }
 
+    logger.info("[topkapi] Step 3d: filling graduation date");
     try {
       await page.fill(
         'input[name="GraduationDate[]"]',
@@ -387,19 +508,24 @@ export const topkapiAdapter: UniversityAdapter = {
       );
     } catch { /* optional */ }
 
+    logger.info("[topkapi] Step 3e: selecting country");
     try {
       await selectByBest(page, 'select[name="country[]"]', country);
     } catch { /* optional */ }
 
+    logger.info("[topkapi] Step 3f: filling main language");
     await page.fill("input[name=mainLanguage]", "English");
 
     if (profile.languageScore != null) {
+      logger.info("[topkapi] Step 3g: filling language score");
       try {
         await page.fill("input[name=toeflIbtScore]", String(profile.languageScore));
       } catch { /* optional */ }
     }
 
-    await clickNext(page);
+    logger.info("[topkapi] Step 3: clicking Next");
+    await clickNext(page, logger);
+    logger.info("[topkapi] Step 3 clickNext done");
 
     { const s = await takeShot(page, "step3-education"); if (s) screenshots.push(s); }
 
@@ -494,7 +620,7 @@ export const topkapiAdapter: UniversityAdapter = {
     }
 
     await selectByBest(page, "select[name=needsScholarship]", "0");
-    await clickNext(page);
+    await clickNext(page, logger);
 
     { const s = await takeShot(page, "step4-program"); if (s) screenshots.push(s); }
 
