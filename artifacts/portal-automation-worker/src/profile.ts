@@ -86,8 +86,11 @@ export async function buildStudentProfile(
     level:          app.level              ?? "",
     programName:    app.programName        ?? "",
     programId:      app.programId          != null ? String(app.programId) : "",
-    universityName: app.universityName     ?? undefined,
-    gpa:            student.gpa            != null ? Number(student.gpa) : undefined,
+    universityName: app.universityName       ?? undefined,
+    schoolName:     student.highSchool       ?? undefined,
+    gpa:            student.gpa             != null ? Number(student.gpa)            : undefined,
+    graduationYear: student.graduationYear  != null ? Number(student.graduationYear) : undefined,
+    languageScore:  student.languageScore   != null ? Number(student.languageScore)  : undefined,
   });
 
   // ----- 5. Download documents to temp dir ---------------------------------

@@ -19,11 +19,18 @@ The same logic lives server-side as `fold()` in `programMatch.ts` (already handl
 
 ---
 
-## 2. esbuild `__name` in `page.$eval` callbacks
+## 2. esbuild `__name` in `page.$eval` / `page.evaluate` callbacks
 
-esbuild's `keep-names` mode wraps named functions with `__name(fn, "name")`. That helper exists in the Node.js bundle but **not** in Playwright's browser sandbox (`page.$eval`, `page.evaluate`).
+esbuild's `keep-names` mode wraps **every** named function — including top-level `function foo()` declarations — with `__name(fn, "name")`. That helper exists in the Node.js bundle but **not** in Playwright's browser sandbox.
 
-**Rule:** Never define named inner functions (even `const foo = (x) => …`) inside `page.$eval` / `page.evaluate` callbacks — esbuild will wrap them. Inline all logic directly.
+**Rule:** Pass a string literal to `page.evaluate` / `page.$eval` for any non-trivial callback:
+```ts
+await page.evaluate(`(function() {
+  var el = document.querySelector(…);
+  …
+})()`);
+```
+Arrow functions and named function declarations inside the callback argument all trigger `__name` wrapping. String form bypasses esbuild transformation entirely.
 
 ---
 
