@@ -19,9 +19,9 @@
 import os from "node:os";
 import { db, portalSubmissionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { claimNext, claimById, writebackResult } from "@workspace/portal-runner";
+import { claimNext, claimById, writebackResult, runSubmission } from "@workspace/portal-runner";
 import { buildStudentProfile } from "../src/profile.js";
-import { runSubmission } from "../src/runner.js";
+import { resolvePortalCreds } from "../src/credResolver.js";
 
 // ---------------------------------------------------------------------------
 // Args
@@ -102,13 +102,18 @@ async function main(): Promise<void> {
   }
 
   // ----- 3. Run submission -------------------------------------------------
+  // Resolve credentials for both dry and real mode.
+  // Dry mode performs a real browser login + full form-fill smoke-test;
+  // only the final submit click is skipped (doSubmit=false).
   let runResult: Awaited<ReturnType<typeof runSubmission>>;
   try {
+    const creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
     runResult = await runSubmission(
       { ...sub, mode: effectiveMode },
       profileResult.profile,
       profileResult.files,
       profileResult.tempDir,
+      creds,
     );
     console.log("[run-once] Run complete:");
     console.log("  submitted     :", runResult.result.submitted);
