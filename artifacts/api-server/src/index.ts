@@ -1621,6 +1621,15 @@ async function seedClaudeIntegration() {
   }
 
   serveStaticFrontend();
+
+  const { feedBus } = await import("./lib/feedBus");
+  const shutdown = async (signal: string) => {
+    console.log(`[shutdown] ${signal} received — releasing feedBus LISTEN connection`);
+    try { await feedBus.shutdown(); } catch { /* ignore */ }
+  };
+  process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
+  process.once("SIGINT",  () => { void shutdown("SIGINT"); });
+
   app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);
     if (typeof process.send === "function") {

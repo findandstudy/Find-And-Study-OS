@@ -4,9 +4,7 @@
  *
  * Run: cd artifacts/api-server && pnpm exec tsx scripts/rbac-e2e-setup.ts
  */
-import { Pool } from "pg";
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+import { pool } from "@workspace/db";
 
 const HASH = "$2b$10$Qx/oEqGzMqoQGvizNRuTK.u8jff4.rbnMfPkLttmmrYDIL2u2OsXi"; // TestAudit2026!
 const ALL_PERMS = ["leads", "students", "applications", "documents", "course_finder", "messages", "commissions"];
@@ -88,8 +86,9 @@ async function main() {
     process.exit(1);
   } finally {
     client.release();
-    await pool.end();
   }
+  // Shared pool keeps Node alive; exit explicitly from this one-shot script.
+  process.exit(0);
 }
 
 main();
