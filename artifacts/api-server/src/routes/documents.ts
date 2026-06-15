@@ -31,7 +31,8 @@ function isValidHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
     if (url.protocol !== "https:" && url.protocol !== "http:") return false;
-    const host = url.hostname.toLowerCase();
+    // Strip IPv6 brackets: new URL('http://[::1]/').hostname === '[::1]'
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
     // Block SSRF targets: loopback, link-local, private ranges
     if (
       host === "localhost" ||

@@ -167,6 +167,16 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  // SEC-002: prevent non-super_admin from modifying a super_admin account
+  if (req.user!.role !== "super_admin") {
+    const [targetCheck] = await db.select({ role: usersTable.role })
+      .from(usersTable).where(eq(usersTable.id, id));
+    if (targetCheck?.role === "super_admin") {
+      res.status(403).json({ error: "Only a super administrator may modify another super administrator account." });
+      return;
+    }
+  }
+
   const AGENT_IMMUTABLE_ROLES = ["agent", "sub_agent"];
   if (!isAdmin && AGENT_IMMUTABLE_ROLES.includes(req.user!.role)) {
     const IMMUTABLE_FIELDS = ["email", "firstName", "lastName"];

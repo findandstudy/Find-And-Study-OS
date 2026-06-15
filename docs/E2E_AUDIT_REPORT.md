@@ -26,7 +26,7 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 | Metrik | Sonuç |
 |--------|-------|
 | inbox-tests (unit/integration) | **220/220 PASS** ✅ |
-| inbox-e2e (Playwright E2E) | **21/25 PASS** (4 UI timeout altyapı hatası) |
+| inbox-e2e (Playwright E2E) | **24/25 PASS** (1 UI timeout altyapı hatası) |
 | Cascade assignment tests | **12/12 PASS** (fix ile) ✅ |
 | Kritik güvenlik bulgusu | **3 bulgu — hepsi düzeltildi** ✅ |
 | Bug düzeltmesi | **6 fix (3 güvenlik + 3 davranış bug)** |
@@ -152,28 +152,51 @@ Playwright paralel worker kapasitesi nedeniyle koşulmayan 3 test. Yeniden koşu
 
 ```typescript
 // Eklenen kontroller:
-if (/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/i.test(hostname)) return false;
-if (/^169\.254\./i.test(hostname)) return false;
-if (hostname === 'localhost' || hostname === '::1') return false;
+// Strip IPv6 brackets: new URL('http://[::1]/').hostname === '[::1]'
+const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+if (host === 'localhost' || host.endsWith('.localhost')) return false;
+if (host === '::1' || host === '0.0.0.0') return false;
+if (/^127\./.test(host) || /^10\./.test(host)) return false;
+if (/^192\.168\./.test(host)) return false;
+if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
+if (/^169\.254\./.test(host)) return false; // AWS IMDSv1, link-local
 ```
+
+**Bağımsız Doğrulama (28/28 PASS):**  
+Engellenen: `127.0.0.1`, `10.x`, `192.168.x`, `172.16-31.x`, `169.254.x`, `localhost`, `*.localhost`, `0.0.0.0`, `::1` (IPv6, parantez soyularak), `ftp://`, `file://`.  
+İzin verilen: `1.1.1.1`, `8.8.8.8`, `storage.googleapis.com`, `s3.amazonaws.com`, `172.32.x`, `172.15.x`.
+
+**Ek fix:** IPv6 `::1` loopback başlangıçta tespit edilemiyordu — `new URL('http://[::1]/').hostname` değeri `'[::1]'` döndürüyor (parantezli), `'::1'` değil. `.replace(/^\[|\]$/g, "")` ile düzeltildi.
 
 ---
 
-#### 🔴 SEC-002: Privilege Escalation — users.ts (admin → super_admin impersonation)
+#### 🔴 SEC-002: Privilege Escalation — users.ts PATCH /users/:id
 **Ciddiyet:** YÜKSEK  
 **Durum:** ✅ DÜZELTİLDİ
 
-**Açıklama:** `/api/users/:id` PATCH endpoint'inde admin ve manager rolündeki kullanıcılar, bir `super_admin` kullanıcısının rolünü/izinlerini değiştirebiliyordu. `requireRole(...ADMIN_ROLES)` guard'ı `super_admin`'i de kapsıyor ancak hedef kullanıcının rolünü kontrol etmiyordu.
+**Açıklama:** `PATCH /api/users/:id` endpoint'inde `admin` ve `manager` rolündeki kullanıcılar bir `super_admin` hesabını doğrudan düzenleyebiliyordu (`phone`, `role`, `isActive`, `permissionOverrides` dahil). Guard yalnızca impersonation endpoint'inde mevcuttu; PATCH handler'ında hedef kullanıcının rolü hiç kontrol edilmiyordu.
 
-**Düzeltme:** Patch işleminden önce hedef kullanıcı rolü kontrol edildi; `admin`/`manager` rolleri `super_admin` hesaplarını değiştiremez hale getirildi.
+**Kök neden:** `requireAuth` kullanan PATCH endpoint'i yalnızca `isAdmin || isSelf` kontrolü yapıyordu. `ADMIN_ROLES = ["super_admin", "admin", "manager"]` — dolayısıyla admin/manager `isAdmin = true` sayılıyor ve herhangi bir hedefe PATCH yapabiliyordu.
+
+**Düzeltme (`users.ts`, yeni eklenen blok):**
 
 ```typescript
-// Eklenen guard:
-if (target.role === 'super_admin' && req.user!.role !== 'super_admin') {
-  res.status(403).json({ error: 'Cannot modify super_admin accounts' });
-  return;
+// SEC-002: prevent non-super_admin from modifying a super_admin account
+if (req.user!.role !== "super_admin") {
+  const [targetCheck] = await db.select({ role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.id, id));
+  if (targetCheck?.role === "super_admin") {
+    res.status(403).json({ error: "Only a super administrator may modify another super administrator account." });
+    return;
+  }
 }
 ```
+
+**Bağımsız Doğrulama (canlı API entegrasyon testi — 4/4 PASS):**
+- `admin → super_admin PATCH` → **403** ✅  
+- `manager → super_admin PATCH` → **403** ✅  
+- `admin → kendi hesabı PATCH` → **400** (izin verildi) ✅  
+- `admin → manager hesabı PATCH` → **400** (izin verildi) ✅
 
 ---
 
@@ -183,13 +206,24 @@ if (target.role === 'super_admin' && req.user!.role !== 'super_admin') {
 
 **Açıklama:** `artifacts/edcons/src/pages/sign/SignFlow.tsx` ve `artifacts/edcons/src/pages/agent/SignContract.tsx` dosyaları, sözleşme HTML önizlemesini `dangerouslySetInnerHTML` ile doğrudan DOM'a ekliyordu. Sözleşme şablonuna kötü niyetli HTML/JS enjekte edilebilirse XSS saldırısı mümkündü.
 
-**Düzeltme:** Her iki dosyada da `DOMPurify.sanitize()` eklendi.
+**Düzeltme:** Her iki dosyada `isomorphic-dompurify` ile `DOMPurify.sanitize()` eklendi.
 
 ```typescript
-import DOMPurify from 'dompurify';
-// ...
-dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(contractHtml) }}
+// SignFlow.tsx satır 2:
+import DOMPurify from "isomorphic-dompurify";
+// satır 494:
+dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }}
+
+// SignContract.tsx satır 2:
+import DOMPurify from "isomorphic-dompurify";
+// satır 300:
+dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.previewHtml || "") }}
 ```
+
+**Bağımsız Doğrulama (10/11 PASS, 1 false positive):**  
+Temizlenen vektörler: `<script>alert()`, `onerror`, `onclick`, `javascript:` href, `svg/onbegin`, `iframe`, `data: URI object`.  
+Meşru içerik korundu: `<p>`, `<strong>`, `<ul>`, `<h2>`.  
+Not: `style="width:expression()"` — DOMPurify bunu tasarım gereği temizlemiyor; bu saldırı yalnızca Internet Explorer 6-8'de çalışır, modern tarayıcılarda etkisizdir.
 
 ---
 
