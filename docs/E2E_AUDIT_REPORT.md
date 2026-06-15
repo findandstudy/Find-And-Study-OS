@@ -1,7 +1,7 @@
 # EduConsult OS — Kapsamlı E2E + Güvenlik/Mimari Denetim Raporu
 
-**Tarih:** 14 Haziran 2026  
-**Versiyon:** 1.0  
+**Tarih:** 14–15 Haziran 2026  
+**Versiyon:** 1.1  
 **Kapsam:** Tüm roller, tüm route'lar, güvenlik zafiyetleri, mimari bulgular, bug düzeltmeleri  
 **Ortam:** DEV (no publish/deploy; no real messages/payments)
 
@@ -28,6 +28,7 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 | inbox-tests (unit/integration) | **220/220 PASS** ✅ |
 | inbox-e2e (Playwright E2E) | **24/25 PASS** (1 UI timeout altyapı hatası) |
 | Cascade assignment tests | **12/12 PASS** (fix ile) ✅ |
+| **RBAC Fonksiyonel E2E (Bölüm A2)** | **106/106 PASS** ✅ — 11 rol × 6 alan |
 | Kritik güvenlik bulgusu | **3 bulgu — hepsi düzeltildi** ✅ |
 | Bug düzeltmesi | **6 fix (3 güvenlik + 3 davranış bug)** |
 | Typecheck (api-server + edcons) | **PASS** ✅ |
@@ -52,7 +53,9 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 | accountant | audit-accountant@audit.test | TestAudit2026! |
 | agent | audit-agent@audit.test | TestAudit2026! |
 | sub_agent | audit-subagent@audit.test | TestAudit2026! |
+| agent_staff | audit-agentstaff@audit.test | TestAudit2026! |
 | student | audit-student@audit.test | TestAudit2026! |
+| super_admin (audit) | audit-superadmin@audit.test | TestAudit2026! |
 
 ### Rol Hiyerarşisi
 - **ADMIN_ROLES**: `super_admin`, `admin`, `manager`
@@ -135,6 +138,172 @@ Playwright paralel worker kapasitesi nedeniyle koşulmayan 3 test. Yeniden koşu
 ✔ leads bulk-assign cascades to each lead's student and applications
 ✔ sync-assignment-backfill is idempotent
 ```
+
+---
+
+### 3.3 Bölüm A2 — Rol-bazlı Fonksiyonel E2E (RBAC Kapsamı)
+
+**Tarih:** 15 Haziran 2026  
+**Spec:** `artifacts/edcons/tests/e2e/rbac-functional.spec.ts`  
+**Setup:** `artifacts/api-server/scripts/rbac-e2e-setup.ts` (11 audit hesabı + agent kayıtları)  
+**Sonuç: 106 / 106 PASS ✅** (2 dk 48 sn)
+
+#### Kapsam: 11 Rol × 6 Alan
+
+| Rol | Toplam Test | PASS | FAIL |
+|-----|-------------|------|------|
+| super_admin | 12 | 12 | 0 |
+| admin | 13 | 13 | 0 |
+| manager | 10 | 10 | 0 |
+| staff | 10 | 10 | 0 |
+| consultant | 7 | 7 | 0 |
+| editor | 7 | 7 | 0 |
+| accountant | 10 | 10 | 0 |
+| agent | 9 | 9 | 0 |
+| sub_agent | 7 | 7 | 0 |
+| agent_staff | 9 | 9 | 0 |
+| student | 12 | 12 | 0 |
+| **TOPLAM** | **106** | **106** | **0** |
+
+---
+
+#### Alan 1 — Finans (FINANCE_ROLES Sınırı)
+
+**Endpoint:** `GET /api/finance/university-receivables`  
+**İzin verilenler:** `super_admin`, `admin`, `accountant`  
+
+| Rol | Beklenen | Alınan | Sonuç |
+|-----|----------|--------|-------|
+| superadmin | 200 | 200 | ✅ |
+| admin | 200 | 200 | ✅ |
+| accountant | 200 | 200 | ✅ |
+| manager | 403 | 403 | ✅ |
+| staff | 403 | 403 | ✅ |
+| consultant | 403 | 403 | ✅ |
+| editor | 403 | 403 | ✅ |
+| student | 403 | 403 | ✅ |
+| agent | 403 | 403 | ✅ |
+| sub_agent | 403 | 403 | ✅ |
+| agent_staff | 403 | 403 | ✅ |
+
+**UI:** `accountant` → `/staff/finance` yüklenir; `staff` → yönlendirilir ✅
+
+---
+
+#### Alan 2 — AI Modları (ADMIN_ROLES Sınırı)
+
+**Endpoint'ler:** `GET /api/ai-personas`, `GET /api/ai-extractors`  
+**İzin verilenler:** `super_admin`, `admin`, `manager`
+
+| Rol | ai-personas | ai-extractors | Sonuç |
+|-----|-------------|---------------|-------|
+| superadmin | 200 | 200 | ✅ |
+| admin | 200 | 200 | ✅ |
+| manager | 200 | 200 | ✅ |
+| staff | 403 | — | ✅ |
+| consultant | 403 | — | ✅ |
+| editor | 403 | — | ✅ |
+| accountant | 403 | — | ✅ |
+| student | 403 | — | ✅ |
+| agent | 403 | — | ✅ |
+| agent_staff | 403 | — | ✅ |
+
+**UI:** `admin` → `/admin/ai-personas` yüklenir; `staff` → yönlendirilir ✅
+
+---
+
+#### Alan 3 — Bildirimler
+
+**Endpoint'ler:**  
+- `GET /api/notifications/unread-count` → tüm auth roller  
+- `GET /api/notification-rules` → ADMIN_ROLES only  
+- `GET /api/notifications` → tüm auth roller (response: `{ data: [...] }`)
+
+| Test | Sonuç |
+|------|-------|
+| Tüm 10 auth rol → `/notifications/unread-count` 200 | ✅ 10/10 |
+| superadmin/admin/manager → `/notification-rules` 200 | ✅ 3/3 |
+| staff/accountant/student/agent → `/notification-rules` 403 | ✅ 4/4 |
+| admin → notifications list alınabilir (`{ data: [] }` shape) | ✅ |
+| student → kendi notification listesi alınabilir | ✅ |
+
+> **Not:** `/api/notifications` endpoint'i `{ notifications: [] }` değil `{ data: [] }` shape döndürür (keşfedilen davranış, spec buna göre güncellendi).
+
+---
+
+#### Alan 4 — Mesajlaşma / Inbox
+
+**Endpoint'ler:**  
+- `GET /api/conversations` → STAFF_ROLES (7 rol)  
+- `GET /api/broadcasts` → ADMIN_ROLES  
+- `GET /api/message-templates` → STAFF_ROLES
+
+| Endpoint | İzin verilen | Yasak | Sonuç |
+|----------|--------------|-------|-------|
+| /conversations | 7 STAFF_ROLES → 200 | student/agent/subagent/agentstaff → 403 | ✅ 11/11 |
+| /broadcasts | admin/manager/superadmin → 200 | staff/accountant/student/agent → 403 | ✅ 7/7 |
+| /message-templates | admin/staff/accountant → 200 | student/agent → 403 | ✅ 5/5 |
+
+**UI:** `staff` → `/staff/messages` hata olmadan açılır ✅
+
+---
+
+#### Alan 5 — Süreç Takibi (Pipeline)
+
+**Endpoint'ler:** `/api/leads`, `/api/students`, `/api/applications`
+
+| Test | Beklenen | Sonuç |
+|------|----------|-------|
+| STAFF_ROLES (7 rol) → `/leads` 200 | 7/7 | ✅ |
+| student → `/leads` 403 | 403 | ✅ |
+| agent_staff (leads perm) → `/leads` 200 | 200 | ✅ |
+| superadmin/admin/staff → `/students` 200 | 3/3 | ✅ |
+| student → `/students` 200 (kendi) | 200 | ✅ |
+| agent_staff (students perm) → `/students` 200 | 200 | ✅ |
+| admin/staff/student/agentstaff → `/applications` 200 | 4/4 | ✅ |
+
+**UI:**
+- `admin` → `/staff/students` hata olmadan açılır ✅
+- `student` → `/student/applications` hata olmadan açılır ✅
+
+---
+
+#### Alan 6 — Agent Network (AGENT_ROLES + 7 İzin)
+
+**Endpoint'ler:** `/api/agents/me`, `/api/agents/me/sub-agents`, commissions guard
+
+| Test | Beklenen | Alınan | Sonuç |
+|------|----------|--------|-------|
+| agent → `/agents/me` | 200 | 200 | ✅ |
+| sub_agent → `/agents/me` | 200 | 200 | ✅ |
+| agent_staff → `/agents/me` | 200 | 200 | ✅ |
+| staff → `/agents/me` | non-200 | 404* | ✅ |
+| student → `/agents/me` | non-200 | 404* | ✅ |
+| agent_staff → leads endpoint | 200 | 200 | ✅ |
+| agent_staff → students endpoint | 200 | 200 | ✅ |
+| agent_staff → applications endpoint | 200 | 200 | ✅ |
+| subagent → leads (kendi scope) | 200 | 200 | ✅ |
+| agent → `/agents/me/sub-agents` | 200 | 200 | ✅ |
+| agent → `/commissions` (FINANCE_ROLES guard) | 403 | 403 | ✅ |
+| agent_staff → `/commissions` (FINANCE_ROLES guard) | 403 | 403 | ✅ |
+
+> *`/agents/me` → `requireAuth` kullanır, `requireRole` yok; non-agent roller agent kaydı bulunmadığından 404 döner (403 değil). Bu davranış güvenlik açığı değildir — non-agent roller buraya erişim sağlasa dahi boş sonuç alır, veri sızıntısı yoktur. İyileştirme önerisi: AGENT_ROLES guard eklenebilir (bkz. Alan 6 Öneriler).
+
+**UI:**
+- `agent` → `/agent` dashboard hata olmadan yüklenir ✅
+- `sub_agent` → `/agent` dashboard hata olmadan yüklenir ✅
+- `agent_staff` (tüm 7 izin) → `/agent` dashboard hata olmadan yüklenir ✅
+
+---
+
+#### A2 Keşfedilen Bulgular
+
+| ID | Ciddiyet | Açıklama | Durum |
+|----|----------|----------|-------|
+| A2-F01 | Düşük | `/api/agents/me` → AGENT_ROLES guard eksik; non-agent roller 404 alır (veri sızıntısı yok) | Öneri |
+| A2-F02 | Bilgi | `/api/notifications` response shape `{ data: [] }` (dokümantasyonda `notifications[]` yazıyor) | Bilgi |
+
+**A2-F01 Detay:** `agents.ts:359` satırında `requireRole(...AGENT_ROLES)` guard'ı eksik. `requireAuth` tek başına yeterli değil; staff veya student token'ıyla `/agents/me` çağrısı yapılabilir (404 döner ama yine de DB sorgusu koşar). Düşük risk: 404 yanıtı veri açığa çıkarmaz. Önerilen düzeltme: `requireRole("agent", "sub_agent", "agent_staff")` ekle.
 
 ---
 
