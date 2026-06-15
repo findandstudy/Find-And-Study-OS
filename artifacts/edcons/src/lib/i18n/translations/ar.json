@@ -4915,5 +4915,33 @@
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
     }
+  },
+  "activityFeed": {
+    "title": "النشاط",
+    "empty": "لا يوجد نشاط بعد",
+    "loadError": "تعذر تحميل النشاط",
+    "addNote": "إضافة ملاحظة",
+    "addFollowUp": "إضافة متابعة",
+    "notePlaceholder": "اكتب ملاحظة...",
+    "general": "عام",
+    "internal": "داخلي",
+    "followUpTitle": "العنوان",
+    "dueDate": "تاريخ الاستحقاق",
+    "assignedTo": "مخصص لـ",
+    "followUpNotes": "ملاحظات (اختياري)",
+    "markComplete": "تحديد كمكتمل",
+    "completed": "مكتمل",
+    "overdue": "متأخر",
+    "dueLabel": "موعد",
+    "byLabel": "بواسطة",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "statusChanged": "تغيرت الحالة",
+    "convertedToStudent": "تم التحويل إلى طالب",
+    "created": "تم إنشاء السجل",
+    "loading": "جارٍ التحميل...",
+    "typeNote": "ملاحظة",
+    "typeFollowUp": "متابعة",
+    "typeStatusChange": "تحديث الحالة"
   }
 }

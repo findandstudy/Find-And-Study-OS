@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -1087,6 +1087,8 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       }
 
       await db.update(leadsTable).set({ status: "converted", convertedStudentId: existingByEmail.id }).where(eq(leadsTable.id, id));
+      // Keep inbox external_contacts in sync so conversation linking resolves to student post-conversion
+      await db.update(externalContactsTable).set({ studentId: existingByEmail.id }).where(eq(externalContactsTable.leadId, lead.id));
       await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: existingByEmail.id, merged: true }, req.ip);
 
       const [updatedStudent] = await db.select().from(studentsTable).where(eq(studentsTable.id, existingByEmail.id));
@@ -1115,6 +1117,8 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   }
 
   await db.update(leadsTable).set({ status: "converted", convertedStudentId: student.id }).where(eq(leadsTable.id, id));
+  // Keep inbox external_contacts in sync so conversation linking resolves to student post-conversion
+  await db.update(externalContactsTable).set({ studentId: student.id }).where(eq(externalContactsTable.leadId, lead.id));
   await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: student.id }, req.ip);
   res.json({ student, merged: false });
 });

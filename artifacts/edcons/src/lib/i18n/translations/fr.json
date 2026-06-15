@@ -4915,5 +4915,33 @@
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
     }
+  },
+  "activityFeed": {
+    "title": "Activité",
+    "empty": "Aucune activité pour l'instant",
+    "loadError": "Impossible de charger l'activité",
+    "addNote": "Ajouter une note",
+    "addFollowUp": "Ajouter un suivi",
+    "notePlaceholder": "Écrire une note...",
+    "general": "Général",
+    "internal": "Interne",
+    "followUpTitle": "Titre",
+    "dueDate": "Date d'échéance",
+    "assignedTo": "Assigné à",
+    "followUpNotes": "Notes (optionnel)",
+    "markComplete": "Marquer terminé",
+    "completed": "Terminé",
+    "overdue": "En retard",
+    "dueLabel": "Échéance",
+    "byLabel": "par",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "statusChanged": "Statut modifié",
+    "convertedToStudent": "Converti en étudiant",
+    "created": "Enregistrement créé",
+    "loading": "Chargement...",
+    "typeNote": "Note",
+    "typeFollowUp": "Suivi",
+    "typeStatusChange": "Mise à jour de statut"
   }
 }

@@ -541,7 +541,7 @@ test.describe("AREA 6 — Agent Network RBAC", () => {
   });
 
   // agent commissions görebilir
-  test("agent → GET /api/commissions 200", async ({ request }) => {
+  test("agent → GET /api/commissions 403 (FINANCE_ROLES gate)", async ({ request }) => {
     await loginAs(request, A.agent, PASS);
     const res = await request.get(`${API}/commissions`);
     expect(res.status(), "agent cannot access commissions (FINANCE_ROLES gate)").toBe(403);

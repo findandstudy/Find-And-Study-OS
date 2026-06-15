@@ -1339,8 +1339,10 @@ router.post(
       return;
     }
 
-    const primaryResourceType: "lead" | "student" = link.leadId ? "lead" : "student";
-    const primaryResourceId = (link.leadId ?? link.studentId) as number;
+    // Student takes priority: a converted lead has both leadId and studentId set;
+    // notes should attach to the student (canonical post-conversion anchor).
+    const primaryResourceType: "lead" | "student" = link.studentId ? "student" : "lead";
+    const primaryResourceId = (link.studentId ?? link.leadId) as number;
 
     // Both inserts share a transaction so a failed cross-link does not leave
     // the primary note orphaned (or vice versa).
@@ -1419,7 +1421,9 @@ router.post(
       return;
     }
 
-    const resourceType: "lead" | "student" = link.leadId ? "lead" : "student";
+    // Student takes priority: a converted lead has both leadId and studentId set;
+    // follow-ups should attach to the student (canonical post-conversion anchor).
+    const resourceType: "lead" | "student" = link.studentId ? "student" : "lead";
     const [task] = await db
       .insert(followUpsTable)
       .values({

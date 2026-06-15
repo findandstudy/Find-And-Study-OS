@@ -4915,5 +4915,33 @@
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
     }
+  },
+  "activityFeed": {
+    "title": "Активность",
+    "empty": "Активности пока нет",
+    "loadError": "Не удалось загрузить активность",
+    "addNote": "Добавить заметку",
+    "addFollowUp": "Добавить задачу",
+    "notePlaceholder": "Написать заметку...",
+    "general": "Общая",
+    "internal": "Внутренняя",
+    "followUpTitle": "Заголовок",
+    "dueDate": "Срок выполнения",
+    "assignedTo": "Назначено",
+    "followUpNotes": "Заметки (необязательно)",
+    "markComplete": "Отметить выполненным",
+    "completed": "Выполнено",
+    "overdue": "Просрочено",
+    "dueLabel": "Срок",
+    "byLabel": "автор",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "statusChanged": "Статус изменён",
+    "convertedToStudent": "Преобразован в студента",
+    "created": "Запись создана",
+    "loading": "Загрузка...",
+    "typeNote": "Заметка",
+    "typeFollowUp": "Задача",
+    "typeStatusChange": "Обновление статуса"
   }
 }

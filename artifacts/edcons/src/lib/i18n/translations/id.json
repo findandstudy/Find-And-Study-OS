@@ -4915,5 +4915,33 @@
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
     }
+  },
+  "activityFeed": {
+    "title": "Aktivitas",
+    "empty": "Belum ada aktivitas",
+    "loadError": "Gagal memuat aktivitas",
+    "addNote": "Tambah Catatan",
+    "addFollowUp": "Tambah Tindak Lanjut",
+    "notePlaceholder": "Tulis catatan...",
+    "general": "Umum",
+    "internal": "Internal",
+    "followUpTitle": "Judul",
+    "dueDate": "Tanggal Jatuh Tempo",
+    "assignedTo": "Ditugaskan ke",
+    "followUpNotes": "Catatan (opsional)",
+    "markComplete": "Tandai selesai",
+    "completed": "Selesai",
+    "overdue": "Terlambat",
+    "dueLabel": "Jatuh tempo",
+    "byLabel": "oleh",
+    "save": "Simpan",
+    "cancel": "Batal",
+    "statusChanged": "Status berubah",
+    "convertedToStudent": "Dikonversi menjadi siswa",
+    "created": "Catatan dibuat",
+    "loading": "Memuat...",
+    "typeNote": "Catatan",
+    "typeFollowUp": "Tindak Lanjut",
+    "typeStatusChange": "Pembaruan status"
   }
 }

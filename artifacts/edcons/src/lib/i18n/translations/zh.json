@@ -4915,5 +4915,33 @@
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
     }
+  },
+  "activityFeed": {
+    "title": "活动",
+    "empty": "暂无活动",
+    "loadError": "无法加载活动",
+    "addNote": "添加备注",
+    "addFollowUp": "添加跟进",
+    "notePlaceholder": "写备注...",
+    "general": "通用",
+    "internal": "内部",
+    "followUpTitle": "标题",
+    "dueDate": "截止日期",
+    "assignedTo": "分配给",
+    "followUpNotes": "备注（可选）",
+    "markComplete": "标记为完成",
+    "completed": "已完成",
+    "overdue": "逾期",
+    "dueLabel": "截止",
+    "byLabel": "由",
+    "save": "保存",
+    "cancel": "取消",
+    "statusChanged": "状态已更改",
+    "convertedToStudent": "已转为学生",
+    "created": "记录已创建",
+    "loading": "加载中...",
+    "typeNote": "备注",
+    "typeFollowUp": "跟进",
+    "typeStatusChange": "状态更新"
   }
 }

@@ -1,7 +1,7 @@
 # EduConsult OS — Kapsamlı E2E + Güvenlik/Mimari Denetim Raporu
 
 **Tarih:** 14–15 Haziran 2026  
-**Versiyon:** 1.2  
+**Versiyon:** 1.3  
 **Kapsam:** Tüm roller, tüm route'lar, güvenlik zafiyetleri, mimari bulgular, bug düzeltmeleri  
 **Ortam:** DEV (no publish/deploy; no real messages/payments)
 
@@ -30,7 +30,7 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 | Cascade assignment tests | **12/12 PASS** (fix ile) ✅ |
 | **RBAC Fonksiyonel E2E (Bölüm A2)** | **106/106 PASS** ✅ — 11 rol × 6 alan |
 | Kritik güvenlik bulgusu | **4 bulgu — hepsi düzeltildi** ✅ |
-| Bug düzeltmesi | **10 fix** (3 güvenlik + 3 davranış + 4 ADIM C) |
+| Bug düzeltmesi | **13 fix** (3 güvenlik + 3 davranış + 4 ADIM C + 3 v1.3) |
 | Typecheck (api-server + edcons) | **PASS** ✅ |
 
 ---
@@ -515,6 +515,19 @@ Prod migrate'ler sadece `api-server/src/index.ts` boot DDL üzerinden yürütül
 #### Email Rate Limiting (Dev SMTP)
 Dev ortamında Hostinger SMTP `451 4.7.1 Ratelimit` hatası veriyor. Bu gerçek bir bug değil, dev ortamı kısıtlaması. Prod'da ayrı SMTP yapılandırması kullanılıyor. Test runner'lar bu hataları gracefully ignore ediyor.
 
+#### feedBus In-Memory EventEmitter (v1.3)
+`artifacts/api-server/src/lib/feedBus.ts` içindeki `ActivityFeed` SSE sistemi Node.js `EventEmitter` tabanlı. Bu:
+- Tek process'te doğru çalışır
+- Autoscale / çok instance durumunda bir instance'a yazılan event diğeri üzerindeki SSE bağlantılarına ulaşmaz
+- Restart sonrası in-flight eventler kaybolur
+
+**Öneri:** Ölçeklenme gerekirse `feedBus` PostgreSQL `LISTEN/NOTIFY` ile değiştirilmeli. Mevcut `feedBus.subscribe(fn)` → `feedBus.publish(event)` arayüzü bu değişikliği kolaylaştıracak şekilde tasarlanmış.
+
+#### rbac-e2e-setup.ts ESM/pg Uyumsuzluğu (v1.3)
+`artifacts/api-server/scripts/rbac-e2e-setup.ts` script'i ESM modül modu altında `tsx` ile çalıştırıldığında `ERR_MODULE_NOT_FOUND: Cannot find package 'pg'` hatası veriyor. Script `pg` paketini doğrudan import ediyor; `@workspace/db` Drizzle wrapper'ı kullanmıyor. `e2e-db-setup.ts` gibi diğer scriptler `@workspace/db` kullandığından bu sorunla karşılaşmıyor.
+
+**Workaround:** Audit kullanıcıları bir önceki oturumda manuel olarak seeded edildi; script'in çalışması gerekmedi. **Öneri:** Script'i `pg` yerine `@workspace/db`'yi kullanacak şekilde dönüştür (bkz. `e2e-db-setup.ts` pattern'ı).
+
 ---
 
 ## 6. Bölüm D — Bug Düzeltmeleri
@@ -629,6 +642,70 @@ router.patch("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req,
 
 ---
 
+### BUG-011: Cross-Context Note Deletion IDOR — personFeed.ts
+**Dosya:** `artifacts/api-server/src/routes/personFeed.ts`  
+**Satır:** ~312 (DELETE /persons/feed/notes/:noteId)  
+**Durum:** ✅ DÜZELTİLDİ (v1.3)
+
+**Sorun:**  
+`DELETE /persons/feed/notes/:noteId?context=lead&id=N` endpoint'i, kişi context'ine (lead/student) erişim yetkisini doğruluyordu ancak `noteId`'nin gerçekten o kişiye ait olduğunu kontrol etmiyordu. Saldırgan, erişim sahibi olduğu Person A'nın context'ini URL'ye koyarak başka bir kişi (Person B) üzerinde yazdığı kendi notunu silebilirdi.
+
+```typescript
+// ÖNCE (hatalı — noteId context ile doğrulanmıyordu):
+const [note] = await db.select().from(notesTable).where(eq(notesTable.id, noteId));
+if (!note) { res.status(404).json({ error: "Note not found" }); return; }
+// note farklı bir kişiye ait olabilir!
+
+// SONRA (doğru — noteId context WHERE koşuluna dahil edildi):
+const contextOrConds = buildNotesConditions(ids); // mevcut helper yeniden kullanıldı
+const [note] = await db.select().from(notesTable).where(
+  and(eq(notesTable.id, noteId), or(...contextOrConds)),
+);
+if (!note) { res.status(404).json({ error: "Note not found" }); return; }
+```
+
+**Etki:** Düşük — yalnızca kendi yazdığı notları silebilirdi; başkasının notlarına veya içerik okumaya izin vermiyordu.
+
+---
+
+### BUG-012: Cross-Context Follow-Up Patch IDOR — personFeed.ts
+**Dosya:** `artifacts/api-server/src/routes/personFeed.ts`  
+**Satır:** ~418 (PATCH /persons/feed/follow-ups/:fuId)  
+**Durum:** ✅ DÜZELTİLDİ (v1.3)
+
+**Sorun:**  
+`PATCH /persons/feed/follow-ups/:fuId?context=lead&id=N` endpoint'i de aynı sorundan etkileniyordu: `fuId` doğrudan UPDATE WHERE'e veriliyordu, context'e ait olup olmadığı doğrulanmıyordu.
+
+```typescript
+// ÖNCE (hatalı):
+const [updated] = await db.update(followUpsTable).set(updates as any)
+  .where(eq(followUpsTable.id, fuId)).returning();
+
+// SONRA (doğru — context uyumu WHERE'e eklendi):
+const fuContextConds = [
+  ...(ids.leadId   ? [eq(followUpsTable.leadId,   ids.leadId)]   : []),
+  ...(ids.studentId ? [eq(followUpsTable.studentId, ids.studentId)] : []),
+];
+const [updated] = await db.update(followUpsTable).set(updates as any).where(
+  and(eq(followUpsTable.id, fuId), fuContextConds.length > 0 ? or(...fuContextConds) : sql`false`),
+).returning();
+```
+
+**Etki:** Düşük — kendi erişim sahası içindeki follow-up'ları çapraz context ile güncelleyebilirdi; veri sızıntısı yoktu.
+
+---
+
+### BUG-013: Yanıltıcı Test Adı — rbac-functional.spec.ts
+**Dosya:** `artifacts/edcons/tests/e2e/rbac-functional.spec.ts`  
+**Satır:** 544  
+**Durum:** ✅ DÜZELTİLDİ (v1.3)
+
+**Sorun:** `test("agent → GET /api/commissions 200", ...)` — test adı "200" diyor ancak beklenti `.toBe(403)`. Test doğru çalışıyor (agent commissions'a erişemiyor) fakat yanıltıcı isim CI rapor okunurken kafa karışıklığı yaratıyordu.
+
+**Düzeltme:** Test adı `"agent → GET /api/commissions 403 (FINANCE_ROLES gate)"` olarak düzeltildi.
+
+---
+
 ### BUG-009: E2E Fixture — programId JSON'a Yazılmıyordu
 **Dosya:** `artifacts/api-server/scripts/e2e-db-setup.ts`  
 **Durum:** ✅ DÜZELTİLDİ (ADIM C)
@@ -695,6 +772,10 @@ Bu, `adapterMetadata()` kütüphane fonksiyonuna dokunmadan, route katmanında `
 
 9. **Migration yönetimi** — Büyüyen şema değişiklikleri için `boot DDL` yaklaşımı yerine migration dosyaları (`drizzle migrate`) değerlendirilebilir. Mevcut `ALTER TABLE IF NOT EXISTS` pattern'ı sağlam ancak büyük değişikliklerde yönetimi zorlaşır.
 
+10. **feedBus → PG LISTEN/NOTIFY** — Autoscale/çok-instance durumunda SSE feed events kaybolur. Tek-instance deployment'ta sorun yok; ölçekleme planı varsa sprint konusu yapılmalı.
+
+11. **rbac-e2e-setup.ts pg → @workspace/db** — Script `pg` doğrudan import ediyor; ESM/tsx ile çalışmıyor. `@workspace/db` Drizzle wrapper'ına taşınmalı.
+
 ---
 
 ## Ekler
@@ -713,6 +794,8 @@ artifacts/api-server/scripts/e2e-db-setup.ts     — programId JSON'a yazılıyo
 artifacts/edcons/src/pages/sign/SignFlow.tsx      — XSS: DOMPurify.sanitize (BUG-004/SEC-003)
 artifacts/edcons/src/pages/agent/SignContract.tsx — XSS: DOMPurify.sanitize (BUG-004/SEC-003)
 artifacts/edcons/tests/e2e/apply-flows.spec.ts   — fetchTestProgram JSON-öncelikli okuma (BUG-009)
+artifacts/api-server/src/routes/personFeed.ts    — Cross-context IDOR: note delete + followup patch (BUG-011/BUG-012)
+artifacts/edcons/tests/e2e/rbac-functional.spec.ts — Yanıltıcı test adı düzeltmesi (BUG-013)
 ```
 
 ### Ek B: Test Koşum Ortamı
@@ -743,7 +826,8 @@ Denetlenen route dosyaları:
 - `messages.ts` — scope filtering
 - `embed.ts` — token generation, public routes
 - `activity.ts` — session tracking
+- `personFeed.ts` — cross-context IDOR (note delete + follow-up patch) — **v1.3**
 
 ---
 
-*Bu rapor EduConsult OS denetim görevinin T005 çıktısıdır. Rapor, T001–T004 görevlerinin bulguları temel alınarak hazırlanmıştır. ADIM C (v1.2) güncellemeleri 15 Haziran 2026 tarihinde eklenmiştir.*
+*Bu rapor EduConsult OS denetim görevinin T005 çıktısıdır. Rapor, T001–T004 görevlerinin bulguları temel alınarak hazırlanmıştır. ADIM C (v1.2) güncellemeleri 15 Haziran 2026 tarihinde eklendi. v1.3 güncellemeleri (BUG-011/012/013, feedBus mimarisi, rbac-e2e-setup sorunu) aynı gün eklenmiştir.*

@@ -52,6 +52,7 @@ import apiTokensRouter from "./apiTokens";
 import cmsRouter from "./cms";
 import portalAutomationRouter from "./portalAutomation";
 import portalMgmtRouter from "./portalMgmt";
+import personFeedRouter from "./personFeed";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
 const router: IRouter = Router();
@@ -188,5 +189,6 @@ router.use(apiTokensRouter);
 router.use(cmsRouter);
 router.use(portalAutomationRouter);
 router.use(portalMgmtRouter);
+router.use(personFeedRouter);
 
 export default router;

@@ -4915,5 +4915,33 @@
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
     }
+  },
+  "activityFeed": {
+    "title": "فعالیت",
+    "empty": "هنوز فعالیتی وجود ندارد",
+    "loadError": "بارگذاری فعالیت ممکن نشد",
+    "addNote": "افزودن یادداشت",
+    "addFollowUp": "افزودن پیگیری",
+    "notePlaceholder": "یادداشت بنویسید...",
+    "general": "عمومی",
+    "internal": "داخلی",
+    "followUpTitle": "عنوان",
+    "dueDate": "تاریخ سررسید",
+    "assignedTo": "تخصیص داده شده به",
+    "followUpNotes": "یادداشت‌ها (اختیاری)",
+    "markComplete": "علامت‌گذاری به عنوان تکمیل",
+    "completed": "تکمیل شد",
+    "overdue": "معوق",
+    "dueLabel": "سررسید",
+    "byLabel": "توسط",
+    "save": "ذخیره",
+    "cancel": "لغو",
+    "statusChanged": "وضعیت تغییر کرد",
+    "convertedToStudent": "به دانشجو تبدیل شد",
+    "created": "پرونده ایجاد شد",
+    "loading": "در حال بارگذاری...",
+    "typeNote": "یادداشت",
+    "typeFollowUp": "پیگیری",
+    "typeStatusChange": "به‌روزرسانی وضعیت"
   }
 }

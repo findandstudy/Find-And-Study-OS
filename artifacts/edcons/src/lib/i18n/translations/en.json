@@ -4915,5 +4915,33 @@
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
     }
+  },
+  "activityFeed": {
+    "title": "Activity",
+    "empty": "No activity yet",
+    "loadError": "Could not load activity",
+    "addNote": "Add Note",
+    "addFollowUp": "Add Follow-up",
+    "notePlaceholder": "Write a note...",
+    "general": "General",
+    "internal": "Internal",
+    "followUpTitle": "Title",
+    "dueDate": "Due Date",
+    "assignedTo": "Assigned to",
+    "followUpNotes": "Notes (optional)",
+    "markComplete": "Mark complete",
+    "completed": "Completed",
+    "overdue": "Overdue",
+    "dueLabel": "Due",
+    "byLabel": "by",
+    "save": "Save",
+    "cancel": "Cancel",
+    "statusChanged": "Status changed",
+    "convertedToStudent": "Converted to student",
+    "created": "Record created",
+    "loading": "Loading...",
+    "typeNote": "Note",
+    "typeFollowUp": "Follow-up",
+    "typeStatusChange": "Status update"
   }
 }

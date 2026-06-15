@@ -4915,5 +4915,33 @@
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
     }
+  },
+  "activityFeed": {
+    "title": "Actividad",
+    "empty": "Sin actividad aún",
+    "loadError": "No se pudo cargar la actividad",
+    "addNote": "Agregar nota",
+    "addFollowUp": "Agregar seguimiento",
+    "notePlaceholder": "Escribir una nota...",
+    "general": "General",
+    "internal": "Interno",
+    "followUpTitle": "Título",
+    "dueDate": "Fecha límite",
+    "assignedTo": "Asignado a",
+    "followUpNotes": "Notas (opcional)",
+    "markComplete": "Marcar completado",
+    "completed": "Completado",
+    "overdue": "Atrasado",
+    "dueLabel": "Vence",
+    "byLabel": "por",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "statusChanged": "Estado cambiado",
+    "convertedToStudent": "Convertido en estudiante",
+    "created": "Registro creado",
+    "loading": "Cargando...",
+    "typeNote": "Nota",
+    "typeFollowUp": "Seguimiento",
+    "typeStatusChange": "Actualización de estado"
   }
 }

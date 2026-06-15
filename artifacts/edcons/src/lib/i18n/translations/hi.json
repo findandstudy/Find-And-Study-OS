@@ -4915,5 +4915,33 @@
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
     }
+  },
+  "activityFeed": {
+    "title": "गतिविधि",
+    "empty": "अभी तक कोई गतिविधि नहीं",
+    "loadError": "गतिविधि लोड नहीं हो सकी",
+    "addNote": "नोट जोड़ें",
+    "addFollowUp": "फ़ॉलो-अप जोड़ें",
+    "notePlaceholder": "नोट लिखें...",
+    "general": "सामान्य",
+    "internal": "आंतरिक",
+    "followUpTitle": "शीर्षक",
+    "dueDate": "नियत तारीख",
+    "assignedTo": "को सौंपा गया",
+    "followUpNotes": "नोट्स (वैकल्पिक)",
+    "markComplete": "पूर्ण चिह्नित करें",
+    "completed": "पूर्ण",
+    "overdue": "विलंबित",
+    "dueLabel": "देय",
+    "byLabel": "द्वारा",
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "statusChanged": "स्थिति बदल गई",
+    "convertedToStudent": "छात्र में परिवर्तित",
+    "created": "रिकॉर्ड बनाया गया",
+    "loading": "लोड हो रहा है...",
+    "typeNote": "नोट",
+    "typeFollowUp": "फ़ॉलो-अप",
+    "typeStatusChange": "स्थिति अपडेट"
   }
 }

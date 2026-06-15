@@ -32,6 +32,7 @@ import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { ActivityFeed } from "@/components/shared/ActivityFeed";
 
 const PHONE_CODES = [
   { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
@@ -854,6 +855,12 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   </Button>
                 </div>
               )}
+            </div>
+
+            {/* Activity Feed */}
+            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
+              <h2 className="font-semibold text-foreground">{t("activityFeed.title")}</h2>
+              <ActivityFeed context="lead" id={id} />
             </div>
           </div>
 

@@ -4915,5 +4915,33 @@
       "credentialsSet": "Kimlik Bilgileri Ayarlı",
       "noCredentials": "Kimlik Bilgisi Yok"
     }
+  },
+  "activityFeed": {
+    "title": "Aktivite",
+    "empty": "Henüz aktivite yok",
+    "loadError": "Aktivite yüklenemedi",
+    "addNote": "Not Ekle",
+    "addFollowUp": "Takip Ekle",
+    "notePlaceholder": "Not yaz...",
+    "general": "Genel",
+    "internal": "Dahili",
+    "followUpTitle": "Başlık",
+    "dueDate": "Tarih",
+    "assignedTo": "Atanan",
+    "followUpNotes": "Notlar (opsiyonel)",
+    "markComplete": "Tamamla",
+    "completed": "Tamamlandı",
+    "overdue": "Gecikmiş",
+    "dueLabel": "Son",
+    "byLabel": "tarafından",
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "statusChanged": "Durum değişti",
+    "convertedToStudent": "Öğrenciye dönüştürüldü",
+    "created": "Kayıt oluşturuldu",
+    "loading": "Yükleniyor...",
+    "typeNote": "Not",
+    "typeFollowUp": "Takip",
+    "typeStatusChange": "Durum güncellemesi"
   }
 }
