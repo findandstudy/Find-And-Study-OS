@@ -225,6 +225,24 @@ test.describe("embed widget — mobile", { tag: "@mobile" }, () => {
     const modal = widget.locator(".ew-modal");
     await expect(modal).toBeVisible({ timeout: 5_000 });
 
+    // Wait until the modal has a non-zero rendered height. repositionModal()
+    // runs synchronously on open and again at t+60ms; the parent loader also
+    // resizes the iframe immediately after edcons-modal-open, which can
+    // trigger a brief layout-flush that returns height=0 between the two
+    // repaint frames. Polling avoids a sporadic race on loaded CI/autoscale.
+    await expect
+      .poll(
+        async () => {
+          const h = await widget
+            .locator(".ew-modal")
+            .evaluate((el) => el.getBoundingClientRect().height)
+            .catch(() => 0);
+          return h;
+        },
+        { timeout: 5_000, intervals: [50, 100, 150, 200] },
+      )
+      .toBeGreaterThan(0);
+
     // The modal must fit inside the parent (mobile) viewport. Compute the
     // modal's bounding box in the parent viewport's coordinate system by
     // adding the iframe's offset.
