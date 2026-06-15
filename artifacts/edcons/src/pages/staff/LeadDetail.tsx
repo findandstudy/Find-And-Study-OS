@@ -143,12 +143,12 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   });
   const { data: generalNotes = [] } = useQuery<any[]>({
     queryKey: [`/api/leads/${id}/notes`, "general"],
-    queryFn: () => fetch(`${BASE}/api/leads/${id}/notes?internal=false`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/leads/${id}/notes?internal=false`, { credentials: "include" }).then(r => r.json()).then(j => Array.isArray(j) ? j : []),
     enabled: !!id,
   });
   const { data: internalNotes = [] } = useQuery<any[]>({
     queryKey: [`/api/leads/${id}/notes`, "internal"],
-    queryFn: () => fetch(`${BASE}/api/leads/${id}/notes?internal=true`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(`${BASE}/api/leads/${id}/notes?internal=true`, { credentials: "include" }).then(r => r.json()).then(j => Array.isArray(j) ? j : []),
     enabled: !!id && !!isStaffUser,
   });
   const activeNotes = noteTab === "internal" ? internalNotes : generalNotes;
