@@ -37,8 +37,18 @@ export function SearchableSelect({
   const [search, setSearch] = useState("");
   const [openUp, setOpenUp] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  // True when mounted inside a Radix Dialog — in that case we render the
+  // dropdown inline (no portal) so that Radix's FocusScope and RemoveScroll
+  // don't block keyboard input and wheel scroll inside the dropdown.
+  const [inDialog, setInDialog] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      setInDialog(!!ref.current.closest("[data-radix-dialog-content]"));
+    }
+  }, []);
 
   useEffect(() => {
     // Use "click" (not "mousedown") so that grabbing/dragging a scrollbar
@@ -96,6 +106,70 @@ export function SearchableSelect({
 
   const selected = options.find(o => o.value === value);
 
+  /** Shared inner content rendered inside the dropdown panel. */
+  function DropdownContent() {
+    return (
+      <>
+        {searchable && options.length > 6 && (
+          <div className="p-2 border-b border-border">
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full h-8 px-2 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+              autoFocus
+            />
+          </div>
+        )}
+        <div className="max-h-72 overflow-y-auto p-1">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-3 text-xs text-muted-foreground text-center">No results</div>
+          ) : (
+            (() => {
+              const groups = new Map<string, typeof filtered>();
+              for (const opt of filtered) {
+                const g = opt.group || "";
+                if (!groups.has(g)) groups.set(g, []);
+                groups.get(g)!.push(opt);
+              }
+              return Array.from(groups.entries()).map(([group, items]) => (
+                <div key={group}>
+                  {group && (
+                    <div className="px-2.5 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{group}</div>
+                  )}
+                  {items.map(opt => {
+                    const isSelected = opt.value === value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => { emitChange(opt.value); setOpen(false); }}
+                        className={`flex items-center justify-between gap-2 w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
+                          isSelected ? "bg-primary/10 text-primary font-medium" : "hover:bg-primary/10 text-foreground"
+                        }`}
+                      >
+                        <span className="truncate flex-1">
+                          {opt.node ?? (
+                            <span className="inline-flex items-center gap-1.5">
+                              {opt.icon}
+                              {opt.label}
+                            </span>
+                          )}
+                        </span>
+                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              ));
+            })()
+          )}
+        </div>
+      </>
+    );
+  }
+
   return (
     <div ref={ref} className={`relative ${className}`}>
       <button
@@ -132,7 +206,36 @@ export function SearchableSelect({
         </div>
       </button>
 
-      {open && pos && createPortal(
+      {/* ── Inline mode (inside Radix Dialog) ───────────────────────────────
+          Rendering inline (not portaled) avoids two Radix Dialog problems:
+          1. FocusScope trapping focus outside the dialog → search can't receive input
+          2. RemoveScroll intercepting wheel events on body-level elements → list can't scroll
+          An inline absolute child is inside the dialog's DOM subtree, so both
+          mechanisms leave it alone. The z-index ensures it floats above siblings. */}
+      {inDialog && open && (
+        <div
+          ref={popRef}
+          className="absolute z-[9999] bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+          style={{
+            top: openUp ? "auto" : "100%",
+            bottom: openUp ? "100%" : "auto",
+            marginTop: openUp ? 0 : 4,
+            marginBottom: openUp ? 4 : 0,
+            left: 0,
+            minWidth: `${minDropdownWidth}px`,
+            width: "100%",
+          }}
+        >
+          <DropdownContent />
+        </div>
+      )}
+
+      {/* ── Portal mode (outside any dialog) ────────────────────────────────
+          Portaling to body escapes overflow:hidden/auto ancestors that would
+          otherwise clip the dropdown. pointer-events:auto re-enables clicks
+          since Radix Dialog sets pointer-events:none on body while open
+          (this branch only runs when NOT inside a dialog). */}
+      {!inDialog && open && pos && createPortal(
         <div
           ref={popRef}
           style={{
@@ -141,72 +244,11 @@ export function SearchableSelect({
             left: pos.left,
             width: Math.max(pos.width, minDropdownWidth),
             transform: openUp ? "translateY(calc(-100% - 4px))" : "translateY(4px)",
-            // Re-enable pointer events explicitly. When this dropdown is used
-            // inside a Radix modal Dialog, the dialog sets
-            // `pointer-events: none` on <body> and only re-enables it within
-            // the dialog content. Because this popover is portaled to
-            // document.body (a sibling of the dialog), it would otherwise
-            // inherit `none` and its options would be unclickable.
             pointerEvents: "auto",
           }}
           className="z-[1000] bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
         >
-          {searchable && options.length > 6 && (
-            <div className="p-2 border-b border-border">
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="w-full h-8 px-2 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                autoFocus
-              />
-            </div>
-          )}
-          <div className="max-h-72 overflow-y-auto p-1">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-3 text-xs text-muted-foreground text-center">No results</div>
-            ) : (
-              (() => {
-                const groups = new Map<string, typeof filtered>();
-                for (const opt of filtered) {
-                  const g = opt.group || "";
-                  if (!groups.has(g)) groups.set(g, []);
-                  groups.get(g)!.push(opt);
-                }
-                return Array.from(groups.entries()).map(([group, items]) => (
-                  <div key={group}>
-                    {group && (
-                      <div className="px-2.5 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{group}</div>
-                    )}
-                    {items.map(opt => {
-                      const isSelected = opt.value === value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => { emitChange(opt.value); setOpen(false); }}
-                          className={`flex items-center justify-between gap-2 w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
-                            isSelected ? "bg-primary/10 text-primary font-medium" : "hover:bg-primary/10 text-foreground"
-                          }`}
-                        >
-                          <span className="truncate flex-1">
-                            {opt.node ?? (
-                              <span className="inline-flex items-center gap-1.5">
-                                {opt.icon}
-                                {opt.label}
-                              </span>
-                            )}
-                          </span>
-                          {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ));
-              })()
-            )}
-          </div>
+          <DropdownContent />
         </div>,
         document.body
       )}
