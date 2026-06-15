@@ -838,6 +838,12 @@ function UniversitiesTab() {
   });
   const allCountries: Country[] = allCountriesResp?.data ?? [];
 
+  const { data: uniCountriesResp } = useQuery({
+    queryKey: ["uni-countries-distinct"],
+    queryFn: () => api("/api/universities/countries"),
+  });
+  const uniCountries: string[] = Array.isArray(uniCountriesResp) ? uniCountriesResp : [];
+
   const { data: formCitiesResp } = useQuery({
     queryKey: ["form-cities-uni", selCountryId],
     queryFn: () => api(`/api/cities?countryId=${selCountryId}&limit=500`),
@@ -936,7 +942,7 @@ function UniversitiesTab() {
               <ColumnHeader asTh label={t("catalogPage.country")}
                 sort={{ sortKey: "country", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fCountry || "all", onChange: v => { setFCountry(v === "all" ? "" : v); setPage(1); },
-                  options: allCountries.map(c => ({ value: c.name, label: c.name })), allLabel: t("catalogPage.allCountries"), label: t("catalogPage.country") }} />
+                  options: uniCountries.map(c => ({ value: c, label: c })), allLabel: t("catalogPage.allCountries"), label: t("catalogPage.country") }} />
               <ColumnHeader asTh label={t("catalogPage.city")}
                 sort={{ sortKey: "city", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "text", value: fCity, onChange: v => { setFCity(v); setPage(1); }, placeholder: t("catalogPage.filterByCity"), label: t("catalogPage.city") }} />
