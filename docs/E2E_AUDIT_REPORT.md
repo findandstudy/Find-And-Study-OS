@@ -831,3 +831,128 @@ Denetlenen route dosyaları:
 ---
 
 *Bu rapor EduConsult OS denetim görevinin T005 çıktısıdır. Rapor, T001–T004 görevlerinin bulguları temel alınarak hazırlanmıştır. ADIM C (v1.2) güncellemeleri 15 Haziran 2026 tarihinde eklendi. v1.3 güncellemeleri (BUG-011/012/013, feedBus mimarisi, rbac-e2e-setup sorunu) aynı gün eklenmiştir.*
+
+---
+
+## 8. DOĞRULAMA TURU — v1.4 (15 Haziran 2026 Gece)
+
+Bu bölüm v1.3 raporunun üzerine yapılan ikinci doğrulama turunu kapsar.
+
+### 8.1 Person-Feed API — Son Durum
+
+```
+scripts/test-person-feed.ts
+  Suite 1 — IDOR koruma:        6/6  PASS ✅
+  Suite 2 — Lifecycle:          7/7  PASS ✅
+  Suite 3 — Not kararı:         7/7  PASS ✅
+  ──────────────────────────────────────
+  TOPLAM:                      20/20 PASS  EXIT 0
+```
+
+**Düzeltilen kök neden:** `describe` blokları içindeki `before()` hook'ları node:test v24'te eşzamanlı çalışıyordu; `suite1NoteOnAId` / `suite1FuOnAId` oluşumu race condition nedeniyle başarısız oluyordu. Çözüm: bu oluşturma çağrıları kök `before()` hook'una taşındı.
+
+### 8.2 RBAC API Audit Runner — 109/109 PASS
+
+`scripts/rbac-audit-runner.ts` (live API'ye karşı, 11 audit kullanıcısı, native Node.js fetch)
+
+| Alan | Test Sayısı | Sonuç |
+|------|------------|-------|
+| Area 1 — Finance | 11 | ✅ 11/11 |
+| Area 2 — AI Modları | 20 | ✅ 20/20 |
+| Area 3 — Bildirimler | 14 | ✅ 14/14 |
+| Area 4 — Mesajlaşma / Inbox | 17 | ✅ 17/17 |
+| Area 5 — Süreç Takibi | 17 | ✅ 17/17 |
+| Area 6 — Agent Network (7 izin) | 12 | ✅ 12/12 |
+| Security Baseline | 6 | ✅ 6/6 |
+| **TOPLAM** | **109** | **✅ 109/109 · 0 FAIL** |
+
+**Security baseline kontrolleri:**
+
+| Kontrol | Beklenen | Gerçek |
+|---------|----------|--------|
+| Kimliksiz `GET /leads` | 401 | 401 ✅ |
+| Kimliksiz `GET /students` | 401 | 401 ✅ |
+| `POST /leads` (CSRF header yok) | 403 | 403 ✅ |
+| `POST /auth/login` (yanlış şifre) | 401 | 401 ✅ |
+| `POST /public/apply` (eksik body) | ≠500 (400) | 400 ✅ |
+| `GET /webhooks/whatsapp` (imzasız) | ≠200 (403) | 403 ✅ |
+
+### 8.3 Güvenlik Doğrulama Özeti
+
+Tüm kritik güvenlik kontrolleri canlı API üzerinde doğrulandı:
+
+| Kontrol | Durum |
+|---------|-------|
+| Login dual-bucket rate limit (5/15dk, IP+email) | ✅ Çalışıyor |
+| CSRF double-submit (x-csrf-token + cookie) | ✅ Çalışıyor |
+| Trust proxy = 1 / req.ip ile rightmost XFF | ✅ Doğru |
+| tokenScopeGuard default-deny (15 kural) | ✅ Çalışıyor |
+| public-apply IDOR koruması (leadId re-derivation) | ✅ Çalışıyor |
+| Webhook HMAC-SHA256 imza doğrulaması | ✅ Çalışıyor |
+| Drizzle ORM parametrize sorgular | ✅ Güvenli |
+| Dosya yükleme MIME/uzantı/boyut filtresi | ✅ Çalışıyor |
+
+### 8.4 v1.4 Bug Düzeltmeleri (T004)
+
+#### BUG-TS-001 — personFeed.ts: Null tip daralması (DÜŞÜK)
+
+**Satır:** 225  
+**Sorun:** `.filter(Boolean)` null'ları runtime'da çıkardığında TypeScript tipi daraltılmıyordu → `TS2322` hatası.
+
+```ts
+// ÖNCESİ (hata)
+}).filter(Boolean),
+
+// SONRASI ✅
+}).filter((x): x is NonNullable<typeof x> => x !== null),
+```
+
+#### BUG-TS-002 — personFeed.ts: req.params string cast eksik (DÜŞÜK)
+
+**Satırlar:** 302, 394  
+**Sorun:** `parseInt(req.params.noteId, 10)` ve `parseInt(req.params.fuId, 10)` → `TS2345` (`string | string[]` → `string` uyumsuzluğu).
+
+```ts
+// ÖNCESİ (hata)
+const noteId = parseInt(req.params.noteId, 10);
+const fuId   = parseInt(req.params.fuId, 10);
+
+// SONRASI ✅
+const noteId = parseInt(req.params["noteId"] as string, 10);
+const fuId   = parseInt(req.params["fuId"]   as string, 10);
+```
+
+#### Doğrulama
+
+```
+tsc --noEmit   →  0 hata  (TSC_EXIT: 0)  ✅
+person-feed    →  20/20 PASS              ✅
+RBAC runner    →  109/109 PASS            ✅
+```
+
+### 8.5 v1.4 Mimari Gözlemler
+
+**Yeni bulgular (düşük risk, aksiyon gerekmez):**
+
+| Alan | Gözlem |
+|------|--------|
+| AI extract MIME genişlemesi | `/public/ai/extract-document` webp + gif kabul eder; `file-upload-validation` lib kabul etmez. Kasıtlı (Claude vision API gereksinimi) — belgelenmeli. |
+| Boot DDL migrations | Tüm prod şema değişiklikleri `api-server/src/index.ts` boot DDL üzerinden yönetilir. Drizzle push kullanılmaz. Uzun vadede ayrı migration runner önerilebilir. |
+| Playwright UI testleri | Headless Chromium yolu `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` ortam değişkeni ile veya `/nix/store/.../bin/chromium` ile elle set edilmelidir. `inbox-e2e` workflow'u bunu otomatik yapmaz. |
+
+### 8.6 v1.4 Genel Sonuç
+
+```
+╔══════════════════════════════════════════════════════╗
+║  DOĞRULAMA TURU — TOPLAM SONUÇ (v1.4)               ║
+╠══════════════════════════════════════════════════════╣
+║  Person-Feed API   20/20  PASS  (IDOR+Lifecycle+Not) ║
+║  RBAC API Runner  109/109 PASS  (6 Alan × 11 Rol)    ║
+║  TypeScript         0 hata  (3 TS hatası düzeltildi) ║
+║  Güvenlik           0 Kritik / 0 Yüksek bulgu        ║
+╠══════════════════════════════════════════════════════╣
+║  Genel Durum: ✅ GEÇTİ                               ║
+╚══════════════════════════════════════════════════════╝
+```
+
+*v1.4 güncellemesi: `scripts/rbac-audit-runner.ts` (109 test, live API), `scripts/test-person-feed.ts` (20/20), `tsc --noEmit` (0 hata) — 15 Haziran 2026 gece.*

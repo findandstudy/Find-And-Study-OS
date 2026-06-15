@@ -4,6 +4,7 @@
 - [Schema/OpenAPI changes need lib dist rebuild + safe DB migration](monorepo-schema-codegen-build.md) — rebuild lib dist (tsc -b) after schema/codegen; use ALTER TABLE not drizzle push (push drops unrelated tables).
 - [List endpoints need ORDER BY with LIMIT](list-pagination-stability.md) — row vanishing from a paginated list after edit = LIMIT without stable ORDER BY; edit-dialog preload fields must be in the list select.
 - [Test fragment uniqueness vs leaked rows](test-fragment-uniqueness.md) — test search fragments must include RUN_ID (per-run unique); fixed prefixes accumulate leaked rows across failed runs → LIMIT pushes seeded row off page.
+- [node:test v24 nested before() concurrency](node-test-nested-before-concurrency.md) — describe-level before() hooks run concurrently in node:test v24; shared state created inside them races. Fix: hoist shared resource creation to root before().
 - [Direction-aware null-last sort](direction-aware-null-last-sort.md) — don't negate a null-aware comparator for desc (floats nulls to top); handle nulls unconditionally, flip only the value compare; normalize missing to null not "".
 - [edcons record assignment & reassign gating](edcons-record-assignment.md) — assign_button=assign/self-claim unassigned; change_assigned=reassign assigned; gate UI with `assignedToId ? canReassign : canAssign`.
 - [Custom dropdown closes on scrollbar drag](dropdown-scrollbar-dismiss.md) — outside-close must listen to "click" not "mousedown"; preserve selected value as fallback option when filtering option lists.

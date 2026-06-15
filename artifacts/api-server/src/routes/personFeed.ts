@@ -222,7 +222,7 @@ router.get("/persons/feed", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_RO
         actorName: a.actorName,
         auditChanges: changes,
       };
-    }).filter(Boolean),
+    }).filter((x): x is NonNullable<typeof x> => x !== null),
   ];
 
   feedItems.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
@@ -299,7 +299,7 @@ router.delete("/persons/feed/notes/:noteId", requireAuth, requireRole(...STAFF_R
   const parsedQ = contextQuerySchema.safeParse(req.query);
   if (!parsedQ.success) { res.status(400).json({ error: "Invalid query params" }); return; }
 
-  const noteId = parseInt(req.params.noteId, 10);
+  const noteId = parseInt(req.params["noteId"] as string, 10);
   if (isNaN(noteId)) { res.status(400).json({ error: "Invalid noteId" }); return; }
 
   const { context, id } = parsedQ.data;
@@ -391,7 +391,7 @@ router.patch("/persons/feed/follow-ups/:fuId", requireAuth, requireRole(...STAFF
   const parsedQ = contextQuerySchema.safeParse(req.query);
   if (!parsedQ.success) { res.status(400).json({ error: "Invalid query params" }); return; }
 
-  const fuId = parseInt(req.params.fuId, 10);
+  const fuId = parseInt(req.params["fuId"] as string, 10);
   if (isNaN(fuId)) { res.status(400).json({ error: "Invalid fuId" }); return; }
 
   const bodyParsed = patchFollowUpBodySchema.safeParse(req.body);
