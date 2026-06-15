@@ -30,6 +30,16 @@ export type ColumnFilterConfig =
       /** Hide the auto-injected "All" option (e.g. gated by permissions). */
       hideAll?: boolean;
       label?: string;
+    }
+  | {
+      type: "searchable-select";
+      value: string;
+      onChange: (v: string) => void;
+      options: ColumnFilterOption[];
+      allLabel?: string;
+      allValue?: string;
+      label?: string;
+      placeholder?: string;
     };
 
 export interface ColumnHeaderProps<TKey extends string = string> {
@@ -52,12 +62,71 @@ function isFilterActive(f: ColumnFilterConfig | undefined): boolean {
   if (!f) return false;
   if (f.type === "text") return f.value.trim().length > 0;
   if (f.type === "select") return f.value !== (f.allValue ?? "all");
+  if (f.type === "searchable-select") return f.value !== (f.allValue ?? "all");
   return false;
+}
+
+function SearchableSelectFilter({
+  filter,
+}: {
+  filter: Extract<ColumnFilterConfig, { type: "searchable-select" }>;
+}) {
+  const [q, setQ] = React.useState("");
+  const allValue = filter.allValue ?? "all";
+  const active = filter.value !== allValue;
+
+  const filtered = React.useMemo(() => {
+    const lower = q.toLowerCase().trim();
+    if (!lower) return filter.options;
+    return filter.options.filter(o => o.label.toLowerCase().includes(lower));
+  }, [q, filter.options]);
+
+  return (
+    <div className="space-y-2" onClick={e => e.stopPropagation()}>
+      <Input
+        autoFocus
+        value={q}
+        onChange={e => setQ(e.target.value)}
+        placeholder={filter.placeholder ?? "Search…"}
+        className="h-7 text-xs"
+      />
+      <div className="max-h-52 overflow-y-auto rounded border border-border text-sm">
+        <button
+          type="button"
+          className={cn(
+            "w-full text-left px-2.5 py-1.5 hover:bg-muted transition-colors",
+            !active && "bg-primary/10 font-medium text-primary",
+          )}
+          onClick={() => { filter.onChange(allValue); setQ(""); }}
+        >
+          {filter.allLabel ?? "All"}
+        </button>
+        {filtered.map(opt => (
+          <button
+            key={opt.value}
+            type="button"
+            className={cn(
+              "w-full text-left px-2.5 py-1.5 hover:bg-muted transition-colors",
+              filter.value === opt.value && "bg-primary/10 font-medium text-primary",
+            )}
+            onClick={() => { filter.onChange(opt.value); setQ(""); }}
+          >
+            {opt.label}
+          </button>
+        ))}
+        {filtered.length === 0 && (
+          <p className="px-2.5 py-3 text-xs text-muted-foreground text-center">No results</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function FilterControl({ filter, onClose }: { filter: ColumnFilterConfig; onClose: () => void }) {
   const active = isFilterActive(filter);
-  const allValue = filter.type === "select" ? filter.allValue ?? "all" : "";
+  const allValue = filter.type === "select" ? filter.allValue ?? "all"
+    : filter.type === "searchable-select" ? filter.allValue ?? "all"
+    : "";
   return (
     <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between gap-2">
@@ -88,6 +157,8 @@ function FilterControl({ filter, onClose }: { filter: ColumnFilterConfig; onClos
             if (e.key === "Enter") onClose();
           }}
         />
+      ) : filter.type === "searchable-select" ? (
+        <SearchableSelectFilter filter={filter} />
       ) : (
         <Select
           value={filter.value}
@@ -163,11 +234,6 @@ export function ColumnHeader<TKey extends string = string>(props: ColumnHeaderPr
         className="w-64 p-3"
         onClick={(e) => e.stopPropagation()}
         onInteractOutside={(e) => {
-          // The select dropdown is portalled OUTSIDE this popover's DOM tree,
-          // so clicking an option counts as an "outside" interaction and would
-          // close the popover before the selection commits. Keep the popover
-          // open when the interaction happens inside the Radix Select dropdown
-          // (its listbox/options/viewport); genuine outside clicks still close.
           const target = (e.detail as { originalEvent?: Event } | undefined)
             ?.originalEvent?.target;
           if (

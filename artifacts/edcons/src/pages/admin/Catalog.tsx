@@ -844,6 +844,12 @@ function UniversitiesTab() {
   });
   const uniCountries: string[] = Array.isArray(uniCountriesResp) ? uniCountriesResp : [];
 
+  const { data: uniCitiesResp } = useQuery({
+    queryKey: ["uni-cities-distinct"],
+    queryFn: () => api("/api/universities/cities"),
+  });
+  const uniCities: string[] = Array.isArray(uniCitiesResp) ? uniCitiesResp : [];
+
   const { data: formCitiesResp } = useQuery({
     queryKey: ["form-cities-uni", selCountryId],
     queryFn: () => api(`/api/cities?countryId=${selCountryId}&limit=500`),
@@ -941,11 +947,12 @@ function UniversitiesTab() {
                 filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: t("catalogPage.filterByName"), label: t("catalogPage.university") }} />
               <ColumnHeader asTh label={t("catalogPage.country")}
                 sort={{ sortKey: "country", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "select", value: fCountry || "all", onChange: v => { setFCountry(v === "all" ? "" : v); setPage(1); },
-                  options: uniCountries.map(c => ({ value: c, label: c })), allLabel: t("catalogPage.allCountries"), label: t("catalogPage.country") }} />
+                filter={{ type: "searchable-select", value: fCountry || "all", onChange: v => { setFCountry(v === "all" ? "" : v); setPage(1); },
+                  options: uniCountries.map(c => ({ value: c, label: c })), allLabel: t("catalogPage.allCountries"), allValue: "all", label: t("catalogPage.country"), placeholder: t("catalogPage.filterByName") }} />
               <ColumnHeader asTh label={t("catalogPage.city")}
                 sort={{ sortKey: "city", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "text", value: fCity, onChange: v => { setFCity(v); setPage(1); }, placeholder: t("catalogPage.filterByCity"), label: t("catalogPage.city") }} />
+                filter={{ type: "searchable-select", value: fCity || "all", onChange: v => { setFCity(v === "all" ? "" : v); setPage(1); },
+                  options: uniCities.map(c => ({ value: c, label: c })), allLabel: t("catalogPage.allCities"), allValue: "all", label: t("catalogPage.city"), placeholder: t("catalogPage.filterByCity") }} />
               <ColumnHeader asTh label={t("catalogPage.type")}
                 sort={{ sortKey: "type", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fType || "all", onChange: v => { setFType(v === "all" ? "" : v); setPage(1); },

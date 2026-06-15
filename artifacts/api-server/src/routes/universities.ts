@@ -55,6 +55,14 @@ router.get("/universities/countries", async (_req, res): Promise<void> => {
   res.json(rows.map(r => r.country).filter(Boolean));
 });
 
+router.get("/universities/cities", async (_req, res): Promise<void> => {
+  const rows = await db
+    .selectDistinct({ city: universitiesTable.city })
+    .from(universitiesTable)
+    .orderBy(universitiesTable.city);
+  res.json(rows.map(r => r.city).filter(Boolean));
+});
+
 router.get("/universities", async (req, res): Promise<void> => {
   const { country, city, type, status, qs, search, name, page = "1", limit = "20" } = req.query as Record<string, string>;
   const safeInt = (v: string, fallback: number) => /^\d+$/.test(v) ? parseInt(v, 10) : fallback;
