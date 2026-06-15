@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { Progress } from "@/components/ui/progress";
 import {
   FileUp, Sparkles, ChevronLeft, User, GraduationCap, X, CheckCircle2,
@@ -567,16 +568,12 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                   <div className="space-y-1.5">
                     <Label className="font-semibold text-sm flex items-center">Phone<span className="text-destructive ml-0.5">*</span>{ef.has("phone") && <AiBadge />}</Label>
                     <div className="flex gap-1.5">
-                      <Select value={form.phoneCode} onValueChange={field("phoneCode")}>
-                        <SelectTrigger className="w-[100px] h-9 text-sm rounded-xl shrink-0"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {PHONE_CODES.map(pc => (
-                            <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
-                              <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <PhoneCodePicker
+                        value={form.phoneCode}
+                        onChange={field("phoneCode")}
+                        className="w-[120px] shrink-0"
+                        triggerClassName="rounded-xl h-9"
+                      />
                       <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000"
                         className={cn("rounded-xl flex-1", ef.has("phone") && "border-emerald-300 bg-emerald-50/40 focus-visible:ring-emerald-400")} />
                     </div>

@@ -3,87 +3,19 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
+import { PHONE_CODES } from "@/lib/nationalities";
 
-const COUNTRY_CODES = [
-  { code: "TR", dial: "+90", name: "Turkey" },
-  { code: "US", dial: "+1", name: "United States" },
-  { code: "GB", dial: "+44", name: "United Kingdom" },
-  { code: "DE", dial: "+49", name: "Germany" },
-  { code: "FR", dial: "+33", name: "France" },
-  { code: "IT", dial: "+39", name: "Italy" },
-  { code: "ES", dial: "+34", name: "Spain" },
-  { code: "NL", dial: "+31", name: "Netherlands" },
-  { code: "BE", dial: "+32", name: "Belgium" },
-  { code: "AT", dial: "+43", name: "Austria" },
-  { code: "CH", dial: "+41", name: "Switzerland" },
-  { code: "SE", dial: "+46", name: "Sweden" },
-  { code: "NO", dial: "+47", name: "Norway" },
-  { code: "DK", dial: "+45", name: "Denmark" },
-  { code: "FI", dial: "+358", name: "Finland" },
-  { code: "PL", dial: "+48", name: "Poland" },
-  { code: "CZ", dial: "+420", name: "Czech Republic" },
-  { code: "RO", dial: "+40", name: "Romania" },
-  { code: "HU", dial: "+36", name: "Hungary" },
-  { code: "GR", dial: "+30", name: "Greece" },
-  { code: "PT", dial: "+351", name: "Portugal" },
-  { code: "IE", dial: "+353", name: "Ireland" },
-  { code: "RU", dial: "+7", name: "Russia" },
-  { code: "UA", dial: "+380", name: "Ukraine" },
-  { code: "SA", dial: "+966", name: "Saudi Arabia" },
-  { code: "AE", dial: "+971", name: "UAE" },
-  { code: "QA", dial: "+974", name: "Qatar" },
-  { code: "KW", dial: "+965", name: "Kuwait" },
-  { code: "BH", dial: "+973", name: "Bahrain" },
-  { code: "OM", dial: "+968", name: "Oman" },
-  { code: "JO", dial: "+962", name: "Jordan" },
-  { code: "LB", dial: "+961", name: "Lebanon" },
-  { code: "IQ", dial: "+964", name: "Iraq" },
-  { code: "SY", dial: "+963", name: "Syria" },
-  { code: "EG", dial: "+20", name: "Egypt" },
-  { code: "MA", dial: "+212", name: "Morocco" },
-  { code: "TN", dial: "+216", name: "Tunisia" },
-  { code: "DZ", dial: "+213", name: "Algeria" },
-  { code: "LY", dial: "+218", name: "Libya" },
-  { code: "IR", dial: "+98", name: "Iran" },
-  { code: "PK", dial: "+92", name: "Pakistan" },
-  { code: "AF", dial: "+93", name: "Afghanistan" },
-  { code: "IN", dial: "+91", name: "India" },
-  { code: "BD", dial: "+880", name: "Bangladesh" },
-  { code: "LK", dial: "+94", name: "Sri Lanka" },
-  { code: "NP", dial: "+977", name: "Nepal" },
-  { code: "CN", dial: "+86", name: "China" },
-  { code: "JP", dial: "+81", name: "Japan" },
-  { code: "KR", dial: "+82", name: "South Korea" },
-  { code: "ID", dial: "+62", name: "Indonesia" },
-  { code: "MY", dial: "+60", name: "Malaysia" },
-  { code: "TH", dial: "+66", name: "Thailand" },
-  { code: "VN", dial: "+84", name: "Vietnam" },
-  { code: "PH", dial: "+63", name: "Philippines" },
-  { code: "SG", dial: "+65", name: "Singapore" },
-  { code: "AU", dial: "+61", name: "Australia" },
-  { code: "NZ", dial: "+64", name: "New Zealand" },
-  { code: "CA", dial: "+1", name: "Canada" },
-  { code: "MX", dial: "+52", name: "Mexico" },
-  { code: "BR", dial: "+55", name: "Brazil" },
-  { code: "AR", dial: "+54", name: "Argentina" },
-  { code: "CL", dial: "+56", name: "Chile" },
-  { code: "CO", dial: "+57", name: "Colombia" },
-  { code: "PE", dial: "+51", name: "Peru" },
-  { code: "NG", dial: "+234", name: "Nigeria" },
-  { code: "GH", dial: "+233", name: "Ghana" },
-  { code: "KE", dial: "+254", name: "Kenya" },
-  { code: "ZA", dial: "+27", name: "South Africa" },
-  { code: "ET", dial: "+251", name: "Ethiopia" },
-  { code: "TZ", dial: "+255", name: "Tanzania" },
-  { code: "AZ", dial: "+994", name: "Azerbaijan" },
-  { code: "GE", dial: "+995", name: "Georgia" },
-  { code: "KZ", dial: "+7", name: "Kazakhstan" },
-  { code: "UZ", dial: "+998", name: "Uzbekistan" },
-  { code: "TM", dial: "+993", name: "Turkmenistan" },
-  { code: "KG", dial: "+996", name: "Kyrgyzstan" },
-  { code: "IL", dial: "+972", name: "Israel" },
-  { code: "CY", dial: "+357", name: "Cyprus" },
-].sort((a, b) => a.name.localeCompare(b.name));
+const regionNames = typeof Intl !== "undefined" && (Intl as any).DisplayNames
+  ? new (Intl as any).DisplayNames(["en"], { type: "region" })
+  : null;
+
+function countryName(iso: string): string {
+  try { return regionNames?.of(iso) || iso; } catch { return iso; }
+}
+
+const COUNTRY_CODES = PHONE_CODES
+  .map(p => ({ code: p.country, dial: p.code, name: countryName(p.country) }))
+  .sort((a, b) => parseInt(a.dial.replace("+", ""), 10) - parseInt(b.dial.replace("+", ""), 10));
 
 function parsePhone(fullPhone: string): { dialCode: string; number: string } {
   if (!fullPhone) return { dialCode: "+90", number: "" };
@@ -138,15 +70,21 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
     return undefined;
   }, [open]);
 
-  const selectedCountry = COUNTRY_CODES.find(c => c.dial === dialCode) || COUNTRY_CODES[0];
+  const selectedCountry = useMemo(
+    () => COUNTRY_CODES.find(c => c.dial === dialCode) ?? COUNTRY_CODES[0],
+    [dialCode],
+  );
 
-  const filtered = search
-    ? COUNTRY_CODES.filter(c =>
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.dial.includes(search) ||
-        c.code.toLowerCase().includes(search.toLowerCase())
-      )
-    : COUNTRY_CODES;
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return COUNTRY_CODES;
+    const cleanQ = q.replace(/^\+/, "");
+    return COUNTRY_CODES.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      c.dial.replace("+", "").startsWith(cleanQ) ||
+      c.code.toLowerCase().includes(q)
+    );
+  }, [search]);
 
   function handleDialChange(dial: string) {
     setDialCode(dial);
@@ -180,7 +118,7 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
       />
 
       {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-[280px] rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 top-full mt-1 left-0 w-[300px] rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
           <div className="flex items-center border-b px-2 py-1.5">
             <Search className="h-3.5 w-3.5 text-muted-foreground mr-1.5 shrink-0" />
             <input
@@ -188,7 +126,7 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search country…"
+              placeholder="Search country or code…"
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
             {search && (
@@ -197,7 +135,7 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
               </button>
             )}
           </div>
-          <div className="max-h-[240px] overflow-y-auto p-1">
+          <div className="max-h-[260px] overflow-y-auto p-1">
             {filtered.length === 0 && (
               <div className="py-4 text-center text-sm text-muted-foreground">No results</div>
             )}

@@ -20,7 +20,7 @@ type Item = { code: string; iso: string; name: string };
 
 const ALL_ITEMS: Item[] = PHONE_CODES
   .map(p => ({ code: p.code, iso: p.country, name: countryName(p.country) }))
-  .sort((a, b) => a.name.localeCompare(b.name));
+  .sort((a, b) => parseInt(a.code.replace("+", ""), 10) - parseInt(b.code.replace("+", ""), 10));
 
 interface Props {
   value: string;
