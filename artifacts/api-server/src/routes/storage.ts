@@ -1,6 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
 import { z } from "zod";
+import * as fsPromises from "node:fs/promises";
+import * as nodePath from "node:path";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { requireAuth } from "../lib/auth";
 import { canAccessGenericObject, recordObjectOwner } from "../lib/objectAuthz";
@@ -99,6 +101,66 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
   } catch (error) {
     console.error("Error generating upload URL:", error);
     res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+
+// ── Local-driver upload handler ───────────────────────────────────────────────
+// Only active when STORAGE_DRIVER=local. The client PUTs file bytes directly
+// to this endpoint (same contract as a GCS signed-URL PUT). The :encoded
+// segment is the base64url of the relative path inside STORAGE_LOCAL_DIR.
+
+router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, res: Response) => {
+  if ((process.env.STORAGE_DRIVER ?? "replit") !== "local") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const rawEncoded = req.params["encoded"];
+  const encoded = Array.isArray(rawEncoded) ? rawEncoded[0] : rawEncoded;
+  let relPath: string;
+  try {
+    relPath = Buffer.from(encoded, "base64url").toString();
+  } catch {
+    res.status(400).json({ error: "Invalid upload token" });
+    return;
+  }
+
+  if (relPath.includes("..") || relPath.includes("\\") || relPath.startsWith("/")) {
+    res.status(400).json({ error: "Invalid path" });
+    return;
+  }
+
+  const localDir = process.env.STORAGE_LOCAL_DIR ?? "";
+  if (!localDir) {
+    res.status(500).json({ error: "STORAGE_LOCAL_DIR not configured" });
+    return;
+  }
+
+  const localPath = nodePath.join(localDir, relPath);
+
+  // Guard against path traversal after join
+  if (!localPath.startsWith(localDir + nodePath.sep) && localPath !== localDir) {
+    res.status(400).json({ error: "Invalid path" });
+    return;
+  }
+
+  try {
+    await fsPromises.mkdir(nodePath.dirname(localPath), { recursive: true });
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+    }
+    const body = Buffer.concat(chunks);
+    await fsPromises.writeFile(localPath, body);
+
+    const contentType = (req.headers["content-type"] ?? "application/octet-stream").split(";")[0].trim();
+    await fsPromises.writeFile(`${localPath}.ct`, contentType);
+
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("[local-upload] write failed:", error);
+    res.status(500).json({ error: "Failed to store file" });
   }
 });
 

@@ -1,3 +1,4 @@
+- [VPS storage driver abstraction](vps-storage-driver.md) — STORAGE_DRIVER=local/replit; LocalStorageFile duck-types GCS; prod active fileKeys = 56 unique (65 rows, 9 shared); export script in scripts/export-object-storage.ts.
 - [Vite ships render-time ReferenceErrors](vite-runtime-referenceerror.md) — esbuild strips types without scope-checking; out-of-scope refs only fail at runtime → ErrorBoundary reload loop. Run tsc.
 - [Photo doc filter & PDF avatar](photo-doc-filter-pdf-avatar.md) — Document API doesn't expose fileData; filter must use fileKey||fileUrl; PDF photos need pdfjs-dist canvas render (lazy) not <img>; photo endpoint needs fileUrl redirect with SSRF guard.
 - [Dashboard FAZ 1 entity_view_events](dashboard-faz1-entity-view.md) — entity_view_events boot DDL in api-server Step 2b4; activityV1.ts for POST /v1/activity/view (5-min dedup) + GET /v1/activity/summary; Kommo in stats.ts; lib/db needs tsc -b after schema add.
