@@ -57,3 +57,5 @@
 - [Topkapi adapter quirks](topkapi-adapter-quirks.md) — ALL-CAPS Turkish options (ÖZBEKİSTAN); esbuild __name in $eval; jconfirm "Exclusive bölge" on Step2 next; mode enum is dry/real not dry/live.
 - [Portal document stub-vs-content fix](portal-doc-stub-fix.md) — POST /documents replace guard must check fileKey||fileUrl before retiring old content-bearing records.
 - [programMatch fold Step 7 fix](programMatch-yuksek-lisans-fix.md) — 'yuksek lisans' two-word form wrongly tokenises as 'bachelor'; fold Step 7 merges to 'yukseklisans'.
+- [OpenAPI UserProfile schema vs session payload drift](openapi-userprofile-drift.md) — buildSessionUser returns fields not in OpenAPI spec (emailVerified was missing); always cross-check openapi.yaml + generated api.schemas.ts + dist rebuild (tsc -b) when adding session fields.
+- [i18n namespace copy-paste gap](i18n-namespace-copy-paste-gap.md) — keys added to one namespace (e.g. programs.allCities) are silently absent from others (catalogPage.allCities); new UI keys must be added to ALL relevant namespaces × ALL 10 lang files simultaneously.

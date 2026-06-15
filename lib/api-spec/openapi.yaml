@@ -2497,6 +2497,8 @@ components:
           type: string
         isActive:
           type: boolean
+        emailVerified:
+          type: boolean
         agentStaffPermissions:
           type: ["array", "null"]
           items:
@@ -2509,6 +2511,7 @@ components:
         - role
         - language
         - isActive
+        - emailVerified
         - createdAt
 
     CreateUserBody:

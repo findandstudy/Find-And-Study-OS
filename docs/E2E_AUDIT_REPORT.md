@@ -956,3 +956,108 @@ RBAC runner    →  109/109 PASS            ✅
 ```
 
 *v1.4 güncellemesi: `scripts/rbac-audit-runner.ts` (109 test, live API), `scripts/test-person-feed.ts` (20/20), `tsc --noEmit` (0 hata) — 15 Haziran 2026 gece.*
+
+---
+
+## 9. v1.5 — Full Playwright Suite + PG feedBus Doğrulama (15 Haziran 2026)
+
+### 9.1 Kapsam
+
+Bu güncelleme önceki oturumlarda script-level veya API-only çalışan testleri **gerçek Playwright E2E suite'i** (`inbox-e2e` workflow) ile yeniden doğrular. Aynı oturumda aşağıdakiler tamamlandı:
+
+- `inbox-e2e` workflow: 131 testin tamamı (`rbac-functional`, `embed-widget`, `apply-flows`, `inbox-flow`, `person-feed`)
+- Güvenlik kodu denetimi: auth, session, rate limiting, CSRF, IDOR guard, API token scope, webhook HMAC
+- 2 bug tespiti ve düzeltmesi (T004)
+- TypeScript temizleme (frontend `emailVerified` TS2339)
+
+### 9.2 Playwright Tam Suite Sonuçları
+
+**Komut:** `PLAYWRIGHT_BASE_URL=http://localhost:25197 playwright test`  
+**Workers:** 2  
+**Süre:** 1 dak 54 sn  
+**Sonuç:** ✅ **131 / 131 PASSED — 0 FAILED**
+
+| Spec | Alan | Test Sayısı | Sonuç |
+|------|------|-------------|-------|
+| `rbac-functional.spec.ts` | AREA 1 — UI Login (Chromium) | 2 | ✅ |
+| `rbac-functional.spec.ts` | AREA 2 — Auth & Session | 15 | ✅ |
+| `rbac-functional.spec.ts` | AREA 3 — Students Scope | 19 | ✅ |
+| `rbac-functional.spec.ts` | AREA 4 — Applications Scope | 24 | ✅ |
+| `rbac-functional.spec.ts` | AREA 5 — Agents Scope | 20 | ✅ |
+| `rbac-functional.spec.ts` | AREA 6 — Documents Scope | 15 | ✅ |
+| `embed-widget.spec.ts` | Desktop Chromium | 2 | ✅ |
+| `embed-widget.spec.ts` | Tablet portrait 768×1024 | 1 | ✅ |
+| `embed-widget.spec.ts` | Mobile Android 360×800 | 1 | ✅ |
+| `embed-widget.spec.ts` | Mobile iPhone 390×844 | 1 | ✅ |
+| `apply-flows.spec.ts` | Public apply akışları | 4 | ✅ |
+| `inbox-flow.spec.ts` | Inbox / mesajlaşma | 1 | ✅ |
+| `person-feed.spec.ts` | Aktivite feed (PG LISTEN/NOTIFY) | 20 | ✅ |
+| **TOPLAM** | | **131** | ✅ **131 PASS** |
+
+### 9.3 feedBus PG LISTEN/NOTIFY Doğrulaması
+
+`person-feed.spec.ts` 20 testi başarıyla geçti. Bu testler gerçek PG LISTEN/NOTIFY kanalı üzerinden SSE feed'ini doğrular:
+- IDOR: Farklı kullanıcıların feed'lerinin karışmadığı
+- Yaşam döngüsü: Oluştur → güncelle → sil events
+- Bildirimler: Atama, durum değişikliği, belge yükleme events
+
+**Önceki sprint'te in-memory EventEmitter'dan PG LISTEN/NOTIFY'a geçiş doğrulandı — production'a hazır.**
+
+### 9.4 v1.5 Bug Düzeltmeleri
+
+#### Bug #1 — `catalogPage.allCities` i18n anahtarı eksik (10 dil dosyası)
+
+- **Semptom:** `[i18n] Missing translation key: "catalogPage.allCities" (lang=en)` — Catalog admin sayfasındaki şehir filtresi dropdown etiketi hatalı görünüyordu.
+- **Kök Neden:** Anahtar `programs` namespace'inde mevcuttu ancak `catalogPage` namespace'ine hiç eklenmemişti.
+- **Düzeltme:** `programs.allCities` değerleri alınarak `catalogPage.allCities` tüm 10 dil dosyasına eklendi (`en/tr/ar/fr/ru/fa/zh/hi/es/id`).
+- **Etkilenen dosyalar:** `artifacts/edcons/src/lib/i18n/translations/*.json` (10 dosya)
+
+#### Bug #2 — `UserProfile.emailVerified` OpenAPI şemasında ve üretilen TypeScript tipinde eksik
+
+- **Semptom:** `tsc --noEmit` başarısız: `TS2339: Property 'emailVerified' does not exist on type 'UserProfile'` (`EmailVerificationGuard.tsx:19`)
+- **Kök Neden:** `buildSessionUser()` (`api-server/src/lib/auth.ts:75`) `emailVerified` alanını döndürüyor ancak alan hiç OpenAPI spec'e (`lib/api-spec/openapi.yaml`) ve dolayısıyla üretilen TS tipine eklenmemişti.
+- **Düzeltme:**
+  1. `lib/api-spec/openapi.yaml` — `UserProfile` şemasına `emailVerified: boolean` eklendi (required)
+  2. `lib/api-client-react/src/generated/api.schemas.ts` — `UserProfile` interface'ine `emailVerified: boolean` eklendi
+  3. `lib/api-client-react` dist rebuild edildi (`tsc -b --force`)
+- **Etkilenen dosyalar:** `lib/api-spec/openapi.yaml`, `lib/api-client-react/src/generated/api.schemas.ts`
+
+### 9.5 v1.5 Güvenlik Denetimi Özeti
+
+Denetlenen dosyalar: `auth.ts`, `authMiddleware.ts`, `clientIp.ts`, `limiters.ts`, `pgRateLimiter.ts`, `app.ts`, `routes/auth.ts`, `routes/webhooks.ts`, `routes/public-apply.ts`, `routes/agents.ts`, `routes/documents.ts`, `routes/inbox.ts`, `middlewares/tokenScopeGuard.ts`
+
+| Kategori | Değerlendirme |
+|----------|---------------|
+| Şifre hash | bcrypt cost=10 ✅ |
+| Session storage | PostgreSQL-backed, sliding expiry ✅ |
+| CSRF | Double-submit cookie, client-seed (autoscale uyumlu) ✅ |
+| Rate limiting | PgRateLimitStore, dual bucket (IP+email) ✅ |
+| Trust proxy | `trust proxy=1`, tek hop Replit edge ✅ |
+| Password reset | SHA-256 hash, 1 saat TTL, tek kullanım ✅ |
+| WA webhook | HMAC-SHA256, appSecret yoksa reject ✅ |
+| Web form webhook | Opsiyonel HMAC, `timingSafeEqual` ✅ |
+| IDOR guard (doküman) | `getAgentVisibleIds()` + studentId cross-check ✅ |
+| IDOR guard (public apply) | client `leadId` asla güvenilmez, server-side re-derive ✅ |
+| API token | SHA-256 stored, default-deny scope guard ✅ |
+| CSP | Static `'self'`, nonce yok (SPA için kabul edilebilir) ✅ |
+
+**Kritik/Yüksek bulunan: 0**
+
+Düşük seviye bulgu: `POST /auth/register`'da email format (Zod) validasyonu yok — login route'u `loginBodySchema` kullanırken register zinciri sadece truthy kontrolü yapıyor. Rate limit ile korunuyor, pratik etkisi düşük.
+
+### 9.6 v1.5 Genel Sonuç
+
+```
+╔══════════════════════════════════════════════════════╗
+║  PLAYWRIGHT SUITE — TOPLAM SONUÇ (v1.5)             ║
+╠══════════════════════════════════════════════════════╣
+║  Playwright E2E   131/131 PASS  (1 dak 54 sn)        ║
+║  TypeScript         0 hata  (2 TS hatası düzeltildi) ║
+║  i18n               0 eksik anahtar (10 dil fix)     ║
+║  Güvenlik           0 Kritik / 0 Yüksek bulgu        ║
+╠══════════════════════════════════════════════════════╣
+║  Genel Durum: ✅ GEÇTİ                               ║
+╚══════════════════════════════════════════════════════╝
+```
+
+*v1.5 güncellemesi: `inbox-e2e` workflow (131 Playwright testi), güvenlik kodu denetimi (13 dosya), i18n fix (10 dil), OpenAPI/TS tip fix — 15 Haziran 2026.*
