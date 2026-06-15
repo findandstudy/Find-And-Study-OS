@@ -1002,7 +1002,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
             {showNewApp && (
               <div className="bg-card rounded-2xl border shadow-sm p-4 mb-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr 2fr 1fr" }}>
                   <div>
                     <Label className="text-xs font-medium mb-1 block">Country</Label>
                     <SearchableSelect
@@ -1030,6 +1030,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                       options={filteredPrograms.map((p: any) => ({ value: String(p.id), label: p.name }))}
                       placeholder={!appUniversityId ? "Select university first" : "Select Course"}
                       disabled={!appUniversityId}
+                      minDropdownWidth={440}
                     />
                   </div>
                   <div>

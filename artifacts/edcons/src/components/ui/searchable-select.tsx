@@ -15,6 +15,8 @@ interface SearchableSelectProps {
   searchable?: boolean;
   clearable?: boolean;
   disabled?: boolean;
+  /** Minimum pixel width of the portal dropdown (default 240). */
+  minDropdownWidth?: number;
 }
 
 export function SearchableSelect({
@@ -28,6 +30,7 @@ export function SearchableSelect({
   searchable = true,
   clearable = false,
   disabled = false,
+  minDropdownWidth = 240,
 }: SearchableSelectProps) {
   const emitChange = onChange ?? onValueChange ?? (() => {});
   const [open, setOpen] = useState(false);
@@ -136,7 +139,7 @@ export function SearchableSelect({
             position: "absolute",
             top: pos.top,
             left: pos.left,
-            width: Math.max(pos.width, 240),
+            width: Math.max(pos.width, minDropdownWidth),
             transform: openUp ? "translateY(calc(-100% - 4px))" : "translateY(4px)",
             // Re-enable pointer events explicitly. When this dropdown is used
             // inside a Radix modal Dialog, the dialog sets
