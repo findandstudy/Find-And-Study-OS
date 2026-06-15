@@ -1,5 +1,6 @@
 import express, { Router, json, type Request, type Response } from "express";
 import { publicFormLimiter } from "../lib/limiters";
+import { getClientIp } from "../lib/clientIp";
 import { db } from "@workspace/db";
 import { eq, asc, desc, inArray, and } from "drizzle-orm";
 import type { AnyPgTable, AnyPgColumn } from "drizzle-orm/pg-core";
@@ -938,7 +939,7 @@ router.post("/public/website-forms/:slug/submit", publicFormLimiter, async (req:
       formId: form.id,
       data: submissionData,
       sourceUrl: req.headers.referer || null,
-      ipAddress: (req.ip || req.headers["x-forwarded-for"] || "").toString().slice(0, 45),
+      ipAddress: (getClientIp(req) ?? "").slice(0, 45),
       userAgent: (req.headers["user-agent"] || "").slice(0, 500),
       leadId,
       status: "new",

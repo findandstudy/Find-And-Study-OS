@@ -287,10 +287,10 @@ async function seedApplyFlowFixtures() {
 
   fs.writeFileSync(
     fixturesIdsFile,
-    JSON.stringify({ agentId, fixtureStudentId }, null, 2),
+    JSON.stringify({ agentId, fixtureStudentId, programId: prog.id }, null, 2),
     "utf8",
   );
-  console.log(`[e2e-setup] Wrote ${fixturesIdsFile}`);
+  console.log(`[e2e-setup] Wrote ${fixturesIdsFile} (agentId=${agentId}, fixtureStudentId=${fixtureStudentId}, programId=${prog.id})`);
 }
 
 async function main() {

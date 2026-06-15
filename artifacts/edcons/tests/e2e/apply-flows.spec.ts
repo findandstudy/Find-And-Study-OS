@@ -30,8 +30,8 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197";
 const STAFF_EMAIL = process.env.PLAYWRIGHT_STAFF_EMAIL || "";
 const STAFF_PASS = process.env.PLAYWRIGHT_STAFF_PASS || "";
 
-/** Read the {agentId, fixtureStudentId} JSON written by e2e-db-setup.ts. */
-function readFixturesIds(): { agentId: number; fixtureStudentId: number } {
+/** Read the {agentId, fixtureStudentId, programId?} JSON written by e2e-db-setup.ts. */
+function readFixturesIds(): { agentId: number; fixtureStudentId: number; programId?: number } {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const file = path.resolve(here, "../../../../e2e-fixtures.json");
   if (!fs.existsSync(file)) {
@@ -49,8 +49,23 @@ const E2E_UNIVERSITY_NAME = "E2E Test University";
 const newRunId = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 const e2eEmail = (runId: string) => `apply_e2e_${runId}@e2e.test`;
 
-/** Look up the deterministic test program created by e2e-db-setup.ts. */
+/** Look up the deterministic test program created by e2e-db-setup.ts.
+ *
+ * Reads programId from e2e-fixtures.json first (survives API-server restarts).
+ * Falls back to an API search if the JSON doesn't have a programId yet
+ * (backwards-compat with older setup runs).
+ */
 async function fetchTestProgram(request: APIRequestContext): Promise<{ id: number; name: string; universityName: string } | null> {
+  // JSON-first: stable across API server restarts
+  try {
+    const fixtures = readFixturesIds();
+    if (fixtures.programId) {
+      return { id: fixtures.programId, name: E2E_PROGRAM_NAME, universityName: E2E_UNIVERSITY_NAME };
+    }
+  } catch {
+    // fall through to API lookup
+  }
+  // API fallback (legacy / first-run without programId in JSON)
   const res = await request.get(`${BASE_URL}/api/programs?search=${encodeURIComponent(E2E_PROGRAM_NAME)}&limit=10`);
   if (!res.ok()) return null;
   const body = await res.json();

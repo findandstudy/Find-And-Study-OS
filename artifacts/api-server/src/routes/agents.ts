@@ -356,7 +356,7 @@ router.post(
   },
 );
 
-router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
+router.get("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
 
@@ -461,7 +461,7 @@ router.get("/agents/me", requireAuth, async (req, res): Promise<void> => {
   res.json({ ...agent, contractUrl, assignedStaff, assignedStaffList, parentAgent, effectiveCommissionRate, effectiveHideServiceFees });
 });
 
-router.patch("/agents/me", requireAuth, async (req, res): Promise<void> => {
+router.patch("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = (req.user as any).role as string;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));

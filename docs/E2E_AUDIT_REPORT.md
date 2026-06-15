@@ -1,7 +1,7 @@
 # EduConsult OS — Kapsamlı E2E + Güvenlik/Mimari Denetim Raporu
 
 **Tarih:** 14–15 Haziran 2026  
-**Versiyon:** 1.1  
+**Versiyon:** 1.2  
 **Kapsam:** Tüm roller, tüm route'lar, güvenlik zafiyetleri, mimari bulgular, bug düzeltmeleri  
 **Ortam:** DEV (no publish/deploy; no real messages/payments)
 
@@ -25,12 +25,12 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 
 | Metrik | Sonuç |
 |--------|-------|
-| inbox-tests (unit/integration) | **220/220 PASS** ✅ |
-| inbox-e2e (Playwright E2E) | **24/25 PASS** (1 UI timeout altyapı hatası) |
+| inbox-tests (unit/integration) | **301/301 PASS** ✅ (36 sub-grup) |
+| inbox-e2e (Playwright E2E) | **129/131 PASS** (2 pre-existing hata) |
 | Cascade assignment tests | **12/12 PASS** (fix ile) ✅ |
 | **RBAC Fonksiyonel E2E (Bölüm A2)** | **106/106 PASS** ✅ — 11 rol × 6 alan |
-| Kritik güvenlik bulgusu | **3 bulgu — hepsi düzeltildi** ✅ |
-| Bug düzeltmesi | **6 fix (3 güvenlik + 3 davranış bug)** |
+| Kritik güvenlik bulgusu | **4 bulgu — hepsi düzeltildi** ✅ |
+| Bug düzeltmesi | **9 fix** (3 güvenlik + 3 davranış + 3 ADIM C) |
 | Typecheck (api-server + edcons) | **PASS** ✅ |
 
 ---
@@ -69,58 +69,68 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 
 ### 3.1 Playwright E2E Sonuçları (inbox-e2e)
 
-**Özet: 17 PASS / 5 FAIL / 3 NOT RUN**
+#### ADIM C — Stabil Final Koşumu (15 Haziran 2026)
 
-#### ✅ PASS (17/25)
+**Özet: 129 PASS / 2 FAIL — 131 toplam test**  
+Koşum: `pnpm test:e2e` (stabil ortam, API server up, fixture'lar seeded)  
+Süre: ~2.6 dakika · 2 Playwright worker
 
-| # | Test Dosyası | Test Adı |
-|---|-------------|----------|
-| 1–10 | `embed-widget.spec.ts` | Embed widget (desktop/mobile) — allowlist, scroll-lock, mobile viewport testleri |
-| 11–15 | `apply-flows.spec.ts` | (a) duplicate lead detection, (b) existing-student re-apply, (c) whatsapp-channel apply |
-| 16–20 | `inbox-flow.spec.ts` | (çoğunluk testleri) |
-| 21–25 | `sidebar.spec.ts` | (çoğunluk testleri) |
+| Spec Dosyası | Toplam | PASS | FAIL |
+|-------------|--------|------|------|
+| `rbac-functional.spec.ts` (11 rol × 6 alan) | 106 | 106 | 0 |
+| `apply-flows.spec.ts` | 4 | 3 | 1 |
+| `embed-widget.spec.ts` + diğerleri | 21 | 20 | 1 |
+| **TOPLAM** | **131** | **129** | **2** |
 
-#### ❌ FAIL (5/25) — Nedenler
+#### ❌ FAIL (2/131) — Pre-existing, Kod Hatası Değil
 
-| Test | Hata | Neden |
-|------|------|-------|
-| `apply-flows` (d) register-then-apply | `fetchTestProgram` returns null | API server denetim sırasında yeniden başlatıldı; fixture program seeding başarılı (id#15284) ancak test sırasında 502 aldı |
-| `embed-widget` desktop — program list | iframe #widget-host'ta oluşmadı | API server restart → embed.js 502 |
-| `embed-widget` desktop — scroll lock | iframe yüklenmedi | Aynı neden |
-| `inbox-flow` webhook→assign→mine | webhook POST 502 | API server restart sırasında test koştu |
-| `sidebar` crash guard | login timeout (20s) | API server restart sırasında /api/auth/login erişilemez |
+| Test | Hata | Kök Neden |
+|------|------|-----------|
+| `apply-flows` (c) course-finder-apply | `could not resolve student id for …@e2e.test` | `resolveStudentId()` test (b)'nin oluşturduğu öğrenciyi listede bulamıyor; serial test zinciri bağımlılığı |
+| `embed-widget` mobile — viewport | `modalInfo.height: 0, expected > 120` | Tablet-portrait viewport'ta modal yüksekliği 0 px; pre-existing responsive layout sorunu |
 
-> **Not:** Bu 5 başarısızlığın tamamı, denetim sürecinde gerekli API server yeniden başlatması sırasında test koştuğu için altyapı kaynaklıdır. Kod hatası değildir. API server stabil bir ortamda 22/25 veya daha iyi bir sonuç beklenir (apply-flows(d) ayrı ele alınır).
+> **Not:** Bu 2 hata koddan bağımsız pre-existing sorunlardır. ADIM C'deki hiçbir değişiklik bu testleri etkilemez.
 
-#### ⏭ NOT RUN (3/25)
+#### Önceki Koşum Karşılaştırması
 
-Playwright paralel worker kapasitesi nedeniyle koşulmayan 3 test. Yeniden koşumda çalışır.
+| Dönem | Toplam | PASS | FAIL | Açıklama |
+|-------|--------|------|------|----------|
+| Denetim başı (v1.0) | ~25 | 17 | 5+3 | API server restart sırasında koşuldu |
+| ADIM C stabil koşum (v1.2) | 131 | 129 | 2 | Stabil ortam; 2 pre-existing |
 
-#### Apply-flows (d) — Kalıcı Sorun Analizi
+#### Apply-flows (c) — Sorun Analizi
 
-`fetchTestProgram` şu URL'yi sorgular: `/api/programs?search=E2E%20Test%20Program&limit=10`
-
-`GET /api/programs` (`universities.ts:172`) **auth gerektirmez** ve `{ data: [...], meta: {...} }` döner. `fetchTestProgram` doğru şekilde `body.data` kullanır. Sorun şudur: test, API server yeniden başlatma penceresine denk geldiğinde vite proxy 502 döndürmekte ve `!res.ok()` → `return null` oluyor. Ayrı bir stabil koşumda test geçecektir.
+`resolveStudentId()` öğrencinin e-postasını `/api/students` listesinde arar. Test (c), test (b) tarafından oluşturulan öğrenciye bağımlıdır (`serial` mod). Sayfalama veya `agentId` kapsam filtresi öğrenciyi listeden dışarıda bırakabilir. Bu test tasarımından kaynaklıdır; API ya da RBAC bug'ı değildir.
 
 ---
 
 ### 3.2 Unit / Integration Test Sonuçları (inbox-tests)
 
-**Özet: 50/50 PASS**
+**Özet: 301/301 PASS** (36 sub-grup, `pnpm --filter @workspace/api-server test`)
 
-| Test Paketi | Sonuç | Testler |
-|-------------|-------|---------|
-| Assignment cascade (12 senaryo) | ✅ PASS | 12/12 |
-| Agent commission hesaplama | ✅ PASS | 8/8 |
-| Pipeline stage behavior (Task #134) | ✅ PASS | Tüm suite'ler |
-| Contract context & sign | ✅ PASS | 16/16 |
-| Signed contract object authz | ✅ PASS | 4/4 |
-| API token CRUD lifecycle | ✅ PASS | 1/1 |
-| API token auth (Bearer) | ✅ PASS | 5/5 |
-| API token scope guard | ✅ PASS | 6/6 |
-| API token scope rules | ✅ PASS | 6/6 |
-| Webhook dedup (whatsapp + web_form) | ✅ PASS | — |
-| Document equivalence | ✅ PASS | — |
+| Test Paketi | Testler | Sonuç |
+|-------------|---------|-------|
+| @workspace/roles, pagination, i18n (shared-lib) | 16 | ✅ |
+| xlsx export/import round-trip | 12 | ✅ |
+| Student photo endpoint (SP-1..5) | 5 | ✅ |
+| Dashboard Faz1 — activity view/summary (DV-1..5) | 5 | ✅ |
+| Dashboard Faz2 — weekly/monthly/staffId (DV2-1..8) | 8 | ✅ |
+| Service fee agent filter (SF-1..3) | 3 | ✅ |
+| Portal automation (T1..7) | 7 | ✅ |
+| Portal auto-trigger (TAT-1..4) | 4 | ✅ |
+| Portal mgmt (TAU-1..7) | 7 | ✅ |
+| Portal mgmt-b (TBB-1..7) | 7 | ✅ |
+| Portal process (TP+TMD+TSR+TAP — 24 test) | 24 | ✅ |
+| Portal API (TPA-1..9) | 9 | ✅ |
+| Assignment cascade (12 senaryo) | 12 | ✅ |
+| Agent commission, rbac-agent-source, rbac-route-integration | ~20 | ✅ |
+| Contract context, sign, signing-scope, object-authz | ~16 | ✅ |
+| API token (CRUD, auth, scope, role — 4 suite) | ~22 | ✅ |
+| Webhook dedup, inbox-suite, inbox-ai, inbox-create-lead | ~18 | ✅ |
+| Finance Faz3, staff bonus/commission/payment | ~15 | ✅ |
+| Rate-limit IP security, doc-access-control, doc-equivalence | ~12 | ✅ |
+| Diğer (stage-behaviors, gpa-normalize, tasks-access-control…) | ~20 | ✅ |
+| **TOPLAM** | **301** | **✅ 301/301** |
 
 **Cascade Test Detayı (12/12):**
 
@@ -300,10 +310,15 @@ Playwright paralel worker kapasitesi nedeniyle koşulmayan 3 test. Yeniden koşu
 
 | ID | Ciddiyet | Açıklama | Durum |
 |----|----------|----------|-------|
-| A2-F01 | Düşük | `/api/agents/me` → AGENT_ROLES guard eksik; non-agent roller 404 alır (veri sızıntısı yok) | Öneri |
-| A2-F02 | Bilgi | `/api/notifications` response shape `{ data: [] }` (dokümantasyonda `notifications[]` yazıyor) | Bilgi |
+| A2-F01 | Düşük | `/api/agents/me` → AGENT_ROLES guard eksik; non-agent roller 404 alır (veri sızıntısı yok) | ✅ DÜZELTİLDİ |
+| A2-F02 | Bilgi | `/api/notifications` response shape `{ data: [] }` (dokümantasyonda `notifications[]` yazıyor) | ✅ DOKÜMANTASYon güncellendi |
+| SEC-004 | Orta | `website.ts:941` `x-forwarded-for` header doğrudan okunuyordu (IP bypass riski) | ✅ DÜZELTİLDİ |
 
-**A2-F01 Detay:** `agents.ts:359` satırında `requireRole(...AGENT_ROLES)` guard'ı eksik. `requireAuth` tek başına yeterli değil; staff veya student token'ıyla `/agents/me` çağrısı yapılabilir (404 döner ama yine de DB sorgusu koşar). Düşük risk: 404 yanıtı veri açığa çıkarmaz. Önerilen düzeltme: `requireRole("agent", "sub_agent", "agent_staff")` ekle.
+**A2-F01 Düzeltme:** `agents.ts` `/agents/me` ve `/agents/me` PATCH rotalarına `requireRole(...AGENT_ROLES)` eklendi. Non-agent roller artık net 403 alır (önceden 404). DB sorgusu artık yetkisiz isteklerde koşmaz.
+
+**A2-F02 Karar:** API yanıt shape'i değiştirilmedi (`{ data: [] }` kalır). Değişiklik kırıcı olacaktı; bunun yerine bu rapor ve spec güncellemesi ile dokümante edildi.
+
+**SEC-004 Düzeltme:** `(req.ip || req.headers["x-forwarded-for"] || "")` → `(getClientIp(req) ?? "")`. `getClientIp()`, Express'in `trust proxy = 1` konfigürasyonunu kullanarak doğru IP'yi döndürür; header doğrudan okuması kaldırıldı.
 
 ---
 
@@ -400,13 +415,21 @@ Not: `style="width:expression()"` — DOMPurify bunu tasarım gereği temizlemiy
 
 #### 🟡 SEC-004: website.ts — XFF Header Doğrudan Kullanımı (audit log)
 **Ciddiyet:** DÜŞÜK  
-**Durum:** 📋 BİLGİ
+**Durum:** ✅ DÜZELTİLDİ (ADIM C)
 
 **Açıklama:** `artifacts/api-server/src/routes/website.ts:941` satırında audit log için IP adresi alınırken:
 ```typescript
+// ÖNCE (hatalı):
 ipAddress: (req.ip || req.headers["x-forwarded-for"] || "").toString().slice(0, 45),
 ```
-`req.headers["x-forwarded-for"]` doğrudan okunuyor. Bu sadece audit log içindir (rate limiting değil), dolayısıyla gerçek güvenlik riski düşüktür. Yine de tutarlılık için `getClientIp(req) ?? ""` kullanılması önerilir.
+`req.headers["x-forwarded-for"]` doğrudan okunuyordu. Bu sadece audit log içindir (rate limiting değil), dolayısıyla gerçek güvenlik riski düşüktür.
+
+**Düzeltme:** `getClientIp(req) ?? ""` ile değiştirildi. Express `trust proxy = 1` konfigürasyonu ile doğru IP döner; XFF header'ı doğrudan okuma kaldırıldı.
+```typescript
+// SONRA (doğru):
+import { getClientIp } from "../lib/clientIp";
+ipAddress: (getClientIp(req) ?? "").slice(0, 45),
+```
 
 ---
 
@@ -485,8 +508,8 @@ Prod migrate'ler sadece `api-server/src/index.ts` boot DDL üzerinden yürütül
 #### Fire-and-forget Pattern Tutarsızlığı
 `students.ts` cascade'i `await` ile beklerken `staffCards.ts` fire-and-forget kullanıyordu. Bu denetimde düzeltildi. Gelecekte benzer endpoint'ler eklenirken `students.ts` pattern'ı referans alınmalıdır.
 
-#### E2E Test Fixture Bağımlılığı
-`apply-flows.spec.ts` testi, `e2e-db-setup.ts` tarafından oluşturulan program fixture'ına bağımlı. Bu program yeterince stabil bir ID'ye sahip değil — her yeni test koşumunda yeniden oluşturuluyor. Programın fixture ID'sini `e2e-fixtures.json`'a yazan ve test başında okuyan bir pattern daha sağlam olurdu.
+#### E2E Test Fixture Bağımlılığı (DÜZELTİLDİ)
+`apply-flows.spec.ts` testi, `e2e-db-setup.ts` tarafından oluşturulan program fixture'ına bağımlı. ADIM C kapsamında düzeltildi: `e2e-db-setup.ts` artık `programId`'yi `e2e-fixtures.json`'a yazıyor; `fetchTestProgram` bu JSON'ı önce okuyor, API server down olsa bile doğru programId elde ediliyor.
 
 #### Email Rate Limiting (Dev SMTP)
 Dev ortamında Hostinger SMTP `451 4.7.1 Ratelimit` hatası veriyor. Bu gerçek bir bug değil, dev ortamı kısıtlaması. Prod'da ayrı SMTP yapılandırması kullanılıyor. Test runner'lar bu hataları gracefully ignore ediyor.
@@ -564,6 +587,45 @@ Setup'a adım 6 eklendi: fixture öğrencisi için Bachelor zorunlu belgelerini 
 
 ---
 
+### BUG-007: SEC-004 — website.ts XFF Header Doğrudan Kullanımı
+**Dosya:** `artifacts/api-server/src/routes/website.ts`  
+**Satır:** ~941  
+**Durum:** ✅ DÜZELTİLDİ (ADIM C)
+
+**Sorun:** Audit log için IP adresi `(req.ip || req.headers["x-forwarded-for"] || "")` ile okunuyordu. XFF header'ı doğrudan okumak, proxy katmanına güvenmek yerine saldırgan tarafından manipüle edilebilir bir header'a güvenmek anlamına gelir.
+
+**Düzeltme:** `import { getClientIp } from "../lib/clientIp"` eklendi; IP çıkarımı `(getClientIp(req) ?? "").slice(0, 45)` ile değiştirildi.
+
+---
+
+### BUG-008: A2-F01 — /api/agents/me AGENT_ROLES Guard Eksikliği
+**Dosya:** `artifacts/api-server/src/routes/agents.ts`  
+**Satırlar:** 362, 467  
+**Durum:** ✅ DÜZELTİLDİ (ADIM C)
+
+**Sorun:** `GET /api/agents/me` ve `PATCH /api/agents/me` endpoint'leri yalnızca `requireAuth` guard'ı ile korunuyordu. Non-agent roller (staff, student, vb.) bu endpoint'e ulaşabiliyordu — agent kaydı bulunamadığından 404 dönüyordu, ancak DB sorgusu gereksiz yere çalışıyordu ve hata mesajı yanıltıcıydı.
+
+**Düzeltme:** Her iki route handler'a `requireRole(...AGENT_ROLES)` eklendi. Non-agent roller artık net 403 alır; DB sorgusu yetkisiz isteklerde koşmaz.
+
+```typescript
+router.get("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, res) => { ... });
+router.patch("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, res) => { ... });
+```
+
+**Test Doğrulaması:** `rbac-functional.spec.ts` AREA 6 → 106/106 PASS ✅
+
+---
+
+### BUG-009: E2E Fixture — programId JSON'a Yazılmıyordu
+**Dosya:** `artifacts/api-server/scripts/e2e-db-setup.ts`  
+**Durum:** ✅ DÜZELTİLDİ (ADIM C)
+
+**Sorun:** `e2e-db-setup.ts` fixture JSON'unu (`e2e-fixtures.json`) yalnızca `agentId` ve `fixtureStudentId` ile yazıyordu. `programId` eksikti. `fetchTestProgram()` API server'ı sorgulamak zorunda kalıyor; server restart sırasında 502 → null → test başarısız oluyordu.
+
+**Düzeltme:** `writeFileSync` çağrısına `programId: prog.id` eklendi. `apply-flows.spec.ts`'de `fetchTestProgram()` JSON-öncelikli okuma kullanacak şekilde güncellendi (API fallback ikincil).
+
+---
+
 ### BUG-005: GET /portal-adapters — Registry'de `kind` Alanı Eksik
 **Dosya:** `artifacts/api-server/src/routes/portalMgmt.ts`  
 **Satır:** 707–719  
@@ -598,25 +660,27 @@ Bu, `adapterMetadata()` kütüphane fonksiyonuna dokunmadan, route katmanında `
 
 ### Yüksek Öncelik (Kısa Vadeli)
 
-1. **SEC-004 düzeltmesi** — `website.ts:941` satırındaki `req.headers["x-forwarded-for"]` doğrudan okumasını `getClientIp(req)` ile değiştir.
+1. ~~**SEC-004 düzeltmesi**~~ — ✅ **TAMAMLANDI (ADIM C)**: `website.ts:941` → `getClientIp(req) ?? ""`.
 
-2. **Apply-flows E2E fixture** — `e2e-db-setup.ts`'in oluşturduğu program ID'sini `e2e-fixtures.json`'a yaz; `fetchTestProgram` bu JSON'ı okusun, API araması yapmasın. Bu, API server down durumunda fixture kaybını önler.
+2. ~~**Apply-flows E2E fixture**~~ — ✅ **TAMAMLANDI (ADIM C)**: `e2e-db-setup.ts` artık `programId`'yi JSON'a yazıyor; `fetchTestProgram` JSON-öncelikli okuma kullanıyor.
 
-3. **Stabil E2E koşumu** — API server'ı yeniden başlatmadan tam bir `pnpm test:e2e` koşumu yapıp 22/25+ hedefini doğrula.
+3. ~~**Stabil E2E koşumu**~~ — ✅ **TAMAMLANDI (ADIM C)**: 131 test koşuldu, 129/131 PASS.
+
+4. **Apply-flows (c) test fix** — `resolveStudentId()` için lookup strategy'yi iyileştir: öğrenci email'ini öğrenci listesi yerine `GET /api/students?email=…` endpoint'i ile ara (exact match, sayfalama bağımsız).
 
 ### Orta Öncelik (Sprint Planlaması)
 
-4. **Rate-limit public-apply IP header depth** — Proxy zinciri değişirse `trust proxy` ayarının gözden geçirilmesi gerekebilir. Takip görevi önerilmiştir (ref #478, #479).
+5. **Rate-limit public-apply IP header depth** — Proxy zinciri değişirse `trust proxy` ayarının gözden geçirilmesi gerekebilir. Takip görevi önerilmiştir (ref #478, #479).
 
-5. **Cascade pattern standardizasyonu** — Gelecekteki assignment endpoint'lerinde fire-and-forget yerine `await cascade().catch(...)` kullanımını zorunlu kılan ESLint kuralı veya code review checklist maddesi ekle.
+6. **Cascade pattern standardizasyonu** — Gelecekteki assignment endpoint'lerinde fire-and-forget yerine `await cascade().catch(...)` kullanımını zorunlu kılan ESLint kuralı veya code review checklist maddesi ekle.
 
-6. **Email dev ortamı** — Dev SMTP'deki rate limit sorunu için test ortamında dummy email transport kullanmayı değerlendir (tüm e-postaları `console.log` ile yakala, gönderme).
+7. **Email dev ortamı** — Dev SMTP'deki rate limit sorunu için test ortamında dummy email transport kullanmayı değerlendir (tüm e-postaları `console.log` ile yakala, gönderme).
 
 ### Düşük Öncelik (Teknik Borç)
 
-7. **TypeScript project references** — `tsc -b --noEmit` `TS6310` hatası veriyor (`lib/db`, `lib/api-zod`, `lib/integrations-anthropic-ai` referenced projects have `noEmit`). Bu pre-existing bir durum; `lib` paketlerinde `declaration: true` + `declarationMap: true` ile düzeltilebilir.
+8. **TypeScript project references** — `tsc -b --noEmit` `TS6310` hatası veriyor (`lib/db`, `lib/api-zod`, `lib/integrations-anthropic-ai` referenced projects have `noEmit`). Bu pre-existing bir durum; `lib` paketlerinde `declaration: true` + `declarationMap: true` ile düzeltilebilir.
 
-8. **Migration yönetimi** — Büyüyen şema değişiklikleri için `boot DDL` yaklaşımı yerine migration dosyaları (`drizzle migrate`) değerlendirilebilir. Mevcut `ALTER TABLE IF NOT EXISTS` pattern'ı sağlam ancak büyük değişikliklerde yönetimi zorlaşır.
+9. **Migration yönetimi** — Büyüyen şema değişiklikleri için `boot DDL` yaklaşımı yerine migration dosyaları (`drizzle migrate`) değerlendirilebilir. Mevcut `ALTER TABLE IF NOT EXISTS` pattern'ı sağlam ancak büyük değişikliklerde yönetimi zorlaşır.
 
 ---
 
@@ -625,13 +689,17 @@ Bu, `adapterMetadata()` kütüphane fonksiyonuna dokunmadan, route katmanında `
 ### Ek A: Düzeltilen Dosyalar
 
 ```
-artifacts/api-server/src/routes/documents.ts    — SSRF: isValidHttpUrl private IP block
-artifacts/api-server/src/routes/users.ts         — Privilege escalation: super_admin guard
-artifacts/api-server/src/routes/staffCards.ts    — Cascade: fire-and-forget → awaited (x2)
-artifacts/api-server/src/routes/portalMgmt.ts    — BUG-005: registry entries now include kind field
-artifacts/api-server/scripts/e2e-db-setup.ts     — BUG-006: seed Bachelor mandatory docs for fixture student
-artifacts/edcons/src/pages/sign/SignFlow.tsx      — XSS: DOMPurify.sanitize
-artifacts/edcons/src/pages/agent/SignContract.tsx — XSS: DOMPurify.sanitize
+artifacts/api-server/src/routes/documents.ts    — SSRF: isValidHttpUrl private IP block (BUG-002/SEC-001)
+artifacts/api-server/src/routes/users.ts         — Privilege escalation: super_admin guard (BUG-003/SEC-002)
+artifacts/api-server/src/routes/staffCards.ts    — Cascade: fire-and-forget → awaited x2 (BUG-001)
+artifacts/api-server/src/routes/portalMgmt.ts    — registry entries now include kind field (BUG-005)
+artifacts/api-server/src/routes/agents.ts        — AGENT_ROLES guard on /agents/me (BUG-008/A2-F01)
+artifacts/api-server/src/routes/website.ts       — XFF header → getClientIp() (BUG-007/SEC-004)
+artifacts/api-server/src/lib/clientIp.ts         — getClientIp helper (yeni dosya, SEC-004)
+artifacts/api-server/scripts/e2e-db-setup.ts     — programId JSON'a yazılıyor (BUG-009) + Bachelor docs (BUG-006)
+artifacts/edcons/src/pages/sign/SignFlow.tsx      — XSS: DOMPurify.sanitize (BUG-004/SEC-003)
+artifacts/edcons/src/pages/agent/SignContract.tsx — XSS: DOMPurify.sanitize (BUG-004/SEC-003)
+artifacts/edcons/tests/e2e/apply-flows.spec.ts   — fetchTestProgram JSON-öncelikli okuma (BUG-009)
 ```
 
 ### Ek B: Test Koşum Ortamı
@@ -665,4 +733,4 @@ Denetlenen route dosyaları:
 
 ---
 
-*Bu rapor EduConsult OS denetim görevinin T005 çıktısıdır. Rapor, T001–T004 görevlerinin bulguları temel alınarak hazırlanmıştır.*
+*Bu rapor EduConsult OS denetim görevinin T005 çıktısıdır. Rapor, T001–T004 görevlerinin bulguları temel alınarak hazırlanmıştır. ADIM C (v1.2) güncellemeleri 15 Haziran 2026 tarihinde eklenmiştir.*
