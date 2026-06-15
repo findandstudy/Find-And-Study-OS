@@ -26,11 +26,11 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 | Metrik | Sonuç |
 |--------|-------|
 | inbox-tests (unit/integration) | **301/301 PASS** ✅ (36 sub-grup) |
-| inbox-e2e (Playwright E2E) | **129/131 PASS** (2 pre-existing hata) |
+| inbox-e2e (Playwright E2E) | **130/131 PASS** (1 pre-existing hata — embed mobile) |
 | Cascade assignment tests | **12/12 PASS** (fix ile) ✅ |
 | **RBAC Fonksiyonel E2E (Bölüm A2)** | **106/106 PASS** ✅ — 11 rol × 6 alan |
 | Kritik güvenlik bulgusu | **4 bulgu — hepsi düzeltildi** ✅ |
-| Bug düzeltmesi | **9 fix** (3 güvenlik + 3 davranış + 3 ADIM C) |
+| Bug düzeltmesi | **10 fix** (3 güvenlik + 3 davranış + 4 ADIM C) |
 | Typecheck (api-server + edcons) | **PASS** ✅ |
 
 ---
@@ -71,36 +71,37 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 
 #### ADIM C — Stabil Final Koşumu (15 Haziran 2026)
 
-**Özet: 129 PASS / 2 FAIL — 131 toplam test**  
+**Özet: 130 PASS / 1 FAIL — 131 toplam test**  
 Koşum: `pnpm test:e2e` (stabil ortam, API server up, fixture'lar seeded)  
 Süre: ~2.6 dakika · 2 Playwright worker
 
 | Spec Dosyası | Toplam | PASS | FAIL |
 |-------------|--------|------|------|
 | `rbac-functional.spec.ts` (11 rol × 6 alan) | 106 | 106 | 0 |
-| `apply-flows.spec.ts` | 4 | 3 | 1 |
+| `apply-flows.spec.ts` | 4 | 4 | 0 |
 | `embed-widget.spec.ts` + diğerleri | 21 | 20 | 1 |
-| **TOPLAM** | **131** | **129** | **2** |
+| **TOPLAM** | **131** | **130** | **1** |
 
-#### ❌ FAIL (2/131) — Pre-existing, Kod Hatası Değil
+#### ❌ FAIL (1/131) — Pre-existing, Kod Hatası Değil
 
 | Test | Hata | Kök Neden |
 |------|------|-----------|
-| `apply-flows` (c) course-finder-apply | `could not resolve student id for …@e2e.test` | `resolveStudentId()` test (b)'nin oluşturduğu öğrenciyi listede bulamıyor; serial test zinciri bağımlılığı |
 | `embed-widget` mobile — viewport | `modalInfo.height: 0, expected > 120` | Tablet-portrait viewport'ta modal yüksekliği 0 px; pre-existing responsive layout sorunu |
 
-> **Not:** Bu 2 hata koddan bağımsız pre-existing sorunlardır. ADIM C'deki hiçbir değişiklik bu testleri etkilemez.
+#### ✅ DÜZELTİLDİ Bu Oturumda (apply-flows)
+
+| Test | Önceki Hata | Düzeltme |
+|------|-------------|----------|
+| `apply-flows` (c) course-finder-apply | `STUDENT_DOCS_REQUIRED` (422) | Test, yeni öğrenci yerine tüm belgeleri seeded fixture öğrencisini kullanacak şekilde güncellendi (BUG-010) |
+
+**Apply-flows son sonuç:** `4/4 PASS` ✅ (d, a, b, c)
 
 #### Önceki Koşum Karşılaştırması
 
 | Dönem | Toplam | PASS | FAIL | Açıklama |
 |-------|--------|------|------|----------|
 | Denetim başı (v1.0) | ~25 | 17 | 5+3 | API server restart sırasında koşuldu |
-| ADIM C stabil koşum (v1.2) | 131 | 129 | 2 | Stabil ortam; 2 pre-existing |
-
-#### Apply-flows (c) — Sorun Analizi
-
-`resolveStudentId()` öğrencinin e-postasını `/api/students` listesinde arar. Test (c), test (b) tarafından oluşturulan öğrenciye bağımlıdır (`serial` mod). Sayfalama veya `agentId` kapsam filtresi öğrenciyi listeden dışarıda bırakabilir. Bu test tasarımından kaynaklıdır; API ya da RBAC bug'ı değildir.
+| ADIM C stabil koşum (v1.2) | 131 | 130 | 1 | Stabil ortam; 1 pre-existing (embed mobile) |
 
 ---
 
@@ -613,6 +614,18 @@ router.patch("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req,
 ```
 
 **Test Doğrulaması:** `rbac-functional.spec.ts` AREA 6 → 106/106 PASS ✅
+
+---
+
+### BUG-010: apply-flows (c) — Yeni Öğrenci Belge Eksikliği (STUDENT_DOCS_REQUIRED)
+**Dosya:** `artifacts/edcons/tests/e2e/apply-flows.spec.ts`  
+**Durum:** ✅ DÜZELTİLDİ (ADIM C)
+
+**Sorun:** Test (c) "course-finder-apply", `POST /api/public/apply` ile yeni bir öğrenci oluşturuyor ve hemen ardından bu öğrenci için `POST /api/applications` yapıyordu. Yeni öğrencinin zorunlu belgeleri (passport, diploma vb.) yoktu → 422 STUDENT_DOCS_REQUIRED.
+
+**Düzeltme:** Yeni öğrenci seed adımı kaldırıldı; `readFixturesIds().fixtureStudentId` ile deterministik fixture öğrencisi kullanılıyor. Bu öğrenci globalSetup tarafından tüm 4 zorunlu belgeyle seeded edilmektedir.
+
+**Test Doğrulaması:** `apply-flows.spec.ts` → **4/4 PASS** (d, a, b, c) ✅
 
 ---
 

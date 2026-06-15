@@ -278,29 +278,13 @@ test.describe("apply flows e2e (smoke)", () => {
   // (c) course-finder-apply  — staff opens /staff/course-finder and applies
   // ────────────────────────────────────────────────────────────────────────
   test("(c) course-finder-apply: staff UI navigates to course-finder, search renders", async ({ page, request }) => {
-    const runId = newRunId();
-    const email = e2eEmail(runId);
-
     const program = await fetchTestProgram(request);
     expect(program).not.toBeNull();
 
-    // Seed a student for the staff to apply on behalf of.
-    const seed = await request.post(`${BASE_URL}/api/public/apply`, {
-      headers: { "Content-Type": "application/json" },
-      data: {
-        firstName: "CfApply",
-        lastName: "Student",
-        email,
-        phone: "5555550103",
-        phoneCode: "+90",
-        nationality: "Turkey",
-        gender: "male",
-        motherName: "Mother E2E",
-        fatherName: "Father E2E",
-        passportNumber: `P${runId.slice(0, 8).toUpperCase()}`,
-      },
-    });
-    expect(seed.status()).toBeLessThan(300);
+    // Use the deterministic fixture student (seeded by globalSetup with all
+    // mandatory docs). Creating a fresh student here would lack docs and 422.
+    const { fixtureStudentId } = readFixturesIds();
+    expect(fixtureStudentId, "fixture student must be seeded by e2e-db-setup").toBeGreaterThan(0);
 
     await loginViaUI(page, STAFF_EMAIL, STAFF_PASS);
 
@@ -314,7 +298,6 @@ test.describe("apply flows e2e (smoke)", () => {
     const allCookies = await page.context().cookies();
     const cookieHeader = allCookies.map(c => `${c.name}=${c.value}`).join("; ");
     const csrfToken = allCookies.find(c => c.name === "csrf_token")?.value ?? "";
-    const studentId = await resolveStudentId(request, email);
     const directRes = await page.request.post(`${BASE_URL}/api/applications`, {
       headers: {
         "Content-Type": "application/json",
@@ -322,7 +305,7 @@ test.describe("apply flows e2e (smoke)", () => {
         "x-csrf-token": csrfToken,
       },
       data: {
-        studentId,
+        studentId: fixtureStudentId,
         stage: "inquiry",
         programId: program!.id,
         programName: program!.name,
