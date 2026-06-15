@@ -37,35 +37,41 @@ export function SearchableSelect({
   const [search, setSearch] = useState("");
   const [openUp, setOpenUp] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  // True when mounted inside a Radix Dialog — in that case we render the
-  // dropdown inline (no portal) so that Radix's FocusScope and RemoveScroll
-  // don't block keyboard input and wheel scroll inside the dropdown.
-  const [inDialog, setInDialog] = useState(false);
+  // The element we portal into: dialog content (keeps Radix FocusScope happy)
+  // or document.body for standalone usage.
+  const [portalTarget, setPortalTarget] = useState<Element | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
+  // Resolve portal target once on mount.
+  // Inside a Radix Dialog we portal INTO the dialog content div (not body) so
+  // that Radix's FocusScope keeps the search input within its managed subtree
+  // and doesn't snatch focus back on every keystroke. position:fixed (below)
+  // means the dropdown still escapes the dialog's overflow:auto clipping.
   useEffect(() => {
     if (ref.current) {
-      setInDialog(!!ref.current.closest("[data-radix-dialog-content]"));
+      const dialogContent = ref.current.closest("[data-radix-dialog-content]");
+      setPortalTarget(dialogContent ?? document.body);
     }
   }, []);
 
+  // Outside-click: use "click" (not "mousedown") so dragging a scrollbar inside
+  // the dropdown doesn't close it prematurely.
   useEffect(() => {
-    // Use "click" (not "mousedown") so that grabbing/dragging a scrollbar
-    // — inside the popover or in an ancestor scroll container such as a
-    // dialog body — does not dismiss the dropdown. Native scrollbar
-    // interactions fire mousedown but never a click event, while real
-    // outside clicks still close the menu as expected.
     function handleClick(e: MouseEvent) {
       const target = e.target as Node;
-      if (ref.current && ref.current.contains(target)) return;
-      if (popRef.current && popRef.current.contains(target)) return;
+      if (ref.current?.contains(target)) return;
+      if (popRef.current?.contains(target)) return;
       setOpen(false);
     }
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
   }, []);
 
+  // Track trigger position in viewport coordinates (for position:fixed portal).
+  // Using fixed coords means the dropdown is never clipped by any overflow
+  // ancestor, whether that's the dialog body or any scroll container.
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
     function update() {
@@ -73,13 +79,11 @@ export function SearchableSelect({
       const rect = ref.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const up = spaceBelow < 320;
-      const top = up ? rect.top + window.scrollY : rect.bottom + window.scrollY;
-      const left = rect.left + window.scrollX;
+      // Viewport-relative coords — do NOT add scrollY/scrollX; position:fixed
+      // is already relative to the viewport.
+      const top = up ? rect.top : rect.bottom;
+      const left = rect.left;
       const width = rect.width;
-      // Bail out when nothing moved. This runs on every scroll/resize; emitting
-      // a fresh pos object each tick would re-render the portal continuously and
-      // could feed back into an update loop (React #185). Stable identity on a
-      // no-op breaks that feedback.
       setOpenUp(prev => (prev === up ? prev : up));
       setPos(prev =>
         prev && prev.top === top && prev.left === left && prev.width === width
@@ -96,9 +100,20 @@ export function SearchableSelect({
     };
   }, [open]);
 
+  // Reset search when dropdown closes.
   useEffect(() => {
     if (!open) setSearch("");
   }, [open]);
+
+  // Focus the search input when the dropdown opens.
+  // We use a ref + setTimeout instead of autoFocus so it fires every time the
+  // dropdown re-opens, not only on the first mount.
+  useEffect(() => {
+    if (open && searchable && options.length > 6) {
+      const id = setTimeout(() => searchRef.current?.focus(), 0);
+      return () => clearTimeout(id);
+    }
+  }, [open, searchable, options.length]);
 
   const filtered = search
     ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
@@ -106,72 +121,79 @@ export function SearchableSelect({
 
   const selected = options.find(o => o.value === value);
 
-  /** Shared inner content rendered inside the dropdown panel. */
-  function DropdownContent() {
-    return (
-      <>
-        {searchable && options.length > 6 && (
-          <div className="p-2 border-b border-border">
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="w-full h-8 px-2 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-              autoFocus
-            />
-          </div>
-        )}
-        <div className="max-h-72 overflow-y-auto p-1">
-          {filtered.length === 0 ? (
-            <div className="px-3 py-3 text-xs text-muted-foreground text-center">No results</div>
-          ) : (
-            (() => {
-              const groups = new Map<string, typeof filtered>();
-              for (const opt of filtered) {
-                const g = opt.group || "";
-                if (!groups.has(g)) groups.set(g, []);
-                groups.get(g)!.push(opt);
-              }
-              return Array.from(groups.entries()).map(([group, items]) => (
-                <div key={group}>
-                  {group && (
-                    <div className="px-2.5 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">{group}</div>
-                  )}
-                  {items.map(opt => {
-                    const isSelected = opt.value === value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => { emitChange(opt.value); setOpen(false); }}
-                        className={`flex items-center justify-between gap-2 w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
-                          isSelected ? "bg-primary/10 text-primary font-medium" : "hover:bg-primary/10 text-foreground"
-                        }`}
-                      >
-                        <span className="truncate flex-1">
-                          {opt.node ?? (
-                            <span className="inline-flex items-center gap-1.5">
-                              {opt.icon}
-                              {opt.label}
-                            </span>
-                          )}
-                        </span>
-                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              ));
-            })()
-          )}
+  // IMPORTANT: dropdownContent is a plain JSX value, NOT a function component.
+  // Defining it as `function DropdownContent()` inside the render body would
+  // give React a brand-new component type on every re-render, causing it to
+  // unmount → remount the subtree and steal focus from the search input on
+  // every keystroke. A JSX variable is stable identity → no unmount.
+  const dropdownContent = (
+    <>
+      {searchable && options.length > 6 && (
+        <div className="p-2 border-b border-border">
+          <input
+            ref={searchRef}
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={searchPlaceholder}
+            className="w-full h-8 px-2 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          />
         </div>
-      </>
-    );
-  }
+      )}
+      <div className="max-h-72 overflow-y-auto p-1">
+        {filtered.length === 0 ? (
+          <div className="px-3 py-3 text-xs text-muted-foreground text-center">No results</div>
+        ) : (
+          (() => {
+            const groups = new Map<string, typeof filtered>();
+            for (const opt of filtered) {
+              const g = opt.group || "";
+              if (!groups.has(g)) groups.set(g, []);
+              groups.get(g)!.push(opt);
+            }
+            return Array.from(groups.entries()).map(([group, items]) => (
+              <div key={group}>
+                {group && (
+                  <div className="px-2.5 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                    {group}
+                  </div>
+                )}
+                {items.map(opt => {
+                  const isSelected = opt.value === value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { emitChange(opt.value); setOpen(false); }}
+                      className={`flex items-center justify-between gap-2 w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
+                        isSelected
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "hover:bg-primary/10 text-foreground"
+                      }`}
+                    >
+                      <span className="truncate flex-1">
+                        {opt.node ?? (
+                          <span className="inline-flex items-center gap-1.5">
+                            {opt.icon}
+                            {opt.label}
+                          </span>
+                        )}
+                      </span>
+                      {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            ));
+          })()
+        )}
+      </div>
+    </>
+  );
 
   return (
     <div ref={ref} className={`relative ${className}`}>
+      {/* ── Trigger button ───────────────────────────────────────────────── */}
       <button
         type="button"
         disabled={disabled}
@@ -206,51 +228,35 @@ export function SearchableSelect({
         </div>
       </button>
 
-      {/* ── Inline mode (inside Radix Dialog) ───────────────────────────────
-          Rendering inline (not portaled) avoids two Radix Dialog problems:
-          1. FocusScope trapping focus outside the dialog → search can't receive input
-          2. RemoveScroll intercepting wheel events on body-level elements → list can't scroll
-          An inline absolute child is inside the dialog's DOM subtree, so both
-          mechanisms leave it alone. The z-index ensures it floats above siblings. */}
-      {inDialog && open && (
-        <div
-          ref={popRef}
-          className="absolute z-[9999] bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
-          style={{
-            top: openUp ? "auto" : "100%",
-            bottom: openUp ? "100%" : "auto",
-            marginTop: openUp ? 0 : 4,
-            marginBottom: openUp ? 4 : 0,
-            left: 0,
-            minWidth: `${minDropdownWidth}px`,
-            width: "100%",
-          }}
-        >
-          <DropdownContent />
-        </div>
-      )}
+      {/* ── Portal dropdown ──────────────────────────────────────────────────
+          Always portaled (never rendered as an inline absolute child) so it
+          escapes every overflow:hidden/auto ancestor without exception.
 
-      {/* ── Portal mode (outside any dialog) ────────────────────────────────
-          Portaling to body escapes overflow:hidden/auto ancestors that would
-          otherwise clip the dropdown. pointer-events:auto re-enables clicks
-          since Radix Dialog sets pointer-events:none on body while open
-          (this branch only runs when NOT inside a dialog). */}
-      {!inDialog && open && pos && createPortal(
+          position:fixed + viewport coords = not clipped by any scroll container.
+
+          pointerEvents:auto overrides Radix Dialog's `pointer-events:none` on
+          the body so clicks inside the dropdown register correctly.
+
+          When inside a Radix Dialog, we portal INTO the dialog content element
+          (not body) so Radix's FocusScope considers the search input "inside"
+          the dialog and doesn't forcibly move focus elsewhere.              */}
+      {open && pos && portalTarget && createPortal(
         <div
           ref={popRef}
           style={{
-            position: "absolute",
-            top: pos.top,
+            position: "fixed",
+            top: openUp ? pos.top - 4 : pos.top + 4,
             left: pos.left,
             width: Math.max(pos.width, minDropdownWidth),
-            transform: openUp ? "translateY(calc(-100% - 4px))" : "translateY(4px)",
+            transform: openUp ? "translateY(-100%)" : "translateY(0)",
             pointerEvents: "auto",
+            zIndex: 9999,
           }}
-          className="z-[1000] bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+          className="bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
         >
-          <DropdownContent />
+          {dropdownContent}
         </div>,
-        document.body
+        portalTarget,
       )}
     </div>
   );
