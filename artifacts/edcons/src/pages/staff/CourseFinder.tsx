@@ -19,7 +19,7 @@ import {
   ChevronLeft, ChevronRight, X, FileText, ExternalLink,
   Mail, Phone, User, Award, Calendar, Check, Loader2, UserSearch,
   Download, CheckSquare, Square, FileDown, LayoutGrid, List, ArrowUpDown,
-  ArrowUp, ArrowDown, CheckCircle2, AlertCircle, Upload,
+  ArrowUp, ArrowDown, CheckCircle2, AlertCircle, Upload, UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
@@ -1821,8 +1821,10 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [step, setStep] = useState<"select" | "documents">("select");
+  const [step, setStep] = useState<"select" | "new_student" | "documents">("select");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
+  const [newStudentForm, setNewStudentForm] = useState({ firstName: "", lastName: "", email: "", phone: "", nationality: "" });
+  const [creatingStudent, setCreatingStudent] = useState(false);
 
   const level = p ? degreeToLevel(p.degree) : "undergraduate";
   // Pull program-specific document requirements from the catalog. Falls
@@ -1914,12 +1916,46 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
     setSuccess(false);
     setStep("select");
     setDocs({});
+    setNewStudentForm({ firstName: "", lastName: "", email: "", phone: "", nationality: "" });
+    setCreatingStudent(false);
     onClose();
   }
 
   function handleNextToDocuments() {
     if (!selectedStudent) return;
     setStep("documents");
+  }
+
+  async function handleCreateAndContinue() {
+    if (!newStudentForm.firstName.trim() || !newStudentForm.lastName.trim()) return;
+    setCreatingStudent(true);
+    try {
+      const created = await apiFetch(`${BASE_URL}/api/students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: newStudentForm.firstName.trim(),
+          lastName: newStudentForm.lastName.trim(),
+          email: newStudentForm.email.trim() || undefined,
+          phone: newStudentForm.phone.trim() || undefined,
+          nationality: newStudentForm.nationality.trim() || undefined,
+        }),
+      });
+      setSelectedStudent({
+        id: created.id,
+        firstName: created.firstName,
+        lastName: created.lastName,
+        email: created.email || "",
+        nationality: created.nationality || null,
+        createdAt: created.createdAt,
+      });
+      toast({ title: "Student registered", description: `${created.firstName} ${created.lastName} has been added to the system.` });
+      setStep("documents");
+    } catch (err: any) {
+      toast({ title: "Registration failed", description: err.message || "Could not create student", variant: "destructive" });
+    } finally {
+      setCreatingStudent(false);
+    }
   }
 
   async function saveDocumentsForApplication(studentId: number, applicationId: number, studentFirstName: string, studentLastName: string): Promise<number> {
@@ -2131,6 +2167,101 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                 <Button onClick={handleNextToDocuments} disabled={!selectedStudent} className="w-full rounded-xl h-11">
                   <FileText className="w-4 h-4 mr-2" /> Continue to Documents
                 </Button>
+
+                <div className="relative my-1">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+                  <div className="relative flex justify-center"><span className="bg-background px-2 text-[11px] text-muted-foreground uppercase tracking-wide">or</span></div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl h-10 text-sm"
+                  onClick={() => { setSelectedStudent(null); setSearchTerm(""); setStep("new_student"); }}
+                >
+                  <UserPlus className="w-4 h-4 mr-2" /> Register New Student
+                </Button>
+              </>
+            )}
+
+            {step === "new_student" && (
+              <>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <UserPlus className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Register New Student</p>
+                    <p className="text-xs text-muted-foreground">They will be registered and applied to this course immediately.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs font-medium mb-1 block">First Name <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={newStudentForm.firstName}
+                      onChange={e => setNewStudentForm(s => ({ ...s, firstName: e.target.value }))}
+                      placeholder="First name"
+                      className="rounded-lg h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1 block">Last Name <span className="text-destructive">*</span></Label>
+                    <Input
+                      value={newStudentForm.lastName}
+                      onChange={e => setNewStudentForm(s => ({ ...s, lastName: e.target.value }))}
+                      placeholder="Last name"
+                      className="rounded-lg h-9"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-medium mb-1 block">Email</Label>
+                  <Input
+                    type="email"
+                    value={newStudentForm.email}
+                    onChange={e => setNewStudentForm(s => ({ ...s, email: e.target.value }))}
+                    placeholder="student@example.com"
+                    className="rounded-lg h-9"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs font-medium mb-1 block">Phone</Label>
+                    <Input
+                      value={newStudentForm.phone}
+                      onChange={e => setNewStudentForm(s => ({ ...s, phone: e.target.value }))}
+                      placeholder="+90 5xx xxx xx xx"
+                      className="rounded-lg h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium mb-1 block">Nationality</Label>
+                    <Input
+                      value={newStudentForm.nationality}
+                      onChange={e => setNewStudentForm(s => ({ ...s, nationality: e.target.value }))}
+                      placeholder="e.g. Turkish"
+                      className="rounded-lg h-9"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setStep("select")} className="rounded-xl h-11">
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Back
+                  </Button>
+                  <Button
+                    onClick={handleCreateAndContinue}
+                    disabled={!newStudentForm.firstName.trim() || !newStudentForm.lastName.trim() || creatingStudent}
+                    className="flex-1 rounded-xl h-11"
+                  >
+                    {creatingStudent
+                      ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Registering...</>
+                      : <><UserPlus className="w-4 h-4 mr-2" /> Register &amp; Continue to Documents</>
+                    }
+                  </Button>
+                </div>
               </>
             )}
 
