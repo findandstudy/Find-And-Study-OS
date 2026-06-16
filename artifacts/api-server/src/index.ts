@@ -1614,6 +1614,16 @@ async function seedClaudeIntegration() {
     startSignedContractDeliveryWorker();
     const { startAssignmentConsistencyChecker } = await import("./lib/assignmentConsistencyChecker");
     startAssignmentConsistencyChecker();
+    // Null-fill backfill: runs on every boot but is idempotent — only touches
+    // records where assignedToId IS NULL, so a second run is always a no-op.
+    setTimeout(async () => {
+      try {
+        const { backfillNullAssignments } = await import("./lib/leadAssignment");
+        await backfillNullAssignments(null);
+      } catch (err: any) {
+        console.error("[boot] backfillNullAssignments error:", err?.message || err);
+      }
+    }, 15_000);
     const { startFollowUpChecker } = await import("./lib/followUpChecker");
     startFollowUpChecker();
     const { startPortalStuckReset } = await import("./routes/portalAutomation");

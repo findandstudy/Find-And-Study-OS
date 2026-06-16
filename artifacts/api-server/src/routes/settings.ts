@@ -267,4 +267,15 @@ router.post("/settings/admin/wipe-crm", requireAuth, requireRole("super_admin"),
   }
 });
 
+router.post("/settings/admin/backfill-assignments", requireAuth, requireRole("super_admin", "admin", "manager"), async (req, res): Promise<void> => {
+  try {
+    const { backfillNullAssignments } = await import("../lib/leadAssignment");
+    const result = await backfillNullAssignments(req.user!.id, req.ip);
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error("[ADMIN-BACKFILL-ASSIGNMENTS] Failed:", err);
+    res.status(500).json({ error: err?.message || "Backfill failed" });
+  }
+});
+
 export default router;

@@ -1,5 +1,5 @@
 import { db, leadAssignmentRulesTable, leadsTable, studentsTable, applicationsTable, universitiesTable, type LeadAssignmentRule } from "@workspace/db";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { logAudit } from "./auth";
 
 interface LeadLike {
@@ -259,6 +259,101 @@ export async function cascadeStudentAssignment(opts: {
   } catch (err: any) {
     console.error("[cascadeStudentAssignment] failed:", err?.message || err);
   }
+}
+
+/**
+ * One-time null-fill backfill: for every student journey (lead → student → applications),
+ * find the authoritative assigned-to value and propagate it to any sibling records
+ * that are currently NULL. Never overwrites an explicit assignment.
+ *
+ * Priority: student.assignedToId > lead.assignedToId
+ *
+ * Safe to call on every boot — it only touches rows where assignedToId IS NULL,
+ * so a second run is a no-op once everything is consistent.
+ */
+export async function backfillNullAssignments(actorUserId: number | null = null, ipAddress?: string): Promise<{ studentsFixed: number; leadsFixed: number; appsFixed: number }> {
+  let studentsFixed = 0;
+  let leadsFixed = 0;
+  let appsFixed = 0;
+
+  try {
+    // --- Pass 1: student.assignedToId → fill their null leads and applications ---
+    const assignedStudents = await db
+      .select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId })
+      .from(studentsTable)
+      .where(and(isNull(studentsTable.deletedAt), isNotNull(studentsTable.assignedToId)));
+
+    for (const student of assignedStudents) {
+      if (!student.assignedToId) continue;
+
+      // Fill null leads for this student
+      const leads = await db
+        .select({ id: leadsTable.id, assignedToId: leadsTable.assignedToId })
+        .from(leadsTable)
+        .where(and(eq(leadsTable.convertedStudentId, student.id), isNull(leadsTable.assignedToId), isNull(leadsTable.deletedAt)));
+
+      for (const lead of leads) {
+        await db.update(leadsTable).set({ assignedToId: student.assignedToId }).where(eq(leadsTable.id, lead.id));
+        logAudit(actorUserId, "assignment.null_fill_backfill", "lead", lead.id, { from: null, to: student.assignedToId, source: "student", sourceId: student.id }, ipAddress);
+        leadsFixed++;
+      }
+
+      // Fill null applications for this student
+      const apps = await db
+        .select({ id: applicationsTable.id, assignedToId: applicationsTable.assignedToId })
+        .from(applicationsTable)
+        .where(and(eq(applicationsTable.studentId, student.id), isNull(applicationsTable.assignedToId), isNull(applicationsTable.deletedAt)));
+
+      for (const app of apps) {
+        await db.update(applicationsTable).set({ assignedToId: student.assignedToId }).where(eq(applicationsTable.id, app.id));
+        logAudit(actorUserId, "assignment.null_fill_backfill", "application", app.id, { from: null, to: student.assignedToId, source: "student", sourceId: student.id }, ipAddress);
+        appsFixed++;
+      }
+    }
+
+    // --- Pass 2: if student is unassigned but their lead has an assignment, promote it ---
+    const unassignedStudents = await db
+      .select({ id: studentsTable.id })
+      .from(studentsTable)
+      .where(and(isNull(studentsTable.deletedAt), isNull(studentsTable.assignedToId)));
+
+    for (const student of unassignedStudents) {
+      const [assignedLead] = await db
+        .select({ id: leadsTable.id, assignedToId: leadsTable.assignedToId })
+        .from(leadsTable)
+        .where(and(eq(leadsTable.convertedStudentId, student.id), isNotNull(leadsTable.assignedToId), isNull(leadsTable.deletedAt)))
+        .limit(1);
+
+      if (!assignedLead?.assignedToId) continue;
+
+      // Set student from lead
+      await db.update(studentsTable).set({ assignedToId: assignedLead.assignedToId }).where(eq(studentsTable.id, student.id));
+      logAudit(actorUserId, "assignment.null_fill_backfill", "student", student.id, { from: null, to: assignedLead.assignedToId, source: "lead", sourceId: assignedLead.id }, ipAddress);
+      studentsFixed++;
+
+      // Fill null applications for this student
+      const apps = await db
+        .select({ id: applicationsTable.id })
+        .from(applicationsTable)
+        .where(and(eq(applicationsTable.studentId, student.id), isNull(applicationsTable.assignedToId), isNull(applicationsTable.deletedAt)));
+
+      for (const app of apps) {
+        await db.update(applicationsTable).set({ assignedToId: assignedLead.assignedToId }).where(eq(applicationsTable.id, app.id));
+        logAudit(actorUserId, "assignment.null_fill_backfill", "application", app.id, { from: null, to: assignedLead.assignedToId, source: "lead", sourceId: assignedLead.id }, ipAddress);
+        appsFixed++;
+      }
+    }
+
+    if (studentsFixed + leadsFixed + appsFixed > 0) {
+      console.log(`[backfillNullAssignments] Fixed: ${studentsFixed} students, ${leadsFixed} leads, ${appsFixed} applications`);
+    } else {
+      console.log("[backfillNullAssignments] No null assignments to fix — all consistent.");
+    }
+  } catch (err: any) {
+    console.error("[backfillNullAssignments] error:", err?.message || err);
+  }
+
+  return { studentsFixed, leadsFixed, appsFixed };
 }
 
 /**
