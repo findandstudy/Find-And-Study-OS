@@ -1824,7 +1824,7 @@ export default function ApplicationsPage() {
             />
             {viewMode === "list" && (
               <ColumnSettingsMenu
-                columns={APP_COLUMN_DEFS}
+                columns={APP_COLUMN_DEFS.filter(c => c.id !== "commission" || canSeeCommission)}
                 order={colPrefs.order}
                 hidden={colPrefs.hidden}
                 onToggle={toggleAppCol}
