@@ -39,7 +39,7 @@ import { StudentDocChecklist } from "@/components/StudentDocChecklist";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 import PortalSubmissionPanel from "@/components/PortalSubmissionPanel";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
-
+import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 
 function formatCurrency(v: number | string | null | undefined) {
   if (!v) return "—";
@@ -286,6 +286,12 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/applications`)}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
+          <StudentPhotoAvatar
+            studentId={app?.studentId ?? null}
+            firstName={app?.studentFirstName}
+            lastName={app?.studentLastName}
+            className="w-14 h-14 rounded-full shrink-0"
+          />
           <div className="flex-1 min-w-0">
             {isLoading ? (
               <Skeleton className="h-8 w-48" />

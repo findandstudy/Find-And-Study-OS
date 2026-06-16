@@ -33,6 +33,7 @@ import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
+import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 
 const PHONE_CODES = [
   { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
@@ -475,6 +476,12 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/leads`)}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
+          <StudentPhotoAvatar
+            studentId={lead?.convertedStudentId ?? null}
+            firstName={lead?.firstName}
+            lastName={lead?.lastName}
+            className="w-14 h-14 rounded-full shrink-0"
+          />
           <div className="flex-1">
             {isLoading ? (
               <Skeleton className="h-8 w-48" />
