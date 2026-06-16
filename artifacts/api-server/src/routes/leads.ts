@@ -225,8 +225,12 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   }
 
   // KURAL 1: non-admin staff cannot see agent-sourced leads
+  // unless they have records.view_others (Task #494)
   if (!isAgentRole(user.role) && !(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-    conditions.push(isNull(leadsTable.agentId));
+    const listPerms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    if (!listPerms.has("records.view_others")) {
+      conditions.push(isNull(leadsTable.agentId));
+    }
   }
   if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
@@ -525,11 +529,14 @@ router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...A
       return;
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    const docPerms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    const docViewOthers = docPerms.has("records.view_others");
     // KURAL 1: non-admin staff cannot access documents of agent-sourced leads
-    if (lead.agentId !== null) {
+    // unless they have records.view_others (Task #494)
+    if (lead.agentId !== null && !docViewOthers) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
-    if (lead.assignedToId !== null && lead.assignedToId !== user.id) {
+    if (lead.assignedToId !== null && lead.assignedToId !== user.id && !docViewOthers) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -751,14 +758,18 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     }
   }
   if (!isAdmin && !isAgent && req.body.assignedTo !== undefined) {
-    const hasAssignPerm = perms.has("records.change_assigned");
     const isCurrentAssignee = existing.assignedToId === user.id;
-    const selfClaimUnassigned = existing.assignedToId === null && Number(req.body.assignedTo) === user.id;
-    // Block if: no perm and not self-claiming unassigned,
-    // OR has perm but record already belongs to someone else (Task #494 assignment protection)
-    if ((!hasAssignPerm && !selfClaimUnassigned) || (hasAssignPerm && existing.assignedToId !== null && !isCurrentAssignee)) {
+    if (existing.assignedToId !== null && !isCurrentAssignee) {
+      // Task #494: record already assigned to someone else — only admin or the assignee can change
       allowedFields = allowedFields.filter(f => f !== "assignedTo");
+    } else if (existing.assignedToId === null && !perms.has("records.change_assigned")) {
+      // Unassigned: self-claim allowed without permission, assigning to others requires change_assigned
+      if (Number(req.body.assignedTo) !== user.id) {
+        allowedFields = allowedFields.filter(f => f !== "assignedTo");
+      }
     }
+    // else: isCurrentAssignee → current assignee may always reassign/unassign
+    //       existing.assignedToId === null + has change_assigned → may assign freely
   }
   const updates: Record<string, unknown> = {};
   for (const key of allowedFields) {

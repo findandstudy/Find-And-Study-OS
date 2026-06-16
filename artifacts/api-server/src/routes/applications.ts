@@ -878,14 +878,18 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   if (isStaff && !isAdmin && req.body.assignedToId !== undefined) {
     const [existingApp] = await db.select({ assignedToId: applicationsTable.assignedToId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
     if (!existingApp) { res.status(404).json({ error: "Application not found" }); return; }
-    const hasAssignPerm = perms.has("records.change_assigned");
     const isCurrentAssignee = existingApp.assignedToId === user.id;
-    const selfClaimUnassigned = existingApp.assignedToId === null && req.body.assignedToId === user.id;
-    // Block if: no perm and not self-claiming unassigned,
-    // OR has perm but record already belongs to someone else (Task #494 assignment protection)
-    if ((!hasAssignPerm && !selfClaimUnassigned) || (hasAssignPerm && existingApp.assignedToId !== null && !isCurrentAssignee)) {
+    if (existingApp.assignedToId !== null && !isCurrentAssignee) {
+      // Task #494: record already assigned to someone else — only admin or the assignee can change
       allowedFields = allowedFields.filter(f => f !== "assignedToId");
+    } else if (existingApp.assignedToId === null && !perms.has("records.change_assigned")) {
+      // Unassigned: self-claim allowed without permission, assigning to others requires change_assigned
+      if (req.body.assignedToId !== user.id) {
+        allowedFields = allowedFields.filter(f => f !== "assignedToId");
+      }
     }
+    // else: isCurrentAssignee → current assignee may always reassign/unassign
+    //       existingApp.assignedToId === null + has change_assigned → may assign freely
   }
 
   const updates: Record<string, unknown> = {};

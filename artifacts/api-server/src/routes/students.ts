@@ -558,14 +558,18 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     allowedFields = allowedFields.filter(f => f !== "status");
   }
   if (!isAdmin && !isAgent && !isStudent && req.body.assignedToId !== undefined) {
-    const hasAssignPerm = perms.has("records.change_assigned");
     const isCurrentAssignee = existing.assignedToId === req.user!.id;
-    const selfClaimUnassigned = existing.assignedToId === null && Number(req.body.assignedToId) === req.user!.id;
-    // Block if: no perm and not self-claiming unassigned,
-    // OR has perm but record already belongs to someone else (Task #494 assignment protection)
-    if ((!hasAssignPerm && !selfClaimUnassigned) || (hasAssignPerm && existing.assignedToId !== null && !isCurrentAssignee)) {
+    if (existing.assignedToId !== null && !isCurrentAssignee) {
+      // Task #494: record already assigned to someone else — only admin or the assignee can change
       allowedFields = allowedFields.filter(f => f !== "assignedToId");
+    } else if (existing.assignedToId === null && !perms.has("records.change_assigned")) {
+      // Unassigned: self-claim allowed without permission, assigning to others requires change_assigned
+      if (Number(req.body.assignedToId) !== req.user!.id) {
+        allowedFields = allowedFields.filter(f => f !== "assignedToId");
+      }
     }
+    // else: isCurrentAssignee → current assignee may always reassign/unassign
+    //       existing.assignedToId === null + has change_assigned → may assign freely
   }
   const updates: Record<string, unknown> = {};
   for (const key of allowedFields) {

@@ -111,9 +111,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
   const canChangeStage = !!isAdmin || hasPermission("students.change_stage");
   const canChangeAssigned = !!isAdmin || hasPermission("records.change_assigned");
-  // Assignment protection (Task #494): only admin or the currently assigned person can reassign
-  const isAssignedToSomeoneElse = !!(student?.assignedToId && student.assignedToId !== user?.id);
-  const canManageAssignment = canChangeAssigned && (!isAssignedToSomeoneElse || !!isAdmin);
+  // Task #494 assignment protection: dropdown shown for admin, current assignee, or change_assigned + unassigned
+  const isCurrentStudentAssignee = !!(student?.assignedToId && student.assignedToId === user?.id);
+  const canManageAssignment = !!isAdmin || isCurrentStudentAssignee || (!student?.assignedToId && canChangeAssigned);
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isStudent = user?.role === "student";
   const [assigning, setAssigning] = useState(false);
