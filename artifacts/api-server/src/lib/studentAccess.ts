@@ -59,12 +59,8 @@ export async function assertCanAccessStudent(
       if (student.agentId) {
         const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
         if (agencyAgentIds.includes(student.agentId)) {
-          const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
-          if (
-            visibleBranchIds === null ||
-            student.branchId == null ||
-            visibleBranchIds.includes(student.branchId)
-          ) {
+          // isInBranchScope handles null branch (globally visible) + super_admin + visible set
+          if (await isInBranchScope(user.id, user.role, student.branchId)) {
             allowed = true;
           }
         }
