@@ -534,7 +534,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (app.assignedToId ? canReassign : canAssign) && staffUsersList ? (
+          {onAssign && (app.assignedToId ? (canReassign || app.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -1470,7 +1470,7 @@ export default function ApplicationsPage() {
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
   const canMoveCards = isAdmin || hasPermission("records.move_cards");
   const canAssign = isAdmin || hasPermission("records.assign_button");
-  const canReassign = isAdmin || hasPermission("records.change_assigned");
+  const canReassign = !!isAdmin; // Task #494: non-admin relies on per-record current-assignee check
 
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
@@ -2078,7 +2078,7 @@ export default function ApplicationsPage() {
                     case "assigned":
                       return (
                         <TableCell key={id} onClick={e => e.stopPropagation()}>
-                          {(app.assignedToId ? canReassign : canAssign) ? (
+                          {(app.assignedToId ? (canReassign || app.assignedToId === user?.id) : canAssign) ? (
                             <AssignPopover
                               assignedUserName={app.assignedToId ? staffUsersMap[app.assignedToId] : undefined}
                               staffUsers={staffUsersList}

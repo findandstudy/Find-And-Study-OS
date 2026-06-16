@@ -881,14 +881,16 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     const isCurrentAssignee = existingApp.assignedToId === user.id;
     if (existingApp.assignedToId !== null && !isCurrentAssignee) {
       // Task #494: record already assigned to someone else — only admin or the assignee can change
-      allowedFields = allowedFields.filter(f => f !== "assignedToId");
+      res.status(403).json({ error: "Only the current assignee or an admin can change assignment" });
+      return;
     } else if (existingApp.assignedToId === null && !perms.has("records.change_assigned")) {
-      // Unassigned: self-claim allowed without permission, assigning to others requires change_assigned
+      // Unassigned: self-claim allowed without permission; assigning to others requires change_assigned
       if (req.body.assignedToId !== user.id) {
-        allowedFields = allowedFields.filter(f => f !== "assignedToId");
+        res.status(403).json({ error: "Assigning to others requires records.change_assigned permission" });
+        return;
       }
     }
-    // else: isCurrentAssignee → current assignee may always reassign/unassign
+    // else: isCurrentAssignee → may always reassign/unassign
     //       existingApp.assignedToId === null + has change_assigned → may assign freely
   }
 

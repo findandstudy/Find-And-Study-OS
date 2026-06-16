@@ -201,7 +201,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (lead.assignedToId ? canReassign : canAssign) && staffUsersList ? (
+          {onAssign && (lead.assignedToId ? (canReassign || lead.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -1230,7 +1230,7 @@ export default function LeadsPage() {
   const canMoveCards = hasPermission("records.move_cards");
   const canChangeStage = hasPermission("leads.change_stage");
   const canAssign = hasPermission("records.assign_button");
-  const canReassign = isAdmin || hasPermission("records.change_assigned");
+  const canReassign = !!isAdmin; // Task #494: non-admin relies on per-record current-assignee check
 
   // Persist the user's "Assigned to" choice locally (per user), like column prefs.
   const [persistedAssignment, setPersistedAssignment] = usePersistedFilterValue(
@@ -1840,7 +1840,7 @@ export default function LeadsPage() {
                         </TableCell>
                       )}
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {(lead.assignedToId ? canReassign : canAssign) ? (
+                        {(lead.assignedToId ? (canReassign || lead.assignedToId === user?.id) : canAssign) ? (
                           <AssignPopover
                             assignedUserName={lead.assignedToId ? staffUsersMap[lead.assignedToId] : undefined}
                             staffUsers={staffUsersList}

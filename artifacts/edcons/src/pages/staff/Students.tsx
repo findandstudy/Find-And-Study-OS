@@ -1556,7 +1556,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (student.assignedToId ? canReassign : canAssign) && staffUsersList ? (
+          {onAssign && (student.assignedToId ? (canReassign || student.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -2109,7 +2109,7 @@ export default function StudentsPage() {
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
   const canMoveCards = isAdmin || hasPermission("records.move_cards");
   const canAssign = isAdmin || hasPermission("records.assign_button");
-  const canReassign = isAdmin || hasPermission("records.change_assigned");
+  const canReassign = !!isAdmin; // Task #494: non-admin relies on per-record current-assignee check
   const canViewOthers = hasPermission("records.view_others");
   const canViewUnassigned = hasPermission("records.view_unassigned");
   const [search, setSearch] = useState("");
@@ -2521,7 +2521,7 @@ export default function StudentsPage() {
                         <Badge className={cn("text-xs border font-medium", stageMap[student.status] ? getStuStageColor(stageMap[student.status], stageMap[student.status]._index) : "bg-gray-100 text-gray-600 border-gray-200")}>{stageMap[student.status]?.label || student.status}</Badge>
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {(student.assignedToId ? canReassign : canAssign) ? (
+                        {(student.assignedToId ? (canReassign || student.assignedToId === user?.id) : canAssign) ? (
                           <AssignPopover
                             assignedUserName={student.assignedToId ? staffUsersMap[student.assignedToId] : undefined}
                             staffUsers={staffUsersList}

@@ -761,14 +761,16 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     const isCurrentAssignee = existing.assignedToId === user.id;
     if (existing.assignedToId !== null && !isCurrentAssignee) {
       // Task #494: record already assigned to someone else — only admin or the assignee can change
-      allowedFields = allowedFields.filter(f => f !== "assignedTo");
+      res.status(403).json({ error: "Only the current assignee or an admin can change assignment" });
+      return;
     } else if (existing.assignedToId === null && !perms.has("records.change_assigned")) {
-      // Unassigned: self-claim allowed without permission, assigning to others requires change_assigned
+      // Unassigned: self-claim allowed without permission; assigning to others requires change_assigned
       if (Number(req.body.assignedTo) !== user.id) {
-        allowedFields = allowedFields.filter(f => f !== "assignedTo");
+        res.status(403).json({ error: "Assigning to others requires records.change_assigned permission" });
+        return;
       }
     }
-    // else: isCurrentAssignee → current assignee may always reassign/unassign
+    // else: isCurrentAssignee → may always reassign/unassign
     //       existing.assignedToId === null + has change_assigned → may assign freely
   }
   const updates: Record<string, unknown> = {};
