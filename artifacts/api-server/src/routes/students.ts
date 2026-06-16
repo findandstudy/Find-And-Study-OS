@@ -646,9 +646,8 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
 
   // Cascade assignment up to the source lead(s) and across the student's
   // applications so the same person shows one owner across Leads, Students and
-  // Applications. Mirrors the lead-side cascade and is gated by the same
-  // `records.cascade_assignment` permission. Detect via hasOwnProperty so an
-  // explicit unassign (null) also propagates.
+  // Applications. With `records.cascade_assignment` permission: OVERWRITES all.
+  // Without it: null-fill only — fills unassigned sibling records automatically.
   const studentAssignmentChanged =
     Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
     existing.assignedToId !== student.assignedToId;
@@ -660,6 +659,14 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
         newAssignedToId: student.assignedToId,
         actorUserId: req.user!.id,
         ipAddress: req.ip,
+      });
+    } else if (student.assignedToId !== null) {
+      await cascadeStudentAssignment({
+        studentId: id,
+        newAssignedToId: student.assignedToId,
+        actorUserId: req.user!.id,
+        ipAddress: req.ip,
+        nullFillOnly: true,
       });
     }
   }
@@ -844,15 +851,14 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
     updated = result.rowCount ?? numericIds.length;
     await logAudit(req.user!.id, "bulk_assign_students", "student", undefined, { ids: numericIds, assignedToId }, req.ip);
     const canCascade = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
-    if (canCascade) {
-      for (const s of affected) {
-        await cascadeStudentAssignment({
-          studentId: s.id,
-          newAssignedToId,
-          actorUserId: req.user!.id,
-          ipAddress: req.ip,
-        });
-      }
+    for (const s of affected) {
+      await cascadeStudentAssignment({
+        studentId: s.id,
+        newAssignedToId,
+        actorUserId: req.user!.id,
+        ipAddress: req.ip,
+        nullFillOnly: !canCascade,
+      });
     }
   } else if (action === "move" && status) {
     const result = await db.update(studentsTable).set({ status }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));

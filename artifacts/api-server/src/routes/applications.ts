@@ -1270,14 +1270,24 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     preUpdateApp &&
     updates.assignedToId !== preUpdateApp.assignedToId;
   if (appAssignmentChanged) {
+    const newAppAssignedToId = typeof app.assignedToId === "number" ? app.assignedToId : null;
     const canCascade = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
     if (canCascade) {
       await cascadeApplicationAssignment({
         applicationId: app.id,
         studentId: app.studentId,
-        newAssignedToId: typeof app.assignedToId === "number" ? app.assignedToId : null,
+        newAssignedToId: newAppAssignedToId,
         actorUserId: req.user!.id,
         ipAddress: req.ip,
+      });
+    } else if (newAppAssignedToId !== null) {
+      await cascadeApplicationAssignment({
+        applicationId: app.id,
+        studentId: app.studentId,
+        newAssignedToId: newAppAssignedToId,
+        actorUserId: req.user!.id,
+        ipAddress: req.ip,
+        nullFillOnly: true,
       });
     }
   }
@@ -1351,16 +1361,15 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES
     updated = result.rowCount ?? numericIds.length;
     await logAudit(req.user!.id, "bulk_assign_applications", "application", undefined, { ids: numericIds, assignedToId }, req.ip);
     const canCascadeApps = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
-    if (canCascadeApps) {
-      for (const a of affectedApps) {
-        await cascadeApplicationAssignment({
-          applicationId: a.id,
-          studentId: a.studentId,
-          newAssignedToId,
-          actorUserId: req.user!.id,
-          ipAddress: req.ip,
-        });
-      }
+    for (const a of affectedApps) {
+      await cascadeApplicationAssignment({
+        applicationId: a.id,
+        studentId: a.studentId,
+        newAssignedToId,
+        actorUserId: req.user!.id,
+        ipAddress: req.ip,
+        nullFillOnly: !canCascadeApps,
+      });
     }
   } else if (action === "move" && stage) {
     const allApps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));

@@ -820,10 +820,9 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     }
   }
 
-  // Cascade reassignment down to the converted student and its applications,
-  // gated by the `records.cascade_assignment` permission. When the acting user
-  // holds it, a lead reassignment overwrites the downstream owners so ownership
-  // follows the lead; without it, downstream records are left untouched.
+  // Cascade reassignment down to the converted student and its applications.
+  // With `records.cascade_assignment` permission: OVERWRITES all downstream records.
+  // Without it: null-fill only — fills unassigned downstream records automatically.
   const assignmentChanged =
     Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
     existing.assignedToId !== lead.assignedToId;
@@ -836,6 +835,15 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
         newAssignedToId: lead.assignedToId,
         actorUserId: user.id,
         ipAddress: req.ip,
+      });
+    } else if (lead.assignedToId !== null) {
+      await cascadeLeadAssignment({
+        leadId: lead.id,
+        convertedStudentId: lead.convertedStudentId,
+        newAssignedToId: lead.assignedToId,
+        actorUserId: user.id,
+        ipAddress: req.ip,
+        nullFillOnly: true,
       });
     }
   }
@@ -954,17 +962,16 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), asyn
     updated = result.rowCount ?? numericIds.length;
     await logAudit(req.user!.id, "bulk_assign_leads", "lead", undefined, { ids: numericIds, assignedToId }, req.ip);
     const canCascadeLeads = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
-    if (canCascadeLeads) {
-      for (const l of affectedLeads) {
-        if (!l.convertedStudentId) continue;
-        await cascadeLeadAssignment({
-          leadId: l.id,
-          convertedStudentId: l.convertedStudentId,
-          newAssignedToId,
-          actorUserId: req.user!.id,
-          ipAddress: req.ip,
-        });
-      }
+    for (const l of affectedLeads) {
+      if (!l.convertedStudentId) continue;
+      await cascadeLeadAssignment({
+        leadId: l.id,
+        convertedStudentId: l.convertedStudentId,
+        newAssignedToId,
+        actorUserId: req.user!.id,
+        ipAddress: req.ip,
+        nullFillOnly: !canCascadeLeads,
+      });
     }
   } else if (action === "move" && status) {
     const result = await db.update(leadsTable).set({ status }).where(inArray(leadsTable.id, numericIds));

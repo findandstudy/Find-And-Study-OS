@@ -136,15 +136,17 @@ export async function applyLeadAssignmentRules(lead: LeadLike & { assignedToId?:
 
 /**
  * Cascade a lead's assigned-staff change down to its converted student and that
- * student's applications. Used when a Lead's `assignedToId` is reassigned AND
- * the acting user holds the `records.cascade_assignment` permission.
+ * student's applications.
  *
- * Unlike the create/convert carry-over (which only fills empty assignments),
- * the gated cascade intentionally OVERWRITES already-assigned downstream
- * records — that is the whole point of turning the cascade on. Each downstream
- * change is written to the audit log so it appears in activity history. The
- * helper is best-effort: it swallows errors so it never breaks the calling
- * lead-update flow, and it skips records that already point at the new staff.
+ * When `nullFillOnly` is false (default): requires the caller to have the
+ * `records.cascade_assignment` permission; OVERWRITES already-assigned downstream
+ * records so ownership follows the lead change entirely.
+ *
+ * When `nullFillOnly` is true: runs unconditionally (no permission gate at
+ * call-site needed) but only updates records that are currently unassigned
+ * (assignedToId IS NULL). This is the "soft" cascade used for first-touch
+ * assignment consistency — assigning a lead for the first time automatically
+ * fills the matching unassigned student and application records.
  */
 export async function cascadeLeadAssignment(opts: {
   leadId: number;
@@ -152,8 +154,9 @@ export async function cascadeLeadAssignment(opts: {
   newAssignedToId: number | null;
   actorUserId: number | null;
   ipAddress?: string;
+  nullFillOnly?: boolean;
 }): Promise<void> {
-  const { leadId, convertedStudentId, newAssignedToId, actorUserId, ipAddress } = opts;
+  const { leadId, convertedStudentId, newAssignedToId, actorUserId, ipAddress, nullFillOnly = false } = opts;
   try {
     if (!convertedStudentId) return;
 
@@ -163,11 +166,11 @@ export async function cascadeLeadAssignment(opts: {
       .where(and(eq(studentsTable.id, convertedStudentId), isNull(studentsTable.deletedAt)));
     if (!student) return;
 
-    if (student.assignedToId !== newAssignedToId) {
+    if (student.assignedToId !== newAssignedToId && (!nullFillOnly || student.assignedToId === null)) {
       await db.update(studentsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(studentsTable.id, student.id));
-      logAudit(actorUserId, "assignment.cascade", "student", student.id, {
+      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "student", student.id, {
         from: student.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "lead",
@@ -182,10 +185,11 @@ export async function cascadeLeadAssignment(opts: {
 
     for (const app of apps) {
       if (app.assignedToId === newAssignedToId) continue;
+      if (nullFillOnly && app.assignedToId !== null) continue;
       await db.update(applicationsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(applicationsTable.id, app.id));
-      logAudit(actorUserId, "assignment.cascade", "application", app.id, {
+      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
         from: app.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "lead",
@@ -199,23 +203,21 @@ export async function cascadeLeadAssignment(opts: {
 
 /**
  * Cascade a student's assigned-staff change up to its source lead(s) and across
- * the student's applications. The reverse of `cascadeLeadAssignment`: used when
- * a Student's `assignedToId` is reassigned AND the acting user holds the
- * `records.cascade_assignment` permission, so ownership of the same person stays
- * consistent across Leads, Students and Applications.
+ * the student's applications.
  *
- * Like the lead-side cascade it intentionally OVERWRITES already-assigned
- * downstream/upstream records, is best-effort (swallows errors so it never
- * breaks the calling student-update flow), and skips records already pointing at
- * the new staff. Each change is written to the audit log.
+ * When `nullFillOnly` is false (default): OVERWRITES already-assigned records
+ * (requires permission gate at call-site).
+ * When `nullFillOnly` is true: only fills records where assignedToId IS NULL —
+ * no permission gate needed; used for first-touch assignment consistency.
  */
 export async function cascadeStudentAssignment(opts: {
   studentId: number;
   newAssignedToId: number | null;
   actorUserId: number | null;
   ipAddress?: string;
+  nullFillOnly?: boolean;
 }): Promise<void> {
-  const { studentId, newAssignedToId, actorUserId, ipAddress } = opts;
+  const { studentId, newAssignedToId, actorUserId, ipAddress, nullFillOnly = false } = opts;
   try {
     const leads = await db
       .select({ id: leadsTable.id, assignedToId: leadsTable.assignedToId })
@@ -224,10 +226,11 @@ export async function cascadeStudentAssignment(opts: {
 
     for (const lead of leads) {
       if (lead.assignedToId === newAssignedToId) continue;
+      if (nullFillOnly && lead.assignedToId !== null) continue;
       await db.update(leadsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(leadsTable.id, lead.id));
-      logAudit(actorUserId, "assignment.cascade", "lead", lead.id, {
+      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", lead.id, {
         from: lead.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "student",
@@ -242,10 +245,11 @@ export async function cascadeStudentAssignment(opts: {
 
     for (const app of apps) {
       if (app.assignedToId === newAssignedToId) continue;
+      if (nullFillOnly && app.assignedToId !== null) continue;
       await db.update(applicationsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(applicationsTable.id, app.id));
-      logAudit(actorUserId, "assignment.cascade", "application", app.id, {
+      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
         from: app.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "student",
@@ -259,11 +263,12 @@ export async function cascadeStudentAssignment(opts: {
 
 /**
  * Cascade an application's assigned-staff change up to its student and that
- * student's source lead(s). Used when an Application's `assignedToId` changes.
+ * student's source lead(s).
  *
- * Like the other cascade helpers it is best-effort (swallows errors so it
- * never breaks the calling application-update flow) and skips records already
- * pointing at the new staff. Each upstream change is written to the audit log.
+ * When `nullFillOnly` is false (default): OVERWRITES already-assigned records
+ * (requires permission gate at call-site).
+ * When `nullFillOnly` is true: only fills records where assignedToId IS NULL —
+ * no permission gate needed; used for first-touch assignment consistency.
  */
 export async function cascadeApplicationAssignment(opts: {
   applicationId: number;
@@ -271,19 +276,20 @@ export async function cascadeApplicationAssignment(opts: {
   newAssignedToId: number | null;
   actorUserId: number | null;
   ipAddress?: string;
+  nullFillOnly?: boolean;
 }): Promise<void> {
-  const { applicationId, studentId, newAssignedToId, actorUserId, ipAddress } = opts;
+  const { applicationId, studentId, newAssignedToId, actorUserId, ipAddress, nullFillOnly = false } = opts;
   try {
     const [student] = await db
       .select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId })
       .from(studentsTable)
       .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
 
-    if (student && student.assignedToId !== newAssignedToId) {
+    if (student && student.assignedToId !== newAssignedToId && (!nullFillOnly || student.assignedToId === null)) {
       await db.update(studentsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(studentsTable.id, student.id));
-      logAudit(actorUserId, "assignment.cascade", "student", student.id, {
+      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "student", student.id, {
         from: student.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "application",
@@ -298,10 +304,11 @@ export async function cascadeApplicationAssignment(opts: {
 
     for (const lead of leads) {
       if (lead.assignedToId === newAssignedToId) continue;
+      if (nullFillOnly && lead.assignedToId !== null) continue;
       await db.update(leadsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(leadsTable.id, lead.id));
-      logAudit(actorUserId, "assignment.cascade", "lead", lead.id, {
+      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", lead.id, {
         from: lead.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "application",
