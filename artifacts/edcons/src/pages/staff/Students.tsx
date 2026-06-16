@@ -1478,29 +1478,45 @@ function StuSortHeader({ label, sortKey, currentSort, onSort }: {
 
 type StuColVariant = "won" | "lost" | undefined;
 
+function useInView(rootMargin = "200px") {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setInView(true); return; }
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setInView(true); obs.disconnect(); } },
+      { threshold: 0, rootMargin },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [rootMargin]);
+  return { ref, inView };
+}
+
 function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "md" }) {
   const dim = size === "md" ? "w-10 h-10" : "w-8 h-8";
   const textSize = size === "md" ? "text-sm" : "text-xs";
   const [imgError, setImgError] = useState(false);
+  const { ref, inView } = useInView();
 
-  if (student.hasPhoto && !imgError) {
-    return (
-      <>
-      <img
-        src={`/api/students/${student.id}/photo`}
-        alt={`${student.firstName} ${student.lastName}`}
-        className={`${dim} rounded-full object-cover border border-primary/20 shrink-0`}
-        onError={() => setImgError(true)}
-      />
-      </>
-    );
-  }
+  const showPhoto = student.hasPhoto && !imgError && inView;
+
   return (
-    <>
-    <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0`}>
-      <span className={`${textSize} font-bold text-primary`}>{student.firstName?.[0]}{student.lastName?.[0]}</span>
+    <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
+      {showPhoto ? (
+        <img
+          src={`/api/students/${student.id}/photo`}
+          alt={`${student.firstName} ${student.lastName}`}
+          className={`${dim} rounded-full object-cover border border-primary/20`}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center`}>
+          <span className={`${textSize} font-bold text-primary`}>{student.firstName?.[0]}{student.lastName?.[0]}</span>
+        </div>
+      )}
     </div>
-    </>
   );
 }
 

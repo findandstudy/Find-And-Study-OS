@@ -122,6 +122,50 @@ function getLeadStageColor(stage: PipelineStage, index: number): string {
   return LEAD_STAGE_COLORS[index % LEAD_STAGE_COLORS.length];
 }
 
+/* ── Lazy IntersectionObserver hook ───────────────────────── */
+function useInView(rootMargin = "200px") {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setInView(true); return; }
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setInView(true); obs.disconnect(); } },
+      { threshold: 0, rootMargin },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [rootMargin]);
+  return { ref, inView };
+}
+
+/* ── LeadAvatar ────────────────────────────────────────────── */
+function LeadAvatar({ lead, size = "sm" }: { lead: any; size?: "sm" | "md" }) {
+  const dim = size === "md" ? "w-10 h-10" : "w-8 h-8";
+  const textSize = size === "md" ? "text-sm" : "text-xs";
+  const [imgError, setImgError] = useState(false);
+  const { ref, inView } = useInView();
+
+  const showPhoto = !!(lead.convertedStudentId && lead.convertedStudentHasPhoto && !imgError && inView);
+
+  return (
+    <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
+      {showPhoto ? (
+        <img
+          src={`/api/students/${lead.convertedStudentId}/photo`}
+          alt={`${lead.firstName} ${lead.lastName}`}
+          className={`${dim} rounded-full object-cover border border-primary/20`}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center`}>
+          <span className={`${textSize} font-bold text-primary`}>{lead.firstName?.[0]}{lead.lastName?.[0]}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── LeadCard ──────────────────────────────────────────────── */
 function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssign, staffUsersList, currentUserId, canAssign, canReassign, canMoveCards }: {
   lead: any; onView: (id: number) => void; showRevenue: boolean; variant?: ColVariant;
@@ -157,15 +201,18 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
       } mb-3 transition-shadow duration-200`}
     >
       <div {...attributes} {...listeners} className={`p-4 pb-2 ${!canMoveCards ? "cursor-default" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
-        <div className="flex justify-between items-start mb-2">
-          <h4 className="font-bold text-sm text-foreground line-clamp-1">
-            {lead.firstName} {lead.lastName}
-          </h4>
-          {lead.source && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">
-              {lead.source}
-            </span>
-          )}
+        <div className="flex items-start gap-2 mb-2">
+          <LeadAvatar lead={lead} />
+          <div className="flex-1 min-w-0 flex justify-between items-start gap-1">
+            <h4 className="font-bold text-sm text-foreground line-clamp-1">
+              {lead.firstName} {lead.lastName}
+            </h4>
+            {lead.source && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium shrink-0">
+                {lead.source}
+              </span>
+            )}
+          </div>
         </div>
         <p className="text-xs text-muted-foreground truncate">{lead.email || lead.phone || t("leadsPage.noContactInfo")}</p>
         <OriginBadge originType={lead.originType || "direct"} originDisplayName={lead.originDisplayName} className="mt-1" />
@@ -1796,9 +1843,12 @@ export default function LeadsPage() {
                         className="font-medium"
                         onClick={() => setLocation(`/staff/leads/${lead.id}`)}
                       >
-                        <div className="flex items-center gap-1.5">
-                          <span>{lead.firstName} {lead.lastName}</span>
-                          <OriginBadge originType={lead.originType} originDisplayName={lead.originDisplayName} />
+                        <div className="flex items-center gap-2">
+                          <LeadAvatar lead={lead} />
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{lead.firstName} {lead.lastName}</span>
+                            <OriginBadge originType={lead.originType} originDisplayName={lead.originDisplayName} />
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell

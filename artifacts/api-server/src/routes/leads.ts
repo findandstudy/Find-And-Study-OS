@@ -308,9 +308,17 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(leadsTable).where(whereClause);
   const rows = await db
-    .select({ lead: leadsTable, agentName: agentsTable.companyName })
+    .select({
+      lead: leadsTable,
+      agentName: agentsTable.companyName,
+      studentHasPhoto: studentsTable.hasPhoto,
+    })
     .from(leadsTable)
     .leftJoin(agentsTable, eq(leadsTable.agentId, agentsTable.id))
+    .leftJoin(studentsTable, and(
+      eq(leadsTable.convertedStudentId, studentsTable.id),
+      isNull(studentsTable.deletedAt),
+    ))
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
@@ -337,6 +345,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     ...r.lead,
     agentName: r.agentName || null,
     nextFollowup: nextFollowupMap.get(r.lead.id) || null,
+    convertedStudentHasPhoto: r.studentHasPhoto ?? false,
   }));
 
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
