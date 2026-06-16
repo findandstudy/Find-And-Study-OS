@@ -10,7 +10,7 @@ import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeApplicationAssignment } from "../lib/leadAssignment";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
-import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
+import { getVisibleBranchIds, resolveCreateBranchId, isInBranchScope } from "../lib/branchScope";
 import { or as orFn } from "drizzle-orm";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, shouldAutoCancelSiblings, getCancelledStageKey } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
@@ -765,10 +765,13 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
   // KURAL 1: non-admin staff cannot access agent-sourced application detail
-  // unless they have records.view_others (Task #494)
+  // unless they have records.view_others (Task #494) — within branch scope only
   if (isAgentSourcedAndBlockedForStaff(user, row.agentId)) {
     const p = await getEffectivePermissionSet({ id: user.id, role: user.role });
     if (!p.has("records.view_others")) {
+      res.status(404).json({ error: "Application not found" }); return;
+    }
+    if (!(await isInBranchScope(user.id, user.role, (row as any).branchId ?? null))) {
       res.status(404).json({ error: "Application not found" }); return;
     }
   }
@@ -1089,11 +1092,14 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }
   }
 
-  const [preUpdateApp] = await db.select({ assignedToId: applicationsTable.assignedToId, agentId: applicationsTable.agentId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+  const [preUpdateApp] = await db.select({ assignedToId: applicationsTable.assignedToId, agentId: applicationsTable.agentId, branchId: applicationsTable.branchId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
 
   // KURAL 1: non-admin staff cannot update agent-sourced applications
-  // unless they have records.view_others (Task #494)
+  // unless they have records.view_others (Task #494) — within branch scope only
   if (isAgentSourcedAndBlockedForStaff(user, preUpdateApp?.agentId ?? null) && !perms.has("records.view_others")) {
+    res.status(404).json({ error: "Application not found" }); return;
+  }
+  if (perms.has("records.view_others") && !(await isInBranchScope(user.id, user.role, preUpdateApp?.branchId ?? null))) {
     res.status(404).json({ error: "Application not found" }); return;
   }
 
@@ -1621,12 +1627,15 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, .
   const offset = (pageNum - 1) * limitNum;
 
   // KURAL 1: non-admin staff cannot access notes of agent-sourced applications
-  // unless they have records.view_others (Task #494)
-  const [noteApp] = await db.select({ agentId: applicationsTable.agentId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+  // unless they have records.view_others (Task #494) — within branch scope only
+  const [noteApp] = await db.select({ agentId: applicationsTable.agentId, branchId: applicationsTable.branchId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
   if (!noteApp) { res.status(404).json({ error: "Application not found" }); return; }
   if (isAgentSourcedAndBlockedForStaff(req.user!, noteApp.agentId)) {
     const notePerms = await getEffectivePermissionSet({ id: req.user!.id, role: req.user!.role });
     if (!notePerms.has("records.view_others")) {
+      res.status(404).json({ error: "Application not found" }); return;
+    }
+    if (!(await isInBranchScope(req.user!.id, req.user!.role, noteApp.branchId))) {
       res.status(404).json({ error: "Application not found" }); return;
     }
   }

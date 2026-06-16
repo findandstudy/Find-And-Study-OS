@@ -70,6 +70,23 @@ export async function resolveCreateBranchId(
  * Returns true for super_admin (no scope), or when at least one of the
  * agent's branches intersects with the caller's visible branches.
  */
+/**
+ * Returns true when a record (identified by its branchId) is within the user's
+ * visible branch scope. Records with a null branchId are globally visible.
+ * Use after granting "records.view_others" access to prevent cross-branch IDOR.
+ */
+export async function isInBranchScope(
+  userId: number,
+  userRole: string,
+  recordBranchId: number | null,
+): Promise<boolean> {
+  if (recordBranchId == null) return true; // null-branch records are globally visible
+  const visibleBranchIds = await getVisibleBranchIds(userId, userRole);
+  if (visibleBranchIds === null) return true; // super_admin sees everything
+  if (visibleBranchIds.length === 0) return false; // user has no branch assignments
+  return visibleBranchIds.includes(recordBranchId);
+}
+
 export async function isAgentInScope(
   callerUserId: number,
   callerRole: string,

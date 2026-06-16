@@ -8,7 +8,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
-import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
+import { getVisibleBranchIds, resolveCreateBranchId, isInBranchScope } from "../lib/branchScope";
 import { normalizeAndValidateNames, normalizePhoneField, toLatinUpper } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
@@ -498,11 +498,14 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
     const viewOthers = perms.has("records.view_others");
     // KURAL 1: non-admin staff cannot access agent-sourced lead detail
-    // unless they have records.view_others (Task #494)
+    // unless they have records.view_others (Task #494) — within branch scope only
     if (lead.agentId !== null && !viewOthers) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
-    if (lead.assignedToId !== null && lead.assignedToId !== user.id && !viewOthers) {
+    if (viewOthers && !(await isInBranchScope(user.id, user.role, lead.branchId))) {
+      res.status(404).json({ error: "Lead not found" }); return;
+    }
+    if (!viewOthers && lead.assignedToId !== null && lead.assignedToId !== user.id) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -532,11 +535,14 @@ router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...A
     const docPerms = await getEffectivePermissionSet({ id: user.id, role: user.role });
     const docViewOthers = docPerms.has("records.view_others");
     // KURAL 1: non-admin staff cannot access documents of agent-sourced leads
-    // unless they have records.view_others (Task #494)
+    // unless they have records.view_others (Task #494) — within branch scope only
     if (lead.agentId !== null && !docViewOthers) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
-    if (lead.assignedToId !== null && lead.assignedToId !== user.id && !docViewOthers) {
+    if (docViewOthers && !(await isInBranchScope(user.id, user.role, lead.branchId))) {
+      res.status(404).json({ error: "Lead not found" }); return;
+    }
+    if (!docViewOthers && lead.assignedToId !== null && lead.assignedToId !== user.id) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -701,8 +707,11 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     }
   } else if (!isAdmin) {
     // KURAL 1: non-admin staff cannot update agent-sourced leads
-    // unless they have records.view_others (Task #494)
+    // unless they have records.view_others (Task #494) — within branch scope only
     if (existing.agentId !== null && !perms.has("records.view_others")) {
+      res.status(404).json({ error: "Lead not found" }); return;
+    }
+    if (perms.has("records.view_others") && !(await isInBranchScope(user.id, user.role, existing.branchId))) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
     if (!canAccessAssignedRecord(perms, existing.assignedToId, user.id)) {
@@ -1211,12 +1220,15 @@ router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT
   const offset = (pageNum - 1) * limitNum;
 
   // KURAL 1: non-admin staff cannot access notes of agent-sourced leads
-  // unless they have records.view_others (Task #494)
-  const [noteLeadRow] = await db.select({ agentId: leadsTable.agentId }).from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
+  // unless they have records.view_others (Task #494) — within branch scope only
+  const [noteLeadRow] = await db.select({ agentId: leadsTable.agentId, branchId: leadsTable.branchId }).from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!noteLeadRow) { res.status(404).json({ error: "Lead not found" }); return; }
   if (isAgentSourcedAndBlockedForStaff(req.user!, noteLeadRow.agentId)) {
     const notePerms = await getEffectivePermissionSet({ id: req.user!.id, role: req.user!.role });
     if (!notePerms.has("records.view_others")) {
+      res.status(404).json({ error: "Lead not found" }); return;
+    }
+    if (!(await isInBranchScope(req.user!.id, req.user!.role, noteLeadRow.branchId))) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
   }

@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "./roles";
 import { getAgentVisibleIds } from "./agentVisibility";
 import { getAgencyMemberAgentIds } from "./agencyStaff";
-import { getVisibleBranchIds } from "./branchScope";
+import { isInBranchScope } from "./branchScope";
 import { getEffectivePermissionSet } from "./permissions";
 
 export type StudentAccessResult =
@@ -48,8 +48,12 @@ export async function assertCanAccessStudent(
 
   if (isStaff && !isAdmin) {
     const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
-    // view_others grants full record visibility (including agent-sourced and other-assigned)
-    if (perms.has("records.view_others")) return { ok: true, student };
+    // view_others grants full record visibility within the same branch scope (Task #494)
+    if (perms.has("records.view_others")) {
+      const inScope = await isInBranchScope(user.id, user.role, student.branchId);
+      if (!inScope) return { ok: false, status: 404, error: "Student not found" };
+      return { ok: true, student };
+    }
     if (student.assignedToId !== null && student.assignedToId !== user.id) {
       let allowed = false;
       if (student.agentId) {
