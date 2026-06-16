@@ -1573,14 +1573,8 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
           {onAssign && student.assignedToId ? (
-            canReassign && staffUsersList ? (
+            (canReassign || student.assignedToId === currentUserId) && staffUsersList ? (
               <AssignPopover assignedUserName={assignedUserName} staffUsers={staffUsersList} currentUserId={currentUserId} onAssign={(uid) => onAssign(student.id, uid)} />
-            ) : student.assignedToId === currentUserId && staffUsersList ? (
-              <AssignPopover assignedUserName={assignedUserName} staffUsers={staffUsersList.filter(u => u.id === currentUserId)} currentUserId={currentUserId} onAssign={(uid) => onAssign(student.id, uid)} />
-            ) : canAssign && currentUserId ? (
-              <button onClick={(e) => { e.stopPropagation(); onAssign(student.id, currentUserId); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5" title="Assign to me">
-                <UserPlus className="w-3 h-3 shrink-0" />Assign to me
-              </button>
             ) : assignedUserName ? (
               <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate"><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</span>
             ) : null
@@ -2547,7 +2541,7 @@ export default function StudentsPage() {
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
                         {student.assignedToId ? (
-                          canReassign ? (
+                          (canReassign || student.assignedToId === user?.id) ? (
                             <AssignPopover
                               assignedUserName={staffUsersMap[student.assignedToId]}
                               staffUsers={staffUsersList}
@@ -2555,21 +2549,6 @@ export default function StudentsPage() {
                               onAssign={(userId) => handleAssign(student.id, userId)}
                               size="list"
                             />
-                          ) : student.assignedToId === user?.id ? (
-                            <AssignPopover
-                              assignedUserName={staffUsersMap[student.assignedToId]}
-                              staffUsers={staffUsersList.filter(u => u.id === user?.id)}
-                              currentUserId={user?.id}
-                              onAssign={(userId) => handleAssign(student.id, userId)}
-                              size="list"
-                            />
-                          ) : canAssign ? (
-                            <button
-                              onClick={e => { e.stopPropagation(); handleAssign(student.id, user!.id); }}
-                              className="text-[10px] text-primary hover:underline font-medium flex items-center gap-1"
-                            >
-                              <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
-                            </button>
                           ) : (
                             <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
                               <UserCheck className="w-3 h-3" />{staffUsersMap[student.assignedToId] || t("leadsPage.assigned")}

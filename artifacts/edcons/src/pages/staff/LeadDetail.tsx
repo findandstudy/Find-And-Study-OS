@@ -193,7 +193,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const canAssignLead = isAgent
     ? isAgentManager
     : (!!isAdmin || isCurrentLeadAssignee);
-  const canSelfAssign = !isAgent && !isAdmin && !isCurrentLeadAssignee && hasPermission("records.assign_button");
+  const canSelfAssign = !isAgent && !isAdmin && !isCurrentLeadAssignee && hasPermission("records.assign_button") && !lead?.assignedToId;
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const { data: catalogResp } = useQuery<any>({
