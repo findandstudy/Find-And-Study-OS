@@ -2063,7 +2063,7 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
               <SelectItem value="mine">{t("studentsPage.me")}</SelectItem>
               <SelectItem value="unassigned">{t("studentsPage.unassigned")}</SelectItem>
               <SelectItem value="mine_unassigned">{t("studentsPage.meUnassigned")}</SelectItem>
-              {canViewOthers && staffUsers.filter((u: any) => u.id !== currentUserId).map((u: any) => (
+              {staffUsers.filter((u: any) => u.id !== currentUserId).map((u: any) => (
                 <SelectItem key={u.id} value={String(u.id)}>{`${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email}</SelectItem>
               ))}
             </SelectContent>
@@ -2484,6 +2484,10 @@ export default function StudentsPage() {
                           { value: "mine", label: t("studentsPage.me") },
                           { value: "unassigned", label: t("studentsPage.unassigned") },
                           { value: "mine_unassigned", label: t("studentsPage.meUnassigned") },
+                          ...staffUsers.filter((u: any) => u.id !== user?.id).map((u: any) => ({
+                            value: String(u.id),
+                            label: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+                          })),
                         ],
                         allLabel: t("studentsPage.all"),
                         hideAll: false,
