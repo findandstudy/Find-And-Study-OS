@@ -1256,6 +1256,8 @@
     "noFollowUps": "No upcoming follow-ups.",
     "followUpCreatedBy": "Created by: {name}",
     "followUpLastEditedBy": "Last edited by: {name}",
+    "fuFilterAll": "All Staff",
+    "fuFilterMine": "Mine",
     "trendsTitle": "Lead & Application Trends",
     "rangeDaily": "Daily",
     "rangeWeekly": "Weekly",

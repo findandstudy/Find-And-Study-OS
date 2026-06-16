@@ -1256,6 +1256,8 @@
     "noFollowUps": "Предстоящих напоминаний нет.",
     "followUpCreatedBy": "Создано: {name}",
     "followUpLastEditedBy": "Последнее изменение: {name}",
+    "fuFilterAll": "Весь персонал",
+    "fuFilterMine": "Мои",
     "trendsTitle": "Тенденции лидов и заявок",
     "rangeDaily": "Ежедневно",
     "rangeWeekly": "Еженедельно",

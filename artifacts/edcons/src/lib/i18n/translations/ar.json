@@ -1256,6 +1256,8 @@
     "noFollowUps": "لا توجد متابعات قادمة.",
     "followUpCreatedBy": "أنشأه: {name}",
     "followUpLastEditedBy": "آخر تعديل بواسطة: {name}",
+    "fuFilterAll": "كل الموظفين",
+    "fuFilterMine": "لي فقط",
     "trendsTitle": "اتجاهات العملاء والطلبات",
     "rangeDaily": "يومي",
     "rangeWeekly": "أسبوعي",

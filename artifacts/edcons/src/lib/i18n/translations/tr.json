@@ -1197,6 +1197,8 @@
     "noFollowUps": "Yaklaşan takip yok.",
     "followUpCreatedBy": "Oluşturan: {name}",
     "followUpLastEditedBy": "Son düzenleyen: {name}",
+    "fuFilterAll": "Tüm Personel",
+    "fuFilterMine": "Sadece Benim",
     "trendsTitle": "Lead & Başvuru Trendleri",
     "rangeDaily": "Günlük",
     "rangeWeekly": "Haftalık",

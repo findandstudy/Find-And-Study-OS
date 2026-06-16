@@ -1256,6 +1256,8 @@
     "noFollowUps": "Tidak ada tindak lanjut mendatang.",
     "followUpCreatedBy": "Dibuat oleh: {name}",
     "followUpLastEditedBy": "Terakhir diedit oleh: {name}",
+    "fuFilterAll": "Semua Staf",
+    "fuFilterMine": "Milik Saya",
     "trendsTitle": "Tren Lead & Aplikasi",
     "rangeDaily": "Harian",
     "rangeWeekly": "Mingguan",

@@ -1256,6 +1256,8 @@
     "noFollowUps": "No hay seguimientos próximos.",
     "followUpCreatedBy": "Creado por: {name}",
     "followUpLastEditedBy": "Última edición por: {name}",
+    "fuFilterAll": "Todo el personal",
+    "fuFilterMine": "Los míos",
     "trendsTitle": "Tendencias de Leads y Solicitudes",
     "rangeDaily": "Diario",
     "rangeWeekly": "Semanal",

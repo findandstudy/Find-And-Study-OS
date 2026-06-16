@@ -1256,6 +1256,8 @@
     "noFollowUps": "暂无即将到来的跟进。",
     "followUpCreatedBy": "创建者：{name}",
     "followUpLastEditedBy": "最后编辑者：{name}",
+    "fuFilterAll": "所有员工",
+    "fuFilterMine": "我的",
     "trendsTitle": "线索与申请趋势",
     "rangeDaily": "每日",
     "rangeWeekly": "每周",

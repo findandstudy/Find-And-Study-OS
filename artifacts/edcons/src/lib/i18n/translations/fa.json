@@ -1256,6 +1256,8 @@
     "noFollowUps": "هیچ پیگیری پیش‌رویی وجود ندارد.",
     "followUpCreatedBy": "ایجادشده توسط: {name}",
     "followUpLastEditedBy": "آخرین ویرایش توسط: {name}",
+    "fuFilterAll": "همه کارکنان",
+    "fuFilterMine": "مال من",
     "trendsTitle": "روند سرنخ‌ها و درخواست‌ها",
     "rangeDaily": "روزانه",
     "rangeWeekly": "هفتگی",

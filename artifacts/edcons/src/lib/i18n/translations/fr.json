@@ -1256,6 +1256,8 @@
     "noFollowUps": "Aucune relance à venir.",
     "followUpCreatedBy": "Créé par : {name}",
     "followUpLastEditedBy": "Dernière modification par : {name}",
+    "fuFilterAll": "Tout le personnel",
+    "fuFilterMine": "Les miens",
     "trendsTitle": "Tendances Prospects & Candidatures",
     "rangeDaily": "Quotidien",
     "rangeWeekly": "Hebdomadaire",
