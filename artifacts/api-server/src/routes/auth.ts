@@ -207,7 +207,10 @@ router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Requ
       console.error("[auth/login] failed to reset rate-limit buckets:", err);
     }
     logAudit(user.id, "auth.login.success", "user", user.id, { email: maskedEmail }, ip);
-    res.json({ user: sessionUser });
+    const loginPermissions = Array.from(
+      await getEffectivePermissionSet({ id: sessionUser.id, role: sessionUser.role })
+    );
+    res.json({ user: { ...sessionUser, permissions: loginPermissions } });
   } catch (err) {
     console.error("[auth/login] error:", err);
     if (!res.headersSent) {
