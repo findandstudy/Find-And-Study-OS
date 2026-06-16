@@ -3,8 +3,8 @@ import { eq } from "drizzle-orm";
 import type { ExtractorFieldDef } from "@workspace/db";
 
 export const HARDCODED_EXTRACTOR_FIELDS: ExtractorFieldDef[] = [
-  { key: "firstName", label: "First name", type: "string", description: "Exactly as printed on the document" },
-  { key: "lastName", label: "Last name", type: "string", description: "Exactly as printed on the document" },
+  { key: "firstName", label: "First name", type: "string", description: "Latin-alphabet version from the document (e.g. 'ELMIR' not 'ELMİR'). Use the dedicated Latin/transliteration line or MRZ — never the local-script line." },
+  { key: "lastName", label: "Last name", type: "string", description: "Latin-alphabet version from the document (e.g. 'ALIZADA' not 'ƏLİZADƏ'). Use the dedicated Latin/transliteration line or MRZ — never the local-script line." },
   { key: "dateOfBirth", label: "Date of birth", type: "date", normalize: "dateYmd", format: "YYYY-MM-DD" },
   { key: "nationality", label: "Nationality", type: "string", description: "Full country name (e.g. 'Turkey' not 'Turkish')" },
   { key: "passportNumber", label: "Passport number", type: "string" },
@@ -26,7 +26,7 @@ export const HARDCODED_EXTRACTOR_FIELDS: ExtractorFieldDef[] = [
 ];
 
 export const HARDCODED_EXTRACTOR_RULES: string[] = [
-  "CRITICAL - Names: Extract names EXACTLY as they appear on the passport or official document. The passport is the authoritative source. Do NOT modify, translate, or reformat names.",
+  "CRITICAL - Names: Passports often show the name in TWO scripts: the local/national script (e.g. Cyrillic, Arabic, Azerbaijani Ə-letters) AND a Latin-alphabet transliteration. ALWAYS prefer the Latin-alphabet version. If a dedicated 'Given name / Ad' or 'Surname / Soyad' Latin line exists, use that. If not, fall back to the MRZ (bottom lines, always Latin). Never return characters from non-Latin scripts (e.g. Ə, İ, Ğ, Ş, Ç, Ö, Ü with cedilla/breve from Azerbaijani/Turkish local script, Cyrillic, Arabic etc.) in firstName or lastName — use the plain-ASCII Latin equivalent shown elsewhere on the document.",
   "CRITICAL - Date format awareness: Different countries use different date formats. Most countries use DD/MM/YYYY; USA uses MM/DD/YYYY; East Asia uses YYYY/MM/DD. Use the issuing country's convention; always output YYYY-MM-DD.",
   "CRITICAL - Passport expiry: Compare expiry date to today; set passportExpired true if past.",
   "For nationality: always return the full official country name. Convert any demonym or adjective form to the country name (e.g. 'Afghan' → 'Afghanistan', 'Turkish' → 'Turkey').",
