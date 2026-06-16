@@ -167,7 +167,7 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {quickMode ? (
@@ -180,7 +180,7 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
               : t("stageDocUpload.requiredTitle")}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-2 min-w-0 w-full">
           {quickMode ? (
             <p className="text-sm text-muted-foreground">
               {renderTemplate(
