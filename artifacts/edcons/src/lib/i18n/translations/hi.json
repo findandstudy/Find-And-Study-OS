@@ -1016,6 +1016,8 @@
     "viewAll": "सभी देखें",
     "followUpCreatedBy": "बनाने वाले: {name}",
     "followUpLastEditedBy": "अंतिम संपादक: {name}",
+    "fuFilterAll": "सभी स्टाफ",
+    "fuFilterMine": "मेरे",
     "myTasks": "मेरे कार्य",
     "noMyTasks": "आपको कोई कार्य नहीं सौंपा गया है।",
     "taskStart": "शुरू करें",

@@ -346,6 +346,7 @@ export default function AdminDashboard() {
   const isAdmin = ADMIN_ROLES_SET.has(user?.role || "");
 
   const [trendRange, setTrendRange] = useState<ActivityRange>("monthly");
+  const [followUpFilter, setFollowUpFilter] = useState<string>("all");
 
   const { data: stats, isLoading } = useGetOverviewStats({ season });
 
@@ -358,14 +359,21 @@ export default function AdminDashboard() {
   });
   const growthData: any[] = toArray(growthRaw);
 
+  const followUpCreatedById = followUpFilter === "all" ? null
+    : followUpFilter === "mine" ? (user?.id ?? null)
+    : parseInt(followUpFilter, 10) || null;
+
   const { data: upcomingRaw } = useQuery<unknown>({
-    queryKey: ["/api/follow-ups/upcoming"],
-    queryFn: () =>
-      fetch(`${BASE}/api/follow-ups/upcoming`, { credentials: "include" })
-        .then(r => r.json())
-        .catch(() => []),
+    queryKey: ["/api/follow-ups/upcoming", followUpCreatedById],
+    queryFn: () => {
+      const url = new URL(`${BASE}/api/follow-ups/upcoming`, window.location.href);
+      if (followUpCreatedById != null) url.searchParams.set("createdById", String(followUpCreatedById));
+      return fetch(url.toString(), { credentials: "include" }).then(r => r.json()).catch(() => []);
+    },
   });
   const upcomingFollowUps: any[] = toArray(upcomingRaw);
+
+  const { data: staffUsersRaw } = useListUsers({ roles: "super_admin,admin,manager,staff,consultant,editor,accountant", limit: 200 } as any);
 
   const { data: latestStudentsRaw } = useQuery<unknown>({
     queryKey: ["/api/students", "dashboard-latest"],
@@ -719,13 +727,31 @@ export default function AdminDashboard() {
 
         {/* Col 3: Upcoming Follow-ups (right, preserved) */}
         <Card className="p-6 border-none shadow-lg shadow-black/5">
-          <div className="flex items-center gap-2 mb-6">
-            <CalendarClock className="w-5 h-5 text-primary" />
-            <h3 className="font-display font-bold text-lg">Upcoming Follow-ups</h3>
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="w-5 h-5 text-primary" />
+              <h3 className="font-display font-bold text-lg">{t("adminDash.upcomingFollowUps")}</h3>
+            </div>
+            {isAdmin && (
+              <Select value={followUpFilter} onValueChange={setFollowUpFilter}>
+                <SelectTrigger className="h-7 text-xs w-36 shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("adminDash.fuFilterAll")}</SelectItem>
+                  <SelectItem value="mine">{t("adminDash.fuFilterMine")}</SelectItem>
+                  {(toArray((staffUsersRaw as any)?.data ?? staffUsersRaw)).map((u: any) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.firstName} {u.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="space-y-3">
             {upcomingFollowUps.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No upcoming follow-ups.</p>
+              <p className="text-sm text-muted-foreground">{t("adminDash.noFollowUps")}</p>
             ) : (
               upcomingFollowUps.slice(0, 5).map((fu: any) => (
                 <Link key={fu.id} href={fu.leadId ? `/staff/leads/${fu.leadId}` : fu.studentId ? `/staff/students/${fu.studentId}` : "#"}>

@@ -1552,6 +1552,13 @@ router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES), asy
     lte(followUpsTable.scheduledAt, nextWeek),
   ];
 
+  if (isAdmin && req.query.createdById) {
+    const filterUserId = parseInt(String(req.query.createdById), 10);
+    if (!isNaN(filterUserId)) {
+      baseConditions.push(eq(followUpsTable.createdById, filterUserId));
+    }
+  }
+
   if (!isAdmin) {
     const leadAssignedOrUnassigned = or(
       sql`(SELECT assigned_to_id FROM leads WHERE leads.id = ${followUpsTable.leadId}) = ${userId}`,

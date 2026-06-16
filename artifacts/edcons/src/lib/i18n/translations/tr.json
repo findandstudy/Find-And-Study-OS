@@ -957,6 +957,8 @@
     "viewAll": "Tümünü Gör",
     "followUpCreatedBy": "Oluşturan: {name}",
     "followUpLastEditedBy": "Son düzenleyen: {name}",
+    "fuFilterAll": "Tüm Personel",
+    "fuFilterMine": "Sadece Benim",
     "myTasks": "Görevlerim",
     "noMyTasks": "Size atanmış görev yok.",
     "taskStart": "Başla",

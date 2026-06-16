@@ -1016,6 +1016,8 @@
     "viewAll": "Tout voir",
     "followUpCreatedBy": "Créé par : {name}",
     "followUpLastEditedBy": "Dernière modification par : {name}",
+    "fuFilterAll": "Tout le personnel",
+    "fuFilterMine": "Les miens",
     "myTasks": "Mes tâches",
     "noMyTasks": "Aucune tâche ne vous est assignée.",
     "taskStart": "Démarrer",

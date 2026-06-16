@@ -1016,6 +1016,8 @@
     "viewAll": "Показать все",
     "followUpCreatedBy": "Создано: {name}",
     "followUpLastEditedBy": "Последнее изменение: {name}",
+    "fuFilterAll": "Весь персонал",
+    "fuFilterMine": "Мои",
     "myTasks": "Мои задачи",
     "noMyTasks": "Нет задач, назначенных вам.",
     "taskStart": "Начать",

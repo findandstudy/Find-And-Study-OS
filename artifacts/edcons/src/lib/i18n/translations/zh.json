@@ -1016,6 +1016,8 @@
     "viewAll": "查看全部",
     "followUpCreatedBy": "创建者：{name}",
     "followUpLastEditedBy": "最后编辑者：{name}",
+    "fuFilterAll": "所有员工",
+    "fuFilterMine": "我的",
     "myTasks": "我的任务",
     "noMyTasks": "没有分配给您的任务。",
     "taskStart": "开始",

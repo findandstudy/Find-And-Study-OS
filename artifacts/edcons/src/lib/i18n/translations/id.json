@@ -1016,6 +1016,8 @@
     "viewAll": "Lihat Semua",
     "followUpCreatedBy": "Dibuat oleh: {name}",
     "followUpLastEditedBy": "Terakhir diedit oleh: {name}",
+    "fuFilterAll": "Semua Staf",
+    "fuFilterMine": "Milik Saya",
     "myTasks": "Tugas Saya",
     "noMyTasks": "Tidak ada tugas yang ditugaskan kepada Anda.",
     "taskStart": "Mulai",

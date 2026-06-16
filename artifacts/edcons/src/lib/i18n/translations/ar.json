@@ -1016,6 +1016,8 @@
     "viewAll": "عرض الكل",
     "followUpCreatedBy": "أنشأه: {name}",
     "followUpLastEditedBy": "آخر تعديل بواسطة: {name}",
+    "fuFilterAll": "كل الموظفين",
+    "fuFilterMine": "لي فقط",
     "myTasks": "مهامي",
     "noMyTasks": "لا توجد مهام مُسنَدة إليك.",
     "taskStart": "ابدأ",

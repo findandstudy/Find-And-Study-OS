@@ -1016,6 +1016,8 @@
     "viewAll": "مشاهده‌ی همه",
     "followUpCreatedBy": "ایجادشده توسط: {name}",
     "followUpLastEditedBy": "آخرین ویرایش توسط: {name}",
+    "fuFilterAll": "همه کارکنان",
+    "fuFilterMine": "مال من",
     "myTasks": "وظایف من",
     "noMyTasks": "هیچ وظیفه‌ای به شما اختصاص داده نشده است.",
     "taskStart": "شروع",
