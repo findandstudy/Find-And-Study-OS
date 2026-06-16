@@ -115,6 +115,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }, [documents, student?.hasPhoto]);
 
+  // Reset load-error state whenever the photo source changes (e.g. new upload, different student).
+  useEffect(() => { setPhotoLoadError(false); }, [photoDoc]);
+
   const { toast } = useToast();
   const { user, hasPermission } = useAuth();
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
@@ -126,6 +129,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isStudent = user?.role === "student";
   const [assigning, setAssigning] = useState(false);
+  const [photoLoadError, setPhotoLoadError] = useState(false);
 
   const { data: staffUsersData } = useQuery<any>({
     queryKey: ["/api/users"],
@@ -620,7 +624,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           <div className="relative group shrink-0">
             {isLoading ? (
               <Skeleton className="w-20 h-20 rounded-full" />
-            ) : photoDoc ? (
+            ) : photoDoc && !photoLoadError ? (
               photoDoc.mimeType === "application/pdf" ? (
                 <Suspense fallback={
                   <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/20">
@@ -643,6 +647,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   src={`${BASE_URL}/api/students/${id}/photo`}
                   alt={`${student?.firstName} ${student?.lastName}`}
                   className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
+                  onError={() => setPhotoLoadError(true)}
                 />
               )
             ) : (

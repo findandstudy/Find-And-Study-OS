@@ -882,24 +882,37 @@ async function seedClaudeIntegration() {
     // students.has_photo: denormalize the photo-presence check so the
     // listing query no longer needs an extra SELECT against documents.
     await pool.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS has_photo BOOLEAN NOT NULL DEFAULT FALSE`);
-    // One-time backfill (idempotent via system_flags so it only runs once
-    // per deployment lifetime — safe to re-execute, but skipped after the
-    // first successful run to avoid scanning the documents table on boot).
-    const flagRes = await pool.query(
-      `INSERT INTO system_flags (key) VALUES ('students_has_photo_backfilled') ON CONFLICT DO NOTHING RETURNING key`
-    );
-    if (flagRes.rows.length > 0) {
-      await pool.query(`
-        UPDATE students s
-        SET has_photo = TRUE
-        WHERE EXISTS (
+    // Perpetual idempotent sync — runs every boot to fix any drift between
+    // the documents table and the denormalized has_photo flag (e.g. photos
+    // uploaded via fileUrl-only path, or records created before the flag
+    // was introduced). Both directions are covered: set TRUE where a photo
+    // doc exists, clear FALSE where it no longer does.
+    // The one-time system_flags guard is removed — this UPDATE only touches
+    // rows where has_photo is already wrong, so it is always safe to run.
+    const { rowCount: photoSet } = await pool.query(`
+      UPDATE students s
+      SET has_photo = TRUE
+      WHERE has_photo = FALSE
+        AND EXISTS (
           SELECT 1 FROM documents d
           WHERE d.student_id = s.id
             AND d.type IN ('photo', 'photograph')
             AND d.deleted_at IS NULL
-        ) AND has_photo = FALSE
-      `);
-      console.log("[migrate] students.has_photo backfilled from documents");
+        )
+    `);
+    const { rowCount: photoCleared } = await pool.query(`
+      UPDATE students s
+      SET has_photo = FALSE
+      WHERE has_photo = TRUE
+        AND NOT EXISTS (
+          SELECT 1 FROM documents d
+          WHERE d.student_id = s.id
+            AND d.type IN ('photo', 'photograph')
+            AND d.deleted_at IS NULL
+        )
+    `);
+    if ((photoSet ?? 0) > 0 || (photoCleared ?? 0) > 0) {
+      console.log(`[migrate] students.has_photo synced: +${photoSet ?? 0} set, -${photoCleared ?? 0} cleared`);
     }
   } catch (err) {
     console.error("[migrate] perf quick-win indexes:", err);

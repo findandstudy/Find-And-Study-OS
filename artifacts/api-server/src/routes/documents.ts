@@ -357,10 +357,9 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
     }
   }
 
-  if (doc.studentId && (type === "photo" || type === "photograph") && fileKey) {
+  if (doc.studentId && (type === "photo" || type === "photograph") && (fileKey || fileUrl)) {
     try {
-      // Stable URL served from object storage via /students/:id/photo.
-      // No more inline base64 data-URLs polluting the students row.
+      // Stable URL served via /students/:id/photo (object-storage key or fileUrl redirect).
       const photoUrl = `/api/students/${doc.studentId}/photo`;
       await db.update(studentsTable).set({ photoUrl, hasPhoto: true }).where(eq(studentsTable.id, doc.studentId));
     } catch (err) {
