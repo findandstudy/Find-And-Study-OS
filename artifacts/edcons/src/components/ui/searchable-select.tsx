@@ -17,6 +17,8 @@ interface SearchableSelectProps {
   disabled?: boolean;
   /** Minimum pixel width of the portal dropdown (default 240). */
   minDropdownWidth?: number;
+  /** When true, item labels wrap to multiple lines instead of truncating (default false). */
+  wrapItems?: boolean;
 }
 
 export function SearchableSelect({
@@ -31,6 +33,7 @@ export function SearchableSelect({
   clearable = false,
   disabled = false,
   minDropdownWidth = 240,
+  wrapItems = false,
 }: SearchableSelectProps) {
   const emitChange = onChange ?? onValueChange ?? (() => {});
   const [open, setOpen] = useState(false);
@@ -171,7 +174,7 @@ export function SearchableSelect({
                           : "hover:bg-primary/10 text-foreground"
                       }`}
                     >
-                      <span className="truncate flex-1">
+                      <span className={wrapItems ? "flex-1 whitespace-normal break-words text-left" : "truncate flex-1"}>
                         {opt.node ?? (
                           <span className="inline-flex items-center gap-1.5">
                             {opt.icon}

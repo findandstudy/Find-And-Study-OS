@@ -1023,7 +1023,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                       options={filteredPrograms.map((p: any) => ({ value: String(p.id), label: p.name }))}
                       placeholder={!appUniversityId ? "Select university first" : "Select Course"}
                       disabled={!appUniversityId}
-                      minDropdownWidth={440}
+                      minDropdownWidth={560}
+                      wrapItems
                     />
                   </div>
                   <div>
