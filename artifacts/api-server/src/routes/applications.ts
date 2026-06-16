@@ -755,6 +755,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
       agentCommissionAmount: commissionsTable.agentCommissionAmount,
       subAgentCommissionAmount: commissionsTable.subAgentCommissionAmount,
       commissionStatus: commissionsTable.status,
+      branchId: applicationsTable.branchId,
     })
     .from(applicationsTable)
     .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
@@ -771,7 +772,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
     if (!p.has("records.view_others")) {
       res.status(404).json({ error: "Application not found" }); return;
     }
-    if (!(await isInBranchScope(user.id, user.role, (row as any).branchId ?? null))) {
+    if (!(await isInBranchScope(user.id, user.role, row.branchId))) {
       res.status(404).json({ error: "Application not found" }); return;
     }
   }
