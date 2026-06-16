@@ -26,6 +26,7 @@ import {
   User, X, Check, GraduationCap, BookOpen, FileCheck, Send,
   Eye, Stamp, CheckCircle, XCircle, Trophy,
 } from "lucide-react";
+import { StageBadgeWithDocs } from "@/components/StageBadgeWithDocs";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
@@ -1092,7 +1093,7 @@ export default function AgentAppsPage() {
                             <span>{app.studentFirstName} {app.studentLastName}</span>
                           </div>
                         </TableCell>
-                        <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
+                        <TableCell><StageBadgeWithDocs app={app} stageLabel={stageLabel} stageColor={stageColor} baseUrl={BASE_URL} /></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
                         <TableCell className="max-w-[250px]"><span className="line-clamp-2" title={app.universityName || ""}>{app.universityName || "-"}</span></TableCell>
                         <TableCell className="max-w-[250px]"><span className="line-clamp-2" title={app.programName || ""}>{app.programName || "-"}</span></TableCell>

@@ -40,6 +40,7 @@ import {
   Eye, Stamp, CheckCircle, XCircle, Trophy, MessageSquare, Mail,
   UserPlus, UserCheck2, Download, Building2, MapPin, Award, ExternalLink, Globe, DollarSign,
 } from "lucide-react";
+import { StageBadgeWithDocs } from "@/components/StageBadgeWithDocs";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage, type StageAction } from "@/hooks/use-pipeline-stages";
 import { BulkActionBar } from "@/components/BulkActionBar";
@@ -2079,7 +2080,7 @@ export default function ApplicationsPage() {
                     case "stage":
                       return (
                         <TableCell key={id}>
-                          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span>
+                          <StageBadgeWithDocs app={app} stageLabel={stageLabel} stageColor={stageColor} baseUrl={BASE_URL} />
                         </TableCell>
                       );
                     case "country":

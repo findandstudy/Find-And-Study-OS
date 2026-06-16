@@ -192,6 +192,13 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       subAgentCommissionAmount: commissionsTable.subAgentCommissionAmount,
       universityType: universitiesTable.universityType,
       agentName: agentsTable.companyName,
+      currentStageDocCount: sql<number>`(
+        SELECT COUNT(*)::int
+        FROM application_stage_documents
+        WHERE application_id = ${applicationsTable.id}
+          AND stage = ${applicationsTable.stage}
+          AND (is_missing_doc_note IS NULL OR is_missing_doc_note = false)
+      )`.as("current_stage_doc_count"),
     })
     .from(applicationsTable)
     .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
