@@ -559,8 +559,11 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   }
   if (!isAdmin && !isAgent && !isStudent && req.body.assignedToId !== undefined) {
     // Task #494: strict rule — non-admin may only change assignment when they ARE the current assignee.
-    // Unassigned (null) records also 403; only admin can make the initial assignment.
-    if (existing.assignedToId !== req.user!.id) {
+    // Exception (Task #507): self-claim of an unassigned record is allowed.
+    // Exception: users with records.change_assigned permission may reassign any record.
+    const isSelfClaim = existing.assignedToId === null && req.body.assignedToId === req.user!.id;
+    const canChangeAssigned = perms.has("records.change_assigned");
+    if (!isSelfClaim && !canChangeAssigned && existing.assignedToId !== req.user!.id) {
       res.status(403).json({ error: "Only the current assignee or an admin can change assignment" });
       return;
     }
