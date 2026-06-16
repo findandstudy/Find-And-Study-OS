@@ -2885,6 +2885,19 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
                       <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab shrink-0" />
                       <span className="inline-block w-6 text-[11px] font-semibold text-muted-foreground tabular-nums shrink-0">{i + 1}.</span>
                       <span className="flex-1 text-xs break-words">{labelFor(dt)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setLevel(dt, docReqs[dt] === "mandatory" ? "optional" : "mandatory")}
+                        title={docReqs[dt] === "mandatory" ? t("catalogPage.badgeOptional") : t("catalogPage.badgeMandatory")}
+                        className={cn(
+                          "shrink-0 px-2 py-0.5 text-[11px] rounded-full border font-medium transition-colors",
+                          docReqs[dt] === "mandatory"
+                            ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950 dark:text-red-400 dark:border-red-800"
+                            : "bg-muted text-muted-foreground border-border hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+                        )}
+                      >
+                        {docReqs[dt] === "mandatory" ? t("catalogPage.badgeMandatory") : t("catalogPage.badgeOptional")}
+                      </button>
                       <div className="flex flex-col gap-0.5 shrink-0">
                         <button
                           type="button"
