@@ -165,6 +165,48 @@ function formatDate(dateStr: string | null | undefined): string {
 
 type Student = { id: number; firstName: string; lastName: string; email?: string | null; nationality?: string | null };
 
+/* ── useInView ───────────────────────────────────────────── */
+function useInView(rootMargin = "200px") {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setInView(true); return; }
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setInView(true); obs.disconnect(); } },
+      { threshold: 0, rootMargin },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [rootMargin]);
+  return { ref, inView };
+}
+
+/* ── AppStudentAvatar ────────────────────────────────────── */
+function AppStudentAvatar({ app, size = "sm" }: { app: any; size?: "sm" | "md" }) {
+  const dim = size === "md" ? "w-10 h-10" : "w-8 h-8";
+  const textSize = size === "md" ? "text-sm" : "text-xs";
+  const [imgError, setImgError] = useState(false);
+  const { ref, inView } = useInView();
+  const showPhoto = app.studentHasPhoto && !imgError && inView;
+  return (
+    <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
+      {showPhoto ? (
+        <img
+          src={`/api/students/${app.studentId}/photo`}
+          alt={`${app.studentFirstName} ${app.studentLastName}`}
+          className={`${dim} rounded-full object-cover border border-primary/20`}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center`}>
+          <span className={`${textSize} font-bold text-primary`}>{app.studentFirstName?.[0]}{app.studentLastName?.[0]}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── StudentSearchInput ──────────────────────────────────── */
 function StudentSearchInput({ value, onChange }: { value: Student | null; onChange: (s: Student | null) => void }) {
   const [query, setQuery] = useState("");
@@ -490,9 +532,10 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); window.open(appDetailHref(app.id), "_blank", "noopener"); } }}
     >
       <div {...attributes} {...listeners} className={`p-4 pb-2 ${!canMoveCards ? "cursor-default" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
-        <div className="flex justify-between items-start mb-1.5">
+        <div className="flex items-center gap-2.5 mb-1.5">
+          <AppStudentAvatar app={app} />
           <h4
-            className="font-bold text-sm text-foreground line-clamp-1 hover:text-primary hover:underline cursor-pointer transition-colors"
+            className="font-bold text-sm text-foreground line-clamp-1 hover:text-primary hover:underline cursor-pointer transition-colors min-w-0"
             onClick={(e) => { e.stopPropagation(); if (app.studentId) setLoc(`/staff/students/${app.studentId}`); }}
           >
             {app.studentFirstName} {app.studentLastName}
@@ -1861,8 +1904,9 @@ export default function ApplicationsPage() {
                 <DragOverlay>
                   {activeCard ? (
                     <div className="bg-card rounded-xl border border-primary shadow-2xl p-4 w-72 opacity-95 rotate-1">
-                      <div className="flex justify-between items-start mb-1.5">
-                        <h4 className="font-bold text-sm text-foreground">
+                      <div className="flex items-center gap-2.5 mb-1.5">
+                        <AppStudentAvatar app={activeCard} />
+                        <h4 className="font-bold text-sm text-foreground line-clamp-1 min-w-0">
                           {activeCard.studentFirstName} {activeCard.studentLastName}
                         </h4>
                       </div>
@@ -2021,11 +2065,14 @@ export default function ApplicationsPage() {
                     case "student":
                       return (
                         <TableCell key={id} className="font-medium">
-                          <div className="flex items-center gap-1.5">
-                            <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>
-                              {app.studentFirstName} {app.studentLastName}
-                            </span>
-                            <OriginBadge originType={app.originType} originDisplayName={app.originDisplayName} />
+                          <div className="flex items-center gap-2">
+                            <AppStudentAvatar app={app} />
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>
+                                {app.studentFirstName} {app.studentLastName}
+                              </span>
+                              <OriginBadge originType={app.originType} originDisplayName={app.originDisplayName} />
+                            </div>
                           </div>
                         </TableCell>
                       );

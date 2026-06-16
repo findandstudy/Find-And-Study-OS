@@ -131,6 +131,48 @@ function formatDate(dateStr: string | null | undefined): string {
 
 type Student = { id: number; firstName: string; lastName: string; email?: string | null; nationality?: string | null };
 
+/* ── useInView ───────────────────────────────────────────── */
+function useInView(rootMargin = "200px") {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setInView(true); return; }
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setInView(true); obs.disconnect(); } },
+      { threshold: 0, rootMargin },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [rootMargin]);
+  return { ref, inView };
+}
+
+/* ── AppStudentAvatar ────────────────────────────────────── */
+function AppStudentAvatar({ app, size = "sm" }: { app: any; size?: "sm" | "md" }) {
+  const dim = size === "md" ? "w-10 h-10" : "w-8 h-8";
+  const textSize = size === "md" ? "text-sm" : "text-xs";
+  const [imgError, setImgError] = useState(false);
+  const { ref, inView } = useInView();
+  const showPhoto = app.studentHasPhoto && !imgError && inView;
+  return (
+    <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
+      {showPhoto ? (
+        <img
+          src={`/api/students/${app.studentId}/photo`}
+          alt={`${app.studentFirstName} ${app.studentLastName}`}
+          className={`${dim} rounded-full object-cover border border-primary/20`}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center`}>
+          <span className={`${textSize} font-bold text-primary`}>{app.studentFirstName?.[0]}{app.studentLastName?.[0]}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── StudentSearchInput ──────────────────────────────────── */
 function StudentSearchInput({ value, onChange }: { value: Student | null; onChange: (s: Student | null) => void }) {
   const [query, setQuery] = useState("");
@@ -216,8 +258,9 @@ function DraggableAppCard({ app, onView, variant }: { app: any; onView: (id: num
       className={`rounded-xl border ${isDragging ? "border-primary shadow-xl opacity-50 z-50 relative" : cardBg} mb-3 transition-shadow duration-200`}
     >
       <div {...attributes} {...listeners} className={`p-4 pb-2 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
-        <div className="flex justify-between items-start mb-1.5">
-          <h4 className="font-bold text-sm text-foreground line-clamp-1">
+        <div className="flex items-center gap-2.5 mb-1.5">
+          <AppStudentAvatar app={app} />
+          <h4 className="font-bold text-sm text-foreground line-clamp-1 min-w-0">
             {app.studentFirstName} {app.studentLastName}
           </h4>
         </div>
@@ -985,8 +1028,9 @@ export default function AgentAppsPage() {
                 <DragOverlay>
                   {activeCard ? (
                     <div className="bg-card rounded-xl border border-primary shadow-2xl p-4 w-72 opacity-95 rotate-1">
-                      <div className="flex justify-between items-start mb-1.5">
-                        <h4 className="font-bold text-sm text-foreground">
+                      <div className="flex items-center gap-2.5 mb-1.5">
+                        <AppStudentAvatar app={activeCard} />
+                        <h4 className="font-bold text-sm text-foreground line-clamp-1 min-w-0">
                           {activeCard.studentFirstName} {activeCard.studentLastName}
                         </h4>
                       </div>
@@ -1042,7 +1086,12 @@ export default function AgentAppsPage() {
                     const levelLabel = studyLabelOf(app.level) || app.level || "-";
                     return (
                       <TableRow key={app.id} className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setLocation(`/agent/applications/${app.id}`)}>
-                        <TableCell className="font-medium">{app.studentFirstName} {app.studentLastName}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <AppStudentAvatar app={app} />
+                            <span>{app.studentFirstName} {app.studentLastName}</span>
+                          </div>
+                        </TableCell>
                         <TableCell><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${stageColor}`}>{stageLabel}</span></TableCell>
                         <TableCell className="text-muted-foreground">{app.country || "-"}</TableCell>
                         <TableCell className="max-w-[250px]"><span className="line-clamp-2" title={app.universityName || ""}>{app.universityName || "-"}</span></TableCell>
