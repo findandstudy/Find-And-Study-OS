@@ -578,7 +578,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (app.assignedToId ? (canReassign || app.assignedToId === currentUserId) : canReassign) && staffUsersList ? (
+          {onAssign && (app.assignedToId ? (canReassign || app.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -2131,15 +2131,15 @@ export default function ApplicationsPage() {
                     case "assigned":
                       return (
                         <TableCell key={id} onClick={e => e.stopPropagation()}>
-                          {(app.assignedToId ? (canReassign || app.assignedToId === user?.id) : canReassign) ? (
+                          {(app.assignedToId ? (canReassign || app.assignedToId === user?.id) : canAssign) ? (
                             <AssignPopover
                               assignedUserName={app.assignedToId ? staffUsersMap[app.assignedToId] : undefined}
-                              staffUsers={staffUsersList}
+                              staffUsers={app.assignedToId ? staffUsersList : (canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id))}
                               currentUserId={user?.id}
                               onAssign={(userId) => handleAssign(app.id, userId)}
                               size="list"
                             />
-                          ) : !app.assignedToId && canReassign ? (
+                          ) : !app.assignedToId && canAssign ? (
                             <button
                               onClick={() => handleAssign(app.id, user!.id)}
                               className="text-xs text-primary hover:underline font-medium flex items-center gap-1"

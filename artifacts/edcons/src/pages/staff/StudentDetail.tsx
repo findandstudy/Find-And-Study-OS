@@ -126,6 +126,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   // Task #494: strict rule — assignment dropdown only for admin or current assignee
   const isCurrentStudentAssignee = !!(student?.assignedToId && student.assignedToId === user?.id);
   const canManageAssignment = !!isAdmin || isCurrentStudentAssignee;
+  const canSelfAssign = !isAdmin && !isStudent && !isCurrentStudentAssignee && hasPermission("records.assign_button") && !student?.assignedToId;
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isStudent = user?.role === "student";
   const [assigning, setAssigning] = useState(false);
@@ -859,13 +860,21 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                         })()}
                       </SelectContent>
                     </Select>
+                  ) : canSelfAssign ? (
+                    <button
+                      onClick={() => handleAssign(user!.id)}
+                      disabled={assigning}
+                      className="text-sm text-primary hover:underline font-medium flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      {assigning ? t("studentDetailPage.assigning") : t("studentDetailPage.assignToMe")}
+                    </button>
                   ) : student?.assignedToId ? (
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       <span className="text-sm font-medium">{getAssignedUserName(student.assignedToId) || "—"}</span>
                     </div>
                   ) : (
-                    // Task #494: unassigned + non-admin → read-only; "Assign to me" removed
                     <p className="text-sm text-muted-foreground">{t("studentDetailPage.unassigned")}</p>
                   )}
                 </div>

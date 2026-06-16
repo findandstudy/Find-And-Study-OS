@@ -248,7 +248,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (lead.assignedToId ? (canReassign || lead.assignedToId === currentUserId) : canReassign) && staffUsersList ? (
+          {onAssign && (lead.assignedToId ? (canReassign || lead.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -1890,10 +1890,10 @@ export default function LeadsPage() {
                         </TableCell>
                       )}
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {(lead.assignedToId ? (canReassign || lead.assignedToId === user?.id) : canReassign) ? (
+                        {(lead.assignedToId ? (canReassign || lead.assignedToId === user?.id) : canAssign) ? (
                           <AssignPopover
                             assignedUserName={lead.assignedToId ? staffUsersMap[lead.assignedToId] : undefined}
-                            staffUsers={staffUsersList}
+                            staffUsers={lead.assignedToId ? staffUsersList : (canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id))}
                             currentUserId={user?.id}
                             onAssign={(userId) => handleAssign(lead.id, userId)}
                             size="list"

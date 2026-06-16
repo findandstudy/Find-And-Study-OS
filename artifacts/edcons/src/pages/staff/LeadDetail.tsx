@@ -193,6 +193,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const canAssignLead = isAgent
     ? isAgentManager
     : (!!isAdmin || isCurrentLeadAssignee);
+  const canSelfAssign = !isAgent && !isAdmin && !isCurrentLeadAssignee && hasPermission("records.assign_button") && !lead?.assignedToId;
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const { data: catalogResp } = useQuery<any>({
@@ -954,13 +955,21 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     })}
                   </SelectContent>
                 </Select>
+              ) : canSelfAssign ? (
+                <button
+                  onClick={() => handleAssign(user!.id)}
+                  disabled={assigning}
+                  className="text-sm text-primary hover:underline font-medium flex items-center gap-1 disabled:opacity-50"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  {assigning ? t("leadDetailPage.assigning") : t("leadDetailPage.assignToMe")}
+                </button>
               ) : lead?.assignedToId ? (
                 <div className="flex items-center gap-2">
                   <UserCheck2 className="w-4 h-4 text-emerald-600" />
                   <span className="text-sm font-medium">{getAssignedUserName(lead.assignedToId)}</span>
                 </div>
               ) : (
-                // Task #494: unassigned + non-admin → read-only; "Assign to me" removed
                 <p className="text-sm text-muted-foreground">{t("leadDetailPage.unassigned")}</p>
               )}
             </div>

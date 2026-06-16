@@ -1572,7 +1572,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (student.assignedToId ? (canReassign || student.assignedToId === currentUserId) : canReassign) && staffUsersList ? (
+          {onAssign && (student.assignedToId ? (canReassign || student.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -2541,10 +2541,10 @@ export default function StudentsPage() {
                         <Badge className={cn("text-xs border font-medium", stageMap[student.status] ? getStuStageColor(stageMap[student.status], stageMap[student.status]._index) : "bg-gray-100 text-gray-600 border-gray-200")}>{stageMap[student.status]?.label || student.status}</Badge>
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {(student.assignedToId ? (canReassign || student.assignedToId === user?.id) : canReassign) ? (
+                        {(student.assignedToId ? (canReassign || student.assignedToId === user?.id) : canAssign) ? (
                           <AssignPopover
                             assignedUserName={student.assignedToId ? staffUsersMap[student.assignedToId] : undefined}
-                            staffUsers={staffUsersList}
+                            staffUsers={student.assignedToId ? staffUsersList : (canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id))}
                             currentUserId={user?.id}
                             onAssign={(userId) => handleAssign(student.id, userId)}
                             size="list"
