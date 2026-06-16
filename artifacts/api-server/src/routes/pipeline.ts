@@ -493,7 +493,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           mappedStudentStageKey: entityType === "application" && s.mappedStudentStageKey ? String(s.mappedStudentStageKey) : null,
           uploadPermissionLevel: entityType === "application" ? normPermission(s.uploadPermissionLevel) : "none",
           tracksOfferExpiry: entityType === "application" && !!s.tracksOfferExpiry,
-          requiresValidUntil: entityType === "application" && !!s.tracksOfferExpiry && !!s.requiresValidUntil,
+          requiresValidUntil: entityType === "application" && !!s.requiresValidUntil,
           commissionFinanceStatus: entityType === "application" ? normFinance(s.commissionFinanceStatus) : null,
           serviceFeeFinanceStatus: entityType === "application" ? normFinance(s.serviceFeeFinanceStatus) : null,
           autoCancelSiblingsOnWon: entityType === "application" && !!s.autoCancelSiblingsOnWon,

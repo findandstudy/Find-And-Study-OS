@@ -167,7 +167,7 @@ function StageSection({
   const [scannerOpen, setScannerOpen] = useState(false);
 
   const requiresValidUntil = requiresValidUntilFlag;
-  const supportsValidUntil = tracksOfferExpiry;
+  const supportsValidUntil = tracksOfferExpiry || requiresValidUntilFlag;
 
   const canUpload = (() => {
     if (hideUpload) return false;

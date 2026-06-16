@@ -62,8 +62,8 @@ export function StageDocUploadDialog({ open, onClose, applicationId, targetStage
   const { toast } = useToast();
   const { stages: pipelineStages } = usePipelineStages("application");
   const targetStageMeta = pipelineStages.find(s => s.key === docStage);
-  const supportsValidUntil = !quickMode && targetStageMeta?.tracksOfferExpiry === true;
   const requiresValidUntil = !quickMode && targetStageMeta?.requiresValidUntil === true;
+  const supportsValidUntil = !quickMode && (targetStageMeta?.tracksOfferExpiry === true || requiresValidUntil);
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
