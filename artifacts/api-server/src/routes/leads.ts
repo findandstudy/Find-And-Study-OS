@@ -491,11 +491,14 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       return;
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+    const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    const viewOthers = perms.has("records.view_others");
     // KURAL 1: non-admin staff cannot access agent-sourced lead detail
-    if (lead.agentId !== null) {
+    // unless they have records.view_others (Task #494)
+    if (lead.agentId !== null && !viewOthers) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
-    if (lead.assignedToId !== null && lead.assignedToId !== user.id) {
+    if (lead.assignedToId !== null && lead.assignedToId !== user.id && !viewOthers) {
       res.status(403).json({ error: "Access denied" });
       return;
     }
@@ -691,7 +694,8 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     }
   } else if (!isAdmin) {
     // KURAL 1: non-admin staff cannot update agent-sourced leads
-    if (existing.agentId !== null) {
+    // unless they have records.view_others (Task #494)
+    if (existing.agentId !== null && !perms.has("records.view_others")) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
     if (!canAccessAssignedRecord(perms, existing.assignedToId, user.id)) {
@@ -746,15 +750,14 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
       allowedFields = [...allowedFields, "assignedTo"];
     }
   }
-  if (!isAdmin && !isAgent) {
-    if (req.body.assignedTo !== undefined && !perms.has("records.change_assigned")) {
-      // Without explicit reassignment rights, the only allowed assignment is
-      // claiming a currently-unassigned record for oneself.
-      if (existing.assignedToId !== null) {
-        allowedFields = allowedFields.filter(f => f !== "assignedTo");
-      } else if (Number(req.body.assignedTo) !== user.id) {
-        allowedFields = allowedFields.filter(f => f !== "assignedTo");
-      }
+  if (!isAdmin && !isAgent && req.body.assignedTo !== undefined) {
+    const hasAssignPerm = perms.has("records.change_assigned");
+    const isCurrentAssignee = existing.assignedToId === user.id;
+    const selfClaimUnassigned = existing.assignedToId === null && Number(req.body.assignedTo) === user.id;
+    // Block if: no perm and not self-claiming unassigned,
+    // OR has perm but record already belongs to someone else (Task #494 assignment protection)
+    if ((!hasAssignPerm && !selfClaimUnassigned) || (hasAssignPerm && existing.assignedToId !== null && !isCurrentAssignee)) {
+      allowedFields = allowedFields.filter(f => f !== "assignedTo");
     }
   }
   const updates: Record<string, unknown> = {};
@@ -1184,10 +1187,14 @@ router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT
   const offset = (pageNum - 1) * limitNum;
 
   // KURAL 1: non-admin staff cannot access notes of agent-sourced leads
+  // unless they have records.view_others (Task #494)
   const [noteLeadRow] = await db.select({ agentId: leadsTable.agentId }).from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!noteLeadRow) { res.status(404).json({ error: "Lead not found" }); return; }
   if (isAgentSourcedAndBlockedForStaff(req.user!, noteLeadRow.agentId)) {
-    res.status(404).json({ error: "Lead not found" }); return;
+    const notePerms = await getEffectivePermissionSet({ id: req.user!.id, role: req.user!.role });
+    if (!notePerms.has("records.view_others")) {
+      res.status(404).json({ error: "Lead not found" }); return;
+    }
   }
 
   const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);

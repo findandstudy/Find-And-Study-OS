@@ -557,13 +557,14 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   if (!isAdmin && !isAgent && !isStudent && !perms.has("students.change_stage")) {
     allowedFields = allowedFields.filter(f => f !== "status");
   }
-  if (!isAdmin && !isAgent && !isStudent) {
-    if (req.body.assignedToId !== undefined && !perms.has("records.change_assigned")) {
-      if (existing.assignedToId !== null) {
-        allowedFields = allowedFields.filter(f => f !== "assignedToId");
-      } else if (Number(req.body.assignedToId) !== req.user!.id) {
-        allowedFields = allowedFields.filter(f => f !== "assignedToId");
-      }
+  if (!isAdmin && !isAgent && !isStudent && req.body.assignedToId !== undefined) {
+    const hasAssignPerm = perms.has("records.change_assigned");
+    const isCurrentAssignee = existing.assignedToId === req.user!.id;
+    const selfClaimUnassigned = existing.assignedToId === null && Number(req.body.assignedToId) === req.user!.id;
+    // Block if: no perm and not self-claiming unassigned,
+    // OR has perm but record already belongs to someone else (Task #494 assignment protection)
+    if ((!hasAssignPerm && !selfClaimUnassigned) || (hasAssignPerm && existing.assignedToId !== null && !isCurrentAssignee)) {
+      allowedFields = allowedFields.filter(f => f !== "assignedToId");
     }
   }
   const updates: Record<string, unknown> = {};

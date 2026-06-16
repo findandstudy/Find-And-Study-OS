@@ -111,6 +111,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
   const canChangeStage = !!isAdmin || hasPermission("students.change_stage");
   const canChangeAssigned = !!isAdmin || hasPermission("records.change_assigned");
+  // Assignment protection (Task #494): only admin or the currently assigned person can reassign
+  const isAssignedToSomeoneElse = !!(student?.assignedToId && student.assignedToId !== user?.id);
+  const canManageAssignment = canChangeAssigned && (!isAssignedToSomeoneElse || !!isAdmin);
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isStudent = user?.role === "student";
   const [assigning, setAssigning] = useState(false);
@@ -817,7 +820,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   </h2>
                   {isLoading ? (
                     <Skeleton className="h-8 w-32" />
-                  ) : canChangeAssigned ? (
+                  ) : canManageAssignment ? (
                     <Select
                       value={student?.assignedToId ? String(student.assignedToId) : "unassigned"}
                       onValueChange={(val) => handleAssign(val === "unassigned" ? null : Number(val))}

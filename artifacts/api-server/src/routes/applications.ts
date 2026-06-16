@@ -100,13 +100,16 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     // Non-admin staff: only see applications assigned to them or unassigned
     // (mirrors the leads / students lists). Admins see everything in scope.
     if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-      // KURAL 1: non-admin staff cannot see agent-sourced applications
-      conditions.push(isNull(applicationsTable.agentId));
       // Visibility driven by records.* keys. Always see own records;
       // view_unassigned adds the unassigned pool; view_others adds
       // teammates' records. Task #128: also include applications for
       // agencies where this staff is listed as agency-assigned staff.
       const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+      // KURAL 1: non-admin staff cannot see agent-sourced applications
+      // unless they have records.view_others (Task #494)
+      if (!perms.has("records.view_others")) {
+        conditions.push(isNull(applicationsTable.agentId));
+      }
       const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
       const orParts: any[] = [eq(applicationsTable.assignedToId, user.id)];
       if (perms.has("records.view_unassigned")) {
@@ -762,8 +765,12 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
   // KURAL 1: non-admin staff cannot access agent-sourced application detail
+  // unless they have records.view_others (Task #494)
   if (isAgentSourcedAndBlockedForStaff(user, row.agentId)) {
-    res.status(404).json({ error: "Application not found" }); return;
+    const p = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    if (!p.has("records.view_others")) {
+      res.status(404).json({ error: "Application not found" }); return;
+    }
   }
   if (isAgentRole(user.role)) {
     const agentRec = await getAgentRecord(user.id, user.role);
@@ -868,14 +875,15 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }
   }
 
-  if (isStaff && !isAdmin && req.body.assignedToId !== undefined && !perms.has("records.change_assigned")) {
-    // Without explicit reassignment rights, the only allowed assignment is
-    // claiming a currently-unassigned application for oneself.
-    const [existing] = await db.select({ assignedToId: applicationsTable.assignedToId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
-    if (!existing) { res.status(404).json({ error: "Application not found" }); return; }
-    if (existing.assignedToId !== null) {
-      allowedFields = allowedFields.filter(f => f !== "assignedToId");
-    } else if (req.body.assignedToId !== user.id) {
+  if (isStaff && !isAdmin && req.body.assignedToId !== undefined) {
+    const [existingApp] = await db.select({ assignedToId: applicationsTable.assignedToId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+    if (!existingApp) { res.status(404).json({ error: "Application not found" }); return; }
+    const hasAssignPerm = perms.has("records.change_assigned");
+    const isCurrentAssignee = existingApp.assignedToId === user.id;
+    const selfClaimUnassigned = existingApp.assignedToId === null && req.body.assignedToId === user.id;
+    // Block if: no perm and not self-claiming unassigned,
+    // OR has perm but record already belongs to someone else (Task #494 assignment protection)
+    if ((!hasAssignPerm && !selfClaimUnassigned) || (hasAssignPerm && existingApp.assignedToId !== null && !isCurrentAssignee)) {
       allowedFields = allowedFields.filter(f => f !== "assignedToId");
     }
   }
@@ -1086,7 +1094,8 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const [preUpdateApp] = await db.select({ assignedToId: applicationsTable.assignedToId, agentId: applicationsTable.agentId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
 
   // KURAL 1: non-admin staff cannot update agent-sourced applications
-  if (isAgentSourcedAndBlockedForStaff(user, preUpdateApp?.agentId ?? null)) {
+  // unless they have records.view_others (Task #494)
+  if (isAgentSourcedAndBlockedForStaff(user, preUpdateApp?.agentId ?? null) && !perms.has("records.view_others")) {
     res.status(404).json({ error: "Application not found" }); return;
   }
 
@@ -1594,10 +1603,14 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, .
   const offset = (pageNum - 1) * limitNum;
 
   // KURAL 1: non-admin staff cannot access notes of agent-sourced applications
+  // unless they have records.view_others (Task #494)
   const [noteApp] = await db.select({ agentId: applicationsTable.agentId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
   if (!noteApp) { res.status(404).json({ error: "Application not found" }); return; }
   if (isAgentSourcedAndBlockedForStaff(req.user!, noteApp.agentId)) {
-    res.status(404).json({ error: "Application not found" }); return;
+    const notePerms = await getEffectivePermissionSet({ id: req.user!.id, role: req.user!.role });
+    if (!notePerms.has("records.view_others")) {
+      res.status(404).json({ error: "Application not found" }); return;
+    }
   }
 
   const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
