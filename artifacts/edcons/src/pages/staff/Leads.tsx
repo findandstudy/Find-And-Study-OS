@@ -248,25 +248,28 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (lead.assignedToId ? (canReassign || lead.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
-            <AssignPopover
-              assignedUserName={assignedUserName}
-              staffUsers={staffUsersList}
-              currentUserId={currentUserId}
-              onAssign={(userId) => onAssign(lead.id, userId)}
-            />
-          ) : onAssign && currentUserId && !lead.assignedToId ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onAssign(lead.id, currentUserId); }}
-              className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"
-              title={t("leadsPage.assignToMe")}
-            >
-              <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
-            </button>
+          {onAssign && lead.assignedToId ? (
+            canReassign && staffUsersList ? (
+              <AssignPopover assignedUserName={assignedUserName} staffUsers={staffUsersList} currentUserId={currentUserId} onAssign={(uid) => onAssign(lead.id, uid)} />
+            ) : lead.assignedToId === currentUserId && staffUsersList ? (
+              <AssignPopover assignedUserName={assignedUserName} staffUsers={staffUsersList.filter(u => u.id === currentUserId)} currentUserId={currentUserId} onAssign={(uid) => onAssign(lead.id, uid)} />
+            ) : canAssign && currentUserId ? (
+              <button onClick={(e) => { e.stopPropagation(); onAssign(lead.id, currentUserId); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5" title={t("leadsPage.assignToMe")}>
+                <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
+              </button>
+            ) : assignedUserName ? (
+              <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}><UserCheck2 className="w-3 h-3 inline mr-0.5" />{assignedUserName}</span>
+            ) : null
+          ) : onAssign && !lead.assignedToId ? (
+            canReassign && staffUsersList ? (
+              <AssignPopover staffUsers={staffUsersList} currentUserId={currentUserId} onAssign={(uid) => onAssign(lead.id, uid)} />
+            ) : canAssign && currentUserId ? (
+              <button onClick={(e) => { e.stopPropagation(); onAssign(lead.id, currentUserId); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5" title={t("leadsPage.assignToMe")}>
+                <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
+              </button>
+            ) : null
           ) : assignedUserName ? (
-            <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}>
-              <UserCheck2 className="w-3 h-3 inline mr-0.5" />{assignedUserName}
-            </span>
+            <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}><UserCheck2 className="w-3 h-3 inline mr-0.5" />{assignedUserName}</span>
           ) : null}
         </div>
         <div className="flex items-center gap-1.5">
@@ -1891,14 +1894,29 @@ export default function LeadsPage() {
                       )}
                       <TableCell onClick={e => e.stopPropagation()}>
                         {lead.assignedToId ? (
-                          (canReassign || lead.assignedToId === user?.id) ? (
+                          canReassign ? (
                             <AssignPopover
                               assignedUserName={staffUsersMap[lead.assignedToId]}
-                              staffUsers={canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id)}
+                              staffUsers={staffUsersList}
                               currentUserId={user?.id}
                               onAssign={(userId) => handleAssign(lead.id, userId)}
                               size="list"
                             />
+                          ) : lead.assignedToId === user?.id ? (
+                            <AssignPopover
+                              assignedUserName={staffUsersMap[lead.assignedToId]}
+                              staffUsers={staffUsersList.filter(u => u.id === user?.id)}
+                              currentUserId={user?.id}
+                              onAssign={(userId) => handleAssign(lead.id, userId)}
+                              size="list"
+                            />
+                          ) : canAssign ? (
+                            <button
+                              onClick={e => { e.stopPropagation(); handleAssign(lead.id, user!.id); }}
+                              className="text-[10px] text-primary hover:underline font-medium flex items-center gap-1"
+                            >
+                              <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
+                            </button>
                           ) : (
                             <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
                               <UserCheck2 className="w-3 h-3" />{staffUsersMap[lead.assignedToId] || t("leadsPage.assigned")}

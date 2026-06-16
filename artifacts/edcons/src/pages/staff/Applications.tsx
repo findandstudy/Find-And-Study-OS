@@ -578,17 +578,28 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (app.assignedToId ? (canReassign || app.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
-            <AssignPopover
-              assignedUserName={assignedUserName}
-              staffUsers={staffUsersList}
-              currentUserId={currentUserId}
-              onAssign={(userId) => onAssign(app.id, userId)}
-            />
+          {onAssign && app.assignedToId ? (
+            canReassign && staffUsersList ? (
+              <AssignPopover assignedUserName={assignedUserName} staffUsers={staffUsersList} currentUserId={currentUserId} onAssign={(uid) => onAssign(app.id, uid)} />
+            ) : app.assignedToId === currentUserId && staffUsersList ? (
+              <AssignPopover assignedUserName={assignedUserName} staffUsers={staffUsersList.filter(u => u.id === currentUserId)} currentUserId={currentUserId} onAssign={(uid) => onAssign(app.id, uid)} />
+            ) : canAssign && currentUserId ? (
+              <button onClick={(e) => { e.stopPropagation(); onAssign(app.id, currentUserId); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5" title="Assign to me">
+                <UserPlus className="w-3 h-3 shrink-0" />Assign to me
+              </button>
+            ) : assignedUserName ? (
+              <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}><UserCheck2 className="w-3 h-3 inline mr-0.5" />{assignedUserName}</span>
+            ) : null
+          ) : onAssign && !app.assignedToId ? (
+            canReassign && staffUsersList ? (
+              <AssignPopover staffUsers={staffUsersList} currentUserId={currentUserId} onAssign={(uid) => onAssign(app.id, uid)} />
+            ) : canAssign && currentUserId ? (
+              <button onClick={(e) => { e.stopPropagation(); onAssign(app.id, currentUserId); }} className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5" title="Assign to me">
+                <UserPlus className="w-3 h-3 shrink-0" />Assign to me
+              </button>
+            ) : null
           ) : assignedUserName ? (
-            <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}>
-              <UserCheck2 className="w-3 h-3 inline mr-0.5" />{assignedUserName}
-            </span>
+            <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}><UserCheck2 className="w-3 h-3 inline mr-0.5" />{assignedUserName}</span>
           ) : null}
         </div>
         <div className="flex items-center gap-1.5">
@@ -2132,14 +2143,29 @@ export default function ApplicationsPage() {
                       return (
                         <TableCell key={id} onClick={e => e.stopPropagation()}>
                           {app.assignedToId ? (
-                            (canReassign || app.assignedToId === user?.id) ? (
+                            canReassign ? (
                               <AssignPopover
                                 assignedUserName={staffUsersMap[app.assignedToId]}
-                                staffUsers={canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id)}
+                                staffUsers={staffUsersList}
                                 currentUserId={user?.id}
                                 onAssign={(userId) => handleAssign(app.id, userId)}
                                 size="list"
                               />
+                            ) : app.assignedToId === user?.id ? (
+                              <AssignPopover
+                                assignedUserName={staffUsersMap[app.assignedToId]}
+                                staffUsers={staffUsersList.filter(u => u.id === user?.id)}
+                                currentUserId={user?.id}
+                                onAssign={(userId) => handleAssign(app.id, userId)}
+                                size="list"
+                              />
+                            ) : canAssign ? (
+                              <button
+                                onClick={e => { e.stopPropagation(); handleAssign(app.id, user!.id); }}
+                                className="text-[10px] text-primary hover:underline font-medium flex items-center gap-1"
+                              >
+                                <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
+                              </button>
                             ) : (
                               <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
                                 <UserCheck2 className="w-3 h-3" />{staffUsersMap[app.assignedToId] || t("leadsPage.assigned")}
