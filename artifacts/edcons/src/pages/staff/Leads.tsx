@@ -1890,18 +1890,34 @@ export default function LeadsPage() {
                         </TableCell>
                       )}
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {(lead.assignedToId ? (canReassign || lead.assignedToId === user?.id) : canAssign) ? (
+                        {lead.assignedToId ? (
+                          (canReassign || lead.assignedToId === user?.id) ? (
+                            <AssignPopover
+                              assignedUserName={staffUsersMap[lead.assignedToId]}
+                              staffUsers={canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id)}
+                              currentUserId={user?.id}
+                              onAssign={(userId) => handleAssign(lead.id, userId)}
+                              size="list"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                              <UserCheck2 className="w-3 h-3" />{staffUsersMap[lead.assignedToId] || t("leadsPage.assigned")}
+                            </span>
+                          )
+                        ) : canReassign ? (
                           <AssignPopover
-                            assignedUserName={lead.assignedToId ? staffUsersMap[lead.assignedToId] : undefined}
-                            staffUsers={lead.assignedToId ? staffUsersList : (canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id))}
+                            staffUsers={staffUsersList}
                             currentUserId={user?.id}
                             onAssign={(userId) => handleAssign(lead.id, userId)}
                             size="list"
                           />
-                        ) : lead.assignedToId ? (
-                          <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                            <UserCheck2 className="w-3 h-3" />{staffUsersMap[lead.assignedToId] || t("leadsPage.assigned")}
-                          </span>
+                        ) : canAssign ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); handleAssign(lead.id, user!.id); }}
+                            className="text-[10px] text-primary hover:underline font-medium flex items-center gap-1"
+                          >
+                            <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
+                          </button>
                         ) : null}
                       </TableCell>
                       <TableCell

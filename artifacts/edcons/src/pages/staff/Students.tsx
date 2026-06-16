@@ -2541,18 +2541,34 @@ export default function StudentsPage() {
                         <Badge className={cn("text-xs border font-medium", stageMap[student.status] ? getStuStageColor(stageMap[student.status], stageMap[student.status]._index) : "bg-gray-100 text-gray-600 border-gray-200")}>{stageMap[student.status]?.label || student.status}</Badge>
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {(student.assignedToId ? (canReassign || student.assignedToId === user?.id) : canAssign) ? (
+                        {student.assignedToId ? (
+                          (canReassign || student.assignedToId === user?.id) ? (
+                            <AssignPopover
+                              assignedUserName={staffUsersMap[student.assignedToId]}
+                              staffUsers={canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id)}
+                              currentUserId={user?.id}
+                              onAssign={(userId) => handleAssign(student.id, userId)}
+                              size="list"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                              <UserCheck className="w-3 h-3" />{staffUsersMap[student.assignedToId] || t("leadsPage.assigned")}
+                            </span>
+                          )
+                        ) : canReassign ? (
                           <AssignPopover
-                            assignedUserName={student.assignedToId ? staffUsersMap[student.assignedToId] : undefined}
-                            staffUsers={student.assignedToId ? staffUsersList : (canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id))}
+                            staffUsers={staffUsersList}
                             currentUserId={user?.id}
                             onAssign={(userId) => handleAssign(student.id, userId)}
                             size="list"
                           />
-                        ) : student.assignedToId ? (
-                          <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                            <UserCheck className="w-3 h-3" />{staffUsersMap[student.assignedToId] || "Assigned"}
-                          </span>
+                        ) : canAssign ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); handleAssign(student.id, user!.id); }}
+                            className="text-[10px] text-primary hover:underline font-medium flex items-center gap-1"
+                          >
+                            <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
+                          </button>
                         ) : null}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs" onClick={() => setLocation(`/staff/students/${student.id}`)}>{formatDate(student.createdAt)}</TableCell>

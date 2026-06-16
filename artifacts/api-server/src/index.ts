@@ -1668,6 +1668,29 @@ async function seedClaudeIntegration() {
       console.error("[migrate] role stage permissions backfill:", err);
     }
 
+    // Backfill records.assign_button for staff/consultant roles (prod migration).
+    try {
+      const assignBtnBackfill = await pool.query(
+        `INSERT INTO system_flags (key) VALUES ('role_assign_button_staff_backfilled') ON CONFLICT DO NOTHING RETURNING key`
+      );
+      if (assignBtnBackfill.rows.length > 0) {
+        await pool.query(`
+          UPDATE roles
+          SET permissions = (
+            SELECT jsonb_agg(DISTINCT elem)
+            FROM jsonb_array_elements_text(
+              permissions || '["records.assign_button"]'::jsonb
+            ) AS elem
+          )
+          WHERE name IN ('staff', 'consultant')
+            AND NOT (permissions @> '["records.assign_button"]'::jsonb)
+        `);
+        console.log("[migrate] Backfilled records.assign_button for staff/consultant roles");
+      }
+    } catch (err) {
+      console.error("[migrate] role assign_button backfill:", err);
+    }
+
     // One-shot data cleanup (idempotent via system_flags). Runs on every
     // boot but exits early once the version flag is set. This ensures
     // Replit autoscale publishes — which don't execute deploy/deploy.sh —

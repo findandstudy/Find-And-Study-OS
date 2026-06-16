@@ -2131,25 +2131,34 @@ export default function ApplicationsPage() {
                     case "assigned":
                       return (
                         <TableCell key={id} onClick={e => e.stopPropagation()}>
-                          {(app.assignedToId ? (canReassign || app.assignedToId === user?.id) : canAssign) ? (
+                          {app.assignedToId ? (
+                            (canReassign || app.assignedToId === user?.id) ? (
+                              <AssignPopover
+                                assignedUserName={staffUsersMap[app.assignedToId]}
+                                staffUsers={canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id)}
+                                currentUserId={user?.id}
+                                onAssign={(userId) => handleAssign(app.id, userId)}
+                                size="list"
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                                <UserCheck2 className="w-3 h-3" />{staffUsersMap[app.assignedToId] || t("leadsPage.assigned")}
+                              </span>
+                            )
+                          ) : canReassign ? (
                             <AssignPopover
-                              assignedUserName={app.assignedToId ? staffUsersMap[app.assignedToId] : undefined}
-                              staffUsers={app.assignedToId ? staffUsersList : (canReassign ? staffUsersList : staffUsersList.filter(u => u.id === user?.id))}
+                              staffUsers={staffUsersList}
                               currentUserId={user?.id}
                               onAssign={(userId) => handleAssign(app.id, userId)}
                               size="list"
                             />
-                          ) : !app.assignedToId && canAssign ? (
+                          ) : canAssign ? (
                             <button
-                              onClick={() => handleAssign(app.id, user!.id)}
-                              className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+                              onClick={e => { e.stopPropagation(); handleAssign(app.id, user!.id); }}
+                              className="text-[10px] text-primary hover:underline font-medium flex items-center gap-1"
                             >
-                              <UserPlus className="w-3 h-3" />Assign to me
+                              <UserPlus className="w-3 h-3 shrink-0" />{t("leadsPage.assignToMe")}
                             </button>
-                          ) : app.assignedToId ? (
-                            <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                              <UserCheck2 className="w-3 h-3" />{staffUsersMap[app.assignedToId] || "Assigned"}
-                            </span>
                           ) : null}
                         </TableCell>
                       );
