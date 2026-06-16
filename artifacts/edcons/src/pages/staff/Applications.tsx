@@ -2025,6 +2025,11 @@ export default function ApplicationsPage() {
                               { value: "mine", label: t("applicationsPage.me") },
                               { value: "unassigned", label: t("applicationsPage.unassigned") },
                               { value: "mine_unassigned", label: t("applicationsPage.meUnassigned") },
+                              ...(canViewOthers
+                                ? staffUsersList
+                                    .filter(u => u.id !== user?.id)
+                                    .map(u => ({ value: String(u.id), label: u.name }))
+                                : []),
                             ],
                             allLabel: t("applicationsPage.all"),
                             hideAll: false,
