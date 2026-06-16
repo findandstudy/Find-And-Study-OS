@@ -1406,6 +1406,67 @@ async function seedClaudeIntegration() {
     console.error("[migrate] portal_credentials backfill universityKey→adapterKey:", err);
   }
 
+  // Step 2b14: Backfill assignedToId consistency across Lead → Student → Application.
+  // Runs on every boot; both UPDATEs are idempotent (IS DISTINCT FROM guard ensures
+  // only genuinely out-of-sync rows are touched). Logs affected counts so each
+  // deploy can confirm convergence.
+  try {
+    // Before counts — helps diagnose residual drift after the first run.
+    const { rows: preRows } = await pool.query(`
+      SELECT
+        (SELECT COUNT(*) FROM students s
+           JOIN leads l ON l.id = s.origin_lead_id
+          WHERE l.assigned_to_id IS NOT NULL
+            AND s.assigned_to_id IS DISTINCT FROM l.assigned_to_id
+            AND s.deleted_at IS NULL
+            AND l.deleted_at IS NULL) AS student_drift,
+        (SELECT COUNT(*) FROM applications a
+           JOIN students s ON s.id = a.student_id
+          WHERE s.assigned_to_id IS NOT NULL
+            AND a.assigned_to_id IS DISTINCT FROM s.assigned_to_id
+            AND a.deleted_at IS NULL
+            AND s.deleted_at IS NULL) AS app_drift
+    `);
+    const preStudentDrift = parseInt(preRows[0]?.student_drift ?? "0", 10);
+    const preAppDrift     = parseInt(preRows[0]?.app_drift     ?? "0", 10);
+
+    // Pass 1: propagate lead's assignedToId → student (only when lead has one).
+    const { rowCount: studentFixed } = await pool.query(`
+      UPDATE students s
+         SET assigned_to_id = l.assigned_to_id,
+             updated_at     = NOW()
+        FROM leads l
+       WHERE s.origin_lead_id              = l.id
+         AND l.assigned_to_id             IS NOT NULL
+         AND s.assigned_to_id             IS DISTINCT FROM l.assigned_to_id
+         AND s.deleted_at                 IS NULL
+         AND l.deleted_at                 IS NULL
+    `);
+
+    // Pass 2: propagate student's (now-updated) assignedToId → application.
+    const { rowCount: appFixed } = await pool.query(`
+      UPDATE applications a
+         SET assigned_to_id = s.assigned_to_id,
+             updated_at     = NOW()
+        FROM students s
+       WHERE a.student_id                  = s.id
+         AND s.assigned_to_id             IS NOT NULL
+         AND a.assigned_to_id             IS DISTINCT FROM s.assigned_to_id
+         AND a.deleted_at                 IS NULL
+         AND s.deleted_at                 IS NULL
+    `);
+
+    if ((studentFixed ?? 0) > 0 || (appFixed ?? 0) > 0 || preStudentDrift > 0 || preAppDrift > 0) {
+      console.log(
+        `[migrate] assignedToId backfill: ` +
+        `students ${studentFixed ?? 0} fixed (was ${preStudentDrift} drifted), ` +
+        `applications ${appFixed ?? 0} fixed (was ${preAppDrift} drifted)`
+      );
+    }
+  } catch (err) {
+    console.error("[migrate] assignedToId backfill:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
