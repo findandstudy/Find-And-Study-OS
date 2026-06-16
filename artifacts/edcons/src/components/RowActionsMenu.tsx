@@ -109,7 +109,7 @@ export function RowActionsMenu({
             <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
           </DropdownMenuItem>
 
-          {onAssign && staffUsersList && (currentAssignedToId ? (canReassign || currentAssignedToId === currentUserId) : canAssign) && (
+          {onAssign && staffUsersList && (currentAssignedToId ? (canReassign || currentAssignedToId === currentUserId) : canReassign) && (
             <DropdownMenuItem onClick={() => setAssignOpen(true)}>
               <UserPlus className="w-3.5 h-3.5 mr-2" />
               {assignedName ? `Reassign (${assignedName})` : "Assign Staff"}

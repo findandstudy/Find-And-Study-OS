@@ -121,7 +121,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const { data: staffUsersData } = useQuery<any>({
     queryKey: ["/api/users"],
     queryFn: () => customFetch("/api/users?roles=super_admin,admin,manager,staff,consultant,accountant,editor&limit=100"),
-    enabled: !!isAdmin,
+    // Task #494: load for admin AND for the current assignee so they can reassign/unassign
+    enabled: !!(isAdmin || (student?.assignedToId && student?.assignedToId === user?.id)),
     staleTime: 5 * 60_000,
   });
 
@@ -850,21 +851,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                       <span className="text-sm font-medium">{getAssignedUserName(student.assignedToId) || "—"}</span>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">{t("studentDetailPage.unassigned")}</p>
-                      {user?.id && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full rounded-full"
-                          onClick={() => handleAssign(user.id)}
-                          disabled={assigning}
-                        >
-                          <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-                          {assigning ? t("studentDetailPage.assigning") : t("studentDetailPage.assignToMe")}
-                        </Button>
-                      )}
-                    </div>
+                    // Task #494: unassigned + non-admin → read-only; "Assign to me" removed
+                    <p className="text-sm text-muted-foreground">{t("studentDetailPage.unassigned")}</p>
                   )}
                 </div>
 
