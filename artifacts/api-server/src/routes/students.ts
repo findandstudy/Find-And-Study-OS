@@ -827,10 +827,16 @@ router.post("/students/:id/transfer-to-sub-agent", requireAuth, requireRole("age
   res.json(updated);
 });
 
-router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.post("/students/bulk-action", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const user = req.user!;
+  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const { ids, action, assignedToId, status } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
   if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
+  // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only
+  if (!isAdmin && action !== "assign") {
+    res.status(403).json({ error: "Only admins can bulk delete or move students" }); return;
+  }
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
   let updated = 0;
   if (action === "delete") {
@@ -838,31 +844,45 @@ router.post("/students/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), a
     const deleteIds = studentsToDelete.map(s => s.id);
     if (deleteIds.length > 0) {
       const userIds = studentsToDelete.filter(s => s.userId).map(s => s.userId!);
-      await softDeleteStudents(deleteIds, userIds, req.user!.id);
+      await softDeleteStudents(deleteIds, userIds, user.id);
       updated = deleteIds.length;
     }
-    for (const id of deleteIds) await logAudit(req.user!.id, "delete_student", "student", id, { soft: true }, req.ip);
+    for (const id of deleteIds) await logAudit(user.id, "delete_student", "student", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
+    // Non-admin: filter to only records they are the current assignee of
+    let idsToUpdate = numericIds;
+    let skipped = 0;
+    if (!isAdmin) {
+      const ownedRows = await db.select({ id: studentsTable.id })
+        .from(studentsTable)
+        .where(and(inArray(studentsTable.id, numericIds), eq(studentsTable.assignedToId, user.id), isNull(studentsTable.deletedAt)));
+      idsToUpdate = ownedRows.map(r => r.id);
+      skipped = numericIds.length - idsToUpdate.length;
+      if (idsToUpdate.length === 0) {
+        res.json({ success: true, updated: 0, skipped }); return;
+      }
+    }
     const affected = await db.select({ id: studentsTable.id }).from(studentsTable)
-      .where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
-    const result = await db.update(studentsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
-    updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_assign_students", "student", undefined, { ids: numericIds, assignedToId }, req.ip);
-    const canCascade = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
+      .where(and(inArray(studentsTable.id, idsToUpdate), isNull(studentsTable.deletedAt)));
+    const result = await db.update(studentsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(studentsTable.id, idsToUpdate), isNull(studentsTable.deletedAt)));
+    updated = result.rowCount ?? idsToUpdate.length;
+    await logAudit(user.id, "bulk_assign_students", "student", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
+    const canCascade = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
     for (const s of affected) {
       await cascadeStudentAssignment({
         studentId: s.id,
         newAssignedToId,
-        actorUserId: req.user!.id,
+        actorUserId: user.id,
         ipAddress: req.ip,
         nullFillOnly: !canCascade,
       });
     }
+    res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
     const result = await db.update(studentsTable).set({ status }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
     updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_move_students", "student", undefined, { ids: numericIds, status }, req.ip);
+    await logAudit(user.id, "bulk_move_students", "student", undefined, { ids: numericIds, status }, req.ip);
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
   }

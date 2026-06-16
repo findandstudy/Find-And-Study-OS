@@ -1344,40 +1344,60 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   res.json(app);
 });
 
-router.post("/applications/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const user = req.user!;
+  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const { ids, action, assignedToId, stage } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
   if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
+  // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only
+  if (!isAdmin && action !== "assign") {
+    res.status(403).json({ error: "Only admins can bulk delete or move applications" }); return;
+  }
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
   let updated = 0;
   if (action === "delete") {
     const existing = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     const liveIds = existing.map(r => r.id);
-    updated = await softDelete(applicationsTable, liveIds, { actorUserId: req.user!.id });
+    updated = await softDelete(applicationsTable, liveIds, { actorUserId: user.id });
     if (liveIds.length > 0) {
       // documents lacks deletedBy; cascade soft-delete with deletedAt only.
       await db.update(documentsTable).set({ deletedAt: new Date() }).where(and(inArray(documentsTable.applicationId, liveIds), isNull(documentsTable.deletedAt)));
     }
-    for (const id of liveIds) logAudit(req.user!.id, "delete_application", "application", id, { soft: true }, req.ip);
+    for (const id of liveIds) logAudit(user.id, "delete_application", "application", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
+    // Non-admin: filter to only records they are the current assignee of
+    let idsToUpdate = numericIds;
+    let skipped = 0;
+    if (!isAdmin) {
+      const ownedRows = await db.select({ id: applicationsTable.id })
+        .from(applicationsTable)
+        .where(and(inArray(applicationsTable.id, numericIds), eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.deletedAt)));
+      idsToUpdate = ownedRows.map(r => r.id);
+      skipped = numericIds.length - idsToUpdate.length;
+      if (idsToUpdate.length === 0) {
+        res.json({ success: true, updated: 0, skipped }); return;
+      }
+    }
     const affectedApps = await db.select({ id: applicationsTable.id, studentId: applicationsTable.studentId })
       .from(applicationsTable)
-      .where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
-    const result = await db.update(applicationsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
-    updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_assign_applications", "application", undefined, { ids: numericIds, assignedToId }, req.ip);
-    const canCascadeApps = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
+      .where(and(inArray(applicationsTable.id, idsToUpdate), isNull(applicationsTable.deletedAt)));
+    const result = await db.update(applicationsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(applicationsTable.id, idsToUpdate), isNull(applicationsTable.deletedAt)));
+    updated = result.rowCount ?? idsToUpdate.length;
+    await logAudit(user.id, "bulk_assign_applications", "application", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
+    const canCascadeApps = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
     for (const a of affectedApps) {
       await cascadeApplicationAssignment({
         applicationId: a.id,
         studentId: a.studentId,
         newAssignedToId,
-        actorUserId: req.user!.id,
+        actorUserId: user.id,
         ipAddress: req.ip,
         nullFillOnly: !canCascadeApps,
       });
     }
+    res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && stage) {
     const allApps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     // Task #269 — bulk move cannot prompt a per-application document

@@ -952,39 +952,58 @@ router.post("/leads/:id/purge", requireAuth, requireRole("super_admin"), async (
   res.json({ success: true, deleted: result.rowCount ?? 0 });
 });
 
-router.post("/leads/bulk-action", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const user = req.user!;
+  const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const { ids, action, assignedToId, status } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
   if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
+  // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only
+  if (!isAdmin && action !== "assign") {
+    res.status(403).json({ error: "Only admins can bulk delete or move leads" }); return;
+  }
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
   let updated = 0;
   if (action === "delete") {
-    updated = await softDelete(leadsTable, numericIds, { actorUserId: req.user!.id });
-    for (const id of numericIds) logAudit(req.user!.id, "delete_lead", "lead", id, { soft: true }, req.ip);
+    updated = await softDelete(leadsTable, numericIds, { actorUserId: user.id });
+    for (const id of numericIds) logAudit(user.id, "delete_lead", "lead", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
+    // Non-admin: filter to only records they are the current assignee of
+    let idsToUpdate = numericIds;
+    let skipped = 0;
+    if (!isAdmin) {
+      const ownedRows = await db.select({ id: leadsTable.id })
+        .from(leadsTable)
+        .where(and(inArray(leadsTable.id, numericIds), eq(leadsTable.assignedToId, user.id), isNull(leadsTable.deletedAt)));
+      idsToUpdate = ownedRows.map(r => r.id);
+      skipped = numericIds.length - idsToUpdate.length;
+      if (idsToUpdate.length === 0) {
+        res.json({ success: true, updated: 0, skipped }); return;
+      }
+    }
     const affectedLeads = await db.select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
-      .from(leadsTable)
-      .where(inArray(leadsTable.id, numericIds));
-    const result = await db.update(leadsTable).set({ assignedToId: newAssignedToId }).where(inArray(leadsTable.id, numericIds));
-    updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_assign_leads", "lead", undefined, { ids: numericIds, assignedToId }, req.ip);
-    const canCascadeLeads = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
+      .from(leadsTable).where(and(inArray(leadsTable.id, idsToUpdate), isNull(leadsTable.deletedAt)));
+    const result = await db.update(leadsTable).set({ assignedToId: newAssignedToId }).where(inArray(leadsTable.id, idsToUpdate));
+    updated = result.rowCount ?? idsToUpdate.length;
+    await logAudit(user.id, "bulk_assign_leads", "lead", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
+    const canCascadeLeads = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
     for (const l of affectedLeads) {
       if (!l.convertedStudentId) continue;
       await cascadeLeadAssignment({
         leadId: l.id,
         convertedStudentId: l.convertedStudentId,
         newAssignedToId,
-        actorUserId: req.user!.id,
+        actorUserId: user.id,
         ipAddress: req.ip,
         nullFillOnly: !canCascadeLeads,
       });
     }
+    res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
     const result = await db.update(leadsTable).set({ status }).where(inArray(leadsTable.id, numericIds));
     updated = result.rowCount ?? numericIds.length;
-    await logAudit(req.user!.id, "bulk_move_leads", "lead", undefined, { ids: numericIds, status }, req.ip);
+    await logAudit(user.id, "bulk_move_leads", "lead", undefined, { ids: numericIds, status }, req.ip);
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
   }
