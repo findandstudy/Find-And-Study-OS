@@ -293,10 +293,17 @@ test("student bulk-assign cascades to each student's lead and applications", asy
 });
 
 // ---------------------------------------------------------------------------
-// (d) Permission gate — toggling ONLY records.cascade_assignment.
+// (d) Permission gate — records.cascade_assignment controls OVERWRITE vs null-fill.
+//
+// Without the permission a "null-fill" cascade still runs: sibling records
+// that are currently unassigned (null) are filled with the new assignee, but
+// records that already have an assignee are left untouched.
+// With the permission the full OVERWRITE cascade runs (existing assignees are
+// replaced).
 // ---------------------------------------------------------------------------
-test("cascade runs only with records.cascade_assignment permission", async () => {
-  const staff = await createUser({ role: "staff" });
+test("cascade permission controls overwrite vs null-fill behaviour", async () => {
+  const staffA = await createUser({ role: "staff" });
+  const staffB = await createUser({ role: "staff" });
 
   // Both consultants can view others' records and change the assignee; only the
   // first additionally holds the cascade permission.
@@ -316,29 +323,40 @@ test("cascade runs only with records.cascade_assignment permission", async () =>
     },
   });
 
-  // With the permission: full cascade.
+  // With the permission: full OVERWRITE cascade (existing staffB replaced by staffA).
   {
-    const s = await seedScenario(null);
+    const s = await seedScenario(staffB);
     currentUser = { id: withCascade, role: "consultant", isActive: true };
-    const res = await request("PATCH", `/api/students/${s.studentId}`, { assignedToId: staff });
+    const res = await request("PATCH", `/api/students/${s.studentId}`, { assignedToId: staffA });
     assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
     const after = await readAssignments(s);
-    assert.equal(after.student, staff, "student assigned (with perm)");
-    assert.equal(after.lead, staff, "lead cascaded (with perm)");
-    assert.deepEqual(after.apps, [staff, staff], "applications cascaded (with perm)");
+    assert.equal(after.student, staffA, "student assigned (with perm)");
+    assert.equal(after.lead, staffA, "lead overwritten (with perm)");
+    assert.deepEqual(after.apps, [staffA, staffA], "applications overwritten (with perm)");
   }
 
-  // Without the permission: the student's own assignment changes, but the
-  // linked lead and applications are left untouched.
+  // Without the permission, downstream records ARE null -> null-fill runs and fills them.
   {
     const s = await seedScenario(null);
     currentUser = { id: withoutCascade, role: "consultant", isActive: true };
-    const res = await request("PATCH", `/api/students/${s.studentId}`, { assignedToId: staff });
+    const res = await request("PATCH", `/api/students/${s.studentId}`, { assignedToId: staffA });
     assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
     const after = await readAssignments(s);
-    assert.equal(after.student, staff, "student assigned (no perm)");
-    assert.equal(after.lead, null, "lead NOT cascaded (no perm)");
-    assert.deepEqual(after.apps, [null, null], "applications NOT cascaded (no perm)");
+    assert.equal(after.student, staffA, "student assigned (no perm, all null)");
+    assert.equal(after.lead, staffA, "lead filled by null-fill (no perm, was null)");
+    assert.deepEqual(after.apps, [staffA, staffA], "applications filled by null-fill (no perm, were null)");
+  }
+
+  // Without the permission, downstream records already have an assignee -> NOT overwritten.
+  {
+    const s = await seedScenario(staffB);
+    currentUser = { id: withoutCascade, role: "consultant", isActive: true };
+    const res = await request("PATCH", `/api/students/${s.studentId}`, { assignedToId: staffA });
+    assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
+    const after = await readAssignments(s);
+    assert.equal(after.student, staffA, "student assigned (no perm, downstream assigned)");
+    assert.equal(after.lead, staffB, "lead NOT overwritten (no perm, was staffB)");
+    assert.deepEqual(after.apps, [staffB, staffB], "applications NOT overwritten (no perm, were staffB)");
   }
 });
 
@@ -421,11 +439,13 @@ test("application PATCH assign cascades to student and linked lead", async () =>
 });
 
 // ---------------------------------------------------------------------------
-// (h) Application PATCH assign without cascade permission — only the app
-//     changes; student and lead are left untouched.
+// (h) Application PATCH assign without cascade permission:
+//     - Null sibling records ARE filled (null-fill cascade).
+//     - Already-assigned sibling records are NOT overwritten.
 // ---------------------------------------------------------------------------
-test("application PATCH assign without cascade permission leaves student and lead untouched", async () => {
-  const staff = await createUser({ role: "staff" });
+test("application PATCH assign without cascade permission: null-fill but no overwrite", async () => {
+  const staffA = await createUser({ role: "staff" });
+  const staffB = await createUser({ role: "staff" });
 
   // A consultant with the ability to change application assignment but without
   // the cascade permission.
@@ -437,30 +457,60 @@ test("application PATCH assign without cascade permission leaves student and lea
       "applications.change_assigned": true,
     },
   });
-  currentUser = { id: withoutCascade, role: "consultant", isActive: true };
 
-  const s = await seedScenario(null);
-  const targetAppId = s.appIds[0];
-  const res = await request("PATCH", `/api/applications/${targetAppId}`, { assignedToId: staff });
-  assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
+  // Sub-case 1: student and lead are null → null-fill fills them.
+  {
+    currentUser = { id: withoutCascade, role: "consultant", isActive: true };
+    const s = await seedScenario(null);
+    const targetAppId = s.appIds[0];
+    const res = await request("PATCH", `/api/applications/${targetAppId}`, { assignedToId: staffA });
+    assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
 
-  const [patchedApp] = await db
-    .select({ assignedToId: applicationsTable.assignedToId })
-    .from(applicationsTable)
-    .where(eq(applicationsTable.id, targetAppId));
-  assert.equal(patchedApp?.assignedToId, staff, "patched application updated");
+    const [patchedApp] = await db
+      .select({ assignedToId: applicationsTable.assignedToId })
+      .from(applicationsTable)
+      .where(eq(applicationsTable.id, targetAppId));
+    assert.equal(patchedApp?.assignedToId, staffA, "patched application updated");
 
-  const [studentRow] = await db
-    .select({ assignedToId: studentsTable.assignedToId })
-    .from(studentsTable)
-    .where(eq(studentsTable.id, s.studentId));
-  assert.equal(studentRow?.assignedToId, null, "student NOT cascaded (no cascade perm)");
+    const [studentRow] = await db
+      .select({ assignedToId: studentsTable.assignedToId })
+      .from(studentsTable)
+      .where(eq(studentsTable.id, s.studentId));
+    assert.equal(studentRow?.assignedToId, staffA, "student filled by null-fill (was null)");
 
-  const [leadRow] = await db
-    .select({ assignedToId: leadsTable.assignedToId })
-    .from(leadsTable)
-    .where(eq(leadsTable.id, s.leadId));
-  assert.equal(leadRow?.assignedToId, null, "lead NOT cascaded (no cascade perm)");
+    const [leadRow] = await db
+      .select({ assignedToId: leadsTable.assignedToId })
+      .from(leadsTable)
+      .where(eq(leadsTable.id, s.leadId));
+    assert.equal(leadRow?.assignedToId, staffA, "lead filled by null-fill (was null)");
+  }
+
+  // Sub-case 2: student and lead already assigned to staffB → NOT overwritten (no cascade perm).
+  {
+    currentUser = { id: withoutCascade, role: "consultant", isActive: true };
+    const s = await seedScenario(staffB);
+    const targetAppId = s.appIds[0];
+    const res = await request("PATCH", `/api/applications/${targetAppId}`, { assignedToId: staffA });
+    assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
+
+    const [patchedApp] = await db
+      .select({ assignedToId: applicationsTable.assignedToId })
+      .from(applicationsTable)
+      .where(eq(applicationsTable.id, targetAppId));
+    assert.equal(patchedApp?.assignedToId, staffA, "patched application updated");
+
+    const [studentRow] = await db
+      .select({ assignedToId: studentsTable.assignedToId })
+      .from(studentsTable)
+      .where(eq(studentsTable.id, s.studentId));
+    assert.equal(studentRow?.assignedToId, staffB, "student NOT overwritten (no perm, was staffB)");
+
+    const [leadRow] = await db
+      .select({ assignedToId: leadsTable.assignedToId })
+      .from(leadsTable)
+      .where(eq(leadsTable.id, s.leadId));
+    assert.equal(leadRow?.assignedToId, staffB, "lead NOT overwritten (no perm, was staffB)");
+  }
 });
 
 // ---------------------------------------------------------------------------
