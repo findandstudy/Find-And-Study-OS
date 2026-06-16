@@ -101,10 +101,19 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const documents: any[] = Array.isArray(documentsResp) ? documentsResp : (documentsResp as any)?.data || [];
 
   const photoDoc = useMemo(() => {
+    // fileData-only uploads (legacy) have no fileKey/fileUrl in the API response,
+    // but /api/students/:id/photo can still serve them from DB. Use hasPhoto flag
+    // as primary existence check; fall back to scanning the documents list for mimeType.
+    if (student?.hasPhoto) {
+      const photoDocs = documents.filter((d: any) => d.type === "photo" || d.type === "photograph");
+      const best = photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      // Synthetic sentinel so the display block activates even for fileData-only photos.
+      return best ?? { mimeType: "image/jpeg", fileKey: null, fileUrl: null };
+    }
     const photoDocs = documents.filter((d: any) => (d.type === "photo" || d.type === "photograph") && (d.fileKey || d.fileUrl));
     if (photoDocs.length === 0) return null;
     return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  }, [documents]);
+  }, [documents, student?.hasPhoto]);
 
   const { toast } = useToast();
   const { user, hasPermission } = useAuth();
