@@ -201,7 +201,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (lead.assignedToId ? (canReassign || lead.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
+          {onAssign && (lead.assignedToId ? (canReassign || lead.assignedToId === currentUserId) : canReassign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -1840,7 +1840,7 @@ export default function LeadsPage() {
                         </TableCell>
                       )}
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {(lead.assignedToId ? (canReassign || lead.assignedToId === user?.id) : canAssign) ? (
+                        {(lead.assignedToId ? (canReassign || lead.assignedToId === user?.id) : canReassign) ? (
                           <AssignPopover
                             assignedUserName={lead.assignedToId ? staffUsersMap[lead.assignedToId] : undefined}
                             staffUsers={staffUsersList}
@@ -1848,13 +1848,6 @@ export default function LeadsPage() {
                             onAssign={(userId) => handleAssign(lead.id, userId)}
                             size="list"
                           />
-                        ) : !lead.assignedToId && user?.id ? (
-                          <button
-                            onClick={() => handleAssign(lead.id, user.id)}
-                            className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
-                          >
-                            <UserPlus className="w-3 h-3" />{t("leadsPage.assignToMe")}
-                          </button>
                         ) : lead.assignedToId ? (
                           <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
                             <UserCheck2 className="w-3 h-3" />{staffUsersMap[lead.assignedToId] || t("leadsPage.assigned")}

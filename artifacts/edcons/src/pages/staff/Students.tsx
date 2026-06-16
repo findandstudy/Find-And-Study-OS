@@ -1556,7 +1556,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (student.assignedToId ? (canReassign || student.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
+          {onAssign && (student.assignedToId ? (canReassign || student.assignedToId === currentUserId) : canReassign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -2521,7 +2521,7 @@ export default function StudentsPage() {
                         <Badge className={cn("text-xs border font-medium", stageMap[student.status] ? getStuStageColor(stageMap[student.status], stageMap[student.status]._index) : "bg-gray-100 text-gray-600 border-gray-200")}>{stageMap[student.status]?.label || student.status}</Badge>
                       </TableCell>
                       <TableCell onClick={e => e.stopPropagation()}>
-                        {(student.assignedToId ? (canReassign || student.assignedToId === user?.id) : canAssign) ? (
+                        {(student.assignedToId ? (canReassign || student.assignedToId === user?.id) : canReassign) ? (
                           <AssignPopover
                             assignedUserName={student.assignedToId ? staffUsersMap[student.assignedToId] : undefined}
                             staffUsers={staffUsersList}
@@ -2529,13 +2529,6 @@ export default function StudentsPage() {
                             onAssign={(userId) => handleAssign(student.id, userId)}
                             size="list"
                           />
-                        ) : !student.assignedToId && user?.id ? (
-                          <button
-                            onClick={() => handleAssign(student.id, user.id)}
-                            className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
-                          >
-                            <UserPlus className="w-3 h-3" />Assign to me
-                          </button>
                         ) : student.assignedToId ? (
                           <span className="text-xs text-muted-foreground truncate flex items-center gap-1">
                             <UserCheck className="w-3 h-3" />{staffUsersMap[student.assignedToId] || "Assigned"}

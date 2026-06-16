@@ -558,20 +558,12 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     allowedFields = allowedFields.filter(f => f !== "status");
   }
   if (!isAdmin && !isAgent && !isStudent && req.body.assignedToId !== undefined) {
-    const isCurrentAssignee = existing.assignedToId === req.user!.id;
-    if (existing.assignedToId !== null && !isCurrentAssignee) {
-      // Task #494: record already assigned to someone else — only admin or the assignee can change
+    // Task #494: strict rule — non-admin may only change assignment when they ARE the current assignee.
+    // Unassigned (null) records also 403; only admin can make the initial assignment.
+    if (existing.assignedToId !== req.user!.id) {
       res.status(403).json({ error: "Only the current assignee or an admin can change assignment" });
       return;
-    } else if (existing.assignedToId === null && !perms.has("records.change_assigned")) {
-      // Unassigned: self-claim allowed without permission; assigning to others requires change_assigned
-      if (Number(req.body.assignedToId) !== req.user!.id) {
-        res.status(403).json({ error: "Assigning to others requires records.change_assigned permission" });
-        return;
-      }
     }
-    // else: isCurrentAssignee → may always reassign/unassign
-    //       existing.assignedToId === null + has change_assigned → may assign freely
   }
   const updates: Record<string, unknown> = {};
   for (const key of allowedFields) {

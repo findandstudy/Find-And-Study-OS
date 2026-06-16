@@ -186,11 +186,11 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
     const staffRoles = ["super_admin", "admin", "manager", "staff", "consultant"];
     return list.filter((u: any) => staffRoles.includes(u.role));
   }, [isAgent, agentStaffData, staffUsersData, user]);
-  // Task #494 assignment protection: dropdown shown for admin, current assignee, or change_assigned + unassigned
+  // Task #494: strict rule — assignment dropdown only for admin or current assignee
   const isCurrentLeadAssignee = !!(lead?.assignedToId && lead.assignedToId === user?.id);
   const canAssignLead = isAgent
     ? isAgentManager
-    : (!!isAdmin || isCurrentLeadAssignee || (!lead?.assignedToId && canChangeAssigned));
+    : (!!isAdmin || isCurrentLeadAssignee);
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const { data: catalogResp } = useQuery<any>({

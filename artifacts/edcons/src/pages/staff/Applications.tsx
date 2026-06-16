@@ -534,7 +534,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       )}
       <div className="px-4 pb-3 flex items-center justify-between">
         <div className="flex items-center gap-1 min-w-0">
-          {onAssign && (app.assignedToId ? (canReassign || app.assignedToId === currentUserId) : canAssign) && staffUsersList ? (
+          {onAssign && (app.assignedToId ? (canReassign || app.assignedToId === currentUserId) : canReassign) && staffUsersList ? (
             <AssignPopover
               assignedUserName={assignedUserName}
               staffUsers={staffUsersList}
@@ -2078,7 +2078,7 @@ export default function ApplicationsPage() {
                     case "assigned":
                       return (
                         <TableCell key={id} onClick={e => e.stopPropagation()}>
-                          {(app.assignedToId ? (canReassign || app.assignedToId === user?.id) : canAssign) ? (
+                          {(app.assignedToId ? (canReassign || app.assignedToId === user?.id) : canReassign) ? (
                             <AssignPopover
                               assignedUserName={app.assignedToId ? staffUsersMap[app.assignedToId] : undefined}
                               staffUsers={staffUsersList}
@@ -2086,9 +2086,9 @@ export default function ApplicationsPage() {
                               onAssign={(userId) => handleAssign(app.id, userId)}
                               size="list"
                             />
-                          ) : !app.assignedToId && user?.id ? (
+                          ) : !app.assignedToId && canReassign ? (
                             <button
-                              onClick={() => handleAssign(app.id, user.id)}
+                              onClick={() => handleAssign(app.id, user!.id)}
                               className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
                             >
                               <UserPlus className="w-3 h-3" />Assign to me

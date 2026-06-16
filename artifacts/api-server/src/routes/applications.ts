@@ -878,20 +878,12 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   if (isStaff && !isAdmin && req.body.assignedToId !== undefined) {
     const [existingApp] = await db.select({ assignedToId: applicationsTable.assignedToId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
     if (!existingApp) { res.status(404).json({ error: "Application not found" }); return; }
-    const isCurrentAssignee = existingApp.assignedToId === user.id;
-    if (existingApp.assignedToId !== null && !isCurrentAssignee) {
-      // Task #494: record already assigned to someone else — only admin or the assignee can change
+    // Task #494: strict rule — non-admin may only change assignment when they ARE the current assignee.
+    // Unassigned (null) records also 403; only admin can make the initial assignment.
+    if (existingApp.assignedToId !== user.id) {
       res.status(403).json({ error: "Only the current assignee or an admin can change assignment" });
       return;
-    } else if (existingApp.assignedToId === null && !perms.has("records.change_assigned")) {
-      // Unassigned: self-claim allowed without permission; assigning to others requires change_assigned
-      if (req.body.assignedToId !== user.id) {
-        res.status(403).json({ error: "Assigning to others requires records.change_assigned permission" });
-        return;
-      }
     }
-    // else: isCurrentAssignee → may always reassign/unassign
-    //       existingApp.assignedToId === null + has change_assigned → may assign freely
   }
 
   const updates: Record<string, unknown> = {};
