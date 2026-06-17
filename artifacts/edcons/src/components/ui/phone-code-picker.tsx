@@ -141,7 +141,7 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-[300px] rounded-lg border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 top-full mt-1 left-0 w-[240px] rounded-lg border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95">
           <div className="flex items-center border-b px-2 py-1.5">
             <Search className="h-3.5 w-3.5 text-muted-foreground mr-1.5 shrink-0" />
             <input
