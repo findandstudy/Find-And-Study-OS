@@ -13,7 +13,7 @@
 
 import crypto from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
-import { db, portalCredentialsTable } from "@workspace/db";
+import { db, pool, portalCredentialsTable } from "@workspace/db";
 
 // ---------------------------------------------------------------------------
 // Inline decrypt — same AES-256-GCM scheme as api-server/lib/encryption.ts
@@ -67,7 +67,7 @@ export async function resolvePortalCreds(
   portalKey: string,
   adapterKey?: string,
 ): Promise<ResolvedCreds> {
-  const [row] = await db
+  let [row] = await db
     .select()
     .from(portalCredentialsTable)
     .where(
@@ -79,6 +79,21 @@ export async function resolvePortalCreds(
     )
     .limit(1);
 
+  if (!row && adapterKey && adapterKey !== portalKey) {
+    [row] = await db.select().from(portalCredentialsTable).where(and(eq(portalCredentialsTable.portalKey, adapterKey), isNull(portalCredentialsTable.deletedAt), eq(portalCredentialsTable.isActive, true))).limit(1);
+  }
+  if (!row) {
+    try {
+      const ru = await pool.query(
+        "select adapter_key from portal_universities where university_key = $1 and deleted_at is null limit 1",
+        [portalKey],
+      );
+      const ak = ru.rows && ru.rows[0] && ru.rows[0].adapter_key;
+      if (ak && ak !== portalKey && ak !== adapterKey) {
+        [row] = await db.select().from(portalCredentialsTable).where(and(eq(portalCredentialsTable.portalKey, ak), isNull(portalCredentialsTable.deletedAt), eq(portalCredentialsTable.isActive, true))).limit(1);
+      }
+    } catch (e) { /* ignore */ }
+  }
   if (row) {
     const user     = decrypt(row.usernameEnc);
     const password = decrypt(row.passwordEnc);
