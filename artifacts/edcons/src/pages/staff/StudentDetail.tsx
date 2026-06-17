@@ -147,9 +147,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   // Task #494: strict rule — assignment dropdown only for admin or current assignee
   const isCurrentStudentAssignee = !!(student?.assignedToId && student.assignedToId === user?.id);
   const canManageAssignment = !!isAdmin || isCurrentStudentAssignee;
+  const isStudent = user?.role === "student";
   const canSelfAssign = !isAdmin && !isStudent && !isCurrentStudentAssignee && hasPermission("records.assign_button") && !student?.assignedToId;
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
-  const isStudent = user?.role === "student";
   const [assigning, setAssigning] = useState(false);
   const [photoLoadError, setPhotoLoadError] = useState(false);
 
