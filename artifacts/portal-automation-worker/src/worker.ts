@@ -19,6 +19,7 @@ import {
   writebackResult,
 } from "@workspace/portal-runner";
 import { resolvePortalCreds } from "./credResolver.js";
+import { scanTriggers } from "./scanTriggers.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -40,6 +41,8 @@ async function tick(): Promise<void> {
   if (released.length > 0) {
     console.log(`[portal-worker] Released ${released.length} stale submission(s)`);
   }
+
+  await scanTriggers();
 
   const sub = await claimNext(WORKER_ID);
   if (!sub) return; // Nothing to do
