@@ -580,7 +580,14 @@ export const topkapiAdapter: UniversityAdapter = {
     } catch { /* optional */ }
 
     logger.info("[topkapi] Step 3f: filling main language");
-    await page.fill("input[name=mainLanguage]", "English", { timeout: 5000 }).catch(() => logger.warn("[topkapi] mainLanguage gorunmez, atlandi"));
+    try {
+      const ml = page.locator("input[name=mainLanguage], select[name=mainLanguage]").first();
+      if (await ml.count()) {
+        const tag = await ml.evaluate((e) => e.tagName).catch(() => "");
+        if (tag === "SELECT") { await selectByBest(page, "select[name=mainLanguage]", "English"); }
+        else { await ml.fill("English"); }
+      }
+    } catch (e) { /* main language not shown for this program */ }
 
     if (profile.languageScore != null) {
       logger.info("[topkapi] Step 3g: filling language score");
@@ -710,7 +717,7 @@ export const topkapiAdapter: UniversityAdapter = {
     // ── FINAL SUBMIT ─────────────────────────────────────────────────────────
     logger.info("[topkapi] clicking Başvuruyu Tamamla");
     let saveStatus = 0;
-  page.on("response", (r) => { try { const u=r.url(); if (u.includes("application-save.php")) saveStatus = r.status(); if (/save|application|basvuru|submit|tamamla|kaydet/i.test(u)) logger.warn("[topkapi] FINRESP " + r.request().method() + " " + r.status() + " " + u); } catch (e) {} });
+  page.on("response", (r) => { try { if (r.url().includes("application-save.php")) saveStatus = r.status(); } catch (e) {} });
 
     for (let i = 0; i < 5; i++) { if ((await page.locator(".jconfirm.jconfirm-open").count()) === 0) break; await dismissJconfirm(page, logger); await page.waitForTimeout(400); }
   for (let i = 0; i < 5; i++) {
@@ -720,21 +727,6 @@ export const topkapiAdapter: UniversityAdapter = {
       await clickNext(page, logger).catch(() => {});
       await page.waitForTimeout(1800).catch(() => {});
     }
-    { const dump = await page.evaluate(() => {
-      const out = [];
-      document.querySelectorAll("button, a.btn, a[onclick], input[type=button], input[type=submit]").forEach((b) => {
-        const vis = b.offsetParent !== null;
-        out.push((vis ? "[V] " : "[H] ") + b.tagName + " \"" + ((b.innerText || b.value || "").trim().slice(0, 45)) + "\"");
-      });
-      const steps = [];
-      document.querySelectorAll("[class*=step], [class*=tab-pane], .wizard-content > *").forEach((e) => {
-        const vis = e.offsetParent !== null;
-        if (vis) steps.push((e.className || "").slice(0, 60));
-      });
-      return { buttons: out.slice(0, 50), visibleSteps: steps.slice(0, 12) };
-    }).catch((e) => ({ err: String(e) }));
-    logger.warn("[topkapi] PAGEDUMP " + JSON.stringify(dump));
-  }
   await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click().catch(async () => { await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click({ force: true }).catch(() => {}); });
 
     // Handle optional jconfirm confirmation modal
@@ -753,10 +745,6 @@ export const topkapiAdapter: UniversityAdapter = {
           .click({ timeout: 2000 });
       }
     } catch { /* no modal — direct submit */ }
-
-    logger.warn("[topkapi] url after submit click = " + page.url());
-  { const mc = await page.locator(".jconfirm").count().catch(() => 0); logger.warn("[topkapi] jconfirm count=" + mc); if (mc) { const bt = await page.locator(".jconfirm button").allInnerTexts().catch(() => []); logger.warn("[topkapi] jconfirm buttons=" + JSON.stringify(bt)); } }
-  { const subs = await page.locator("button[type=submit], input[type=submit]").allInnerTexts().catch(() => []); logger.warn("[topkapi] submit-like buttons=" + JSON.stringify(subs)); }
   for (let i = 0; i < 30 && saveStatus === 0; i++) { await page.waitForTimeout(1000).catch(() => {}); }
 
   { const s2 = await takeShot(page, "final").catch(() => null); if (s2) screenshots.push(s2); }
