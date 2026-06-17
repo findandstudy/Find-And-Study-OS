@@ -1,6 +1,6 @@
 import express, { Router, type IRouter, json } from "express";
 import crypto from "crypto";
-import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
+import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable, settingsTable, countriesTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, desc, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -1478,7 +1478,17 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   // API key header — see the backend-mediated token issuance endpoint).
   const baseUrl = getBaseUrl(req);
   const docMeta = await loadDocCatalogForEmbed();
-  const html = generateWidgetHTML(slug, baseUrl, widget, docMeta);
+  // Source phone dial codes from the country catalog (active + dial-coded only)
+  // so admins control them centrally. Tuples are [dialCode, isoAlpha2, name].
+  const dialRows = await db
+    .select({ code: countriesTable.code, name: countriesTable.name, dialCode: countriesTable.dialCode })
+    .from(countriesTable)
+    .where(and(eq(countriesTable.isActive, true), isNotNull(countriesTable.dialCode)))
+    .orderBy(countriesTable.name);
+  const dialCodes: [string, string, string][] = dialRows
+    .filter(r => r.dialCode)
+    .map(r => [r.dialCode as string, r.code, r.name]);
+  const html = generateWidgetHTML(slug, baseUrl, widget, docMeta, dialCodes);
   res.setHeader("Content-Type", "text/html");
   res.send(html);
 });
@@ -1676,7 +1686,7 @@ function generateEmbedScript(baseUrl: string): string {
 })();`;
 }
 
-function generateWidgetHTML(slug: string, baseUrl: string, widget: any, docMeta: Record<string, DocCatalogEntry>): string {
+function generateWidgetHTML(slug: string, baseUrl: string, widget: any, docMeta: Record<string, DocCatalogEntry>, dialCodes: [string, string, string][] = []): string {
   const theme = sanitizeTheme(widget.theme);
   const primaryColor = theme.primaryColor || "#2563eb";
   const secondaryColor = theme.secondaryColor || "#1e40af";
@@ -1958,7 +1968,10 @@ var NATIONALITIES=${JSON.stringify(NATIONALITIES)};
 // selection. Tuples are [code, isoAlpha2, displayName]. Flags rendered via
 // flagcdn PNG images instead of unicode regional-indicator emoji so they
 // render consistently on Windows (which otherwise shows letter pairs).
-var PHONE_CODES=[
+// Catalog-sourced codes (admin-managed) take precedence; the hardcoded list
+// below is a fallback for when the catalog has no dial-coded countries.
+var PHONE_CODES_CATALOG=${JSON.stringify(dialCodes).replace(/<\/script/gi, "<\\/script").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")};
+var PHONE_CODES=(PHONE_CODES_CATALOG&&PHONE_CODES_CATALOG.length)?PHONE_CODES_CATALOG:[
   ['+93','AF','Afghanistan'],['+355','AL','Albania'],['+213','DZ','Algeria'],
   ['+376','AD','Andorra'],['+244','AO','Angola'],['+54','AR','Argentina'],
   ['+374','AM','Armenia'],['+61','AU','Australia'],['+43','AT','Austria'],

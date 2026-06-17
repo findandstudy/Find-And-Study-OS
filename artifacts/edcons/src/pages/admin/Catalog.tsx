@@ -96,7 +96,7 @@ function useDebounce<T>(value: T, delay = 300): T {
 
 /* ─── types ─────────────────────────────────────────────────── */
 
-type Country = { id: number; name: string; code: string; flagEmoji?: string | null; isActive: boolean };
+type Country = { id: number; name: string; code: string; flagEmoji?: string | null; dialCode?: string | null; isActive: boolean };
 type City = { id: number; name: string; countryId: number; isActive: boolean };
 type University = {
   id: number; name: string; country: string; city?: string | null; website?: string | null;
@@ -307,7 +307,7 @@ function CountriesTab() {
   const totalPages = Math.ceil((data?.meta?.total ?? 0) / 50);
 
   const sorted = useMemo(() => {
-    const colMap: Record<string, keyof Country> = { name: "name", code: "code", status: "isActive" };
+    const colMap: Record<string, keyof Country> = { name: "name", code: "code", dialCode: "dialCode", status: "isActive" };
     const key = colMap[sort.col] ?? "name";
     return [...countries].sort((a, b) => sortCompare(a, b, key, sort.dir));
   }, [countries, sort]);
@@ -353,10 +353,10 @@ function CountriesTab() {
   };
 
   const templateRows = [
-    { name: "Türkiye", code: "TR", flagEmoji: "🇹🇷" },
-    { name: "United Kingdom", code: "GB", flagEmoji: "🇬🇧" },
-    { name: "Germany", code: "DE", flagEmoji: "🇩🇪" },
-    { name: "France", code: "FR", flagEmoji: "🇫🇷" },
+    { name: "Türkiye", code: "TR", flagEmoji: "🇹🇷", dialCode: "+90" },
+    { name: "United Kingdom", code: "GB", flagEmoji: "🇬🇧", dialCode: "+44" },
+    { name: "Germany", code: "DE", flagEmoji: "🇩🇪", dialCode: "+49" },
+    { name: "France", code: "FR", flagEmoji: "🇫🇷", dialCode: "+33" },
   ];
 
   return (
@@ -378,6 +378,7 @@ function CountriesTab() {
             const all = await api("/api/countries?limit=5000");
             const rows = (all?.data ?? all ?? []).map((c: Country) => ({
               Name: c.name, "ISO Code": c.code, "Flag Emoji": c.flagEmoji ?? "",
+              "Dial Code": c.dialCode ?? "",
               Status: c.isActive ? "Active" : "Inactive",
             }));
             await exportToExcel(rows, "Countries", `countries-${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -399,6 +400,8 @@ function CountriesTab() {
               <ColumnHeader asTh label={t("catalogPage.code")}
                 sort={{ sortKey: "code", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "text", value: fCode, onChange: v => { setFCode(v.toUpperCase()); setPage(1); }, placeholder: t("catalogPage.codePlaceholder"), label: t("catalogPage.isoCode") }} />
+              <ColumnHeader asTh label={t("catalogPage.dialCode")}
+                sort={{ sortKey: "dialCode", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }} />
               <ColumnHeader asTh label={t("common.status")}
                 sort={{ sortKey: "status", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: fStatus || "all", onChange: v => { setFStatus(v === "all" ? "" : v); setPage(1); },
@@ -408,7 +411,7 @@ function CountriesTab() {
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">{t("catalogPage.noCountriesFound")}</td></tr>
+              <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">{t("catalogPage.noCountriesFound")}</td></tr>
             )}
             {sorted.map(c => (
               <tr key={c.id} className={`hover:bg-muted/20 transition-colors ${selected.has(c.id) ? "bg-primary/5" : ""}`}>
@@ -417,6 +420,7 @@ function CountriesTab() {
                 </td>
                 <td className="px-4 py-2.5 font-medium"><span className="inline-flex items-center gap-1.5">{c.code ? <CountryFlag code={c.code} size="md" /> : null}{c.name}</span></td>
                 <td className="px-4 py-2.5 text-muted-foreground font-mono">{c.code}</td>
+                <td className="px-4 py-2.5 text-muted-foreground font-mono">{c.dialCode || "—"}</td>
                 <td className="px-4 py-2.5">
                   <Badge variant={c.isActive ? "default" : "secondary"} className="text-xs">{c.isActive ? t("common.active") : t("common.inactive")}</Badge>
                 </td>
@@ -441,6 +445,7 @@ function CountriesTab() {
             <div><Label>{t("catalogPage.countryNameReq")}</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div><Label>{t("catalogPage.isoCode2Req")}</Label><Input className="mt-1 uppercase" maxLength={2} value={form?.code ?? ""} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} /></div>
             <div><Label>{t("catalogPage.flagEmoji")}</Label><Input className="mt-1" placeholder="🇹🇷" value={form?.flagEmoji ?? ""} onChange={e => setForm(f => ({ ...f, flagEmoji: e.target.value }))} /></div>
+            <div><Label>{t("catalogPage.dialCodeOptional")}</Label><Input className="mt-1 font-mono" placeholder="+90" value={form?.dialCode ?? ""} onChange={e => setForm(f => ({ ...f, dialCode: e.target.value }))} /></div>
             <div className="flex items-center justify-between">
               <Label>{t("common.active")}</Label>
               <Switch checked={form?.isActive ?? true} onCheckedChange={v => setForm(f => ({ ...f, isActive: v }))} />

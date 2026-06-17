@@ -4061,7 +4061,9 @@
     "optDocuments": "Documents",
     "optDocumentsDesc": "Required document types",
     "optCurrency": "Currency",
-    "optCurrencyDesc": "Supported currencies"
+    "optCurrencyDesc": "Supported currencies",
+    "dialCode": "Dial Code",
+    "dialCodeOptional": "Dial code (optional)"
   },
   "appDocsPanel": {
     "documentUploaded": "Document uploaded",

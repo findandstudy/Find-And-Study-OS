@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ColumnHeader } from "@/components/ui/column-header";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
@@ -43,6 +44,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CountryFlag } from "@/components/CountryFlag";
+import { useCountrySearch } from "@/hooks/use-countries";
 import { OriginBadge } from "@/components/OriginBadge";
 import { cn } from "@/lib/utils";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
@@ -441,9 +443,8 @@ function NationalityCombobox({ value, onChange, countries }: { value: string; on
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const filtered = searchVal
-    ? countries.filter(c => c.name.toLowerCase().includes(searchVal.toLowerCase()))
-    : countries;
+  // Server-side (AJAX) debounced search over the country catalog.
+  const { data: filtered = [] } = useCountrySearch(searchVal);
 
   useEffect(() => {
     if (!open) return;
@@ -1003,18 +1004,7 @@ function AddStudentModal({
                       {ef.has("phone") && <AiBadge />}
                     </Label>
                     <div className="flex gap-1.5">
-                      <Select value={form.phoneCode} onValueChange={field("phoneCode")}>
-                        <SelectTrigger className="w-[100px] h-9 text-sm rounded-xl shrink-0">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PHONE_CODES.map(pc => (
-                            <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
-                              <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <PhoneCodePicker value={form.phoneCode} onChange={field("phoneCode")} triggerClassName="w-[100px] h-9 shrink-0" />
                       <Input
                         value={form.phone}
                         onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
@@ -1815,18 +1805,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Phone</Label>
                 <div className="flex gap-1.5">
-                  <Select value={form.phoneCode} onValueChange={field("phoneCode")}>
-                    <SelectTrigger className="w-[100px] h-9 text-sm rounded-xl shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PHONE_CODES.map(pc => (
-                        <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
-                          <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <PhoneCodePicker value={form.phoneCode} onChange={field("phoneCode")} triggerClassName="w-[100px] h-9 shrink-0" />
                   <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
                 </div>
               </div>

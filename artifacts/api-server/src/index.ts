@@ -811,6 +811,30 @@ async function seedClaudeIntegration() {
     console.error("[migrate] email_queue retry columns:", err);
   }
 
+  // Step 2b2c2: countries.dial_code (Task #518).
+  // Adds an OPTIONAL editable dial code (e.g. "+90") to the country catalog so
+  // every phone-code dropdown across the product can source codes from the DB
+  // instead of hardcoded arrays. Deploy runs NO migrations, so this idempotent
+  // boot DDL is the only prod migration path. The backfill is WHERE dial_code
+  // IS NULL guarded — it seeds an initial value from the canonical ISO map on
+  // first boot but NEVER overwrites a value an admin has edited afterwards.
+  try {
+    await pool.query(`ALTER TABLE countries ADD COLUMN IF NOT EXISTS dial_code TEXT`);
+    const { ISO_DIAL_CODES } = await import("./lib/dialCodes.js");
+    const isoList = Object.keys(ISO_DIAL_CODES);
+    const codeList = isoList.map((iso) => ISO_DIAL_CODES[iso]);
+    // Single set-based UPDATE keyed on ISO code; only fills NULL dial_code rows.
+    await pool.query(
+      `UPDATE countries AS c
+         SET dial_code = m.dial
+         FROM (SELECT UNNEST($1::text[]) AS iso, UNNEST($2::text[]) AS dial) AS m
+        WHERE c.dial_code IS NULL AND UPPER(c.code) = m.iso`,
+      [isoList, codeList],
+    );
+  } catch (err) {
+    console.error("[migrate] countries.dial_code:", err);
+  }
+
   // Step 2b2d: Website CMS collections tables.
   // These mirror the Drizzle schema definitions in lib/db/src/schema/website.ts.
   // All steps are idempotent (CREATE TABLE IF NOT EXISTS).

@@ -4118,7 +4118,9 @@
     "optDocuments": "Документы",
     "optDocumentsDesc": "Требуемые типы документов",
     "optCurrency": "Валюта",
-    "optCurrencyDesc": "Поддерживаемые валюты"
+    "optCurrencyDesc": "Поддерживаемые валюты",
+    "dialCode": "Телефонный код",
+    "dialCodeOptional": "Телефонный код (необязательно)"
   },
   "appDocsPanel": {
     "documentUploaded": "Документ загружен",

@@ -14,49 +14,9 @@ import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { CountryFlag } from "@/components/CountryFlag";
 
-const PHONE_CODES: Array<{ code: string; iso: string; name: string }> = [
-  { code: "+90", iso: "TR", name: "Türkiye" },
-  { code: "+1", iso: "US", name: "United States" },
-  { code: "+44", iso: "GB", name: "United Kingdom" },
-  { code: "+49", iso: "DE", name: "Germany" },
-  { code: "+33", iso: "FR", name: "France" },
-  { code: "+39", iso: "IT", name: "Italy" },
-  { code: "+34", iso: "ES", name: "Spain" },
-  { code: "+31", iso: "NL", name: "Netherlands" },
-  { code: "+46", iso: "SE", name: "Sweden" },
-  { code: "+47", iso: "NO", name: "Norway" },
-  { code: "+7", iso: "RU", name: "Russia" },
-  { code: "+86", iso: "CN", name: "China" },
-  { code: "+81", iso: "JP", name: "Japan" },
-  { code: "+82", iso: "KR", name: "South Korea" },
-  { code: "+91", iso: "IN", name: "India" },
-  { code: "+92", iso: "PK", name: "Pakistan" },
-  { code: "+880", iso: "BD", name: "Bangladesh" },
-  { code: "+62", iso: "ID", name: "Indonesia" },
-  { code: "+60", iso: "MY", name: "Malaysia" },
-  { code: "+234", iso: "NG", name: "Nigeria" },
-  { code: "+20", iso: "EG", name: "Egypt" },
-  { code: "+212", iso: "MA", name: "Morocco" },
-  { code: "+213", iso: "DZ", name: "Algeria" },
-  { code: "+216", iso: "TN", name: "Tunisia" },
-  { code: "+964", iso: "IQ", name: "Iraq" },
-  { code: "+966", iso: "SA", name: "Saudi Arabia" },
-  { code: "+971", iso: "AE", name: "UAE" },
-  { code: "+974", iso: "QA", name: "Qatar" },
-  { code: "+973", iso: "BH", name: "Bahrain" },
-  { code: "+998", iso: "UZ", name: "Uzbekistan" },
-  { code: "+993", iso: "TM", name: "Turkmenistan" },
-  { code: "+994", iso: "AZ", name: "Azerbaijan" },
-  { code: "+995", iso: "GE", name: "Georgia" },
-  { code: "+380", iso: "UA", name: "Ukraine" },
-  { code: "+55", iso: "BR", name: "Brazil" },
-  { code: "+52", iso: "MX", name: "Mexico" },
-  { code: "+61", iso: "AU", name: "Australia" },
-  { code: "+64", iso: "NZ", name: "New Zealand" },
-];
 import { motion, AnimatePresence } from "framer-motion";
 
 const LANG_COUNTRY: Record<string, string> = {
@@ -672,36 +632,11 @@ export default function Login() {
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5 text-sm font-semibold"><Phone className="w-3.5 h-3.5" /> {t("login.phoneLabel")}</Label>
                     <div className="flex gap-2">
-                      <Select
+                      <PhoneCodePicker
                         value={registerForm.phoneCode}
-                        onValueChange={v => setRegisterForm(f => ({ ...f, phoneCode: v }))}
-                        required
-                      >
-                        <SelectTrigger className="h-11 rounded-xl w-[110px] shrink-0 text-sm font-medium">
-                          {registerForm.phoneCode ? (
-                            (() => {
-                              const sel = PHONE_CODES.find(p => p.code === registerForm.phoneCode);
-                              return sel ? (
-                                <span className="inline-flex items-center gap-1.5">
-                                  <CountryFlag code={sel.iso} size="md" rounded />
-                                  <span>{sel.code}</span>
-                                </span>
-                              ) : <SelectValue placeholder="Code" />;
-                            })()
-                          ) : <SelectValue placeholder="Code" />}
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[320px]">
-                          {PHONE_CODES.map(p => (
-                            <SelectItem key={p.code + p.iso} value={p.code}>
-                              <span className="inline-flex items-center gap-2">
-                                <CountryFlag code={p.iso} size="md" rounded />
-                                <span className="font-medium">{p.code}</span>
-                                <span className="text-muted-foreground text-xs">{p.name}</span>
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onChange={v => setRegisterForm(f => ({ ...f, phoneCode: v }))}
+                        triggerClassName="h-11 rounded-xl w-[110px] shrink-0"
+                      />
                       <Input
                         value={registerForm.phone}
                         onChange={e => setRegisterForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))}

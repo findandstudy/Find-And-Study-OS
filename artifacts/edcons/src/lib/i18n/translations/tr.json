@@ -4002,7 +4002,9 @@
     "optDocuments": "Belgeler",
     "optDocumentsDesc": "Gerekli belge türleri",
     "optCurrency": "Para Birimi",
-    "optCurrencyDesc": "Desteklenen para birimleri"
+    "optCurrencyDesc": "Desteklenen para birimleri",
+    "dialCode": "Telefon Kodu",
+    "dialCodeOptional": "Telefon kodu (isteğe bağlı)"
   },
   "appDocsPanel": {
     "documentUploaded": "Belge yüklendi",

@@ -7,6 +7,7 @@ export const countriesTable = pgTable("countries", {
   name: text("name").notNull().unique(),
   code: text("code").notNull().unique(),
   flagEmoji: text("flag_emoji"),
+  dialCode: text("dial_code"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

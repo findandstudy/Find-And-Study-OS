@@ -5,6 +5,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalog, loadDocCatalogKeySet } from "../lib/docCatalog";
 import { invalidateCurrencyCatalog } from "../lib/currencyCatalog";
+import { normalizeDialCode } from "../lib/dialCodes";
 import * as XLSX from "xlsx";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
@@ -40,7 +41,7 @@ const router: IRouter = Router();
 /* ─── COUNTRIES ─────────────────────────────────────────────── */
 
 router.get("/countries", async (req, res): Promise<void> => {
-  const { search, name, code, status, page = "1", limit = "200" } = req.query as Record<string, string>;
+  const { search, name, code, status, withDialCode, page = "1", limit = "200" } = req.query as Record<string, string>;
   const safeInt = (v: string, fallback: number) => /^\d+$/.test(v) ? parseInt(v, 10) : fallback;
   const pageNum = Math.max(1, safeInt(page, 1));
   const limitNum = Math.min(500, Math.max(1, safeInt(limit, 200)));
@@ -52,6 +53,8 @@ router.get("/countries", async (req, res): Promise<void> => {
   if (code) conditions.push(ilike(countriesTable.code, `%${code}%`));
   if (status === "active") conditions.push(eq(countriesTable.isActive, true));
   else if (status === "inactive") conditions.push(eq(countriesTable.isActive, false));
+  // Phone-code dropdowns request only countries that actually carry a dial code.
+  if (withDialCode === "1" || withDialCode === "true") conditions.push(isNotNull(countriesTable.dialCode));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(countriesTable).where(where);
@@ -61,20 +64,37 @@ router.get("/countries", async (req, res): Promise<void> => {
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum } });
 });
 
+// Public (no-auth) country list for embed/web-to-lead/public-apply phone and
+// nationality selectors. Only active countries; supports `search` and the
+// `withDialCode` filter. Mounted under /api/public/* so it is CSRF-exempt.
+router.get("/public/countries", async (req, res): Promise<void> => {
+  const { search, withDialCode } = req.query as Record<string, string>;
+  const conditions = [eq(countriesTable.isActive, true)];
+  if (search) conditions.push(ilike(countriesTable.name, `%${search}%`));
+  if (withDialCode === "1" || withDialCode === "true") conditions.push(isNotNull(countriesTable.dialCode));
+  const data = await db
+    .select({ id: countriesTable.id, name: countriesTable.name, code: countriesTable.code, flagEmoji: countriesTable.flagEmoji, dialCode: countriesTable.dialCode })
+    .from(countriesTable)
+    .where(and(...conditions))
+    .orderBy(countriesTable.name)
+    .limit(500);
+  res.json({ data });
+});
+
 router.post("/countries", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const { name, code, flagEmoji, isActive = true } = req.body;
+  const { name, code, flagEmoji, dialCode, isActive = true } = req.body;
   if (!name || !code) { res.status(400).json({ error: "name and code are required" }); return; }
   try {
-    const [country] = await db.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, isActive }).returning();
+    const [country] = await db.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, dialCode: normalizeDialCode(dialCode), isActive }).returning();
     await logAudit(req.user!.id, "create_country", "country", country.id, { name, code }, req.ip);
     res.status(201).json(country);
   } catch { res.status(409).json({ error: "Country code or name already exists" }); }
 });
 
 router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const rows: { name: string; code: string; flagEmoji?: string }[] = req.body;
+  const rows: { name: string; code: string; flagEmoji?: string; dialCode?: string }[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
-  const values = rows.map(r => ({ name: r.name, code: r.code.toUpperCase(), flagEmoji: r.flagEmoji ?? null, isActive: true }));
+  const values = rows.map(r => ({ name: r.name, code: r.code.toUpperCase(), flagEmoji: r.flagEmoji ?? null, dialCode: normalizeDialCode(r.dialCode), isActive: true }));
   const inserted = await db.insert(countriesTable).values(values).onConflictDoNothing().returning();
   await logAudit(req.user!.id, "bulk_import_countries", "country", undefined, { count: inserted.length }, req.ip);
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
@@ -82,11 +102,12 @@ router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROL
 
 router.patch("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
-  const { name, code, flagEmoji, isActive } = req.body;
+  const { name, code, flagEmoji, dialCode, isActive } = req.body;
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
   if (code !== undefined) updates.code = code.toUpperCase();
   if (flagEmoji !== undefined) updates.flagEmoji = flagEmoji;
+  if (dialCode !== undefined) updates.dialCode = normalizeDialCode(dialCode);
   if (isActive !== undefined) updates.isActive = isActive;
   const [country] = await db.update(countriesTable).set(updates).where(eq(countriesTable.id, id)).returning();
   if (!country) { res.status(404).json({ error: "Not found" }); return; }

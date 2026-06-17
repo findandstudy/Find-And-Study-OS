@@ -3,6 +3,7 @@ import { ChevronDown, Search, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
 import { PHONE_CODES } from "@/lib/nationalities";
+import { useDialCodeCountries } from "@/hooks/use-countries";
 
 const regionNames = typeof Intl !== "undefined" && (Intl as any).DisplayNames
   ? new (Intl as any).DisplayNames(["en"], { type: "region" })
@@ -36,14 +37,28 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
   const containerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // Base (unfiltered) catalog tells us whether the catalog is available at all
+  // and is the source of truth for resolving the currently selected code —
+  // including admin-edited dial codes that the hardcoded fallback never knew.
+  const { data: baseCatalog = [] } = useDialCodeCountries("");
+  const catalogAvailable = baseCatalog.length > 0;
+
   const selected = useMemo(() => {
     if (!value) return null;
+    if (catalogAvailable) {
+      if (pickedIso) {
+        const m = baseCatalog.find(c => c.code === pickedIso && c.dialCode === value);
+        if (m) return { code: m.dialCode, iso: m.code, name: m.name };
+      }
+      const c = baseCatalog.find(c => c.dialCode === value);
+      if (c) return { code: c.dialCode, iso: c.code, name: c.name };
+    }
     if (pickedIso) {
       const m = ALL_ITEMS.find(i => i.iso === pickedIso && i.code === value);
       if (m) return m;
     }
     return ALL_ITEMS.find(i => i.code === value) || null;
-  }, [value, pickedIso]);
+  }, [value, pickedIso, catalogAvailable, baseCatalog]);
 
   useEffect(() => {
     if (open) setTimeout(() => searchRef.current?.focus(), 0);
@@ -59,16 +74,24 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  const filtered = useMemo(() => {
+  // Server-side (AJAX) debounced search over the dial-code catalog. When the
+  // catalog is available we always render its (possibly empty) search results
+  // so "no results" is honest; we only fall back to the hardcoded list when the
+  // catalog itself is empty/unreachable (offline dev or before backfill).
+  const { data: catalog = [] } = useDialCodeCountries(search);
+  const items = useMemo<Item[]>(() => {
+    if (catalogAvailable) {
+      return catalog.map(c => ({ code: c.dialCode, iso: c.code, name: c.name }));
+    }
     const q = search.trim().toLowerCase();
-    if (!q) return null;
+    if (!q) return ALL_ITEMS;
     const cleanQ = q.replace(/^\+/, "");
     return ALL_ITEMS.filter(i =>
       i.name.toLowerCase().includes(q) ||
       i.iso.toLowerCase().includes(q) ||
       i.code.replace(/^\+/, "").startsWith(cleanQ)
     );
-  }, [search]);
+  }, [catalogAvailable, catalog, search]);
 
   function pick(item: Item) {
     setPickedIso(item.iso);
@@ -136,13 +159,9 @@ export function PhoneCodePicker({ value, onChange, className, triggerClassName }
             )}
           </div>
           <div className="max-h-[280px] overflow-y-auto p-1">
-            {filtered ? (
-              filtered.length === 0
-                ? <div className="py-6 text-center text-sm text-muted-foreground">No results</div>
-                : filtered.map(renderItem)
-            ) : (
-              ALL_ITEMS.map(renderItem)
-            )}
+            {items.length === 0
+              ? <div className="py-6 text-center text-sm text-muted-foreground">No results</div>
+              : items.map(renderItem)}
           </div>
         </div>
       )}

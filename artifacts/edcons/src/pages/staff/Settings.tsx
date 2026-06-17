@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -504,22 +505,7 @@ export default function SettingsPage() {
           </FieldGroup>
           <FieldGroup label="Phone" className="sm:col-span-2">
             <div className="flex gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="h-10 gap-1.5 px-2.5 min-w-[100px] shrink-0 rounded-xl">
-                    <CountryFlag code={PHONE_CODES.find(p => p.code === form.phoneCode)?.country || "TR"} size="sm" />
-                    <span className="text-xs">{form.phoneCode}</span>
-                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
-                  {PHONE_CODES.map(pc => (
-                    <DropdownMenuItem key={pc.code} onClick={() => setForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
-                      <CountryFlag code={pc.country} size="sm" /> {pc.code}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <PhoneCodePicker value={form.phoneCode} onChange={v => setForm(f => ({ ...f, phoneCode: v }))} triggerClassName="min-w-[100px] h-10 shrink-0" />
               <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 123 4567" className="rounded-xl flex-1" />
             </div>
           </FieldGroup>
@@ -586,22 +572,7 @@ export default function SettingsPage() {
           </FieldGroup>
           <FieldGroup label="Phone Number">
             <div className="flex gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="h-10 gap-1.5 px-2.5 min-w-[100px] shrink-0 rounded-xl">
-                    <CountryFlag code={PHONE_CODES.find(p => p.code === form.emergencyPhoneCode)?.country || "TR"} size="sm" />
-                    <span className="text-xs">{form.emergencyPhoneCode}</span>
-                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
-                  {PHONE_CODES.map(pc => (
-                    <DropdownMenuItem key={pc.code} onClick={() => setForm(f => ({ ...f, emergencyPhoneCode: pc.code }))} className="gap-2 text-xs">
-                      <CountryFlag code={pc.country} size="sm" /> {pc.code}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <PhoneCodePicker value={form.emergencyPhoneCode} onChange={v => setForm(f => ({ ...f, emergencyPhoneCode: v }))} triggerClassName="min-w-[100px] h-10 shrink-0" />
               <Input value={form.emergencyPhone} onChange={e => setForm(f => ({ ...f, emergencyPhone: e.target.value }))} placeholder="555 123 4567" className="rounded-xl flex-1" />
             </div>
           </FieldGroup>
