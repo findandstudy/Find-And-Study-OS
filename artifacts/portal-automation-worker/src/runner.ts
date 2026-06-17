@@ -21,6 +21,7 @@ import {
 import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 import type { ClaimedSubmission } from "./queue.js";
 import { resolvePortalCreds } from "./credResolver.js";
+import { loadDbAdapter } from "./dbAdapters.js";
 
 // ---------------------------------------------------------------------------
 // Result shape returned to stageWriteback
@@ -50,7 +51,8 @@ export async function runSubmission(
   // ----- 1. Resolve adapter -----------------------------------------------
   const adapter =
     adapterByKey(submission.universityKey) ??
-    adapterForUniversity(submission.universityName);
+    adapterForUniversity(submission.universityName) ??
+    (await loadDbAdapter(submission.universityKey, submission.universityName));
 
   if (!adapter) {
     await cleanup(tempDir);
