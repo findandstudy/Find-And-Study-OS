@@ -132,7 +132,7 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
         // from object storage (or legacy fileData) without bloating the JSON
         // payload with megabytes of base64 content per conversation list.
         const photoDocs = await db
-          .select({ studentId: documentsTable.studentId, fileKey: documentsTable.fileKey, fileData: documentsTable.fileData })
+          .select({ studentId: documentsTable.studentId, fileKey: documentsTable.fileKey, fileData: documentsTable.fileData, fileUrl: documentsTable.fileUrl })
           .from(documentsTable)
           .where(and(
             inArray(documentsTable.studentId, sIds),
@@ -142,8 +142,15 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
           .orderBy(desc(documentsTable.createdAt));
         const seen = new Set<number>();
         for (const pd of photoDocs) {
-          if (pd.studentId && !seen.has(pd.studentId) && (pd.fileKey || pd.fileData)) {
-            seen.add(pd.studentId);
+          // photoDocs is ordered newest-first; the endpoint serves ONLY the
+          // latest doc, so claim the student on the first row regardless of
+          // servability and map an avatar URL only if that latest doc is
+          // servable (fileKey/fileData, or an http(s) fileUrl — a data:/file:
+          // url is rejected 422). Falling back to an older servable doc would
+          // diverge from the endpoint and yield a broken avatar.
+          if (!pd.studentId || seen.has(pd.studentId)) continue;
+          seen.add(pd.studentId);
+          if (pd.fileKey || pd.fileData || (pd.fileUrl && /^https?:\/\//i.test(pd.fileUrl))) {
             photoMap[pd.studentId] = `/api/students/${pd.studentId}/photo`;
           }
         }
@@ -338,7 +345,7 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
     const sIds = Object.values(sidMap);
     if (sIds.length > 0) {
       const photoDocs = await db
-        .select({ studentId: documentsTable.studentId, fileKey: documentsTable.fileKey, fileData: documentsTable.fileData })
+        .select({ studentId: documentsTable.studentId, fileKey: documentsTable.fileKey, fileData: documentsTable.fileData, fileUrl: documentsTable.fileUrl })
         .from(documentsTable)
         .where(and(
           inArray(documentsTable.studentId, sIds),
@@ -349,8 +356,13 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
       const pMap: Record<number, string> = {};
       const seen = new Set<number>();
       for (const pd of photoDocs) {
-        if (pd.studentId && !seen.has(pd.studentId) && (pd.fileKey || pd.fileData)) {
-          seen.add(pd.studentId);
+        // photoDocs is ordered newest-first; the endpoint serves ONLY the latest
+        // doc, so claim the student on the first row regardless of servability
+        // and map an avatar URL only if that latest doc is servable (fileKey/
+        // fileData, or an http(s) fileUrl — a data:/file: url is rejected 422).
+        if (!pd.studentId || seen.has(pd.studentId)) continue;
+        seen.add(pd.studentId);
+        if (pd.fileKey || pd.fileData || (pd.fileUrl && /^https?:\/\//i.test(pd.fileUrl))) {
           pMap[pd.studentId] = `/api/students/${pd.studentId}/photo`;
         }
       }

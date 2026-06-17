@@ -7,6 +7,7 @@ import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
 import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
+import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp } from "../lib/clientIp";
 import { createApplicationForStudent } from "./public-apply";
@@ -1360,6 +1361,12 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           sizeBytes: doc.sizeBytes || null,
         });
       }
+    }
+
+    // Sync has_photo + photo_url from the just-inserted (fileData-only) docs so a
+    // photograph uploaded through the embed widget shows on every avatar surface.
+    if (resultStudentId) {
+      await recomputeStudentPhoto(resultStudentId);
     }
 
     // Auto-convert the lead → "converted" + flip student → "active" on

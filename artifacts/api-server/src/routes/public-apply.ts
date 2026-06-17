@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
+import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
@@ -637,13 +638,11 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
             });
           }
           if (!photoSet && (docType === "photo" || docType === "photograph") && resultStudentId) {
-            try {
-              const photoUrl = `data:${mime};base64,${doc.base64}`;
-              await db.update(studentsTable).set({ photoUrl }).where(eq(studentsTable.id, resultStudentId));
-              photoSet = true;
-            } catch (e) {
-              console.error("[PUBLIC-APPLY] Failed to set student photo:", e);
-            }
+            // Sync has_photo + photo_url from the docs so the avatar shows
+            // everywhere (was previously only setting a data: URI on photo_url,
+            // leaving has_photo false → photo hidden on list/kanban/Student Detail).
+            await recomputeStudentPhoto(resultStudentId);
+            photoSet = true;
           }
           savedCount++;
         }
@@ -821,14 +820,9 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
             notes: src.notes ?? null,
           });
           copied++;
-          if (!photoSet && srcGroup === "photo" && src.fileData && src.mimeType) {
-            try {
-              const photoUrl = `data:${src.mimeType};base64,${src.fileData}`;
-              await db.update(studentsTable).set({ photoUrl }).where(eq(studentsTable.id, resultStudentId));
-              photoSet = true;
-            } catch (e) {
-              console.error("[PUBLIC-APPLY] Failed to set student photo from reused doc:", e);
-            }
+          if (!photoSet && srcGroup === "photo" && resultStudentId) {
+            await recomputeStudentPhoto(resultStudentId);
+            photoSet = true;
           }
         }
         if (copied > 0) {

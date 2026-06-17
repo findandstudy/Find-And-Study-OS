@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm";
 import { db, studentsTable, documentsTable } from "@workspace/db";
 
 import studentsRouter from "../src/routes/students.js";
+import { recomputeStudentPhoto } from "../src/lib/studentPhoto.js";
 
 after(() => {
   setImmediate(() => process.exit(process.exitCode ?? 0));
@@ -100,9 +101,11 @@ async function teardown() {
 async function insertDoc(overrides: Partial<{
   type: string;
   fileKey: string | null;
+  fileData: string | null;
   fileUrl: string | null;
   mimeType: string | null;
   deletedAt: Date | null;
+  createdAt: Date;
 }> = {}) {
   const [doc] = await db
     .insert(documentsTable)
@@ -112,13 +115,23 @@ async function insertDoc(overrides: Partial<{
       type: overrides.type ?? "photo",
       status: "pending",
       fileKey: overrides.fileKey ?? null,
+      fileData: overrides.fileData ?? null,
       fileUrl: overrides.fileUrl ?? null,
       mimeType: overrides.mimeType ?? null,
       deletedAt: overrides.deletedAt ?? null,
+      ...(overrides.createdAt ? { createdAt: overrides.createdAt } : {}),
     })
     .returning({ id: documentsTable.id });
   docIds.push(doc.id);
   return doc.id;
+}
+
+async function readFlags() {
+  const [s] = await db
+    .select({ hasPhoto: studentsTable.hasPhoto, photoUrl: studentsTable.photoUrl })
+    .from(studentsTable)
+    .where(eq(studentsTable.id, studentId));
+  return s;
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -182,6 +195,65 @@ test("SP-5: type=photograph alias also resolves → 302", async () => {
     const r = await apiReq("GET", `/api/students/${studentId}/photo`);
     assert.equal(r.status, 302, `expected 302 got ${r.status}: ${JSON.stringify(r.body)}`);
     assert.equal(r.headers.location, photoUrl);
+  } finally {
+    await teardown();
+  }
+});
+
+// ── recomputeStudentPhoto — denormalized has_photo/photo_url sync ─────────────
+// Guards the self-healing helper that every write path (upload, delete,
+// public-apply, embed, lead-convert/merge) calls. Must mirror the endpoint:
+// latest doc only, servable = fileKey || fileData || http(s) fileUrl.
+
+test("SP-6: recompute sets has_photo=true + photo_url for an http fileUrl photo", async () => {
+  await setup();
+  try {
+    await insertDoc({ fileUrl: "https://example.com/p.jpg", mimeType: "image/jpeg" });
+    await recomputeStudentPhoto(studentId);
+    const f = await readFlags();
+    assert.equal(f.hasPhoto, true);
+    assert.equal(f.photoUrl, `/api/students/${studentId}/photo`);
+  } finally {
+    await teardown();
+  }
+});
+
+test("SP-7: recompute sets has_photo=true for a fileData-only photo (legacy upload)", async () => {
+  await setup();
+  try {
+    await insertDoc({ fileData: "/9j/ABCfakebase64", mimeType: "image/jpeg" });
+    await recomputeStudentPhoto(studentId);
+    const f = await readFlags();
+    assert.equal(f.hasPhoto, true);
+    assert.equal(f.photoUrl, `/api/students/${studentId}/photo`);
+  } finally {
+    await teardown();
+  }
+});
+
+test("SP-8: recompute leaves has_photo=false for a data:-only fileUrl (endpoint 422s)", async () => {
+  await setup();
+  try {
+    await insertDoc({ fileUrl: "data:image/jpeg;base64,/9j/ABC", mimeType: "image/jpeg" });
+    await recomputeStudentPhoto(studentId);
+    const f = await readFlags();
+    assert.equal(f.hasPhoto, false);
+    assert.equal(f.photoUrl, null);
+  } finally {
+    await teardown();
+  }
+});
+
+test("SP-9: recompute follows LATEST doc — newer unservable data: hides older http photo", async () => {
+  await setup();
+  try {
+    await insertDoc({ fileUrl: "https://example.com/old.jpg", createdAt: new Date(Date.now() - 60_000) });
+    await insertDoc({ fileUrl: "data:image/jpeg;base64,/9j/NEW", createdAt: new Date() });
+    await recomputeStudentPhoto(studentId);
+    const f = await readFlags();
+    // Endpoint serves only the latest doc, which is the unservable data: URI.
+    assert.equal(f.hasPhoto, false);
+    assert.equal(f.photoUrl, null);
   } finally {
     await teardown();
   }

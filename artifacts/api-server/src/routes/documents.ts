@@ -11,6 +11,7 @@ import { buildDocNameFromParts } from "../lib/docNaming";
 import { loadDocumentBytes, streamDocumentToResponse } from "../lib/documentBytes";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
+import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { callerOwnsObject } from "../lib/objectAuthz";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
@@ -357,14 +358,10 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
     }
   }
 
-  if (doc.studentId && (type === "photo" || type === "photograph") && (fileKey || fileUrl)) {
-    try {
-      // Stable URL served via /students/:id/photo (object-storage key or fileUrl redirect).
-      const photoUrl = `/api/students/${doc.studentId}/photo`;
-      await db.update(studentsTable).set({ photoUrl, hasPhoto: true }).where(eq(studentsTable.id, doc.studentId));
-    } catch (err) {
-      console.error("[DOCUMENTS] Failed to set student photo from document:", err);
-    }
+  if (doc.studentId && (type === "photo" || type === "photograph")) {
+    // Recompute from the docs themselves so fileData-only photos (which carry
+    // neither fileKey nor fileUrl) still flip has_photo on. Single source of truth.
+    await recomputeStudentPhoto(doc.studentId);
   }
 
   if (doc.studentId) {
@@ -587,19 +584,8 @@ router.post("/documents/bulk-delete", requireAuth, requireRole(...STAFF_ROLES), 
     docs.filter(d => d.studentId && (d.type === "photo" || d.type === "photograph")).map(d => d.studentId!) as number[]
   ));
   if (photoStudentIds.length > 0) {
-    try {
-      const stillHave = await db.select({ studentId: documentsTable.studentId }).from(documentsTable).where(and(
-        inArray(documentsTable.studentId, photoStudentIds),
-        inArray(documentsTable.type, ["photo", "photograph"]),
-        isNull(documentsTable.deletedAt),
-      ));
-      const stillSet = new Set(stillHave.map(r => r.studentId!));
-      const toClear = photoStudentIds.filter(sid => !stillSet.has(sid));
-      if (toClear.length > 0) {
-        await db.update(studentsTable).set({ hasPhoto: false }).where(inArray(studentsTable.id, toClear));
-      }
-    } catch (err) {
-      console.error("[DOCUMENTS] Failed to bulk-sync students.has_photo:", err);
+    for (const sid of photoStudentIds) {
+      await recomputeStudentPhoto(sid);
     }
   }
   res.json({ deleted: docs.length });
@@ -635,18 +621,7 @@ router.delete("/documents/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGEN
   // photo: only flip to false when no other active photo doc remains.
   // Both 'photo' and 'photograph' type variants count as a student photo.
   if (doc.studentId && (doc.type === "photo" || doc.type === "photograph")) {
-    try {
-      const remaining = await db.select({ id: documentsTable.id }).from(documentsTable).where(and(
-        eq(documentsTable.studentId, doc.studentId),
-        inArray(documentsTable.type, ["photo", "photograph"]),
-        isNull(documentsTable.deletedAt),
-      )).limit(1);
-      if (remaining.length === 0) {
-        await db.update(studentsTable).set({ hasPhoto: false }).where(eq(studentsTable.id, doc.studentId));
-      }
-    } catch (err) {
-      console.error("[DOCUMENTS] Failed to sync students.has_photo on delete:", err);
-    }
+    await recomputeStudentPhoto(doc.studentId);
   }
   res.sendStatus(204);
 });

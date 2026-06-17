@@ -100,20 +100,41 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const applications: any[] = (applicationsResp as any)?.data || applicationsResp || [];
   const documents: any[] = Array.isArray(documentsResp) ? documentsResp : (documentsResp as any)?.data || [];
 
+  // Endpoint-first existence probe (defense-in-depth): /api/students/:id/photo is
+  // the single source of truth that serves the bytes (object-storage key, legacy
+  // fileData, or fileUrl). Probing it directly means the avatar renders correctly
+  // even if the denormalized students.has_photo flag is ever stale. Reads the
+  // Content-Type header and cancels the body so we don't download the image twice.
+  const { data: photoMime } = useQuery<string | null>({
+    queryKey: ["student-photo-mime", id],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_URL}/api/students/${id}/photo`, { credentials: "include" });
+      if (!res.ok) { try { await res.body?.cancel(); } catch { /* ignore */ } return null; }
+      const ct = res.headers.get("content-type") || "image/jpeg";
+      try { await res.body?.cancel(); } catch { /* ignore */ }
+      return ct;
+    },
+    enabled: !!id,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const hasPhotoResolved = !!photoMime;
+
   const photoDoc = useMemo(() => {
     // fileData-only uploads (legacy) have no fileKey/fileUrl in the API response,
-    // but /api/students/:id/photo can still serve them from DB. Use hasPhoto flag
-    // as primary existence check; fall back to scanning the documents list for mimeType.
-    if (student?.hasPhoto) {
+    // but /api/students/:id/photo can still serve them. Drive existence off the
+    // endpoint probe (with the denormalized flag as a fallback), then scan the
+    // documents list for the real doc (needed for download/delete) when present.
+    if (hasPhotoResolved || student?.hasPhoto) {
       const photoDocs = documents.filter((d: any) => d.type === "photo" || d.type === "photograph");
       const best = photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
       // Synthetic sentinel so the display block activates even for fileData-only photos.
-      return best ?? { mimeType: "image/jpeg", fileKey: null, fileUrl: null };
+      return best ?? { mimeType: photoMime ?? "image/jpeg", fileKey: null, fileUrl: null };
     }
     const photoDocs = documents.filter((d: any) => (d.type === "photo" || d.type === "photograph") && (d.fileKey || d.fileUrl));
     if (photoDocs.length === 0) return null;
     return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  }, [documents, student?.hasPhoto]);
+  }, [documents, hasPhotoResolved, photoMime, student?.hasPhoto]);
 
   // Reset load-error state whenever the photo source changes (e.g. new upload, different student).
   useEffect(() => { setPhotoLoadError(false); }, [photoDoc]);

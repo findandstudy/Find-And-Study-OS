@@ -16,6 +16,7 @@ import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
+import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
@@ -1136,6 +1137,9 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       }
 
       await db.update(documentsTable).set({ studentId: existingByEmail.id }).where(and(eq(documentsTable.leadId, lead.id), isNull(documentsTable.studentId)));
+      // Reassigned lead docs may include a photo/photograph — resync the flag now
+      // so the avatar appears immediately, not only after the next boot backfill.
+      await recomputeStudentPhoto(existingByEmail.id);
 
       if (submission?.programId) {
         await createApplicationFromSubmission(existingByEmail.id, submission);
@@ -1152,20 +1156,13 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }
   }
 
-  const photoDocs = await db.select().from(documentsTable).where(and(eq(documentsTable.leadId, lead.id), eq(documentsTable.type, "photo")));
-  const hasPhotoBlob = photoDocs.length > 0 && (photoDocs[0].fileKey || photoDocs[0].fileData);
-
   const [student] = await db.insert(studentsTable).values(studentValues).returning();
 
   await db.update(documentsTable).set({ studentId: student.id }).where(and(eq(documentsTable.leadId, lead.id), isNull(documentsTable.studentId)));
 
-  if (hasPhotoBlob) {
-    // Now that the student row exists, point photoUrl at the stable
-    // /students/:id/photo endpoint instead of inlining base64.
-    await db.update(studentsTable)
-      .set({ photoUrl: `/api/students/${student.id}/photo`, hasPhoto: true })
-      .where(eq(studentsTable.id, student.id));
-  }
+  // Now that the lead's photo doc(s) belong to the student, sync has_photo +
+  // photo_url. Covers photo/photograph + fileKey/fileData/fileUrl uniformly.
+  await recomputeStudentPhoto(student.id);
 
   if (submission?.programId) {
     await createApplicationFromSubmission(student.id, submission);

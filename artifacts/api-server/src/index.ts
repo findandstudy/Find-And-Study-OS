@@ -367,6 +367,56 @@ async function backfillLeadConversion() {
   }
 }
 
+async function backfillStudentPhotoFlags() {
+  // Repair the denormalized students.has_photo + photo_url from the actual
+  // photo/photograph documents. The flag previously drifted false for photos
+  // that carried only fileData (legacy uploads, public-apply, embed widget),
+  // which hid the avatar on every list/kanban/Student Detail surface that gates
+  // on the flag. has_photo must mirror EXACTLY what GET /api/students/:id/photo
+  // would serve: it takes the LATEST photo/photograph doc and serves it only
+  // when that doc has a file_key, file_data, or an http(s) file_url (a data:/
+  // file: url is rejected 422 by the SSRF guard). Runs on every boot (outside
+  // the bootstrap lock) so it heals existing/prod data; WHERE-guarded so only
+  // drifted rows are written.
+  try {
+    const result = await db.execute(sql`
+      UPDATE students s
+      SET has_photo = sub.hp,
+          photo_url = CASE WHEN sub.hp THEN '/api/students/' || s.id || '/photo' ELSE NULL END
+      FROM (
+        SELECT s2.id,
+          COALESCE((
+            SELECT (
+              (d.file_key IS NOT NULL AND d.file_key <> '')
+              OR (d.file_data IS NOT NULL AND d.file_data <> '')
+              OR (d.file_url ~* '^https?://')
+            )
+            FROM documents d
+            WHERE d.student_id = s2.id
+              AND d.type IN ('photo', 'photograph')
+              AND d.deleted_at IS NULL
+            ORDER BY d.created_at DESC
+            LIMIT 1
+          ), false) AS hp
+        FROM students s2
+        WHERE s2.deleted_at IS NULL
+      ) sub
+      WHERE sub.id = s.id
+        AND (
+          s.has_photo IS DISTINCT FROM sub.hp
+          OR (sub.hp AND s.photo_url IS DISTINCT FROM '/api/students/' || s.id || '/photo')
+          OR (NOT sub.hp AND s.photo_url IS NOT NULL)
+        )
+    `);
+    const count = (result as any)?.rowCount || 0;
+    if (count > 0) {
+      console.log(`[backfill] Resynced has_photo/photo_url for ${count} student(s)`);
+    }
+  } catch (err) {
+    console.error("[backfill] backfillStudentPhotoFlags error:", err);
+  }
+}
+
 async function seedClaudeIntegration() {
   const envKey = process.env.ANTHROPIC_API_KEY;
   if (!envKey) return;
@@ -1485,6 +1535,11 @@ async function seedClaudeIntegration() {
       await backfillStudentAppStatus();
       await backfillLeadConversion();
     }
+
+    // Runs on EVERY boot (outside the bootstrap_done lock) so it heals
+    // existing/prod data, not just freshly seeded environments. Idempotent and
+    // WHERE-guarded — only writes the handful of students whose flag has drifted.
+    await backfillStudentPhotoFlags();
 
     // Documents catalog: add metadata jsonb column if missing, then seed.
     // Runs on every boot (idempotent per-row), outside the bootstrap_done
