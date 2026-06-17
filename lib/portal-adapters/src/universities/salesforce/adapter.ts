@@ -33,14 +33,21 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       const session = await launchPortal({ headless: opts?.headless ?? true });
       logger.info(`[salesforce:${cfg.key}] login → ${cfg.portalUrl}`);
 
-      // TODO: Salesforce OmniStudio login flow
-      //   await session.page.goto(cfg.portalUrl);
-      //   await session.page.fill("input[name='username']", user);
-      //   await session.page.fill("input[name='password']", password);
-      //   await session.page.click("button[type='submit']");
-      //   await session.page.waitForSelector(".omni-application-form");
-
-      void user; void password;
+      const page: any = session.page;
+      try {
+        await page.goto(cfg.portalUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+        await page.waitForTimeout(3500);
+        await page.locator("input[type=email], input[name*=email i], input[id*=email i]").first().fill(user);
+        await page.locator("input[type=password]").first().fill(password);
+        await page.getByRole("button", { name: /login|giris|sign in/i }).first().click({ timeout: 8000 }).catch(() => {});
+        await page.waitForTimeout(6000);
+        const stillLogin = await page.locator("input[type=password]").first().isVisible().catch(() => false);
+        if (stillLogin) throw new Error(`[salesforce:${cfg.key}] login failed - password field still visible (wrong creds or captcha)`);
+        logger.info(`[salesforce:${cfg.key}] login successful -> ${page.url()}`);
+      } catch (err) {
+        await session.close().catch(() => {});
+        throw err;
+      }
       return session;
     },
 
