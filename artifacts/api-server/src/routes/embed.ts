@@ -11,7 +11,7 @@ import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp } from "../lib/clientIp";
 import { createApplicationForStudent } from "./public-apply";
-import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
+import { checkMandatoryDocs, checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import { generateSecureToken } from "../lib/email";
@@ -1180,6 +1180,34 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
 
     return { leadId: lead.id, submissionId: submission.id };
   });
+
+  // ─── Server-side mandatory-document enforcement ──────────────────────────
+  // The widget blocks submit client-side when required documents are missing,
+  // but a stale cached widget, a disabled-JS client, or a direct API call
+  // could bypass that gate (this is exactly how application #2141 came in with
+  // only 2 of 4 mandatory docs). Enforce the gate on the server too: when the
+  // selected program has mandatory documents that this submission does not
+  // satisfy, refuse to create/convert the student + application. The lead +
+  // submission row committed above is intentionally KEPT, so no contact is
+  // ever lost — staff still see the lead and can follow up — we only decline
+  // to accept an application that is missing its mandatory documents.
+  {
+    const programIdNum = programId ? parseInt(String(programId), 10) : NaN;
+    if (Number.isFinite(programIdNum) && programIdNum > 0) {
+      const uploadedDocTypes = docArray
+        .map((d: any) => String(d.label || "").toLowerCase())
+        .filter(Boolean);
+      const { missing } = await checkMandatoryDocs(programIdNum, uploadedDocTypes);
+      if (missing.length > 0) {
+        res.status(422).json({
+          error: "Please upload all required documents before submitting your application.",
+          missingDocuments: missing,
+          leadId: result.leadId,
+        });
+        return;
+      }
+    }
+  }
 
   // ─────────────────────────────────────────────────────────────────────
   // After the lead+submission row is saved, create a student account and
@@ -3530,7 +3558,13 @@ function handleFormSubmit(e){
     body:JSON.stringify(data)
   }).then(function(r){
     formLoading=false;
-    if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Submission failed')});
+    if(!r.ok)return r.json().then(function(d){
+      // Server rejected because mandatory documents are missing (defense in
+      // depth behind the client gate). Bounce the user back to the Documents
+      // step so they can upload what's missing instead of being stuck.
+      if(d&&d.missingDocuments&&d.missingDocuments.length)formStep='documents';
+      throw new Error(d.error||'Submission failed')
+    });
     formSubmitted=true;
     if(formOpen)showModal();
     else render(false);
