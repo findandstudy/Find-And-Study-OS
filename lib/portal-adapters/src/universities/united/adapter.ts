@@ -23,7 +23,7 @@ export const UNITED_ALLOWLIST: readonly string[] = [
 /** Pre-folded entries for fast matches() lookup. */
 const UNITED_ALLOWLIST_FOLDED: readonly string[] = UNITED_ALLOWLIST.map(fold);
 
-const PORTAL_URL = "https://portal.united.com.tr"; // TODO: confirm URL
+const PORTAL_URL = "https://partner.unitededucation.com"; // TODO: confirm URL
 
 export const unitedAdapter: UniversityAdapter = {
   key:       "united",

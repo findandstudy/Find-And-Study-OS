@@ -31,7 +31,7 @@ export const SIT_ALLOWLIST: readonly string[] = [
 /** Pre-folded entries for fast matches() lookup. */
 const SIT_ALLOWLIST_FOLDED: readonly string[] = SIT_ALLOWLIST.map(fold);
 
-const PORTAL_URL = "https://sit.universite-yonetim.com"; // TODO: confirm URL
+const PORTAL_URL = "https://partners.sitconnect.net"; // TODO: confirm URL
 
 export const sitAdapter: UniversityAdapter = {
   key:       "sit",
