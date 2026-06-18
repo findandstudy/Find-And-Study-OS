@@ -60,43 +60,95 @@ export const unitedAdapter: UniversityAdapter = {
     _files: SubmitFiles,
   ): Promise<SubmitResult> {
     logger.info("[united] submit — program:", profile.programName);
-
-    // NOTE: United portal expects the phone number WITHOUT country code.
-    //   Use profile.phone directly (caller must strip the +90 prefix).
-    //   Correct:   "5321234567"
-    //   Incorrect: "+905321234567"
-
     const page: any = session.page;
     const dryRun = process.env.PORTAL_DRYRUN === "1";
     const result: any = { alreadyExists: false, submitted: false, programMissing: false };
-    const bodyText = async (): Promise<string> => { try { return (await page.evaluate("(() => document.body ? document.body.innerText : '')()")) as string; } catch (e) { return ""; } };
-    const fillStep = async () => {
-      try { const s = page.locator("select"); const n = await s.count(); for (let i = 0; i < n; i++) { if (await s.nth(i).isVisible().catch(() => false)) await s.nth(i).selectOption({ index: 1 }).catch(() => {}); } } catch (e) {}
-      try { const t = page.locator("input[type=text],input[type=email],input[type=tel],input[type=number],input:not([type]),textarea"); const n = await t.count(); for (let i = 0; i < Math.min(n, 30); i++) { const el = t.nth(i); if (!(await el.isVisible().catch(() => false))) continue; if (await el.inputValue().catch(() => "x")) continue; const k = (((await el.getAttribute("name").catch(() => "")) || "") + ((await el.getAttribute("placeholder").catch(() => "")) || "") + ((await el.getAttribute("id").catch(() => "")) || "")).toLowerCase(); let v = "Test"; if (/mail/.test(k)) v = profile.email || "test@example.com"; else if (/phone|tel|gsm|mobil/.test(k)) v = (profile.phone || "5551112233").replace(/^0+/, ""); else if (/passport|pasaport/.test(k)) v = profile.passportNumber || "U1234567"; else if (/first|firstname|ad$|isim|name1/.test(k)) v = profile.firstName || "Test"; else if (/last|surname|soyad/.test(k)) v = profile.lastName || "Applicant"; else if (/birth|dogum|dob|date/.test(k)) v = "01/01/2000"; else if (/address|adres/.test(k)) v = profile.address || "Istanbul"; else if (/city|sehir/.test(k)) v = profile.address || "Istanbul"; await el.fill(v).catch(() => {}); } } catch (e) {}
-      try { const r = page.locator("input[type=radio]"); if (await r.count()) { const el = r.first(); const id = await el.getAttribute("id").catch(() => null); if (id) { const lb = page.locator("label[for=\"" + id + "\"]").first(); if (await lb.count()) await lb.click({ timeout: 2500 }).catch(() => {}); } await el.check({ force: true }).catch(() => {}); } } catch (e) {}
-      try { const card = page.locator("[class*=card i],[class*=option i],[role=radio]").first(); if (await card.count() && await card.isVisible().catch(() => false)) await card.click({ timeout: 2000 }).catch(() => {}); } catch (e) {}
-      try { const fi = page.locator("input[type=file]"); const n = await fi.count(); const order = [files.diploma, files.transcript, files.passport, files.photo].filter(Boolean) as string[]; for (let i = 0; i < n; i++) { const fp = order[i] || files.passport || files.diploma; if (fp) await fi.nth(i).setInputFiles(fp).catch(() => {}); } } catch (e) {}
+    const wait = (ms: number) => page.waitForTimeout(ms);
+    // Select a native <select> by id, choosing the option whose text contains `want` (else first real option). Returns true if `want` matched.
+    const selById = async (id: string, want?: string): Promise<boolean> => {
+      try {
+        const loc = page.locator("#" + id);
+        if (!(await loc.count())) return false;
+        const opts = (await loc.locator("option").allInnerTexts().catch(() => [])) as string[];
+        const w = String(want || "").toLowerCase().trim();
+        let idx = -1, matched = false;
+        if (w) { idx = opts.findIndex((o) => o.toLowerCase().includes(w)); if (idx >= 0) matched = true; }
+        if (idx < 0) idx = opts.findIndex((o) => o.trim() && !/^(please\s+)?select/i.test(o.trim()));
+        if (idx >= 0) { await loc.selectOption({ index: idx }).catch(() => {}); await wait(800); }
+        return matched;
+      } catch (e) { return false; }
+    };
+    // Scan all selects, pick the one with an option matching `re`, select it.
+    const selByOpt = async (re: RegExp): Promise<boolean> => {
+      try {
+        const sels = page.locator("select");
+        const n = await sels.count();
+        for (let i = 0; i < n; i++) {
+          const sl = sels.nth(i);
+          const opts = (await sl.locator("option").allInnerTexts().catch(() => [])) as string[];
+          const idx = opts.findIndex((o) => re.test(o));
+          if (idx >= 0) { await sl.selectOption({ index: idx }).catch(() => {}); await wait(800); return true; }
+        }
+      } catch (e) {}
+      return false;
+    };
+    const clickContinue = async (): Promise<boolean> => {
+      let b = page.getByRole("button", { name: /continue|next|ileri|devam/i }).first();
+      if (await b.count()) { await b.click({ timeout: 8000 }).catch(() => {}); await wait(2800); return true; }
+      b = page.locator("button:has-text('Continue'), a:has-text('Continue'), input[value*='Continue' i]").first();
+      if (await b.count()) { await b.click({ timeout: 8000 }).catch(() => {}); await wait(2800); return true; }
+      return false;
     };
     try {
       await page.goto(PORTAL_URL + "/Manage/newapplication", { waitUntil: "domcontentloaded", timeout: 60000 });
-      await page.waitForTimeout(5000);
-      for (let step = 0; step < 9; step++) {
-        await page.waitForTimeout(2500);
-        const txt = await bodyText();
-        if (/already.*application|zaten.*basvuru/i.test(txt)) { result.alreadyExists = true; break; }
-        if (/completed|application (submitted|created|received)|basvurunuz (alinmis|olusturuldu)/i.test(txt)) { result.submitted = true; break; }
-        const finalBtn = page.getByRole("button", { name: /submit|finish|complete|tamamla|gönder|onayla/i }).first();
-        const hasCont = await page.getByRole("button", { name: /continue|next|ileri|devam|kaydet/i }).count();
-        if ((await finalBtn.count()) && !hasCont) { if (dryRun) { result.dryReachedFinal = true; break; } await finalBtn.click({ timeout: 8000 }).catch(() => {}); await page.waitForTimeout(6000); if (/completed|submitted|alinmis/i.test(await bodyText())) result.submitted = true; break; }
-        const before = txt.slice(0, 140);
-        await fillStep();
-        const nb = page.getByRole("button", { name: /continue|next|ileri|devam|kaydet/i }).first();
-        if (!(await nb.count())) { result.stoppedStep = step; result.body = txt.replace(/\s+/g, " ").slice(0, 200); break; }
-        await nb.click({ timeout: 6000 }).catch(() => {});
-        let moved = false;
-        for (let t = 0; t < 10; t++) { await page.waitForTimeout(1000); if (((await bodyText()).slice(0, 140)) !== before) { moved = true; break; } }
-        if (!moved) { result.stuckStep = step; result.body = (await bodyText()).replace(/\s+/g, " ").slice(0, 200); break; }
+      await wait(5000);
+      const txt0 = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")) as string;
+      if (/already.*application|zaten.*basvuru/i.test(txt0)) { result.alreadyExists = true; logger.warn("[united] already has application"); return result; }
+      // Step 1 — Term Selection: student type + destination
+      await selByOpt(/new student/i);
+      await selByOpt(/t\u00fcrkiye|turkiye/i);
+      await clickContinue();
+      // Step 2 — Degree Selection
+      await selById("selectdegree", profile.level || "Bachelor");
+      await clickContinue();
+      // Step 3 — Program Selection (cascading: university → program)
+      await selById("selectuniversity", profile.universityName);
+      await wait(1500);
+      const progMatched = await selById("selectprogram", profile.programName);
+      await selById("selectlang");
+      await selById("selectcampus");
+      result.programMissing = !!(profile.programName && !progMatched);
+      await clickContinue();
+      await wait(2500);
+      // We should now be at Step 4 — Personal Information.
+      const atPersonal = await page.locator("#firstname, #lastname").first().count().catch(() => 0);
+      if (dryRun) {
+        result.dryReachedFinal = !!atPersonal;
+        if (!atPersonal) { result.stuckStep = 3; result.stuckBody = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")).replace(/\s+/g, " ").slice(0, 220); }
+        logger.warn("[united] DRY: reached Program→Personal boundary (atPersonal=" + atPersonal + "); stopping before Personal Information — no student created");
+        return result;
       }
+      // ===== REAL submission (requires explicit approval; first-real gating handled by worker) =====
+      const fill = async (id: string, v?: string) => { const l = page.locator("#" + id); if ((await l.count()) && v) await l.fill(String(v)).catch(() => {}); };
+      await fill("firstname", profile.firstName);
+      await fill("lastname", profile.lastName);
+      await fill("fathername", (profile as any).fatherName);
+      await fill("mothername", (profile as any).motherName);
+      await fill("passport", profile.passportNumber);
+      await fill("kimlik", (profile as any).nationalId);
+      await fill("phone11", String((profile as any).phone || "").replace(/^\+?90/, ""));
+      await fill("SecondarySchoolName", (profile as any).lastSchool);
+      await selById("gender", (profile as any).gender || "Male");
+      await clickContinue();
+      // Step 5 — Documents
+      const fi = page.locator("input[type=file]"); const fn = await fi.count();
+      const order = [(_files as any).passport, (_files as any).diploma, (_files as any).transcript, (_files as any).photo].filter(Boolean) as string[];
+      for (let i = 0; i < fn; i++) { const fp = order[i] || (_files as any).passport; if (fp) await fi.nth(i).setInputFiles(fp).catch(() => {}); }
+      await clickContinue();
+      await wait(2500);
+      // Step 6 — final submit
+      const finalBtn = page.getByRole("button", { name: /submit|finish|complete application|tamamla|g\u00f6nder|onayla/i }).first();
+      if (await finalBtn.count()) { await finalBtn.click({ timeout: 8000 }).catch(() => {}); await wait(6000); const done = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")) as string; if (/successfully|application (submitted|created|completed)|ba\u015fvurunuz al\u0131nm/i.test(done)) result.submitted = true; }
     } catch (e: any) { result.error = e.message; }
     logger.info("[united] submit " + JSON.stringify(result));
     return result;
