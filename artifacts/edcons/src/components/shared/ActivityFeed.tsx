@@ -4,13 +4,10 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/apiFetch";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@workspace/i18n";
 import {
-  MessageSquare, CalendarClock, Activity, ChevronDown, ChevronUp,
+  CalendarClock, Activity, ChevronDown, ChevronUp,
   CheckCircle2, Circle, Loader2, AlertCircle, Lock, Globe, Plus, X, Check
 } from "lucide-react";
 
@@ -119,55 +116,6 @@ export function ActivityFeed({ context, id, className = "" }: ActivityFeedProps)
     };
   }, [context, id]);
 
-  // ── Note compose ──────────────────────────────────────────────────────────
-  const [noteText, setNoteText] = useState("");
-  const [noteInternal, setNoteInternal] = useState(false);
-  const [noteOpen, setNoteOpen] = useState(false);
-
-  const addNote = useMutation({
-    mutationFn: async () => {
-      const res = await apiFetch(`${BASE_URL}/api/persons/feed/notes?context=${context}&id=${id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: noteText.trim(), isInternal: noteInternal }),
-      });
-      if (!res.ok) throw new Error("Failed to add note");
-      return res.json();
-    },
-    onSuccess: () => {
-      setNoteText("");
-      setNoteOpen(false);
-      qc.invalidateQueries({ queryKey: feedKey });
-    },
-  });
-
-  // ── Follow-up compose ─────────────────────────────────────────────────────
-  const [fuOpen, setFuOpen] = useState(false);
-  const [fuTitle, setFuTitle] = useState("");
-  const [fuDate, setFuDate] = useState("");
-  const [fuNotes, setFuNotes] = useState("");
-
-  const addFollowUp = useMutation({
-    mutationFn: async () => {
-      const res = await apiFetch(`${BASE_URL}/api/persons/feed/follow-ups?context=${context}&id=${id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: fuTitle.trim(),
-          scheduledAt: new Date(fuDate).toISOString(),
-          notes: fuNotes.trim() || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to add follow-up");
-      return res.json();
-    },
-    onSuccess: () => {
-      setFuTitle(""); setFuDate(""); setFuNotes("");
-      setFuOpen(false);
-      qc.invalidateQueries({ queryKey: feedKey });
-    },
-  });
-
   // ── Complete follow-up ────────────────────────────────────────────────────
   const completeFollowUp = useMutation({
     mutationFn: async (fuId: number) => {
@@ -212,117 +160,6 @@ export function ActivityFeed({ context, id, className = "" }: ActivityFeedProps)
 
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
-      {/* ── Compose bar ────────────────────────────────────────────────── */}
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-1.5"
-          onClick={() => { setNoteOpen(v => !v); setFuOpen(false); }}
-        >
-          <MessageSquare className="h-3.5 w-3.5" />
-          {t("activityFeed.addNote")}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-1.5"
-          onClick={() => { setFuOpen(v => !v); setNoteOpen(false); }}
-        >
-          <CalendarClock className="h-3.5 w-3.5" />
-          {t("activityFeed.addFollowUp")}
-        </Button>
-      </div>
-
-      {/* ── Note compose panel ─────────────────────────────────────────── */}
-      {noteOpen && (
-        <div className="rounded-lg border bg-card p-3 flex flex-col gap-2">
-          {isStaff && (
-            <div className="flex gap-1">
-              <button
-                onClick={() => setNoteInternal(false)}
-                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${!noteInternal ? "bg-primary text-primary-foreground border-primary" : "border-input text-muted-foreground hover:text-foreground"}`}
-              >
-                <Globe className="h-3 w-3" />
-                {t("activityFeed.general")}
-              </button>
-              <button
-                onClick={() => setNoteInternal(true)}
-                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${noteInternal ? "bg-orange-500 text-white border-orange-500" : "border-input text-muted-foreground hover:text-foreground"}`}
-              >
-                <Lock className="h-3 w-3" />
-                {t("activityFeed.internal")}
-              </button>
-            </div>
-          )}
-          <Textarea
-            value={noteText}
-            onChange={e => setNoteText(e.target.value)}
-            placeholder={t("activityFeed.notePlaceholder")}
-            className={`resize-none min-h-[72px] text-sm ${noteInternal ? "border-orange-300 focus-visible:ring-orange-400" : ""}`}
-            autoFocus
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => { setNoteOpen(false); setNoteText(""); }}>
-              {t("activityFeed.cancel")}
-            </Button>
-            <Button
-              size="sm"
-              disabled={!noteText.trim() || addNote.isPending}
-              onClick={() => addNote.mutate()}
-              className={noteInternal ? "bg-orange-500 hover:bg-orange-600" : ""}
-            >
-              {addNote.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("activityFeed.save")}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Follow-up compose panel ────────────────────────────────────── */}
-      {fuOpen && (
-        <div className="rounded-lg border bg-card p-3 flex flex-col gap-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="col-span-2">
-              <Label className="text-xs mb-1">{t("activityFeed.followUpTitle")}</Label>
-              <Input
-                value={fuTitle}
-                onChange={e => setFuTitle(e.target.value)}
-                placeholder={t("activityFeed.followUpTitle")}
-                className="h-8 text-sm"
-                autoFocus
-              />
-            </div>
-            <div>
-              <Label className="text-xs mb-1">{t("activityFeed.dueDate")}</Label>
-              <Input
-                type="datetime-local"
-                value={fuDate}
-                onChange={e => setFuDate(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
-          </div>
-          <Textarea
-            value={fuNotes}
-            onChange={e => setFuNotes(e.target.value)}
-            placeholder={t("activityFeed.followUpNotes")}
-            className="resize-none min-h-[48px] text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => { setFuOpen(false); setFuTitle(""); setFuDate(""); setFuNotes(""); }}>
-              {t("activityFeed.cancel")}
-            </Button>
-            <Button
-              size="sm"
-              disabled={!fuTitle.trim() || !fuDate || addFollowUp.isPending}
-              onClick={() => addFollowUp.mutate()}
-            >
-              {addFollowUp.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("activityFeed.save")}
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* ── Feed items ─────────────────────────────────────────────────── */}
       {feedItems.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
