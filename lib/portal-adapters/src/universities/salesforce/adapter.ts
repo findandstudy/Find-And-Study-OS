@@ -97,6 +97,8 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         try { const sp = page.getByRole("button", { name: /select_program|^\s*select\s*$/i }).first(); if (await sp.count()) { await sp.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(1500); } } catch (e) {}
         await pickCombos();
         await uploadDocs();
+        try { const sels = page.locator("select"); const ns = await sels.count(); for (let i = 0; i < ns; i++) await sels.nth(i).selectOption({ index: 1 }).catch(() => {}); } catch (e) {}
+        try { const txs = page.locator("input[type=text],input:not([type]),textarea"); const nt = await txs.count(); for (let i = 0; i < Math.min(nt, 25); i++) { const el = txs.nth(i); if (!(await el.isVisible().catch(() => false))) continue; if (await el.inputValue().catch(() => "x")) continue; await el.fill("Test").catch(() => {}); await el.press("Tab").catch(() => {}); } } catch (e) {}
         const submitBtn = page.getByRole("button", { name: /submit|complete|tamamla|gonder|finish|onayla/i }).first();
         const nextBtn = page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).first();
         const hasSubmit = await submitBtn.count();
@@ -113,7 +115,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         await nextBtn.click({ timeout: 6000 }).catch(() => {});
         let moved = false;
         for (let t = 0; t < 12; t++) { await page.waitForTimeout(1000); if ((await sig()) !== before) { moved = true; break; } }
-        if (!moved) { result.blockedStep = step; break; }
+        if (!moved) { result.blockedStep = step; try { result.blockBody = (await bodyText()).replace(/\s+/g, " ").slice(0, 300); } catch (e) {} break; }
       }
       logger.info("[salesforce:" + cfg.key + "] submit result " + JSON.stringify(result));
       return result;
