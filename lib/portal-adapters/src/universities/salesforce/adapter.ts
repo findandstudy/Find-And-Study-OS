@@ -73,7 +73,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       const bodyText = async (): Promise<string> => { try { return (await page.evaluate("(() => document.body ? document.body.innerText : '')()")) as string; } catch (e) { return ""; } };
       const has = async (sel: string): Promise<boolean> => { try { return (await page.locator(sel).count()) > 0; } catch (e) { return false; } };
       const heading = async (): Promise<string> => { try { return (await page.evaluate("(() => { var a=[]; document.querySelectorAll('h1,h2,legend,.slds-text-heading_medium').forEach(function(h){ if(h.offsetParent!==null) a.push((h.innerText||'').slice(0,24)); }); return a.join('|'); })()")) as string; } catch (e) { return Math.random().toString(); } };
-      const typeInto = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const loc = page.locator(sel); const cnt = await loc.count(); let t: any = null; for (let i = 0; i < cnt; i++) { if (await loc.nth(i).isVisible().catch(() => false)) { t = loc.nth(i); break; } } if (!t) return; await t.click().catch(() => {}); await t.fill("").catch(() => {}); await t.pressSequentially(String(v), { delay: 45 }).catch(() => {}); await t.press("Tab").catch(() => {}); } catch (e) {} };
+      const typeInto = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const loc = page.locator(sel); const cnt = await loc.count(); let t: any = null; for (let i = 0; i < cnt; i++) { if (await loc.nth(i).isVisible().catch(() => false)) { t = loc.nth(i); break; } } if (!t) return; await t.click().catch(() => {}); await page.waitForTimeout(300); await t.focus().catch(() => {}); await page.keyboard.type(String(v), { delay: 70 }).catch(() => {}); await t.press("Tab").catch(() => {}); } catch (e) {} };
       const fill = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const l = page.locator(sel).first(); if ((await l.count()) && (await l.isVisible().catch(() => false))) { await l.fill(String(v)).catch(() => {}); await l.press("Tab").catch(() => {}); } } catch (e) {} };
       const selByName = async (name: string, label?: string) => { try { const s = page.locator("select[name=\"" + name + "\"]").first(); if (!(await s.count())) return; if (label) { try { await s.selectOption({ label }); } catch (e) { await s.selectOption({ index: 1 }).catch(() => {}); } } else { await s.selectOption({ index: 1 }).catch(() => {}); } } catch (e) {} };
       const clickNext = async () => { const n = page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).first(); if (await n.count()) { await n.click({ timeout: 6000 }).catch(() => {}); return true; } return false; };
@@ -84,7 +84,14 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         const txt = await bodyText();
         if (DUP.test(txt)) { result.alreadyExists = true; break; }
         const before = await heading();
-        if (await has("input[name=\"Student_First_Name\"]")) {
+        if (/review and submit|not submitted yet|please review/i.test(txt)) {
+          if (dryRun) { result.dryReachedFinal = true; break; }
+          await clickNext();
+          await page.waitForTimeout(6000);
+          const aft = await bodyText();
+          if (DUP.test(aft)) result.alreadyExists = true; else result.submitted = true;
+          break;
+        } else if (await has("input[name=\"Student_First_Name\"]")) {
           await typeInto("input[name=\"Student_First_Name\"]", profile.firstName);
           await typeInto("input[name=\"Student_Last_Name\"]", profile.lastName);
           await typeInto("input[name=\"Student_Passport_Number\"]", profile.passportNumber);
