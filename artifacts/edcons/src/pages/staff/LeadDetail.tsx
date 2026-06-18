@@ -34,7 +34,6 @@ import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 
 const PHONE_CODES = [
@@ -872,11 +871,6 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               )}
             </div>
 
-            {/* Activity Feed */}
-            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
-              <h2 className="font-semibold text-foreground">{t("activityFeed.title")}</h2>
-              <ActivityFeed context="lead" id={id} />
-            </div>
           </div>
 
           {/* Right: status card */}

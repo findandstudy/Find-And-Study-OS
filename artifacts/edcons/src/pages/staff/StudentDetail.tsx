@@ -37,7 +37,6 @@ import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
-import { ActivityFeed } from "@/components/shared/ActivityFeed";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -789,7 +788,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               </TabsTrigger>
             )}
             <TabsTrigger value="messaging">{t("studentDetailPage.allMessaging")}</TabsTrigger>
-            <TabsTrigger value="activity">{t("activityFeed.title")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
@@ -1338,9 +1336,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
           <TabsContent value="messaging" className="mt-4">
             <AllMessagingHistory type="student" id={Number(id)} />
-          </TabsContent>
-          <TabsContent value="activity" className="mt-4">
-            <ActivityFeed context="student" id={Number(id)} />
           </TabsContent>
         </Tabs>
         {student && <div className="mt-4"><AuditLogSection resource="student" resourceId={student.id} /></div>}

@@ -38,7 +38,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { StudentDocChecklist } from "@/components/StudentDocChecklist";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 import PortalSubmissionPanel from "@/components/PortalSubmissionPanel";
-import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 
 function formatCurrency(v: number | string | null | undefined) {
@@ -619,11 +618,6 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
               </div>
             )}
 
-            {/* Activity Feed */}
-            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
-              <h2 className="font-semibold text-foreground">{t("activityFeed.title")}</h2>
-              <ActivityFeed context="application" id={Number(id)} />
-            </div>
           </div>
 
           <div className="space-y-4">
