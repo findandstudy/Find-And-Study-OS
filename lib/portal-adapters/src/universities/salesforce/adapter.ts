@@ -37,7 +37,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       try {
         await page.goto(cfg.portalUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
         await page.waitForTimeout(3500);
-        await page.locator("input[type=email], input[name*=email i], input[id*=email i]").first().fill(user);
+        for (const __s of ["input[type=email]","input[name*=email i]","input[id*=email i]","input[type=text]"]) { const __l = page.locator(__s).first(); if ((await __l.count()) && (await __l.isVisible().catch(() => false))) { await __l.fill(user).catch(() => {}); break; } }
         await page.locator("input[type=password]").first().fill(password);
         await page.getByRole("button", { name: /login|giris|sign in/i }).first().click({ timeout: 8000 }).catch(() => {});
         await page.waitForTimeout(6000);
@@ -73,7 +73,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       const bodyText = async (): Promise<string> => { try { return (await page.evaluate("(() => document.body ? document.body.innerText : '')()")) as string; } catch (e) { return ""; } };
       const has = async (sel: string): Promise<boolean> => { try { return (await page.locator(sel).count()) > 0; } catch (e) { return false; } };
       const heading = async (): Promise<string> => { try { return (await page.evaluate("(() => { var a=[]; document.querySelectorAll('h1,h2,legend,.slds-text-heading_medium').forEach(function(h){ if(h.offsetParent!==null) a.push((h.innerText||'').slice(0,24)); }); return a.join('|'); })()")) as string; } catch (e) { return Math.random().toString(); } };
-      const typeInto = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const loc = page.locator(sel); const cnt = await loc.count(); let t: any = null; for (let i = 0; i < cnt; i++) { if (await loc.nth(i).isVisible().catch(() => false)) { t = loc.nth(i); break; } } if (!t) return; await t.click().catch(() => {}); await page.waitForTimeout(300); await t.focus().catch(() => {}); await page.keyboard.type(String(v), { delay: 70 }).catch(() => {}); await t.press("Tab").catch(() => {}); } catch (e) {} };
+      const typeInto = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const loc = page.locator(sel); const cnt = await loc.count(); let t: any = null; for (let i = 0; i < cnt; i++) { if (await loc.nth(i).isVisible().catch(() => false)) { t = loc.nth(i); break; } } if (!t) return; await t.fill(String(v)).catch(() => {}); const __cur = await t.inputValue().catch(() => ""); if (__cur !== String(v)) { await t.click().catch(() => {}); await page.waitForTimeout(200); await t.fill("").catch(() => {}); await t.pressSequentially(String(v), { delay: 60 }).catch(() => {}); } await t.press("Tab").catch(() => {}); } catch (e) {} };
       const fill = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const l = page.locator(sel).first(); if ((await l.count()) && (await l.isVisible().catch(() => false))) { await l.fill(String(v)).catch(() => {}); await l.press("Tab").catch(() => {}); } } catch (e) {} };
       const selByName = async (name: string, label?: string) => { try { const s = page.locator("select[name=\"" + name + "\"]").first(); if (!(await s.count())) return; if (label) { try { await s.selectOption({ label }); } catch (e) { await s.selectOption({ index: 1 }).catch(() => {}); } } else { await s.selectOption({ index: 1 }).catch(() => {}); } } catch (e) {} };
       const clickNext = async () => { const n = page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).first(); if (await n.count()) { await n.click({ timeout: 6000 }).catch(() => {}); return true; } return false; };
@@ -83,7 +83,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         await page.waitForTimeout(2500);
         const txt = await bodyText();
         if (DUP.test(txt)) { result.alreadyExists = true; break; }
-        const before = await heading();
+        const before = (await bodyText()).replace(/\s+/g, " ").slice(0, 600);
         if (/review and submit|not submitted yet|please review/i.test(txt)) {
           if (dryRun) { result.dryReachedFinal = true; break; }
           await clickNext();
@@ -147,7 +147,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await clickNext();
         }
         let moved = false;
-        for (let t = 0; t < 10; t++) { await page.waitForTimeout(1000); if ((await heading()) !== before) { moved = true; break; } }
+        for (let t = 0; t < 10; t++) { await page.waitForTimeout(1000); if (((await bodyText()).replace(/\s+/g, " ").slice(0, 600)) !== before) { moved = true; break; } }
         if (!moved) { result.stuckStep = step; result.stuckBody = (await bodyText()).replace(/\s+/g, " ").slice(0, 200); if (step > 0) break; }
       }
       logger.info("[salesforce:" + cfg.key + "] submit " + JSON.stringify(result));
