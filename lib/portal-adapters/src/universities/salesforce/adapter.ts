@@ -91,11 +91,15 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           const aft = await bodyText();
           if (DUP.test(aft)) result.alreadyExists = true; else result.submitted = true;
           break;
-        } else if (await has("input[name=\"Student_First_Name\"]")) {
+        } else if ((await has("input[name=\"Student_First_Name\"]")) || ((await has("input[name=\"First_Name\"]")) && !(await has("select[name=\"Gender\"]")))) {
           await typeInto("input[name=\"Student_First_Name\"]", profile.firstName);
+          await typeInto("input[name=\"First_Name\"]", profile.firstName);
           await typeInto("input[name=\"Student_Last_Name\"]", profile.lastName);
+          await typeInto("input[name=\"Last_Name\"]", profile.lastName);
           await typeInto("input[name=\"Student_Passport_Number\"]", profile.passportNumber);
+          await typeInto("input[name*=Passport i]", profile.passportNumber);
           await typeInto("input[placeholder=\"you@example.com\"]", profile.email);
+          await typeInto("input[type=email]", profile.email);
           await clickNext();
         } else if (/available programs/i.test(txt)) {
           if (profile.programName) { try { const kw = page.getByPlaceholder(/search program name|keyword/i).first(); if (await kw.count()) { await kw.fill(profile.programName).catch(() => {}); await page.waitForTimeout(1800); } } catch (e) {} }
