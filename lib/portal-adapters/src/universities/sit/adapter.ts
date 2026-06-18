@@ -90,18 +90,24 @@ export const sitAdapter: UniversityAdapter = {
       try {
         await page.goto(PORTAL_URL + "/students", { waitUntil: "domcontentloaded", timeout: 60000 });
         await page.waitForTimeout(4000);
-        const q = profile.passportNumber || ((profile.firstName || "") + " " + (profile.lastName || "")).trim();
-        const search = page.getByPlaceholder(/search by name|name or email|search/i).first();
+        const q = (profile.email || ((profile.firstName || "") + " " + (profile.lastName || ""))).trim();
+        const search = page.getByPlaceholder(/search by name|name or email/i).first();
         if ((await search.count()) && q) { await search.fill(q).catch(() => {}); await page.waitForTimeout(3000); }
         const row = page.locator("table tbody tr, [role=row]").first();
         if (!(await row.count())) { result.studentNotFound = true; logger.warn("[sit] student not found: " + q); return result; }
-        await row.click({ timeout: 4000 }).catch(() => {});
+        await row.locator(".lucide-info").first().click({ timeout: 5000 }).catch(async () => { await row.click({ timeout: 3000 }).catch(() => {}); });
         await page.waitForTimeout(3000);
-        if (!/\/students\//.test(page.url())) { result.studentNotFound = true; return result; }
+        if (!/\/students\/[0-9]/.test(page.url())) { result.studentNotFound = true; return result; }
         const addBtn = page.getByRole("button", { name: /add application/i }).first();
         if (!(await addBtn.count())) { result.error = "no Add Application button"; return result; }
         await addBtn.click({ timeout: 6000 }).catch(() => {});
         await page.waitForTimeout(2500);
+        for (const __re of [/academic year/i, /semester|intake|term/i]) {
+          try {
+            const __c = page.getByRole("button", { name: __re }).first();
+            if (await __c.count()) { await __c.click({ timeout: 4000 }).catch(() => {}); await page.waitForTimeout(900); const __o = page.getByRole("option").first(); if (await __o.count()) await __o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(1000); }
+          } catch (e) {}
+        }
         await pick(/select country/i, "Turk");
         await pick(/select university/i, profile.universityName);
         await pick(/select degree/i, profile.level);
