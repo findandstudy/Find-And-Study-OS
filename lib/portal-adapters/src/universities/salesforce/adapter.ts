@@ -100,6 +100,8 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await typeInto("input[name*=Passport i]", profile.passportNumber);
           await typeInto("input[placeholder=\"you@example.com\"]", profile.email);
           await typeInto("input[type=email]", profile.email);
+          try { const cz = page.getByLabel(/citizenship|vatanda/i).first(); if ((await cz.count()) && (await cz.isVisible().catch(() => false))) { await cz.click().catch(() => {}); await cz.fill(profile.nationality || "Turkey").catch(() => {}); await page.waitForTimeout(1500); const o = page.locator("[role=option],lightning-base-combobox-item,li").first(); if (await o.count()) await o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(700); } } catch (e) {}
+          try { const eml = page.getByLabel(/applicant email|email address/i).first(); if ((await eml.count()) && (await eml.isVisible().catch(() => false)) && !(await eml.inputValue().catch(() => "x"))) { await eml.click().catch(() => {}); await page.keyboard.type(profile.email || ("fas" + Date.now() + "@example.com"), { delay: 40 }).catch(() => {}); await eml.press("Tab").catch(() => {}); } } catch (e) {}
           await clickNext();
         } else if (/available programs/i.test(txt)) {
           if (profile.programName) { try { const kw = page.getByPlaceholder(/search program name|keyword/i).first(); if (await kw.count()) { await kw.fill(profile.programName).catch(() => {}); await page.waitForTimeout(1800); } } catch (e) {} }
@@ -130,7 +132,9 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           try { const fi = page.locator("input[type=file]"); const order = [files.diploma, files.transcript, files.passport, files.photo].filter(Boolean) as string[]; const n = await fi.count(); for (let i = 0; i < Math.min(n, order.length); i++) { await fi.nth(i).setInputFiles(order[i]).catch(() => {}); await page.waitForTimeout(1800); } } catch (e) {}
           await clickNext();
         } else {
-          const sub = page.getByRole("button", { name: /submit|complete|tamamla|gönder|finish|onayla|apply/i }).first();
+          const cna = page.getByRole("button", { name: /create new application|add application/i }).first();
+          if (await cna.count()) { await cna.click({ timeout: 6000 }).catch(() => {}); }
+          const sub = page.getByRole("button", { name: /^\s*(submit|complete|tamamla|gönder|finish|onayla)\s*$/i }).first();
           const hn = await page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).count();
           if ((await sub.count()) && !hn) {
             if (dryRun) { result.dryReachedFinal = true; break; }
