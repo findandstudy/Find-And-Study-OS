@@ -100,6 +100,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await typeInto("input[name*=Passport i]", profile.passportNumber);
           await typeInto("input[placeholder=\"you@example.com\"]", profile.email);
           await typeInto("input[type=email]", profile.email);
+          await typeInto("input[placeholder*=\"@\"]:not([type=password])", profile.email);
           try { const cz = page.getByLabel(/citizenship|vatanda/i).first(); if ((await cz.count()) && (await cz.isVisible().catch(() => false))) { await cz.click().catch(() => {}); await cz.fill(profile.nationality || "Turkey").catch(() => {}); await page.waitForTimeout(1500); const o = page.locator("[role=option],lightning-base-combobox-item,li").first(); if (await o.count()) await o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(700); } } catch (e) {}
           try { const eml = page.getByLabel(/applicant email|email address/i).first(); if ((await eml.count()) && (await eml.isVisible().catch(() => false)) && !(await eml.inputValue().catch(() => "x"))) { await eml.click().catch(() => {}); await page.keyboard.type(profile.email || ("fas" + Date.now() + "@example.com"), { delay: 40 }).catch(() => {}); await eml.press("Tab").catch(() => {}); } } catch (e) {}
           await clickNext();
