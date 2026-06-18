@@ -3,6 +3,7 @@ import { topkapiAdapter }          from "./universities/topkapi/adapter.js";
 import { salesforceAdapters }      from "./universities/salesforce/adapter.js";
 import { sitAdapter }              from "./universities/sit/adapter.js";
 import { unitedAdapter }           from "./universities/united/adapter.js";
+import { emuAdapter } from "./universities/emu/adapter.js";
 import { createDeclarativeAdapter } from "./declarativeAdapter.js";
 import { declarativeConfigs }       from "./declarativeConfigs.js";
 
@@ -22,6 +23,7 @@ export const adapters: UniversityAdapter[] = [
   ...salesforceAdapters,
   sitAdapter,
   unitedAdapter,
+  emuAdapter,
   ..._declarativeAdapters,
 ];
 
@@ -48,13 +50,14 @@ export function allAdapterKeys(): string[] {
 // Adapter family classification
 // ---------------------------------------------------------------------------
 
-type AdapterFamily = "metronic" | "salesforce" | "sit" | "united" | "declarative";
+type AdapterFamily = "metronic" | "salesforce" | "sit" | "united" | "emu" | "declarative";
 
 function resolveFamily(adapterKey: string): AdapterFamily {
   if (adapterKey === topkapiAdapter.key) return "metronic";
   if (salesforceAdapters.some((a) => a.key === adapterKey)) return "salesforce";
   if (adapterKey === sitAdapter.key) return "sit";
   if (adapterKey === unitedAdapter.key) return "united";
+  if (adapterKey === emuAdapter.key) return "emu";
   return "declarative";
 }
 

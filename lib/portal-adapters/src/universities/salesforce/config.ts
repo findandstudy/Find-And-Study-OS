@@ -56,13 +56,6 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     requiredDocs: ["diploma", "transcript", "passport"],
   },
   {
-    key: "emu",
-    label: "Doğu Akdeniz Üniversitesi (EMU)",
-    portalUrl: "https://applyonline.emu.edu.tr/agency",
-    namePatterns: ["emu","dogu akdeniz"],
-    requiredDocs: ["diploma", "transcript", "passport"],
-  },
-  {
     key: "altinbas",
     label: "Altınbaş Üniversitesi",
     portalUrl: "https://apply.altinbas.edu.tr/partner/s",
