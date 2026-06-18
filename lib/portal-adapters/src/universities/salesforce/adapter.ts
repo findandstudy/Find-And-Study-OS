@@ -66,58 +66,76 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
 
       const page: any = session.page;
       const dryRun = process.env.SF_DRYRUN === "1";
-      const formUrl = cfg.portalUrl.replace(/\/$/, "") + "/application-form";
-      await page.goto(formUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+      await page.goto(cfg.portalUrl.replace(/\/$/, "") + "/application-form", { waitUntil: "domcontentloaded", timeout: 60000 });
       await page.waitForTimeout(6000);
-      const DUP = /already an application for this passport|already exists|kayitli ogrenci/i;
-      const bodyText = async (): Promise<string> => { try { return (await page.evaluate("(() => document.body ? document.body.innerText : '')()")) as string; } catch (e) { return ""; } };
-      const sig = async (): Promise<string> => { try { return (await page.evaluate("(()=>{var a=[];function w(r){var e=[];try{e=[].slice.call(r.querySelectorAll('input,select,textarea,button'))}catch(x){}for(var i=0;i<e.length;i++){a.push((e[i].name||'')+'|'+(e[i].innerText||'').slice(0,10))}var al=[];try{al=[].slice.call(r.querySelectorAll('*'))}catch(x){}for(var j=0;j<al.length;j++){if(al[j].shadowRoot)w(al[j].shadowRoot)}}w(document);return a.join(',')})()")) as string; } catch (e) { return ""; } };
-      const fill = async (sel: string, val?: string | number) => { if (val === undefined || val === null || val === "") return; try { const l = page.locator(sel).first(); if ((await l.count()) && (await l.isVisible().catch(() => false))) { await l.fill(String(val)).catch(() => {}); await l.press("Tab").catch(() => {}); } } catch (e) {} };
-      const pickRadio = async () => { try { const r = page.locator("input[type=radio]"); if (await r.count()) { const el = r.first(); const id = await el.getAttribute("id").catch(() => null); if (id) { const lb = page.locator("label[for=\"" + id + "\"]").first(); if (await lb.count()) { await lb.click({ timeout: 3000 }).catch(() => {}); return; } } await el.check({ force: true }).catch(() => {}); } } catch (e) {} };
-      const pickCombos = async () => { try { const cbs = page.locator("button[role=combobox],[role=combobox]"); const n = await cbs.count(); for (let i = 0; i < Math.min(n, 14); i++) { const cb = cbs.nth(i); if (!(await cb.isVisible().catch(() => false))) continue; await cb.click({ timeout: 2500 }).catch(() => {}); await page.waitForTimeout(600); const opt = page.locator("[role=option],lightning-base-combobox-item").first(); if ((await opt.count()) && (await opt.isVisible().catch(() => false))) await opt.click({ timeout: 2500 }).catch(() => {}); await page.waitForTimeout(250); } } catch (e) {} };
-      const uploadDocs = async () => { try { const fi = page.locator("input[type=file]"); const n = await fi.count(); const order = [files.passport, files.transcript, files.diploma, files.photo].filter(Boolean) as string[]; for (let i = 0; i < n; i++) { const fp = order[i] || files.passport || files.transcript || files.diploma; if (fp) await fi.nth(i).setInputFiles(fp).catch(() => {}); } } catch (e) {} };
+      const DUP = /already an application for this (passport|email)|already exists/i;
       const result: any = { alreadyExists: false, submitted: false, programMissing: false };
-      for (let step = 0; step < 14; step++) {
-        await page.waitForTimeout(1500);
-        if (DUP.test(await bodyText())) { result.alreadyExists = true; break; }
-        await pickRadio();
-        await fill("input[name=\"Student_First_Name\"]", profile.firstName);
-        await fill("input[name=\"Student_Last_Name\"]", profile.lastName);
-        await fill("input[name=\"First_Name\"]", profile.firstName);
-        await fill("input[name=\"Last_Name\"]", profile.lastName);
-        await fill("input[name=\"Student_Passport_Number\"]", profile.passportNumber);
-        await fill("input[name*=Passport i]", profile.passportNumber);
-        await fill("input[placeholder=\"you@example.com\"]", profile.email);
-        await fill("input[name=\"Address\"]", profile.address);
-        await fill("input[name=\"City\"]", profile.address);
-        await fill("input[name=\"MobilePhone_Text\"]", profile.phone);
-        await fill("input[type=date],input[name*=birth i]", profile.dateOfBirth);
-        try { const kw = page.getByPlaceholder(/search a keyword/i).first(); if (await kw.count()) { await kw.fill(profile.programName || "").catch(() => {}); await page.waitForTimeout(1800); } } catch (e) {}
-        try { const sa = page.getByRole("button", { name: /show all/i }).first(); if (await sa.count()) { await sa.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(1500); } } catch (e) {}
-        try { const sp = page.getByRole("button", { name: /select_program|^\s*select\s*$/i }).first(); if (await sp.count()) { await sp.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(1500); } } catch (e) {}
-        await pickCombos();
-        await uploadDocs();
-        try { const sels = page.locator("select"); const ns = await sels.count(); for (let i = 0; i < ns; i++) await sels.nth(i).selectOption({ index: 1 }).catch(() => {}); } catch (e) {}
-        try { const txs = page.locator("input[type=text],input:not([type]),textarea"); const nt = await txs.count(); for (let i = 0; i < Math.min(nt, 25); i++) { const el = txs.nth(i); if (!(await el.isVisible().catch(() => false))) continue; if (await el.inputValue().catch(() => "x")) continue; await el.fill("Test").catch(() => {}); await el.press("Tab").catch(() => {}); } } catch (e) {}
-        const submitBtn = page.getByRole("button", { name: /submit|complete|tamamla|gonder|finish|onayla/i }).first();
-        const nextBtn = page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).first();
-        const hasSubmit = await submitBtn.count();
-        const hasNext = await nextBtn.count();
-        if (hasSubmit && !hasNext) {
-          if (dryRun) { logger.warn("[salesforce:" + cfg.key + "] DRY: final submit reached, NOT clicking"); result.dryReachedFinal = true; break; }
-          await submitBtn.click({ timeout: 8000 }).catch(() => {});
-          await page.waitForTimeout(6000);
-          if (DUP.test(await bodyText())) result.alreadyExists = true; else result.submitted = true;
-          break;
+      const bodyText = async (): Promise<string> => { try { return (await page.evaluate("(() => document.body ? document.body.innerText : '')()")) as string; } catch (e) { return ""; } };
+      const has = async (sel: string): Promise<boolean> => { try { return (await page.locator(sel).count()) > 0; } catch (e) { return false; } };
+      const heading = async (): Promise<string> => { try { return (await page.evaluate("(() => { var a=[]; document.querySelectorAll('h1,h2,legend,.slds-text-heading_medium').forEach(function(h){ if(h.offsetParent!==null) a.push((h.innerText||'').slice(0,24)); }); return a.join('|'); })()")) as string; } catch (e) { return Math.random().toString(); } };
+      const typeInto = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const loc = page.locator(sel); const cnt = await loc.count(); let t: any = null; for (let i = 0; i < cnt; i++) { if (await loc.nth(i).isVisible().catch(() => false)) { t = loc.nth(i); break; } } if (!t) return; await t.click().catch(() => {}); await t.fill("").catch(() => {}); await t.pressSequentially(String(v), { delay: 45 }).catch(() => {}); await t.press("Tab").catch(() => {}); } catch (e) {} };
+      const fill = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const l = page.locator(sel).first(); if ((await l.count()) && (await l.isVisible().catch(() => false))) { await l.fill(String(v)).catch(() => {}); await l.press("Tab").catch(() => {}); } } catch (e) {} };
+      const selByName = async (name: string, label?: string) => { try { const s = page.locator("select[name=\"" + name + "\"]").first(); if (!(await s.count())) return; if (label) { try { await s.selectOption({ label }); } catch (e) { await s.selectOption({ index: 1 }).catch(() => {}); } } else { await s.selectOption({ index: 1 }).catch(() => {}); } } catch (e) {} };
+      const clickNext = async () => { const n = page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).first(); if (await n.count()) { await n.click({ timeout: 6000 }).catch(() => {}); return true; } return false; };
+      const dobm = String(profile.dateOfBirth || "").match(/(\d{4})-(\d{2})-(\d{2})/);
+      const dobStr = dobm ? (dobm[2] + "/" + dobm[3] + "/" + dobm[1]) : "01/01/2000";
+      for (let step = 0; step < 12; step++) {
+        await page.waitForTimeout(2500);
+        const txt = await bodyText();
+        if (DUP.test(txt)) { result.alreadyExists = true; break; }
+        const before = await heading();
+        if (await has("input[name=\"Student_First_Name\"]")) {
+          await typeInto("input[name=\"Student_First_Name\"]", profile.firstName);
+          await typeInto("input[name=\"Student_Last_Name\"]", profile.lastName);
+          await typeInto("input[name=\"Student_Passport_Number\"]", profile.passportNumber);
+          await typeInto("input[placeholder=\"you@example.com\"]", profile.email);
+          await clickNext();
+        } else if (/available programs/i.test(txt)) {
+          if (profile.programName) { try { const kw = page.getByPlaceholder(/search program name|keyword/i).first(); if (await kw.count()) { await kw.fill(profile.programName).catch(() => {}); await page.waitForTimeout(1800); } } catch (e) {} }
+          const sb = page.getByRole("button", { name: /^\s*select\s*$/i }).first();
+          if (await sb.count()) { await sb.click({ timeout: 4000 }).catch(() => {}); await page.waitForTimeout(2000); } else { result.programMissing = true; break; }
+          await clickNext();
+        } else if (await has("select[name=\"Gender\"]")) {
+          await fill("input[name=\"First_Name\"]", profile.firstName);
+          await fill("input[name=\"Last_Name\"]", profile.lastName);
+          await selByName("Gender", /female/i.test(profile.gender || "") ? "Female" : "Male");
+          await selByName("Citizenship", profile.nationality);
+          await selByName("Country_of_Residence", profile.nationality);
+          await selByName("Where_did_you_hear_us", "University Website");
+          try { const d = page.locator("input[name*=Date_of_Birth i],input[name*=birth i]").first(); if (await d.count()) { await d.click().catch(() => {}); await d.fill("").catch(() => {}); await d.type(dobStr, { delay: 60 }).catch(() => {}); await d.press("Tab").catch(() => {}); } } catch (e) {}
+          try { const rs = page.locator("input[type=radio]"); const rn = await rs.count(); for (let i = 0; i < rn; i++) { const v = await rs.nth(i).getAttribute("value").catch(() => ""); if (/^No/i.test(v || "")) await rs.nth(i).check({ force: true }).catch(() => {}); } } catch (e) {}
+          try { const cb = page.locator("button[role=combobox],[role=combobox]").first(); if (await cb.count()) { await cb.click({ timeout: 2500 }).catch(() => {}); await page.waitForTimeout(800); const opts = page.locator("[role=option]"); const oc = await opts.count(); for (let i = 0; i < oc; i++) { const ot = (await opts.nth(i).innerText().catch(() => "")) || ""; if (!/none/i.test(ot)) { await opts.nth(i).click({ timeout: 2000 }).catch(() => {}); break; } } } } catch (e) {}
+          await fill("input[name=\"MobilePhone_Text\"]", profile.phone);
+          await fill("input[name=\"Address\"]", profile.address);
+          await fill("input[name=\"City\"]", profile.address);
+          await clickNext();
+        } else if (await has("select[name=\"Country_of_Secondary_School\"]") || /secondary school/i.test(txt)) {
+          await fill("input[name=\"Name_of_Secondary_School\"]", profile.schoolName || "High School");
+          await selByName("Country_of_Secondary_School", profile.nationality);
+          await selByName("Choose_the_education_system_of_the_high_school_you_have_graduated_from");
+          await fill("input[name=\"GPA_of_Secondary_School\"]", String(profile.gpa || "3"));
+          await clickNext();
+        } else if (await has("input[type=file]")) {
+          try { const fi = page.locator("input[type=file]"); const order = [files.diploma, files.transcript, files.passport, files.photo].filter(Boolean) as string[]; const n = await fi.count(); for (let i = 0; i < Math.min(n, order.length); i++) { await fi.nth(i).setInputFiles(order[i]).catch(() => {}); await page.waitForTimeout(1800); } } catch (e) {}
+          await clickNext();
+        } else {
+          const sub = page.getByRole("button", { name: /submit|complete|tamamla|gönder|finish|onayla|apply/i }).first();
+          const hn = await page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).count();
+          if ((await sub.count()) && !hn) {
+            if (dryRun) { result.dryReachedFinal = true; break; }
+            await sub.click({ timeout: 8000 }).catch(() => {});
+            await page.waitForTimeout(6000);
+            if (DUP.test(await bodyText())) result.alreadyExists = true; else result.submitted = true;
+            break;
+          }
+          try { const r = page.locator("input[type=radio]"); if (await r.count()) { const id = await r.first().getAttribute("id").catch(() => null); if (id) { const lb = page.locator("label[for=\"" + id + "\"]").first(); if (await lb.count()) await lb.click({ timeout: 3000 }).catch(() => {}); } await r.first().check({ force: true }).catch(() => {}); } } catch (e) {}
+          await clickNext();
         }
-        if (!hasNext) { result.stoppedStep = step; break; }
-        const before = await sig();
-        await nextBtn.click({ timeout: 6000 }).catch(() => {});
         let moved = false;
-        for (let t = 0; t < 12; t++) { await page.waitForTimeout(1000); if ((await sig()) !== before) { moved = true; break; } }
-        if (!moved) { result.blockedStep = step; try { result.blockBody = (await bodyText()).replace(/\s+/g, " ").slice(0, 300); } catch (e) {} break; }
+        for (let t = 0; t < 10; t++) { await page.waitForTimeout(1000); if ((await heading()) !== before) { moved = true; break; } }
+        if (!moved) { result.stuckStep = step; result.stuckBody = (await bodyText()).replace(/\s+/g, " ").slice(0, 200); if (step > 0) break; }
       }
-      logger.info("[salesforce:" + cfg.key + "] submit result " + JSON.stringify(result));
+      logger.info("[salesforce:" + cfg.key + "] submit " + JSON.stringify(result));
       return result;
     },
   };
