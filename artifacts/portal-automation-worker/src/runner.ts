@@ -13,8 +13,8 @@
 
 import fs from "node:fs/promises";
 import {
-  adapterByKey,
-  adapterForUniversity,
+  resolveAdapterByKey,
+  resolveAdapterForUniversity,
   setCredsOverride,
   clearCredsOverride,
 } from "@workspace/portal-adapters";
@@ -47,10 +47,10 @@ export async function runSubmission(
   files: SubmitFiles,
   tempDir: string,
 ): Promise<RunResult> {
-  // ----- 1. Resolve adapter -----------------------------------------------
+  // ----- 1. Resolve adapter (code adapters + DB declarative adapters) ------
   const adapter =
-    adapterByKey(submission.universityKey) ??
-    adapterForUniversity(submission.universityName);
+    (await resolveAdapterByKey(submission.universityKey)) ??
+    (await resolveAdapterForUniversity(submission.universityName));
 
   if (!adapter) {
     await cleanup(tempDir);
