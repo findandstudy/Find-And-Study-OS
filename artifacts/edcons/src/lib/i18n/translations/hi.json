@@ -931,7 +931,9 @@
       "web_form": "वेब फ़ॉर्म",
       "email": "ईमेल",
       "sms": "SMS",
-      "telegram": "Telegram"
+      "telegram": "Telegram",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
     },
     "empty": "कोई वार्तालाप नहीं",
     "select": "एक वार्तालाप चुनें",

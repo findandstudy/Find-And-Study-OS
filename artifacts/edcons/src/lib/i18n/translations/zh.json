@@ -931,7 +931,9 @@
       "web_form": "网页表单",
       "email": "邮件",
       "sms": "SMS",
-      "telegram": "Telegram"
+      "telegram": "Telegram",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
     },
     "empty": "暂无会话",
     "select": "选择一个会话",

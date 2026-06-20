@@ -931,7 +931,9 @@
       "web_form": "فرم وب",
       "email": "ایمیل",
       "sms": "SMS",
-      "telegram": "Telegram"
+      "telegram": "Telegram",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
     },
     "empty": "گفتگویی وجود ندارد",
     "select": "یک گفتگو را انتخاب کنید",

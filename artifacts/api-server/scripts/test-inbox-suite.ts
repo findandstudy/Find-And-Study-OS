@@ -647,6 +647,185 @@ async function testWhatsAppRouteRejectsBadSignature(
   return { name: "(d) WhatsApp webhook route signature gate", ok, details };
 }
 
+async function testMetaRoute(url: string): Promise<Section> {
+  const details: string[] = [];
+  let ok = true;
+  const secret = `meta_app_secret_${RUN_ID}`;
+  const verifyToken = `meta_verify_${RUN_ID}`;
+  const psid = `psid_${RUN_ID}`;
+  const igsid = `igsid_${RUN_ID}`;
+  const createdConvIds: number[] = [];
+
+  const sign = (body: string) =>
+    "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("hex");
+
+  await withIntegration(
+    "facebook_messenger",
+    "Facebook Messenger",
+    "communication",
+    { pageId: `page_${RUN_ID}`, appSecret: secret, webhookVerifyToken: verifyToken },
+    async () => {
+      await withIntegration(
+        "instagram",
+        "Instagram",
+        "communication",
+        { igBusinessAccountId: `ig_${RUN_ID}`, appSecret: secret, webhookVerifyToken: verifyToken },
+        async () => {
+          // (1) GET verify handshake — correct token echoes the challenge.
+          const goodVerify = await fetch(
+            `${url}/api/webhooks/meta?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(verifyToken)}&hub.challenge=meta_challenge_123`,
+          );
+          const challengeBody = await goodVerify.text();
+          ok = assert(goodVerify.status === 200 && challengeBody === "meta_challenge_123",
+            `GET verify with correct token returns challenge (got ${goodVerify.status}, body="${challengeBody}")`, details) && ok;
+
+          // (2) GET verify handshake — wrong token is rejected.
+          const badVerify = await fetch(
+            `${url}/api/webhooks/meta?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=x`,
+          );
+          ok = assert(badVerify.status === 403,
+            `GET verify with wrong token returns 403 (got ${badVerify.status})`, details) && ok;
+
+          // (3) POST without signature -> 401.
+          const noSigBody = JSON.stringify({ object: "page", entry: [] });
+          const noSig = await fetch(`${url}/api/webhooks/meta`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: noSigBody,
+          });
+          ok = assert(noSig.status === 401,
+            `POST without signature returns 401 (got ${noSig.status})`, details) && ok;
+
+          // (4) POST with bad signature -> 401.
+          const badSig = await fetch(`${url}/api/webhooks/meta`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Hub-Signature-256": "sha256=" + "0".repeat(64) },
+            body: noSigBody,
+          });
+          ok = assert(badSig.status === 401,
+            `POST with bad signature returns 401 (got ${badSig.status})`, details) && ok;
+
+          // (5) POST valid sig, empty entries -> 200 processed=0.
+          const emptyOk = await fetch(`${url}/api/webhooks/meta`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Hub-Signature-256": sign(noSigBody) },
+            body: noSigBody,
+          });
+          ok = assert(emptyOk.status === 200,
+            `POST valid sig with empty entries returns 200 (got ${emptyOk.status})`, details) && ok;
+
+          // (6) Messenger inbound creates a conversation under "messenger".
+          const msgrMid = `m_mid_${RUN_ID}`;
+          const messengerBody = JSON.stringify({
+            object: "page",
+            entry: [{
+              id: `page_${RUN_ID}`,
+              time: Date.now(),
+              messaging: [{
+                sender: { id: psid },
+                recipient: { id: `page_${RUN_ID}` },
+                timestamp: Date.now(),
+                message: { mid: msgrMid, text: "hello from messenger" },
+              }],
+            }],
+          });
+          const msgrRes = await fetch(`${url}/api/webhooks/meta`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Hub-Signature-256": sign(messengerBody) },
+            body: messengerBody,
+          });
+          const msgrJson = (await msgrRes.json().catch(() => ({}))) as { processed?: number };
+          ok = assert(msgrRes.status === 200 && msgrJson.processed === 1,
+            `Messenger inbound processed=1 (got ${msgrRes.status}, processed=${msgrJson.processed})`, details) && ok;
+
+          // Verify the message landed under the messenger channel.
+          const [msgrMsg] = await db.select().from(messagesTable)
+            .where(and(eq(messagesTable.channel, "messenger"), eq(messagesTable.externalMessageId, msgrMid)));
+          ok = assert(Boolean(msgrMsg),
+            `Messenger message persisted under channel=messenger`, details) && ok;
+          if (msgrMsg) createdConvIds.push(msgrMsg.conversationId);
+
+          // (7) Re-post the same Messenger message id -> idempotent (no new row).
+          await fetch(`${url}/api/webhooks/meta`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Hub-Signature-256": sign(messengerBody) },
+            body: messengerBody,
+          });
+          const msgrRows = await db.select().from(messagesTable)
+            .where(and(eq(messagesTable.channel, "messenger"), eq(messagesTable.externalMessageId, msgrMid)));
+          ok = assert(msgrRows.length === 1,
+            `Duplicate Messenger delivery does not create a second row (count=${msgrRows.length})`, details) && ok;
+
+          // (8) Instagram inbound creates a conversation under "instagram".
+          const igMid = `ig_mid_${RUN_ID}`;
+          const instagramBody = JSON.stringify({
+            object: "instagram",
+            entry: [{
+              id: `ig_${RUN_ID}`,
+              time: Date.now(),
+              messaging: [{
+                sender: { id: igsid },
+                recipient: { id: `ig_${RUN_ID}` },
+                timestamp: Date.now(),
+                message: { mid: igMid, text: "hi from instagram" },
+              }],
+            }],
+          });
+          const igRes = await fetch(`${url}/api/webhooks/meta`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Hub-Signature-256": sign(instagramBody) },
+            body: instagramBody,
+          });
+          const igJson = (await igRes.json().catch(() => ({}))) as { processed?: number };
+          ok = assert(igRes.status === 200 && igJson.processed === 1,
+            `Instagram inbound processed=1 (got ${igRes.status}, processed=${igJson.processed})`, details) && ok;
+          const [igMsg] = await db.select().from(messagesTable)
+            .where(and(eq(messagesTable.channel, "instagram"), eq(messagesTable.externalMessageId, igMid)));
+          ok = assert(Boolean(igMsg),
+            `Instagram message persisted under channel=instagram`, details) && ok;
+          if (igMsg) createdConvIds.push(igMsg.conversationId);
+
+          // (9) Unknown object type is acknowledged and skipped.
+          const unknownBody = JSON.stringify({ object: "whatsapp_business_account", entry: [] });
+          const unknownRes = await fetch(`${url}/api/webhooks/meta`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Hub-Signature-256": sign(unknownBody) },
+            body: unknownBody,
+          });
+          ok = assert(unknownRes.status === 200,
+            `Unknown object type returns 200 and skips (got ${unknownRes.status})`, details) && ok;
+
+          // Cleanup rows created by this test.
+          try {
+            const convIds = createdConvIds.filter((n) => n > 0);
+            if (convIds.length > 0) {
+              for (const t of ["inbox.new_message", "inbox.unmatched"] as const) {
+                await db.delete(notificationsTable).where(and(
+                  eq(notificationsTable.type, t),
+                  inArray(sql`(${notificationsTable.data}->>'conversationId')::int`, convIds),
+                ));
+              }
+              await db.delete(messagesTable).where(inArray(messagesTable.conversationId, convIds));
+              await db.delete(conversationsTable).where(inArray(conversationsTable.id, convIds));
+            }
+            await db.delete(externalContactsTable).where(and(
+              eq(externalContactsTable.channel, "messenger"), eq(externalContactsTable.externalId, psid)));
+            await db.delete(externalContactsTable).where(and(
+              eq(externalContactsTable.channel, "instagram"), eq(externalContactsTable.externalId, igsid)));
+            await db.delete(channelAccountsTable).where(and(
+              eq(channelAccountsTable.channel, "messenger"), eq(channelAccountsTable.externalAccountId, `page_${RUN_ID}`)));
+            await db.delete(channelAccountsTable).where(and(
+              eq(channelAccountsTable.channel, "instagram"), eq(channelAccountsTable.externalAccountId, `ig_${RUN_ID}`)));
+          } catch (cleanupErr) {
+            details.push(`WARN cleanup error (non-fatal): ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`);
+          }
+        },
+      );
+    },
+  );
+  return { name: "(f) Meta webhook route (Messenger + Instagram)", ok, details };
+}
+
 async function testWebFormRouteRejectsBadToken(
   url: string,
 ): Promise<Section> {
@@ -859,6 +1038,7 @@ async function main(): Promise<void> {
   const server = await startRouteServer();
   try {
     sections.push(await testWhatsAppRouteRejectsBadSignature(server.url));
+    sections.push(await testMetaRoute(server.url));
     sections.push(await testWebFormRouteRejectsBadToken(server.url));
   } finally {
     await server.close();

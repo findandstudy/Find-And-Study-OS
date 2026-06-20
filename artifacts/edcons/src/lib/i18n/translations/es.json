@@ -931,7 +931,9 @@
       "web_form": "Formulario web",
       "email": "Correo electrónico",
       "sms": "SMS",
-      "telegram": "Telegram"
+      "telegram": "Telegram",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
     },
     "empty": "No hay conversaciones",
     "select": "Selecciona una conversación",

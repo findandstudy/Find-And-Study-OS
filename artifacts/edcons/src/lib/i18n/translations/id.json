@@ -931,7 +931,9 @@
       "web_form": "Formulir Web",
       "email": "Email",
       "sms": "SMS",
-      "telegram": "Telegram"
+      "telegram": "Telegram",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
     },
     "empty": "Tidak ada percakapan",
     "select": "Pilih percakapan",

@@ -931,7 +931,9 @@
       "web_form": "Web Formu",
       "email": "E-posta",
       "sms": "SMS",
-      "telegram": "Telegram"
+      "telegram": "Telegram",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
     },
     "empty": "Görüşme yok",
     "select": "Bir görüşme seçin",

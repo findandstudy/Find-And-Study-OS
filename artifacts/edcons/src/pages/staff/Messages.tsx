@@ -39,7 +39,8 @@ import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
-  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot
+  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
+  Facebook, Instagram
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -94,6 +95,8 @@ const channelIcon: Record<string, any> = {
   email: Mail,
   sms: Smartphone,
   web_form: FormInput,
+  messenger: Facebook,
+  instagram: Instagram,
 };
 
 const channelColor: Record<string, string> = {
@@ -103,6 +106,8 @@ const channelColor: Record<string, string> = {
   email: "bg-purple-500/10 text-purple-600",
   sms: "bg-amber-500/10 text-amber-600",
   web_form: "bg-indigo-500/10 text-indigo-600",
+  messenger: "bg-blue-600/10 text-blue-700",
+  instagram: "bg-pink-500/10 text-pink-600",
 };
 
 interface InboxConversation {
@@ -683,7 +688,7 @@ function InboxTab() {
     }
   }
 
-  const channelOptions = ["all", "whatsapp", "web_form", "email", "sms", "telegram"];
+  const channelOptions = ["all", "whatsapp", "messenger", "instagram", "web_form", "email", "sms", "telegram"];
   const tabs: Array<{ key: typeof tab; label: string; icon: any }> = [
     { key: "mine", label: t("messagesPage.mine"), icon: UserCheck },
     { key: "unassigned", label: t("messagesPage.unassigned"), icon: InboxIcon },
@@ -754,6 +759,8 @@ function InboxTab() {
                         className={cn(
                           "w-1.5 h-1.5 rounded-full shrink-0",
                           channel === "whatsapp" && "bg-green-500",
+                          channel === "messenger" && "bg-blue-600",
+                          channel === "instagram" && "bg-pink-500",
                           channel === "web_form" && "bg-indigo-500",
                           channel === "email" && "bg-purple-500",
                           channel === "sms" && "bg-amber-500",
@@ -780,6 +787,8 @@ function InboxTab() {
                         className={cn(
                           "w-4 h-4 me-2",
                           ch === "whatsapp" && "text-green-600",
+                          ch === "messenger" && "text-blue-700",
+                          ch === "instagram" && "text-pink-600",
                           ch === "web_form" && "text-indigo-600",
                           ch === "email" && "text-purple-600",
                           ch === "sms" && "text-amber-600",

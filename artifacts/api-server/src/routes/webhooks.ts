@@ -7,6 +7,10 @@ import { processInboundMessage } from "../lib/inbox/processInbound";
 import { maybeAutoReply } from "../lib/inbox/botAutoReply";
 import { verifyWhatsAppSignature, parseWhatsAppWebhook, type WhatsAppConfig } from "../lib/inbox/channels/whatsapp";
 import { verifyWebFormSignature, parseWebFormPayload } from "../lib/inbox/channels/webForm";
+import { verifyMetaSignature, hasMetaChanges } from "../lib/inbox/channels/meta-shared";
+import { parseMessengerWebhook, type MessengerConfig } from "../lib/inbox/channels/messenger";
+import { parseInstagramWebhook, type InstagramConfig } from "../lib/inbox/channels/instagram";
+import { CHANNEL_MESSENGER, CHANNEL_INSTAGRAM } from "../lib/inbox/channels/constants";
 import { decryptConfig } from "../lib/encryption";
 import { logAudit } from "../lib/auth";
 import crypto from "crypto";
@@ -88,6 +92,18 @@ async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
   const [row] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "whatsapp"));
   if (!row || !row.isEnabled) return null;
   return (decryptConfig(row.config as Record<string, any>) as WhatsAppConfig) || {};
+}
+
+async function getMessengerConfig(): Promise<MessengerConfig | null> {
+  const [row] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "facebook_messenger"));
+  if (!row || !row.isEnabled) return null;
+  return (decryptConfig(row.config as Record<string, any>) as MessengerConfig) || {};
+}
+
+async function getInstagramConfig(): Promise<InstagramConfig | null> {
+  const [row] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "instagram"));
+  if (!row || !row.isEnabled) return null;
+  return (decryptConfig(row.config as Record<string, any>) as InstagramConfig) || {};
 }
 
 async function ensureChannelAccount(channel: string, displayName: string, externalAccountId?: string): Promise<number | null> {
@@ -218,6 +234,148 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
       console.error("[WEBHOOK] WA auto-reply error:", err);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Unified Meta webhook (Facebook Messenger + Instagram DMs)
+//
+// Meta delivers Messenger and Instagram events to ONE callback URL and signs
+// every request with the (single) Meta App secret. The `object` field on the
+// payload tells the channels apart: "page" → Messenger, "instagram" → IG DMs.
+// WhatsApp keeps its own /webhooks/whatsapp route untouched.
+// ---------------------------------------------------------------------------
+
+router.get("/webhooks/meta", webhookLimiter, async (req: Request, res: Response): Promise<void> => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+  const [messengerCfg, instagramCfg] = await Promise.all([getMessengerConfig(), getInstagramConfig()]);
+  const expectedTokens = [messengerCfg?.webhookVerifyToken, instagramCfg?.webhookVerifyToken]
+    .filter((t): t is string => Boolean(t));
+  const matches = typeof token === "string" && expectedTokens.some((t) => t === token);
+  if (mode === "subscribe" && matches && challenge) {
+    res.status(200).send(String(challenge));
+    return;
+  }
+  logAudit(null, "webhook_auth_failed", "webhook:meta:verify", undefined, {
+    mode: String(mode || ""),
+    hasToken: Boolean(token),
+    hasExpected: expectedTokens.length > 0,
+  }, req.ip);
+  res.status(403).send("Forbidden");
+});
+
+router.post("/webhooks/meta", webhookLimiter, rawJson, async (req: Request, res: Response): Promise<void> => {
+  const [messengerCfg, instagramCfg] = await Promise.all([getMessengerConfig(), getInstagramConfig()]);
+  if (!messengerCfg && !instagramCfg) {
+    res.status(200).json({ ok: true, ignored: "integration disabled" });
+    return;
+  }
+
+  const sig = req.headers["x-hub-signature-256"] as string | undefined;
+  const raw = req.body as Buffer;
+  // Both Messenger and Instagram are signed with the same Meta App secret, but
+  // each integration stores it independently. Accept the request if the
+  // signature validates against EITHER configured secret. verifyMetaSignature
+  // returns false when the secret OR the header is missing, so unsigned
+  // payloads are always rejected.
+  const secrets = [messengerCfg?.appSecret, instagramCfg?.appSecret].filter((s): s is string => Boolean(s));
+  const verified = secrets.some((secret) => verifyMetaSignature(raw, sig, secret));
+  if (!verified) {
+    logAudit(null, "webhook_auth_failed", "webhook:meta", undefined, {
+      reason: "invalid_or_missing_signature",
+      hasSig: Boolean(sig),
+      hasSecret: secrets.length > 0,
+    }, req.ip);
+    console.warn("[WEBHOOK] Meta signature verification failed", {
+      hasSig: Boolean(sig),
+      hasSecret: secrets.length > 0,
+    });
+    res.status(401).json({ error: "Invalid or missing signature" });
+    return;
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw.toString("utf8"));
+  } catch {
+    res.status(400).json({ error: "Invalid JSON" });
+    return;
+  }
+
+  const object = (payload && typeof payload === "object")
+    ? (payload as { object?: unknown }).object
+    : undefined;
+
+  let channel: string;
+  let messages;
+  let externalAccountId: string | undefined;
+  let displayName: string;
+
+  if (object === "page") {
+    if (!messengerCfg) {
+      res.status(200).json({ ok: true, ignored: "messenger disabled" });
+      return;
+    }
+    if (hasMetaChanges(payload)) {
+      console.log("[WEBHOOK] Meta page change event (feed/comment) — skipped (handled in comments phase)");
+    }
+    messages = parseMessengerWebhook(payload);
+    channel = CHANNEL_MESSENGER;
+    externalAccountId = messengerCfg.pageId;
+    displayName = "Facebook Messenger";
+  } else if (object === "instagram") {
+    if (!instagramCfg) {
+      res.status(200).json({ ok: true, ignored: "instagram disabled" });
+      return;
+    }
+    if (hasMetaChanges(payload)) {
+      console.log("[WEBHOOK] Meta instagram change event (comment/mention) — skipped (handled in comments phase)");
+    }
+    messages = parseInstagramWebhook(payload);
+    channel = CHANNEL_INSTAGRAM;
+    externalAccountId = instagramCfg.igBusinessAccountId || instagramCfg.pageId;
+    displayName = "Instagram";
+  } else {
+    res.status(200).json({ ok: true, ignored: `unknown object: ${String(object)}` });
+    return;
+  }
+
+  if (messages.length === 0) {
+    res.status(200).json({ ok: true, processed: 0 });
+    return;
+  }
+
+  const channelAccountId = await ensureChannelAccount(channel, displayName, externalAccountId);
+
+  let processed = 0;
+  for (const m of messages) {
+    try {
+      await processInboundMessage({
+        channel,
+        channelAccountId,
+        contact: {
+          externalId: m.externalUserId,
+          displayName: m.displayName,
+        },
+        message: {
+          externalMessageId: m.externalMessageId,
+          text: m.text,
+          // Each user has one DM thread per page/account; key the thread by
+          // the sender's page-/IG-scoped id.
+          externalThreadId: m.externalUserId,
+          receivedAt: m.timestamp,
+          metadata: { raw: m.raw, attachments: m.attachments },
+        },
+      });
+      processed++;
+    } catch (err) {
+      console.error("[WEBHOOK] Meta process error:", err);
+    }
+  }
+  res.status(200).json({ ok: true, processed });
+
+  // Outbound replies / AI bot routing for Meta channels arrive in Faz 3.
 });
 
 function timingSafeEq(a: string | undefined, b: string | undefined): boolean {

@@ -931,7 +931,9 @@
       "web_form": "Веб-форма",
       "email": "Email",
       "sms": "SMS",
-      "telegram": "Telegram"
+      "telegram": "Telegram",
+      "messenger": "Messenger",
+      "instagram": "Instagram"
     },
     "empty": "Нет диалогов",
     "select": "Выберите диалог",
