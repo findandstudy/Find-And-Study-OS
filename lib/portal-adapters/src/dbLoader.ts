@@ -39,7 +39,7 @@ const PROFILE_FIELDS = [
   "email", "passportNumber", "firstName", "lastName", "dateOfBirth", "gender",
   "fatherName", "motherName", "nationality", "address", "phone", "level",
   "programName", "programId", "universityName", "schoolName", "gpa",
-  "graduationYear", "languageScore",
+  "graduationYear", "languageScore", "passportIssueDate", "passportExpiryDate",
 ] as const;
 
 const FILE_FIELDS = ["photo", "passport", "transcript", "diploma"] as const;
@@ -163,6 +163,33 @@ const selectStep = z.object({
 const clickStep = z.object({
   type: z.literal("click"),
   selector: z.string().min(1),
+  final: z.boolean().optional(),
+});
+
+const checkStep = z.object({
+  type: z.literal("check"),
+  selector: z.string().min(1),
+  value: z.boolean().optional(),
+});
+
+const radioStep = z.object({
+  type: z.literal("radio"),
+  field: profileFieldSchema,
+  map: z.record(z.string().min(1), z.string().min(1)),
+  fallback: z.string().min(1).optional(),
+});
+
+const selectLabelStep = z.object({
+  type: z.literal("selectLabel"),
+  selector: z.string().min(1),
+  field: profileFieldSchema,
+});
+
+const phoneStep = z.object({
+  type: z.literal("phone"),
+  selector: z.string().min(1),
+  field: profileFieldSchema,
+  hiddenSelector: z.string().min(1).optional(),
 });
 
 const uploadStep = z.object({
@@ -188,6 +215,10 @@ const stepSchema = z.union([
   uploadStep,
   waitStep,
   screenshotStep,
+  checkStep,
+  radioStep,
+  selectLabelStep,
+  phoneStep,
 ]);
 
 const credentialsSchema = z.object({

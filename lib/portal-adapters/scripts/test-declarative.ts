@@ -22,7 +22,7 @@ import {
   type DeclarativeConfig,
   type MinimalPage,
 } from "../src/declarativeAdapter.js";
-import type { SubmitProfile, SubmitFiles } from "../src/types.js";
+import type { SubmitProfile, SubmitFiles, AdapterSession } from "../src/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -104,6 +104,8 @@ function makeMockPage(overrides?: Partial<MinimalPage> & { _html?: string }): {
     waitForSelector:  async (...args) => { calls.push({ method: "waitForSelector",  args }); },
     content:          async ()        => html,
     $:                async (...args) => { calls.push({ method: "$",               args }); return null; },
+    evaluate:         async (...args) => { calls.push({ method: "evaluate",         args }); return undefined; },
+    isChecked:        async (...args) => { calls.push({ method: "isChecked",        args }); return false; },
     ...overrides,
   };
   return { page, calls };
@@ -230,6 +232,182 @@ test("TD2j: runSteps() executes all steps in order", async () => {
   assert.equal(calls[9].method, "waitForSelector", "step 10: wait");
   assert.equal(calls[10].method, "click",          "step 11: click");
   // step 12: screenshot → no call (skipped in count)
+});
+
+// ---------------------------------------------------------------------------
+// TD3: new step types — check / radio / selectLabel / phone
+// ---------------------------------------------------------------------------
+
+test("TD3a: 'check' clicks when checkbox state differs (unchecked → want true)", async () => {
+  const { page, calls } = makeMockPage({ isChecked: async () => false });
+  await executeStep(page, { type: "check", selector: "#kvkk" }, TEST_PROFILE, TEST_FILES);
+  const clicks = calls.filter((c) => c.method === "click");
+  assert.equal(clicks.length, 1, "click called once on mismatch");
+  assert.equal(clicks[0].args[0], "#kvkk", "selector passed to click");
+});
+
+test("TD3b: 'check' does NOT click when already checked (checked → want true)", async () => {
+  const { page, calls } = makeMockPage({ isChecked: async () => true });
+  await executeStep(page, { type: "check", selector: "#kvkk" }, TEST_PROFILE, TEST_FILES);
+  assert.equal(calls.filter((c) => c.method === "click").length, 0, "no click when state matches");
+});
+
+test("TD3c: 'check' with value:false clicks when currently checked", async () => {
+  const { page, calls } = makeMockPage({ isChecked: async () => true });
+  await executeStep(page, { type: "check", selector: "#opt", value: false }, TEST_PROFILE, TEST_FILES);
+  const clicks = calls.filter((c) => c.method === "click");
+  assert.equal(clicks.length, 1, "click called to uncheck");
+  assert.equal(clicks[0].args[0], "#opt", "selector passed");
+});
+
+test("TD3d: 'radio' clicks selector mapped from profile field", async () => {
+  const { page, calls } = makeMockPage();
+  await executeStep(
+    page,
+    { type: "radio", field: "gender", map: { female: "#f", male: "#m" } },
+    TEST_PROFILE, // gender = "male"
+    TEST_FILES,
+  );
+  const clicks = calls.filter((c) => c.method === "click");
+  assert.equal(clicks.length, 1, "one click");
+  assert.equal(clicks[0].args[0], "#m", "clicked the mapped male radio");
+});
+
+test("TD3e: 'radio' clicks fallback when no map key matches", async () => {
+  const { page, calls } = makeMockPage();
+  await executeStep(
+    page,
+    { type: "radio", field: "gender", map: { other: "#o" }, fallback: "#fb" },
+    TEST_PROFILE, // gender = "male" — no match
+    TEST_FILES,
+  );
+  const clicks = calls.filter((c) => c.method === "click");
+  assert.equal(clicks.length, 1, "one click");
+  assert.equal(clicks[0].args[0], "#fb", "clicked the fallback");
+});
+
+test("TD3f: 'radio' no click and no throw when no match and no fallback", async () => {
+  const { page, calls } = makeMockPage();
+  await executeStep(
+    page,
+    { type: "radio", field: "gender", map: { other: "#o" } },
+    TEST_PROFILE,
+    TEST_FILES,
+  );
+  assert.equal(calls.filter((c) => c.method === "click").length, 0, "no click");
+});
+
+test("TD3g: 'selectLabel' calls selectOption with { label }", async () => {
+  const { page, calls } = makeMockPage();
+  const profile: SubmitProfile = { ...TEST_PROFILE, nationality: "Afghanistan" };
+  await executeStep(page, { type: "selectLabel", selector: "#nat", field: "nationality" }, profile, TEST_FILES);
+  assert.equal(calls[0].method, "selectOption", "method is selectOption");
+  assert.equal(calls[0].args[0], "#nat", "selector passed");
+  assert.deepEqual(calls[0].args[1], { label: "Afghanistan" }, "passes { label } not value");
+});
+
+test("TD3h: 'phone' fills visible input and sets hidden via evaluate", async () => {
+  const { page, calls } = makeMockPage();
+  await executeStep(
+    page,
+    { type: "phone", selector: "#phone", field: "phone", hiddenSelector: "#phone_full" },
+    TEST_PROFILE, // phone = "+905001234567"
+    TEST_FILES,
+  );
+  const fills = calls.filter((c) => c.method === "fill");
+  assert.equal(fills.length, 1, "visible fill called");
+  assert.equal(fills[0].args[0], "#phone", "visible selector");
+  assert.equal(fills[0].args[1], "+905001234567", "visible value");
+  const evals = calls.filter((c) => c.method === "evaluate");
+  assert.equal(evals.length, 1, "evaluate called for hidden input");
+  assert.match(String(evals[0].args[0]), /#phone_full/, "evaluate targets hidden selector");
+});
+
+test("TD3i: 'phone' without hiddenSelector only fills visible input", async () => {
+  const { page, calls } = makeMockPage();
+  await executeStep(page, { type: "phone", selector: "#phone", field: "phone" }, TEST_PROFILE, TEST_FILES);
+  assert.equal(calls.filter((c) => c.method === "fill").length, 1, "one fill");
+  assert.equal(calls.filter((c) => c.method === "evaluate").length, 0, "no evaluate without hiddenSelector");
+});
+
+// ---------------------------------------------------------------------------
+// TD4: runSteps skipFinal — dry-run gate
+// ---------------------------------------------------------------------------
+
+test("TD4a: runSteps(skipFinal=true) skips click steps marked final", async () => {
+  const { page, calls } = makeMockPage();
+  const steps: typeof TEST_CONFIG.steps = [
+    { type: "fill", selector: "#a", value: "x" },
+    { type: "click", selector: "#submit", final: true },
+    { type: "fill", selector: "#b", value: "y" },
+  ];
+  await runSteps(page, steps, TEST_PROFILE, TEST_FILES, true);
+  assert.equal(calls.filter((c) => c.method === "click").length, 0, "final click skipped");
+  assert.equal(calls.filter((c) => c.method === "fill").length, 2, "non-final steps still run");
+});
+
+test("TD4b: runSteps(skipFinal=false) runs the final click step", async () => {
+  const { page, calls } = makeMockPage();
+  const steps: typeof TEST_CONFIG.steps = [
+    { type: "click", selector: "#submit", final: true },
+  ];
+  await runSteps(page, steps, TEST_PROFILE, TEST_FILES, false);
+  assert.equal(calls.filter((c) => c.method === "click").length, 1, "final click runs when not dry");
+});
+
+test("TD4c: backward compat — config of only legacy step types runs unchanged", async () => {
+  const { page, calls } = makeMockPage();
+  const steps: typeof TEST_CONFIG.steps = [
+    { type: "navigate", url: "https://example.com/apply" },
+    { type: "fill", selector: "#name", field: "firstName" },
+    { type: "click", selector: "#go" }, // no `final` — runs even with skipFinal
+  ];
+  await runSteps(page, steps, TEST_PROFILE, TEST_FILES, true);
+  assert.equal(calls.length, 3, "all legacy steps run; non-final click not skipped");
+  assert.equal(calls[2].method, "click", "click without final still executes");
+});
+
+test("TD4d: adapter.submit(doSubmit=false) skips final click and returns submitted:false", async () => {
+  const { page, calls } = makeMockPage();
+  const config: DeclarativeConfig = {
+    ...TEST_CONFIG,
+    steps: [
+      { type: "fill",  selector: "#firstName", field: "firstName" },
+      { type: "click", selector: "#submitBtn", final: true },
+    ],
+  };
+  const adapter = createDeclarativeAdapter(config);
+  const session = { page: page as unknown as AdapterSession["page"], close: async () => {} };
+
+  const result = await adapter.submit(session, TEST_PROFILE, TEST_FILES, false);
+
+  assert.equal(result.submitted, false, "dry submit returns submitted:false");
+  assert.equal(result.alreadyExists, false, "dry submit returns alreadyExists:false");
+  assert.equal(result.programMissing, false, "dry submit returns programMissing:false");
+  assert.equal(calls.filter((c) => c.method === "click").length, 0, "final click NOT fired in dry mode");
+  assert.equal(calls.filter((c) => c.method === "fill").length, 1, "non-final steps still execute in dry mode");
+});
+
+test("TD4e: adapter.submit() default fires final click and classifies result", async () => {
+  const prevDryrun = process.env.PORTAL_DRYRUN;
+  delete process.env.PORTAL_DRYRUN; // ensure the env gate does not force dry mode
+  try {
+    const { page, calls } = makeMockPage({ _html: "<html><body>application submitted</body></html>" });
+    const config: DeclarativeConfig = {
+      ...TEST_CONFIG,
+      steps: [{ type: "click", selector: "#submitBtn", final: true }],
+    };
+    const adapter = createDeclarativeAdapter(config);
+    const session = { page: page as unknown as AdapterSession["page"], close: async () => {} };
+
+    const result = await adapter.submit(session, TEST_PROFILE, TEST_FILES); // doSubmit defaults to true
+
+    assert.equal(calls.filter((c) => c.method === "click").length, 1, "final click fires when not dry");
+    assert.equal(result.submitted, true, "result classified submitted via successText");
+  } finally {
+    if (prevDryrun === undefined) delete process.env.PORTAL_DRYRUN;
+    else process.env.PORTAL_DRYRUN = prevDryrun;
+  }
 });
 
 // ---------------------------------------------------------------------------

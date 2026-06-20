@@ -65,3 +65,13 @@ To run a real submission: `UPDATE portal_submissions SET mode='real', status='qu
 ```
 
 Without these, "Bachelor of Computer Engineering (English)" vs "Bilgisayar Mühendisliği (İngilizce - Lisans - Tam Zamanlı)" scored Jaccard=0.5.
+
+---
+
+## 6. Worker typecheck fails on pre-existing topkapi `$eval` DOM errors
+
+`pnpm --filter @workspace/portal-automation-worker run typecheck` reports `Element.value/options`, `'o' is of type unknown`, and `NodeListOf must have [Symbol.iterator]` errors in `lib/portal-adapters/src/universities/topkapi/adapter.ts` (~lines 520/524/607). These are **pre-existing** (browser-context `$eval` callbacks typed under the worker tsconfig, which lacks DOM lib/downlevelIteration) and identical to HEAD — NOT regressions.
+
+**Why:** `typecheck:libs` (lib's own tsconfig) passes clean; only the worker tsconfig surfaces them. Easy to mistake for damage you just caused.
+
+**How to apply:** Before chasing topkapi typecheck errors, `diff` the file against `git show HEAD:...` — if identical, ignore. Verify your own portal-adapters work with `pnpm run typecheck:libs` + the portal-adapters unit tests, not the worker typecheck.

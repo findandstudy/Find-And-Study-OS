@@ -70,5 +70,7 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
     gpa:             data.gpa             != null ? Number(data.gpa)             : undefined,
     graduationYear:  data.graduationYear  != null ? Number(data.graduationYear)  : undefined,
     languageScore:   data.languageScore   != null ? Number(data.languageScore)   : undefined,
+    passportIssueDate:  data.passportIssueDate  != null ? String(data.passportIssueDate)  : undefined,
+    passportExpiryDate: data.passportExpiryDate != null ? String(data.passportExpiryDate) : undefined,
   };
 }

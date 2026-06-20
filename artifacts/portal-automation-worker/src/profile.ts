@@ -111,6 +111,8 @@ export async function buildStudentProfile(
     gpa:            student.gpa             != null ? Number(student.gpa)            : undefined,
     graduationYear: student.graduationYear  != null ? Number(student.graduationYear) : undefined,
     languageScore:  student.languageScore   != null ? Number(student.languageScore)  : undefined,
+    passportIssueDate:  student.passportIssueDate ?? undefined,
+    passportExpiryDate: student.passportExpiry    ?? undefined,
   });
 
   // ----- 5. Download documents to temp dir ---------------------------------

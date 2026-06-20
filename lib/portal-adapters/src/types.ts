@@ -60,6 +60,10 @@ export interface SubmitProfile {
   gpa?: number;
   graduationYear?: number;
   languageScore?: number;
+  // Passport validity dates (ISO-8601 "YYYY-MM-DD"). Optional — only portals
+  // that require them (e.g. Medipol) use these. Sourced from the CRM student record.
+  passportIssueDate?: string;
+  passportExpiryDate?: string;
 }
 
 // ---------------------------------------------------------------------------
