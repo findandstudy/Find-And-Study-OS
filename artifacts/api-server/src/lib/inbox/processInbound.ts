@@ -13,6 +13,7 @@ import { toE164 } from "./phone";
 import { dispatchNotification } from "../notificationDispatcher";
 import { inboxBus } from "./eventBus";
 import { applyLeadAssignmentRules } from "../leadAssignment";
+import { getAiAgentConfig } from "./aiAgentConfig";
 
 export interface InboundContactInfo {
   externalId: string;
@@ -220,6 +221,9 @@ export async function processInboundMessage(opts: {
   )[0];
 
   if (!conversation) {
+    // New conversations start with the bot toggle from the "default-on for new
+    // chats" setting (default OFF — nothing auto-enables until staff opt in).
+    const aiConfig = await getAiAgentConfig();
     const insertResult = await db
       .insert(conversationsTable)
       .values({
@@ -231,6 +235,7 @@ export async function processInboundMessage(opts: {
         externalThreadId,
         unmatched: !isLinked,
         status: "open",
+        botEnabled: aiConfig.defaultOnForNew,
         lastMessageAt: message.receivedAt || new Date(),
         lastMessagePreview: message.text.slice(0, 200),
         lastInboundAt: message.receivedAt || new Date(),

@@ -577,9 +577,11 @@ router.patch(
     }
     // Re-enabling the bot clears the needs-human flag: staff have acknowledged
     // any escalation and are handing the conversation back to the assistant.
+    // Re-enabling resets the consecutive-reply counter so the handoff threshold
+    // starts fresh for the next bot-led stretch.
     const [updated] = await db
       .update(conversationsTable)
-      .set(enabled ? { botEnabled: true, needsHuman: false } : { botEnabled: false })
+      .set(enabled ? { botEnabled: true, needsHuman: false, botReplyCount: 0 } : { botEnabled: false })
       .where(eq(conversationsTable.id, id))
       .returning();
     if (!updated) {
@@ -897,7 +899,7 @@ router.post(
     if (conv.botEnabled) {
       await db
         .update(conversationsTable)
-        .set({ botEnabled: false })
+        .set({ botEnabled: false, botReplyCount: 0 })
         .where(eq(conversationsTable.id, id));
     }
 

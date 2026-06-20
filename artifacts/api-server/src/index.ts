@@ -12,6 +12,7 @@ import { getCurrentSeason } from "./lib/season";
 import { seedDocumentTypes } from "./scripts/seedDocumentTypes";
 import { seedCurrencies } from "./scripts/seedCurrencies";
 import { HARDCODED_EXTRACTOR_FIELDS, HARDCODED_EXTRACTOR_RULES } from "./lib/aiDefaultConfigs";
+import { seedAiAgentConfig } from "./lib/inbox/aiAgentConfig";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -609,6 +610,7 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS needs_human BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS bot_last_handled_message_id INTEGER`);
+    await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS bot_reply_count INTEGER NOT NULL DEFAULT 0`);
     await pool.query(`ALTER TABLE application_stage_documents ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE application_stage_documents ADD COLUMN IF NOT EXISTS expiry_notified_thresholds TEXT`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS offer_expiry_warning_days TEXT DEFAULT '30,14,7,1'`);
@@ -1562,6 +1564,11 @@ async function seedClaudeIntegration() {
       await backfillStudentAppStatus();
       await backfillLeadConversion();
     }
+
+    // Runs on EVERY boot (outside the bootstrap_done lock) so existing/prod
+    // environments that were already bootstrapped still materialize the
+    // ai_agent config row. Idempotent — only inserts when the row is absent.
+    await seedAiAgentConfig();
 
     // Runs on EVERY boot (outside the bootstrap_done lock) so it heals
     // existing/prod data, not just freshly seeded environments. Idempotent and

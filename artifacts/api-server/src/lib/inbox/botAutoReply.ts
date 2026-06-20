@@ -14,11 +14,21 @@ import {
 } from "./channels/whatsapp";
 import { decryptConfig } from "../encryption";
 import { inboxBus } from "./eventBus";
-import { buildBotSystemPrompt, type BotLanguage } from "./botBrain";
+import {
+  buildBotSystemPrompt,
+  DEFAULT_ESCALATION_KEYWORDS,
+  type BotLanguage,
+  type EscalationTopic,
+} from "./botBrain";
+import { getAiAgentConfig, DEFAULT_BOT_MODEL } from "./aiAgentConfig";
 
-// Dedicated reply model, intentionally independent of the inbox SUMMARIZE_MODEL
-// so the intake brain can be tuned/upgraded without touching summarization.
-export const BOT_REPLY_MODEL = "claude-haiku-4-5-20251001";
+// Re-export so existing consumers of EscalationTopic from this module keep working.
+export type { EscalationTopic };
+
+// Dedicated reply model default, intentionally independent of the inbox
+// SUMMARIZE_MODEL. The live model comes from the ai_agent config; this constant
+// remains the fallback default.
+export const BOT_REPLY_MODEL = DEFAULT_BOT_MODEL;
 
 // How many of the most recent messages we feed the model as conversation
 // context. Keep small to bound token cost — the intake flow is short-turn.
@@ -28,45 +38,21 @@ const BOT_HISTORY_LIMIT = 20;
 // Escalation detection
 // ---------------------------------------------------------------------------
 
-export type EscalationTopic = "contract" | "payment" | "commission" | "partner";
-
-// Multilingual keyword sets (TR/EN/AR/RU/FR) for the four escalation topics.
-// Matched as lowercase substrings — non-Latin scripts (Arabic/Cyrillic) don't
-// honour Latin word boundaries, so substring matching is the reliable approach.
-const ESCALATION_KEYWORDS: Record<EscalationTopic, string[]> = {
-  contract: [
-    "contract", "agreement", "sözleşme", "sozlesme", "anlaşma", "anlasma",
-    "عقد", "اتفاقية", "контракт", "договор", "contrat",
-  ],
-  payment: [
-    "payment", "pay ", "refund", "invoice", "fee", "fees", "deposit",
-    "ödeme", "odeme", "ücret", "ucret", "para", "iade", "fatura",
-    "دفع", "رسوم", "رسم", "استرداد", "فاتورة",
-    "оплат", "платеж", "платёж", "возврат", "счет", "счёт",
-    "paiement", "payer", "frais", "remboursement", "facture",
-  ],
-  commission: [
-    "commission", "komisyon", "عمولة", "комисси", "коммисси",
-  ],
-  partner: [
-    "partner", "partnership", "agency", "agent", "sub-agent", "subagent",
-    "acente", "acenta", "bayi", "ortaklık", "ortaklik", "ortak",
-    "شريك", "شراكة", "وكالة", "وكيل",
-    "партнер", "партнёр", "агентств", "агент",
-    "partenaire", "partenariat", "agence",
-  ],
-};
-
 /**
  * Detect whether an inbound message touches an escalation topic that must be
  * deferred to a human (contract / payment-fee / commission / partner-agency).
- * Returns the first matching topic, or null when none match.
+ * Returns the first matching topic, or null when none match. The keyword sets
+ * default to the built-in multilingual defaults but can be supplied from the
+ * live ai_agent config.
  */
-export function detectEscalation(text: string): EscalationTopic | null {
+export function detectEscalation(
+  text: string,
+  keywords: Record<EscalationTopic, string[]> = DEFAULT_ESCALATION_KEYWORDS,
+): EscalationTopic | null {
   const haystack = ` ${text.toLowerCase()} `;
-  for (const topic of Object.keys(ESCALATION_KEYWORDS) as EscalationTopic[]) {
-    for (const kw of ESCALATION_KEYWORDS[topic]) {
-      if (haystack.includes(kw.toLowerCase())) return topic;
+  for (const topic of Object.keys(keywords) as EscalationTopic[]) {
+    for (const kw of keywords[topic]) {
+      if (kw && haystack.includes(kw.toLowerCase())) return topic;
     }
   }
   return null;
@@ -114,6 +100,8 @@ export function detectLanguage(text: string): BotLanguage {
 export interface BotReplyInput {
   systemPrompt: string;
   language: BotLanguage;
+  model: string;
+  temperature: number;
   messages: Array<{ direction: string; content: string }>;
 }
 let __botReplyOverride: ((input: BotReplyInput) => Promise<string>) | null = null;
@@ -145,8 +133,9 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
   if (__botReplyOverride) return __botReplyOverride(input);
   const anthropic = await getAnthropicClient();
   const message = await anthropic.messages.create({
-    model: BOT_REPLY_MODEL,
+    model: input.model,
     max_tokens: 600,
+    temperature: input.temperature,
     system: input.systemPrompt,
     messages: input.messages.map((m) => ({
       role: m.direction === "inbound" ? ("user" as const) : ("assistant" as const),
@@ -189,10 +178,12 @@ export interface AutoReplyOutcome {
   acted: boolean;
   reason:
     | "sent"
+    | "globally_disabled"
     | "bot_disabled"
     | "already_handled"
     | "not_inbound_text"
     | "escalated"
+    | "handoff"
     | "outside_window"
     | "no_phone"
     | "send_failed"
@@ -216,11 +207,19 @@ export async function maybeAutoReply(opts: {
 }): Promise<AutoReplyOutcome> {
   const { conversationId, inboundMessageId } = opts;
 
+  // Load the live, DB-managed agent config (global switch, model, escalation
+  // keywords, handoff threshold + message, knowledge base).
+  const config = await getAiAgentConfig();
+
   const [conv] = await db
     .select()
     .from(conversationsTable)
     .where(eq(conversationsTable.id, conversationId));
   if (!conv) return { acted: false, reason: "not_found" };
+
+  // Global master switch: when the bot is off agency-wide, no auto-replies are
+  // sent regardless of the per-conversation toggle.
+  if (!config.enabled) return { acted: false, reason: "globally_disabled" };
 
   // Human takeover / per-conversation opt-in gate.
   if (!conv.botEnabled) return { acted: false, reason: "bot_disabled" };
@@ -239,7 +238,7 @@ export async function maybeAutoReply(opts: {
 
   // Escalation gate (code layer): never auto-reply on sensitive topics. Flag
   // the conversation "needs human" and turn the bot off so staff take over.
-  const topic = detectEscalation(msg.content);
+  const topic = detectEscalation(msg.content, config.escalationKeywords);
   if (topic) {
     await db
       .update(conversationsTable)
@@ -290,6 +289,70 @@ export async function maybeAutoReply(opts: {
     return { acted: false, reason: "no_phone" };
   }
 
+  // Consecutive-reply safety: after too many bot replies in a row (configurable
+  // threshold; 0 = no limit) hand the conversation to a human — flip needs-human,
+  // turn the bot off, and send the handoff message exactly once. Disabling the
+  // bot here means subsequent inbound messages short-circuit on the per-conv
+  // gate, so the handoff is never sent twice.
+  if (config.maxConsecutiveReplies > 0 && (conv.botReplyCount ?? 0) >= config.maxConsecutiveReplies) {
+    const handoffText = config.handoffMessage.trim();
+    let sendOk = true;
+    if (handoffText) {
+      const [pendingHandoff] = await db
+        .insert(messagesTable)
+        .values({
+          conversationId,
+          senderId: null,
+          content: handoffText,
+          channel: conv.channel,
+          direction: "outbound",
+          status: "pending",
+          metadata: { botSent: true, botHandoff: true },
+        })
+        .returning();
+      const handoffResult = await sendBotReply({
+        channel: conv.channel,
+        toPhoneE164: toPhone || "",
+        text: handoffText,
+      });
+      sendOk = handoffResult.ok;
+      await db
+        .update(messagesTable)
+        .set({
+          status: handoffResult.ok ? "sent" : "failed",
+          externalMessageId: handoffResult.externalMessageId || null,
+          failedReason: handoffResult.ok ? null : handoffResult.error || "send_failed",
+          sentAt: handoffResult.ok ? new Date() : null,
+          metadata: {
+            botSent: true,
+            botHandoff: true,
+            simulated: handoffResult.simulated,
+            ...(handoffResult.ok ? {} : { error: handoffResult.error }),
+          },
+        })
+        .where(eq(messagesTable.id, pendingHandoff.id));
+    }
+    await db
+      .update(conversationsTable)
+      .set({
+        botEnabled: false,
+        needsHuman: true,
+        ...(sendOk && handoffText
+          ? { lastMessageAt: new Date(), lastMessagePreview: handoffText.slice(0, 200) }
+          : {}),
+      })
+      .where(eq(conversationsTable.id, conversationId));
+    inboxBus.publish({
+      type: "message",
+      conversationId,
+      channel: conv.channel,
+      assignedToId: conv.assignedToId ?? null,
+      unmatched: conv.unmatched,
+      direction: "outbound",
+    });
+    return { acted: true, reason: "handoff" };
+  }
+
   // Build context from the last N messages (oldest → newest for the model).
   const recent = await db
     .select({ direction: messagesTable.direction, content: messagesTable.content })
@@ -299,11 +362,13 @@ export async function maybeAutoReply(opts: {
   const history = recent.slice(-BOT_HISTORY_LIMIT);
 
   const language = detectLanguage(msg.content);
-  const systemPrompt = buildBotSystemPrompt(language);
+  const systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase);
 
   const replyText = await generateBotReply({
     systemPrompt,
     language,
+    model: config.model,
+    temperature: config.temperature,
     messages: history.map((m) => ({ direction: m.direction, content: m.content })),
   });
   if (!replyText) return { acted: false, reason: "send_failed" };
@@ -318,7 +383,7 @@ export async function maybeAutoReply(opts: {
       channel: conv.channel,
       direction: "outbound",
       status: "pending",
-      metadata: { botSent: true, model: BOT_REPLY_MODEL, language },
+      metadata: { botSent: true, model: config.model, language },
     })
     .returning();
 
@@ -337,7 +402,7 @@ export async function maybeAutoReply(opts: {
       sentAt: sendResult.ok ? new Date() : null,
       metadata: {
         botSent: true,
-        model: BOT_REPLY_MODEL,
+        model: config.model,
         language,
         simulated: sendResult.simulated,
         ...(sendResult.ok ? {} : { error: sendResult.error }),
@@ -346,9 +411,14 @@ export async function maybeAutoReply(opts: {
     .where(eq(messagesTable.id, pending.id));
 
   if (sendResult.ok) {
+    // Count this bot reply toward the consecutive-reply handoff threshold.
     await db
       .update(conversationsTable)
-      .set({ lastMessageAt: new Date(), lastMessagePreview: replyText.slice(0, 200) })
+      .set({
+        lastMessageAt: new Date(),
+        lastMessagePreview: replyText.slice(0, 200),
+        botReplyCount: sql`${conversationsTable.botReplyCount} + 1`,
+      })
       .where(eq(conversationsTable.id, conversationId));
   }
 

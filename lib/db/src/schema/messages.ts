@@ -33,6 +33,7 @@ export const conversationsTable = pgTable("conversations", {
   botEnabled: boolean("bot_enabled").notNull().default(false),
   needsHuman: boolean("needs_human").notNull().default(false),
   botLastHandledMessageId: integer("bot_last_handled_message_id"),
+  botReplyCount: integer("bot_reply_count").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
