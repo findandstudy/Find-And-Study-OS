@@ -126,6 +126,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
       { title: t('dashboard.aiPersonas'), icon: Sparkles, url: '/admin/ai-personas' },
       { title: t('dashboard.aiActionQueue'), icon: ListChecks, url: '/admin/ai-action-queue' },
       { title: t('aiExtractor.sidebar'), icon: FileSearch, url: '/admin/ai-extractors' },
+      { title: t('aiAgentAdmin.sidebar'), icon: MessageSquare, url: '/admin/ai-agent' },
     ] : [];
 
     const websiteItems: MenuItem[] = isAdmin ? [

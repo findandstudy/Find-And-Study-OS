@@ -2376,6 +2376,107 @@ export const SummarizeInboxConversationResponse = zod.object({
 });
 
 /**
+ * @summary Read the AI intake agent configuration (admin only)
+ */
+export const GetAiAgentConfigResponse = zod.object({
+  config: zod.object({
+    enabled: zod.boolean(),
+    defaultOnForNew: zod.boolean(),
+    model: zod.string(),
+    temperature: zod.number(),
+    maxConsecutiveReplies: zod.number(),
+    handoffMessage: zod.string(),
+    languages: zod.array(zod.enum(["tr", "en", "ar", "ru", "fr"])),
+    escalationKeywords: zod.object({
+      contract: zod.array(zod.string()),
+      payment: zod.array(zod.string()),
+      commission: zod.array(zod.string()),
+      partner: zod.array(zod.string()),
+    }),
+    knowledgeBase: zod.string(),
+  }),
+});
+
+/**
+ * @summary Update the AI intake agent configuration (admin only)
+ */
+export const UpdateAiAgentConfigBody = zod
+  .object({
+    enabled: zod.boolean().optional(),
+    defaultOnForNew: zod.boolean().optional(),
+    model: zod.string().optional(),
+    temperature: zod.number().optional(),
+    maxConsecutiveReplies: zod.number().optional(),
+    handoffMessage: zod.string().optional(),
+    languages: zod.array(zod.enum(["tr", "en", "ar", "ru", "fr"])).optional(),
+    escalationKeywords: zod
+      .object({
+        contract: zod.array(zod.string()),
+        payment: zod.array(zod.string()),
+        commission: zod.array(zod.string()),
+        partner: zod.array(zod.string()),
+      })
+      .optional(),
+    knowledgeBase: zod.string().optional(),
+  })
+  .describe("Partial update of the AI agent config; all fields optional.");
+
+export const UpdateAiAgentConfigResponse = zod.object({
+  config: zod.object({
+    enabled: zod.boolean(),
+    defaultOnForNew: zod.boolean(),
+    model: zod.string(),
+    temperature: zod.number(),
+    maxConsecutiveReplies: zod.number(),
+    handoffMessage: zod.string(),
+    languages: zod.array(zod.enum(["tr", "en", "ar", "ru", "fr"])),
+    escalationKeywords: zod.object({
+      contract: zod.array(zod.string()),
+      payment: zod.array(zod.string()),
+      commission: zod.array(zod.string()),
+      partner: zod.array(zod.string()),
+    }),
+    knowledgeBase: zod.string(),
+  }),
+});
+
+/**
+ * @summary Run the AI intake brain against a sample message without sending (admin only)
+ */
+export const TestAiAgentBody = zod.object({
+  message: zod.string(),
+  language: zod.enum(["tr", "en", "ar", "ru", "fr"]).optional(),
+  history: zod
+    .array(
+      zod.object({
+        direction: zod.enum(["inbound", "outbound"]),
+        content: zod.string(),
+      }),
+    )
+    .optional(),
+});
+
+export const TestAiAgentResponse = zod.object({
+  result: zod.object({
+    reply: zod.string().nullable(),
+    language: zod.enum(["tr", "en", "ar", "ru", "fr"]),
+    escalation: zod.object({
+      escalated: zod.boolean(),
+      topic: zod
+        .union([
+          zod.literal("contract"),
+          zod.literal("payment"),
+          zod.literal("commission"),
+          zod.literal("partner"),
+          zod.literal(null),
+        ])
+        .nullable(),
+    }),
+    model: zod.string(),
+  }),
+});
+
+/**
  * @summary Add an internal note to the lead/student linked to a conversation
  */
 export const AddInboxConversationNoteParams = zod.object({

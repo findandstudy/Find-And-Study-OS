@@ -40,6 +40,12 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
 import { decryptConfig } from "../lib/encryption";
 import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
+import {
+  getAiAgentConfig,
+  writeAiAgentConfig,
+  aiAgentConfigPatchSchema,
+} from "../lib/inbox/aiAgentConfig";
+import { runBotReplyTest } from "../lib/inbox/botAutoReply";
 
 const router: IRouter = Router();
 
@@ -1484,6 +1490,96 @@ router.post(
     }, req.ip);
 
     res.status(201).json({ data: task });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// AI Agent admin panel (FAZ 2) — manage the DB-managed ai_agent config and run
+// the Test Console. Admin-only on every endpoint. The config is the same FAZ 1
+// single source of truth read by the auto-reply engine.
+// ---------------------------------------------------------------------------
+
+// GET /inbox/ai-agent/config — read the live AI agent config (merged over
+// safe defaults).
+router.get(
+  "/inbox/ai-agent/config",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const config = await getAiAgentConfig();
+    res.json({ config });
+  },
+);
+
+// PUT /inbox/ai-agent/config — validate and persist a (partial) config patch.
+// Returns the merged, validated config.
+router.put(
+  "/inbox/ai-agent/config",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const parsed = aiAgentConfigPatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid config", details: parsed.error.flatten() });
+      return;
+    }
+    try {
+      const config = await writeAiAgentConfig(parsed.data);
+      logAudit(req.user!.id, "update_ai_agent_config", "integration", undefined, {
+        enabled: config.enabled,
+        model: config.model,
+      }, req.ip);
+      res.json({ config });
+    } catch (err) {
+      // writeAiAgentConfig re-validates the merged result; a merge that produces
+      // an invalid config (e.g. an empty knowledge base) surfaces here.
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ error: "Invalid config", details: err.flatten() });
+        return;
+      }
+      throw err;
+    }
+  },
+);
+
+// POST /inbox/ai-agent/test — run the bot brain against a sample message and
+// (optional) history, returning the would-be reply, detected language, and
+// escalation result. Sends NOTHING.
+const aiAgentTestSchema = z.object({
+  message: z.string().min(1).max(4000),
+  language: z.enum(["tr", "en", "ar", "ru", "fr"]).optional(),
+  history: z
+    .array(
+      z.object({
+        direction: z.enum(["inbound", "outbound"]),
+        content: z.string().min(1).max(4000),
+      }),
+    )
+    .max(40)
+    .optional(),
+});
+
+router.post(
+  "/inbox/ai-agent/test",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const parsed = aiAgentTestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+    try {
+      const result = await runBotReplyTest({
+        message: parsed.data.message,
+        language: parsed.data.language,
+        history: parsed.data.history,
+      });
+      res.json({ result });
+    } catch (err) {
+      console.error("[ai-agent-test]", err);
+      res.status(502).json({ error: "Test run failed" });
+    }
   },
 );
 

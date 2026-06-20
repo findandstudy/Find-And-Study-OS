@@ -2002,6 +2002,109 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /inbox/ai-agent/config:
+    get:
+      operationId: getAiAgentConfig
+      tags: [inbox, ai]
+      summary: Read the AI intake agent configuration (admin only)
+      responses:
+        "200":
+          description: Current AI agent config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAgentConfigResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateAiAgentConfig
+      tags: [inbox, ai]
+      summary: Update the AI intake agent configuration (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiAgentConfigUpdate"
+      responses:
+        "200":
+          description: Updated AI agent config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAgentConfigResponse"
+        "400":
+          description: Invalid config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inbox/ai-agent/test:
+    post:
+      operationId: testAiAgent
+      tags: [inbox, ai]
+      summary: Run the AI intake brain against a sample message without sending (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiAgentTestRequest"
+      responses:
+        "200":
+          description: Test run result (no message sent)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAgentTestResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Test run failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /inbox/conversations/{id}/notes:
     post:
       operationId: addInboxConversationNote
@@ -4519,6 +4622,159 @@ components:
         - messageCount
         - model
         - generatedByUserId
+
+    EscalationKeywords:
+      type: object
+      properties:
+        contract:
+          type: array
+          items:
+            type: string
+        payment:
+          type: array
+          items:
+            type: string
+        commission:
+          type: array
+          items:
+            type: string
+        partner:
+          type: array
+          items:
+            type: string
+      required:
+        - contract
+        - payment
+        - commission
+        - partner
+
+    AiAgentConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        defaultOnForNew:
+          type: boolean
+        model:
+          type: string
+        temperature:
+          type: number
+        maxConsecutiveReplies:
+          type: integer
+        handoffMessage:
+          type: string
+        languages:
+          type: array
+          items:
+            type: string
+            enum: [tr, en, ar, ru, fr]
+        escalationKeywords:
+          $ref: "#/components/schemas/EscalationKeywords"
+        knowledgeBase:
+          type: string
+      required:
+        - enabled
+        - defaultOnForNew
+        - model
+        - temperature
+        - maxConsecutiveReplies
+        - handoffMessage
+        - languages
+        - escalationKeywords
+        - knowledgeBase
+
+    AiAgentConfigResponse:
+      type: object
+      properties:
+        config:
+          $ref: "#/components/schemas/AiAgentConfig"
+      required:
+        - config
+
+    AiAgentConfigUpdate:
+      type: object
+      description: Partial update of the AI agent config; all fields optional.
+      properties:
+        enabled:
+          type: boolean
+        defaultOnForNew:
+          type: boolean
+        model:
+          type: string
+        temperature:
+          type: number
+        maxConsecutiveReplies:
+          type: integer
+        handoffMessage:
+          type: string
+        languages:
+          type: array
+          items:
+            type: string
+            enum: [tr, en, ar, ru, fr]
+        escalationKeywords:
+          $ref: "#/components/schemas/EscalationKeywords"
+        knowledgeBase:
+          type: string
+
+    AiAgentTestRequest:
+      type: object
+      properties:
+        message:
+          type: string
+        language:
+          type: string
+          enum: [tr, en, ar, ru, fr]
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              direction:
+                type: string
+                enum: [inbound, outbound]
+              content:
+                type: string
+            required:
+              - direction
+              - content
+      required:
+        - message
+
+    AiAgentTestResult:
+      type: object
+      properties:
+        reply:
+          type: ["string", "null"]
+        language:
+          type: string
+          enum: [tr, en, ar, ru, fr]
+        escalation:
+          type: object
+          properties:
+            escalated:
+              type: boolean
+            topic:
+              type: ["string", "null"]
+              enum: [contract, payment, commission, partner, null]
+          required:
+            - escalated
+            - topic
+        model:
+          type: string
+      required:
+        - reply
+        - language
+        - escalation
+        - model
+
+    AiAgentTestResponse:
+      type: object
+      properties:
+        result:
+          $ref: "#/components/schemas/AiAgentTestResult"
+      required:
+        - result
 
     InboxConversationNote:
       type: object

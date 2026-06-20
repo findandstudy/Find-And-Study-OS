@@ -149,6 +149,74 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
   return textBlock.text.trim();
 }
 
+// ---------------------------------------------------------------------------
+// Test console (FAZ 2) — run the bot brain against a sample message WITHOUT
+// sending anything. Used by the admin-only POST /inbox/ai-agent/test endpoint.
+// It deliberately reuses the same config + language + escalation + prompt path
+// as the live engine, but it NEVER calls sendBotReply, so an admin can preview
+// the would-be reply, the detected language, and the escalation decision with
+// zero outbound side effects.
+// ---------------------------------------------------------------------------
+
+export interface BotTestInput {
+  /** The sample inbound student message to run the brain against. */
+  message: string;
+  /** Optional language override; when omitted the language is auto-detected. */
+  language?: BotLanguage;
+  /** Optional prior turns for context (oldest → newest). */
+  history?: Array<{ direction: string; content: string }>;
+}
+
+export interface BotTestResult {
+  /** The would-be reply, or null when the message would escalate (no reply). */
+  reply: string | null;
+  /** The language the brain would reply in. */
+  language: BotLanguage;
+  /** Escalation decision: whether the message hits a hand-off topic. */
+  escalation: { escalated: boolean; topic: EscalationTopic | null };
+  /** The model the live config would use for the reply. */
+  model: string;
+}
+
+/**
+ * Run the intake brain against a supplied sample message and (optional) history
+ * using the live ai_agent config, returning the would-be reply, detected
+ * language, and escalation result — WITHOUT sending any message. When the
+ * message matches an escalation topic the engine would defer to a human, so we
+ * mirror that by returning `reply: null` and the matched topic.
+ */
+export async function runBotReplyTest(input: BotTestInput): Promise<BotTestResult> {
+  const config = await getAiAgentConfig();
+  const language = input.language ?? detectLanguage(input.message);
+  const topic = detectEscalation(input.message, config.escalationKeywords);
+  if (topic) {
+    return {
+      reply: null,
+      language,
+      escalation: { escalated: true, topic },
+      model: config.model,
+    };
+  }
+  const systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase);
+  const turns = [
+    ...(input.history ?? []),
+    { direction: "inbound", content: input.message },
+  ].slice(-BOT_HISTORY_LIMIT);
+  const reply = await generateBotReply({
+    systemPrompt,
+    language,
+    model: config.model,
+    temperature: config.temperature,
+    messages: turns,
+  });
+  return {
+    reply,
+    language,
+    escalation: { escalated: false, topic: null },
+    model: config.model,
+  };
+}
+
 // Channel-aware send. Only WhatsApp is wired today; a future channel can be
 // slotted in here without touching the engine logic.
 async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {

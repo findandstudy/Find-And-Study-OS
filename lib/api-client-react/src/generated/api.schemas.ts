@@ -1464,6 +1464,139 @@ export interface ConversationAiSummary {
   generatedByUserId: number;
 }
 
+export interface EscalationKeywords {
+  contract: string[];
+  payment: string[];
+  commission: string[];
+  partner: string[];
+}
+
+export type AiAgentConfigLanguagesItem =
+  (typeof AiAgentConfigLanguagesItem)[keyof typeof AiAgentConfigLanguagesItem];
+
+export const AiAgentConfigLanguagesItem = {
+  tr: "tr",
+  en: "en",
+  ar: "ar",
+  ru: "ru",
+  fr: "fr",
+} as const;
+
+export interface AiAgentConfig {
+  enabled: boolean;
+  defaultOnForNew: boolean;
+  model: string;
+  temperature: number;
+  maxConsecutiveReplies: number;
+  handoffMessage: string;
+  languages: AiAgentConfigLanguagesItem[];
+  escalationKeywords: EscalationKeywords;
+  knowledgeBase: string;
+}
+
+export interface AiAgentConfigResponse {
+  config: AiAgentConfig;
+}
+
+export type AiAgentConfigUpdateLanguagesItem =
+  (typeof AiAgentConfigUpdateLanguagesItem)[keyof typeof AiAgentConfigUpdateLanguagesItem];
+
+export const AiAgentConfigUpdateLanguagesItem = {
+  tr: "tr",
+  en: "en",
+  ar: "ar",
+  ru: "ru",
+  fr: "fr",
+} as const;
+
+/**
+ * Partial update of the AI agent config; all fields optional.
+ */
+export interface AiAgentConfigUpdate {
+  enabled?: boolean;
+  defaultOnForNew?: boolean;
+  model?: string;
+  temperature?: number;
+  maxConsecutiveReplies?: number;
+  handoffMessage?: string;
+  languages?: AiAgentConfigUpdateLanguagesItem[];
+  escalationKeywords?: EscalationKeywords;
+  knowledgeBase?: string;
+}
+
+export type AiAgentTestRequestLanguage =
+  (typeof AiAgentTestRequestLanguage)[keyof typeof AiAgentTestRequestLanguage];
+
+export const AiAgentTestRequestLanguage = {
+  tr: "tr",
+  en: "en",
+  ar: "ar",
+  ru: "ru",
+  fr: "fr",
+} as const;
+
+export type AiAgentTestRequestHistoryItemDirection =
+  (typeof AiAgentTestRequestHistoryItemDirection)[keyof typeof AiAgentTestRequestHistoryItemDirection];
+
+export const AiAgentTestRequestHistoryItemDirection = {
+  inbound: "inbound",
+  outbound: "outbound",
+} as const;
+
+export type AiAgentTestRequestHistoryItem = {
+  direction: AiAgentTestRequestHistoryItemDirection;
+  content: string;
+};
+
+export interface AiAgentTestRequest {
+  message: string;
+  language?: AiAgentTestRequestLanguage;
+  history?: AiAgentTestRequestHistoryItem[];
+}
+
+export type AiAgentTestResultLanguage =
+  (typeof AiAgentTestResultLanguage)[keyof typeof AiAgentTestResultLanguage];
+
+export const AiAgentTestResultLanguage = {
+  tr: "tr",
+  en: "en",
+  ar: "ar",
+  ru: "ru",
+  fr: "fr",
+} as const;
+
+/**
+ * @nullable
+ */
+export type AiAgentTestResultEscalationTopic =
+  | (typeof AiAgentTestResultEscalationTopic)[keyof typeof AiAgentTestResultEscalationTopic]
+  | null;
+
+export const AiAgentTestResultEscalationTopic = {
+  contract: "contract",
+  payment: "payment",
+  commission: "commission",
+  partner: "partner",
+} as const;
+
+export type AiAgentTestResultEscalation = {
+  escalated: boolean;
+  /** @nullable */
+  topic: AiAgentTestResultEscalationTopic;
+};
+
+export interface AiAgentTestResult {
+  /** @nullable */
+  reply: string | null;
+  language: AiAgentTestResultLanguage;
+  escalation: AiAgentTestResultEscalation;
+  model: string;
+}
+
+export interface AiAgentTestResponse {
+  result: AiAgentTestResult;
+}
+
 export type InboxConversationNoteResourceType =
   (typeof InboxConversationNoteResourceType)[keyof typeof InboxConversationNoteResourceType];
 

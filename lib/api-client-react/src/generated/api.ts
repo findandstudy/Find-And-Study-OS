@@ -24,6 +24,10 @@ import type {
   AddInboxConversationTaskResponse,
   Agent,
   AgentsListResponse,
+  AiAgentConfigResponse,
+  AiAgentConfigUpdate,
+  AiAgentTestRequest,
+  AiAgentTestResponse,
   Announcement,
   Application,
   ApplicationsListResponse,
@@ -7835,6 +7839,253 @@ export const useSummarizeInboxConversation = <
   TContext
 > => {
   return useMutation(getSummarizeInboxConversationMutationOptions(options));
+};
+
+/**
+ * @summary Read the AI intake agent configuration (admin only)
+ */
+export const getGetAiAgentConfigUrl = () => {
+  return `/api/inbox/ai-agent/config`;
+};
+
+export const getAiAgentConfig = async (
+  options?: RequestInit,
+): Promise<AiAgentConfigResponse> => {
+  return customFetch<AiAgentConfigResponse>(getGetAiAgentConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAiAgentConfigQueryKey = () => {
+  return [`/api/inbox/ai-agent/config`] as const;
+};
+
+export const getGetAiAgentConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAiAgentConfig>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAiAgentConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAiAgentConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAiAgentConfig>>
+  > = ({ signal }) => getAiAgentConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAiAgentConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAiAgentConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAiAgentConfig>>
+>;
+export type GetAiAgentConfigQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Read the AI intake agent configuration (admin only)
+ */
+
+export function useGetAiAgentConfig<
+  TData = Awaited<ReturnType<typeof getAiAgentConfig>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAiAgentConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAiAgentConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update the AI intake agent configuration (admin only)
+ */
+export const getUpdateAiAgentConfigUrl = () => {
+  return `/api/inbox/ai-agent/config`;
+};
+
+export const updateAiAgentConfig = async (
+  aiAgentConfigUpdate: AiAgentConfigUpdate,
+  options?: RequestInit,
+): Promise<AiAgentConfigResponse> => {
+  return customFetch<AiAgentConfigResponse>(getUpdateAiAgentConfigUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aiAgentConfigUpdate),
+  });
+};
+
+export const getUpdateAiAgentConfigMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAiAgentConfig>>,
+    TError,
+    { data: BodyType<AiAgentConfigUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAiAgentConfig>>,
+  TError,
+  { data: BodyType<AiAgentConfigUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateAiAgentConfig"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAiAgentConfig>>,
+    { data: BodyType<AiAgentConfigUpdate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateAiAgentConfig(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAiAgentConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAiAgentConfig>>
+>;
+export type UpdateAiAgentConfigMutationBody = BodyType<AiAgentConfigUpdate>;
+export type UpdateAiAgentConfigMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update the AI intake agent configuration (admin only)
+ */
+export const useUpdateAiAgentConfig = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAiAgentConfig>>,
+    TError,
+    { data: BodyType<AiAgentConfigUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAiAgentConfig>>,
+  TError,
+  { data: BodyType<AiAgentConfigUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateAiAgentConfigMutationOptions(options));
+};
+
+/**
+ * @summary Run the AI intake brain against a sample message without sending (admin only)
+ */
+export const getTestAiAgentUrl = () => {
+  return `/api/inbox/ai-agent/test`;
+};
+
+export const testAiAgent = async (
+  aiAgentTestRequest: AiAgentTestRequest,
+  options?: RequestInit,
+): Promise<AiAgentTestResponse> => {
+  return customFetch<AiAgentTestResponse>(getTestAiAgentUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aiAgentTestRequest),
+  });
+};
+
+export const getTestAiAgentMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testAiAgent>>,
+    TError,
+    { data: BodyType<AiAgentTestRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof testAiAgent>>,
+  TError,
+  { data: BodyType<AiAgentTestRequest> },
+  TContext
+> => {
+  const mutationKey = ["testAiAgent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof testAiAgent>>,
+    { data: BodyType<AiAgentTestRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return testAiAgent(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TestAiAgentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof testAiAgent>>
+>;
+export type TestAiAgentMutationBody = BodyType<AiAgentTestRequest>;
+export type TestAiAgentMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Run the AI intake brain against a sample message without sending (admin only)
+ */
+export const useTestAiAgent = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testAiAgent>>,
+    TError,
+    { data: BodyType<AiAgentTestRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof testAiAgent>>,
+  TError,
+  { data: BodyType<AiAgentTestRequest> },
+  TContext
+> => {
+  return useMutation(getTestAiAgentMutationOptions(options));
 };
 
 /**
