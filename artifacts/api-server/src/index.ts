@@ -613,6 +613,13 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS bot_reply_count INTEGER NOT NULL DEFAULT 0`);
     await pool.query(`ALTER TABLE application_stage_documents ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE application_stage_documents ADD COLUMN IF NOT EXISTS expiry_notified_thresholds TEXT`);
+    // FAZ 3 (AI agent lead capture): qualifying fields the intake bot collects
+    // that lack a native leads column. budget→estimated_value, program→
+    // interested_program, country→interested_country already exist.
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS interested_level TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS preferred_language TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS mother_name TEXT`);
+    await pool.query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS father_name TEXT`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS offer_expiry_warning_days TEXT DEFAULT '30,14,7,1'`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS contract_expiry_reminder_days TEXT DEFAULT '30,14,7,1'`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS pdf_accent_color TEXT`);

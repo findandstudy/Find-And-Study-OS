@@ -9,10 +9,18 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
 import {
   sendWhatsAppText,
+  sendWhatsAppTemplate,
   isWithin24hWindow,
   type WhatsAppConfig,
 } from "./channels/whatsapp";
 import { decryptConfig } from "../encryption";
+import { messageTemplatesTable } from "@workspace/db";
+import {
+  captureLeadFromConversation,
+  recordInboundDocuments,
+  computeMissingDocGroups,
+  buildMissingDocsInstruction,
+} from "./leadCapture";
 import { inboxBus } from "./eventBus";
 import {
   buildBotSystemPrompt,
@@ -238,6 +246,79 @@ async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
   return { ok: false, error: `unsupported_channel:${input.channel}` };
 }
 
+export interface BotTemplateSendInput {
+  channel: string;
+  toPhoneE164: string;
+  templateName: string;
+  language: string;
+  parameters?: string[];
+}
+let __botTemplateSendOverride:
+  | ((input: BotTemplateSendInput) => Promise<BotSendResult>)
+  | null = null;
+export function __setBotTemplateSendOverrideForTests(
+  fn: ((input: BotTemplateSendInput) => Promise<BotSendResult>) | null,
+): void {
+  __botTemplateSendOverride = fn;
+}
+
+// Channel-aware approved-template send (used outside the 24h window).
+async function sendBotTemplate(input: BotTemplateSendInput): Promise<BotSendResult> {
+  if (__botTemplateSendOverride) return __botTemplateSendOverride(input);
+  if (input.channel === "whatsapp") {
+    const [integ] = await db
+      .select()
+      .from(integrationsTable)
+      .where(eq(integrationsTable.key, "whatsapp"));
+    const cfg: WhatsAppConfig =
+      (decryptConfig(integ?.config as Record<string, any>) as WhatsAppConfig) || {};
+    return sendWhatsAppTemplate({
+      config: cfg,
+      toPhoneE164: input.toPhoneE164,
+      templateName: input.templateName,
+      language: input.language,
+      parameters: input.parameters,
+    });
+  }
+  return { ok: false, error: `unsupported_channel:${input.channel}` };
+}
+
+interface ReengagementTemplate {
+  externalTemplateName: string;
+  language: string;
+  content: string;
+}
+
+/**
+ * Resolve the approved WhatsApp re-engagement template to send outside the 24h
+ * window. By convention this is the most recently updated active template with
+ * category 'reengagement', a WhatsApp-capable channel, and a non-null
+ * externalTemplateName (the name registered with the WhatsApp provider). We do
+ * NOT manage templates here — that's Task #61's UI; we only consume its rows.
+ * Returns null when none is configured (caller defers to staff).
+ */
+async function resolveReengagementTemplate(): Promise<ReengagementTemplate | null> {
+  const [tpl] = await db
+    .select()
+    .from(messageTemplatesTable)
+    .where(
+      and(
+        eq(messageTemplatesTable.isActive, true),
+        eq(messageTemplatesTable.category, "reengagement"),
+        sql`${messageTemplatesTable.externalTemplateName} IS NOT NULL`,
+        sql`${messageTemplatesTable.channel} IN ('whatsapp', 'all')`,
+      ),
+    )
+    .orderBy(sql`${messageTemplatesTable.updatedAt} DESC`)
+    .limit(1);
+  if (!tpl || !tpl.externalTemplateName) return null;
+  return {
+    externalTemplateName: tpl.externalTemplateName,
+    language: tpl.language || "en",
+    content: tpl.content || `[template] ${tpl.externalTemplateName}`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
@@ -253,6 +334,7 @@ export interface AutoReplyOutcome {
     | "escalated"
     | "handoff"
     | "outside_window"
+    | "template_sent"
     | "no_phone"
     | "send_failed"
     | "not_found";
@@ -338,14 +420,28 @@ export async function maybeAutoReply(opts: {
     return { acted: false, reason: "already_handled" };
   }
 
-  // 24h service window: free-form replies are only allowed within 24h of the
-  // last inbound message (WhatsApp policy). Outside it we must use a template,
-  // which the bot does not do — defer to staff.
-  if (conv.channel === "whatsapp" && !isWithin24hWindow(conv.lastInboundAt)) {
-    return { acted: false, reason: "outside_window" };
+  // FAZ 3 — advance the funnel. On every handled inbound (while the bot is on)
+  // we extract qualifying info, idempotently upsert the lead, and record any
+  // attached document. Best-effort: a failure here must never block the reply.
+  let captureLeadId: number | null = null;
+  let captureStudentId: number | null = null;
+  let captureLevel: string | null = null;
+  try {
+    const capture = await captureLeadFromConversation({ conversationId });
+    captureLeadId = capture.leadId;
+    captureStudentId = capture.studentId;
+    captureLevel = capture.level;
+    await recordInboundDocuments({
+      metadata: msg.metadata,
+      leadId: capture.leadId,
+      studentId: capture.studentId,
+    });
+  } catch (err) {
+    console.error("[bot] lead capture failed:", err);
   }
 
-  // Resolve the contact phone for the outbound send.
+  // Resolve the contact phone for the outbound send (needed by both the
+  // template re-engagement path and the free-form reply path).
   const [contact] = conv.externalContactId
     ? await db
         .select()
@@ -353,6 +449,69 @@ export async function maybeAutoReply(opts: {
         .where(eq(externalContactsTable.id, conv.externalContactId))
     : [null];
   const toPhone = contact?.phoneE164 || contact?.phone || null;
+
+  // 24h service window: free-form replies are only allowed within 24h of the
+  // last inbound message (WhatsApp policy). Outside it, re-engage with an
+  // approved template (Task #61 message_templates) if one is configured;
+  // otherwise defer to staff.
+  if (conv.channel === "whatsapp" && !isWithin24hWindow(conv.lastInboundAt)) {
+    if (!toPhone) return { acted: false, reason: "no_phone" };
+    const template = await resolveReengagementTemplate();
+    if (!template) return { acted: false, reason: "outside_window" };
+
+    const [pendingTemplate] = await db
+      .insert(messagesTable)
+      .values({
+        conversationId,
+        senderId: null,
+        content: template.content,
+        channel: conv.channel,
+        direction: "outbound",
+        status: "pending",
+        metadata: { botSent: true, botTemplate: true, templateName: template.externalTemplateName },
+      })
+      .returning();
+    const templateResult = await sendBotTemplate({
+      channel: conv.channel,
+      toPhoneE164: toPhone,
+      templateName: template.externalTemplateName,
+      language: template.language,
+    });
+    await db
+      .update(messagesTable)
+      .set({
+        status: templateResult.ok ? "sent" : "failed",
+        externalMessageId: templateResult.externalMessageId || null,
+        failedReason: templateResult.ok ? null : templateResult.error || "send_failed",
+        sentAt: templateResult.ok ? new Date() : null,
+        metadata: {
+          botSent: true,
+          botTemplate: true,
+          templateName: template.externalTemplateName,
+          simulated: templateResult.simulated,
+          ...(templateResult.ok ? {} : { error: templateResult.error }),
+        },
+      })
+      .where(eq(messagesTable.id, pendingTemplate.id));
+    if (templateResult.ok) {
+      await db
+        .update(conversationsTable)
+        .set({ lastMessageAt: new Date(), lastMessagePreview: template.content.slice(0, 200) })
+        .where(eq(conversationsTable.id, conversationId));
+    }
+    inboxBus.publish({
+      type: "message",
+      conversationId,
+      channel: conv.channel,
+      assignedToId: conv.assignedToId ?? null,
+      unmatched: conv.unmatched,
+      direction: "outbound",
+    });
+    return templateResult.ok
+      ? { acted: true, reason: "template_sent" }
+      : { acted: false, reason: "send_failed" };
+  }
+
   if (conv.channel === "whatsapp" && !toPhone) {
     return { acted: false, reason: "no_phone" };
   }
@@ -430,7 +589,21 @@ export async function maybeAutoReply(opts: {
   const history = recent.slice(-BOT_HISTORY_LIMIT);
 
   const language = detectLanguage(msg.content);
-  const systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase);
+  let systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase);
+
+  // FAZ 3 — nudge the bot to collect any still-missing level-appropriate
+  // documents for the captured lead/student.
+  try {
+    const missing = await computeMissingDocGroups({
+      leadId: captureLeadId,
+      studentId: captureStudentId,
+      level: captureLevel,
+    });
+    const docInstruction = buildMissingDocsInstruction(missing);
+    if (docInstruction) systemPrompt = `${systemPrompt}\n\n${docInstruction}`;
+  } catch (err) {
+    console.error("[bot] missing-doc computation failed:", err);
+  }
 
   const replyText = await generateBotReply({
     systemPrompt,
