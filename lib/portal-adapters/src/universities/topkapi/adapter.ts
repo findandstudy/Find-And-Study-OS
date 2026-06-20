@@ -104,6 +104,35 @@ const COUNTRY_MAP: Record<string, string> = {
 // Also map commonly-seen raw country-name values (not adjectives) to Turkish.
 // Handles cases where student.nationality stores "Uzbekistan" instead of "Uzbek".
 const COUNTRY_NAME_MAP: Record<string, string> = {
+  "united kingdom": "Birleşik Krallık",
+  "united states": "Amerika Birleşik Devletleri",
+  "united states of america": "Amerika Birleşik Devletleri",
+  "germany": "Almanya",
+  "france": "Fransa",
+  "india": "Hindistan",
+  "pakistan": "Pakistan",
+  "nigeria": "Nijerya",
+  "saudi arabia": "Suudi Arabistan",
+  "kuwait": "Kuveyt",
+  "qatar": "Katar",
+  "oman": "Umman",
+  "palestine": "Filistin",
+  "russia": "Rusya",
+  "ukraine": "Ukrayna",
+  "ghana": "Gana",
+  "kenya": "Kenya",
+  "tanzania": "Tanzanya",
+  "cameroon": "Kamerun",
+  "indonesia": "Endonezya",
+  "kazakhstan": "Kazakistan",
+  "uzbekistan": "Özbekistan",
+  "morocco": "Fas",
+  "jordan": "Ürdün",
+  "iran": "İran",
+  "iraq": "Irak",
+  "syria": "Suriye",
+  "lebanon": "Lübnan",
+  "tunisia": "Tunus",
   afghanistan:              "Afganistan",
   algeria:                  "Cezayir",
   azerbaijan:               "Azerbaycan",
@@ -214,12 +243,16 @@ async function dismissJconfirm(page: Page, logger: typeof import("../../browser.
 // confirmation). DOM-click used to bypass Playwright overlay detection.
 // ---------------------------------------------------------------------------
 async function clickNext(page: Page, logger: typeof import("../../browser.js").logger): Promise<void> {
-  // Pre-dismiss any leftover modal before attempting the click
-  await dismissJconfirm(page, logger);
+  // Pre-dismiss any leftover modal before attempting the click (loop)
+  for (let i = 0; i < 5; i++) {
+    if ((await page.locator(".jconfirm.jconfirm-open").count()) === 0) break;
+    await dismissJconfirm(page, logger);
+    await page.waitForTimeout(400);
+  }
 
   const btn = page.getByRole("button", { name: /Sonraki Adım/i });
   await btn.waitFor({ state: "visible", timeout: 8000 });
-  await btn.click();
+  await btn.click({ force: true });
 
   // Post-dismiss any modal that opened as a result of the click
   try {
@@ -477,13 +510,19 @@ export const topkapiAdapter: UniversityAdapter = {
     await page.fill("input[name=fathersName]", profile.fatherName);
     await page.fill("input[name=mothersName]", profile.motherName);
 
+    await page.waitForFunction(() => { const s = document.querySelector("select[name=countryOfBirth]"); return !!s && s.options.length > 1; }, { timeout: 8000 }).catch(() => {});
     await selectByBest(page, "select[name=countryOfBirth]", country);
     await selectByBest(page, "select[name=nationality]",    country);
     await selectByBest(page, "select[name=addressCountry]", country);
+    await page.evaluate(() => { ["countryOfBirth","nationality","addressCountry"].forEach((n) => { const e = document.querySelector("select[name=" + n + "]"); if (e) { e.dispatchEvent(new Event("change", { bubbles: true })); const w = window; if (w.jQuery) { w.jQuery(e).trigger("change"); } } }); });
 
+    logger.info("[topkapi] DBG country=" + country + " natl=" + (profile.nationality || ""));
+    logger.info("[topkapi] DBG cob=" + JSON.stringify(await page.evaluate(() => { const s = document.querySelector("select[name=countryOfBirth]"); return s ? { n: s.options.length, sel: s.value, sample: Array.from(s.options).slice(0, 6).map((o) => o.value + "::" + o.text) } : "NO"; })));
     await page.fill("input[name=address]", profile.address || "-");
     try { await page.fill("input[name=addressCity]", "-"); } catch { /* field optional */ }
     await page.fill("input[name=mobilePhone]", profile.phone);
+    const _dump = await page.evaluate(() => { const names = ["studentName","studentSurname","dateOfBirth","gender","fathersName","mothersName","countryOfBirth","nationality","addressCountry","address","addressCity","mobilePhone"]; const out = {}; for (const n of names) { const el = document.querySelector("[name=" + n + "]"); out[n] = el ? el.value : "MISSING"; } return out; });
+    logger.info("[topkapi] Step 2 field values:", JSON.stringify(_dump));
 
     await clickNext(page, logger);
     logger.info("[topkapi] Step 2 clickNext done — waiting for Step 3 form");
@@ -541,7 +580,14 @@ export const topkapiAdapter: UniversityAdapter = {
     } catch { /* optional */ }
 
     logger.info("[topkapi] Step 3f: filling main language");
-    await page.fill("input[name=mainLanguage]", "English");
+    try {
+      const ml = page.locator("input[name=mainLanguage], select[name=mainLanguage]").first();
+      if (await ml.count()) {
+        const tag = await ml.evaluate((e) => e.tagName).catch(() => "");
+        if (tag === "SELECT") { await selectByBest(page, "select[name=mainLanguage]", "English"); }
+        else { await ml.fill("English"); }
+      }
+    } catch (e) { /* main language not shown for this program */ }
 
     if (profile.languageScore != null) {
       logger.info("[topkapi] Step 3g: filling language score");
@@ -558,7 +604,7 @@ export const topkapiAdapter: UniversityAdapter = {
 
     // ── STEP 4: program selection (AJAX) ─────────────────────────────────────
     logger.info("[topkapi] Step 4: program selection (AJAX)");
-    await page.waitForSelector("input[name=educationLevel]", { timeout: 10000 });
+    await page.waitForSelector("input[name=educationLevel]", { timeout: 15000 }).catch(async () => { const d = await page.evaluate(() => { const r=[...document.querySelectorAll("input[type=radio]")].map(x=>x.name); const se=[...document.querySelectorAll("select")].map(x=>x.name); return { radios:[...new Set(r)], selects:[...new Set(se)] }; }); logger.warn("[topkapi] STEP4 DBG " + JSON.stringify(d)); });
 
     // Trigger the AJAX call by programmatically checking the education-level radio
     await page.evaluate((lv: string) => {
@@ -628,6 +674,7 @@ export const topkapiAdapter: UniversityAdapter = {
     await page.selectOption(
       "select[name=programFirstPreference]",
       { value: matchResult.match.id },
+    { force: true },
     );
 
     const selVal = await page.$eval(
@@ -653,7 +700,7 @@ export const topkapiAdapter: UniversityAdapter = {
 
     // ── STEP 5: document uploads ─────────────────────────────────────────────
     logger.info("[topkapi] Step 5: document uploads");
-    await page.waitForSelector("input[name=filePassport]", { timeout: 10000 });
+    await page.waitForSelector("input[name=filePassport]", { state: "attached", timeout: 10000 });
 
     if (files.photo)      { try { await page.setInputFiles("input[name=filePhoto]",      files.photo);      } catch { /* optional */ } }
     if (files.passport)   { try { await page.setInputFiles("input[name=filePassport]",   files.passport);   } catch { /* optional */ } }
@@ -669,12 +716,18 @@ export const topkapiAdapter: UniversityAdapter = {
 
     // ── FINAL SUBMIT ─────────────────────────────────────────────────────────
     logger.info("[topkapi] clicking Başvuruyu Tamamla");
-    const saveRespPromise = page.waitForResponse(
-      (r) => r.url().includes("application-save.php"),
-      { timeout: 45000 },
-    );
+    let saveStatus = 0;
+  page.on("response", (r) => { try { if (r.url().includes("application-save.php")) saveStatus = r.status(); } catch (e) {} });
 
-    await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click();
+    for (let i = 0; i < 5; i++) { if ((await page.locator(".jconfirm.jconfirm-open").count()) === 0) break; await dismissJconfirm(page, logger); await page.waitForTimeout(400); }
+  for (let i = 0; i < 5; i++) {
+      const finBtn = page.getByRole("button", { name: /Başvuruyu Tamamla/i });
+      if (await finBtn.isVisible().catch(() => false)) { logger.warn("[topkapi] final-submit visible after " + i + " advance(s)"); break; }
+      logger.warn("[topkapi] advancing to final step (Sonraki Adım) #" + (i + 1));
+      await clickNext(page, logger).catch(() => {});
+      await page.waitForTimeout(1800).catch(() => {});
+    }
+  await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click().catch(async () => { await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click({ force: true }).catch(() => {}); });
 
     // Handle optional jconfirm confirmation modal
     try {
@@ -692,24 +745,22 @@ export const topkapiAdapter: UniversityAdapter = {
           .click({ timeout: 2000 });
       }
     } catch { /* no modal — direct submit */ }
+  for (let i = 0; i < 30 && saveStatus === 0; i++) { await page.waitForTimeout(1000).catch(() => {}); }
 
-    const saveResp = await saveRespPromise;
+  { const s2 = await takeShot(page, "final").catch(() => null); if (s2) screenshots.push(s2); }
 
-    { const s = await takeShot(page, "final"); if (s) screenshots.push(s); }
-
-    if (saveResp.status() >= 200 && saveResp.status() < 400) {
-      logger.info("[topkapi] application submitted ✓ (HTTP", saveResp.status(), ")");
-      return { submitted: true, alreadyExists: false, programMissing: false, screenshots };
-    }
-
-    logger.warn("[topkapi] application-save.php returned HTTP", saveResp.status());
-    return {
-      submitted: false,
-      alreadyExists: false,
-      programMissing: false,
-      detail: `application-save.php returned HTTP ${saveResp.status()}`,
-      screenshots,
-    };
+  if (saveStatus >= 200 && saveStatus < 400) {
+    logger.info("[topkapi] application submitted (HTTP " + saveStatus + ")");
+    return { submitted: true, alreadyExists: false, programMissing: false, screenshots };
+  }
+  logger.warn("[topkapi] application-save.php status=" + saveStatus + " (0=no response captured)");
+  return {
+    submitted: false,
+    alreadyExists: false,
+    programMissing: false,
+    detail: "application-save.php status " + saveStatus,
+    screenshots,
+  };
   },
 };
 
