@@ -5007,6 +5007,14 @@
     "testNoReply": "Yanıt yok — bu mesaj bir insana aktarılır.",
     "testNoSendNote": "Bu yalnızca bir önizlemedir — hiçbir mesaj gönderilmedi.",
     "statusOn": "AÇIK",
-    "statusOff": "KAPALI"
+    "statusOff": "KAPALI",
+    "testHistoryLabel": "Sahte konuşma geçmişi (isteğe bağlı)",
+    "testHistoryHint": "Bota bağlam vermek için önceki mesajları ekleyin, sanki bu konuşma daha önce gerçekleşmiş gibi. Hiçbir şey gönderilmez.",
+    "testHistoryAdd": "Mesaj ekle",
+    "testHistoryEmpty": "Geçmiş eklenmedi. Test yalnızca mesaj üzerinde çalışacak.",
+    "testHistoryInbound": "Öğrenci",
+    "testHistoryOutbound": "Danışman",
+    "testHistoryContentPlaceholder": "Mesaj içeriği",
+    "testHistoryRemove": "Mesajı kaldır"
   }
 }

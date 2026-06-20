@@ -207,6 +207,45 @@ test("admin POST /inbox/ai-agent/test → reply, never sends", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// 5b. Test endpoint accepts optional fake history and still never sends.
+// ---------------------------------------------------------------------------
+test("admin POST /inbox/ai-agent/test → accepts fake history, never sends", async () => {
+  currentUser = { id: 999000, role: "admin", isActive: true };
+
+  let sendCalled = false;
+  __setBotSendOverrideForTests(async () => {
+    sendCalled = true;
+    return { ok: true, externalMessageId: "should-not-happen" };
+  });
+  const cannedReply = `CANNED_HIST_${RUN_ID}`;
+  __setBotReplyOverrideForTests(async () => cannedReply);
+
+  const res = await apiReq("POST", "/inbox/ai-agent/test", {
+    message: "Thanks! Can you tell me more about the programs?",
+    language: "en",
+    history: [
+      { direction: "inbound", content: "Hi, tell me about your programs." },
+      { direction: "outbound", content: "Sure! We offer many programs." },
+    ],
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.result.reply, cannedReply, "returns the would-be reply with history");
+  assert.equal(res.data.result.language, "en");
+  assert.equal(sendCalled, false, "the test endpoint must NEVER send, even with history");
+
+  // Invalid history (bad direction) must be rejected with 400.
+  const bad = await apiReq("POST", "/inbox/ai-agent/test", {
+    message: "hi",
+    history: [{ direction: "sideways", content: "x" }],
+  });
+  assert.equal(bad.status, 400, "invalid history direction should 400");
+
+  __setBotReplyOverrideForTests(null);
+  __setBotSendOverrideForTests(null);
+});
+
+// ---------------------------------------------------------------------------
 // 6. Test endpoint reports escalation (and still never sends, reply null).
 // ---------------------------------------------------------------------------
 test("admin POST /inbox/ai-agent/test → escalation yields null reply, no send", async () => {

@@ -5007,6 +5007,14 @@
     "testNoReply": "No reply — this message would be handed off to a human.",
     "testNoSendNote": "This is a preview only — no message was sent.",
     "statusOn": "ON",
-    "statusOff": "OFF"
+    "statusOff": "OFF",
+    "testHistoryLabel": "Fake conversation history (optional)",
+    "testHistoryHint": "Add prior turns to give the bot context, as if this conversation already happened. Nothing is sent.",
+    "testHistoryAdd": "Add turn",
+    "testHistoryEmpty": "No history added. The test will run against the message alone.",
+    "testHistoryInbound": "Student",
+    "testHistoryOutbound": "Agent",
+    "testHistoryContentPlaceholder": "Message content",
+    "testHistoryRemove": "Remove turn"
   }
 }

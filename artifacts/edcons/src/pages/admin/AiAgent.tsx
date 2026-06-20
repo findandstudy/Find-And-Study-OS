@@ -4,6 +4,7 @@ import type {
   AiAgentConfig,
   AiAgentConfigUpdate,
   AiAgentTestResult,
+  AiAgentTestRequestHistoryItem,
 } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -29,7 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MessageSquare, Save, Play, AlertTriangle } from "lucide-react";
+import {
+  MessageSquare,
+  Save,
+  Play,
+  AlertTriangle,
+  Plus,
+  Trash2,
+} from "lucide-react";
+
+type HistoryDirection = "inbound" | "outbound";
 
 type EscalationTopicKey = "contract" | "payment" | "commission" | "partner";
 const ESCALATION_TOPICS: EscalationTopicKey[] = [
@@ -66,8 +76,21 @@ export default function AiAgent() {
   // Test console state.
   const [testMessage, setTestMessage] = useState("");
   const [testLanguage, setTestLanguage] = useState<TestLanguage | "auto">("auto");
+  const [testHistory, setTestHistory] = useState<AiAgentTestRequestHistoryItem[]>([]);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<AiAgentTestResult | null>(null);
+
+  const addHistoryTurn = () =>
+    setTestHistory((prev) => [...prev, { direction: "inbound", content: "" }]);
+  const updateHistoryTurn = (
+    index: number,
+    patch: Partial<AiAgentTestRequestHistoryItem>,
+  ) =>
+    setTestHistory((prev) =>
+      prev.map((turn, i) => (i === index ? { ...turn, ...patch } : turn)),
+    );
+  const removeHistoryTurn = (index: number) =>
+    setTestHistory((prev) => prev.filter((_, i) => i !== index));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,10 +160,18 @@ export default function AiAgent() {
     setTesting(true);
     setTestResult(null);
     try {
-      const body: { message: string; language?: TestLanguage } = {
+      const body: {
+        message: string;
+        language?: TestLanguage;
+        history?: AiAgentTestRequestHistoryItem[];
+      } = {
         message: testMessage.trim(),
       };
       if (testLanguage !== "auto") body.language = testLanguage;
+      const cleanHistory = testHistory
+        .map((turn) => ({ ...turn, content: turn.content.trim() }))
+        .filter((turn) => turn.content.length > 0);
+      if (cleanHistory.length > 0) body.history = cleanHistory;
       const { result } = await customFetch<{ result: AiAgentTestResult }>(
         "/api/inbox/ai-agent/test",
         {
@@ -359,6 +390,75 @@ export default function AiAgent() {
           <CardDescription>{t("aiAgentAdmin.testHint")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <Label>{t("aiAgentAdmin.testHistoryLabel")}</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t("aiAgentAdmin.testHistoryHint")}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addHistoryTurn}
+                className="shrink-0"
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                {t("aiAgentAdmin.testHistoryAdd")}
+              </Button>
+            </div>
+            {testHistory.length === 0 ? (
+              <p className="text-xs italic text-muted-foreground">
+                {t("aiAgentAdmin.testHistoryEmpty")}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {testHistory.map((turn, index) => (
+                  <div key={index} className="flex items-start gap-2">
+                    <Select
+                      value={turn.direction}
+                      onValueChange={(v) =>
+                        updateHistoryTurn(index, {
+                          direction: v as HistoryDirection,
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-32 shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="inbound">
+                          {t("aiAgentAdmin.testHistoryInbound")}
+                        </SelectItem>
+                        <SelectItem value="outbound">
+                          {t("aiAgentAdmin.testHistoryOutbound")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={turn.content}
+                      onChange={(e) =>
+                        updateHistoryTurn(index, { content: e.target.value })
+                      }
+                      placeholder={t("aiAgentAdmin.testHistoryContentPlaceholder")}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeHistoryTurn(index)}
+                      className="shrink-0"
+                      aria-label={t("aiAgentAdmin.testHistoryRemove")}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="testMessage">
               {t("aiAgentAdmin.testMessageLabel")}
