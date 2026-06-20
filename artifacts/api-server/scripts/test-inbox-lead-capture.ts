@@ -24,7 +24,7 @@
  * Run with:
  *   pnpm --filter @workspace/api-server run test:inbox-lead-capture
  */
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import {
   db,
@@ -473,4 +473,11 @@ test("cleanup", async () => {
   __setBotReplyOverrideForTests(null);
   __setBotSendOverrideForTests(null);
   __setBotTemplateSendOverrideForTests(null);
+});
+
+// Force a clean process exit once all tests finish — lingering db pool / inbox
+// bus handles otherwise keep node:test alive and the chain hangs (matches the
+// teardown pattern in test-inbox-bot.ts / test-meta-dm.ts).
+after(() => {
+  setImmediate(() => process.exit(process.exitCode ?? 0));
 });
