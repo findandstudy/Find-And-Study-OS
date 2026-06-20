@@ -6,7 +6,7 @@
  *            Edit dialog includes configJson textarea = Declarative Builder (SUB-STEP H)
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, type ChangeEvent } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Plus, Edit2, Trash2, CheckCircle2, XCircle, Loader2,
-  Code2, Braces, KeySquare,
+  Code2, Braces, KeySquare, Upload,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -120,6 +120,28 @@ function AdapterFormDialog({ open, editing, onClose, onSaved }: FormDialogProps)
       return JSON.parse(raw) as Record<string, unknown>;
     } catch {
       return undefined as unknown as null;
+    }
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleJsonFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset so re-selecting the same file fires onChange again.
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      JSON.parse(text); // validate; throws on malformed JSON
+      set("configJson", text);
+      setJsonError("");
+    } catch {
+      // Leave the existing textarea content untouched on invalid files.
+      setJsonError(t("portalAutomation.adapters.addDialog.invalidJson"));
+      toast({
+        title: t("portalAutomation.adapters.addDialog.invalidJson"),
+        variant: "destructive",
+      });
     }
   };
 
@@ -268,7 +290,30 @@ function AdapterFormDialog({ open, editing, onClose, onSaved }: FormDialogProps)
 
           {/* Config JSON (Declarative Builder) */}
           <div className="space-y-1.5">
-            <Label htmlFor="adp-json">{t("portalAutomation.adapters.addDialog.configJsonLabel")}</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="adp-json">{t("portalAutomation.adapters.addDialog.configJsonLabel")}</Label>
+              {form.kind === "declarative" && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={handleJsonFileUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 px-2 text-xs"
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label="Upload JSON file"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              )}
+            </div>
             <Textarea
               id="adp-json"
               value={form.configJson}
