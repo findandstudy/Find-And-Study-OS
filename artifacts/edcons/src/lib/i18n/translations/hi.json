@@ -4118,7 +4118,9 @@
     "optDocuments": "दस्तावेज़",
     "optDocumentsDesc": "आवश्यक दस्तावेज़ प्रकार",
     "optCurrency": "मुद्रा",
-    "optCurrencyDesc": "समर्थित मुद्राएं"
+    "optCurrencyDesc": "समर्थित मुद्राएं",
+    "dialCode": "डायल कोड",
+    "dialCodeOptional": "डायल कोड (वैकल्पिक)"
   },
   "appDocsPanel": {
     "documentUploaded": "दस्तावेज़ अपलोड किया गया",

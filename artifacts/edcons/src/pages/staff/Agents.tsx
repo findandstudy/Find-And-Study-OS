@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -1202,16 +1203,7 @@ export default function AgentsPage() {
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> Mobile No. <span className="text-red-500">*</span></Label>
                   <div className="flex gap-2">
-                    <Select value={form.phoneCode} onValueChange={v => setForm(f => ({ ...f, phoneCode: v }))}>
-                      <SelectTrigger className="w-28 rounded-xl shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {PHONE_CODES.map(pc => (
-                          <SelectItem key={pc.code + pc.country} value={pc.code}><span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span></SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <PhoneCodePicker value={form.phoneCode} onChange={v => setForm(f => ({ ...f, phoneCode: v }))} triggerClassName="w-28 shrink-0" />
                     <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="Mobile No." className="rounded-xl" />
                   </div>
                 </div>

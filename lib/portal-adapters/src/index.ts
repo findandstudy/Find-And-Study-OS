@@ -63,3 +63,19 @@ export {
   type ProfileField,
   type FileField,
 } from "./declarativeAdapter.js";
+
+// DB declarative adapter loader (validates + merges DB-defined adapters)
+export {
+  declarativeConfigSchema,
+  parseDeclarativeConfig,
+  isSafePortalUrl,
+  rowToRawConfig,
+  staticAdapterKeys,
+  buildDeclarativeAdaptersFromRows,
+  loadDeclarativeAdaptersFromDb,
+  invalidateDeclarativeAdapterCache,
+  resolveAdapterByKey,
+  resolveAdapterForUniversity,
+  type ParseResult,
+  type DeclarativeAdapterRow,
+} from "./dbLoader.js";

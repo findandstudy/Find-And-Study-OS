@@ -13,15 +13,14 @@
 
 import fs from "node:fs/promises";
 import {
-  adapterByKey,
-  adapterForUniversity,
+  resolveAdapterByKey,
+  resolveAdapterForUniversity,
   setCredsOverride,
   clearCredsOverride,
 } from "@workspace/portal-adapters";
 import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 import type { ClaimedSubmission } from "./queue.js";
 import { resolvePortalCreds } from "./credResolver.js";
-import { loadDbAdapter } from "./dbAdapters.js";
 
 // ---------------------------------------------------------------------------
 // Result shape returned to stageWriteback
@@ -48,11 +47,10 @@ export async function runSubmission(
   files: SubmitFiles,
   tempDir: string,
 ): Promise<RunResult> {
-  // ----- 1. Resolve adapter -----------------------------------------------
+  // ----- 1. Resolve adapter (code adapters + DB declarative adapters) ------
   const adapter =
-    adapterByKey(submission.universityKey) ??
-    adapterForUniversity(submission.universityName) ??
-    (await loadDbAdapter(submission.universityKey, submission.universityName));
+    (await resolveAdapterByKey(submission.universityKey)) ??
+    (await resolveAdapterForUniversity(submission.universityName));
 
   if (!adapter) {
     await cleanup(tempDir);

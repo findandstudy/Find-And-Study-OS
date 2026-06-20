@@ -4118,7 +4118,9 @@
     "optDocuments": "Dokumen",
     "optDocumentsDesc": "Jenis dokumen yang diperlukan",
     "optCurrency": "Mata Uang",
-    "optCurrencyDesc": "Mata uang yang didukung"
+    "optCurrencyDesc": "Mata uang yang didukung",
+    "dialCode": "Kode Telepon",
+    "dialCodeOptional": "Kode telepon (opsional)"
   },
   "appDocsPanel": {
     "documentUploaded": "Dokumen diunggah",

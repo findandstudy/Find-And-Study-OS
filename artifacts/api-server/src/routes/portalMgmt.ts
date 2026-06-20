@@ -27,7 +27,7 @@ import {
   portalProgramMappingTable,
   portalCredentialsTable,
 } from "@workspace/db";
-import { adapterByKey, adapterMetadata, setCredsOverride, clearCredsOverride } from "@workspace/portal-adapters";
+import { resolveAdapterByKey, adapterMetadata, setCredsOverride, clearCredsOverride, invalidateDeclarativeAdapterCache } from "@workspace/portal-adapters";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -573,8 +573,8 @@ router.post(
       return;
     }
 
-    // Gate 2: adapter registered?
-    const adapter = adapterByKey(uni.adapterKey);
+    // Gate 2: adapter registered? (code adapters + DB declarative adapters)
+    const adapter = await resolveAdapterByKey(uni.adapterKey);
     if (!adapter) {
       res.json({
         ok: false,
@@ -778,6 +778,10 @@ router.post(
 
     logAudit(user.id, "create_portal_adapter", "portal_adapter", row.id, { key: row.key }, req.ip);
 
+    // Refresh the declarative-adapter resolution cache so the new adapter is
+    // usable immediately (without waiting for the TTL or a process restart).
+    invalidateDeclarativeAdapterCache();
+
     res.status(201).json(row);
   },
 );
@@ -831,6 +835,8 @@ router.patch(
 
     logAudit(user.id, "update_portal_adapter", "portal_adapter", id, body, req.ip);
 
+    invalidateDeclarativeAdapterCache();
+
     res.json(updated);
   },
 );
@@ -863,6 +869,8 @@ router.delete(
       .where(eq(portalAdaptersTable.id, id));
 
     logAudit(user.id, "delete_portal_adapter", "portal_adapter", id, {}, req.ip);
+
+    invalidateDeclarativeAdapterCache();
 
     res.json({ ok: true });
   },

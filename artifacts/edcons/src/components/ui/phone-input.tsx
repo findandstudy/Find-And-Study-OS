@@ -4,6 +4,7 @@ import { ChevronDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
 import { PHONE_CODES } from "@/lib/nationalities";
+import { useDialCodeCountries } from "@/hooks/use-countries";
 
 const regionNames = typeof Intl !== "undefined" && (Intl as any).DisplayNames
   ? new (Intl as any).DisplayNames(["en"], { type: "region" })
@@ -70,12 +71,28 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
     return undefined;
   }, [open]);
 
-  const selectedCountry = useMemo(
-    () => COUNTRY_CODES.find(c => c.dial === dialCode) ?? COUNTRY_CODES[0],
-    [dialCode],
-  );
+  // Base (unfiltered) catalog tells us whether the catalog is available and is
+  // the source of truth for resolving the selected country (incl. admin-edited
+  // dial codes). Falls back to the hardcoded ITU list when catalog is empty.
+  const { data: baseCatalog = [] } = useDialCodeCountries("");
+  const catalogAvailable = baseCatalog.length > 0;
 
+  const selectedCountry = useMemo(() => {
+    if (catalogAvailable) {
+      const c = baseCatalog.find(c => c.dialCode === dialCode);
+      if (c) return { code: c.code, dial: c.dialCode, name: c.name };
+    }
+    return COUNTRY_CODES.find(c => c.dial === dialCode) ?? COUNTRY_CODES[0];
+  }, [dialCode, catalogAvailable, baseCatalog]);
+
+  // Server-side (AJAX) debounced search. When the catalog is available we render
+  // its (possibly empty) search results honestly; we only fall back to the
+  // hardcoded list when the catalog itself is empty/unreachable.
+  const { data: catalog = [] } = useDialCodeCountries(search);
   const filtered = useMemo(() => {
+    if (catalogAvailable) {
+      return catalog.map(c => ({ code: c.code, dial: c.dialCode, name: c.name }));
+    }
     const q = search.trim().toLowerCase();
     if (!q) return COUNTRY_CODES;
     const cleanQ = q.replace(/^\+/, "");
@@ -84,7 +101,7 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
       c.dial.replace("+", "").startsWith(cleanQ) ||
       c.code.toLowerCase().includes(q)
     );
-  }, [search]);
+  }, [catalogAvailable, catalog, search]);
 
   function handleDialChange(dial: string) {
     setDialCode(dial);
@@ -118,7 +135,7 @@ export function PhoneInput({ value, onChange, className }: PhoneInputProps) {
       />
 
       {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-[300px] rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 top-full mt-1 left-0 w-[240px] rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
           <div className="flex items-center border-b px-2 py-1.5">
             <Search className="h-3.5 w-3.5 text-muted-foreground mr-1.5 shrink-0" />
             <input

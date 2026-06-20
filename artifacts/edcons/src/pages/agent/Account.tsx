@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import {
@@ -355,21 +356,7 @@ export default function AgentAccount() {
                         <Phone className="w-3 h-3" /> Phone
                       </Label>
                       <div className="flex gap-2">
-                        <Select value={form.phoneCode} onValueChange={v => setForm(f => ({ ...f, phoneCode: v }))}>
-                          <SelectTrigger className="w-[110px] h-10 shrink-0">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-60">
-                            {PHONE_CODES.map(pc => (
-                              <SelectItem key={pc.code + pc.country} value={pc.code}>
-                                <span className="inline-flex items-center gap-1.5">
-                                  <CountryFlag code={pc.country} size="sm" />
-                                  {pc.code}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <PhoneCodePicker value={form.phoneCode} onChange={v => setForm(f => ({ ...f, phoneCode: v }))} triggerClassName="w-[110px] h-10 shrink-0" />
                         <Input
                           value={form.phoneNumber}
                           onChange={e => setForm(f => ({ ...f, phoneNumber: digitsOnly(e.target.value) }))}

@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
+import { useCountrySearch } from "@/hooks/use-countries";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -238,7 +239,8 @@ function NationalityCombobox({ value, onChange, countries, aiExtracted }: {
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const filtered = searchVal ? countries.filter(c => c.name.toLowerCase().includes(searchVal.toLowerCase())) : countries;
+  // Server-side (AJAX) debounced search over the country catalog.
+  const { data: filtered = [] } = useCountrySearch(searchVal);
 
   useEffect(() => {
     if (!open) return;

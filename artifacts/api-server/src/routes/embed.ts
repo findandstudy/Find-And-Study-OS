@@ -1,6 +1,6 @@
 import express, { Router, type IRouter, json } from "express";
 import crypto from "crypto";
-import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
+import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable, settingsTable, countriesTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, desc, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -11,7 +11,7 @@ import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp } from "../lib/clientIp";
 import { createApplicationForStudent } from "./public-apply";
-import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
+import { checkMandatoryDocs, checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import { generateSecureToken } from "../lib/email";
@@ -1181,6 +1181,34 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     return { leadId: lead.id, submissionId: submission.id };
   });
 
+  // ─── Server-side mandatory-document enforcement ──────────────────────────
+  // The widget blocks submit client-side when required documents are missing,
+  // but a stale cached widget, a disabled-JS client, or a direct API call
+  // could bypass that gate (this is exactly how application #2141 came in with
+  // only 2 of 4 mandatory docs). Enforce the gate on the server too: when the
+  // selected program has mandatory documents that this submission does not
+  // satisfy, refuse to create/convert the student + application. The lead +
+  // submission row committed above is intentionally KEPT, so no contact is
+  // ever lost — staff still see the lead and can follow up — we only decline
+  // to accept an application that is missing its mandatory documents.
+  {
+    const programIdNum = programId ? parseInt(String(programId), 10) : NaN;
+    if (Number.isFinite(programIdNum) && programIdNum > 0) {
+      const uploadedDocTypes = docArray
+        .map((d: any) => String(d.label || "").toLowerCase())
+        .filter(Boolean);
+      const { missing } = await checkMandatoryDocs(programIdNum, uploadedDocTypes);
+      if (missing.length > 0) {
+        res.status(422).json({
+          error: "Please upload all required documents before submitting your application.",
+          missingDocuments: missing,
+          leadId: result.leadId,
+        });
+        return;
+      }
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────
   // After the lead+submission row is saved, create a student account and
   // application so the embed submission shows up in the same Students /
@@ -1478,7 +1506,17 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   // API key header — see the backend-mediated token issuance endpoint).
   const baseUrl = getBaseUrl(req);
   const docMeta = await loadDocCatalogForEmbed();
-  const html = generateWidgetHTML(slug, baseUrl, widget, docMeta);
+  // Source phone dial codes from the country catalog (active + dial-coded only)
+  // so admins control them centrally. Tuples are [dialCode, isoAlpha2, name].
+  const dialRows = await db
+    .select({ code: countriesTable.code, name: countriesTable.name, dialCode: countriesTable.dialCode })
+    .from(countriesTable)
+    .where(and(eq(countriesTable.isActive, true), isNotNull(countriesTable.dialCode)))
+    .orderBy(countriesTable.name);
+  const dialCodes: [string, string, string][] = dialRows
+    .filter(r => r.dialCode)
+    .map(r => [r.dialCode as string, r.code, r.name]);
+  const html = generateWidgetHTML(slug, baseUrl, widget, docMeta, dialCodes);
   res.setHeader("Content-Type", "text/html");
   res.send(html);
 });
@@ -1676,7 +1714,7 @@ function generateEmbedScript(baseUrl: string): string {
 })();`;
 }
 
-function generateWidgetHTML(slug: string, baseUrl: string, widget: any, docMeta: Record<string, DocCatalogEntry>): string {
+function generateWidgetHTML(slug: string, baseUrl: string, widget: any, docMeta: Record<string, DocCatalogEntry>, dialCodes: [string, string, string][] = []): string {
   const theme = sanitizeTheme(widget.theme);
   const primaryColor = theme.primaryColor || "#2563eb";
   const secondaryColor = theme.secondaryColor || "#1e40af";
@@ -1843,6 +1881,8 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-doc-hint{font-size:0.65rem;color:#94a3b8}
 .ew-doc-status{font-size:0.7rem;color:#22c55e;font-weight:600}
 .ew-doc-required{color:#ef4444;font-size:0.65rem}
+.ew-btn:disabled,.ew-btn-outline:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+.ew-doc-warning{background:#fef3c7;border:1px solid #fcd34d;color:#92400e;border-radius:10px;padding:10px 12px;margin-top:14px;font-size:0.78rem;line-height:1.4}
 .ew-doc-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
 .ew-doc-header span:first-child{font-size:0.9rem;font-weight:600;color:#1f2937}
 .ew-doc-header span:last-child{font-size:0.75rem;color:#64748b}
@@ -1929,9 +1969,8 @@ function loadProgramDocs(pid,cb){
   programDocs=null;
   if(!pid){if(cb)cb();return;}
   var apiBase=API.replace('/public/embed/'+SLUG,'');
-  fetch(apiBase+'/public/programs/'+pid+'/document-requirements').then(function(r){
-    return r.ok?r.json():[];
-  }).then(function(rows){
+  var url=apiBase+'/public/programs/'+pid+'/document-requirements';
+  function applyRows(rows){
     if(Array.isArray(rows)&&rows.length>0){
       programDocs=rows.slice().sort(function(a,b){return (a.sortOrder||0)-(b.sortOrder||0);}).map(function(r){
         var rawKey=String(r.documentType||'other');
@@ -1945,11 +1984,62 @@ function loadProgramDocs(pid,cb){
         return {key:key,label:meta.label,icon:meta.icon,accept:meta.accept||'.pdf,.jpg,.jpeg,.png',required:!!r.mandatory};
       });
     }
-  }).catch(function(){}).finally(function(){if(cb)cb();});
+  }
+  // Retry once on transient failure so a blip doesn't silently downgrade the
+  // required-docs gate to the generic fallback set. On persistent failure we
+  // fall back (gate still requires the default docs) and rely on the backend
+  // safety net, which always parks incomplete applications in missing_docs --
+  // we never hard-block here, to avoid dropping the lead entirely.
+  function attempt(retriesLeft){
+    fetch(url).then(function(r){
+      if(!r.ok)throw new Error('http '+r.status);
+      return r.json();
+    }).then(function(rows){
+      applyRows(rows);
+      if(cb)cb();
+    }).catch(function(){
+      if(retriesLeft>0){setTimeout(function(){attempt(retriesLeft-1);},600);return;}
+      if(cb)cb();
+    });
+  }
+  attempt(1);
 }
 var detailProgram=null, detailOpen=false;
 var formStep='personal';
 var uploadedDocs={};
+// Message shown when the applicant tries to advance past the Documents step
+// without uploading every document marked Required. {docs} is replaced with
+// the comma-separated list of missing required document labels.
+var REQUIRED_DOCS_MSG='Please upload all required documents to continue: {docs}';
+// The document-type list shown in the Documents step: per-program
+// requirements when available, otherwise a sensible default set. Used by both
+// the renderer and the required-docs gate so they never diverge.
+function getDocTypes(){
+  return (programDocs&&programDocs.length>0)?programDocs:[
+    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
+    {key:'diploma',label:'Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:false},
+    {key:'transcript',label:'Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:false},
+    {key:'photo',label:'Photo',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:false}
+  ];
+}
+// Required documents not yet uploaded. Returns an array of doc-type objects.
+function missingRequiredDocs(){
+  var types=getDocTypes(),miss=[];
+  for(var i=0;i<types.length;i++){var d=types[i];if(d&&d.required&&!uploadedDocs[d.key])miss.push(d);}
+  return miss;
+}
+// Defense-in-depth gate: refuse to advance/submit and bounce back to the
+// Documents step when any required document is missing. Returns true when OK.
+function enforceDocGate(){
+  var miss=missingRequiredDocs();
+  if(miss.length>0){
+    alert(REQUIRED_DOCS_MSG.replace('{docs}',miss.map(function(d){return d.label;}).join(', ')));
+    formStep='documents';
+    if(formOpen)showModal();else render(false);
+    return false;
+  }
+  return true;
+}
 var aiResult=null;
 var extractedFields={};
 var NATIONALITIES=${JSON.stringify(NATIONALITIES)};
@@ -1958,7 +2048,10 @@ var NATIONALITIES=${JSON.stringify(NATIONALITIES)};
 // selection. Tuples are [code, isoAlpha2, displayName]. Flags rendered via
 // flagcdn PNG images instead of unicode regional-indicator emoji so they
 // render consistently on Windows (which otherwise shows letter pairs).
-var PHONE_CODES=[
+// Catalog-sourced codes (admin-managed) take precedence; the hardcoded list
+// below is a fallback for when the catalog has no dial-coded countries.
+var PHONE_CODES_CATALOG=${JSON.stringify(dialCodes).replace(/<\/script/gi, "<\\/script").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")};
+var PHONE_CODES=(PHONE_CODES_CATALOG&&PHONE_CODES_CATALOG.length)?PHONE_CODES_CATALOG:[
   ['+93','AF','Afghanistan'],['+355','AL','Albania'],['+213','DZ','Algeria'],
   ['+376','AD','Andorra'],['+244','AO','Angola'],['+54','AR','Argentina'],
   ['+374','AM','Armenia'],['+61','AU','Australia'],['+43','AT','Austria'],
@@ -2658,12 +2751,7 @@ function renderFormContent(prog){
     h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:1rem">\\u2728</span><strong style="font-size:0.85rem">AI-Powered Document Analysis</strong></div>';
     h+='<p style="font-size:0.78rem;color:#64748b;margin:0">Upload your documents and our AI will automatically extract your information. You can review and edit before submitting.</p>';
     h+='</div>';
-    var docTypes=(programDocs&&programDocs.length>0)?programDocs:[
-      {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
-      {key:'diploma',label:'Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:false},
-      {key:'transcript',label:'Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:false},
-      {key:'photo',label:'Photo',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:false}
-    ];
+    var docTypes=getDocTypes();
     h+='<div class="ew-doc-grid">';
     for(var i=0;i<docTypes.length;i++){
       var d=docTypes[i];
@@ -2682,9 +2770,14 @@ function renderFormContent(prog){
       h+='</div>';
     }
     h+='</div>';
+    var _missReq=missingRequiredDocs();
+    var _gate=_missReq.length>0;
+    if(_gate){
+      h+='<div class="ew-doc-warning">'+esc(REQUIRED_DOCS_MSG.replace('{docs}',_missReq.map(function(d){return d.label;}).join(', ')))+'</div>';
+    }
     h+='<div class="ew-form-actions" style="margin-top:16px">';
-    h+='<button type="button" class="ew-btn" id="ew-analyze-btn" style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">\\u2728 Analyze with AI & Continue</button>';
-    h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-skip-btn">Skip & Continue</button>';
+    h+='<button type="button" class="ew-btn" id="ew-analyze-btn"'+(_gate?' disabled':'')+' style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">\\u2728 Analyze with AI & Continue</button>';
+    h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-skip-btn"'+(_gate?' disabled':'')+'>Skip & Continue</button>';
     h+='<button type="button" class="ew-btn-back" id="ew-back-personal">\\u2190 Back</button>';
     if(formOpen)h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
     h+='</div>';
@@ -3071,7 +3164,7 @@ function bindModalEvents(modal,overlay){
   if(analyzeBtn)analyzeBtn.addEventListener('click',handleAnalyze);
   var skipBtn=$('#ew-skip-btn',modal);
   // Skip the AI extract and go straight to the review step.
-  if(skipBtn)skipBtn.addEventListener('click',function(){formStep='review';if(formOpen)showModal();else render(false)});
+  if(skipBtn)skipBtn.addEventListener('click',function(){if(!enforceDocGate())return;formStep='review';if(formOpen)showModal();else render(false)});
   var backUploadBtn=$('#ew-back-upload',modal);
   // From review step → back to documents. Snapshot any review-form edits
   // first so they survive the round-trip.
@@ -3348,6 +3441,7 @@ function handleNextPersonal(scope){
 }
 
 function handleAnalyze(){
+  if(!enforceDocGate())return;
   var docKeys=Object.keys(uploadedDocs);
   if(docKeys.length===0){formStep='review';if(formOpen)showModal();else render(false);return;}
   formStep='analyzing';
@@ -3431,6 +3525,7 @@ function handleFormSubmit(e){
     alert('Please select the phone country code.');
     return;
   }
+  if(!enforceDocGate())return;
   if(formLoading)return;
   formLoading=true;
   if(formOpen)showModal();else render(false);
@@ -3463,7 +3558,13 @@ function handleFormSubmit(e){
     body:JSON.stringify(data)
   }).then(function(r){
     formLoading=false;
-    if(!r.ok)return r.json().then(function(d){throw new Error(d.error||'Submission failed')});
+    if(!r.ok)return r.json().then(function(d){
+      // Server rejected because mandatory documents are missing (defense in
+      // depth behind the client gate). Bounce the user back to the Documents
+      // step so they can upload what's missing instead of being stuck.
+      if(d&&d.missingDocuments&&d.missingDocuments.length)formStep='documents';
+      throw new Error(d.error||'Submission failed')
+    });
     formSubmitted=true;
     if(formOpen)showModal();
     else render(false);
@@ -3517,7 +3618,7 @@ function bindEvents(){
   var inlineAnalyzeBtn=$('#ew-analyze-btn');
   if(inlineAnalyzeBtn&&!formOpen)inlineAnalyzeBtn.addEventListener('click',handleAnalyze);
   var inlineSkipBtn=$('#ew-skip-btn');
-  if(inlineSkipBtn&&!formOpen)inlineSkipBtn.addEventListener('click',function(){formStep='review';render(false)});
+  if(inlineSkipBtn&&!formOpen)inlineSkipBtn.addEventListener('click',function(){if(!enforceDocGate())return;formStep='review';render(false)});
   var inlineBackUploadBtn=$('#ew-back-upload');
   if(inlineBackUploadBtn&&!formOpen)inlineBackUploadBtn.addEventListener('click',function(){snapshotForm(null);formStep='documents';render(false)});
   var inlineBackPersonalBtn=$('#ew-back-personal');

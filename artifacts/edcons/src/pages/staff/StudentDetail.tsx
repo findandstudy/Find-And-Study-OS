@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock, Copy, Check, Eye, UserPlus } from "lucide-react";
@@ -27,6 +28,7 @@ import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CountryFlag } from "@/components/CountryFlag";
+import { useCountrySearch } from "@/hooks/use-countries";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { OriginBadge } from "@/components/OriginBadge";
@@ -35,7 +37,6 @@ import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
-import { ActivityFeed } from "@/components/shared/ActivityFeed";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -787,7 +788,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               </TabsTrigger>
             )}
             <TabsTrigger value="messaging">{t("studentDetailPage.allMessaging")}</TabsTrigger>
-            <TabsTrigger value="activity">{t("activityFeed.title")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
@@ -1337,9 +1337,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           <TabsContent value="messaging" className="mt-4">
             <AllMessagingHistory type="student" id={Number(id)} />
           </TabsContent>
-          <TabsContent value="activity" className="mt-4">
-            <ActivityFeed context="student" id={Number(id)} />
-          </TabsContent>
         </Tabs>
         {student && <div className="mt-4"><AuditLogSection resource="student" resourceId={student.id} /></div>}
       </div>
@@ -1494,16 +1491,8 @@ function NationalityCombobox({ value, onChange }: { value: string; onChange: (v:
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const { data: countriesResp } = useQuery({
-    queryKey: ["all-countries-nationality"],
-    queryFn: () => fetch(`${BASE_URL}/api/countries?limit=500`, { credentials: "include" }).then(r => r.json()),
-    staleTime: 5 * 60_000,
-  });
-  const allCountries: Array<{ id: number; name: string; code?: string }> = countriesResp?.data ?? [];
-
-  const filtered = searchVal
-    ? allCountries.filter(c => c.name.toLowerCase().includes(searchVal.toLowerCase()))
-    : allCountries;
+  // Server-side (AJAX) debounced search over the country catalog.
+  const { data: filtered = [] } = useCountrySearch(searchVal);
 
   useEffect(() => {
     if (!open) return;
@@ -1667,18 +1656,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Phone</Label>
                 <div className="flex gap-1.5">
-                  <Select value={form.phoneCode} onValueChange={field("phoneCode")}>
-                    <SelectTrigger className="w-[100px] h-9 text-sm rounded-xl shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PHONE_CODES.map(pc => (
-                        <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
-                          <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <PhoneCodePicker value={form.phoneCode} onChange={field("phoneCode")} triggerClassName="w-[100px] h-9 shrink-0" />
                   <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
                 </div>
               </div>

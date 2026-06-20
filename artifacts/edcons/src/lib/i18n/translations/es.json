@@ -4118,7 +4118,9 @@
     "optDocuments": "Documentos",
     "optDocumentsDesc": "Tipos de documentos requeridos",
     "optCurrency": "Moneda",
-    "optCurrencyDesc": "Monedas admitidas"
+    "optCurrencyDesc": "Monedas admitidas",
+    "dialCode": "Código de marcación",
+    "dialCodeOptional": "Código de marcación (opcional)"
   },
   "appDocsPanel": {
     "documentUploaded": "Documento subido",

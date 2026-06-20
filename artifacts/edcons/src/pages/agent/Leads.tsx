@@ -16,8 +16,10 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { Badge } from "@/components/ui/badge";
 import { CountryFlag } from "@/components/CountryFlag";
+import { useCountrySearch } from "@/hooks/use-countries";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -369,14 +371,12 @@ function FilterPopover({ filters, onChange, columns }: {
 
 /* ── NationalityCombobox ──────────────────────────────────── */
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: allCountries = [] } = useCountries();
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const filtered = searchVal
-    ? allCountries.filter(c => c.name.toLowerCase().includes(searchVal.toLowerCase()))
-    : allCountries;
+  // Server-side (AJAX) debounced search over the country catalog.
+  const { data: filtered = [] } = useCountrySearch(searchVal);
 
   useEffect(() => {
     if (!open) return;
@@ -581,16 +581,7 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
           <div className="space-y-1.5">
             <Label>Phone *</Label>
             <div className="flex gap-1">
-              <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
-                <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PHONE_CODES.map(pc => (
-                    <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
-                      <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PhoneCodePicker value={form.phoneCode} onChange={v => setForm({ ...form, phoneCode: v })} triggerClassName="w-[90px] shrink-0 px-2" />
               <Input className="flex-1 min-w-0" value={form.phone} onChange={e => setForm({ ...form, phone: digitsOnly(e.target.value) })} placeholder="555 000 0000" />
             </div>
           </div>

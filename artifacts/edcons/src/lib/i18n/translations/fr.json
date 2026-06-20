@@ -4118,7 +4118,9 @@
     "optDocuments": "Documents",
     "optDocumentsDesc": "Types de documents requis",
     "optCurrency": "Devise",
-    "optCurrencyDesc": "Devises prises en charge"
+    "optCurrencyDesc": "Devises prises en charge",
+    "dialCode": "Indicatif téléphonique",
+    "dialCodeOptional": "Indicatif téléphonique (facultatif)"
   },
   "appDocsPanel": {
     "documentUploaded": "Document téléversé",

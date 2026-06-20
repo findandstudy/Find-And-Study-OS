@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { CountryFlag } from "@/components/CountryFlag";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { useI18n } from "@/hooks/use-i18n";
 
 type SubAgent = {
@@ -564,22 +565,7 @@ export default function AgentSubAgents() {
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">{t("common.phone")}</Label>
               <div className="flex gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="h-9 gap-1.5 px-2.5 min-w-[90px] shrink-0">
-                      <CountryFlag code={PHONE_CODES.find(p => p.code === form.phoneCode)?.country || "TR"} size="sm" />
-                      <span className="text-xs">{form.phoneCode}</span>
-                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
-                    {PHONE_CODES.map(pc => (
-                      <DropdownMenuItem key={pc.code} onClick={() => setForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
-                        <CountryFlag code={pc.country} size="sm" /> {pc.code}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <PhoneCodePicker value={form.phoneCode} onChange={v => setForm(f => ({ ...f, phoneCode: v }))} triggerClassName="min-w-[90px] w-auto h-9 shrink-0" />
                 <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder={t("subAgentsPage.phonePlaceholder")} className="h-9 flex-1" />
               </div>
             </div>
@@ -662,22 +648,7 @@ export default function AgentSubAgents() {
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">{t("common.phone")}</Label>
               <div className="flex gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="h-9 gap-1.5 px-2.5 min-w-[90px] shrink-0">
-                      <CountryFlag code={PHONE_CODES.find(p => p.code === form.phoneCode)?.country || "TR"} size="sm" />
-                      <span className="text-xs">{form.phoneCode}</span>
-                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
-                    {PHONE_CODES.map(pc => (
-                      <DropdownMenuItem key={pc.code} onClick={() => setForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
-                        <CountryFlag code={pc.country} size="sm" /> {pc.code}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <PhoneCodePicker value={form.phoneCode} onChange={v => setForm(f => ({ ...f, phoneCode: v }))} triggerClassName="min-w-[90px] w-auto h-9 shrink-0" />
                 <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder={t("subAgentsPage.phonePlaceholder")} className="h-9 flex-1" />
               </div>
             </div>

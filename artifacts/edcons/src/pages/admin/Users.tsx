@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { CountryFlag } from "@/components/CountryFlag";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { useI18n } from "@/hooks/use-i18n";
 
@@ -665,22 +666,7 @@ function UsersTab() {
             <div className="space-y-2">
               <Label>Phone</Label>
               <div className="flex gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="h-10 gap-1.5 px-2.5 min-w-[100px] shrink-0">
-                      <CountryFlag code={PHONE_CODES.find(p => p.code === createForm.phoneCode)?.country || "TR"} size="sm" />
-                      <span className="text-xs">{createForm.phoneCode}</span>
-                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
-                    {PHONE_CODES.map(pc => (
-                      <DropdownMenuItem key={pc.code} onClick={() => setCreateForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
-                        <CountryFlag code={pc.country} size="sm" /> {pc.code}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <PhoneCodePicker value={createForm.phoneCode} onChange={v => setCreateForm(f => ({ ...f, phoneCode: v }))} triggerClassName="min-w-[100px] w-auto h-10 shrink-0" />
                 <Input value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))}
                   placeholder="555 123 4567" className="flex-1" />
               </div>
@@ -778,22 +764,7 @@ function UsersTab() {
             <div className="space-y-2">
               <Label>Phone</Label>
               <div className="flex gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="h-10 gap-1.5 px-2.5 min-w-[100px] shrink-0">
-                      <CountryFlag code={PHONE_CODES.find(p => p.code === editForm.phoneCode)?.country || "TR"} size="sm" />
-                      <span className="text-xs">{editForm.phoneCode}</span>
-                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="max-h-60 overflow-y-auto w-36">
-                    {PHONE_CODES.map(pc => (
-                      <DropdownMenuItem key={pc.code} onClick={() => setEditForm(f => ({ ...f, phoneCode: pc.code }))} className="gap-2 text-xs">
-                        <CountryFlag code={pc.country} size="sm" /> {pc.code}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <PhoneCodePicker value={editForm.phoneCode} onChange={v => setEditForm(f => ({ ...f, phoneCode: v }))} triggerClassName="min-w-[100px] w-auto h-10 shrink-0" />
                 <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))}
                   placeholder="555 123 4567" className="flex-1" />
               </div>

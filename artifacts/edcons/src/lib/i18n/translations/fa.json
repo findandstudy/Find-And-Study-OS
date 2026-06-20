@@ -4118,7 +4118,9 @@
     "optDocuments": "مدارک",
     "optDocumentsDesc": "انواع مدارک مورد نیاز",
     "optCurrency": "ارز",
-    "optCurrencyDesc": "ارزهای پشتیبانی شده"
+    "optCurrencyDesc": "ارزهای پشتیبانی شده",
+    "dialCode": "کد تماس",
+    "dialCodeOptional": "کد تماس (اختیاری)"
   },
   "appDocsPanel": {
     "documentUploaded": "مدرک بارگذاری شد",

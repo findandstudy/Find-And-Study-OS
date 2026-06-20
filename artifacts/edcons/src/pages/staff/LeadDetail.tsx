@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useDocumentPreview } from "@/components/DocumentPreviewDialog";
 import { getPreviewKind, type PreviewTarget } from "@/components/documentPreview";
@@ -27,12 +28,12 @@ import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
+import { useCountrySearch } from "@/hooks/use-countries";
 import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 
 const PHONE_CODES = [
@@ -870,11 +871,6 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
               )}
             </div>
 
-            {/* Activity Feed */}
-            <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
-              <h2 className="font-semibold text-foreground">{t("activityFeed.title")}</h2>
-              <ActivityFeed context="lead" id={id} />
-            </div>
           </div>
 
           {/* Right: status card */}
@@ -1078,14 +1074,12 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
 }
 
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { data: allCountries = [] } = useCountries();
   const [searchVal, setSearchVal] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const filtered = searchVal
-    ? allCountries.filter(c => c.name.toLowerCase().includes(searchVal.toLowerCase()))
-    : allCountries;
+  // Server-side (AJAX) debounced search over the country catalog.
+  const { data: filtered = [] } = useCountrySearch(searchVal);
 
   useEffect(() => {
     if (!open) return;
@@ -1287,16 +1281,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
           <div className="space-y-1.5">
             <Label>{t("leadDetailPage.phone")}</Label>
             <div className="flex gap-1">
-              <Select value={form.phoneCode} onValueChange={v => setForm({ ...form, phoneCode: v })}>
-                <SelectTrigger className="w-[90px] shrink-0 px-2"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PHONE_CODES.map(pc => (
-                    <SelectItem key={`${pc.code}-${pc.country}`} value={pc.code}>
-                      <span className="inline-flex items-center gap-1.5"><CountryFlag code={pc.country} size="sm" />{pc.code}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PhoneCodePicker value={form.phoneCode} onChange={v => setForm({ ...form, phoneCode: v })} triggerClassName="w-[90px] shrink-0" />
               <Input className="flex-1 min-w-0" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
             </div>
           </div>
