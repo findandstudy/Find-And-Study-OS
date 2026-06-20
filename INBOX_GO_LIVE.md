@@ -1,4 +1,4 @@
-# Inbox Go-Live Checklist — WhatsApp Business + Web Form
+# Inbox Go-Live Checklist — WhatsApp Business + Messenger + Instagram DM + Web Form
 
 This is the production runbook for switching the Omnichannel Inbox from
 simulated/dev mode to live, accepting real WhatsApp messages and real form
@@ -109,6 +109,139 @@ WHERE action='webhook_auth_failed' AND created_at > NOW() - INTERVAL '10 minutes
 | Inbound webhooks return `401 Invalid or missing signature` | App Secret missing or wrong | Re-copy from Meta App Basic settings; re-save WA integration |
 | Inbound webhooks return `200 ignored: integration disabled` | The Enable switch is off | Toggle it on (requires both secrets) |
 | `403 Forbidden` on GET handshake | Verify Token typo, or WA integration not yet saved | Save creds first, then re-paste in Meta |
+
+---
+
+## 1.5. Facebook Messenger + Instagram — Direct Messages (DM only)
+
+> **Scope:** Direct Messages only. Public **comments, feed posts, mentions, and
+> story replies are explicitly out of scope** for this rollout — do not subscribe
+> to any feed/comment webhook fields and do not request any comment-management
+> permission. This keeps the Meta App Review surface minimal and avoids the
+> Advanced Access reviews that comment moderation would trigger.
+
+Both Messenger and Instagram DM share **one** webhook callback with WhatsApp:
+
+```
+https://apply.findandstudy.com/api/webhooks/meta
+```
+
+Inbound is signature-verified with the **same** App Secret (`X-Hub-Signature-256`),
+and outbound DMs go to the Graph `me/messages` endpoint. Live sending is gated by
+the same live-mode switch as WhatsApp (`isLiveIntegrationsEnabled()` —
+`NODE_ENV=production` or `ALLOW_LIVE_INTEGRATIONS=true`); in dev the send is
+**simulated** and returns `{ simulated: true }`.
+
+### 1.5a. Prerequisites
+
+- A **Facebook Page** for the brand (Messenger is Page-scoped).
+- An **Instagram professional account** (Business or Creator) **linked to that
+  Page** (Instagram → Settings → linked Facebook Page). Personal IG accounts
+  cannot receive Messaging API webhooks.
+- A **Meta System User** (Business Settings → Users → System Users) with a
+  **non-expiring Page access token** generated for the Page above. Use a System
+  User token, not a personal short-lived token, so the integration does not break
+  every 60 days.
+- App ID **1490649605420814** (same app as WhatsApp).
+
+### 1.5b. Subscribe the webhook fields (DM only)
+
+In **Meta App → Webhooks**, using the existing callback URL + Verify Token:
+
+- **Page** product → subscribe **only**:
+  - `messages`
+  - `messaging_postbacks`
+  - `message_reactions`
+  - `messaging_referrals`
+  - *(do NOT subscribe `feed`, `mention`, `message_deliveries` is optional/receipt-only)*
+- **Instagram** product → subscribe **only**:
+  - `messages`
+  - *(do NOT subscribe `comments`, `mentions`, `story_insights`)*
+
+Then **subscribe the Page to the app** (Page → app subscription) so message
+events actually flow. For Instagram, ensure the **Instagram account is connected
+to the app's Page** and the app has messaging access for that IG account.
+
+### 1.5c. Save the page token + enable
+
+1. **Settings → Integrations → Messenger / Instagram → Configure.**
+2. Paste the **System User Page access token** (and IG account id where prompted).
+3. The **App Secret** and **Verify Token** are shared with WhatsApp — no need to
+   re-enter; the single `/api/webhooks/meta` route validates all three channels.
+4. Toggle **Enable Integration** on (requires the same live-mode gate as WA).
+
+### 1.5d. Round-trip dry run
+
+1. From a **different** Facebook account, send a DM to the Page.
+2. Confirm it appears in `/staff/messages` under **channel: messenger** within ~5s.
+3. Reply from the inbox → the DM is received back in Messenger, message status `sent`.
+4. Repeat from a different Instagram account DM-ing the IG business account →
+   appears under **channel: instagram**.
+
+**Verification queries:**
+
+```sql
+SELECT id, channel, status, last_inbound_at
+FROM conversations WHERE channel IN ('messenger','instagram') ORDER BY id DESC LIMIT 5;
+
+SELECT id, channel, direction, content, sent_at
+FROM messages WHERE channel IN ('messenger','instagram') ORDER BY id DESC LIMIT 5;
+```
+
+> **24-hour window:** Like WhatsApp, Meta only allows free-form outbound DMs
+> within **24 hours** of the user's last inbound message. Replies after that
+> return `409 outside_24h_window`. (Message-tag/HSM sending is not part of this
+> rollout.)
+
+### 1.5e. Meta App Review — DM-only permissions
+
+Submit the app for review requesting **only** the permissions a DM workflow
+needs. Each one needs a screencast showing the inbox sending/receiving DMs.
+
+| Permission | Why (DM use case) |
+|---|---|
+| `pages_messaging` | Send & receive Messenger DMs on behalf of the Page |
+| `pages_manage_metadata` | Subscribe the Page to the messaging webhook |
+| `pages_read_engagement` | Read Page + conversation metadata for inbox display |
+| `pages_show_list` | Let the admin pick which Page to connect |
+| `instagram_basic` | Read the linked IG business account profile |
+| `instagram_manage_messages` | Send & receive Instagram DMs |
+| `business_management` | Manage the System User token / Business assets |
+
+**Do NOT request** (out of scope — comments/feed):
+
+- `instagram_manage_comments`
+- `pages_manage_engagement`
+- `pages_manage_posts` / any `*_content_publish`
+- any `feed`/`mention` comment-moderation scope
+
+**Review submission checklist:**
+
+- [ ] App in **Live** mode (not Development) before requesting Advanced Access
+- [ ] Privacy Policy URL + Data Deletion Instructions URL set on the app
+- [ ] Each requested permission has a clear screencast of the DM flow
+- [ ] Screencast shows a **test user / real Page** DM round-trip in the inbox
+- [ ] No comment/feed permissions requested (faster review)
+- [ ] App Icon, Category, and Business Verification completed
+
+### 1.5f. Rollout order
+
+1. Ship code (already gated — dev simulates, prod requires live-mode + token).
+2. Connect Page + IG account, save System User token, **keep toggle OFF**.
+3. Submit App Review (DM permissions above). Wait for approval.
+4. After approval: subscribe webhook fields (1.5b), toggle **Enable** on.
+5. Do the round-trip dry run (1.5d) with a real external account.
+6. Announce internally once both channels round-trip cleanly.
+
+### 1.5g. If it fails
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| DMs never arrive | Page not subscribed to the app, or field not subscribed | Re-do 1.5b; confirm Page→app subscription |
+| Instagram DMs missing while Messenger works | IG not a professional acct, or not linked to the Page | Convert IG to Business/Creator and link the Page |
+| Inbound returns `401 Invalid or missing signature` | App Secret mismatch | Shared with WA — re-save the WA App Secret |
+| Outbound returns `409 outside_24h_window` | User's last inbound > 24h ago | Wait for a new inbound; HSM/tags not in scope |
+| Outbound returns `190` / token error from Graph | Page token expired/short-lived | Re-issue a **System User** non-expiring token |
 
 ---
 
@@ -230,6 +363,12 @@ Tick each before announcing the feature internally:
 - [ ] WhatsApp GET handshake passes (green check in Meta)
 - [ ] One real inbound WA message → appears in inbox within 5s
 - [ ] One real outbound WA reply → received on phone, status `sent`
+- [ ] Messenger + Instagram: System User Page token saved, both toggles enabled
+- [ ] Page subscribed to the app; **DM-only** webhook fields subscribed (no feed/comments)
+- [ ] Instagram is a professional account linked to the Page
+- [ ] App Review approved for DM permissions only (no comment scopes requested)
+- [ ] One real Messenger DM inbound → appears in inbox; reply received, status `sent`
+- [ ] One real Instagram DM inbound → appears in inbox; reply received, status `sent`
 - [ ] Web Form formId + secret saved, integration enabled
 - [ ] Embed snippet pasted on the customer site
 - [ ] One real form submission → appears in inbox; correct routing (linked / unmatched)
