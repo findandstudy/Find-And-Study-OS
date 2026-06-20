@@ -219,9 +219,13 @@ export async function buildStudentProfile(
 // ---------------------------------------------------------------------------
 
 async function downloadFile(url: string, dest: string): Promise<void> {
-  const res = await fetch(url);
+  // Relative /objects/... URLs must be absolutized — Node fetch() cannot parse relative URLs.
+  // The api-server serves /objects/ on its own origin (proven: curl 127.0.0.1:PORT/objects/... = 200).
+  const base = (process.env.OBJECT_BASE_URL || `http://127.0.0.1:${process.env.PORT || "5057"}`).replace(/\/$/, "");
+  const absUrl = /^https?:\/\//i.test(url) ? url : base + (url.startsWith("/") ? url : "/" + url);
+  const res = await fetch(absUrl);
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} downloading ${url}`);
+    throw new Error(`HTTP ${res.status} downloading ${absUrl}`);
   }
   const buf = Buffer.from(await res.arrayBuffer());
   await fs.writeFile(dest, buf);
