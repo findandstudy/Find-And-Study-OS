@@ -1,4 +1,36 @@
 {
+  "integrationsManager": {
+    "facebook_messenger": {
+      "name": "Facebook / Messenger",
+      "description": "Meta Graph API ile Facebook Messenger görüşmelerini gelen kutunuzda alın ve yanıtlayın.",
+      "fields": {
+        "pageId": "Facebook Sayfa Kimliği",
+        "pageAccessToken": "Sayfa Erişim Anahtarı",
+        "appSecret": "Uygulama Gizli Anahtarı (HMAC doğrulaması)",
+        "webhookVerifyToken": "Webhook Doğrulama Anahtarı"
+      }
+    },
+    "instagram": {
+      "name": "Instagram",
+      "description": "Meta Graph API ile Instagram Direkt Mesajlarını gelen kutunuzda alın ve yanıtlayın.",
+      "fields": {
+        "igBusinessAccountId": "Instagram İşletme Hesabı Kimliği",
+        "pageId": "Bağlı Facebook Sayfa Kimliği",
+        "pageAccessToken": "Sayfa Erişim Anahtarı",
+        "appSecret": "Uygulama Gizli Anahtarı (HMAC doğrulaması)",
+        "webhookVerifyToken": "Webhook Doğrulama Anahtarı"
+      }
+    },
+    "metaWebhook": {
+      "title": "Meta webhook kurulumu",
+      "instructions": "Meta → Uygulama Paneli → Webhooks bölümünde aşağıdaki Geri Çağrı URL'sini ve Doğrulama Anahtarını yapıştırın, ardından mesajlaşma alanlarına abone olun. Meta bu URL'yi hub.verify_token ile çağırır; anahtar tam eşleşmezse doğrulama başarısız olur.",
+      "callbackUrl": "Geri Çağrı URL'si",
+      "verifyTokenLabel": "Doğrulama Anahtarı (Meta'ya yapıştırın)",
+      "verifyTokenPlaceholder": "(önce yukarıdaki Webhook Doğrulama Anahtarını ayarlayın)",
+      "appSecretNote": "Uygulama Gizli Anahtarı, her gelen mesajdaki HMAC imza kontrolleri için ayrıca gereklidir. Entegrasyon üretimde etkinleştirilmeden önce kaydedilmelidir.",
+      "copy": "Kopyala"
+    }
+  },
   "currencyAllLabel": "Toplam (tümü)",
   "nav": {
     "home": "Ana Sayfa",

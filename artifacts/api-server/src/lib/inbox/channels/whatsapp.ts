@@ -1,7 +1,7 @@
-import crypto from "crypto";
 import { isLiveIntegrationsEnabled } from "../liveMode";
+import { verifyMetaSignature, META_API_VERSION } from "./meta-shared";
 
-const WA_API_VERSION = "v21.0";
+const WA_API_VERSION = META_API_VERSION;
 
 export interface WhatsAppConfig {
   phoneNumberId?: string;
@@ -27,13 +27,7 @@ const SIMULATED_PREFIX = "sim_wa_";
  * so unsigned spoofed payloads are never accepted in production.
  */
 export function verifyWhatsAppSignature(rawBody: Buffer | string, signatureHeader: string | undefined, appSecret: string | undefined): boolean {
-  if (!appSecret || !signatureHeader) return false;
-  const expected = "sha256=" + crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
-  try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader));
-  } catch {
-    return false;
-  }
+  return verifyMetaSignature(rawBody, signatureHeader, appSecret);
 }
 
 /**

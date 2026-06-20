@@ -9,10 +9,11 @@ import { createSmtpTransporter, invalidateSmtpCache } from "../lib/email";
 import crypto from "crypto";
 import { isLiveIntegrationsEnabled, liveModeReason } from "../lib/inbox/liveMode";
 import { encryptConfig, decryptConfig } from "../lib/encryption";
+import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 
 const router: IRouter = Router();
 
-const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form"]);
+const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form", "facebook_messenger", "instagram"]);
 
 router.get("/integrations/live-mode", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
   res.json({ live: isLiveIntegrationsEnabled(), reason: liveModeReason() });
@@ -251,6 +252,64 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
       }
     } catch (err: any) {
       res.json({ success: false, message: `WhatsApp test failed: ${err?.message || "Unknown error"}` });
+    }
+    return;
+  }
+
+  if (String(req.params.key) === "facebook_messenger") {
+    if (!isLiveIntegrationsEnabled()) {
+      res.json({ success: true, message: "Test skipped — running in simulated mode (set ALLOW_LIVE_INTEGRATIONS=true to test live)" });
+      return;
+    }
+    if (!config.pageId || !config.pageAccessToken) {
+      res.json({ success: false, message: "Page ID and Page Access Token are required" });
+      return;
+    }
+    try {
+      const r = await fetch(
+        `https://graph.facebook.com/${META_API_VERSION}/${encodeURIComponent(config.pageId)}?fields=name`,
+        { headers: { Authorization: `Bearer ${config.pageAccessToken}` } },
+      );
+      const data: unknown = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const name = typeof (data as { name?: unknown }).name === "string" ? (data as { name: string }).name : undefined;
+        res.json({ success: true, message: name ? `Messenger connected — Page: ${name}` : "Messenger credentials verified" });
+      } else {
+        const errMsg = (data as { error?: { message?: string } })?.error?.message || `HTTP ${r.status}`;
+        res.json({ success: false, message: `Messenger test failed (${r.status}): ${errMsg}` });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      res.json({ success: false, message: `Messenger test failed: ${msg}` });
+    }
+    return;
+  }
+
+  if (String(req.params.key) === "instagram") {
+    if (!isLiveIntegrationsEnabled()) {
+      res.json({ success: true, message: "Test skipped — running in simulated mode (set ALLOW_LIVE_INTEGRATIONS=true to test live)" });
+      return;
+    }
+    if (!config.igBusinessAccountId || !config.pageAccessToken) {
+      res.json({ success: false, message: "Instagram Business Account ID and Page Access Token are required" });
+      return;
+    }
+    try {
+      const r = await fetch(
+        `https://graph.facebook.com/${META_API_VERSION}/${encodeURIComponent(config.igBusinessAccountId)}?fields=username`,
+        { headers: { Authorization: `Bearer ${config.pageAccessToken}` } },
+      );
+      const data: unknown = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const username = typeof (data as { username?: unknown }).username === "string" ? (data as { username: string }).username : undefined;
+        res.json({ success: true, message: username ? `Instagram connected — @${username}` : "Instagram credentials verified" });
+      } else {
+        const errMsg = (data as { error?: { message?: string } })?.error?.message || `HTTP ${r.status}`;
+        res.json({ success: false, message: `Instagram test failed (${r.status}): ${errMsg}` });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      res.json({ success: false, message: `Instagram test failed: ${msg}` });
     }
     return;
   }

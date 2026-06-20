@@ -8,10 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import {
   Mail, MessageCircle, Send, Bot, Plug, Key, Eye, EyeOff,
   Loader2, Check, X, ExternalLink, Search, Zap, Globe,
-  Smartphone, Video, Share2, Webhook, Database, Shield, Copy, FormInput
+  Smartphone, Video, Share2, Webhook, Database, Shield, Copy, FormInput,
+  Facebook, Instagram
 } from "lucide-react";
 
 interface IntegrationDef {
@@ -22,6 +24,10 @@ interface IntegrationDef {
   color: string;
   description: string;
   fields: FieldDef[];
+  /** When set, name/description/field labels are resolved from i18n under `integrationsManager.<i18nKey>`. */
+  i18nKey?: string;
+  /** When true, the dialog renders the shared Meta webhook setup helper block. */
+  metaWebhook?: boolean;
 }
 
 interface FieldDef {
@@ -78,6 +84,31 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
     ],
   },
   {
+    key: "facebook_messenger", name: "Facebook / Messenger", category: "communication",
+    i18nKey: "facebook_messenger", metaWebhook: true,
+    icon: Facebook, color: "bg-blue-600/10 text-blue-700 border-blue-200",
+    description: "Receive and reply to Facebook Messenger conversations in your inbox via the Meta Graph API.",
+    fields: [
+      { key: "pageId", label: "Facebook Page ID", type: "text", required: true },
+      { key: "pageAccessToken", label: "Page Access Token", type: "password", required: true },
+      { key: "appSecret", label: "App Secret (HMAC verification)", type: "password" },
+      { key: "webhookVerifyToken", label: "Webhook Verify Token", type: "password" },
+    ],
+  },
+  {
+    key: "instagram", name: "Instagram", category: "communication",
+    i18nKey: "instagram", metaWebhook: true,
+    icon: Instagram, color: "bg-pink-500/10 text-pink-600 border-pink-200",
+    description: "Receive and reply to Instagram Direct Messages in your inbox via the Meta Graph API.",
+    fields: [
+      { key: "igBusinessAccountId", label: "Instagram Business Account ID", type: "text", required: true },
+      { key: "pageId", label: "Linked Facebook Page ID", type: "text" },
+      { key: "pageAccessToken", label: "Page Access Token", type: "password", required: true },
+      { key: "appSecret", label: "App Secret (HMAC verification)", type: "password" },
+      { key: "webhookVerifyToken", label: "Webhook Verify Token", type: "password" },
+    ],
+  },
+  {
     key: "telegram", name: "Telegram Bot", category: "communication",
     icon: Send, color: "bg-sky-500/10 text-sky-600 border-sky-200",
     description: "Send messages via Telegram Bot API",
@@ -131,15 +162,6 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
     description: "AI video generation with HeyGen",
     fields: [
       { key: "apiKey", label: "API Key", type: "password", required: true },
-    ],
-  },
-  {
-    key: "instagram", name: "Instagram", category: "social",
-    icon: Share2, color: "bg-pink-500/10 text-pink-600 border-pink-200",
-    description: "Instagram Graph API for lead generation and messaging",
-    fields: [
-      { key: "accessToken", label: "Access Token", type: "password", required: true },
-      { key: "businessAccountId", label: "Business Account ID", type: "text" },
     ],
   },
   {
@@ -232,10 +254,11 @@ const CATEGORIES = [
   { key: "thirdparty", label: "Third Party" },
 ];
 
-const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form"]);
+const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form", "facebook_messenger", "instagram"]);
 
 export function IntegrationsManager() {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [integrations, setIntegrations] = useState<IntegrationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [editDef, setEditDef] = useState<IntegrationDef | null>(null);
@@ -267,6 +290,27 @@ export function IntegrationsManager() {
 
   function getIntegrationData(key: string): IntegrationData | undefined {
     return integrations.find((i) => i.key === key);
+  }
+
+  // Resolve display strings from i18n when the def opts in (i18nKey set),
+  // falling back to the hard-coded English value when no translation exists.
+  function defName(def: IntegrationDef): string {
+    if (!def.i18nKey) return def.name;
+    const key = `integrationsManager.${def.i18nKey}.name`;
+    const v = t(key);
+    return v === key ? def.name : v;
+  }
+  function defDesc(def: IntegrationDef): string {
+    if (!def.i18nKey) return def.description;
+    const key = `integrationsManager.${def.i18nKey}.description`;
+    const v = t(key);
+    return v === key ? def.description : v;
+  }
+  function fieldLabel(def: IntegrationDef, field: FieldDef): string {
+    if (!def.i18nKey) return field.label;
+    const key = `integrationsManager.${def.i18nKey}.fields.${field.key}`;
+    const v = t(key);
+    return v === key ? field.label : v;
   }
 
   function openEdit(def: IntegrationDef) {
@@ -347,7 +391,7 @@ export function IntegrationsManager() {
 
   const filtered = INTEGRATION_DEFS.filter((d) => {
     if (category !== "all" && d.category !== category) return false;
-    if (search && !d.name.toLowerCase().includes(search.toLowerCase()) && !d.description.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !defName(d).toLowerCase().includes(search.toLowerCase()) && !defDesc(d).toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -431,7 +475,7 @@ export function IntegrationsManager() {
                         <Icon className="w-5 h-5" />
                       </div>
                       <div>
-                        <p className="font-semibold text-sm text-foreground">{def.name}</p>
+                        <p className="font-semibold text-sm text-foreground">{defName(def)}</p>
                         <p className="text-[10px] text-muted-foreground capitalize">{def.category}</p>
                       </div>
                     </div>
@@ -441,7 +485,7 @@ export function IntegrationsManager() {
                     />
                   </div>
 
-                  <p className="text-xs text-muted-foreground mt-3 line-clamp-2">{def.description}</p>
+                  <p className="text-xs text-muted-foreground mt-3 line-clamp-2">{defDesc(def)}</p>
 
                   <div className="flex items-center gap-2 mt-3">
                     <Button
@@ -488,8 +532,8 @@ export function IntegrationsManager() {
                     <editDef.icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <p>{editDef.name}</p>
-                    <p className="text-xs text-muted-foreground font-normal mt-0.5">{editDef.description}</p>
+                    <p>{defName(editDef)}</p>
+                    <p className="text-xs text-muted-foreground font-normal mt-0.5">{defDesc(editDef)}</p>
                   </div>
                 </DialogTitle>
               </DialogHeader>
@@ -511,7 +555,7 @@ export function IntegrationsManager() {
                 {editDef.fields.map((field) => (
                   <div key={field.key}>
                     <Label className="text-xs flex items-center gap-1">
-                      {field.label}
+                      {fieldLabel(editDef, field)}
                       {field.required && <span className="text-red-500">*</span>}
                     </Label>
                     <div className="relative mt-1">
@@ -577,6 +621,48 @@ export function IntegrationsManager() {
                         The App Secret is required separately for HMAC signature checks on every
                         inbound message. Both fields must be saved before the integration can be
                         enabled in production.
+                      </p>
+                    </div>
+                  );
+                })()}
+                {editDef.metaWebhook && (() => {
+                  const callbackUrl = `${window.location.origin}/api/webhooks/meta`;
+                  const verifyToken = editConfig.webhookVerifyToken || t("integrationsManager.metaWebhook.verifyTokenPlaceholder");
+                  return (
+                    <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
+                      <p className="text-xs font-semibold">{t("integrationsManager.metaWebhook.title")}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("integrationsManager.metaWebhook.instructions")}
+                      </p>
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px]">{t("integrationsManager.metaWebhook.callbackUrl")}</Label>
+                        <div className="flex items-center gap-1.5">
+                          <Input readOnly value={callbackUrl} className="h-8 rounded-lg text-[11px] font-mono" />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs rounded-lg gap-1 shrink-0"
+                            onClick={() => copyToClipboard(callbackUrl, t("integrationsManager.metaWebhook.callbackUrl"))}
+                          >
+                            <Copy className="w-3 h-3" /> {t("integrationsManager.metaWebhook.copy")}
+                          </Button>
+                        </div>
+                        <Label className="text-[11px] mt-1.5">{t("integrationsManager.metaWebhook.verifyTokenLabel")}</Label>
+                        <div className="flex items-center gap-1.5">
+                          <Input readOnly value={verifyToken} className="h-8 rounded-lg text-[11px] font-mono" />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs rounded-lg gap-1 shrink-0"
+                            onClick={() => copyToClipboard(verifyToken, t("integrationsManager.metaWebhook.verifyTokenLabel"))}
+                            disabled={!editConfig.webhookVerifyToken}
+                          >
+                            <Copy className="w-3 h-3" /> {t("integrationsManager.metaWebhook.copy")}
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-amber-700">
+                        {t("integrationsManager.metaWebhook.appSecretNote")}
                       </p>
                     </div>
                   );
