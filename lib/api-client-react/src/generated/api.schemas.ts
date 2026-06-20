@@ -1315,6 +1315,8 @@ export interface InboxConversation {
   status: string;
   unmatched: boolean;
   lastInboundAt?: string | null;
+  botEnabled?: boolean;
+  needsHuman?: boolean;
   createdAt: string;
   updatedAt: string;
   assignedTo?: InboxAssignedUser | null;
@@ -1599,6 +1601,66 @@ export interface ActivitySummary {
 
 export interface AddInboxConversationTaskResponse {
   data: FollowUp;
+}
+
+export interface InboxLeadSuggestionData {
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  fullName?: string | null;
+  fullNameLowConfidence?: boolean;
+  /** @nullable */
+  email?: string | null;
+  emailLowConfidence?: boolean;
+}
+
+export interface InboxLeadSuggestionResponse {
+  suggestion: InboxLeadSuggestionData;
+}
+
+export interface CreateLeadFromConversationBody {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  fullName: string;
+  /** @nullable */
+  email?: string | null;
+  /**
+   * @maxLength 50
+   * @nullable
+   */
+  phone?: string | null;
+}
+
+export interface CreateLeadFromConversationResponse {
+  ok: boolean;
+  leadId: number;
+}
+
+export type LeadExistsConflictError =
+  (typeof LeadExistsConflictError)[keyof typeof LeadExistsConflictError];
+
+export const LeadExistsConflictError = {
+  LEAD_EXISTS: "LEAD_EXISTS",
+} as const;
+
+export type LeadExistsConflictCandidate = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  status: string;
+};
+
+export interface LeadExistsConflict {
+  error: LeadExistsConflictError;
+  candidate: LeadExistsConflictCandidate;
 }
 
 export type PortalSubmissionMode =

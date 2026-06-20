@@ -40,6 +40,8 @@ import type {
   CreateDocumentBody,
   CreateInvoiceBody,
   CreateLeadBody,
+  CreateLeadFromConversationBody,
+  CreateLeadFromConversationResponse,
   CreateNoteBody,
   CreateProgramBody,
   CreateServiceFeeBody,
@@ -62,10 +64,12 @@ import type {
   GetUniversityContract200,
   HealthStatus,
   InboxConversationDetailResponse,
+  InboxLeadSuggestionResponse,
   Invoice,
   InvoicesListResponse,
   KommoSummary,
   Lead,
+  LeadExistsConflict,
   LeadsListResponse,
   ListAgentsParams,
   ListAnnouncementsParams,
@@ -7922,6 +7926,190 @@ export const useAddInboxConversationNote = <
   TContext
 > => {
   return useMutation(getAddInboxConversationNoteMutationOptions(options));
+};
+
+/**
+ * @summary Get AI-prefilled lead suggestion for an unmatched conversation
+ */
+export const getGetInboxLeadSuggestionUrl = (id: number) => {
+  return `/api/inbox/conversations/${id}/lead-suggestion`;
+};
+
+export const getInboxLeadSuggestion = async (
+  id: number,
+  options?: RequestInit,
+): Promise<InboxLeadSuggestionResponse> => {
+  return customFetch<InboxLeadSuggestionResponse>(
+    getGetInboxLeadSuggestionUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetInboxLeadSuggestionQueryKey = (id: number) => {
+  return [`/api/inbox/conversations/${id}/lead-suggestion`] as const;
+};
+
+export const getGetInboxLeadSuggestionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getInboxLeadSuggestion>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getInboxLeadSuggestion>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetInboxLeadSuggestionQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getInboxLeadSuggestion>>
+  > = ({ signal }) => getInboxLeadSuggestion(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getInboxLeadSuggestion>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetInboxLeadSuggestionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getInboxLeadSuggestion>>
+>;
+export type GetInboxLeadSuggestionQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get AI-prefilled lead suggestion for an unmatched conversation
+ */
+
+export function useGetInboxLeadSuggestion<
+  TData = Awaited<ReturnType<typeof getInboxLeadSuggestion>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getInboxLeadSuggestion>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetInboxLeadSuggestionQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new lead from an unmatched conversation with duplicate protection
+ */
+export const getCreateLeadFromConversationUrl = (id: number) => {
+  return `/api/inbox/conversations/${id}/create-lead`;
+};
+
+export const createLeadFromConversation = async (
+  id: number,
+  createLeadFromConversationBody: CreateLeadFromConversationBody,
+  options?: RequestInit,
+): Promise<CreateLeadFromConversationResponse> => {
+  return customFetch<CreateLeadFromConversationResponse>(
+    getCreateLeadFromConversationUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createLeadFromConversationBody),
+    },
+  );
+};
+
+export const getCreateLeadFromConversationMutationOptions = <
+  TError = ErrorType<ErrorResponse | LeadExistsConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLeadFromConversation>>,
+    TError,
+    { id: number; data: BodyType<CreateLeadFromConversationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createLeadFromConversation>>,
+  TError,
+  { id: number; data: BodyType<CreateLeadFromConversationBody> },
+  TContext
+> => {
+  const mutationKey = ["createLeadFromConversation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createLeadFromConversation>>,
+    { id: number; data: BodyType<CreateLeadFromConversationBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createLeadFromConversation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateLeadFromConversationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createLeadFromConversation>>
+>;
+export type CreateLeadFromConversationMutationBody =
+  BodyType<CreateLeadFromConversationBody>;
+export type CreateLeadFromConversationMutationError = ErrorType<
+  ErrorResponse | LeadExistsConflict
+>;
+
+/**
+ * @summary Create a new lead from an unmatched conversation with duplicate protection
+ */
+export const useCreateLeadFromConversation = <
+  TError = ErrorType<ErrorResponse | LeadExistsConflict>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createLeadFromConversation>>,
+    TError,
+    { id: number; data: BodyType<CreateLeadFromConversationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createLeadFromConversation>>,
+  TError,
+  { id: number; data: BodyType<CreateLeadFromConversationBody> },
+  TContext
+> => {
+  return useMutation(getCreateLeadFromConversationMutationOptions(options));
 };
 
 /**

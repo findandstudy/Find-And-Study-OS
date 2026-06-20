@@ -28,6 +28,7 @@ export const GetMeResponse = zod.object({
   phone: zod.string().nullish(),
   language: zod.string(),
   isActive: zod.boolean(),
+  emailVerified: zod.boolean(),
   agentStaffPermissions: zod.array(zod.string()).nullish(),
   createdAt: zod.date(),
 });
@@ -63,6 +64,7 @@ export const ListUsersResponse = zod.object({
       phone: zod.string().nullish(),
       language: zod.string(),
       isActive: zod.boolean(),
+      emailVerified: zod.boolean(),
       agentStaffPermissions: zod.array(zod.string()).nullish(),
       createdAt: zod.date(),
     }),
@@ -105,6 +107,7 @@ export const GetUserResponse = zod.object({
   phone: zod.string().nullish(),
   language: zod.string(),
   isActive: zod.boolean(),
+  emailVerified: zod.boolean(),
   agentStaffPermissions: zod.array(zod.string()).nullish(),
   createdAt: zod.date(),
 });
@@ -137,6 +140,7 @@ export const UpdateUserResponse = zod.object({
   phone: zod.string().nullish(),
   language: zod.string(),
   isActive: zod.boolean(),
+  emailVerified: zod.boolean(),
   agentStaffPermissions: zod.array(zod.string()).nullish(),
   createdAt: zod.date(),
 });
@@ -2213,6 +2217,8 @@ export const GetInboxConversationDetailResponse = zod.object({
     status: zod.string(),
     unmatched: zod.boolean(),
     lastInboundAt: zod.union([zod.date(), zod.null()]).optional(),
+    botEnabled: zod.boolean().optional(),
+    needsHuman: zod.boolean().optional(),
     createdAt: zod.date(),
     updatedAt: zod.date(),
     assignedTo: zod
@@ -2380,6 +2386,41 @@ export const addInboxConversationNoteBodyContentMax = 2000;
 
 export const AddInboxConversationNoteBody = zod.object({
   content: zod.string().min(1).max(addInboxConversationNoteBodyContentMax),
+});
+
+/**
+ * @summary Get AI-prefilled lead suggestion for an unmatched conversation
+ */
+export const GetInboxLeadSuggestionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetInboxLeadSuggestionResponse = zod.object({
+  suggestion: zod.object({
+    phone: zod.string().nullish(),
+    displayName: zod.string().nullish(),
+    fullName: zod.string().nullish(),
+    fullNameLowConfidence: zod.boolean().optional(),
+    email: zod.string().nullish(),
+    emailLowConfidence: zod.boolean().optional(),
+  }),
+});
+
+/**
+ * @summary Create a new lead from an unmatched conversation with duplicate protection
+ */
+export const CreateLeadFromConversationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const createLeadFromConversationBodyFullNameMax = 200;
+
+export const createLeadFromConversationBodyPhoneMax = 50;
+
+export const CreateLeadFromConversationBody = zod.object({
+  fullName: zod.string().min(1).max(createLeadFromConversationBodyFullNameMax),
+  email: zod.string().email().nullish(),
+  phone: zod.string().max(createLeadFromConversationBodyPhoneMax).nullish(),
 });
 
 /**

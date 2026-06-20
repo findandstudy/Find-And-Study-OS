@@ -564,6 +564,33 @@ router.patch(
   },
 );
 
+router.patch(
+  "/inbox/conversations/:id/bot",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    const { enabled } = req.body as { enabled: boolean };
+    if (!id || typeof enabled !== "boolean") {
+      res.status(400).json({ error: "enabled (boolean) is required" });
+      return;
+    }
+    // Re-enabling the bot clears the needs-human flag: staff have acknowledged
+    // any escalation and are handing the conversation back to the assistant.
+    const [updated] = await db
+      .update(conversationsTable)
+      .set(enabled ? { botEnabled: true, needsHuman: false } : { botEnabled: false })
+      .where(eq(conversationsTable.id, id))
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    await logAudit(req.user!.id, "toggle_conversation_bot", "conversation", id, { enabled }, req.ip);
+    res.json({ data: { id: updated.id, botEnabled: updated.botEnabled, needsHuman: updated.needsHuman } });
+  },
+);
+
 router.post(
   "/inbox/conversations/:id/match",
   requireAuth,
@@ -863,6 +890,15 @@ router.post(
     if (!conv) {
       res.status(404).json({ error: "Not found" });
       return;
+    }
+
+    // Human takeover: a staff member manually replying disables the intake bot
+    // for this conversation so the human and the bot never talk over each other.
+    if (conv.botEnabled) {
+      await db
+        .update(conversationsTable)
+        .set({ botEnabled: false })
+        .where(eq(conversationsTable.id, id));
     }
 
     if (conv.channel === "whatsapp") {

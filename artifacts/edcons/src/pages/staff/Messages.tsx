@@ -39,7 +39,7 @@ import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
-  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter
+  Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -117,6 +117,8 @@ interface InboxConversation {
   lastMessageAt: string | null;
   lastMessagePreview: string | null;
   lastInboundAt: string | null;
+  botEnabled?: boolean;
+  needsHuman?: boolean;
   externalContact: {
     id: number;
     displayName: string | null;
@@ -537,6 +539,22 @@ function InboxTab() {
     }
   }
 
+  async function toggleBot(enabled: boolean) {
+    if (!selectedId) return;
+    try {
+      await customFetch(`/api/inbox/conversations/${selectedId}/bot`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      toast({ title: enabled ? t("messagesPage.aiEnabled") : t("messagesPage.aiDisabled") });
+      fetchInbox();
+      fetchDetail(selectedId);
+    } catch {
+      toast({ title: t("messagesPage.aiToggleFailed"), variant: "destructive" });
+    }
+  }
+
   async function sendReply() {
     if (!selectedId || !reply.trim()) return;
     setSending(true);
@@ -864,6 +882,23 @@ function InboxTab() {
                   </div>
                 </div>
                 <div className="flex gap-1.5 items-center">
+                  {conv.needsHuman && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                      <AlertTriangle className="w-3 h-3" /> {t("messagesPage.needsHuman")}
+                    </span>
+                  )}
+                  {conv.channel === "whatsapp" && (
+                    <Button
+                      size="sm"
+                      variant={conv.botEnabled ? "default" : "outline"}
+                      onClick={() => toggleBot(!conv.botEnabled)}
+                      className="h-7 text-xs gap-1"
+                      title={conv.botEnabled ? t("messagesPage.aiOnHint") : t("messagesPage.aiOffHint")}
+                      data-testid="button-toggle-bot"
+                    >
+                      <Bot className="w-3 h-3" /> {conv.botEnabled ? t("messagesPage.aiOn") : t("messagesPage.aiOff")}
+                    </Button>
+                  )}
                   {conv.assignedToId !== user?.id && (
                     <Button size="sm" variant="outline" onClick={assignToMe} className="h-7 text-xs gap-1">
                       <UserCheck className="w-3 h-3" /> Assign to me

@@ -33,6 +33,8 @@ export interface InboxConversation {
   status: string;
   unmatched: boolean;
   lastInboundAt?: Date | null;
+  botEnabled?: boolean;
+  needsHuman?: boolean;
   createdAt: Date;
   updatedAt: Date;
   assignedTo?: InboxAssignedUser | null;

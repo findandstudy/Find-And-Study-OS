@@ -4260,6 +4260,10 @@ components:
             - type: string
               format: date-time
             - type: "null"
+        botEnabled:
+          type: boolean
+        needsHuman:
+          type: boolean
         createdAt:
           type: string
           format: date-time

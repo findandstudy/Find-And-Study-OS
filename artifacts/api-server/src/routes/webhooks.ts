@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import { db, integrationsTable, channelAccountsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { processInboundMessage } from "../lib/inbox/processInbound";
+import { maybeAutoReply } from "../lib/inbox/botAutoReply";
 import { verifyWhatsAppSignature, parseWhatsAppWebhook, type WhatsAppConfig } from "../lib/inbox/channels/whatsapp";
 import { verifyWebFormSignature, parseWebFormPayload } from "../lib/inbox/channels/webForm";
 import { decryptConfig } from "../lib/encryption";
@@ -177,9 +178,13 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
   const channelAccountId = await ensureChannelAccount("whatsapp", "WhatsApp Business", phoneNumberId);
 
   let processed = 0;
+  // Inbound text messages that are eligible to trigger the intake bot. We only
+  // act on fresh (non-duplicate) inbound text — duplicate webhook deliveries are
+  // dropped here AND again by the engine's idempotency claim.
+  const botCandidates: Array<{ conversationId: number; inboundMessageId: number }> = [];
   for (const m of messages) {
     try {
-      await processInboundMessage({
+      const result = await processInboundMessage({
         channel: "whatsapp",
         channelAccountId,
         contact: {
@@ -196,11 +201,23 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
         },
       });
       processed++;
+      if (!result.duplicate && m.text && m.text.trim()) {
+        botCandidates.push({ conversationId: result.conversationId, inboundMessageId: result.messageId });
+      }
     } catch (err) {
       console.error("[WEBHOOK] WA process error:", err);
     }
   }
   res.status(200).json({ ok: true, processed });
+
+  // Fire the intake bot AFTER acking the webhook so delivery latency never
+  // gates Meta's 200. maybeAutoReply is self-guarding: it no-ops when the
+  // per-conversation bot is off and is idempotent against duplicate triggers.
+  for (const cand of botCandidates) {
+    void maybeAutoReply(cand).catch((err) => {
+      console.error("[WEBHOOK] WA auto-reply error:", err);
+    });
+  }
 });
 
 function timingSafeEq(a: string | undefined, b: string | undefined): boolean {

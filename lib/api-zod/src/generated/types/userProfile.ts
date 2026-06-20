@@ -23,6 +23,7 @@ export interface UserProfile {
   phone?: string | null;
   language: string;
   isActive: boolean;
+  emailVerified: boolean;
   /** @nullable */
   agentStaffPermissions?: string[] | null;
   createdAt: Date;

@@ -30,6 +30,9 @@ export const conversationsTable = pgTable("conversations", {
   unmatched: boolean("unmatched").notNull().default(false),
   lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
   readReceiptsEnabled: boolean("read_receipts_enabled").notNull().default(true),
+  botEnabled: boolean("bot_enabled").notNull().default(false),
+  needsHuman: boolean("needs_human").notNull().default(false),
+  botLastHandledMessageId: integer("bot_last_handled_message_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
