@@ -1868,6 +1868,7 @@
     "newLeadCreated": "Lead baru dibuat",
     "outsideWindow": "Di luar jendela 24 jam",
     "outside24hReplyWindow": "Di luar jendela balasan 24 jam. Gunakan template.",
+    "outside24hReplyWindowMeta": "Di luar jendela balasan 24 jam. Anda dapat membalas lagi setelah pengguna mengirim pesan baru.",
     "failedToCreateConversation": "Gagal membuat percakapan",
     "failedToSend": "Gagal mengirim",
     "failedToSendBroadcast": "Gagal mengirim siaran",

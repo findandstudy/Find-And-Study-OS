@@ -2101,6 +2101,7 @@
     "newLeadCreated": "Yeni lead oluşturuldu",
     "outsideWindow": "24 saatlik pencerenin dışında",
     "outside24hReplyWindow": "24 saatlik yanıt penceresinin dışında. Bir şablon kullan.",
+    "outside24hReplyWindowMeta": "24 saatlik yanıt penceresinin dışında. Kullanıcı yeni bir mesaj gönderdikten sonra tekrar yanıt verebilirsin.",
     "failedToCreateConversation": "Konuşma oluşturulamadı",
     "failedToSend": "Gönderilemedi",
     "failedToSendBroadcast": "Duyuru gönderilemedi",

@@ -2160,6 +2160,7 @@
     "newLeadCreated": "New lead created",
     "outsideWindow": "Outside 24h window",
     "outside24hReplyWindow": "Outside the 24h reply window. Use a template.",
+    "outside24hReplyWindowMeta": "Outside the 24h reply window. You can reply again after the user sends a new message.",
     "failedToCreateConversation": "Failed to create conversation",
     "failedToSend": "Failed to send",
     "failedToSendBroadcast": "Failed to send broadcast",

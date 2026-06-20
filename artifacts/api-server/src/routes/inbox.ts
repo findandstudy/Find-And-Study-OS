@@ -33,6 +33,8 @@ import {
   isWithin24hWindow,
   type WhatsAppConfig,
 } from "../lib/inbox/channels/whatsapp";
+import { sendMessengerText, type MessengerConfig } from "../lib/inbox/channels/messenger";
+import { sendInstagramText, type InstagramConfig } from "../lib/inbox/channels/instagram";
 import { isLiveIntegrationsEnabled } from "../lib/inbox/liveMode";
 import { directOrigin } from "../lib/originHelper";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
@@ -48,6 +50,11 @@ import {
 import { runBotReplyTest } from "../lib/inbox/botAutoReply";
 
 const router: IRouter = Router();
+
+// Channels governed by Meta's 24h messaging window: free-form replies are only
+// allowed within 24h of the last inbound message. WhatsApp, Messenger and
+// Instagram all share this policy.
+const CHANNELS_WITH_24H_WINDOW = new Set(["whatsapp", "messenger", "instagram"]);
 
 // ---------------------------------------------------------------------------
 // Inbox AI / notes / tasks helpers (Phase 2)
@@ -509,7 +516,7 @@ router.get(
       conversation: { ...conv, assignedTo: assignedTo ?? null },
       externalContact,
       messages,
-      withinWindow: conv.channel === "whatsapp" ? isWithin24hWindow(conv.lastInboundAt) : true,
+      withinWindow: CHANNELS_WITH_24H_WINDOW.has(conv.channel) ? isWithin24hWindow(conv.lastInboundAt) : true,
       lead: lead ?? null,
       student: student ?? null,
       agent: agent ?? null,
@@ -980,6 +987,98 @@ router.post(
             actionUrl: `/staff/messages?conversation=${id}`,
             icon: "alert",
             data: { conversationId: id, channel: "whatsapp", error: result.error },
+          });
+        } catch (err) {
+          console.error("[INBOX] send_failed dispatch error:", err);
+        }
+      }
+      res.status(result.ok ? 201 : 502).json({ message: msg, simulated: result.simulated, error: result.error });
+      return;
+    }
+
+    if (conv.channel === "messenger" || conv.channel === "instagram") {
+      if (!isWithin24hWindow(conv.lastInboundAt)) {
+        res.status(409).json({
+          error: "outside_24h_window",
+          message: "Free-form replies are only allowed within 24h of the last inbound message.",
+        });
+        return;
+      }
+      if (!conv.externalContactId) {
+        res.status(400).json({ error: "Conversation has no external contact" });
+        return;
+      }
+      const [contact] = await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId));
+      // The recipient is the user's page-/IG-scoped id, stored as externalId.
+      const recipientId = contact?.externalId || conv.externalThreadId || "";
+      if (!recipientId) {
+        res.status(400).json({ error: "Conversation has no recipient id" });
+        return;
+      }
+      const integKey = conv.channel === "messenger" ? "facebook_messenger" : "instagram";
+      const [integ] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, integKey));
+
+      // Persist a 'pending' row first so the client can observe lifecycle.
+      const [pending] = await db
+        .insert(messagesTable)
+        .values({
+          conversationId: id,
+          senderId: req.user!.id,
+          content,
+          channel: conv.channel,
+          direction: "outbound",
+          status: "pending",
+          metadata: {},
+        })
+        .returning();
+
+      const result =
+        conv.channel === "messenger"
+          ? await sendMessengerText({
+              config: (decryptConfig(integ?.config as Record<string, any>) as MessengerConfig) || {},
+              recipientId,
+              text: content,
+            })
+          : await sendInstagramText({
+              config: (decryptConfig(integ?.config as Record<string, any>) as InstagramConfig) || {},
+              recipientId,
+              text: content,
+            });
+
+      const [msg] = await db
+        .update(messagesTable)
+        .set({
+          status: result.ok ? "sent" : "failed",
+          externalMessageId: result.externalMessageId || null,
+          failedReason: result.ok ? null : result.error || "send_failed",
+          sentAt: result.ok ? new Date() : null,
+          metadata: { simulated: result.simulated, ...(result.ok ? {} : { error: result.error }) },
+        })
+        .where(eq(messagesTable.id, pending.id))
+        .returning();
+
+      if (result.ok) {
+        await db
+          .update(conversationsTable)
+          .set({ lastMessageAt: new Date(), lastMessagePreview: content.slice(0, 200) })
+          .where(eq(conversationsTable.id, id));
+        inboxBus.publish({
+          type: "message",
+          conversationId: id,
+          channel: conv.channel,
+          assignedToId: conv.assignedToId ?? null,
+          unmatched: conv.unmatched,
+          direction: "outbound",
+        });
+      } else {
+        try {
+          await dispatchNotification({
+            event: "inbox.send_failed",
+            title: `${conv.channel} send failed for conversation #${id}`,
+            body: result.error || "Send failed",
+            actionUrl: `/staff/messages?conversation=${id}`,
+            icon: "alert",
+            data: { conversationId: id, channel: conv.channel, error: result.error },
           });
         } catch (err) {
           console.error("[INBOX] send_failed dispatch error:", err);

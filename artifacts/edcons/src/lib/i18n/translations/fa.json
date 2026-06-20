@@ -1868,6 +1868,7 @@
     "newLeadCreated": "سرنخ جدید ایجاد شد",
     "outsideWindow": "خارج از پنجره ۲۴ ساعته",
     "outside24hReplyWindow": "خارج از پنجره پاسخ ۲۴ ساعته. از یک الگو استفاده کنید.",
+    "outside24hReplyWindowMeta": "خارج از پنجره پاسخ ۲۴ ساعته. پس از اینکه کاربر پیام جدیدی ارسال کرد می‌توانید دوباره پاسخ دهید.",
     "failedToCreateConversation": "ایجاد گفتگو ناموفق بود",
     "failedToSend": "ارسال ناموفق بود",
     "failedToSendBroadcast": "ارسال پخش ناموفق بود",

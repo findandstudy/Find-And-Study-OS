@@ -1,5 +1,4 @@
-import { isLiveIntegrationsEnabled } from "../liveMode";
-import { parseMetaMessaging, type MetaInbound } from "./meta-shared";
+import { parseMetaMessaging, sendMetaText, type MetaInbound } from "./meta-shared";
 import { CHANNEL_MESSENGER } from "./constants";
 
 /**
@@ -30,24 +29,22 @@ export function parseMessengerWebhook(payload: unknown): MetaInbound[] {
 }
 
 /**
- * Send a text message to a Messenger user via the Meta Graph API.
- *
- * STUB — the live Graph API implementation lands in the outbound phase (Faz 3).
- * For now it returns a simulated success so the rest of the pipeline can run.
+ * Send a text message to a Messenger user via the Meta Graph API `me/messages`
+ * endpoint, using the page access token from the integration config. In dev
+ * (without ALLOW_LIVE_INTEGRATIONS) returns a simulated success.
  */
 export async function sendMessengerText(opts: {
   config: MessengerConfig;
   recipientId: string;
   text: string;
 }): Promise<MessengerSendResult> {
-  void opts;
-  if (!isLiveIntegrationsEnabled()) {
-    return {
-      ok: true,
-      externalMessageId: `sim_msgr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      simulated: true,
-    };
-  }
-  // Outbound delivery is implemented in Faz 3 (Messenger + Instagram outbound).
-  return { ok: false, error: "Messenger outbound not implemented yet", simulated: false };
+  const { config, recipientId, text } = opts;
+  return sendMetaText({
+    pageAccessToken: config.pageAccessToken,
+    recipientId,
+    text,
+    simulatedPrefix: "sim_msgr_",
+    notConfiguredError: "Messenger integration is not configured",
+    logLabel: "MESSENGER",
+  });
 }

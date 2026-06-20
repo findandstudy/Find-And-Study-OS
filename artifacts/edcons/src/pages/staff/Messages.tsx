@@ -942,11 +942,15 @@ function InboxTab() {
                 </div>
               )}
 
-              {conv.channel === "whatsapp" && !detail.withinWindow && (
+              {(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow && (
                 <div className="m-3 p-3 rounded-lg border border-orange-300 bg-orange-50 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-orange-700" />
-                  <p className="text-xs text-orange-900 flex-1">{t("messagesPage.outside24hReplyWindow")}</p>
-                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openTemplateDialog}>{t("messagesPage.useTemplate")}</Button>
+                  <p className="text-xs text-orange-900 flex-1">
+                    {conv.channel === "whatsapp" ? t("messagesPage.outside24hReplyWindow") : t("messagesPage.outside24hReplyWindowMeta")}
+                  </p>
+                  {conv.channel === "whatsapp" && (
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openTemplateDialog}>{t("messagesPage.useTemplate")}</Button>
+                  )}
                 </div>
               )}
 
@@ -976,17 +980,17 @@ function InboxTab() {
                     <Textarea
                       value={reply}
                       onChange={(e) => setReply(e.target.value)}
-                      placeholder={conv.channel === "whatsapp" && !detail.withinWindow ? "Outside 24h — use a template" : "Reply..."}
+                      placeholder={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow ? (conv.channel === "whatsapp" ? "Outside 24h — use a template" : "Outside 24h window") : "Reply..."}
                       rows={2}
                       className="flex-1 rounded-lg text-sm"
-                      disabled={conv.channel === "whatsapp" && !detail.withinWindow}
+                      disabled={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow}
                     />
                     {conv.channel === "whatsapp" && (
                       <Button size="sm" variant="outline" onClick={openTemplateDialog} className="h-9 gap-1">
                         <FileText className="w-3 h-3" /> {t("messagesPage.template")}
                       </Button>
                     )}
-                    <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim() || (conv.channel === "whatsapp" && !detail.withinWindow)} className="h-9 gap-1">
+                    <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim() || ((conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow)} className="h-9 gap-1">
                       {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />} Send
                     </Button>
                   </div>

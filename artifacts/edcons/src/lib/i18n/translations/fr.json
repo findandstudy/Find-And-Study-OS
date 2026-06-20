@@ -1919,6 +1919,7 @@
     "newLeadCreated": "Nouveau prospect créé",
     "outsideWindow": "Hors de la fenêtre de 24 h",
     "outside24hReplyWindow": "Hors de la fenêtre de réponse de 24 h. Utilisez un modèle.",
+    "outside24hReplyWindowMeta": "Hors de la fenêtre de réponse de 24 h. Vous pourrez répondre à nouveau lorsque l'utilisateur enverra un nouveau message.",
     "failedToCreateConversation": "Échec de la création de la conversation",
     "failedToSend": "Échec de l'envoi",
     "failedToSendBroadcast": "Échec de l'envoi de la diffusion",

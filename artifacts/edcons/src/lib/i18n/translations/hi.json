@@ -1868,6 +1868,7 @@
     "newLeadCreated": "नया लीड बनाया गया",
     "outsideWindow": "24 घंटे की विंडो के बाहर",
     "outside24hReplyWindow": "24 घंटे की उत्तर विंडो के बाहर। टेम्पलेट का उपयोग करें।",
+    "outside24hReplyWindowMeta": "24 घंटे की उत्तर विंडो के बाहर। उपयोगकर्ता द्वारा नया संदेश भेजने के बाद आप फिर से उत्तर दे सकते हैं।",
     "failedToCreateConversation": "बातचीत बनाने में विफल",
     "failedToSend": "भेजने में विफल",
     "failedToSendBroadcast": "प्रसारण भेजने में विफल",

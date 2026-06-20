@@ -13,6 +13,8 @@ import {
   isWithin24hWindow,
   type WhatsAppConfig,
 } from "./channels/whatsapp";
+import { sendMessengerText, type MessengerConfig } from "./channels/messenger";
+import { sendInstagramText, type InstagramConfig } from "./channels/instagram";
 import { decryptConfig } from "../encryption";
 import { messageTemplatesTable } from "@workspace/db";
 import {
@@ -121,7 +123,9 @@ export function __setBotReplyOverrideForTests(
 
 export interface BotSendInput {
   channel: string;
-  toPhoneE164: string;
+  // For WhatsApp this is the E.164 phone number; for Messenger / Instagram it
+  // is the user's page-/IG-scoped recipient id.
+  recipient: string;
   text: string;
 }
 export interface BotSendResult {
@@ -238,10 +242,28 @@ async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
       (decryptConfig(integ?.config as Record<string, any>) as WhatsAppConfig) || {};
     const result = await sendWhatsAppText({
       config: cfg,
-      toPhoneE164: input.toPhoneE164,
+      toPhoneE164: input.recipient,
       text: input.text,
     });
     return result;
+  }
+  if (input.channel === "messenger") {
+    const [integ] = await db
+      .select()
+      .from(integrationsTable)
+      .where(eq(integrationsTable.key, "facebook_messenger"));
+    const cfg: MessengerConfig =
+      (decryptConfig(integ?.config as Record<string, any>) as MessengerConfig) || {};
+    return sendMessengerText({ config: cfg, recipientId: input.recipient, text: input.text });
+  }
+  if (input.channel === "instagram") {
+    const [integ] = await db
+      .select()
+      .from(integrationsTable)
+      .where(eq(integrationsTable.key, "instagram"));
+    const cfg: InstagramConfig =
+      (decryptConfig(integ?.config as Record<string, any>) as InstagramConfig) || {};
+    return sendInstagramText({ config: cfg, recipientId: input.recipient, text: input.text });
   }
   return { ok: false, error: `unsupported_channel:${input.channel}` };
 }
@@ -440,8 +462,9 @@ export async function maybeAutoReply(opts: {
     console.error("[bot] lead capture failed:", err);
   }
 
-  // Resolve the contact phone for the outbound send (needed by both the
-  // template re-engagement path and the free-form reply path).
+  // Resolve the outbound recipient. WhatsApp addresses by phone (E.164);
+  // Messenger / Instagram address by the user's page-/IG-scoped id stored as
+  // externalId. Needed by both the re-engagement and free-form reply paths.
   const [contact] = conv.externalContactId
     ? await db
         .select()
@@ -449,11 +472,18 @@ export async function maybeAutoReply(opts: {
         .where(eq(externalContactsTable.id, conv.externalContactId))
     : [null];
   const toPhone = contact?.phoneE164 || contact?.phone || null;
+  const isMetaChannel = conv.channel === "messenger" || conv.channel === "instagram";
+  const recipient = conv.channel === "whatsapp"
+    ? toPhone
+    : isMetaChannel
+      ? contact?.externalId || conv.externalThreadId || null
+      : toPhone;
 
   // 24h service window: free-form replies are only allowed within 24h of the
-  // last inbound message (WhatsApp policy). Outside it, re-engage with an
+  // last inbound message (Meta policy). For WhatsApp, re-engage with an
   // approved template (Task #61 message_templates) if one is configured;
-  // otherwise defer to staff.
+  // otherwise defer to staff. For Messenger / Instagram there is no template
+  // path in scope, so simply defer to staff.
   if (conv.channel === "whatsapp" && !isWithin24hWindow(conv.lastInboundAt)) {
     if (!toPhone) return { acted: false, reason: "no_phone" };
     const template = await resolveReengagementTemplate();
@@ -516,6 +546,15 @@ export async function maybeAutoReply(opts: {
     return { acted: false, reason: "no_phone" };
   }
 
+  // Messenger / Instagram: no template re-engagement path in scope, so outside
+  // the 24h window the bot stays silent and defers to staff.
+  if (isMetaChannel && !isWithin24hWindow(conv.lastInboundAt)) {
+    return { acted: false, reason: "outside_window" };
+  }
+  if (isMetaChannel && !recipient) {
+    return { acted: false, reason: "no_phone" };
+  }
+
   // Consecutive-reply safety: after too many bot replies in a row (configurable
   // threshold; 0 = no limit) hand the conversation to a human — flip needs-human,
   // turn the bot off, and send the handoff message exactly once. Disabling the
@@ -539,7 +578,7 @@ export async function maybeAutoReply(opts: {
         .returning();
       const handoffResult = await sendBotReply({
         channel: conv.channel,
-        toPhoneE164: toPhone || "",
+        recipient: recipient || "",
         text: handoffText,
       });
       sendOk = handoffResult.ok;
@@ -630,7 +669,7 @@ export async function maybeAutoReply(opts: {
 
   const sendResult = await sendBotReply({
     channel: conv.channel,
-    toPhoneE164: toPhone || "",
+    recipient: recipient || "",
     text: replyText,
   });
 

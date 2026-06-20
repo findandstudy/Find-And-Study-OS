@@ -1868,6 +1868,7 @@
     "newLeadCreated": "已创建新潜在客户",
     "outsideWindow": "超出 24 小时窗口",
     "outside24hReplyWindow": "超出 24 小时回复窗口。请使用模板。",
+    "outside24hReplyWindowMeta": "超出 24 小时回复窗口。待用户发送新消息后，你可以再次回复。",
     "failedToCreateConversation": "创建对话失败",
     "failedToSend": "发送失败",
     "failedToSendBroadcast": "发送广播失败",

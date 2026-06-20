@@ -1868,6 +1868,7 @@
     "newLeadCreated": "Nuevo lead creado",
     "outsideWindow": "Fuera de la ventana de 24 h",
     "outside24hReplyWindow": "Fuera de la ventana de respuesta de 24 h. Usa una plantilla.",
+    "outside24hReplyWindowMeta": "Fuera de la ventana de respuesta de 24 h. Podrás responder de nuevo cuando el usuario envíe un nuevo mensaje.",
     "failedToCreateConversation": "Error al crear la conversación",
     "failedToSend": "Error al enviar",
     "failedToSendBroadcast": "Error al enviar la difusión",

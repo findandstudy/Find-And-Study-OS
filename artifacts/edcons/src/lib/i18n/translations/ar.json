@@ -1919,6 +1919,7 @@
     "newLeadCreated": "تم إنشاء عميل محتمل جديد",
     "outsideWindow": "خارج نافذة الـ24 ساعة",
     "outside24hReplyWindow": "خارج نافذة الرد لمدة 24 ساعة. استخدم قالبًا.",
+    "outside24hReplyWindowMeta": "خارج نافذة الرد لمدة 24 ساعة. يمكنك الرد مرة أخرى بعد أن يرسل المستخدم رسالة جديدة.",
     "failedToCreateConversation": "فشل في إنشاء المحادثة",
     "failedToSend": "فشل الإرسال",
     "failedToSendBroadcast": "فشل إرسال البث",
