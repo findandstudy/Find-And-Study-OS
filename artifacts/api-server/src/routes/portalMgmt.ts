@@ -880,12 +880,12 @@ const credentialsBodySchema = z.object({
 type CredentialsBodySchemas = { body: typeof credentialsBodySchema };
 
 // ---------------------------------------------------------------------------
-// PUT /university-portals/:portalKey/credentials
+// PUT /portal-universities/:portalKey/credentials
 // Upsert encrypted credentials for a portal university.
 // Response: { ok: true } — plaintext is NEVER returned.
 // ---------------------------------------------------------------------------
 router.put(
-  "/university-portals/:portalKey/credentials",
+  "/portal-universities/:portalKey/credentials",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ params: portalKeyParamsSchema, body: credentialsBodySchema }),
@@ -934,11 +934,11 @@ router.put(
 );
 
 // ---------------------------------------------------------------------------
-// DELETE /university-portals/:portalKey/credentials
+// DELETE /portal-universities/:portalKey/credentials
 // Soft-deletes the stored credentials for a portal university.
 // ---------------------------------------------------------------------------
 router.delete(
-  "/university-portals/:portalKey/credentials",
+  "/portal-universities/:portalKey/credentials",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ params: portalKeyParamsSchema }),
