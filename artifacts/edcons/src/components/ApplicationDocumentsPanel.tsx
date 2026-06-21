@@ -132,6 +132,7 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId, cur
               uploadPermissionLevel={uploadLevel}
               tracksOfferExpiry={stageMeta?.tracksOfferExpiry === true}
               requiresValidUntilFlag={stageMeta?.requiresValidUntil === true}
+              advanceOnUpload={isFutureCategory(category)}
               docs={docs}
               userId={userId}
               isAdmin={isAdmin}
@@ -146,7 +147,7 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId, cur
 }
 
 function CategorySection({
-  applicationId, category, label, uploadPermissionLevel, tracksOfferExpiry, requiresValidUntilFlag, docs, userId, isAdmin, isStaff, isAgent, hideUpload,
+  applicationId, category, label, uploadPermissionLevel, tracksOfferExpiry, requiresValidUntilFlag, advanceOnUpload, docs, userId, isAdmin, isStaff, isAgent, hideUpload,
 }: {
   applicationId: number;
   category: string;
@@ -154,6 +155,7 @@ function CategorySection({
   uploadPermissionLevel: string;
   tracksOfferExpiry: boolean;
   requiresValidUntilFlag: boolean;
+  advanceOnUpload: boolean;
   docs: any[];
   userId?: number;
   isAdmin: boolean;
@@ -206,9 +208,30 @@ function CategorySection({
         body: JSON.stringify(body),
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: [`app-stage-docs-${applicationId}`] });
       setPendingValidUntil("");
+      // Mirror the kanban "Document Required" flow: uploading a document for a
+      // stage that is ahead of the application's current stage auto-advances
+      // the application to that stage. Forward-only (advanceOnUpload is only
+      // true for future categories, which only staff can upload into).
+      if (advanceOnUpload) {
+        try {
+          await customFetch(`${BASE_URL}/api/applications/${applicationId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stage: category }),
+          });
+          qc.invalidateQueries({
+            predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/applications"),
+          });
+          toast({ title: t("stageDocUpload.toastUploadedAndMoved", { stage: label }) });
+          return;
+        } catch {
+          // Upload saved but the stage move failed (e.g. permission) — fall
+          // through to the plain upload-success toast.
+        }
+      }
       toast({ title: t("appDocsPanel.documentUploaded") });
     },
     onError: (err: any) => {

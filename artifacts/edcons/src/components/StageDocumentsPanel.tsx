@@ -119,6 +119,7 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
               uploadPermissionLevel={(stageMeta?.uploadPermissionLevel ?? "everyone") as string}
               tracksOfferExpiry={stageMeta?.tracksOfferExpiry === true}
               requiresValidUntilFlag={stageMeta?.requiresValidUntil === true}
+              advanceOnUpload={isFutureStage(stage)}
               docs={(allDocs as any[]).filter((d: any) => d.stage === stage && !d.isMissingDocNote)}
               missingNotes={notesByStage.get(stage) ?? []}
               userRole={userRole}
@@ -136,7 +137,7 @@ export function StageDocumentsPanel({ applicationId, currentStage, userRole, use
 }
 
 function StageSection({
-  applicationId, stage, stageLabel, uploadPermissionLevel, tracksOfferExpiry, requiresValidUntilFlag,
+  applicationId, stage, stageLabel, uploadPermissionLevel, tracksOfferExpiry, requiresValidUntilFlag, advanceOnUpload,
   docs, missingNotes, userRole, userId, isAdmin, isStaff, isAgent, isCurrent, hideUpload,
 }: {
   applicationId: number;
@@ -145,6 +146,7 @@ function StageSection({
   uploadPermissionLevel: string;
   tracksOfferExpiry: boolean;
   requiresValidUntilFlag: boolean;
+  advanceOnUpload: boolean;
   docs: any[];
   missingNotes: any[];
   userRole: string;
@@ -196,9 +198,30 @@ function StageSection({
         body: JSON.stringify(body),
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: [`app-stage-docs-${applicationId}`] });
       setPendingValidUntil("");
+      // Mirror the kanban "Document Required" flow: uploading a document for a
+      // stage ahead of the application's current stage auto-advances the
+      // application to that stage. Forward-only (advanceOnUpload is only true
+      // for future stages, which only staff can upload into).
+      if (advanceOnUpload) {
+        try {
+          await customFetch(`${BASE_URL}/api/applications/${applicationId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stage }),
+          });
+          qc.invalidateQueries({
+            predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/applications"),
+          });
+          toast({ title: t("stageDocUpload.toastUploadedAndMoved", { stage: stageLabel }) });
+          return;
+        } catch {
+          // Upload saved but the stage move failed — fall through to the
+          // plain upload-success toast.
+        }
+      }
       toast({ title: t("stageDocs.toastUploaded") });
     },
     onError: (err: any) => {
