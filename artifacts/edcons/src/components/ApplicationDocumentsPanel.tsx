@@ -3,10 +3,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Upload, FileText, Trash2, Download,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Calendar,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
@@ -129,6 +130,8 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId, cur
               category={category}
               label={getCategoryLabel(category)}
               uploadPermissionLevel={uploadLevel}
+              tracksOfferExpiry={stageMeta?.tracksOfferExpiry === true}
+              requiresValidUntilFlag={stageMeta?.requiresValidUntil === true}
               docs={docs}
               userId={userId}
               isAdmin={isAdmin}
@@ -143,12 +146,14 @@ export function ApplicationDocumentsPanel({ applicationId, userRole, userId, cur
 }
 
 function CategorySection({
-  applicationId, category, label, uploadPermissionLevel, docs, userId, isAdmin, isStaff, isAgent, hideUpload,
+  applicationId, category, label, uploadPermissionLevel, tracksOfferExpiry, requiresValidUntilFlag, docs, userId, isAdmin, isStaff, isAgent, hideUpload,
 }: {
   applicationId: number;
   category: string;
   label: string;
   uploadPermissionLevel: string;
+  tracksOfferExpiry: boolean;
+  requiresValidUntilFlag: boolean;
   docs: any[];
   userId?: number;
   isAdmin: boolean;
@@ -162,6 +167,10 @@ function CategorySection({
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [pendingValidUntil, setPendingValidUntil] = useState<string>("");
+
+  const requiresValidUntil = requiresValidUntilFlag;
+  const supportsValidUntil = tracksOfferExpiry || requiresValidUntilFlag;
 
   // Permission matrix (Task #134):
   //   admin_only         → admin / manager only (legacy default for offer stages)
@@ -183,20 +192,23 @@ function CategorySection({
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       const base64 = await fileToBase64(file);
+      const body: any = {
+        stage: category,
+        fileName: file.name,
+        fileData: base64,
+        mimeType: file.type,
+        sizeBytes: file.size,
+      };
+      if (supportsValidUntil && pendingValidUntil) body.validUntil = pendingValidUntil;
       return customFetch(`${BASE_URL}/api/applications/${applicationId}/stage-documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stage: category,
-          fileName: file.name,
-          fileData: base64,
-          mimeType: file.type,
-          sizeBytes: file.size,
-        }),
+        body: JSON.stringify(body),
       });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [`app-stage-docs-${applicationId}`] });
+      setPendingValidUntil("");
       toast({ title: t("appDocsPanel.documentUploaded") });
     },
     onError: (err: any) => {
@@ -216,6 +228,11 @@ function CategorySection({
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (requiresValidUntil && !pendingValidUntil) {
+      toast({ title: t("stageDocs.toastValidUntilRequired"), description: t("stageDocs.toastValidUntilRequiredDesc"), variant: "destructive" });
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     const validation = validateFile(file);
     if (!validation.valid) {
       toast({ title: t("appDocsPanel.fileError"), description: validation.message, variant: "destructive" });
@@ -304,6 +321,20 @@ function CategorySection({
 
           {canUpload && (
             <div className="pt-1 space-y-1">
+              {supportsValidUntil && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {t("stageDocs.validUntilFieldLabel")}{requiresValidUntil ? " *" : ""}:
+                  </label>
+                  <Input
+                    type="date"
+                    value={pendingValidUntil}
+                    onChange={e => setPendingValidUntil(e.target.value)}
+                    className="h-7 text-xs flex-1"
+                  />
+                </div>
+              )}
               <input
                 ref={fileRef}
                 type="file"
