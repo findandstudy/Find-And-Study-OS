@@ -11,7 +11,6 @@ import {
   agentsTable,
   usersTable,
   messageTemplatesTable,
-  integrationsTable,
   pipelineStagesTable,
   notesTable,
   followUpsTable,
@@ -40,7 +39,7 @@ import { directOrigin } from "../lib/originHelper";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
-import { decryptConfig } from "../lib/encryption";
+import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
 import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
 import {
   getAiAgentConfig,
@@ -933,8 +932,7 @@ router.post(
         res.status(400).json({ error: "Contact has no E.164 phone" });
         return;
       }
-      const [integ] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "whatsapp"));
-      const cfg: WhatsAppConfig = (decryptConfig(integ?.config as Record<string, any>) as WhatsAppConfig) || {};
+      const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
 
       // Persist a 'pending' row first so the client can observe lifecycle.
       const [pending] = await db
@@ -1015,8 +1013,7 @@ router.post(
         res.status(400).json({ error: "Conversation has no recipient id" });
         return;
       }
-      const integKey = conv.channel === "messenger" ? "facebook_messenger" : "instagram";
-      const [integ] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, integKey));
+      const metaCfg = (await resolveOutboundConfig<MessengerConfig & InstagramConfig>(conv.channel, conv.channelAccountId)) || {};
 
       // Persist a 'pending' row first so the client can observe lifecycle.
       const [pending] = await db
@@ -1035,12 +1032,12 @@ router.post(
       const result =
         conv.channel === "messenger"
           ? await sendMessengerText({
-              config: (decryptConfig(integ?.config as Record<string, any>) as MessengerConfig) || {},
+              config: metaCfg as MessengerConfig,
               recipientId,
               text: content,
             })
           : await sendInstagramText({
-              config: (decryptConfig(integ?.config as Record<string, any>) as InstagramConfig) || {},
+              config: metaCfg as InstagramConfig,
               recipientId,
               text: content,
             });
@@ -1191,8 +1188,7 @@ router.post(
       res.status(400).json({ error: "Template missing externalTemplateName" });
       return;
     }
-    const [integ] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "whatsapp"));
-    const cfg: WhatsAppConfig = (decryptConfig(integ?.config as Record<string, any>) as WhatsAppConfig) || {};
+    const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
     const result = await sendWhatsAppTemplate({
       config: cfg,
       toPhoneE164: contact.phoneE164,

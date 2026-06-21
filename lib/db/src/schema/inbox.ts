@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, jsonb, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { leadsTable } from "./leads";
 import { studentsTable } from "./students";
 import { agentsTable } from "./agents";
@@ -11,6 +11,8 @@ export const channelAccountsTable = pgTable("channel_accounts", {
   configEncrypted: text("config_encrypted"),
   webhookSecret: text("webhook_secret"),
   status: text("status").notNull().default("active"),
+  isActive: boolean("is_active").notNull().default(true),
+  isDefault: boolean("is_default").notNull().default(false),
   metadata: jsonb("metadata").default({}),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

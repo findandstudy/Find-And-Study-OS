@@ -611,6 +611,36 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS needs_human BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS bot_last_handled_message_id INTEGER`);
     await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS bot_reply_count INTEGER NOT NULL DEFAULT 0`);
+    // Task #554 — multi-account-per-channel: per-account active/default flags.
+    // Mirrors migration 0021 (not journaled; boot DDL is the prod migration path).
+    await pool.query(`ALTER TABLE channel_accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`);
+    await pool.query(`ALTER TABLE channel_accounts ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT false`);
+    // Seed channel_accounts from the legacy integrations rows so the existing
+    // single connected account becomes the first (default) per-channel account.
+    // integrations.config is an already-encrypted JSON object; channel_accounts
+    // .config_encrypted is TEXT, so store the JSON as text. Guarded so we only
+    // seed when no account exists yet for the channel (idempotent, no cred loss).
+    await pool.query(`
+      INSERT INTO channel_accounts (channel, display_name, external_account_id, config_encrypted, status, is_active, is_default, created_at, updated_at)
+      SELECT 'whatsapp', COALESCE(NULLIF(i.name, ''), 'WhatsApp Business'), NULLIF(i.config->>'phoneNumberId', ''), i.config::text,
+             CASE WHEN i.is_enabled THEN 'active' ELSE 'inactive' END, COALESCE(i.is_enabled, false), true, now(), now()
+      FROM integrations i
+      WHERE i.key = 'whatsapp' AND NOT EXISTS (SELECT 1 FROM channel_accounts ca WHERE ca.channel = 'whatsapp')
+    `);
+    await pool.query(`
+      INSERT INTO channel_accounts (channel, display_name, external_account_id, config_encrypted, status, is_active, is_default, created_at, updated_at)
+      SELECT 'messenger', COALESCE(NULLIF(i.name, ''), 'Facebook Messenger'), NULLIF(i.config->>'pageId', ''), i.config::text,
+             CASE WHEN i.is_enabled THEN 'active' ELSE 'inactive' END, COALESCE(i.is_enabled, false), true, now(), now()
+      FROM integrations i
+      WHERE i.key = 'facebook_messenger' AND NOT EXISTS (SELECT 1 FROM channel_accounts ca WHERE ca.channel = 'messenger')
+    `);
+    await pool.query(`
+      INSERT INTO channel_accounts (channel, display_name, external_account_id, config_encrypted, status, is_active, is_default, created_at, updated_at)
+      SELECT 'instagram', COALESCE(NULLIF(i.name, ''), 'Instagram'), COALESCE(NULLIF(i.config->>'igBusinessAccountId', ''), NULLIF(i.config->>'pageId', '')), i.config::text,
+             CASE WHEN i.is_enabled THEN 'active' ELSE 'inactive' END, COALESCE(i.is_enabled, false), true, now(), now()
+      FROM integrations i
+      WHERE i.key = 'instagram' AND NOT EXISTS (SELECT 1 FROM channel_accounts ca WHERE ca.channel = 'instagram')
+    `);
     await pool.query(`ALTER TABLE application_stage_documents ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE application_stage_documents ADD COLUMN IF NOT EXISTS expiry_notified_thresholds TEXT`);
     // FAZ 3 (AI agent lead capture): qualifying fields the intake bot collects

@@ -3,7 +3,6 @@ import {
   conversationsTable,
   messagesTable,
   externalContactsTable,
-  integrationsTable,
 } from "@workspace/db";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
@@ -15,7 +14,7 @@ import {
 } from "./channels/whatsapp";
 import { sendMessengerText, type MessengerConfig } from "./channels/messenger";
 import { sendInstagramText, type InstagramConfig } from "./channels/instagram";
-import { decryptConfig } from "../encryption";
+import { resolveOutboundConfig } from "./channelAccountConfig";
 import { messageTemplatesTable } from "@workspace/db";
 import {
   captureLeadFromConversation,
@@ -127,6 +126,9 @@ export interface BotSendInput {
   // is the user's page-/IG-scoped recipient id.
   recipient: string;
   text: string;
+  // The conversation's connected account (multi-account-per-channel). When null
+  // the legacy single-config integrations row is used (resolveOutboundConfig).
+  channelAccountId?: number | null;
 }
 export interface BotSendResult {
   ok: boolean;
@@ -234,12 +236,8 @@ export async function runBotReplyTest(input: BotTestInput): Promise<BotTestResul
 async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
   if (__botSendOverride) return __botSendOverride(input);
   if (input.channel === "whatsapp") {
-    const [integ] = await db
-      .select()
-      .from(integrationsTable)
-      .where(eq(integrationsTable.key, "whatsapp"));
     const cfg: WhatsAppConfig =
-      (decryptConfig(integ?.config as Record<string, any>) as WhatsAppConfig) || {};
+      (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", input.channelAccountId)) || {};
     const result = await sendWhatsAppText({
       config: cfg,
       toPhoneE164: input.recipient,
@@ -248,21 +246,13 @@ async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
     return result;
   }
   if (input.channel === "messenger") {
-    const [integ] = await db
-      .select()
-      .from(integrationsTable)
-      .where(eq(integrationsTable.key, "facebook_messenger"));
     const cfg: MessengerConfig =
-      (decryptConfig(integ?.config as Record<string, any>) as MessengerConfig) || {};
+      (await resolveOutboundConfig<MessengerConfig>("messenger", input.channelAccountId)) || {};
     return sendMessengerText({ config: cfg, recipientId: input.recipient, text: input.text });
   }
   if (input.channel === "instagram") {
-    const [integ] = await db
-      .select()
-      .from(integrationsTable)
-      .where(eq(integrationsTable.key, "instagram"));
     const cfg: InstagramConfig =
-      (decryptConfig(integ?.config as Record<string, any>) as InstagramConfig) || {};
+      (await resolveOutboundConfig<InstagramConfig>("instagram", input.channelAccountId)) || {};
     return sendInstagramText({ config: cfg, recipientId: input.recipient, text: input.text });
   }
   return { ok: false, error: `unsupported_channel:${input.channel}` };
@@ -274,6 +264,7 @@ export interface BotTemplateSendInput {
   templateName: string;
   language: string;
   parameters?: string[];
+  channelAccountId?: number | null;
 }
 let __botTemplateSendOverride:
   | ((input: BotTemplateSendInput) => Promise<BotSendResult>)
@@ -288,12 +279,8 @@ export function __setBotTemplateSendOverrideForTests(
 async function sendBotTemplate(input: BotTemplateSendInput): Promise<BotSendResult> {
   if (__botTemplateSendOverride) return __botTemplateSendOverride(input);
   if (input.channel === "whatsapp") {
-    const [integ] = await db
-      .select()
-      .from(integrationsTable)
-      .where(eq(integrationsTable.key, "whatsapp"));
     const cfg: WhatsAppConfig =
-      (decryptConfig(integ?.config as Record<string, any>) as WhatsAppConfig) || {};
+      (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", input.channelAccountId)) || {};
     return sendWhatsAppTemplate({
       config: cfg,
       toPhoneE164: input.toPhoneE164,
@@ -506,6 +493,7 @@ export async function maybeAutoReply(opts: {
       toPhoneE164: toPhone,
       templateName: template.externalTemplateName,
       language: template.language,
+      channelAccountId: conv.channelAccountId,
     });
     await db
       .update(messagesTable)
@@ -580,6 +568,7 @@ export async function maybeAutoReply(opts: {
         channel: conv.channel,
         recipient: recipient || "",
         text: handoffText,
+        channelAccountId: conv.channelAccountId,
       });
       sendOk = handoffResult.ok;
       await db
@@ -671,6 +660,7 @@ export async function maybeAutoReply(opts: {
     channel: conv.channel,
     recipient: recipient || "",
     text: replyText,
+    channelAccountId: conv.channelAccountId,
   });
 
   await db

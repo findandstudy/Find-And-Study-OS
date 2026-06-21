@@ -13,7 +13,7 @@ import {
   Mail, MessageCircle, Send, Bot, Plug, Key, Eye, EyeOff,
   Loader2, Check, X, ExternalLink, Search, Zap, Globe,
   Smartphone, Video, Share2, Webhook, Database, Shield, Copy, FormInput,
-  Facebook, Instagram
+  Facebook, Instagram, Plus, Star, Trash2, Power, Users
 } from "lucide-react";
 
 interface IntegrationDef {
@@ -28,6 +28,13 @@ interface IntegrationDef {
   i18nKey?: string;
   /** When true, the dialog renders the shared Meta webhook setup helper block. */
   metaWebhook?: boolean;
+  /**
+   * When set, this integration supports multiple connected accounts. The value is
+   * the `channel_accounts.channel` key (e.g. "messenger" for facebook_messenger),
+   * which may differ from the integration `key`. The single `integrations` row
+   * remains the legacy null-channelAccountId fallback.
+   */
+  accountChannel?: string;
 }
 
 interface FieldDef {
@@ -47,6 +54,26 @@ interface IntegrationData {
   config: Record<string, any>;
 }
 
+/** A single connected account in `channel_accounts` (secrets masked by the API). */
+interface ChannelAccount {
+  id: number;
+  channel: string;
+  displayName: string;
+  externalAccountId: string | null;
+  config: Record<string, any>;
+  status: string;
+  isActive: boolean;
+  isDefault: boolean;
+}
+
+/** Resolve a field's label from i18n when the def opts in, else the English fallback. */
+function resolveFieldLabel(def: IntegrationDef, field: FieldDef, t: (k: string) => string): string {
+  if (!def.i18nKey) return field.label;
+  const key = `integrationsManager.${def.i18nKey}.fields.${field.key}`;
+  const v = t(key);
+  return v === key ? field.label : v;
+}
+
 const INTEGRATION_DEFS: IntegrationDef[] = [
   {
     key: "smtp", name: "Email (SMTP)", category: "communication",
@@ -63,6 +90,7 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
   },
   {
     key: "whatsapp", name: "WhatsApp Business", category: "communication",
+    accountChannel: "whatsapp",
     icon: MessageCircle, color: "bg-emerald-500/10 text-emerald-600 border-emerald-200",
     description: "Send and receive WhatsApp via Meta Cloud API. Outbound is simulated outside production.",
     fields: [
@@ -85,7 +113,7 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
   },
   {
     key: "facebook_messenger", name: "Facebook / Messenger", category: "communication",
-    i18nKey: "facebook_messenger", metaWebhook: true,
+    i18nKey: "facebook_messenger", metaWebhook: true, accountChannel: "messenger",
     icon: Facebook, color: "bg-blue-600/10 text-blue-700 border-blue-200",
     description: "Receive and reply to Facebook Messenger conversations in your inbox via the Meta Graph API.",
     fields: [
@@ -97,7 +125,7 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
   },
   {
     key: "instagram", name: "Instagram", category: "communication",
-    i18nKey: "instagram", metaWebhook: true,
+    i18nKey: "instagram", metaWebhook: true, accountChannel: "instagram",
     icon: Instagram, color: "bg-pink-500/10 text-pink-600 border-pink-200",
     description: "Receive and reply to Instagram Direct Messages in your inbox via the Meta Graph API.",
     fields: [
@@ -270,6 +298,7 @@ export function IntegrationsManager() {
   const [category, setCategory] = useState("all");
   const [showPasswords, setShowPasswords] = useState<Set<string>>(new Set());
   const [liveMode, setLiveMode] = useState<{ live: boolean; reason: string } | null>(null);
+  const [accountsDef, setAccountsDef] = useState<IntegrationDef | null>(null);
 
   useEffect(() => {
     fetchIntegrations();
@@ -307,10 +336,7 @@ export function IntegrationsManager() {
     return v === key ? def.description : v;
   }
   function fieldLabel(def: IntegrationDef, field: FieldDef): string {
-    if (!def.i18nKey) return field.label;
-    const key = `integrationsManager.${def.i18nKey}.fields.${field.key}`;
-    const v = t(key);
-    return v === key ? field.label : v;
+    return resolveFieldLabel(def, field, t);
   }
 
   function openEdit(def: IntegrationDef) {
@@ -496,6 +522,16 @@ export function IntegrationsManager() {
                     >
                       <Key className="w-3 h-3" /> Configure
                     </Button>
+                    {def.accountChannel && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs rounded-lg gap-1"
+                        onClick={() => setAccountsDef(def)}
+                      >
+                        <Users className="w-3 h-3" /> {t("integrationsManager.channelAccounts.accountsButton")}
+                      </Button>
+                    )}
                     {isActive && (
                       <Button
                         size="sm"
@@ -728,6 +764,326 @@ export function IntegrationsManager() {
           )}
         </DialogContent>
       </Dialog>
+
+      {accountsDef && accountsDef.accountChannel && (
+        <ChannelAccountsDialog
+          def={accountsDef}
+          channel={accountsDef.accountChannel}
+          liveMode={liveMode}
+          onClose={() => setAccountsDef(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Multi-account manager for a single channel (Task #554). Lists the rows in
+ * `channel_accounts` for one channel and supports add / edit / test / set-default
+ * / toggle-active / delete. Secrets arrive masked from the API; an unchanged
+ * masked value is merged server-side (mergeConfig) so re-saving never wipes a
+ * credential. The legacy single `integrations` row is untouched and remains the
+ * null-channelAccountId fallback for existing conversations.
+ */
+function ChannelAccountsDialog({
+  def,
+  channel,
+  liveMode,
+  onClose,
+}: {
+  def: IntegrationDef;
+  channel: string;
+  liveMode: { live: boolean; reason: string } | null;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const { t } = useI18n();
+  const [accounts, setAccounts] = useState<ChannelAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState<"list" | "form">("list");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [config, setConfig] = useState<Record<string, any>>({});
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [showPw, setShowPw] = useState<Set<string>>(new Set());
+
+  const ca = (k: string, vars?: Record<string, any>) => t(`integrationsManager.channelAccounts.${k}`, vars);
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel]);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await customFetch(`/api/channel-accounts?channel=${encodeURIComponent(channel)}`);
+      setAccounts((res as any)?.accounts || []);
+    } catch {
+      toast({ title: ca("loadFailed"), variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function openNew() {
+    setEditingId(null);
+    setDisplayName("");
+    setConfig({});
+    setShowPw(new Set());
+    setMode("form");
+  }
+
+  function openEditAccount(acc: ChannelAccount) {
+    setEditingId(acc.id);
+    setDisplayName(acc.displayName);
+    setConfig({ ...acc.config });
+    setShowPw(new Set());
+    setMode("form");
+  }
+
+  function toggleShowPw(key: string) {
+    setShowPw((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function copyToClipboard(text: string, label: string) {
+    navigator.clipboard.writeText(text).then(() => toast({ title: `${label} copied` })).catch(() => {});
+  }
+
+  async function save() {
+    if (!displayName.trim()) {
+      toast({ title: ca("displayNameRequired"), variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editingId == null) {
+        await customFetch(`/api/channel-accounts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channel, displayName: displayName.trim(), config }),
+        });
+      } else {
+        await customFetch(`/api/channel-accounts/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ displayName: displayName.trim(), config }),
+        });
+      }
+      toast({ title: ca("saved") });
+      setMode("list");
+      load();
+    } catch (err: any) {
+      const msg = err?.body?.error || err?.body?.message || err?.message || ca("saveFailed");
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function action(fn: () => Promise<any>, id: number, okTitle?: string) {
+    setBusyId(id);
+    try {
+      await fn();
+      if (okTitle) toast({ title: okTitle });
+      load();
+    } catch (err: any) {
+      const msg = err?.body?.error || err?.body?.message || err?.message || ca("saveFailed");
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function setDefault(id: number) {
+    action(() => customFetch(`/api/channel-accounts/${id}/set-default`, { method: "PATCH" }), id, ca("defaultSet"));
+  }
+
+  function toggleActive(id: number) {
+    action(() => customFetch(`/api/channel-accounts/${id}/toggle-active`, { method: "PATCH" }), id, ca("toggled"));
+  }
+
+  function remove(id: number) {
+    if (!window.confirm(ca("deleteConfirm"))) return;
+    action(() => customFetch(`/api/channel-accounts/${id}`, { method: "DELETE" }), id, ca("deleted"));
+  }
+
+  async function test(id: number) {
+    setBusyId(id);
+    try {
+      const res = await customFetch(`/api/channel-accounts/${id}/test`, { method: "POST" });
+      const ok = (res as any)?.success !== false;
+      toast({ title: (res as any)?.message || (ok ? ca("testPassed") : ca("testFailed")), variant: ok ? undefined : "destructive" });
+    } catch (err: any) {
+      const msg = err?.body?.error || err?.body?.message || err?.message || ca("testFailed");
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const webhookCallback = channel === "whatsapp"
+    ? `${window.location.origin}/api/webhooks/whatsapp`
+    : `${window.location.origin}/api/webhooks/meta`;
+  const Icon = def.icon;
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${def.color}`}>
+              <Icon className="w-5 h-5" />
+            </div>
+            <div>
+              <p>{ca("title")}</p>
+              <p className="text-xs text-muted-foreground font-normal mt-0.5">{ca("subtitle")}</p>
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        {mode === "list" ? (
+          <div className="space-y-3 py-2">
+            {loading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : accounts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">{ca("noAccounts")}</p>
+            ) : (
+              accounts.map((acc) => (
+                <div key={acc.id} className="border rounded-xl p-3 border-border/60">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-medium text-sm truncate">{acc.displayName}</p>
+                        {acc.isDefault && (
+                          <Badge className="bg-primary/10 text-primary border-primary/20 gap-1 text-[10px]">
+                            <Star className="w-2.5 h-2.5" /> {ca("default")}
+                          </Badge>
+                        )}
+                        <Badge className={acc.isActive
+                          ? "bg-green-500/10 text-green-600 border-green-200 text-[10px]"
+                          : "bg-muted text-muted-foreground border-border text-[10px]"}>
+                          {acc.isActive ? ca("active") : ca("inactive")}
+                        </Badge>
+                      </div>
+                      {acc.externalAccountId && (
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
+                          {ca("externalId")}: {acc.externalAccountId}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                    {!acc.isDefault && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs rounded-lg gap-1"
+                        disabled={busyId === acc.id} onClick={() => setDefault(acc.id)}>
+                        <Star className="w-3 h-3" /> {ca("setDefault")}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg gap-1"
+                      disabled={busyId === acc.id} onClick={() => toggleActive(acc.id)}>
+                      <Power className="w-3 h-3" /> {acc.isActive ? ca("deactivate") : ca("activate")}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg gap-1"
+                      disabled={busyId === acc.id} onClick={() => test(acc.id)}>
+                      {busyId === acc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />} {ca("test")}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg gap-1"
+                      disabled={busyId === acc.id} onClick={() => openEditAccount(acc)}>
+                      <Key className="w-3 h-3" /> {ca("edit")}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg gap-1 text-red-600 hover:text-red-700"
+                      disabled={busyId === acc.id} onClick={() => remove(acc.id)}>
+                      <Trash2 className="w-3 h-3" /> {ca("delete")}
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+            <Button variant="outline" className="w-full rounded-xl gap-1.5" onClick={openNew}>
+              <Plus className="w-4 h-4" /> {ca("addAccount")}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4 py-2">
+            {liveMode && !liveMode.live && (
+              <div className="text-xs p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900">
+                {ca("simulatedNote")}
+              </div>
+            )}
+            <div>
+              <Label className="text-xs flex items-center gap-1">
+                {ca("displayName")}<span className="text-red-500">*</span>
+              </Label>
+              <Input
+                placeholder={ca("displayNamePlaceholder")}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="h-9 rounded-xl mt-1"
+              />
+            </div>
+            {def.fields.map((field) => (
+              <div key={field.key}>
+                <Label className="text-xs flex items-center gap-1">
+                  {resolveFieldLabel(def, field, t)}
+                  {field.required && <span className="text-red-500">*</span>}
+                </Label>
+                <div className="relative mt-1">
+                  <Input
+                    type={field.type === "password" && !showPw.has(field.key) ? "password" : field.type === "password" ? "text" : field.type}
+                    placeholder={field.placeholder}
+                    value={config[field.key] || ""}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                    className="h-9 rounded-xl pr-10"
+                  />
+                  {field.type === "password" && (
+                    <button
+                      type="button"
+                      onClick={() => toggleShowPw(field.key)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPw.has(field.key) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
+              <p className="text-xs font-semibold">{t("integrationsManager.metaWebhook.title")}</p>
+              <p className="text-[11px] text-muted-foreground">{ca("webhookPerAccountNote")}</p>
+              <Label className="text-[11px]">{t("integrationsManager.metaWebhook.callbackUrl")}</Label>
+              <div className="flex items-center gap-1.5">
+                <Input readOnly value={webhookCallback} className="h-8 rounded-lg text-[11px] font-mono" />
+                <Button size="sm" variant="outline" className="h-8 text-xs rounded-lg gap-1 shrink-0"
+                  onClick={() => copyToClipboard(webhookCallback, t("integrationsManager.metaWebhook.callbackUrl"))}>
+                  <Copy className="w-3 h-3" /> {t("integrationsManager.metaWebhook.copy")}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          {mode === "list" ? (
+            <Button variant="outline" onClick={onClose} className="rounded-xl">{ca("close")}</Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => setMode("list")} className="rounded-xl">{ca("cancel")}</Button>
+              <Button onClick={save} disabled={saving} className="rounded-xl gap-1.5">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {ca("save")}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

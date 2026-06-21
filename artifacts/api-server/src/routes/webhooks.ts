@@ -11,6 +11,7 @@ import { verifyMetaSignature, hasMetaChanges } from "../lib/inbox/channels/meta-
 import { parseMessengerWebhook, type MessengerConfig } from "../lib/inbox/channels/messenger";
 import { parseInstagramWebhook, type InstagramConfig } from "../lib/inbox/channels/instagram";
 import { CHANNEL_MESSENGER, CHANNEL_INSTAGRAM } from "../lib/inbox/channels/constants";
+import { resolveInboundAccount, parseAccountConfig } from "../lib/inbox/channelAccountConfig";
 import { decryptConfig } from "../lib/encryption";
 import { logAudit } from "../lib/auth";
 import crypto from "crypto";
@@ -133,33 +134,121 @@ async function ensureChannelAccount(channel: string, displayName: string, extern
   }
 }
 
+function asRec(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+}
+
+/**
+ * Extract the WhatsApp Business phone_number_id from a webhook payload. This is
+ * the per-account identifier used to pick the correct channel_account secret.
+ * Path: entry[].changes[].value.metadata.phone_number_id
+ */
+function extractWhatsAppPhoneNumberId(payload: unknown): string | undefined {
+  const entries = Array.isArray(asRec(payload).entry) ? (asRec(payload).entry as unknown[]) : [];
+  for (const e of entries) {
+    const changes = Array.isArray(asRec(e).changes) ? (asRec(e).changes as unknown[]) : [];
+    for (const c of changes) {
+      const meta = asRec(asRec(asRec(c).value).metadata);
+      const id = meta.phone_number_id;
+      if (typeof id === "string" && id) return id;
+      if (id != null) return String(id);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Extract the receiving Meta account id (page id for Messenger, IG-scoped id
+ * for Instagram DMs) from a Meta messaging payload. Prefers the per-message
+ * recipient.id and falls back to entry[].id.
+ */
+function extractMetaRecipientId(payload: unknown): string | undefined {
+  const entries = Array.isArray(asRec(payload).entry) ? (asRec(payload).entry as unknown[]) : [];
+  for (const e of entries) {
+    const messaging = Array.isArray(asRec(e).messaging) ? (asRec(e).messaging as unknown[]) : [];
+    for (const evt of messaging) {
+      const rid = asRec(asRec(evt).recipient).id;
+      if (typeof rid === "string" && rid) return rid;
+      if (rid != null) return String(rid);
+    }
+  }
+  for (const e of entries) {
+    const eid = asRec(e).id;
+    if (typeof eid === "string" && eid) return eid;
+    if (eid != null) return String(eid);
+  }
+  return undefined;
+}
+
+/**
+ * Gather every webhook verify token that should be accepted for a channel:
+ * the active channel_accounts' tokens plus the legacy single-config token.
+ * Used by the GET (subscription challenge) handlers so any connected account
+ * under the same Meta app can complete verification.
+ */
+async function gatherVerifyTokens(channel: string, legacyToken?: string): Promise<string[]> {
+  const tokens = new Set<string>();
+  if (legacyToken) tokens.add(legacyToken);
+  try {
+    const rows = await db
+      .select()
+      .from(channelAccountsTable)
+      .where(and(eq(channelAccountsTable.channel, channel), eq(channelAccountsTable.isActive, true)));
+    for (const r of rows) {
+      const cfg = parseAccountConfig(r.configEncrypted);
+      const t = cfg.webhookVerifyToken;
+      if (typeof t === "string" && t) tokens.add(t);
+    }
+  } catch (err) {
+    console.error("[WEBHOOK] gatherVerifyTokens error:", err);
+  }
+  return [...tokens];
+}
+
 router.get("/webhooks/whatsapp", webhookLimiter, async (req: Request, res: Response): Promise<void> => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
-  const config = await getWhatsAppConfig();
-  const expected = config?.webhookVerifyToken;
-  if (mode === "subscribe" && expected && token === expected && challenge) {
+  const legacy = await getWhatsAppConfig();
+  const expectedTokens = await gatherVerifyTokens("whatsapp", legacy?.webhookVerifyToken);
+  const matches = typeof token === "string" && expectedTokens.some((t) => t === token);
+  if (mode === "subscribe" && matches && challenge) {
     res.status(200).send(String(challenge));
     return;
   }
   logAudit(null, "webhook_auth_failed", "webhook:whatsapp:verify", undefined, {
     mode: String(mode || ""),
     hasToken: Boolean(token),
-    hasExpected: Boolean(expected),
+    hasExpected: expectedTokens.length > 0,
   }, req.ip);
   res.status(403).send("Forbidden");
 });
 
 router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, res: Response): Promise<void> => {
-  const config = await getWhatsAppConfig();
+  const sig = req.headers["x-hub-signature-256"] as string | undefined;
+  const raw = req.body as Buffer;
+
+  // Parse the payload up front ONLY to route to the correct per-account secret
+  // (by phone_number_id). The HMAC below is still computed over the raw bytes,
+  // so picking the secret from the parsed body never weakens verification.
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw.toString("utf8"));
+  } catch {
+    res.status(400).json({ error: "Invalid JSON" });
+    return;
+  }
+
+  const phoneNumberId = extractWhatsAppPhoneNumberId(payload);
+  // Per-account first; fall back to the legacy single-config integration only
+  // when no active channel_account matches the inbound phone_number_id.
+  const perAccount = await resolveInboundAccount<WhatsAppConfig>("whatsapp", phoneNumberId);
+  const config = perAccount?.config ?? (await getWhatsAppConfig());
   if (!config) {
     res.status(200).json({ ok: true, ignored: "integration disabled" });
     return;
   }
 
-  const sig = req.headers["x-hub-signature-256"] as string | undefined;
-  const raw = req.body as Buffer;
   // Always verify — verifyWhatsAppSignature returns false when appSecret OR
   // the signature header is missing, so unsigned/legacy configs are rejected.
   if (!verifyWhatsAppSignature(raw, sig, config.appSecret)) {
@@ -167,6 +256,7 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
       reason: "invalid_or_missing_signature",
       hasSig: Boolean(sig),
       hasSecret: Boolean(config.appSecret),
+      perAccount: Boolean(perAccount),
     }, req.ip);
     console.warn("[WEBHOOK] WhatsApp signature verification failed", {
       hasSig: Boolean(sig),
@@ -176,22 +266,15 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
     return;
   }
 
-  let payload: unknown;
-  try {
-    payload = JSON.parse(raw.toString("utf8"));
-  } catch {
-    res.status(400).json({ error: "Invalid JSON" });
-    return;
-  }
-
   const messages = parseWhatsAppWebhook(payload);
   if (messages.length === 0) {
     res.status(200).json({ ok: true, processed: 0 });
     return;
   }
 
-  const phoneNumberId = config.phoneNumberId;
-  const channelAccountId = await ensureChannelAccount("whatsapp", "WhatsApp Business", phoneNumberId);
+  const channelAccountId = perAccount
+    ? perAccount.channelAccountId
+    : await ensureChannelAccount("whatsapp", "WhatsApp Business", phoneNumberId ?? config.phoneNumberId);
 
   let processed = 0;
   // Inbound text messages that are eligible to trigger the intake bot. We only
@@ -250,8 +333,11 @@ router.get("/webhooks/meta", webhookLimiter, async (req: Request, res: Response)
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
   const [messengerCfg, instagramCfg] = await Promise.all([getMessengerConfig(), getInstagramConfig()]);
-  const expectedTokens = [messengerCfg?.webhookVerifyToken, instagramCfg?.webhookVerifyToken]
-    .filter((t): t is string => Boolean(t));
+  const [msgrTokens, igTokens] = await Promise.all([
+    gatherVerifyTokens(CHANNEL_MESSENGER, messengerCfg?.webhookVerifyToken),
+    gatherVerifyTokens(CHANNEL_INSTAGRAM, instagramCfg?.webhookVerifyToken),
+  ]);
+  const expectedTokens = [...new Set([...msgrTokens, ...igTokens])];
   const matches = typeof token === "string" && expectedTokens.some((t) => t === token);
   if (mode === "subscribe" && matches && challenge) {
     res.status(200).send(String(challenge));
@@ -266,35 +352,12 @@ router.get("/webhooks/meta", webhookLimiter, async (req: Request, res: Response)
 });
 
 router.post("/webhooks/meta", webhookLimiter, rawJson, async (req: Request, res: Response): Promise<void> => {
-  const [messengerCfg, instagramCfg] = await Promise.all([getMessengerConfig(), getInstagramConfig()]);
-  if (!messengerCfg && !instagramCfg) {
-    res.status(200).json({ ok: true, ignored: "integration disabled" });
-    return;
-  }
-
   const sig = req.headers["x-hub-signature-256"] as string | undefined;
   const raw = req.body as Buffer;
-  // Both Messenger and Instagram are signed with the same Meta App secret, but
-  // each integration stores it independently. Accept the request if the
-  // signature validates against EITHER configured secret. verifyMetaSignature
-  // returns false when the secret OR the header is missing, so unsigned
-  // payloads are always rejected.
-  const secrets = [messengerCfg?.appSecret, instagramCfg?.appSecret].filter((s): s is string => Boolean(s));
-  const verified = secrets.some((secret) => verifyMetaSignature(raw, sig, secret));
-  if (!verified) {
-    logAudit(null, "webhook_auth_failed", "webhook:meta", undefined, {
-      reason: "invalid_or_missing_signature",
-      hasSig: Boolean(sig),
-      hasSecret: secrets.length > 0,
-    }, req.ip);
-    console.warn("[WEBHOOK] Meta signature verification failed", {
-      hasSig: Boolean(sig),
-      hasSecret: secrets.length > 0,
-    });
-    res.status(401).json({ error: "Invalid or missing signature" });
-    return;
-  }
 
+  // Parse the payload up front to route to the correct channel + per-account
+  // secret (by the receiving page/IG id). The HMAC below is still computed over
+  // the raw bytes, so this never weakens verification.
   let payload: unknown;
   try {
     payload = JSON.parse(raw.toString("utf8"));
@@ -307,46 +370,71 @@ router.post("/webhooks/meta", webhookLimiter, rawJson, async (req: Request, res:
     ? (payload as { object?: unknown }).object
     : undefined;
 
-  let channel: string;
-  let messages;
-  let externalAccountId: string | undefined;
+  let channel: "messenger" | "instagram";
   let displayName: string;
-
   if (object === "page") {
-    if (!messengerCfg) {
-      res.status(200).json({ ok: true, ignored: "messenger disabled" });
-      return;
-    }
-    if (hasMetaChanges(payload)) {
-      console.log("[WEBHOOK] Meta page change event (feed/comment) — skipped (handled in comments phase)");
-    }
-    messages = parseMessengerWebhook(payload);
     channel = CHANNEL_MESSENGER;
-    externalAccountId = messengerCfg.pageId;
     displayName = "Facebook Messenger";
   } else if (object === "instagram") {
-    if (!instagramCfg) {
-      res.status(200).json({ ok: true, ignored: "instagram disabled" });
-      return;
-    }
-    if (hasMetaChanges(payload)) {
-      console.log("[WEBHOOK] Meta instagram change event (comment/mention) — skipped (handled in comments phase)");
-    }
-    messages = parseInstagramWebhook(payload);
     channel = CHANNEL_INSTAGRAM;
-    externalAccountId = instagramCfg.igBusinessAccountId || instagramCfg.pageId;
     displayName = "Instagram";
   } else {
     res.status(200).json({ ok: true, ignored: `unknown object: ${String(object)}` });
     return;
   }
 
+  // Resolve the receiving account (per-account first, legacy fallback). The
+  // legacy config for the OTHER channel is irrelevant here since `object`
+  // already disambiguated Messenger vs Instagram.
+  const externalAccountId = extractMetaRecipientId(payload);
+  const perAccount = await resolveInboundAccount<MessengerConfig & InstagramConfig>(channel, externalAccountId);
+  const legacyCfg = perAccount
+    ? null
+    : channel === CHANNEL_MESSENGER
+      ? await getMessengerConfig()
+      : await getInstagramConfig();
+  const config = perAccount?.config ?? legacyCfg;
+  if (!config) {
+    res.status(200).json({ ok: true, ignored: `${channel} disabled` });
+    return;
+  }
+
+  // verifyMetaSignature returns false when the secret OR the header is missing,
+  // so unsigned payloads are always rejected.
+  if (!verifyMetaSignature(raw, sig, config.appSecret)) {
+    logAudit(null, "webhook_auth_failed", "webhook:meta", undefined, {
+      reason: "invalid_or_missing_signature",
+      hasSig: Boolean(sig),
+      hasSecret: Boolean(config.appSecret),
+      perAccount: Boolean(perAccount),
+    }, req.ip);
+    console.warn("[WEBHOOK] Meta signature verification failed", {
+      hasSig: Boolean(sig),
+      hasSecret: Boolean(config.appSecret),
+    });
+    res.status(401).json({ error: "Invalid or missing signature" });
+    return;
+  }
+
+  if (hasMetaChanges(payload)) {
+    console.log(`[WEBHOOK] Meta ${channel} change event (feed/comment/mention) — skipped (handled in comments phase)`);
+  }
+
+  const messages = channel === CHANNEL_MESSENGER
+    ? parseMessengerWebhook(payload)
+    : parseInstagramWebhook(payload);
+
   if (messages.length === 0) {
     res.status(200).json({ ok: true, processed: 0 });
     return;
   }
 
-  const channelAccountId = await ensureChannelAccount(channel, displayName, externalAccountId);
+  const fallbackExternalId = channel === CHANNEL_MESSENGER
+    ? (config as MessengerConfig).pageId
+    : (config as InstagramConfig).igBusinessAccountId || (config as InstagramConfig).pageId;
+  const channelAccountId = perAccount
+    ? perAccount.channelAccountId
+    : await ensureChannelAccount(channel, displayName, externalAccountId ?? fallbackExternalId);
 
   let processed = 0;
   for (const m of messages) {

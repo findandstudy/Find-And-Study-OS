@@ -9,6 +9,7 @@ import { createSmtpTransporter, invalidateSmtpCache } from "../lib/email";
 import crypto from "crypto";
 import { isLiveIntegrationsEnabled, liveModeReason } from "../lib/inbox/liveMode";
 import { encryptConfig, decryptConfig } from "../lib/encryption";
+import { maskSecrets, mergeConfig } from "../lib/configMasking";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 
 const router: IRouter = Router();
@@ -330,30 +331,5 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
 
   res.json({ success: true, message: "Connection test passed (simulated)" });
 });
-
-function maskSecrets(config: Record<string, any>): Record<string, any> {
-  const masked: Record<string, any> = {};
-  const secretKeys = ["password", "token", "secret", "api_key", "apiKey", "accessToken", "access_token", "appSecret", "app_secret"];
-  for (const [k, v] of Object.entries(config)) {
-    if (typeof v === "string" && secretKeys.some((s) => k.toLowerCase().includes(s.toLowerCase())) && v.length > 0) {
-      masked[k] = v.slice(0, 4) + "•".repeat(Math.min(v.length - 4, 20));
-    } else {
-      masked[k] = v;
-    }
-  }
-  return masked;
-}
-
-function mergeConfig(existing: Record<string, any>, incoming: Record<string, any>): Record<string, any> {
-  const merged = { ...existing };
-  const secretKeys = ["password", "token", "secret", "api_key", "apiKey", "accessToken", "access_token", "appSecret", "app_secret"];
-  for (const [k, v] of Object.entries(incoming)) {
-    if (typeof v === "string" && secretKeys.some((s) => k.toLowerCase().includes(s.toLowerCase())) && v.includes("•")) {
-      continue;
-    }
-    merged[k] = v;
-  }
-  return merged;
-}
 
 export default router;
