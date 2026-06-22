@@ -1500,7 +1500,7 @@ export default function ApplicationsPage() {
 
   const { data: applicationsResp, isLoading } = useQuery({
     queryKey: ["applications", season, search],
-    queryFn: () => apiFetch(`${BASE_URL}/api/applications?season=${encodeURIComponent(season)}&limit=500${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+    queryFn: () => apiFetch(`${BASE_URL}/api/applications?season=${encodeURIComponent(season)}&limit=100000${search ? `&search=${encodeURIComponent(search)}` : ""}`),
   });
   const allApps: any[] = applicationsResp?.data || [];
 

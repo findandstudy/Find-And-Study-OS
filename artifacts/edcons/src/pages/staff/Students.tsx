@@ -2190,7 +2190,7 @@ export default function StudentsPage() {
   }
 
   const { season } = useSeason();
-  const { data, isLoading } = useListStudents({ search, season, limit: 500 });
+  const { data, isLoading } = useListStudents({ search, season, limit: 100000 });
   const allStudents: any[] = data?.data ?? [];
 
   const uniqueNationalities = useMemo(() => {

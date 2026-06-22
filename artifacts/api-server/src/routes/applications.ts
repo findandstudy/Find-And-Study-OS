@@ -78,7 +78,7 @@ async function autoCancelSiblingApplications(wonAppId: number, studentId: number
 
 router.get("/applications", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
   const { studentId, agentId, stage, season, originType: originFilter } = req.query as Record<string, string>;
-  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: "large" });
+  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 100000 });
   const pageNum = pageParams.page;
   const limitNum = pageParams.limit;
   const offset = pageParams.offset;
