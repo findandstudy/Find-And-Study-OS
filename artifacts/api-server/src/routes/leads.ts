@@ -212,7 +212,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
 router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const user = req.user!;
   const { status, search, season, agentId: agentIdFilter, originType: originFilter } = req.query as Record<string, string>;
-  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: "large" });
+  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 100000 });
   const pageNum = pageParams.page;
   const limitNum = pageParams.limit;
   const offset = pageParams.offset;

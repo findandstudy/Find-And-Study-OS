@@ -1301,7 +1301,7 @@ export default function LeadsPage() {
   }, [setPersistedAssignment]);
 
   const { season } = useSeason();
-  const { data, isLoading } = useListLeads({ search, season, limit: 200 } as any);
+  const { data, isLoading } = useListLeads({ search, season, limit: 100000 } as any);
 
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
