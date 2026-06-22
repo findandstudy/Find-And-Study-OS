@@ -83,4 +83,18 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     namePatterns: ["yeditepe"],
     requiredDocs: ["diploma", "transcript", "passport"],
   },
+  {
+    key: "beykent",
+    label: "İstanbul Beykent Üniversitesi",
+    portalUrl: "https://beykent.my.site.com/agency/s",
+    namePatterns: ["beykent"],
+    requiredDocs: ["diploma", "transcript", "passport"],
+  },
+  {
+    key: "isik",
+    label: "Işık Üniversitesi",
+    portalUrl: "https://isikuniversity.my.site.com/agency/s",
+    namePatterns: ["isik"],
+    requiredDocs: ["diploma", "transcript", "passport"],
+  },
 ];

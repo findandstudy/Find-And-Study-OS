@@ -55,6 +55,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       session: AdapterSession,
       profile: SubmitProfile,
       files: SubmitFiles,
+      doSubmit: boolean = true,
     ): Promise<SubmitResult> {
       logger.info(`[salesforce:${cfg.key}] submit — program: ${profile.programName}`);
 
@@ -65,10 +66,42 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       }
 
       const page: any = session.page;
-      const dryRun = process.env.SF_DRYRUN === "1";
-      await page.goto(cfg.portalUrl.replace(/\/$/, "") + "/application-form", { waitUntil: "domcontentloaded", timeout: 60000 });
-      await page.waitForTimeout(6000);
+      const dryRun = doSubmit === false || process.env.PORTAL_DRYRUN === "1" || process.env.SF_DRYRUN === "1";
+
+      // --- Boot-first SPA navigation (Sabancı / 2-phase Experience Cloud fix) ---
+      // A cold goto(application-form) is redirected Home by the SPA route-guard,
+      // so the wizard never renders. Boot on Home first (let the app-shell
+      // hydrate), then reach the wizard via an in-app link, falling back to a
+      // warmed goto. Retry up to 3× until a wizard form field is visible.
+      const agencyUrl = cfg.portalUrl.replace(/\/$/, "") + "/";
+      const appFormUrl = agencyUrl + "application-form";
+      const FORM_SEL = 'input[name="First_Name"], input[name="Last_Name"], input[name="Passport_Number"], input[name="Student_First_Name"], input[name="eduhubPicklistOptions"], select[name="Gender"], input[name="Country_of_Secondary_School"], input[type=file]';
+      // "Any visible match" — FORM_SEL is a broad union, so .first() can bind to
+      // a hidden element while another field is actually on screen. Iterate.
+      const onWizard = async (): Promise<boolean> => { try { const loc = page.locator(FORM_SEL); const n = await loc.count(); for (let i = 0; i < Math.min(n, 12); i++) { if (await loc.nth(i).isVisible().catch(() => false)) return true; } return false; } catch (e) { return false; } };
+      const gotoAppForm = async (): Promise<void> => {
+        await page.goto(agencyUrl, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+        await page.waitForTimeout(8000); // SPA app-shell hydration (networkidle unreliable on Salesforce)
+        const link = page.locator('a[href*="application-form"], a[href$="/application-form"]').first();
+        if (await link.count().catch(() => 0)) {
+          await link.scrollIntoViewIfNeeded().catch(() => {});
+          await link.click({ timeout: 6000 }).catch(() => {});
+          await page.waitForTimeout(3000);
+        }
+        if (!(await onWizard())) {
+          await page.goto(appFormUrl, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+        }
+        // Poll for ANY visible wizard field (don't waitFor .first(), which may be hidden).
+        for (let i = 0; i < 30 && !(await onWizard()); i++) await page.waitForTimeout(1000);
+      };
+      for (let attempt = 0; attempt < 3 && !(await onWizard()); attempt++) await gotoAppForm();
+      await page.waitForTimeout(2000);
+
       const DUP = /already an application for this (passport|email)|already exists/i;
+      // Existing-application detection on the Applicant Detail page: an
+      // application number like "SU260169828" means a record already exists —
+      // never open a NEW application for the same student.
+      const APP_NUM = /\b[A-Z]{2,3}\d{6,}\b/;
       const result: any = { alreadyExists: false, submitted: false, programMissing: false };
       const bodyText = async (): Promise<string> => { try { return (await page.evaluate("(() => document.body ? document.body.innerText : '')()")) as string; } catch (e) { return ""; } };
       const has = async (sel: string): Promise<boolean> => { try { return (await page.locator(sel).count()) > 0; } catch (e) { return false; } };
@@ -82,7 +115,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       for (let step = 0; step < 12; step++) {
         await page.waitForTimeout(2500);
         const txt = await bodyText();
-        if (DUP.test(txt)) { result.alreadyExists = true; break; }
+        if (DUP.test(txt) || (/application\s*number/i.test(txt) && APP_NUM.test(txt))) { result.alreadyExists = true; break; }
         const before = (await bodyText()).replace(/\s+/g, " ").slice(0, 600);
         if (/review and submit|not submitted yet|please review/i.test(txt)) {
           if (dryRun) { result.dryReachedFinal = true; break; }
