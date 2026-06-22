@@ -1110,11 +1110,13 @@ function LeadBulkImportModal({ open, onClose, onSuccess }: { open: boolean; onCl
                   <button
                     className="text-xs text-primary hover:underline flex items-center gap-1"
                     onClick={() => {
-                      const blob = new Blob([SAMPLE_CSV_LEADS], { type: "text/csv" });
+                      const wb = XLSX.read(SAMPLE_CSV_LEADS, { type: "string" });
+                      const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+                      const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement("a");
                       a.href = url;
-                      a.download = "sample_leads.csv";
+                      a.download = "sample_leads.xlsx";
                       a.click();
                       URL.revokeObjectURL(url);
                     }}

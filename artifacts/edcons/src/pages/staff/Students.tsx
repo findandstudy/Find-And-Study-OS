@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { toLatinUpper } from "@/lib/textTransform";
 import { useLocation } from "wouter";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
@@ -1237,11 +1238,21 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
     onClose();
   }
 
+  async function fileToCsv(file: File): Promise<string> {
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    if (!isExcel) return file.text();
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const firstSheet = wb.SheetNames[0];
+    if (!firstSheet) throw new Error(t("studentsPage.csvParsingFailed"));
+    return XLSX.utils.sheet_to_csv(wb.Sheets[firstSheet]);
+  }
+
   async function parseCSV(file: File) {
     setParsing(true);
     setPreview(null);
     try {
-      const text = await file.text();
+      const text = await fileToCsv(file);
       const res = await fetch(`${BASE_URL}/api/ai/extract-bulk-csv`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1296,9 +1307,9 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
               <div className="bg-gradient-to-br from-blue-50 to-violet-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
                 <Sparkles className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">AI-powered CSV Import</p>
+                  <p className="text-sm font-semibold">AI-powered CSV / Excel Import</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Upload any CSV with student data. AI will intelligently map column names regardless of format — no strict header requirements.
+                    Upload any CSV or Excel file with student data. AI will intelligently map column names regardless of format — no strict header requirements.
                   </p>
                 </div>
               </div>
@@ -1309,11 +1320,13 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
                   <button
                     className="text-xs text-primary hover:underline flex items-center gap-1"
                     onClick={() => {
-                      const blob = new Blob([SAMPLE_CSV], { type: "text/csv" });
+                      const wb = XLSX.read(SAMPLE_CSV, { type: "string" });
+                      const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+                      const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement("a");
                       a.href = url;
-                      a.download = "sample_students.csv";
+                      a.download = "sample_students.xlsx";
                       a.click();
                       URL.revokeObjectURL(url);
                     }}
@@ -1328,12 +1341,12 @@ function BulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose:
                     onClick={() => inputRef.current?.click()}
                   >
                     <FileUp className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm font-semibold text-foreground">Drop CSV file here or click to browse</p>
-                    <p className="text-xs text-muted-foreground mt-1">Accepts .csv files</p>
+                    <p className="text-sm font-semibold text-foreground">Drop CSV or Excel file here or click to browse</p>
+                    <p className="text-xs text-muted-foreground mt-1">Accepts .csv, .xlsx, .xls files</p>
                     <input
                       ref={inputRef}
                       type="file"
-                      accept=".csv,text/csv"
+                      accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                       className="hidden"
                       onChange={(e) => {
                         const f = e.target.files?.[0];
