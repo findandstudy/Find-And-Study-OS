@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction, json } from "express";
+import * as XLSX from "xlsx";
 import { requireAuth } from "../lib/auth";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
@@ -274,60 +275,172 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
   }
 });
 
-router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(5, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
+const LEAD_FIELDS = [
+  "firstName", "lastName", "email", "phone", "nationality",
+  "interestedProgram", "interestedUniversity", "interestedCountry",
+  "source", "estimatedValue", "notes",
+];
+const STUDENT_FIELDS = [
+  "firstName", "lastName", "email", "phone", "nationality", "dateOfBirth",
+  "passportNumber", "highSchool", "graduationYear", "gpa", "languageScore",
+  "motherName", "fatherName", "passportExpiry", "passportIssueDate", "address", "notes",
+];
+
+// Maximum data rows accepted per bulk import to protect the DB / request budget.
+const BULK_CSV_MAX_ROWS = 5000;
+
+function normHeader(h: string): string {
+  return String(h ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Synonyms shared by both entities (names, contact, nationality, notes).
+const SHARED_SYNONYMS: Record<string, string> = {
+  firstname: "firstName", fname: "firstName", givenname: "firstName", givennames: "firstName",
+  ad: "firstName", adi: "firstName", isim: "firstName", name: "firstName",
+  lastname: "lastName", surname: "lastName", lname: "lastName", familyname: "lastName",
+  soyad: "lastName", soyadi: "lastName", soyisim: "lastName",
+  email: "email", emailaddress: "email", mail: "email", eposta: "email", epostaadresi: "email",
+  phone: "phone", phonenumber: "phone", mobile: "phone", mobilephone: "phone", tel: "phone",
+  telephone: "phone", telefon: "phone", gsm: "phone", cep: "phone", ceptelefonu: "phone", whatsapp: "phone",
+  nationality: "nationality", citizenship: "nationality", uyruk: "nationality", milliyet: "nationality",
+  notes: "notes", note: "notes", comment: "notes", comments: "notes", remarks: "notes",
+  aciklama: "notes", description: "notes",
+};
+const LEAD_SYNONYMS: Record<string, string> = {
+  interestedprogram: "interestedProgram", program: "interestedProgram", programofinterest: "interestedProgram",
+  bolum: "interestedProgram", department: "interestedProgram", major: "interestedProgram",
+  interesteduniversity: "interestedUniversity", university: "interestedUniversity", uni: "interestedUniversity",
+  universite: "interestedUniversity",
+  interestedcountry: "interestedCountry", destinationcountry: "interestedCountry", targetcountry: "interestedCountry",
+  hedefulke: "interestedCountry", country: "interestedCountry",
+  source: "source", leadsource: "source", kaynak: "source",
+  estimatedvalue: "estimatedValue", value: "estimatedValue", dealvalue: "estimatedValue",
+  amount: "estimatedValue", deger: "estimatedValue", tutar: "estimatedValue", budget: "estimatedValue",
+};
+const STUDENT_SYNONYMS: Record<string, string> = {
+  dateofbirth: "dateOfBirth", dob: "dateOfBirth", birthdate: "dateOfBirth", birthday: "dateOfBirth",
+  dogumtarihi: "dateOfBirth",
+  passportnumber: "passportNumber", passportno: "passportNumber", passport: "passportNumber",
+  pasaport: "passportNumber", pasaportno: "passportNumber",
+  highschool: "highSchool", school: "highSchool", lise: "highSchool",
+  graduationyear: "graduationYear", gradyear: "graduationYear", mezuniyetyili: "graduationYear",
+  gpa: "gpa", gradepointaverage: "gpa", ortalama: "gpa",
+  languagescore: "languageScore", langscore: "languageScore", ielts: "languageScore",
+  toefl: "languageScore", dilpuani: "languageScore",
+  mothername: "motherName", anneadi: "motherName",
+  fathername: "fatherName", babaadi: "fatherName",
+  passportexpiry: "passportExpiry", passportexpiration: "passportExpiry", passportexpirydate: "passportExpiry",
+  passportissuedate: "passportIssueDate", passportissue: "passportIssueDate",
+  address: "address", adres: "address",
+};
+
+function buildHeaderMap(isLead: boolean): Record<string, string> {
+  const fields = isLead ? LEAD_FIELDS : STUDENT_FIELDS;
+  const map: Record<string, string> = {};
+  // Canonical field names always map to themselves.
+  for (const f of fields) map[normHeader(f)] = f;
+  Object.assign(map, SHARED_SYNONYMS, isLead ? LEAD_SYNONYMS : STUDENT_SYNONYMS);
+  // Drop any synonym whose target isn't valid for this entity.
+  const valid = new Set(fields);
+  for (const k of Object.keys(map)) {
+    if (!valid.has(map[k])) delete map[k];
+  }
+  return map;
+}
+
+/**
+ * Parse a CSV string into a header row + data rows using SheetJS so quoting,
+ * embedded commas and newlines are handled correctly.
+ */
+function parseCsvRows(csvData: string): string[][] {
+  const wb = XLSX.read(csvData, { type: "string", raw: false });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return [];
+  const sheet = wb.Sheets[sheetName];
+  return XLSX.utils.sheet_to_json<string[]>(sheet, {
+    header: 1,
+    defval: "",
+    blankrows: false,
+    raw: false,
+  });
+}
+
+router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(20, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
   try {
     const { csvData, entity } = req.body as { csvData: string; entity?: "student" | "lead" };
-    if (!csvData) {
+    if (!csvData || !csvData.trim()) {
       res.status(400).json({ error: "No CSV data provided" });
       return;
     }
-
-    let anthropic;
-    let claudeConfig;
-    try {
-      anthropic = await getAnthropicClient();
-      claudeConfig = await getClaudeConfig();
-    } catch (err: any) {
-      res.status(503).json({ error: err.message || "AI integration not configured" });
-      return;
-    }
-
     const isLead = entity === "lead";
-    const promptIntro = isLead
-      ? `Parse this CSV data and extract sales lead records. Return a JSON array of lead objects with keys: firstName, lastName, email, phone, nationality, interestedProgram, interestedUniversity, interestedCountry, source, estimatedValue, notes.`
-      : `Parse this CSV data and extract student records. Return a JSON array of student objects with keys: firstName, lastName, email, phone, nationality, dateOfBirth, passportNumber, highSchool, graduationYear, gpa, languageScore, motherName, fatherName, passportExpiry, passportIssueDate, address, notes.`;
+    const fields = isLead ? LEAD_FIELDS : STUDENT_FIELDS;
 
-    const message = await anthropic.messages.create({
-      model: claudeConfig.model || DEFAULT_CSV_MODEL,
-      max_tokens: 8192,
-      messages: [{
-        role: "user",
-        content: `${promptIntro}
-        
-Map any reasonable column name variations (e.g. "first name", "First Name", "firstname" all map to firstName).
-Return ONLY the JSON array, no explanation.
-Set null for missing values.
-
-CSV:
-${csvData.slice(0, 10000)}`,
-      }],
-    });
-
-    const textBlock = message.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      res.status(500).json({ error: "No response from AI" });
+    const rows = parseCsvRows(csvData);
+    if (rows.length < 2) {
+      res.json({ students: [], records: [] });
       return;
     }
 
-    let records: any[] = [];
-    try {
-      const jsonMatch = textBlock.text.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        records = JSON.parse(jsonMatch[0]);
+    const headers = (rows[0] || []).map((h) => String(h ?? "").trim());
+    const headerMap = buildHeaderMap(isLead);
+    const colToField: (string | null)[] = headers.map((h) => headerMap[normHeader(h)] ?? null);
+
+    // Fuzzy header fallback: if the required name columns weren't recognized,
+    // ask the AI to map ONLY the header names (a tiny payload, never row data).
+    const haveName = colToField.includes("firstName") && colToField.includes("lastName");
+    if (!haveName) {
+      const unmappedIdx = colToField
+        .map((f, i) => (f === null ? i : -1))
+        .filter((i) => i >= 0 && headers[i]);
+      if (unmappedIdx.length > 0) {
+        try {
+          const anthropic = await getAnthropicClient();
+          const claudeConfig = await getClaudeConfig();
+          const msg = await anthropic.messages.create({
+            model: claudeConfig.model || DEFAULT_CSV_MODEL,
+            max_tokens: 1024,
+            messages: [{
+              role: "user",
+              content: `Map each CSV column header to exactly one of these canonical field names, or null if none fit. Canonical fields: ${fields.join(", ")}.
+Return ONLY a JSON object whose keys are the EXACT header strings and whose values are a canonical field name or null. No explanation.
+Headers: ${JSON.stringify(unmappedIdx.map((i) => headers[i]))}`,
+            }],
+          });
+          const tb = msg.content.find((b) => b.type === "text");
+          if (tb && tb.type === "text") {
+            const m = tb.text.match(/\{[\s\S]*\}/);
+            if (m) {
+              const mapping = JSON.parse(m[0]) as Record<string, string | null>;
+              const validSet = new Set(fields);
+              for (const i of unmappedIdx) {
+                const target = mapping[headers[i]];
+                if (target && validSet.has(target) && !colToField.includes(target)) {
+                  colToField[i] = target;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          // AI mapping is best-effort; deterministic mapping still applies.
+          console.warn("CSV header AI-mapping fallback failed:", (err as any)?.message || err);
+        }
       }
-    } catch {
-      res.status(500).json({ error: "Failed to parse AI response" });
-      return;
+    }
+
+    const records: Record<string, any>[] = [];
+    for (let r = 1; r < rows.length && records.length < BULK_CSV_MAX_ROWS; r++) {
+      const row = rows[r] || [];
+      const rec: Record<string, any> = {};
+      for (let c = 0; c < colToField.length; c++) {
+        const field = colToField[c];
+        if (!field) continue;
+        const raw = row[c];
+        const v = raw == null ? "" : String(raw).trim();
+        if (v === "") continue;
+        rec[field] = v;
+      }
+      // Skip fully empty rows; rows missing names are reported by the bulk insert.
+      if (rec.firstName || rec.lastName) records.push(rec);
     }
 
     res.json({ students: records, records });
