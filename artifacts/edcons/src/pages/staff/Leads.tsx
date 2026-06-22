@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import * as XLSX from "xlsx";
 import { useLocation } from "wouter";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
@@ -1030,11 +1031,21 @@ function LeadBulkImportModal({ open, onClose, onSuccess }: { open: boolean; onCl
     onClose();
   }
 
+  async function fileToCsv(file: File): Promise<string> {
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    if (!isExcel) return file.text();
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const firstSheet = wb.SheetNames[0];
+    if (!firstSheet) throw new Error(t("leadsPage.csvParsingFailed"));
+    return XLSX.utils.sheet_to_csv(wb.Sheets[firstSheet]);
+  }
+
   async function parseCSV(file: File) {
     setParsing(true);
     setPreview(null);
     try {
-      const text = await file.text();
+      const text = await fileToCsv(file);
       const res = await fetch(`${BASE_URL}/api/ai/extract-bulk-csv`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1123,7 +1134,7 @@ function LeadBulkImportModal({ open, onClose, onSuccess }: { open: boolean; onCl
                     <input
                       ref={inputRef}
                       type="file"
-                      accept=".csv,text/csv"
+                      accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                       className="hidden"
                       onChange={(e) => {
                         const f = e.target.files?.[0];
