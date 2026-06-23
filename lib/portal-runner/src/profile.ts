@@ -1,10 +1,16 @@
 /**
  * profile.ts — builds a SubmitProfile + SubmitFiles from the DB record
- * for a given portal submission.
+ * for a given portal submission (or directly from an application).
  *
  * Documents are downloaded from their fileUrl / fileKey, or decoded from
  * base64 fileData, into a per-submission temp dir so the adapter can
  * reference them as local file paths.
+ *
+ * Two entry points share the same profile-mapping + document-download core:
+ *   - buildStudentProfile(submissionId)      — used by the production worker
+ *     (resolves application + student from a portal_submissions row).
+ *   - buildProfileFromApplication(appId)      — used by the local dry-test CLI
+ *     (resolves student directly from an application, no submission row).
  */
 
 import fs from "node:fs/promises";
@@ -41,14 +47,55 @@ export interface StudentProfileResult {
   downloadErrors: Record<string, string>;
 }
 
+type StudentRow = typeof studentsTable.$inferSelect;
+type ApplicationRow = typeof applicationsTable.$inferSelect;
+
 // ---------------------------------------------------------------------------
-// buildStudentProfile
+// Shared core: profile mapping
 // ---------------------------------------------------------------------------
 
 /**
- * Fetches the application + student data for a given portal_submission row,
- * downloads the student's documents to a temporary directory, and returns
- * a SubmitProfile + SubmitFiles ready for the adapter.
+ * Maps a CRM student + application record into a CRM-agnostic SubmitProfile.
+ * Single source of truth shared by both entry points below.
+ */
+function buildSubmitProfileFromRecords(
+  student: StudentRow,
+  app: ApplicationRow,
+): SubmitProfile {
+  return buildProfile({
+    email:          student.email          ?? "",
+    passportNumber: student.passportNumber ?? "",
+    firstName:      student.firstName       ?? "",
+    lastName:       student.lastName        ?? "",
+    dateOfBirth:    student.dateOfBirth     ?? "",
+    gender:         student.gender          ?? "",
+    fatherName:     student.fatherName      ?? "",
+    motherName:     student.motherName      ?? "",
+    nationality:    student.nationality     ?? "",
+    address:        student.address         ?? "",
+    phone:          student.phone           ?? "",
+    level:          app.level               ?? "",
+    programName:    app.programName         ?? "",
+    programId:      app.programId           != null ? String(app.programId) : "",
+    universityName: app.universityName      ?? undefined,
+    gpa:            student.gpa             != null ? Number(student.gpa) : undefined,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Shared core: document download
+// ---------------------------------------------------------------------------
+
+interface DownloadedDocs {
+  files: SubmitFiles;
+  tempDir: string;
+  filledSlots: string[];
+  missingSlots: string[];
+  downloadErrors: Record<string, string>;
+}
+
+/**
+ * Downloads a student's documents into a fresh temp directory.
  *
  * Document resolution order per slot:
  *   1. Non-deleted records with content (fileUrl / fileKey / fileData), sorted
@@ -58,68 +105,18 @@ export interface StudentProfileResult {
  *   3. For each candidate: try URL download (fileUrl then fileKey), then fall
  *      back to base64 fileData written to a temp file.
  *
- * Throws when the submission, application, or student cannot be found.
  * Download failures are non-fatal: they are recorded in `downloadErrors` and
  * the slot is listed in `missingSlots`.
+ *
+ * @param tempPrefix  mkdtemp prefix (e.g. "portal-sub-12" / "portal-app-2054").
+ * @param logLabel    label used in log lines (e.g. "#12" / "app#2054").
  */
-export async function buildStudentProfile(
-  submissionId: number,
-): Promise<StudentProfileResult> {
-  // ----- 1. Load submission ------------------------------------------------
-  const [sub] = await db
-    .select()
-    .from(portalSubmissionsTable)
-    .where(eq(portalSubmissionsTable.id, submissionId));
-
-  if (!sub) throw new Error(`Submission ${submissionId} not found`);
-
-  // ----- 2. Load application -----------------------------------------------
-  const [app] = await db
-    .select()
-    .from(applicationsTable)
-    .where(
-      and(
-        eq(applicationsTable.id, sub.applicationId),
-        isNull(applicationsTable.deletedAt),
-      ),
-    );
-
-  if (!app) throw new Error(`Application ${sub.applicationId} not found`);
-
-  // ----- 3. Load student ---------------------------------------------------
-  if (!sub.studentId) throw new Error(`Submission ${submissionId} has no studentId`);
-
-  const [student] = await db
-    .select()
-    .from(studentsTable)
-    .where(eq(studentsTable.id, sub.studentId));
-
-  if (!student) throw new Error(`Student ${sub.studentId} not found`);
-
-  // ----- 4. Build SubmitProfile --------------------------------------------
-  const profile: SubmitProfile = buildProfile({
-    email:          student.email         ?? "",
-    passportNumber: student.passportNumber ?? "",
-    firstName:      student.firstName      ?? "",
-    lastName:       student.lastName       ?? "",
-    dateOfBirth:    student.dateOfBirth ?? "",
-    gender:         student.gender      ?? "",
-    fatherName:     student.fatherName  ?? "",
-    motherName:     student.motherName  ?? "",
-    nationality:    student.nationality ?? "",
-    address:        student.address     ?? "",
-    phone:          student.phone          ?? "",
-    level:          app.level              ?? "",
-    programName:    app.programName        ?? "",
-    programId:      app.programId          != null ? String(app.programId) : "",
-    universityName: app.universityName     ?? undefined,
-    gpa:            student.gpa            != null ? Number(student.gpa) : undefined,
-  });
-
-  // ----- 5. Download documents to temp dir ---------------------------------
-  const tempDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), `portal-sub-${submissionId}-`),
-  );
+async function downloadStudentDocuments(
+  studentId: number,
+  tempPrefix: string,
+  logLabel: string,
+): Promise<DownloadedDocs> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `${tempPrefix}-`));
 
   const docs = await db
     .select({
@@ -132,7 +129,7 @@ export async function buildStudentProfile(
     .from(documentsTable)
     .where(
       and(
-        eq(documentsTable.studentId, sub.studentId!),
+        eq(documentsTable.studentId, studentId),
         isNull(documentsTable.deletedAt),
       ),
     );
@@ -185,7 +182,7 @@ export async function buildStudentProfile(
         const msg = err instanceof Error ? err.message : String(err);
         downloadErrors[docKey] = `type=${doc.type}: ${msg}`;
         console.warn(
-          `[portal-profile] #${submissionId} doc download failed` +
+          `[portal-profile] ${logLabel} doc download failed` +
           ` — slot=${docKey} type=${doc.type}: ${msg}`,
         );
       }
@@ -201,11 +198,112 @@ export async function buildStudentProfile(
       : "";
 
   console.log(
-    `[portal-profile] #${submissionId} doc slots — filled: [${filledSlots.join(", ")}]` +
+    `[portal-profile] ${logLabel} doc slots — filled: [${filledSlots.join(", ")}]` +
     (missingSlots.length > 0 ? ` | missing: [${missingDetail}]` : " | all 4 filled"),
   );
 
-  return { profile, files, tempDir, filledSlots, missingSlots, downloadErrors };
+  return { files, tempDir, filledSlots, missingSlots, downloadErrors };
+}
+
+// ---------------------------------------------------------------------------
+// buildStudentProfile — submission-keyed (production worker)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches the application + student data for a given portal_submission row,
+ * downloads the student's documents to a temporary directory, and returns
+ * a SubmitProfile + SubmitFiles ready for the adapter.
+ *
+ * Throws when the submission, application, or student cannot be found.
+ */
+export async function buildStudentProfile(
+  submissionId: number,
+): Promise<StudentProfileResult> {
+  // ----- 1. Load submission ------------------------------------------------
+  const [sub] = await db
+    .select()
+    .from(portalSubmissionsTable)
+    .where(eq(portalSubmissionsTable.id, submissionId));
+
+  if (!sub) throw new Error(`Submission ${submissionId} not found`);
+
+  // ----- 2. Load application -----------------------------------------------
+  const [app] = await db
+    .select()
+    .from(applicationsTable)
+    .where(
+      and(
+        eq(applicationsTable.id, sub.applicationId),
+        isNull(applicationsTable.deletedAt),
+      ),
+    );
+
+  if (!app) throw new Error(`Application ${sub.applicationId} not found`);
+
+  // ----- 3. Load student ---------------------------------------------------
+  if (!sub.studentId) throw new Error(`Submission ${submissionId} has no studentId`);
+
+  const [student] = await db
+    .select()
+    .from(studentsTable)
+    .where(eq(studentsTable.id, sub.studentId));
+
+  if (!student) throw new Error(`Student ${sub.studentId} not found`);
+
+  // ----- 4. Build profile + download documents -----------------------------
+  const profile = buildSubmitProfileFromRecords(student, app);
+  const dl = await downloadStudentDocuments(
+    sub.studentId,
+    `portal-sub-${submissionId}`,
+    `#${submissionId}`,
+  );
+
+  return { profile, ...dl };
+}
+
+// ---------------------------------------------------------------------------
+// buildProfileFromApplication — application-keyed (local dry-test CLI)
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a SubmitProfile + SubmitFiles directly from an application id, with
+ * no portal_submissions row required. Resolves the student via the
+ * application's studentId. Reuses the exact same profile-mapping and
+ * document-download logic as buildStudentProfile (single source of truth) so
+ * the local dry-test CLI exercises the identical profile the worker would.
+ *
+ * Throws when the application or student cannot be found.
+ */
+export async function buildProfileFromApplication(
+  applicationId: number,
+): Promise<StudentProfileResult> {
+  const [app] = await db
+    .select()
+    .from(applicationsTable)
+    .where(
+      and(
+        eq(applicationsTable.id, applicationId),
+        isNull(applicationsTable.deletedAt),
+      ),
+    );
+
+  if (!app) throw new Error(`Application ${applicationId} not found`);
+
+  const [student] = await db
+    .select()
+    .from(studentsTable)
+    .where(eq(studentsTable.id, app.studentId));
+
+  if (!student) throw new Error(`Student ${app.studentId} not found`);
+
+  const profile = buildSubmitProfileFromRecords(student, app);
+  const dl = await downloadStudentDocuments(
+    app.studentId,
+    `portal-app-${applicationId}`,
+    `app#${applicationId}`,
+  );
+
+  return { profile, ...dl };
 }
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,8 @@
     "build:prod": "bash deploy/build-production.sh",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "test:e2e": "PLAYWRIGHT_BASE_URL=http://localhost:25197 playwright test"
+    "test:e2e": "PLAYWRIGHT_BASE_URL=http://localhost:25197 playwright test",
+    "portal:dry": "pnpm --filter @workspace/portal-automation-worker run portal:dry"
   },
   "private": true,
   "devDependencies": {

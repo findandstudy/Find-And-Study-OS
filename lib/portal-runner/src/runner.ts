@@ -73,6 +73,10 @@ export interface RunResult {
  *                    dry mode — dry mode still performs a full browser login
  *                    and form-fill smoke test; only the final submit click is
  *                    skipped.
+ * @param opts        Optional run options. `headless` defaults to true so the
+ *                    production worker behaviour is unchanged; the local
+ *                    dry-test CLI passes `headless:false` to drive a visible
+ *                    browser (residential IP, no Cloudflare/bot block).
  */
 export async function runSubmission(
   submission: Pick<ClaimedSubmission, "id" | "universityKey" | "universityName" | "mode">,
@@ -80,6 +84,7 @@ export async function runSubmission(
   files: SubmitFiles,
   tempDir: string,
   creds?: ResolvedCreds,
+  opts?: { headless?: boolean },
 ): Promise<RunResult> {
   // ----- 1. Resolve adapter -----------------------------------------------
   const adapter =
@@ -113,7 +118,7 @@ export async function runSubmission(
   }
 
   try {
-    session = await adapter.login({ headless: true });
+    session = await adapter.login({ headless: opts?.headless ?? true });
 
     const result = await adapter.submit(session, profile, files, !isDry);
 
