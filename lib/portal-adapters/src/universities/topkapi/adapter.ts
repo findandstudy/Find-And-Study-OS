@@ -172,8 +172,18 @@ const COUNTRY_NAME_MAP: Record<string, string> = {
   yemen:                    "Yemen",
 };
 
-function resolveCountry(nationality: string): string {
+function resolveCountry(
+  nationality: string,
+  overrides?: Record<string, string>,
+): string {
   const lower = nationality.toLowerCase().trim();
+  // 0. Panel-managed override (DB wins) — exact key first, then adjective substring.
+  if (overrides) {
+    if (overrides[lower]) return overrides[lower];
+    for (const [key, value] of Object.entries(overrides)) {
+      if (key && lower.includes(key)) return value;
+    }
+  }
   // 1. Exact country-name match (e.g. "Uzbekistan" → "Özbekistan")
   if (COUNTRY_NAME_MAP[lower]) return COUNTRY_NAME_MAP[lower];
   // 2. Nationality-adjective substring match (e.g. "uzbek" in "Uzbekistani" → "Özbekistan")
@@ -391,7 +401,7 @@ export const topkapiAdapter: UniversityAdapter = {
     doSubmit = true,
   ): Promise<SubmitResult> {
     const { page } = session;
-    const country  = resolveCountry(profile.nationality);
+    const country  = resolveCountry(profile.nationality, profile.countryOverrides);
     const eduLevel = mapEduLevel(profile.level);
     const screenshots: string[] = [];
 
@@ -645,11 +655,20 @@ export const topkapiAdapter: UniversityAdapter = {
       programOptions.slice(0, 10).map((o) => `${o.id}: ${o.name}`),
     );
 
+    // Panel-managed mapping data merges OVER the built-in code defaults (DB wins):
+    //   - programOverrides: built-in PROGRAM_MAP first, then DB overrides.
+    //   - programSynonyms:  passed through to EXTEND the matcher's dictionary.
+    // When the table is empty both are undefined → identical to prior behaviour.
+    const mergedProgramMap = profile.programOverrides
+      ? { ...PROGRAM_MAP, ...profile.programOverrides }
+      : PROGRAM_MAP;
+
     const matchResult = matchProgram(
       profile.programName,
       programOptions,
       profile.programId,
-      PROGRAM_MAP,
+      mergedProgramMap,
+      profile.programSynonyms,
     );
 
     if (!matchResult) {

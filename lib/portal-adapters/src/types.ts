@@ -64,6 +64,18 @@ export interface SubmitProfile {
   // that require them (e.g. Medipol) use these. Sourced from the CRM student record.
   passportIssueDate?: string;
   passportExpiryDate?: string;
+  // ---------------------------------------------------------------------------
+  // Panel-managed mapping data (sourced from portal_program_mapping by the
+  // runner, keyed by universityKey). All optional — when absent the adapter
+  // falls back to its built-in code defaults (zero behaviour change). When
+  // present, these EXTEND/OVERRIDE the built-ins (DB wins). See programMatch.ts.
+  // ---------------------------------------------------------------------------
+  /** CRM programId → portal option value/text. Merged over adapter PROGRAM_MAP. */
+  programOverrides?: Record<string, string>;
+  /** EN↔TR synonym groups (folded single tokens). Extends built-in synonyms. */
+  programSynonyms?: string[][];
+  /** Country name/adjective (lowercase) → portal label. Merged over country maps. */
+  countryOverrides?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------

@@ -41,6 +41,7 @@ import {
   resolveObjectPaths,
 } from "@workspace/object-storage";
 import type { ClaimedSubmission } from "./queue.js";
+import { loadProgramMapping } from "./programMappingLoader.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -120,7 +121,14 @@ export async function runSubmission(
   try {
     session = await adapter.login({ headless: opts?.headless ?? true });
 
-    const result = await adapter.submit(session, profile, files, !isDry);
+    // Inject panel-managed mapping (synonyms / program & country overrides)
+    // keyed by universityKey. Empty/missing row → fields omitted → the adapter
+    // falls back to its built-in code defaults (no behaviour change). The DB
+    // values, when present, are merged OVER the built-ins by the adapter.
+    const mapping = await loadProgramMapping(submission.universityKey);
+    const enrichedProfile: SubmitProfile = { ...profile, ...mapping };
+
+    const result = await adapter.submit(session, enrichedProfile, files, !isDry);
 
     // ----- 4. Upload per-step screenshots to Object Storage ----------------
     // Adapters write screenshots to /tmp and return local paths in

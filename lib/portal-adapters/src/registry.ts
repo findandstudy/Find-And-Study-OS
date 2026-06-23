@@ -65,6 +65,27 @@ function resolveFamily(adapterKey: string): AdapterFamily {
 }
 
 // ---------------------------------------------------------------------------
+// Experimental adapter families.
+//
+// These adapters are not yet production-proven. They MUST NOT auto-submit:
+// the scheduled drain worker excludes them and the panel blocks enabling
+// auto-process for them. Manual single-submission (operator-triggered) is
+// still allowed. Topkapı (metronic) and the Okan/Medipol declarative flow
+// remain production-active.
+// ---------------------------------------------------------------------------
+const EXPERIMENTAL_FAMILIES: ReadonlySet<AdapterFamily> = new Set<AdapterFamily>([
+  "salesforce",
+  "sit",
+  "united",
+  "emu",
+]);
+
+/** True when the given adapter key belongs to an experimental (non-auto) family. */
+export function isExperimentalAdapterKey(adapterKey: string): boolean {
+  return EXPERIMENTAL_FAMILIES.has(resolveFamily(adapterKey));
+}
+
+// ---------------------------------------------------------------------------
 // adapterMetadata — lightweight summary safe for API / logging
 // Returns NO credentials.
 // ---------------------------------------------------------------------------
@@ -72,18 +93,22 @@ export function adapterMetadata(): {
   key: string;
   label: string;
   family: AdapterFamily;
+  experimental: boolean;
   allowlist?: string[];
 }[] {
   return adapters.map((a) => {
+    const family = resolveFamily(a.key);
     const entry: {
       key: string;
       label: string;
       family: AdapterFamily;
+      experimental: boolean;
       allowlist?: string[];
     } = {
       key:    a.key,
       label:  a.label,
-      family: resolveFamily(a.key),
+      family,
+      experimental: EXPERIMENTAL_FAMILIES.has(family),
     };
     if (a.allowlist !== undefined) {
       entry.allowlist = a.allowlist;

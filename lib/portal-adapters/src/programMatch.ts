@@ -146,23 +146,40 @@ const SYNONYM_GROUPS: readonly string[][] = [
   ["sistemleri", "systems"],
 ];
 
-/** token → Set<synonyms> (built once at module load) */
-const _synonymMap = new Map<string, Set<string>>();
-for (const group of SYNONYM_GROUPS) {
-  for (const term of group) {
-    const synonyms = _synonymMap.get(term) ?? new Set<string>();
-    for (const other of group) {
-      if (other !== term) synonyms.add(other);
+/** Build a token→synonyms map from equivalence-class groups. */
+function buildSynonymMap(
+  groups: readonly (readonly string[])[],
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const group of groups) {
+    for (const term of group) {
+      const synonyms = map.get(term) ?? new Set<string>();
+      for (const other of group) {
+        if (other !== term) synonyms.add(other);
+      }
+      map.set(term, synonyms);
     }
-    _synonymMap.set(term, synonyms);
   }
+  return map;
 }
 
-/** Expand a token set by adding all dictionary synonyms of each token. */
-function expandTokens(tokens: Set<string>): Set<string> {
+/** Default token → Set<synonyms>, built once at module load from SYNONYM_GROUPS. */
+const _synonymMap = buildSynonymMap(SYNONYM_GROUPS);
+
+/**
+ * Expand a token set by adding all dictionary synonyms of each token.
+ *
+ * @param synonymMap token→synonyms map. Defaults to the built-in map; callers
+ *                   that pass DB-supplied groups receive a merged map so panel
+ *                   synonyms EXTEND (never replace) the proven defaults.
+ */
+function expandTokens(
+  tokens: Set<string>,
+  synonymMap: ReadonlyMap<string, Set<string>>,
+): Set<string> {
   const expanded = new Set<string>(tokens);
   for (const t of tokens) {
-    const syns = _synonymMap.get(t);
+    const syns = synonymMap.get(t);
     if (syns) {
       for (const s of syns) expanded.add(s);
     }
@@ -236,11 +253,12 @@ function scorePool(
   queryTokens: Set<string>,
   pool: ProgramCandidate[],
   expand: boolean,
+  synonymMap: ReadonlyMap<string, Set<string>>,
 ): Scored[] {
-  const qt = expand ? expandTokens(queryTokens) : queryTokens;
+  const qt = expand ? expandTokens(queryTokens, synonymMap) : queryTokens;
   return pool
     .map(c => {
-      const ct = expand ? expandTokens(tokenize(c.name)) : tokenize(c.name);
+      const ct = expand ? expandTokens(tokenize(c.name), synonymMap) : tokenize(c.name);
       return { candidate: c, conf: jaccard(qt, ct) };
     })
     .filter(x => x.conf >= CONF_THRESHOLD)
@@ -262,6 +280,7 @@ export function matchProgram(
   candidates: ProgramCandidate[],
   programId?: string,
   programMap?: Record<string, string>,
+  synonyms?: readonly (readonly string[])[],
 ): MatchResult | null {
 
   // --- 1. Manual override (highest confidence) ---
@@ -282,15 +301,24 @@ export function matchProgram(
   const pool = applyHardFilters(queryFolded, candidates);
 
   // --- 3. Primary Jaccard (no expansion) ---
+  // Synonym map: built-in groups, optionally extended with DB-supplied groups
+  // (panel-managed). DB groups EXTEND the proven defaults — they never remove
+  // built-in coverage. With no extras the shared default map is reused (zero
+  // allocation, behaviour identical to before this parameter existed).
+  const synonymMap =
+    synonyms && synonyms.length > 0
+      ? buildSynonymMap([...SYNONYM_GROUPS, ...synonyms])
+      : _synonymMap;
+
   const queryTokens = tokenize(programName);
-  let scored = scorePool(queryTokens, pool, false);
+  let scored = scorePool(queryTokens, pool, false, synonymMap);
 
   // --- 4. EN↔TR expansion fallback ---
   // Only triggered when NO primary candidate scores ≥ CONF_THRESHOLD.
   // Deliberately NOT triggered for the ambiguity case (margin < 0.15) —
   // that ambiguity result is intentional and must not be overridden.
   if (scored.length === 0) {
-    scored = scorePool(queryTokens, pool, true);
+    scored = scorePool(queryTokens, pool, true, synonymMap);
   }
 
   if (scored.length === 0) return null;

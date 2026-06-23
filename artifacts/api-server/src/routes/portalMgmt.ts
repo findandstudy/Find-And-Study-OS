@@ -631,7 +631,14 @@ router.get(
       .where(eq(portalProgramMappingTable.universityKey, universityKey));
 
     if (!row) {
-      res.json({ universityKey, mappings: {}, id: null, createdAt: null, updatedAt: null });
+      res.json({
+        universityKey,
+        mappings:         {},
+        programOverrides: {},
+        synonyms:         [],
+        countryOverrides: {},
+        id: null, createdAt: null, updatedAt: null,
+      });
       return;
     }
 
@@ -641,38 +648,57 @@ router.get(
 
 // ---------------------------------------------------------------------------
 // PUT /portal-program-mapping/:universityKey
+//
+// Write access is TIGHTER than read: only super_admin / admin / manager
+// (ADMIN_ROLES) may edit the matching data — it directly affects automated
+// portal submissions. Read stays STAFF+ADMIN for visibility.
+//
+// All matching-data fields are optional; the matcher merges whatever is stored
+// OVER the adapter's built-in code defaults (DB wins). Empty = no change.
 // ---------------------------------------------------------------------------
 const putMappingBodySchema = z.object({
-  mappings: z.record(z.string()),
+  mappings:         z.record(z.string()).optional(),
+  programOverrides: z.record(z.string()).optional(),
+  synonyms:         z.array(z.array(z.string().min(1)).min(2)).optional(),
+  countryOverrides: z.record(z.string()).optional(),
 });
 type PutMappingSchemas = { params: typeof uniKeyParamsSchema; body: typeof putMappingBodySchema };
 
 router.put(
   "/portal-program-mapping/:universityKey",
   requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  requireRole(...ADMIN_ROLES),
   validate({ params: uniKeyParamsSchema, body: putMappingBodySchema }),
   async (req, res): Promise<void> => {
     const { universityKey } = getValidated<PutMappingSchemas>(req).params;
-    const { mappings }      = getValidated<PutMappingSchemas>(req).body;
+    const body              = getValidated<PutMappingSchemas>(req).body;
     const user = req.user!;
 
     const [existing] = await db
-      .select({ id: portalProgramMappingTable.id })
+      .select()
       .from(portalProgramMappingTable)
       .where(eq(portalProgramMappingTable.universityKey, universityKey));
+
+    // Only overwrite the fields actually present in the request body so a
+    // partial PUT (e.g. just synonyms) never wipes the other columns.
+    const next = {
+      mappings:         body.mappings         ?? existing?.mappings         ?? {},
+      programOverrides: body.programOverrides ?? existing?.programOverrides ?? {},
+      synonyms:         body.synonyms         ?? existing?.synonyms         ?? [],
+      countryOverrides: body.countryOverrides ?? existing?.countryOverrides ?? {},
+    };
 
     let row;
     if (existing) {
       [row] = await db
         .update(portalProgramMappingTable)
-        .set({ mappings, updatedAt: new Date() })
+        .set({ ...next, updatedAt: new Date() })
         .where(eq(portalProgramMappingTable.id, existing.id))
         .returning();
     } else {
       [row] = await db
         .insert(portalProgramMappingTable)
-        .values({ universityKey, mappings })
+        .values({ universityKey, ...next })
         .returning();
     }
 
@@ -681,7 +707,13 @@ router.put(
       "update_portal_program_mapping",
       "portal_program_mapping",
       row.id,
-      { universityKey, count: Object.keys(mappings).length },
+      {
+        universityKey,
+        mappings:         Object.keys(next.mappings).length,
+        programOverrides: Object.keys(next.programOverrides).length,
+        synonyms:         next.synonyms.length,
+        countryOverrides: Object.keys(next.countryOverrides).length,
+      },
       req.ip,
     );
 
@@ -704,7 +736,7 @@ router.get(
     // Registry (code + declarative from declarativeConfigs.ts) — read-only
     // hasCredentials: DB-first by adapterKey (canonical), then env fallback.
     const dbCredKeys = await batchPortalCredentialKeys();
-    const registry = adapterMetadata().map(({ key, label, family }) => {
+    const registry = adapterMetadata().map(({ key, label, family, experimental }) => {
       const K = key.toUpperCase().replace(/-/g, "_");
       const envHas = !!(
         (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
@@ -712,7 +744,7 @@ router.get(
       );
       const hasCredentials = dbCredKeys.has(key) || envHas;
       const kind: "declarative" | "code" = family === "declarative" ? "declarative" : "code";
-      return { key, label, family, kind, hasCredentials };
+      return { key, label, family, kind, experimental, hasCredentials };
     });
 
     // DB-stored adapters — manageable via UI

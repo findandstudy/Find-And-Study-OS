@@ -1483,6 +1483,11 @@ async function seedClaudeIntegration() {
       )
     `);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_prog_map_key_uniq ON portal_program_mapping (university_key)`);
+    // Panel-managed matching data (single-source). Additive, idempotent — the
+    // matcher reads these MERGED OVER the adapter's built-in defaults (DB wins).
+    await pool.query(`ALTER TABLE portal_program_mapping ADD COLUMN IF NOT EXISTS program_overrides JSONB NOT NULL DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE portal_program_mapping ADD COLUMN IF NOT EXISTS synonyms JSONB NOT NULL DEFAULT '[]'`);
+    await pool.query(`ALTER TABLE portal_program_mapping ADD COLUMN IF NOT EXISTS country_overrides JSONB NOT NULL DEFAULT '{}'`);
   } catch (err) {
     console.error("[migrate] portal_adapters/portal_program_mapping:", err);
   }

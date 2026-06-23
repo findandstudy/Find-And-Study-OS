@@ -45,6 +45,7 @@ import {
   runSubmission,
   writebackResult,
 } from "@workspace/portal-runner";
+import { isExperimentalAdapterKey } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "../src/lib/portalCreds.js";
 import { db, pool, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
 import { and, eq, isNull } from "drizzle-orm";
@@ -153,17 +154,33 @@ async function drain(): Promise<void> {
   }
 
   // Step 4: Fetch autoProcess-enabled university keys
+  // Experimental adapter families (salesforce/sit/united/emu) are EXCLUDED here
+  // as a hard runtime guard: even if a row somehow has autoProcess=true, the
+  // worker will never auto-submit it. Manual single-submission still works.
   let autoProcessKeys: string[] = [];
   try {
     const unis = await db
-      .select({ universityKey: portalUniversitiesTable.universityKey })
+      .select({
+        universityKey: portalUniversitiesTable.universityKey,
+        adapterKey:    portalUniversitiesTable.adapterKey,
+      })
       .from(portalUniversitiesTable)
       .where(and(
         eq(portalUniversitiesTable.autoProcess, true),
         eq(portalUniversitiesTable.isActive, true),
         isNull(portalUniversitiesTable.deletedAt),
       ));
-    autoProcessKeys = unis.map((u) => u.universityKey);
+    const experimentalSkipped = unis
+      .filter((u) => isExperimentalAdapterKey(u.adapterKey))
+      .map((u) => u.universityKey);
+    if (experimentalSkipped.length > 0) {
+      console.log(
+        `[drain-once] Experimental adapters excluded from auto-process: ${experimentalSkipped.join(", ")}`,
+      );
+    }
+    autoProcessKeys = unis
+      .filter((u) => !isExperimentalAdapterKey(u.adapterKey))
+      .map((u) => u.universityKey);
   } catch (err) {
     console.error("[drain-once] Fatal: failed to load auto-process universities:", err instanceof Error ? err.message : err);
     process.exit(1);

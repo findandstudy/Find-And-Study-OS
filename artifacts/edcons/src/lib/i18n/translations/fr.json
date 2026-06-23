@@ -4854,7 +4854,30 @@
       "saveError": "Failed to save mappings.",
       "loadError": "Failed to load mappings.",
       "emptyMappings": "No mappings defined yet.",
-      "pairsCount": "{{count}} mapping(s)"
+      "pairsCount": "{{count}} mapping(s)",
+      "inactiveSuffix": "inactive",
+      "overridesTitle": "Program ID Overrides",
+      "overridesDescription": "CRM program ID → portal option value. Overrides the built-in defaults (most robust against label changes).",
+      "overrideIdCol": "CRM Program ID",
+      "overrideValueCol": "Portal Option Value",
+      "overrideIdPlaceholder": "e.g. 9338",
+      "overrideValuePlaceholder": "e.g. 166",
+      "addOverride": "Add Override",
+      "removeOverride": "Remove",
+      "synonymsTitle": "Synonyms (EN ↔ TR)",
+      "synonymsDescription": "Equivalence groups of single words used to match program names across languages. Extends the built-in dictionary.",
+      "synonymsPlaceholder": "e.g. yapay, artificial",
+      "addSynonym": "Add Synonym Group",
+      "removeSynonym": "Remove",
+      "synonymsHint": "Enter 2+ words per row separated by commas or spaces. Groups with fewer than 2 words are ignored.",
+      "countriesTitle": "Country Overrides",
+      "countriesDescription": "Nationality/country (lowercase) → portal dropdown label. Overrides the built-in country maps.",
+      "countryKeyCol": "Country / Nationality",
+      "countryValueCol": "Portal Label",
+      "countryKeyPlaceholder": "e.g. niger",
+      "countryValuePlaceholder": "e.g. Nijer",
+      "addCountry": "Add Country",
+      "removeCountry": "Remove"
     },
     "adapters": {
       "title": "Adapter Management",
@@ -4900,7 +4923,8 @@
       "deleteConfirm": "Delete this adapter?",
       "deleteSuccess": "Adapter deleted.",
       "deleteError": "Failed to delete adapter.",
-      "loadError": "Failed to load adapters."
+      "loadError": "Failed to load adapters.",
+      "experimental": "Experimental"
     },
     "submissions": {
       "title": "Submission Board",

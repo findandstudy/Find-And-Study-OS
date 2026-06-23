@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   Plus, Edit2, Trash2, CheckCircle2, XCircle, Loader2,
-  Code2, Braces, KeySquare, Upload,
+  Code2, Braces, KeySquare, Upload, FlaskConical,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -46,6 +46,7 @@ interface RegistryAdapter {
   key: string;
   label: string;
   kind: "code" | "declarative";
+  experimental?: boolean;
   hasCredentials: boolean;
 }
 
@@ -465,6 +466,12 @@ export default function PortalAdaptersTab() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm">{a.label}</span>
                       {kindBadge(a.kind)}
+                      {a.experimental && (
+                        <Badge className="gap-1 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 text-[11px] py-0 h-4">
+                          <FlaskConical className="w-2.5 h-2.5" />
+                          {t("portalAutomation.adapters.experimental")}
+                        </Badge>
+                      )}
                       {credBadge(a.hasCredentials)}
                     </div>
                     <code className="text-[11px] text-muted-foreground">{a.key}</code>

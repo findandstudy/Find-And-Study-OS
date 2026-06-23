@@ -4854,7 +4854,30 @@
       "saveError": "Eşleştirmeler kaydedilemedi.",
       "loadError": "Eşleştirmeler yüklenemedi.",
       "emptyMappings": "Henüz eşleştirme tanımlanmamış.",
-      "pairsCount": "{{count}} eşleştirme"
+      "pairsCount": "{{count}} eşleştirme",
+      "inactiveSuffix": "pasif",
+      "overridesTitle": "Program ID Geçersiz Kılma",
+      "overridesDescription": "CRM program ID → portal seçenek değeri. Yerleşik varsayılanları geçersiz kılar (etiket değişikliklerine karşı en sağlam yöntem).",
+      "overrideIdCol": "CRM Program ID",
+      "overrideValueCol": "Portal Seçenek Değeri",
+      "overrideIdPlaceholder": "örn. 9338",
+      "overrideValuePlaceholder": "örn. 166",
+      "addOverride": "Geçersiz Kılma Ekle",
+      "removeOverride": "Kaldır",
+      "synonymsTitle": "Eş Anlamlılar (EN ↔ TR)",
+      "synonymsDescription": "Program adlarını diller arası eşleştirmek için kullanılan tek kelimelik eşdeğerlik grupları. Yerleşik sözlüğü genişletir.",
+      "synonymsPlaceholder": "örn. yapay, artificial",
+      "addSynonym": "Eş Anlamlı Grubu Ekle",
+      "removeSynonym": "Kaldır",
+      "synonymsHint": "Her satıra virgül veya boşlukla ayrılmış 2+ kelime girin. 2 kelimeden az olan gruplar yok sayılır.",
+      "countriesTitle": "Ülke Geçersiz Kılma",
+      "countriesDescription": "Uyruk/ülke (küçük harf) → portal açılır menü etiketi. Yerleşik ülke haritalarını geçersiz kılar.",
+      "countryKeyCol": "Ülke / Uyruk",
+      "countryValueCol": "Portal Etiketi",
+      "countryKeyPlaceholder": "örn. niger",
+      "countryValuePlaceholder": "örn. Nijer",
+      "addCountry": "Ülke Ekle",
+      "removeCountry": "Kaldır"
     },
     "adapters": {
       "title": "Adapter Yönetimi",
@@ -4900,7 +4923,8 @@
       "deleteConfirm": "Bu adapter'ı silmek istiyor musunuz?",
       "deleteSuccess": "Adapter silindi.",
       "deleteError": "Adapter silinemedi.",
-      "loadError": "Adapter'lar yüklenemedi."
+      "loadError": "Adapter'lar yüklenemedi.",
+      "experimental": "Deneysel"
     },
     "submissions": {
       "title": "Başvuru Panosu",
