@@ -26,7 +26,7 @@ import {
 import { eq } from "drizzle-orm";
 import { isExperimentalAdapterKey } from "@workspace/portal-adapters";
 
-const UNIVERSITY_KEY = "topkapi";
+const UNIVERSITY_KEY = "topkapi_university";
 
 // CRM programId → portal <option> value (numeric, immune to wording changes).
 const SEED_PROGRAM_OVERRIDES: Record<string, string> = {
