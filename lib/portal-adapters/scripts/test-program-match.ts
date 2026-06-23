@@ -184,6 +184,52 @@ test("DICT2 — Turkish query matches English candidate via synonym expansion", 
 });
 
 // ---------------------------------------------------------------------------
+// SYN-DB1 — DB-supplied synonym group enables a match the built-in dict misses
+// ---------------------------------------------------------------------------
+
+test("SYN-DB1 — DB synonym group extends the built-in dictionary (gap-fill)", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "ai-tr", name: "Yapay Zeka Mühendisliği" },
+    { id: "cs-tr", name: "Bilgisayar Mühendisliği" },
+  ];
+
+  // "artificial" is not in the built-in dictionary for "yapay", so without the
+  // DB-supplied group this query cannot reach the Turkish candidate.
+  const withoutDb = matchProgram("Artificial Intelligence Engineering", candidates);
+  assert.equal(withoutDb, null, "Without DB synonyms, the gap term cannot match");
+
+  // Panel-managed group fills the gap: artificial↔yapay, intelligence↔zeka.
+  const withDb = matchProgram(
+    "Artificial Intelligence Engineering",
+    candidates,
+    undefined,
+    undefined,
+    [["artificial", "yapay"], ["intelligence", "zeka"]],
+  );
+
+  assert.ok(withDb !== null, "DB synonyms must enable the gap-fill match");
+  assert.equal(withDb.match.id, "ai-tr", "Artificial Intelligence → Yapay Zeka");
+});
+
+// ---------------------------------------------------------------------------
+// SYN-DB2 — empty DB synonyms preserve built-in behaviour exactly
+// ---------------------------------------------------------------------------
+
+test("SYN-DB2 — empty DB synonyms leave built-in matching unchanged", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "be-1", name: "Bilgisayar Mühendisliği" },
+    { id: "me-1", name: "Makine Mühendisliği" },
+  ];
+
+  const baseline = matchProgram("Computer Engineering", candidates);
+  const withEmpty = matchProgram("Computer Engineering", candidates, undefined, undefined, []);
+
+  assert.ok(baseline !== null && withEmpty !== null, "Both should match via built-in dict");
+  assert.equal(withEmpty.match.id, baseline.match.id, "Empty DB synonyms must not change the result");
+  assert.equal(withEmpty.match.id, "be-1", "Computer Engineering → Bilgisayar Mühendisliği");
+});
+
+// ---------------------------------------------------------------------------
 // mapDocType — transcript aliases
 // ---------------------------------------------------------------------------
 

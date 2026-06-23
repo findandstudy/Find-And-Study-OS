@@ -22,6 +22,7 @@ import {
   adapterForUniversity,
   adapterByKey,
   adapterMetadata,
+  isExperimentalAdapterKey,
 } from "../src/registry.js";
 import { SIT_ALLOWLIST } from "../src/universities/sit/adapter.js";
 import { UNITED_ALLOWLIST } from "../src/universities/united/adapter.js";
@@ -137,4 +138,30 @@ test("TR9 — all registered adapters have non-empty key and label", () => {
     assert.ok(typeof a.login     === "function", `Adapter "${a.key}" missing login()`);
     assert.ok(typeof a.submit    === "function", `Adapter "${a.key}" missing submit()`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// TR10 — experimental adapter classification (drives the worker auto-process
+// guard: experimental families must NEVER be auto-submitted).
+// ---------------------------------------------------------------------------
+
+test("TR10 — isExperimentalAdapterKey flags salesforce/sit/united/emu and clears topkapi", () => {
+  // Real adapter keys (not family names): uskudar is a salesforce-family key.
+  for (const key of ["uskudar", "sit", "united", "emu"]) {
+    assert.equal(
+      isExperimentalAdapterKey(key),
+      true,
+      `Expected "${key}" to be classified experimental`,
+    );
+  }
+  assert.equal(
+    isExperimentalAdapterKey("topkapi"),
+    false,
+    'Expected "topkapi" to be non-experimental (production-proven)',
+  );
+  assert.equal(
+    isExperimentalAdapterKey("does-not-exist"),
+    false,
+    "Unknown adapter keys must default to non-experimental=false",
+  );
 });

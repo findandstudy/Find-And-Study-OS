@@ -4833,7 +4833,8 @@
         "clearConfirm": "Silmeyi onaylamak için tekrar tıklayın",
         "clearSuccess": "Kimlik bilgileri silindi.",
         "clearError": "Kimlik bilgileri silinemedi."
-      }
+      },
+      "autoProcessExperimentalBlocked": "Deneysel adaptörlerde otomatik işleme devre dışıdır."
     },
     "programMapping": {
       "title": "Program Haritalama",

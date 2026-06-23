@@ -4833,7 +4833,8 @@
         "clearConfirm": "Cliquez à nouveau pour confirmer la suppression",
         "clearSuccess": "Identifiants supprimés.",
         "clearError": "Échec de la suppression des identifiants."
-      }
+      },
+      "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters."
     },
     "programMapping": {
       "title": "Program Mapping",

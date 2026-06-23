@@ -4833,7 +4833,8 @@
         "clearConfirm": "Klik lagi untuk konfirmasi penghapusan",
         "clearSuccess": "Kredensial dihapus.",
         "clearError": "Gagal menghapus kredensial."
-      }
+      },
+      "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters."
     },
     "programMapping": {
       "title": "Program Mapping",

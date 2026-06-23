@@ -4833,7 +4833,8 @@
         "clearConfirm": "हटाने की पुष्टि के लिए फिर से क्लिक करें",
         "clearSuccess": "क्रेडेंशियल हटाए गए।",
         "clearError": "क्रेडेंशियल हटाने में विफल।"
-      }
+      },
+      "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters."
     },
     "programMapping": {
       "title": "Program Mapping",

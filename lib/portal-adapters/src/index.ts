@@ -47,6 +47,7 @@ export {
   allAdapterKeys,
   adapterMetadata,
   declarativeAdapterKeys,
+  isExperimentalAdapterKey,
 } from "./registry.js";
 
 // Declarative adapter engine

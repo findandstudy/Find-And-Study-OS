@@ -4833,7 +4833,8 @@
         "clearConfirm": "انقر مرة أخرى لتأكيد الإزالة",
         "clearSuccess": "تمت إزالة بيانات الاعتماد.",
         "clearError": "فشل إزالة بيانات الاعتماد."
-      }
+      },
+      "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters."
     },
     "programMapping": {
       "title": "Program Mapping",

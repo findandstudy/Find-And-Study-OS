@@ -4833,7 +4833,8 @@
         "clearConfirm": "Нажмите снова для подтверждения удаления",
         "clearSuccess": "Учётные данные удалены.",
         "clearError": "Не удалось удалить учётные данные."
-      }
+      },
+      "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters."
     },
     "programMapping": {
       "title": "Program Mapping",

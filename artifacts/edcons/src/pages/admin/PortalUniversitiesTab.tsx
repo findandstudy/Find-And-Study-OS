@@ -10,7 +10,7 @@
  *  - Edit Defaults dialog (PATCH /portal-universities/:id) — defaults JSONB
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -76,6 +76,7 @@ interface RegistryAdapter {
   key: string;
   label: string;
   kind: "code" | "declarative";
+  experimental?: boolean;
   hasCredentials: boolean;
 }
 
@@ -626,12 +627,13 @@ interface RowProps {
   onTestLogin: (id: number) => Promise<void>;
   onEditDefaults: (uni: PortalUniversity) => void;
   onManageCreds: (uni: PortalUniversity) => void;
+  experimental:           boolean;
   togglingId:             number | null;
   togglingAutoProcessId:  number | null;
   testingId:              number | null;
 }
 
-function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, togglingId, togglingAutoProcessId, testingId }: RowProps) {
+function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, experimental, togglingId, togglingAutoProcessId, testingId }: RowProps) {
   const { t } = useI18n();
   const isToggling            = togglingId            === uni.id;
   const isTogglingAutoProcess = togglingAutoProcessId === uni.id;
@@ -721,7 +723,24 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEdit
             <div className="flex items-center gap-1.5">
               {isTogglingAutoProcess
                 ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                : (
+                : experimental ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                          <Switch
+                            checked={false}
+                            disabled
+                            aria-label={t("portalAutomation.unis.autoProcessLabel")}
+                          />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t("portalAutomation.unis.autoProcessExperimentalBlocked")}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
                   <Switch
                     checked={uni.autoProcess}
                     onCheckedChange={(v) => onToggleAutoProcess(uni.id, v)}
@@ -817,6 +836,11 @@ export default function PortalUniversitiesTab() {
   const [editTarget, setEditTarget]   = useState<PortalUniversity | null>(null);
   const [credsTarget, setCredsTarget] = useState<PortalUniversity | null>(null);
   const [registryAdapters, setRegistryAdapters] = useState<RegistryAdapter[]>([]);
+
+  const experimentalKeys = useMemo(
+    () => new Set(registryAdapters.filter((a) => a.experimental).map((a) => a.key)),
+    [registryAdapters],
+  );
 
   // Load universities
   const load = useCallback(async (q: string) => {
@@ -986,6 +1010,7 @@ export default function PortalUniversitiesTab() {
               onTestLogin={handleTestLogin}
               onEditDefaults={setEditTarget}
               onManageCreds={setCredsTarget}
+              experimental={experimentalKeys.has(uni.adapterKey)}
               togglingId={togglingId}
               togglingAutoProcessId={togglingAutoProcessId}
               testingId={testingId}

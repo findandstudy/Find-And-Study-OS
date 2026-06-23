@@ -4833,7 +4833,8 @@
         "clearConfirm": "برای تأیید حذف دوباره کلیک کنید",
         "clearSuccess": "اعتبارنامه‌ها حذف شدند.",
         "clearError": "حذف اعتبارنامه‌ها ناموفق بود."
-      }
+      },
+      "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters."
     },
     "programMapping": {
       "title": "Program Mapping",

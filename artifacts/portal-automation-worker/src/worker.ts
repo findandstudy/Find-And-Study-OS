@@ -11,6 +11,9 @@
  */
 
 import os from "node:os";
+import { and, eq, isNull } from "drizzle-orm";
+import { db, portalUniversitiesTable } from "@workspace/db";
+import { isExperimentalAdapterKey } from "@workspace/portal-adapters";
 import {
   claimNext,
   releaseStale,
@@ -34,6 +37,42 @@ const WORKER_ID = `${os.hostname()}-${process.pid}`;
 
 console.log(`[portal-worker] Starting — id=${WORKER_ID} poll=${POLL_MS}ms stale=${STALE_MS}ms`);
 
+/**
+ * Loads the allowlist of university keys eligible for auto-processing:
+ * autoProcess=true AND isActive=true AND not soft-deleted.
+ *
+ * Experimental adapter families (salesforce/sit/united/emu) are EXCLUDED here
+ * as a hard runtime guard — even if a row somehow has autoProcess=true, the
+ * worker will never auto-submit it. Manual single-submission via the API still
+ * works. This mirrors the same guard in api-server/scripts/drain-once.ts.
+ */
+async function loadAutoProcessKeys(): Promise<string[]> {
+  const unis = await db
+    .select({
+      universityKey: portalUniversitiesTable.universityKey,
+      adapterKey:    portalUniversitiesTable.adapterKey,
+    })
+    .from(portalUniversitiesTable)
+    .where(and(
+      eq(portalUniversitiesTable.autoProcess, true),
+      eq(portalUniversitiesTable.isActive, true),
+      isNull(portalUniversitiesTable.deletedAt),
+    ));
+
+  const experimentalSkipped = unis
+    .filter((u) => isExperimentalAdapterKey(u.adapterKey))
+    .map((u) => u.universityKey);
+  if (experimentalSkipped.length > 0) {
+    console.log(
+      `[portal-worker] Experimental adapters excluded from auto-process: ${experimentalSkipped.join(", ")}`,
+    );
+  }
+
+  return unis
+    .filter((u) => !isExperimentalAdapterKey(u.adapterKey))
+    .map((u) => u.universityKey);
+}
+
 async function tick(): Promise<void> {
   // Reset stale locks on every tick (cheap, idempotent)
   const released = await releaseStale(STALE_MS);
@@ -41,7 +80,12 @@ async function tick(): Promise<void> {
     console.log(`[portal-worker] Released ${released.length} stale submission(s)`);
   }
 
-  const sub = await claimNext(WORKER_ID);
+  // Only claim submissions for autoProcess+active+non-experimental universities.
+  // An empty allowlist means there is nothing to auto-process this tick.
+  const autoProcessKeys = await loadAutoProcessKeys();
+  if (autoProcessKeys.length === 0) return;
+
+  const sub = await claimNext(WORKER_ID, autoProcessKeys);
   if (!sub) return; // Nothing to do
 
   console.log(

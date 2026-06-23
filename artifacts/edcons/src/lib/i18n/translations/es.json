@@ -4833,7 +4833,8 @@
         "clearConfirm": "Haz clic de nuevo para confirmar la eliminación",
         "clearSuccess": "Credenciales eliminadas.",
         "clearError": "Error al eliminar las credenciales."
-      }
+      },
+      "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters."
     },
     "programMapping": {
       "title": "Program Mapping",
