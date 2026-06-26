@@ -139,11 +139,80 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           try { const cz = page.getByLabel(/citizenship|vatanda/i).first(); if ((await cz.count()) && (await cz.isVisible().catch(() => false))) { await cz.click().catch(() => {}); await cz.fill(profile.nationality || "Turkey").catch(() => {}); await page.waitForTimeout(1500); const o = page.locator("[role=option],lightning-base-combobox-item,li").first(); if (await o.count()) await o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(700); } } catch (e) {}
           try { const eml = page.getByLabel(/applicant email|email address/i).first(); if ((await eml.count()) && (await eml.isVisible().catch(() => false)) && !(await eml.inputValue().catch(() => "x"))) { await eml.click().catch(() => {}); await page.keyboard.type(profile.email || ("fas" + Date.now() + "@example.com"), { delay: 40 }).catch(() => {}); await eml.press("Tab").catch(() => {}); } } catch (e) {}
           await clickNext();
-        } else if (/available programs/i.test(txt)) {
-          if (profile.programName) { try { const kw = page.getByPlaceholder(/search program name|keyword/i).first(); if (await kw.count()) { await kw.fill(profile.programName).catch(() => {}); await page.waitForTimeout(1800); } } catch (e) {} }
-          const sb = page.getByRole("button", { name: /^\s*select\s*$/i }).first();
-          if (await sb.count()) { await sb.click({ timeout: 4000 }).catch(() => {}); await page.waitForTimeout(2000); } else { result.programMissing = true; break; }
-          await clickNext();
+        } else if (/available programs/i.test(txt) || (await page.getByPlaceholder(/search program name|keyword/i).count())) {
+          const portalProg = profile.programName;
+          // Boş program adı match-all regex üretir (yanlış program seçer) → güvenli çıkış.
+          if (!portalProg || !portalProg.trim()) {
+            result.programMissing = true;
+            logger.warn("[salesforce:" + cfg.key + "] program adı boş — Available Programs atlanıyor", { crmProgram: profile.programName });
+            break;
+          }
+          // ZORUNLU FİLTRE: "Economics" varsayılan listede yok, aramayla geliyor. Temizle + yaz + render bekle.
+          try {
+            const kw = page.getByPlaceholder(/search program name|keyword/i).first();
+            if (await kw.count()) {
+              await kw.fill("").catch(() => {});
+              await kw.fill(portalProg).catch(() => {});
+              await page.waitForTimeout(3000);
+            } else {
+              await page.waitForTimeout(2500);
+            }
+          } catch (e) { await page.waitForTimeout(2500); }
+          // Teşhis: filtre sonrası kart metinlerini dök (mapping doğrulama için)
+          try {
+            const cards = page.locator('li, article, lightning-card, [class*="card" i], [class*="tile" i], tr');
+            const cn = Math.min(await cards.count().catch(() => 0), 40);
+            const labels: string[] = [];
+            for (let i = 0; i < cn; i++) {
+              const t = ((await cards.nth(i).innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
+              if (t && /select/i.test(t) && t.length < 160) labels.push(t.slice(0, 120));
+            }
+            logger.info("[salesforce:" + cfg.key + "] Available Programs kartları", { portalProg, count: labels.length, sample: labels.slice(0, 15) });
+          } catch (e) {}
+          // KÖK NEDEN: kartlar KAPALI shadow root'ta; page.evaluate manuel walk giremez (cards:0).
+          // Playwright locator'ları kapalı shadow'u deler → seçimi tamamen Playwright ile yap.
+          const progRe = new RegExp(portalProg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+          const cardSel = 'lightning-card, [class*="card" i], [class*="tile" i], article, li';
+          const matchedCards = page.locator(cardSel)
+            .filter({ hasText: progRe })
+            .filter({ has: page.locator('button.slds-button_stateful, lightning-button-stateful, button:has-text("Select")') });
+          const cartBtn = page.getByRole("button", { name: /selected programs/i }).first();
+          const readCartN = async () => { const t = (await cartBtn.count()) ? (((await cartBtn.innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim()) : ""; return ((t.match(/\((\d+)\)/) || [])[1]) || "0"; };
+          let cartN = "0";
+          let cardCount = 0;
+          for (let attempt = 1; attempt <= 2 && cartN === "0"; attempt++) {
+            cardCount = await matchedCards.count().catch(() => 0);
+            if (!cardCount) break;
+            const card = matchedCards.last();
+            const stateful = card.locator('button.slds-button_stateful, lightning-button-stateful button').first();
+            const target = (await stateful.count().catch(() => 0))
+              ? stateful
+              : card.locator("button").filter({ hasText: /select/i }).first();
+            await target.scrollIntoViewIfNeeded().catch(() => {});
+            await target.click({ timeout: 6000 }).catch(() => {});
+            await page.waitForTimeout(2400);
+            cartN = await readCartN();
+          }
+          if (cardCount === 0) {
+            result.programMissing = true;
+            logger.warn("[salesforce:" + cfg.key + "] program bulunamadı (Available Programs)", { crmProgram: profile.programName, portalProg, cardCount });
+            break;
+          }
+          logger.info("[salesforce:" + cfg.key + "] program Select tıklandı (Playwright/pierce)", { portalProg, cartN, cardCount });
+          if (cartN === "0") {
+            result.programMissing = true;
+            logger.warn("[salesforce:" + cfg.key + "] sepet boş kaldı (Select tıklandı ama sepet artmadı)", { portalProg, cardCount });
+            break;
+          }
+          let advanced = false;
+          if ((await cartBtn.count())) {
+            await cartBtn.click({ timeout: 4000 }).catch(() => {});
+            await page.waitForTimeout(1500);
+            const modalSave = page.getByRole("button", { name: /save and next|save & next/i }).first();
+            if (await modalSave.count()) { await modalSave.click({ timeout: 6000 }).catch(() => {}); await page.waitForTimeout(3500); advanced = true; }
+          }
+          logger.info("[salesforce:" + cfg.key + "] program seçildi (Save and Next)", { portalProg, cartN, advanced });
+          continue;
         } else if (await has("select[name=\"Gender\"]")) {
           await fill("input[name=\"First_Name\"]", profile.firstName);
           await fill("input[name=\"Last_Name\"]", profile.lastName);
