@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, documentsTable, studentsTable, applicationsTable } from "@workspace/db";
-import { eq, and, inArray, desc, isNull } from "drizzle-orm";
+import { eq, and, inArray, desc, isNull, isNotNull, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { assertCanAccessStudent } from "../lib/studentAccess";
@@ -449,6 +449,104 @@ router.get("/documents/:id/download", requireAuth, requireAgentStaffPermission("
     }
   } catch (err) {
     console.error(`[DOCUMENTS] download #${id} failed:`, err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to download document" });
+  }
+});
+
+// Build a fully-qualified URL for an /api path, honouring the reverse proxy's
+// X-Forwarded-* headers (production serves the api-server behind the edge proxy)
+// and falling back to a relative path when no host can be determined.
+function buildPublicApiUrl(req: import("express").Request, path: string): string {
+  const fwdProto = req.headers["x-forwarded-proto"];
+  const fwdHost = req.headers["x-forwarded-host"];
+  const proto =
+    (Array.isArray(fwdProto) ? fwdProto[0] : fwdProto)?.split(",")[0]?.trim() ||
+    req.protocol;
+  const host =
+    (Array.isArray(fwdHost) ? fwdHost[0] : fwdHost)?.split(",")[0]?.trim() ||
+    req.get("host") ||
+    "";
+  return host ? `${proto}://${host}${path}` : path;
+}
+
+// GET /students/:id/documents — student-scoped document listing. Reachable with
+// an API token (documents:read scope) as well as cookie sessions. Access is
+// gated by assertCanAccessStudent, which for an agent (API-token owner) enforces
+// that the student belongs to the token's agency — closing the IDOR. Only
+// content-bearing documents are returned so every downloadUrl is downloadable.
+router.get("/students/:id/documents", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
+  const studentId = parseInt(String(req.params.id), 10);
+  if (isNaN(studentId)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const access = await assertCanAccessStudent(req, studentId);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+
+  const docs = await db
+    .select({
+      id: documentsTable.id,
+      type: documentsTable.type,
+      fileName: documentsTable.name,
+      mimeType: documentsTable.mimeType,
+      sizeBytes: documentsTable.sizeBytes,
+    })
+    .from(documentsTable)
+    .where(and(
+      eq(documentsTable.studentId, studentId),
+      isNull(documentsTable.deletedAt),
+      or(
+        isNotNull(documentsTable.fileKey),
+        isNotNull(documentsTable.fileUrl),
+        isNotNull(documentsTable.fileData),
+      ),
+    ))
+    .orderBy(desc(documentsTable.createdAt));
+
+  res.json(docs.map((d) => ({
+    id: d.id,
+    type: d.type,
+    fileName: d.fileName,
+    mimeType: d.mimeType,
+    sizeBytes: d.sizeBytes,
+    downloadUrl: buildPublicApiUrl(req, `/api/students/${studentId}/documents/${d.id}/download`),
+  })));
+});
+
+// GET /students/:id/documents/:docId/download — stream a single document's
+// binary content. Same agency IDOR gate as the listing; the document is also
+// re-bound to :id so a doc from another student cannot be fetched via this path.
+router.get("/students/:id/documents/:docId/download", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
+  const studentId = parseInt(String(req.params.id), 10);
+  const docId = parseInt(String(req.params.docId), 10);
+  if (isNaN(studentId) || isNaN(docId)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const access = await assertCanAccessStudent(req, studentId);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+
+  const [doc] = await db
+    .select()
+    .from(documentsTable)
+    .where(and(
+      eq(documentsTable.id, docId),
+      eq(documentsTable.studentId, studentId),
+      isNull(documentsTable.deletedAt),
+    ));
+  if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+
+  const wantsAttachment = req.query.disposition !== "inline";
+  const downloadName = (req.query.filename as string | undefined) || doc.name;
+  res.setHeader("Cache-Control", "private, max-age=300");
+  res.setHeader(
+    "Content-Disposition",
+    `${wantsAttachment ? "attachment" : "inline"}; filename="${encodeURIComponent(downloadName)}"`,
+  );
+  try {
+    const sent = await streamDocumentToResponse(doc, res);
+    if (!sent) {
+      if (doc.fileUrl) { res.redirect(doc.fileUrl); return; }
+      res.status(404).json({ error: "No file content available" });
+    }
+  } catch (err) {
+    console.error(`[DOCUMENTS] student-doc download #${docId} failed:`, err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to download document" });
   }
 });

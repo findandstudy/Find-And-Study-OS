@@ -31,6 +31,9 @@ test("resolveScopeRule: path/method mapping", () => {
   assert.equal(resolveScopeRule("PATCH", "/applications/123")?.scope, "applications:patch");
   assert.equal(resolveScopeRule("GET", "/documents/9/download")?.scope, "documents:read");
   assert.equal(resolveScopeRule("GET", "/students/5")?.scope, "students:read");
+  // Student-scoped documents (read-only list + binary download).
+  assert.equal(resolveScopeRule("GET", "/students/5/documents")?.scope, "documents:read");
+  assert.equal(resolveScopeRule("GET", "/students/5/documents/9/download")?.scope, "documents:read");
   assert.equal(resolveScopeRule("GET", "/universities/countries")?.scope, "universities:read");
   assert.equal(resolveScopeRule("GET", "/universities/42")?.scope, "universities:read");
   assert.equal(resolveScopeRule("GET", "/programs/7")?.scope, "universities:read");
@@ -39,6 +42,10 @@ test("resolveScopeRule: path/method mapping", () => {
   assert.equal(resolveScopeRule("POST", "/students/1/purge"), null);
   assert.equal(resolveScopeRule("PATCH", "/applications"), null);
   assert.equal(resolveScopeRule("DELETE", "/documents/1"), null);
+  // Student-scoped documents are read-only via token: no write/delete mapping.
+  assert.equal(resolveScopeRule("POST", "/students/5/documents"), null);
+  assert.equal(resolveScopeRule("DELETE", "/students/5/documents/9"), null);
+  assert.equal(resolveScopeRule("POST", "/students/5/documents/9/download"), null);
 });
 
 test("tokenScopeGuard: session requests always pass through", () => {

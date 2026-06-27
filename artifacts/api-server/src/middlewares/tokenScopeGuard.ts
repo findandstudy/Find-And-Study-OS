@@ -27,6 +27,9 @@ const SCOPE_RULES: ScopeRule[] = [
   // students
   { method: "GET", pattern: /^\/students\/?$/, scope: "students:read" },
   { method: "GET", pattern: /^\/students\/\d+\/?$/, scope: "students:read" },
+  // student-scoped documents (read-only: list + binary download)
+  { method: "GET", pattern: /^\/students\/\d+\/documents\/?$/, scope: "documents:read" },
+  { method: "GET", pattern: /^\/students\/\d+\/documents\/\d+\/download\/?$/, scope: "documents:read" },
   // universities & programs (all read-only)
   { method: "GET", pattern: /^\/universities\/?$/, scope: "universities:read" },
   { method: "GET", pattern: /^\/universities\/countries\/?$/, scope: "universities:read" },

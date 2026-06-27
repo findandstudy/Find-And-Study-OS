@@ -20,6 +20,8 @@ Persistent API tokens (`fas_live_` + 32 base62) let external callers hit the api
 
 **Prod migration:** the `api_tokens` table + indexes are created by idempotent boot DDL in `api-server/src/index.ts` (deploy runs no migrations — see prod-schema-bootstrap-ddl.md).
 
+**Student-scoped document read via token:** `GET /students/:id/documents` (list `{id,type,fileName,mimeType,sizeBytes,downloadUrl}`, content-bearing only) + `GET /students/:id/documents/:docId/download` (binary stream) live in `routes/documents.ts`, mapped to `documents:read` in SCOPE_RULES (read-only — no POST/DELETE rule). IDOR closed by `assertCanAccessStudent` (agent → student.agentId ∈ getAgentVisibleIds) AND the download re-binds `WHERE id=docId AND studentId=:id`. **Why two checks:** the path gate stops cross-agency students, the WHERE binding stops cross-student docId reuse.
+
 **Scopes (7, resource:action):** applications:read/write/patch, documents:read/write, students:read, universities:read. `AVAILABLE_SCOPES` in `lib/apiToken.ts` is the single source; the management UI fetches them via `GET /api-tokens/scopes`.
 
 **UI:** edcons admin page `/admin/api-tokens` (ADMIN_ROLES). Backend revoke is `POST /api-tokens/:id/revoke` (soft, keeps row), NOT DELETE. List/create/scopes all under `apiTokens.*` i18n keys in all 10 locales.
