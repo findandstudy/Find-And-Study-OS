@@ -11,7 +11,7 @@ import {
   type SessionUser,
 } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
-import { extractBearerToken, lookupApiToken } from "../lib/apiTokenAuth";
+import { extractBearerToken, extractQueryToken, lookupApiToken } from "../lib/apiTokenAuth";
 
 declare global {
   namespace Express {
@@ -78,6 +78,25 @@ export async function authMiddleware(
   const bearer = extractBearerToken(req.headers.authorization);
   if (bearer) {
     const result = await lookupApiToken(bearer);
+    if (!result) {
+      res.status(401).json({ error: "Invalid or expired API token" });
+      return;
+    }
+    req.user = buildSessionUser(result.dbUser);
+    req.tokenScopes = result.scopes;
+    req.apiTokenAuth = true;
+    next();
+    return;
+  }
+
+  // Fallback: API token supplied via the "?api_key=" query parameter. Only
+  // reached when no Bearer header was present (the header always wins), so this
+  // is purely additive and breaks no existing header-based integration. The
+  // same lookupApiToken validation path is used — an invalid query key yields
+  // the identical 401 as the header flow. The key is never logged here.
+  const queryToken = extractQueryToken(req.query as Record<string, unknown>);
+  if (queryToken) {
+    const result = await lookupApiToken(queryToken);
     if (!result) {
       res.status(401).json({ error: "Invalid or expired API token" });
       return;

@@ -13,6 +13,37 @@ export function extractBearerToken(authHeader: string | string[] | undefined): s
   return token;
 }
 
+// Coerce a single query value (which Express may deliver as string, array, or
+// nested object) into a trimmed non-empty string, or null when unusable.
+function firstQueryString(value: unknown): string | null {
+  if (typeof value === "string") {
+    const t = value.trim();
+    return t.length > 0 ? t : null;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      if (typeof v === "string") {
+        const t = v.trim();
+        if (t.length > 0) return t;
+      }
+    }
+  }
+  return null;
+}
+
+// Pull the plain API token out of the request query string. This is a FALLBACK
+// for clients that cannot set an Authorization header (e.g. plain GET links);
+// the caller only consults it when no Bearer header was supplied, so the header
+// always wins. The documented parameter is "api_key"; "apiKey" is accepted for
+// tolerance. "token" is intentionally NOT read — it collides with existing
+// public sign/intake links. Unlike the Bearer path no prefix filter is applied:
+// api_key is reserved for this purpose, so any value is treated as a token
+// attempt and an invalid one yields the same 401 as the header flow.
+export function extractQueryToken(query: Record<string, unknown> | undefined): string | null {
+  if (!query) return null;
+  return firstQueryString(query["api_key"]) ?? firstQueryString(query["apiKey"]);
+}
+
 export type ApiTokenLookup = {
   token: typeof apiTokensTable.$inferSelect;
   dbUser: typeof usersTable.$inferSelect;
