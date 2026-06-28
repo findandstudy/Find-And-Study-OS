@@ -4197,7 +4197,15 @@
     "optCurrency": "Валюта",
     "optCurrencyDesc": "Поддерживаемые валюты",
     "dialCode": "Телефонный код",
-    "dialCodeOptional": "Телефонный код (необязательно)"
+    "dialCodeOptional": "Телефонный код (необязательно)",
+    "selectAllItems": "Выбрать все {n} элементов",
+    "pageItemsSelected": "Выбрано {n} элементов на этой странице",
+    "allItemsSelected": "Выбраны все {n} элементов",
+    "clearSelection": "Очистить выбор",
+    "selecting": "Выбор…",
+    "exportSelected": "Экспорт выбранного ({n})",
+    "bulkDeleteFailed": "Некоторые элементы не удалось удалить",
+    "bulkDeleteFailedDesc": "Не удалось удалить {failed} из {total}. Возможно, они используются."
   },
   "appDocsPanel": {
     "documentUploaded": "Документ загружен",

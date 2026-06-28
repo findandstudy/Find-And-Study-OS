@@ -4197,7 +4197,15 @@
     "optCurrency": "Moneda",
     "optCurrencyDesc": "Monedas admitidas",
     "dialCode": "Código de marcación",
-    "dialCodeOptional": "Código de marcación (opcional)"
+    "dialCodeOptional": "Código de marcación (opcional)",
+    "selectAllItems": "Seleccionar los {n} elementos",
+    "pageItemsSelected": "{n} elementos seleccionados en esta página",
+    "allItemsSelected": "Todos los {n} elementos seleccionados",
+    "clearSelection": "Borrar selección",
+    "selecting": "Seleccionando…",
+    "exportSelected": "Exportar seleccionados ({n})",
+    "bulkDeleteFailed": "Algunos elementos no se pudieron eliminar",
+    "bulkDeleteFailedDesc": "No se pudieron eliminar {failed} de {total}. Puede que estén en uso."
   },
   "appDocsPanel": {
     "documentUploaded": "Documento subido",

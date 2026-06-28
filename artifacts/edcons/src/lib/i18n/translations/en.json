@@ -4140,7 +4140,15 @@
     "optCurrency": "Currency",
     "optCurrencyDesc": "Supported currencies",
     "dialCode": "Dial Code",
-    "dialCodeOptional": "Dial code (optional)"
+    "dialCodeOptional": "Dial code (optional)",
+    "selectAllItems": "Select all {n} items",
+    "pageItemsSelected": "{n} items on this page selected",
+    "allItemsSelected": "All {n} items selected",
+    "clearSelection": "Clear selection",
+    "selecting": "Selecting…",
+    "exportSelected": "Export Selected ({n})",
+    "bulkDeleteFailed": "Some items could not be deleted",
+    "bulkDeleteFailedDesc": "{failed} of {total} could not be deleted. They may be in use."
   },
   "appDocsPanel": {
     "documentUploaded": "Document uploaded",

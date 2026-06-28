@@ -4197,7 +4197,15 @@
     "optCurrency": "Mata Uang",
     "optCurrencyDesc": "Mata uang yang didukung",
     "dialCode": "Kode Telepon",
-    "dialCodeOptional": "Kode telepon (opsional)"
+    "dialCodeOptional": "Kode telepon (opsional)",
+    "selectAllItems": "Pilih semua {n} item",
+    "pageItemsSelected": "{n} item di halaman ini dipilih",
+    "allItemsSelected": "Semua {n} item dipilih",
+    "clearSelection": "Hapus pilihan",
+    "selecting": "Memilih…",
+    "exportSelected": "Ekspor Terpilih ({n})",
+    "bulkDeleteFailed": "Beberapa item tidak dapat dihapus",
+    "bulkDeleteFailedDesc": "{failed} dari {total} tidak dapat dihapus. Mungkin sedang digunakan."
   },
   "appDocsPanel": {
     "documentUploaded": "Dokumen diunggah",

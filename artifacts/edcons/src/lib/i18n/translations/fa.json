@@ -4197,7 +4197,15 @@
     "optCurrency": "ارز",
     "optCurrencyDesc": "ارزهای پشتیبانی شده",
     "dialCode": "کد تماس",
-    "dialCodeOptional": "کد تماس (اختیاری)"
+    "dialCodeOptional": "کد تماس (اختیاری)",
+    "selectAllItems": "انتخاب همه {n} مورد",
+    "pageItemsSelected": "{n} مورد در این صفحه انتخاب شد",
+    "allItemsSelected": "همه {n} مورد انتخاب شد",
+    "clearSelection": "پاک کردن انتخاب",
+    "selecting": "در حال انتخاب…",
+    "exportSelected": "خروجی موارد انتخاب‌شده ({n})",
+    "bulkDeleteFailed": "برخی موارد حذف نشدند",
+    "bulkDeleteFailedDesc": "{failed} مورد از {total} حذف نشد. ممکن است در حال استفاده باشند."
   },
   "appDocsPanel": {
     "documentUploaded": "مدرک بارگذاری شد",

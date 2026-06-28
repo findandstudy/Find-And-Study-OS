@@ -4197,7 +4197,15 @@
     "optCurrency": "मुद्रा",
     "optCurrencyDesc": "समर्थित मुद्राएं",
     "dialCode": "डायल कोड",
-    "dialCodeOptional": "डायल कोड (वैकल्पिक)"
+    "dialCodeOptional": "डायल कोड (वैकल्पिक)",
+    "selectAllItems": "सभी {n} आइटम चुनें",
+    "pageItemsSelected": "इस पृष्ठ पर {n} आइटम चुने गए",
+    "allItemsSelected": "सभी {n} आइटम चुने गए",
+    "clearSelection": "चयन साफ़ करें",
+    "selecting": "चयन हो रहा है…",
+    "exportSelected": "चयनित निर्यात करें ({n})",
+    "bulkDeleteFailed": "कुछ आइटम हटाए नहीं जा सके",
+    "bulkDeleteFailedDesc": "{total} में से {failed} हटाए नहीं जा सके। वे उपयोग में हो सकते हैं।"
   },
   "appDocsPanel": {
     "documentUploaded": "दस्तावेज़ अपलोड किया गया",

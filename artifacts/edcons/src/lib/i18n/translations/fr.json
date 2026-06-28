@@ -4197,7 +4197,15 @@
     "optCurrency": "Devise",
     "optCurrencyDesc": "Devises prises en charge",
     "dialCode": "Indicatif téléphonique",
-    "dialCodeOptional": "Indicatif téléphonique (facultatif)"
+    "dialCodeOptional": "Indicatif téléphonique (facultatif)",
+    "selectAllItems": "Sélectionner les {n} éléments",
+    "pageItemsSelected": "{n} éléments sélectionnés sur cette page",
+    "allItemsSelected": "Les {n} éléments sont sélectionnés",
+    "clearSelection": "Effacer la sélection",
+    "selecting": "Sélection…",
+    "exportSelected": "Exporter la sélection ({n})",
+    "bulkDeleteFailed": "Certains éléments n'ont pas pu être supprimés",
+    "bulkDeleteFailedDesc": "{failed} sur {total} n'ont pas pu être supprimés. Ils sont peut-être utilisés."
   },
   "appDocsPanel": {
     "documentUploaded": "Document téléversé",

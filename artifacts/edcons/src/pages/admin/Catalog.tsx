@@ -45,7 +45,49 @@ async function api(url: string, opts?: RequestInit) {
 }
 
 async function apiDelete(url: string) {
-  await apiFetch(url, { method: "DELETE" });
+  const r = await apiFetch(url, { method: "DELETE" });
+  if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`);
+}
+
+// Delete many ids with bounded concurrency; never rejects, returns failure count.
+async function bulkDelete(ids: number[], toUrl: (id: number) => string, concurrency = 8): Promise<number> {
+  let idx = 0;
+  let failures = 0;
+  async function worker() {
+    while (idx < ids.length) {
+      const id = ids[idx++];
+      try { await apiDelete(toUrl(id)); } catch { failures++; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, ids.length || 1) }, worker));
+  return failures;
+}
+
+// Fetch every row across all pages, respecting per-endpoint limit caps.
+// The list endpoints silently cap `limit` (countries 500, cities 1000,
+// universities/programs 100), so a single big request would truncate. We
+// paginate with a conservative page size and stop once meta.total is reached.
+async function fetchAllRows<T = any>(url: string, pageSize = 100): Promise<T[]> {
+  const u = new URL(url, window.location.origin);
+  u.searchParams.delete("page");
+  u.searchParams.delete("limit");
+  u.searchParams.set("limit", String(pageSize));
+  const out: T[] = [];
+  for (let page = 1; page <= 5000; page++) {
+    u.searchParams.set("page", String(page));
+    const res = await api(`${u.pathname}${u.search}`);
+    const rows = (res?.data ?? res ?? []) as T[];
+    out.push(...rows);
+    const total = res?.meta?.total;
+    if (rows.length < pageSize) break;
+    if (typeof total === "number" && out.length >= total) break;
+  }
+  return out;
+}
+
+async function fetchAllIds(url: string): Promise<number[]> {
+  const rows = await fetchAllRows<{ id?: number }>(url);
+  return rows.map(r => r.id).filter((id): id is number => typeof id === "number");
 }
 
 async function exportToExcel(rows: Record<string, any>[], sheetName: string, filename: string) {
@@ -237,6 +279,41 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
   );
 }
 
+function SelectAllBanner({ selectedCount, total, allMatchingSelected, selecting, onSelectAllMatching, onClear }: {
+  selectedCount: number;
+  total: number;
+  allMatchingSelected: boolean;
+  selecting: boolean;
+  onSelectAllMatching: () => void;
+  onClear: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+      {allMatchingSelected ? (
+        <>
+          <span className="text-muted-foreground">{t("catalogPage.allItemsSelected", { n: total })}</span>
+          <button type="button" className="font-medium text-primary hover:underline" onClick={onClear}>
+            {t("catalogPage.clearSelection")}
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="text-muted-foreground">{t("catalogPage.pageItemsSelected", { n: selectedCount })}</span>
+          <button
+            type="button"
+            className="font-medium text-primary hover:underline disabled:opacity-50"
+            onClick={onSelectAllMatching}
+            disabled={selecting}
+          >
+            {selecting ? t("catalogPage.selecting") : t("catalogPage.selectAllItems", { n: total })}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ─── Sort helpers ──────────────────────────────────────── */
 type SortState = { col: string; dir: "asc" | "desc" };
 
@@ -274,6 +351,7 @@ function SortTh({ label, col, sort, onSort, className }: { label: string; col: s
 ══════════════════════════════════════════════════════════ */
 function CountriesTab() {
   const { t } = useI18n();
+  const { toast } = useToast();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -285,6 +363,7 @@ function CountriesTab() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
 
   const [fName, setFName] = useState("");
   const [fCode, setFCode] = useState("");
@@ -339,11 +418,40 @@ function CountriesTab() {
 
   async function handleBulkDelete() {
     setBulkDeleting(true);
-    await Promise.allSettled([...selected].map(id => apiDelete(`/api/countries/${id}`)));
+    const count = selected.size;
+    const failures = await bulkDelete([...selected], id => `/api/countries/${id}`);
     setSelected(new Set());
     setBulkDelOpen(false);
     setBulkDeleting(false);
     qc.invalidateQueries({ queryKey: ["countries"] });
+    if (failures > 0) toast({ title: t("catalogPage.bulkDeleteFailed"), description: t("catalogPage.bulkDeleteFailedDesc", { failed: failures, total: count }), variant: "destructive" });
+  }
+
+  const total = data?.meta?.total ?? 0;
+  const allMatchingSelected = total > 0 && selected.size >= total;
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    try {
+      const params = new URLSearchParams({ limit: "5000" });
+      if (dSearch) params.set("search", dSearch);
+      if (dfName) params.set("name", dfName);
+      if (dfCode) params.set("code", dfCode);
+      if (fStatus) params.set("status", fStatus);
+      const ids = await fetchAllIds(`/api/countries?${params.toString()}`);
+      setSelected(new Set(ids));
+    } catch {} finally { setSelectingAll(false); }
+  }
+  async function runExport(onlySelected: boolean) {
+    try {
+      let list = await fetchAllRows<Country>("/api/countries");
+      if (onlySelected) list = list.filter(c => selected.has(c.id));
+      const rows = list.map((c: Country) => ({
+        Name: c.name, "ISO Code": c.code, "Flag Emoji": c.flagEmoji ?? "",
+        "Dial Code": c.dialCode ?? "",
+        Status: c.isActive ? "Active" : "Inactive",
+      }));
+      await exportToExcel(rows, "Countries", `countries-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch {}
   }
 
   const handleBulkImport = async (rows: Record<string, string>[]) => {
@@ -372,18 +480,13 @@ function CountriesTab() {
             <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}
           </Button>
         )}
+        {selected.size > 0 && (
+          <Button variant="outline" size="sm" onClick={() => runExport(true)}>
+            <Download className="h-4 w-4 mr-2" />{t("catalogPage.exportSelected", { n: selected.size })}
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
-        <Button variant="outline" onClick={async () => {
-          try {
-            const all = await api("/api/countries?limit=5000");
-            const rows = (all?.data ?? all ?? []).map((c: Country) => ({
-              Name: c.name, "ISO Code": c.code, "Flag Emoji": c.flagEmoji ?? "",
-              "Dial Code": c.dialCode ?? "",
-              Status: c.isActive ? "Active" : "Inactive",
-            }));
-            await exportToExcel(rows, "Countries", `countries-${new Date().toISOString().slice(0, 10)}.xlsx`);
-          } catch {}
-        }}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
+        <Button variant="outline" onClick={() => runExport(false)}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
         <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addCountry")}</Button>
       </div>
 
@@ -435,6 +538,16 @@ function CountriesTab() {
           </tbody>
         </table>
       </div>
+      {allSelected && total > sorted.length && (
+        <SelectAllBanner
+          selectedCount={selected.size}
+          total={total}
+          allMatchingSelected={allMatchingSelected}
+          selecting={selectingAll}
+          onSelectAllMatching={selectAllMatching}
+          onClear={() => setSelected(new Set())}
+        />
+      )}
       <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       {/* Add/Edit Modal */}
@@ -495,6 +608,7 @@ function CountriesTab() {
 ══════════════════════════════════════════════════════════ */
 function CitiesTab() {
   const { t } = useI18n();
+  const { toast } = useToast();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -507,6 +621,7 @@ function CitiesTab() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
 
   const [fName, setFName] = useState("");
   const [fStatus, setFStatus] = useState("");
@@ -573,11 +688,41 @@ function CitiesTab() {
 
   async function handleBulkDelete() {
     setBulkDeleting(true);
-    await Promise.allSettled([...selected].map(id => apiDelete(`/api/cities/${id}`)));
+    const count = selected.size;
+    const failures = await bulkDelete([...selected], id => `/api/cities/${id}`);
     setSelected(new Set());
     setBulkDelOpen(false);
     setBulkDeleting(false);
     qc.invalidateQueries({ queryKey: ["cities"] });
+    if (failures > 0) toast({ title: t("catalogPage.bulkDeleteFailed"), description: t("catalogPage.bulkDeleteFailedDesc", { failed: failures, total: count }), variant: "destructive" });
+  }
+
+  const total = data?.meta?.total ?? 0;
+  const allMatchingSelected = total > 0 && selected.size >= total;
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    try {
+      const params = new URLSearchParams({ limit: "5000" });
+      if (dSearch) params.set("search", dSearch);
+      if (dfName) params.set("name", dfName);
+      if (filterCountry !== "all") params.set("countryId", filterCountry);
+      if (fStatus) params.set("status", fStatus);
+      const ids = await fetchAllIds(`/api/cities?${params.toString()}`);
+      setSelected(new Set(ids));
+    } catch {} finally { setSelectingAll(false); }
+  }
+  async function runExport(onlySelected: boolean) {
+    try {
+      const allCities = { data: await fetchAllRows<City>("/api/cities") };
+      const cMap = Object.fromEntries(countries.map(c => [c.id, c]));
+      let list = (allCities?.data ?? allCities ?? []) as City[];
+      if (onlySelected) list = list.filter(c => selected.has(c.id));
+      const rows = list.map((c: City) => ({
+        Name: c.name, Country: cMap[c.countryId]?.name ?? "", "Country Code": cMap[c.countryId]?.code ?? "",
+        Status: c.isActive ? "Active" : "Inactive",
+      }));
+      await exportToExcel(rows, "Cities", `cities-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch {}
   }
 
   const handleBulkImport = async (rows: Record<string, string>[]) => {
@@ -620,18 +765,13 @@ function CitiesTab() {
             <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}
           </Button>
         )}
+        {selected.size > 0 && (
+          <Button variant="outline" size="sm" onClick={() => runExport(true)}>
+            <Download className="h-4 w-4 mr-2" />{t("catalogPage.exportSelected", { n: selected.size })}
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
-        <Button variant="outline" onClick={async () => {
-          try {
-            const allCities = await api("/api/cities?limit=5000");
-            const cMap = Object.fromEntries(countries.map(c => [c.id, c]));
-            const rows = (allCities?.data ?? allCities ?? []).map((c: City) => ({
-              Name: c.name, Country: cMap[c.countryId]?.name ?? "", "Country Code": cMap[c.countryId]?.code ?? "",
-              Status: c.isActive ? "Active" : "Inactive",
-            }));
-            await exportToExcel(rows, "Cities", `cities-${new Date().toISOString().slice(0, 10)}.xlsx`);
-          } catch {}
-        }}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
+        <Button variant="outline" onClick={() => runExport(false)}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
         <Button onClick={() => setForm({ isActive: true })}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addCity")}</Button>
       </div>
 
@@ -681,6 +821,16 @@ function CitiesTab() {
           </tbody>
         </table>
       </div>
+      {allSelected && total > sorted.length && (
+        <SelectAllBanner
+          selectedCount={selected.size}
+          total={total}
+          allMatchingSelected={allMatchingSelected}
+          selecting={selectingAll}
+          onSelectAllMatching={selectAllMatching}
+          onClear={() => setSelected(new Set())}
+        />
+      )}
       <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
@@ -766,6 +916,7 @@ function UniversitiesTab() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
 
   // Column filters
   const [fName, setFName] = useState("");
@@ -830,11 +981,51 @@ function UniversitiesTab() {
 
   async function handleBulkDelete() {
     setBulkDeleting(true);
-    await Promise.allSettled([...selected].map(id => apiDelete(`/api/universities/${id}`)));
+    const count = selected.size;
+    const failures = await bulkDelete([...selected], id => `/api/universities/${id}`);
     setSelected(new Set());
     setBulkDelOpen(false);
     setBulkDeleting(false);
     qc.invalidateQueries({ queryKey: ["universities"] });
+    if (failures > 0) toast({ title: t("catalogPage.bulkDeleteFailed"), description: t("catalogPage.bulkDeleteFailedDesc", { failed: failures, total: count }), variant: "destructive" });
+  }
+
+  const total = data?.meta?.total ?? 0;
+  const allMatchingSelected = total > 0 && selected.size >= total;
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    try {
+      const params = new URLSearchParams({ limit: "5000" });
+      if (dSearch) params.set("search", dSearch);
+      if (dfName) params.set("name", dfName);
+      if (fCountry) params.set("country", fCountry);
+      if (dfCity) params.set("city", dfCity);
+      if (fType) params.set("type", fType);
+      if (dfQs) params.set("qs", dfQs);
+      if (fStatus) params.set("status", fStatus);
+      const ids = await fetchAllIds(`/api/universities?${params.toString()}`);
+      setSelected(new Set(ids));
+    } catch {} finally { setSelectingAll(false); }
+  }
+  async function runExport(onlySelected: boolean) {
+    try {
+      let list = await fetchAllRows<University>("/api/universities");
+      if (onlySelected) list = list.filter(u => selected.has(u.id));
+      const rows = list.map((u: University) => ({
+        Name: u.name, Country: u.country, City: u.city ?? "", Website: u.website ?? "",
+        Type: u.universityType ?? "", "Tax Type": u.taxType ?? "", "Tax %": u.taxPercent ?? "",
+        Status: u.status, Active: u.isActive ? "Yes" : "No",
+        "QS Ranking": u.qsRanking ?? "", "Times Ranking": u.timesRanking ?? "",
+        "Shanghai Ranking": u.shanghaiRanking ?? "", "CWTS Leiden Ranking": u.cwtsLeidenRanking ?? "",
+        Address: u.address ?? "", "Logo URL": u.logoUrl ?? "",
+        "Online Payment URL": u.onlinePaymentUrl ?? "", "CRICOS Link": u.cricosLink ?? "",
+        "Documents Link": u.documentsLink ?? "", "Current Fee List Link": u.currentFeeListLink ?? "",
+        "Initial Deposit Options": u.initialDepositOptions ?? "", "Admission Process": u.admissionProcess ?? "",
+        "Contact Person": u.contactPersonName ?? "", "Contact Phone": u.contactPersonPhone ?? "",
+        "Contact Email": u.contactPersonEmail ?? "", Description: u.description ?? "",
+      }));
+      await exportToExcel(rows, "Universities", `universities-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch {}
   }
 
   const { data: allCountriesResp } = useQuery({
@@ -917,26 +1108,13 @@ function UniversitiesTab() {
             <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}
           </Button>
         )}
+        {selected.size > 0 && (
+          <Button variant="outline" size="sm" onClick={() => runExport(true)}>
+            <Download className="h-4 w-4 mr-2" />{t("catalogPage.exportSelected", { n: selected.size })}
+          </Button>
+        )}
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
-        <Button variant="outline" onClick={async () => {
-          try {
-            const all = await api("/api/universities?limit=5000");
-            const rows = (all?.data ?? []).map((u: University) => ({
-              Name: u.name, Country: u.country, City: u.city ?? "", Website: u.website ?? "",
-              Type: u.universityType ?? "", "Tax Type": u.taxType ?? "", "Tax %": u.taxPercent ?? "",
-              Status: u.status, Active: u.isActive ? "Yes" : "No",
-              "QS Ranking": u.qsRanking ?? "", "Times Ranking": u.timesRanking ?? "",
-              "Shanghai Ranking": u.shanghaiRanking ?? "", "CWTS Leiden Ranking": u.cwtsLeidenRanking ?? "",
-              Address: u.address ?? "", "Logo URL": u.logoUrl ?? "",
-              "Online Payment URL": u.onlinePaymentUrl ?? "", "CRICOS Link": u.cricosLink ?? "",
-              "Documents Link": u.documentsLink ?? "", "Current Fee List Link": u.currentFeeListLink ?? "",
-              "Initial Deposit Options": u.initialDepositOptions ?? "", "Admission Process": u.admissionProcess ?? "",
-              "Contact Person": u.contactPersonName ?? "", "Contact Phone": u.contactPersonPhone ?? "",
-              "Contact Email": u.contactPersonEmail ?? "", Description: u.description ?? "",
-            }));
-            await exportToExcel(rows, "Universities", `universities-${new Date().toISOString().slice(0, 10)}.xlsx`);
-          } catch {}
-        }}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
+        <Button variant="outline" onClick={() => runExport(false)}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
         <Button onClick={() => { setForm({ isActive: true, status: "open" }); setSelCountryId(null); }}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addUniversity")}</Button>
       </div>
 
@@ -1018,6 +1196,16 @@ function UniversitiesTab() {
           </tbody>
         </table>
       </div>
+      {allSelected && total > sorted.length && (
+        <SelectAllBanner
+          selectedCount={selected.size}
+          total={total}
+          allMatchingSelected={allMatchingSelected}
+          selecting={selectingAll}
+          onSelectAllMatching={selectAllMatching}
+          onClear={() => setSelected(new Set())}
+        />
+      )}
       <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>
@@ -1284,6 +1472,7 @@ function UniversitiesTab() {
 ══════════════════════════════════════════════════════════ */
 function ProgramsTab() {
   const { t } = useI18n();
+  const { toast } = useToast();
   const qc = useQueryClient();
   const { season } = useSeason();
   const [page, setPage] = useState(1);
@@ -1297,6 +1486,7 @@ function ProgramsTab() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
   const [delAllOpen, setDelAllOpen] = useState(false);
   const [delAllInProgress, setDelAllInProgress] = useState(false);
 
@@ -1368,11 +1558,51 @@ function ProgramsTab() {
 
   async function handleBulkDelete() {
     setBulkDeleting(true);
-    await Promise.allSettled([...selected].map(id => apiDelete(`/api/programs/${id}`)));
+    const count = selected.size;
+    const failures = await bulkDelete([...selected], id => `/api/programs/${id}`);
     setSelected(new Set());
     setBulkDelOpen(false);
     setBulkDeleting(false);
     qc.invalidateQueries({ queryKey: ["programs"] });
+    if (failures > 0) toast({ title: t("catalogPage.bulkDeleteFailed"), description: t("catalogPage.bulkDeleteFailedDesc", { failed: failures, total: count }), variant: "destructive" });
+  }
+
+  const total = data?.meta?.total ?? 0;
+  const allMatchingSelected = total > 0 && selected.size >= total;
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    try {
+      const params = new URLSearchParams({ limit: "5000" });
+      if (dSearch) params.set("search", dSearch);
+      if (filterUni !== "all") params.set("universityId", filterUni);
+      if (dfName) params.set("name", dfName);
+      if (fDegree) params.set("degree", fDegree);
+      if (fField) params.set("field", fField);
+      const ids = await fetchAllIds(`/api/programs?${params.toString()}`);
+      setSelected(new Set(ids));
+    } catch {} finally { setSelectingAll(false); }
+  }
+  async function runExport(onlySelected: boolean) {
+    try {
+      const exportUrl = !onlySelected && filterUni !== "all" ? `/api/programs?universityId=${filterUni}` : "/api/programs";
+      let list = await fetchAllRows<Program>(exportUrl);
+      if (onlySelected) list = list.filter(p => selected.has(p.id));
+      const rows = list.map((p: Program) => ({
+        Program: p.name, University: uniMap[p.universityId]?.name ?? "",
+        Degree: p.degree ?? "", Field: p.field ?? "", Language: p.language ?? "",
+        Duration: p.duration ?? "", "Fee Type": p.feeType ?? "",
+        "Tuition Fee": p.tuitionFee ?? "", Currency: p.currency ?? "",
+        "Commission %": p.commissionRate ?? "", "Scholarship": p.scholarship ?? "",
+        Intakes: p.intakes ?? "", "Application Fee": p.applicationFee ?? "",
+        "Advance Fee": p.advancedFee ?? "", "Deposit Fee": p.depositFee ?? "",
+        "Service Fee": p.serviceFeeAmount ?? "", "Discounted Fee": p.discountedFee ?? "",
+        "Language Fee": p.languageFee ?? "", "Min GPA": p.minGpa ?? "",
+        "Min Language Score": p.minLanguageScore ?? "", "Quota": p.quota ?? "",
+        Active: p.isActive ? "Yes" : "No",
+        Requirements: p.requirements ?? "",
+      }));
+      await exportToExcel(rows, "Programs", `programs-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch {}
   }
 
   async function handleDeleteAll() {
@@ -1545,30 +1775,16 @@ function ProgramsTab() {
             <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}
           </Button>
         )}
+        {selected.size > 0 && (
+          <Button variant="outline" size="sm" onClick={() => runExport(true)}>
+            <Download className="h-4 w-4 mr-2" />{t("catalogPage.exportSelected", { n: selected.size })}
+          </Button>
+        )}
         <Button variant="destructive" size="sm" className="gap-1.5" onClick={() => setDelAllOpen(true)}>
           <Trash2 className="h-4 w-4" />{t("catalogPage.deleteAll")}
         </Button>
         <Button variant="outline" onClick={() => setBulkOpen(true)}><Upload className="h-4 w-4 mr-2" />{t("catalogPage.importExcel")}</Button>
-        <Button variant="outline" onClick={async () => {
-          try {
-            const all = await api(`/api/programs?limit=5000${filterUni !== "all" ? `&universityId=${filterUni}` : ""}`);
-            const rows = (all?.data ?? []).map((p: Program) => ({
-              Program: p.name, University: uniMap[p.universityId]?.name ?? "",
-              Degree: p.degree ?? "", Field: p.field ?? "", Language: p.language ?? "",
-              Duration: p.duration ?? "", "Fee Type": p.feeType ?? "",
-              "Tuition Fee": p.tuitionFee ?? "", Currency: p.currency ?? "",
-              "Commission %": p.commissionRate ?? "", "Scholarship": p.scholarship ?? "",
-              Intakes: p.intakes ?? "", "Application Fee": p.applicationFee ?? "",
-              "Advance Fee": p.advancedFee ?? "", "Deposit Fee": p.depositFee ?? "",
-              "Service Fee": p.serviceFeeAmount ?? "", "Discounted Fee": p.discountedFee ?? "",
-              "Language Fee": p.languageFee ?? "", "Min GPA": p.minGpa ?? "",
-              "Min Language Score": p.minLanguageScore ?? "", "Quota": p.quota ?? "",
-              Active: p.isActive ? "Yes" : "No",
-              Requirements: p.requirements ?? "",
-            }));
-            await exportToExcel(rows, "Programs", `programs-${new Date().toISOString().slice(0, 10)}.xlsx`);
-          } catch {}
-        }}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
+        <Button variant="outline" onClick={() => runExport(false)}><Download className="h-4 w-4 mr-2" />{t("catalogPage.exportExcel")}</Button>
         <Button onClick={() => setForm({ isActive: true, currency: "USD" })}><Plus className="h-4 w-4 mr-2" />{t("catalogPage.addProgram")}</Button>
       </div>
 
@@ -1634,6 +1850,16 @@ function ProgramsTab() {
           </tbody>
         </table>
       </div>
+      {allSelected && total > sorted.length && (
+        <SelectAllBanner
+          selectedCount={selected.size}
+          total={total}
+          allMatchingSelected={allMatchingSelected}
+          selecting={selectingAll}
+          onSelectAllMatching={selectAllMatching}
+          onClear={() => setSelected(new Set())}
+        />
+      )}
       <Pagination page={page} totalPages={totalPages} onPage={p => { setPage(p); setSelected(new Set()); }} />
 
       <Dialog open={form !== null} onOpenChange={o => !o && setForm(null)}>

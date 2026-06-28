@@ -4197,7 +4197,15 @@
     "optCurrency": "العملة",
     "optCurrencyDesc": "العملات المدعومة",
     "dialCode": "رمز الاتصال",
-    "dialCodeOptional": "رمز الاتصال (اختياري)"
+    "dialCodeOptional": "رمز الاتصال (اختياري)",
+    "selectAllItems": "تحديد كل {n} عنصر",
+    "pageItemsSelected": "تم تحديد {n} عنصر في هذه الصفحة",
+    "allItemsSelected": "تم تحديد كل العناصر ({n})",
+    "clearSelection": "مسح التحديد",
+    "selecting": "جارٍ التحديد…",
+    "exportSelected": "تصدير المحدد ({n})",
+    "bulkDeleteFailed": "تعذّر حذف بعض العناصر",
+    "bulkDeleteFailedDesc": "تعذّر حذف {failed} من أصل {total}. قد تكون قيد الاستخدام."
   },
   "appDocsPanel": {
     "documentUploaded": "تم رفع المستند",

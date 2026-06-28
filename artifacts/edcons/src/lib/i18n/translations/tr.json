@@ -4081,7 +4081,15 @@
     "optCurrency": "Para Birimi",
     "optCurrencyDesc": "Desteklenen para birimleri",
     "dialCode": "Telefon Kodu",
-    "dialCodeOptional": "Telefon kodu (isteğe bağlı)"
+    "dialCodeOptional": "Telefon kodu (isteğe bağlı)",
+    "selectAllItems": "Tüm {n} öğeyi seç",
+    "pageItemsSelected": "Bu sayfadaki {n} öğe seçildi",
+    "allItemsSelected": "Tüm {n} öğe seçildi",
+    "clearSelection": "Seçimi temizle",
+    "selecting": "Seçiliyor…",
+    "exportSelected": "Seçilenleri Dışa Aktar ({n})",
+    "bulkDeleteFailed": "Bazı öğeler silinemedi",
+    "bulkDeleteFailedDesc": "{total} öğeden {failed} tanesi silinemedi. Kullanımda olabilirler."
   },
   "appDocsPanel": {
     "documentUploaded": "Belge yüklendi",
