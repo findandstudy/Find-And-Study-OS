@@ -144,6 +144,165 @@ const SYNONYM_GROUPS: readonly string[][] = [
   ["ticaret", "trade", "commerce", "commercial"],
   ["bilisim", "informatics", "information", "systems"],
   ["sistemleri", "systems"],
+
+  // -------------------------------------------------------------------------
+  // Extended EN↔TR coverage (cross-portal program-name matching).
+  //
+  // Additive only — these groups EXTEND the proven defaults above. Where a
+  // group shares a token (hub) with an existing group, buildSynonymMap merges
+  // their synonym sets so matching still bridges correctly. All tokens are in
+  // folded form (lowercase ASCII, Turkish chars mapped, single words only:
+  // multi-word/hyphenated forms never match because tokenize() splits on
+  // spaces, so they are intentionally omitted).
+  // -------------------------------------------------------------------------
+
+  // --- Degree / study format ---
+  ["lisansustu", "postgraduate", "graduate"],
+  ["yuksek", "yukseklisans"],
+  ["uzaktan", "distance", "online", "elearning"],
+  ["orgun", "formal", "onsite"],
+  ["hazirlik", "preparatory", "prep", "foundation"],
+  ["sertifika", "certificate"],
+
+  // --- Health sciences ---
+  ["hekimlik", "medicine"],
+  ["dis", "dental", "dentistry"],
+  ["fizyoterapi", "physiotherapy", "rehabilitation"],
+  ["beslenme", "nutrition", "dietetics"],
+  ["ebelik", "midwifery"],
+  ["odyoloji", "audiology"],
+  ["veteriner", "veterinary"],
+  ["biyomedikal", "biomedical"],
+  ["saglik", "health", "healthcare"],
+  ["laboratuvar", "laboratory", "laboratories"],
+  ["anestezi", "anesthesia", "anaesthesia"],
+  ["radyoloji", "radiology"],
+  ["optisyenlik", "optician", "optometry"],
+  ["agiz", "oral"],
+  ["cocuk", "child", "pediatric"],
+  ["gelisimi", "gelistirme", "development"],
+  ["konusma", "speech"],
+  ["terapi", "therapy", "therapies"],
+  ["goruntuleme", "imaging"],
+  ["ameliyathane", "surgery"],
+  ["acil", "emergency"],
+  ["yardim", "aid"],
+  ["ilk", "first"],
+
+  // --- Engineering & computing ---
+  ["makine", "makina", "mechanical"],
+  ["endustri", "endustriyel", "industrial"],
+  ["kimya", "chemical", "chemistry"],
+  ["mekatronik", "mechatronics"],
+  ["otomotiv", "automotive"],
+  ["havacilik", "aviation", "aeronautical", "aerospace"],
+  ["uzay", "aerospace", "space"],
+  ["yapay", "artificial"],
+  ["zeka", "intelligence"],
+  ["veri", "data"],
+  ["bilim", "bilimi", "science", "sciences"],
+  ["siber", "cyber"],
+  ["guvenlik", "security"],
+  ["aglar", "networks", "network"],
+  ["biyomuhendislik", "bioengineering"],
+  ["enerji", "energy"],
+
+  // --- Business / economics / social management ---
+  ["iktisat", "ekonomi", "economics"],
+  ["sigortacilik", "sigorta", "insurance"],
+  ["pazarlama", "marketing"],
+  ["lojistik", "logistics"],
+  ["tedarik", "supply"],
+  ["girisimcilik", "entrepreneurship"],
+  ["insan", "human"],
+  ["kaynaklari", "resources"],
+  ["calisma", "labor", "labour"],
+  ["vergi", "taxation", "tax"],
+  ["denetim", "audit", "auditing"],
+  ["aktuerya", "actuarial"],
+  ["maliye", "finance"],
+
+  // --- Law / politics / public ---
+  ["hukuk", "law", "legal"],
+  ["adalet", "justice"],
+  ["siyasal", "siyasi", "political", "politics"],
+  ["kamu", "public"],
+  ["diplomasi", "diplomacy"],
+  ["adli", "forensic"],
+  ["bilirkisi", "forensic"],
+  ["yonetisim", "governance"],
+
+  // --- Social sciences & humanities ---
+  ["psikoloji", "psychology", "psychological"],
+  ["psikolojik", "psychological"],
+  ["antropoloji", "anthropology"],
+  ["cografya", "cografi", "geography"],
+  ["hizmet", "hizmeti", "work", "service"],
+  ["edebiyat", "literature"],
+  ["dil", "language", "linguistics"],
+  ["dilbilimi", "linguistics"],
+  ["ceviri", "translation", "interpreting"],
+  ["mutercim", "translation", "translator"],
+  ["tercumanlik", "interpreting", "interpretation"],
+  ["ingiliz", "english"],
+  ["rehberlik", "guidance", "counseling", "counselling"],
+  ["danismanlik", "counseling", "consultancy"],
+
+  // --- Architecture & design ---
+  ["mimarlik", "mimarligi", "architecture", "architectural"],
+  ["ic", "interior"],
+  ["sehir", "urban", "city"],
+  ["bolge", "regional"],
+  ["planlama", "planning"],
+  ["peyzaj", "landscape"],
+  ["tasarim", "tasarimi", "design"],
+
+  // --- Communication, media & arts ---
+  ["medya", "media"],
+  ["yeni", "new"],
+  ["reklam", "reklamcilik", "advertising"],
+  ["radyo", "radio"],
+  ["televizyon", "television"],
+  ["gorsel", "visual"],
+  ["sanat", "sanatlar", "art", "arts"],
+  ["resim", "painting"],
+  ["grafik", "graphic", "graphics"],
+  ["fotograf", "fotografcilik", "photography"],
+  ["moda", "fashion"],
+  ["tekstil", "textile", "textiles"],
+  ["animasyon", "animation"],
+  ["oyun", "game"],
+
+  // --- Tourism & gastronomy ---
+  ["otel", "otelcilik", "hotel", "hospitality"],
+  ["gastronomi", "gastronomy", "culinary"],
+  ["mutfak", "culinary", "cookery"],
+  ["ascilik", "cookery", "cooking"],
+  ["rekreasyon", "recreation"],
+  ["seyahat", "travel"],
+
+  // --- Education & sport ---
+  ["ogretmenligi", "ogretmenlik", "teaching", "teacher"],
+  ["egitim", "egitimi", "education", "educational"],
+  ["okul", "school"],
+  ["oncesi", "preschool"],
+  ["ozel", "special"],
+  ["antrenorluk", "coaching"],
+  ["beden", "physical"],
+  ["mesleki", "occupational", "vocational"],
+
+  // --- Basic sciences ---
+  ["biyoloji", "biology", "biological"],
+  ["molekuler", "molecular"],
+  ["genetik", "genetics", "genetic"],
+  ["istatistik", "statistics"],
+  ["biyokimya", "biochemistry"],
+  ["biyoteknoloji", "biotechnology"],
+
+  // --- General modifiers ---
+  ["uygulamali", "applied"],
+  ["teknikerligi", "teknik", "technician", "technical"],
+  ["programciligi", "programming"],
 ];
 
 /** Build a token→synonyms map from equivalence-class groups. */

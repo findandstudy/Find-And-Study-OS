@@ -189,26 +189,67 @@ test("DICT2 — Turkish query matches English candidate via synonym expansion", 
 
 test("SYN-DB1 — DB synonym group extends the built-in dictionary (gap-fill)", () => {
   const candidates: ProgramCandidate[] = [
-    { id: "ai-tr", name: "Yapay Zeka Mühendisliği" },
-    { id: "cs-tr", name: "Bilgisayar Mühendisliği" },
+    { id: "mine-tr", name: "Yeraltı Maden Mühendisliği" },
+    { id: "cs-tr",   name: "Bilgisayar Mühendisliği" },
   ];
 
-  // "artificial" is not in the built-in dictionary for "yapay", so without the
-  // DB-supplied group this query cannot reach the Turkish candidate.
-  const withoutDb = matchProgram("Artificial Intelligence Engineering", candidates);
+  // "mining"/"maden" and "underground"/"yeralti" are NOT in the built-in
+  // dictionary, so without the DB-supplied group this query cannot reach the
+  // Turkish candidate (engineering↔mühendislik alone scores below threshold).
+  const withoutDb = matchProgram("Underground Mining Engineering", candidates);
   assert.equal(withoutDb, null, "Without DB synonyms, the gap term cannot match");
 
-  // Panel-managed group fills the gap: artificial↔yapay, intelligence↔zeka.
+  // Panel-managed group fills the gap: underground↔yeralti, mining↔maden.
   const withDb = matchProgram(
-    "Artificial Intelligence Engineering",
+    "Underground Mining Engineering",
     candidates,
     undefined,
     undefined,
-    [["artificial", "yapay"], ["intelligence", "zeka"]],
+    [["underground", "yeralti"], ["mining", "maden"]],
   );
 
   assert.ok(withDb !== null, "DB synonyms must enable the gap-fill match");
-  assert.equal(withDb.match.id, "ai-tr", "Artificial Intelligence → Yapay Zeka");
+  assert.equal(withDb.match.id, "mine-tr", "Underground Mining → Yeraltı Maden");
+});
+
+// ---------------------------------------------------------------------------
+// SYN-EXT1/2/3 — built-in EN↔TR coverage for cross-portal program matching
+// ---------------------------------------------------------------------------
+
+test("SYN-EXT1 — Psychology (EN) matches Psikoloji (TR) via built-in dict", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "psy-tr", name: "Psikoloji" },
+    { id: "soc-tr", name: "Sosyoloji" },
+    { id: "phi-tr", name: "Felsefe" },
+  ];
+
+  const result = matchProgram("Psychology", candidates);
+  assert.ok(result !== null, "Psychology must match a Turkish candidate");
+  assert.equal(result.match.id, "psy-tr", "Psychology → Psikoloji");
+});
+
+test("SYN-EXT2 — İşletme (TR) matches Business Administration (EN) via built-in dict", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "ba-en", name: "Business Administration" },
+    { id: "ec-en", name: "Economics" },
+    { id: "law-en", name: "Law" },
+  ];
+
+  const result = matchProgram("İşletme", candidates);
+  assert.ok(result !== null, "İşletme must match an English candidate");
+  assert.equal(result.match.id, "ba-en", "İşletme → Business Administration");
+});
+
+test("SYN-EXT3 — Bilgisayar Mühendisliği (TR) matches Computer Engineering (EN)", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "ce-en", name: "Computer Engineering" },
+    { id: "me-en", name: "Mechanical Engineering" },
+    { id: "ee-en", name: "Electrical Engineering" },
+  ];
+
+  const result = matchProgram("Bilgisayar Mühendisliği", candidates);
+  assert.ok(result !== null, "Bilgisayar Mühendisliği must match an English candidate");
+  assert.equal(result.match.id, "ce-en", "Bilgisayar Mühendisliği → Computer Engineering");
 });
 
 // ---------------------------------------------------------------------------
