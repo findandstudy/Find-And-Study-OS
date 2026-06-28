@@ -11,7 +11,9 @@
     "test:registry": "tsx --test ./scripts/test-registry.ts",
     "test:declarative": "tsx --test ./scripts/test-declarative.ts",
     "test:db-loader": "tsx --test ./scripts/test-db-loader.ts",
-    "test:adapters": "tsx --test ./scripts/*.ts"
+    "test:sit": "tsx --test ./scripts/test-sit.ts",
+    "test:adapters": "tsx --test ./scripts/test-*.ts",
+    "smoke:sit": "tsx ./scripts/sit-smoke.ts"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",

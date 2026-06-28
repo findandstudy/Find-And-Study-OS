@@ -1,3 +1,20 @@
+// ---------------------------------------------------------------------------
+// SIT portal adapter (partners.sitconnect.net)
+//
+// Production-grade Playwright adapter covering the 11 agreed universities.
+// Capabilities:
+//   - login + ensureLoggedIn (re-auth on /auth/login redirect)
+//   - createStudent via the 6-step "Add Student" wizard (idempotent, filechooser
+//     uploads, GPA normalization, Zoho validation recovery)
+//   - createApplication (idempotent dedup, exact program match per university)
+//
+// Writes happen ONLY through the UI; SIT GraphQL is read-only (idempotency +
+// catalog). The adapter satisfies the shared UniversityAdapter interface
+// (login/submit) and additionally exposes typed createStudent/createApplication
+// methods. Registered as experimental (never auto-submitted).
+// ---------------------------------------------------------------------------
+
+import type { Page, Locator } from "playwright-core";
 import type {
   UniversityAdapter,
   AdapterSession,
@@ -7,119 +24,745 @@ import type {
   LoginOpts,
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
-import { portalCreds } from "../../portalCreds.js";
-import { fold } from "../../programMatch.js";
+import { portalCreds, type ResolvedCreds } from "../../portalCreds.js";
+import { fold, matchProgram, type ProgramCandidate } from "../../programMatch.js";
+import {
+  SIT_URLS,
+  SIT_LOGIN,
+  SIT_NAV,
+  SIT_STUDENT_FIELDS,
+  SIT_APP_FIELDS,
+  SIT_BUTTONS,
+  SIT_UPLOAD,
+  SIT_ERRORS,
+} from "./selectors.js";
+import {
+  SIT_ALLOWLIST,
+  normalizeGpa,
+  mapEducationLevel,
+  formatSitDate,
+  matchAllowedUniversity,
+  isAllowedUniversity,
+  isLanguageCompatible,
+} from "./helpers.js";
+import {
+  findStudent,
+  listStudentApplications,
+  fetchProgramCatalog,
+} from "./graphql.js";
+
+export { SIT_ALLOWLIST } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
-// SIT portal allowlist — EXACTLY 11 universities (do not add/remove)
-// Credentials: SIT_USER + SIT_PASSWORD (or inject via opts.credentials)
+// Result shapes for the extra typed methods.
 // ---------------------------------------------------------------------------
-export const SIT_ALLOWLIST: readonly string[] = [
-  "Haliç Üniversitesi",
-  "Atlas Üniversitesi",
-  "Ankara Medipol Üniversitesi",
-  "Galata Üniversitesi",
-  "İstanbul Yeni Yüzyıl Üniversitesi",
-  "İstinye Üniversitesi",
-  "İstanbul Aydın Üniversitesi",
-  "İstanbul Kent Üniversitesi",
-  "Fenerbahçe Üniversitesi",
-  "İstanbul Kültür Üniversitesi",
-  "TED Üniversitesi",
-] as const;
+export interface SitStudentResult {
+  /** SIT student id when known (created or reused); null when unresolved. */
+  studentId: string | null;
+  created: boolean;
+  alreadyExists: boolean;
+  detail?: string;
+}
 
-/** Pre-folded entries for fast matches() lookup. */
+export interface SitApplicationResult extends SubmitResult {
+  studentId: string | null;
+}
+
+/** Extended adapter type — UniversityAdapter plus SIT-specific operations. */
+export interface SitAdapter extends UniversityAdapter {
+  ensureLoggedIn(session: AdapterSession): Promise<void>;
+  createStudent(
+    session: AdapterSession,
+    profile: SubmitProfile,
+    files: SubmitFiles,
+    doSubmit?: boolean,
+  ): Promise<SitStudentResult>;
+  createApplication(
+    session: AdapterSession,
+    profile: SubmitProfile,
+    studentId: string | null,
+    doSubmit?: boolean,
+  ): Promise<SitApplicationResult>;
+}
+
+const PORTAL_KEY = "sit";
 const SIT_ALLOWLIST_FOLDED: readonly string[] = SIT_ALLOWLIST.map(fold);
 
-const PORTAL_URL = "https://partners.sitconnect.net"; // TODO: confirm URL
+// ---------------------------------------------------------------------------
+// Small typed locator utilities (no `any`).
+// ---------------------------------------------------------------------------
+const sleep = (page: Page, ms: number): Promise<void> => page.waitForTimeout(ms);
 
-export const sitAdapter: UniversityAdapter = {
-  key:       "sit",
-  label:     "SIT Portal",
+async function bodyText(page: Page): Promise<string> {
+  try {
+    const txt = (await page.evaluate(
+      "(() => document.body ? document.body.innerText : '')()",
+    )) as string;
+    return txt;
+  } catch {
+    return "";
+  }
+}
+
+async function firstVisible(
+  page: Page,
+  selectors: readonly string[],
+): Promise<Locator | null> {
+  for (const sel of selectors) {
+    const loc = page.locator(sel).first();
+    if ((await loc.count()) && (await loc.isVisible().catch(() => false))) {
+      return loc;
+    }
+  }
+  return null;
+}
+
+/** Fill a field located by accessible label, placeholder, or name fallback. */
+async function fillField(
+  page: Page,
+  labelRe: RegExp,
+  value: string | undefined,
+): Promise<boolean> {
+  if (!value) return false;
+  const candidates: Locator[] = [
+    page.getByLabel(labelRe).first(),
+    page.getByPlaceholder(labelRe).first(),
+  ];
+  for (const loc of candidates) {
+    if ((await loc.count()) && (await loc.isVisible().catch(() => false))) {
+      await loc.fill(value).catch(() => {});
+      await loc.press("Tab").catch(() => {});
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Click a button by accessible name. Returns true when a click was issued. */
+async function clickButton(page: Page, nameRe: RegExp): Promise<boolean> {
+  const btn = page.getByRole("button", { name: nameRe }).first();
+  if (await btn.count()) {
+    await btn.click({ timeout: 8000 }).catch(() => {});
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Open a SIT custom combobox (role=button trigger) and click the option whose
+ * text matches `valueRe`. Returns true when an option was clicked.
+ */
+async function selectCombo(
+  page: Page,
+  triggerRe: RegExp,
+  valueRe: RegExp,
+): Promise<boolean> {
+  const trigger = page.getByRole("button", { name: triggerRe }).first();
+  if (!(await trigger.count())) return false;
+  await trigger.click({ timeout: 6000 }).catch(() => {});
+  await sleep(page, 900);
+
+  let opt = page.getByRole("option", { name: valueRe }).first();
+  if (!(await opt.count())) {
+    opt = page
+      .locator("[role=option], li, [class*=option i]")
+      .filter({ hasText: valueRe })
+      .first();
+  }
+  if (await opt.count()) {
+    await opt.click({ timeout: 3000 }).catch(() => {});
+    await sleep(page, 1100);
+    return true;
+  }
+  // Close the dropdown to avoid blocking later interactions.
+  await page.keyboard.press("Escape").catch(() => {});
+  return false;
+}
+
+/** Read all visible option texts from an open combobox. */
+async function readComboOptions(
+  page: Page,
+  triggerRe: RegExp,
+): Promise<ProgramCandidate[]> {
+  const trigger = page.getByRole("button", { name: triggerRe }).first();
+  if (!(await trigger.count())) return [];
+  await trigger.click({ timeout: 6000 }).catch(() => {});
+  await sleep(page, 1000);
+
+  const options = page.locator("[role=option], li[role=option]");
+  const n = await options.count().catch(() => 0);
+  const out: ProgramCandidate[] = [];
+  for (let i = 0; i < Math.min(n, 500); i++) {
+    const text = ((await options.nth(i).innerText().catch(() => "")) || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text) out.push({ id: text, name: text });
+  }
+  await page.keyboard.press("Escape").catch(() => {});
+  return out;
+}
+
+/** Upload a file via the OS file chooser triggered by clicking `triggerRe`. */
+async function uploadViaChooser(
+  page: Page,
+  triggerRe: RegExp,
+  filePath: string,
+): Promise<boolean> {
+  const trigger = page.getByRole("button", { name: triggerRe }).first();
+  if (!(await trigger.count())) {
+    // Fallback: a hidden <input type=file>, set directly.
+    const input = page.locator(SIT_UPLOAD.fileInput).first();
+    if (await input.count()) {
+      await input.setInputFiles(filePath).catch(() => {});
+      return true;
+    }
+    return false;
+  }
+  try {
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout: 8000 }),
+      trigger.click({ timeout: 6000 }),
+    ]);
+    await chooser.setFiles(filePath);
+    await sleep(page, 1500);
+    return true;
+  } catch {
+    const input = page.locator(SIT_UPLOAD.fileInput).first();
+    if (await input.count()) {
+      await input.setInputFiles(filePath).catch(() => {});
+      return true;
+    }
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Login internals.
+// ---------------------------------------------------------------------------
+function resolveCreds(opts?: LoginOpts): ResolvedCreds {
+  return opts?.credentials ?? portalCreds(PORTAL_KEY);
+}
+
+async function performLogin(page: Page, creds: ResolvedCreds): Promise<void> {
+  await page.setViewportSize({ width: 1366, height: 900 }).catch(() => {});
+  await page.goto(SIT_URLS.base + SIT_URLS.loginPath, {
+    waitUntil: "domcontentloaded",
+    timeout: 60_000,
+  });
+  await sleep(page, 3500);
+
+  const emailInput = await firstVisible(page, SIT_LOGIN.emailCandidates);
+  if (emailInput) await emailInput.fill(creds.user).catch(() => {});
+  const passInput = await firstVisible(page, SIT_LOGIN.passwordCandidates);
+  if (passInput) await passInput.fill(creds.password).catch(() => {});
+
+  await clickButton(page, SIT_LOGIN.submitName);
+  await sleep(page, 6000);
+
+  const stillOnLogin =
+    SIT_LOGIN.loginUrlMarker.test(page.url()) ||
+    (await page
+      .locator(SIT_LOGIN.passwordCandidates[0])
+      .first()
+      .isVisible()
+      .catch(() => false));
+  if (stillOnLogin) {
+    throw new Error(
+      "[sit] login failed — still on /auth/login (wrong credentials or captcha)",
+    );
+  }
+  logger.info("[sit] login successful -> " + page.url());
+}
+
+// ---------------------------------------------------------------------------
+// Navigate to the student detail page for a known/looked-up student, or null.
+// ---------------------------------------------------------------------------
+async function openStudentDetail(
+  page: Page,
+  profile: SubmitProfile,
+  studentId: string | null,
+): Promise<boolean> {
+  // --- Preferred path: direct navigation by the SIT student id. ---
+  // This is the only way to GUARANTEE we operate on the intended student
+  // (search + first-row click can land on the wrong record when the panel
+  // returns multiple/stale matches).
+  if (studentId) {
+    await page.goto(
+      `${SIT_URLS.base}${SIT_URLS.studentsPath}/${encodeURIComponent(studentId)}`,
+      { waitUntil: "domcontentloaded", timeout: 60_000 },
+    );
+    await sleep(page, 3000);
+    if (SIT_NAV.studentDetailUrl.test(page.url())) return true;
+    // Direct nav failed (id stale / route changed) — fall through to search,
+    // but identity is then verified below before any click.
+  }
+
+  await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+    waitUntil: "domcontentloaded",
+    timeout: 60_000,
+  });
+  await sleep(page, 4000);
+
+  const email = (profile.email ?? "").trim();
+  const passport = (profile.passportNumber ?? "").trim();
+  const query = (
+    email || `${profile.firstName ?? ""} ${profile.lastName ?? ""}`
+  ).trim();
+  const search = page.getByPlaceholder(SIT_NAV.searchPlaceholder).first();
+  if ((await search.count()) && query) {
+    await search.fill(query).catch(() => {});
+    await sleep(page, 3000);
+  }
+
+  const row = page.locator("table tbody tr, [role=row]").first();
+  if (!(await row.count())) return false;
+
+  // Identity guard: only click when the row demonstrably belongs to this
+  // student (its text contains the email or passport). Without a verifiable
+  // identifier we refuse to click rather than risk the wrong student.
+  const rowText = ((await row.innerText().catch(() => "")) || "").toLowerCase();
+  const identifiable = Boolean(email) || Boolean(passport);
+  const rowMatches =
+    (email !== "" && rowText.includes(email.toLowerCase())) ||
+    (passport !== "" && rowText.includes(passport.toLowerCase()));
+  if (identifiable && !rowMatches) {
+    logger.warn(
+      "[sit] öğrenci satırı kimlik doğrulaması başarısız — yanlış öğrenci riskine karşı atlanıyor",
+    );
+    return false;
+  }
+
+  const info = row.locator(SIT_NAV.rowInfoSelector).first();
+  if (await info.count()) {
+    await info.click({ timeout: 5000 }).catch(() => {});
+  } else {
+    await row.click({ timeout: 3000 }).catch(() => {});
+  }
+  await sleep(page, 3000);
+  return SIT_NAV.studentDetailUrl.test(page.url());
+}
+
+// ---------------------------------------------------------------------------
+// The adapter.
+// ---------------------------------------------------------------------------
+export const sitAdapter: SitAdapter = {
+  key: PORTAL_KEY,
+  label: "SIT Portal",
   allowlist: [...SIT_ALLOWLIST],
 
   matches(name: string): boolean {
+    // IDOR-safe: token-subset allowlist match (see helpers.matchAllowedUniversity).
+    // The folded-substring path is retained only as a permissive pre-check that
+    // still defers to the strict matcher for the actual decision.
+    if (isAllowedUniversity(name)) return true;
     const f = fold(name);
-    return SIT_ALLOWLIST_FOLDED.some(entry => f.includes(entry) || entry.includes(f));
+    return SIT_ALLOWLIST_FOLDED.some(
+      (entry) => f === entry,
+    );
   },
 
   async login(opts?: LoginOpts): Promise<AdapterSession> {
-    const { user, password } = opts?.credentials ?? portalCreds("sit");
+    const creds = resolveCreds(opts);
     const session = await launchPortal({ headless: opts?.headless ?? true });
     logger.info("[sit] login — navigating to portal");
-
-      const page: any = session.page;
-      try {
-        await page.goto(PORTAL_URL + "/auth/login", { waitUntil: "domcontentloaded", timeout: 60000 });
-        await page.waitForTimeout(3500);
-        await page.locator("input[type=email], input[name*=email i], input[placeholder*=mail i]").first().fill(user);
-        await page.locator("input[type=password]").first().fill(password);
-        await page.getByRole("button", { name: /sign in|log ?in|giris/i }).first().click({ timeout: 8000 }).catch(() => {});
-        await page.waitForTimeout(6000);
-        if (await page.locator("input[type=password]").first().isVisible().catch(() => false)) throw new Error("[sit] login failed - wrong creds or captcha");
-        logger.info("[sit] login successful -> " + page.url());
-      } catch (err) { await session.close().catch(() => {}); throw err; }
-      return session;
+    try {
+      await performLogin(session.page, creds);
+    } catch (err) {
+      await session.close().catch(() => {});
+      throw err;
+    }
+    return session;
   },
 
+  /**
+   * Re-authenticate if the session dropped (redirected to /auth/login). Safe to
+   * call before every operation. Uses portalCreds(PORTAL_KEY), which returns the
+   * runner-injected override during a submission.
+   */
+  async ensureLoggedIn(session: AdapterSession): Promise<void> {
+    const page = session.page;
+    if (!SIT_LOGIN.loginUrlMarker.test(page.url())) {
+      // Probe the students route — a redirect back to login means expired.
+      await page
+        .goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+          waitUntil: "domcontentloaded",
+          timeout: 60_000,
+        })
+        .catch(() => {});
+      await sleep(page, 2000);
+    }
+    if (SIT_LOGIN.loginUrlMarker.test(page.url())) {
+      logger.warn("[sit] session expired — re-authenticating");
+      await performLogin(page, portalCreds(PORTAL_KEY));
+    }
+  },
+
+  /**
+   * Create a student via the 6-step wizard. Idempotent: if GraphQL finds an
+   * existing student by email/passport, returns it without creating a duplicate.
+   */
+  async createStudent(
+    session: AdapterSession,
+    profile: SubmitProfile,
+    files: SubmitFiles,
+    doSubmit: boolean = true,
+  ): Promise<SitStudentResult> {
+    const page = session.page;
+    await this.ensureLoggedIn(session);
+
+    // --- Idempotency: read-only GraphQL lookup ---
+    const existing = await findStudent(page, {
+      email: profile.email,
+      passportNumber: profile.passportNumber,
+    });
+    if (existing) {
+      logger.info(`[sit] mevcut öğrenci bulundu (id=${existing.id}) — yeniden kullanılıyor`);
+      return { studentId: existing.id, created: false, alreadyExists: true };
+    }
+
+    // --- Open the Add Student wizard ---
+    await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    await sleep(page, 3500);
+    if (!(await clickButton(page, SIT_NAV.addStudentName))) {
+      return {
+        studentId: null,
+        created: false,
+        alreadyExists: false,
+        detail: "Add Student düğmesi bulunamadı",
+      };
+    }
+    await sleep(page, 2000);
+
+    const gpa = normalizeGpa(profile.gpa);
+    const dob = formatSitDate(profile.dateOfBirth);
+    const genderLabel = /^f|kad|woman|kız|kiz/i.test(profile.gender || "")
+      ? /female|kad/i
+      : /male|erkek/i;
+
+    // --- Walk up to 6 wizard steps, filling whatever is on screen ---
+    for (let step = 0; step < 6; step++) {
+      await sleep(page, 1500);
+
+      // Step 1 — Personal
+      await fillField(page, SIT_STUDENT_FIELDS.firstName, profile.firstName);
+      await fillField(page, SIT_STUDENT_FIELDS.lastName, profile.lastName);
+      if (dob) await fillField(page, SIT_STUDENT_FIELDS.dateOfBirth, dob);
+      await selectCombo(page, SIT_STUDENT_FIELDS.gender, genderLabel).catch(() => {});
+
+      // Step 2 — Contact
+      await fillField(page, SIT_STUDENT_FIELDS.email, profile.email);
+      await fillField(page, SIT_STUDENT_FIELDS.phone, profile.phone);
+      await fillField(page, SIT_STUDENT_FIELDS.address, profile.address);
+
+      // Step 3 — Family
+      await fillField(page, SIT_STUDENT_FIELDS.fatherName, profile.fatherName);
+      await fillField(page, SIT_STUDENT_FIELDS.motherName, profile.motherName);
+
+      // Step 4 — Identity
+      if (profile.nationality) {
+        await selectCombo(
+          page,
+          SIT_STUDENT_FIELDS.nationality,
+          new RegExp(fold(profile.nationality).slice(0, 12), "i"),
+        ).catch(() => {});
+      }
+      await fillField(page, SIT_STUDENT_FIELDS.nationality, profile.nationality);
+      await fillField(page, SIT_STUDENT_FIELDS.passportNumber, profile.passportNumber);
+
+      // Step 5 — Academics
+      await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName);
+      if (gpa !== undefined) {
+        await fillField(page, SIT_STUDENT_FIELDS.gpa, String(gpa));
+      }
+      if (profile.graduationYear !== undefined) {
+        await fillField(
+          page,
+          SIT_STUDENT_FIELDS.graduationYear,
+          String(profile.graduationYear),
+        );
+      }
+
+      // Step 6 — Documents (filechooser uploads)
+      if (files.photo) {
+        await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo);
+      }
+      for (const doc of [files.passport, files.transcript, files.diploma]) {
+        if (doc) await uploadViaChooser(page, SIT_UPLOAD.attachmentTrigger, doc);
+      }
+
+      // Advance — try Next first; on the last step the Save button appears.
+      const hasNext = await page
+        .getByRole("button", { name: SIT_BUTTONS.next })
+        .first()
+        .count();
+      if (hasNext) {
+        await clickButton(page, SIT_BUTTONS.next);
+        await sleep(page, 1800);
+        // Zoho validation recovery: if a validation banner appears, the step did
+        // not advance — re-fill happens on the next loop iteration.
+        if (SIT_ERRORS.validation.test(await bodyText(page))) {
+          logger.warn("[sit] doğrulama hatası — adım yeniden denenecek");
+        }
+        continue;
+      }
+      break;
+    }
+
+    if (!doSubmit) {
+      logger.info("[sit] DRY: öğrenci kaydedilmeden önce durduruldu");
+      return {
+        studentId: null,
+        created: false,
+        alreadyExists: false,
+        detail: "dry-run: öğrenci kaydedilmedi",
+      };
+    }
+
+    // --- Final save (with one Zoho-validation retry) ---
+    let saved = false;
+    for (let attempt = 0; attempt < 2 && !saved; attempt++) {
+      await clickButton(page, SIT_BUTTONS.saveStudent);
+      await sleep(page, 5000);
+      const txt = await bodyText(page);
+      if (SIT_ERRORS.duplicate.test(txt)) {
+        logger.info("[sit] kayıt sırasında mükerrer tespit edildi");
+        break;
+      }
+      if (SIT_ERRORS.validation.test(txt)) {
+        logger.warn(`[sit] kayıt doğrulama hatası (deneme ${attempt + 1})`);
+        continue;
+      }
+      saved = true;
+    }
+
+    // --- Resolve the new student id via read-only lookup ---
+    const created = await findStudent(page, {
+      email: profile.email,
+      passportNumber: profile.passportNumber,
+    });
+    if (created) {
+      logger.info(`[sit] öğrenci oluşturuldu (id=${created.id})`);
+      return { studentId: created.id, created: saved, alreadyExists: !saved };
+    }
+    // Could not confirm via GraphQL — surface a soft result.
+    const onDetail = SIT_NAV.studentDetailUrl.test(page.url());
+    return {
+      studentId: null,
+      created: saved && onDetail,
+      alreadyExists: false,
+      detail: saved
+        ? "öğrenci kaydedildi ancak id doğrulanamadı"
+        : "öğrenci kaydedilemedi",
+    };
+  },
+
+  /**
+   * Create an application for a student at an allowed university + program.
+   * Idempotent: skips when a matching (university, program) application already
+   * exists. Program is matched exactly against the university-scoped catalog.
+   */
+  async createApplication(
+    session: AdapterSession,
+    profile: SubmitProfile,
+    studentId: string | null,
+    doSubmit: boolean = true,
+  ): Promise<SitApplicationResult> {
+    const page = session.page;
+    await this.ensureLoggedIn(session);
+
+    const base: SitApplicationResult = {
+      alreadyExists: false,
+      submitted: false,
+      programMissing: false,
+      studentId,
+    };
+
+    // --- Allowlist guard (IDOR-safe) ---
+    const allowedUni = matchAllowedUniversity(profile.universityName ?? "");
+    if (!allowedUni) {
+      logger.warn(
+        `[sit] üniversite izin listesinde değil: "${profile.universityName ?? ""}" — atlanıyor`,
+      );
+      return {
+        ...base,
+        programMissing: true,
+        detail: `İzin verilmeyen üniversite: ${profile.universityName ?? "(boş)"}`,
+      };
+    }
+
+    // --- Dedup via read-only GraphQL ---
+    if (studentId) {
+      const apps = await listStudentApplications(page, studentId);
+      const dup = apps.find(
+        (a) =>
+          a.universityName &&
+          matchAllowedUniversity(a.universityName) === allowedUni &&
+          a.programName &&
+          fold(a.programName) === fold(profile.programName),
+      );
+      if (dup) {
+        logger.info(
+          `[sit] mevcut başvuru bulundu (id=${dup.id}) — mükerrer oluşturulmayacak`,
+        );
+        return { ...base, alreadyExists: true, externalRef: dup.id };
+      }
+    }
+
+    // --- Resolve the exact program from the university-scoped catalog ---
+    const level = mapEducationLevel(profile.level);
+    let catalog = await fetchProgramCatalog(page, allowedUni, level);
+
+    // --- Open the student detail + Add Application dialog ---
+    if (!(await openStudentDetail(page, profile, studentId))) {
+      return { ...base, detail: "öğrenci detay sayfası açılamadı" };
+    }
+    if (!(await clickButton(page, SIT_NAV.addApplicationName))) {
+      return { ...base, detail: "Add Application düğmesi bulunamadı" };
+    }
+    await sleep(page, 2500);
+
+    // Year / semester (best-effort first option).
+    for (const re of [SIT_APP_FIELDS.academicYear, SIT_APP_FIELDS.semester]) {
+      const trigger = page.getByRole("button", { name: re }).first();
+      if (await trigger.count()) {
+        await trigger.click({ timeout: 4000 }).catch(() => {});
+        await sleep(page, 800);
+        const opt = page.getByRole("option").first();
+        if (await opt.count()) await opt.click({ timeout: 3000 }).catch(() => {});
+        await sleep(page, 900);
+      }
+    }
+
+    // Country + university (university constrained to the allowlist entry).
+    await selectCombo(page, SIT_APP_FIELDS.country, /turk/i);
+    await selectCombo(
+      page,
+      SIT_APP_FIELDS.university,
+      new RegExp(fold(allowedUni).split(" ").slice(0, 2).join(".*"), "i"),
+    );
+    await selectCombo(page, SIT_APP_FIELDS.degree, new RegExp(level, "i"));
+
+    // If GraphQL catalog was empty, scan the program combobox options instead.
+    if (catalog.length === 0) {
+      catalog = await readComboOptions(page, SIT_APP_FIELDS.program);
+    }
+
+    // Exact program match (language-compatible, confidence-gated).
+    const langFiltered = catalog.filter((c) =>
+      isLanguageCompatible(profile.programName, c.name),
+    );
+    const pool = langFiltered.length > 0 ? langFiltered : catalog;
+    const mergedMap = profile.programOverrides
+      ? { ...profile.programOverrides }
+      : undefined;
+    const match = matchProgram(
+      profile.programName,
+      pool,
+      profile.programId,
+      mergedMap,
+      profile.programSynonyms,
+    );
+
+    if (!match) {
+      logger.warn(
+        `[sit] program eşleşmedi: "${profile.programName}" (${pool.length} aday)`,
+      );
+      return {
+        ...base,
+        programMissing: true,
+        detail: `Program bulunamadı: "${profile.programName}" — ${pool.length} aday arasında güvenli eşleşme yok`,
+      };
+    }
+    logger.info(
+      `[sit] program eşleşti: "${match.match.name}" (güven=${match.conf.toFixed(2)})`,
+    );
+
+    const picked = await selectCombo(
+      page,
+      SIT_APP_FIELDS.program,
+      new RegExp(
+        match.match.name.slice(0, 30).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        "i",
+      ),
+    );
+    if (!picked) {
+      return {
+        ...base,
+        programMissing: true,
+        detail: `Program seçilemedi: "${match.match.name}"`,
+      };
+    }
+
+    if (!doSubmit) {
+      logger.info("[sit] DRY: Create Application öncesi durduruldu");
+      return { ...base, detail: "dry-run: başvuru oluşturulmadı" };
+    }
+
+    if (!(await clickButton(page, SIT_BUTTONS.createApplication))) {
+      return { ...base, detail: "Create Application düğmesi bulunamadı" };
+    }
+    await sleep(page, 6000);
+
+    const after = await bodyText(page);
+    if (SIT_ERRORS.duplicate.test(after)) {
+      return { ...base, alreadyExists: true };
+    }
+    return { ...base, submitted: true };
+  },
+
+  /**
+   * UniversityAdapter entry point. Orchestrates the full flow so the existing
+   * runner path keeps working unchanged: ensure student → create application.
+   */
   async submit(
     session: AdapterSession,
     profile: SubmitProfile,
-    _files: SubmitFiles,
+    files: SubmitFiles,
+    doSubmit: boolean = true,
   ): Promise<SubmitResult> {
-    logger.info("[sit] submit — program:", profile.programName);
+    logger.info(`[sit] submit — program: ${profile.programName}`);
+    const effectiveSubmit =
+      doSubmit && process.env.PORTAL_DRYRUN !== "1";
 
-      const page: any = session.page;
-      const dryRun = process.env.PORTAL_DRYRUN === "1";
-      const result: any = { alreadyExists: false, submitted: false, programMissing: false };
-      const esc = (s: string) => s.slice(0, 20).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const pick = async (placeholderRe: RegExp, value?: string) => {
-        if (!value) return;
-        try {
-          const btn = page.getByRole("button", { name: placeholderRe }).first();
-          if (!(await btn.count())) return;
-          await btn.click({ timeout: 4000 }).catch(() => {});
-          await page.waitForTimeout(900);
-          const re = new RegExp(esc(value), "i");
-          let opt = page.getByRole("option", { name: re }).first();
-          if (!(await opt.count())) opt = page.locator("[role=option],li,[class*=option i]").filter({ hasText: re }).first();
-          if (await opt.count()) await opt.click({ timeout: 3000 }).catch(() => {});
-          await page.waitForTimeout(1300);
-        } catch (e) {}
-      };
-      try {
-        await page.goto(PORTAL_URL + "/students", { waitUntil: "domcontentloaded", timeout: 60000 });
-        await page.waitForTimeout(4000);
-        const q = (profile.email || ((profile.firstName || "") + " " + (profile.lastName || ""))).trim();
-        const search = page.getByPlaceholder(/search by name|name or email/i).first();
-        if ((await search.count()) && q) { await search.fill(q).catch(() => {}); await page.waitForTimeout(3000); }
-        const row = page.locator("table tbody tr, [role=row]").first();
-        if (!(await row.count())) { result.studentNotFound = true; logger.warn("[sit] student not found: " + q); return result; }
-        await row.locator(".lucide-info").first().click({ timeout: 5000 }).catch(async () => { await row.click({ timeout: 3000 }).catch(() => {}); });
-        await page.waitForTimeout(3000);
-        if (!/\/students\/[0-9]/.test(page.url())) { result.studentNotFound = true; return result; }
-        const addBtn = page.getByRole("button", { name: /add application/i }).first();
-        if (!(await addBtn.count())) { result.error = "no Add Application button"; return result; }
-        await addBtn.click({ timeout: 6000 }).catch(() => {});
-        await page.waitForTimeout(2500);
-        for (const __re of [/academic year/i, /semester|intake|term/i]) {
-          try {
-            const __c = page.getByRole("button", { name: __re }).first();
-            if (await __c.count()) { await __c.click({ timeout: 4000 }).catch(() => {}); await page.waitForTimeout(900); const __o = page.getByRole("option").first(); if (await __o.count()) await __o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(1000); }
-          } catch (e) {}
-        }
-        await pick(/select country/i, "Turk");
-        await pick(/select university/i, profile.universityName);
-        await pick(/select degree/i, profile.level);
-        await pick(/select program/i, profile.programName);
-        const createBtn = page.getByRole("button", { name: /create application/i }).first();
-        if (!(await createBtn.count())) { result.error = "no Create Application button"; return result; }
-        if (dryRun) { result.dryReachedFinal = true; logger.warn("[sit] DRY: stopping before Create Application"); return result; }
-        await createBtn.click({ timeout: 8000 }).catch(() => {});
-        await page.waitForTimeout(6000);
-        result.submitted = true;
-      } catch (e: any) { result.error = e.message; }
-      logger.info("[sit] submit " + JSON.stringify(result));
-      return result;
+    const student = await this.createStudent(
+      session,
+      profile,
+      files,
+      effectiveSubmit,
+    );
+
+    const app = await this.createApplication(
+      session,
+      profile,
+      student.studentId,
+      effectiveSubmit,
+    );
+
+    const detail = [
+      student.alreadyExists
+        ? "öğrenci mevcut"
+        : student.created
+          ? "öğrenci oluşturuldu"
+          : "öğrenci oluşturulmadı",
+      app.detail ??
+        (app.submitted
+          ? "başvuru oluşturuldu"
+          : app.alreadyExists
+            ? "başvuru mevcut"
+            : "başvuru oluşturulmadı"),
+    ].join(" · ");
+
+    const result: SubmitResult = {
+      alreadyExists: app.alreadyExists,
+      submitted: app.submitted,
+      programMissing: app.programMissing,
+      detail,
+    };
+    if (app.externalRef) result.externalRef = app.externalRef;
+    logger.info("[sit] submit " + JSON.stringify(result));
+    return result;
   },
 };
