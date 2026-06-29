@@ -86,6 +86,14 @@ The portal rejects passport/transcript/diploma uploaded as JPG/PNG with "Dosya t
 
 **How to apply:** detection is CONTENT-based (sharp.metadata + magic bytes), never the DB mimeType/extension — a PNG mislabeled `.jpg`/`image/jpeg` is still handled. If a new portal needs different per-slot formats, change the slot→format mapping here, not in the adapter.
 
+### 7b. Oversized docs (>1.8 MB) → compressed AFTER conversion (gs / sharp)
+
+Topkapı reports oversized uploads as "Dosya türü geçersiz" (misleading — it's a SIZE limit, ~1.8 MB). `shrinkIfBig()` runs inside `ensureUploadFormat` AFTER the format conversion: PDFs via Ghostscript (`gs -sDEVICE=pdfwrite -dPDFSETTINGS=/ebook`), images via `sharp` resize ≤1600w jpeg q72. PDF-vs-image is decided by `%PDF-` MAGIC BYTES, not extension — a base64-path PDF keeps a `.bin` name, so extension checks misroute it into sharp and throw. Never throws / never enlarges (returns original on failure or non-smaller output). `gs` is NOT in the Replit dev env (graceful fallback) — it must be installed on the VPS worker for PDF compression to actually fire.
+
+### IMPORTANT: portal-runner is NOT in `typecheck:libs`
+
+`pnpm run typecheck:libs` (tsc --build) does NOT cover `lib/portal-runner` (it ships raw src, not built). A broken portal-runner edit (e.g. a missing `const execFileP = promisify(execFile)`) passes `typecheck:libs` silently. To typecheck portal-runner: `pnpm --filter @workspace/portal-runner exec tsc --noEmit -p tsconfig.json` — but that ALSO drags in topkapi adapter.ts's pre-existing `$eval` DOM + duplicate-country-key (TS1117) errors (present on HEAD, NOT regressions); grep the output for `profile.ts` to see only your own errors.
+
 ---
 
 ## 8. Master Tezli/Tezsiz lives in the program NAME, not the degree level

@@ -18,6 +18,8 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   db,
   portalSubmissionsTable,
@@ -28,6 +30,8 @@ import {
 import { eq, and, isNull } from "drizzle-orm";
 import { buildProfile, mapDocType, REQUIRED_DOCS } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
+
+const execFileP = promisify(execFile);
 
 // ---------------------------------------------------------------------------
 // Result shape
@@ -233,18 +237,106 @@ async function ensurePdfDocument(
 }
 
 /**
+ * Upper size bound for an uploaded document. The Topkapı portal rejects files
+ * over its limit with a misleading "Dosya türü geçersiz" (invalid file type)
+ * error, so anything above this is shrunk before upload.
+ */
+const MAX_UPLOAD_BYTES = 1.8 * 1024 * 1024;
+
+/** True when the file starts with the %PDF- magic bytes (content, not ext). */
+async function isPdfFile(filePath: string): Promise<boolean> {
+  try {
+    const fh = await fs.open(filePath, "r");
+    try {
+      const head = Buffer.alloc(5);
+      await fh.read(head, 0, 5, 0);
+      return head.toString("latin1") === "%PDF-";
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Shrinks a document that exceeds MAX_UPLOAD_BYTES. PDFs are compressed with
+ * Ghostscript (/ebook preset); images are downscaled to ≤1600px wide JPEG q72.
+ * Detection is CONTENT-based (magic bytes) — a real PDF saved with a `.bin`
+ * extension (base64 path) is still routed to Ghostscript, not sharp.
+ *
+ * Never throws and never enlarges: on any failure, or if the compressed output
+ * is not strictly smaller, the original path is returned so the upload still
+ * proceeds. Files already within the limit pass through untouched.
+ */
+async function shrinkIfBig(filePath: string, logLabel: string): Promise<string> {
+  let size: number;
+  try {
+    size = (await fs.stat(filePath)).size;
+  } catch {
+    return filePath;
+  }
+  if (size <= MAX_UPLOAD_BYTES) return filePath;
+
+  const kb = (n: number) => Math.round(n / 1024);
+
+  // --- PDF → Ghostscript ---------------------------------------------------
+  if (await isPdfFile(filePath)) {
+    const out = filePath.replace(/\.[^.]+$/, "") + ".min.pdf";
+    try {
+      await execFileP("gs", [
+        "-sDEVICE=pdfwrite",
+        "-dCompatibilityLevel=1.4",
+        "-dPDFSETTINGS=/ebook",
+        "-dNOPAUSE",
+        "-dQUIET",
+        "-dBATCH",
+        `-sOutputFile=${out}`,
+        filePath,
+      ]);
+      const outSize = (await fs.stat(out)).size;
+      if (outSize > 0 && outSize < size) {
+        console.log(`[portal-profile] ${logLabel} compressed pdf ${kb(size)}→${kb(outSize)} KB`);
+        return out;
+      }
+    } catch (err) {
+      console.warn(`[portal-profile] ${logLabel} gs compress failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return filePath;
+  }
+
+  // --- Image → sharp -------------------------------------------------------
+  const out = filePath.replace(/\.[^.]+$/, "") + ".min.jpg";
+  try {
+    await sharp(filePath)
+      .resize({ width: 1600, withoutEnlargement: true })
+      .jpeg({ quality: 72 })
+      .toFile(out);
+    const outSize = (await fs.stat(out)).size;
+    if (outSize > 0 && outSize < size) {
+      console.log(`[portal-profile] ${logLabel} compressed image ${kb(size)}→${kb(outSize)} KB`);
+      return out;
+    }
+  } catch (err) {
+    console.warn(`[portal-profile] ${logLabel} image compress failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return filePath;
+}
+
+/**
  * Per-slot upload-format normalization. photo → JPEG; passport / transcript /
- * diploma → PDF. Both helpers are content-based and never throw.
+ * diploma → PDF. Both helpers are content-based and never throw. After the
+ * format conversion, oversized files (>MAX_UPLOAD_BYTES) are compressed.
  */
 async function ensureUploadFormat(
   filePath: string,
   docKey: string,
   logLabel: string,
 ): Promise<string> {
-  if (PDF_DOC_SLOTS.has(docKey)) {
-    return ensurePdfDocument(filePath, docKey, logLabel);
-  }
-  return ensureJpegImage(filePath, docKey, logLabel);
+  const converted = PDF_DOC_SLOTS.has(docKey)
+    ? await ensurePdfDocument(filePath, docKey, logLabel)
+    : await ensureJpegImage(filePath, docKey, logLabel);
+  return shrinkIfBig(converted, logLabel);
 }
 
 /**
