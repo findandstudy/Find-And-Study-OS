@@ -237,9 +237,10 @@ async function ensurePdfDocument(
 }
 
 /**
- * Upper size bound for an uploaded document. The Topkapı portal rejects files
- * over its limit with a misleading "Dosya türü geçersiz" (invalid file type)
- * error, so anything above this is shrunk before upload.
+ * Upper size bound for an uploaded image. The Topkapı portal rejects files over
+ * its limit with a misleading "Dosya türü geçersiz" (invalid file type) error,
+ * so oversized images are downscaled before upload. PDFs are handled separately
+ * (always normalized through Ghostscript regardless of size — see below).
  */
 const MAX_UPLOAD_BYTES = 1.8 * 1024 * 1024;
 
@@ -260,27 +261,38 @@ async function isPdfFile(filePath: string): Promise<boolean> {
 }
 
 /**
- * Shrinks a document that exceeds MAX_UPLOAD_BYTES. PDFs are compressed with
- * Ghostscript (/ebook preset); images are downscaled to ≤1600px wide JPEG q72.
- * Detection is CONTENT-based (magic bytes) — a real PDF saved with a `.bin`
- * extension (base64 path) is still routed to Ghostscript, not sharp.
+ * Normalizes a document for upload to the portal.
  *
- * Never throws and never enlarges: on any failure, or if the compressed output
- * is not strictly smaller, the original path is returned so the upload still
- * proceeds. Files already within the limit pass through untouched.
+ * The Topkapı portal rejects raw CRM PDFs with a misleading "Dosya türü
+ * geçersiz" (invalid file type) error, but accepts the same content once it has
+ * been rewritten by Ghostscript. So EVERY PDF is normalized through Ghostscript
+ * regardless of size (no size threshold, no size comparison — the goal is a
+ * portal-compatible rewrite, not compression). If `gs` errors or produces an
+ * empty file, the original is used so the upload still proceeds.
+ *
+ * Images (the photo slot stays a JPEG) are instead downscaled to ≤1600px wide
+ * JPEG q72 only when they exceed MAX_UPLOAD_BYTES, returning the original unless
+ * the result is strictly smaller.
+ *
+ * Detection is CONTENT-based (magic bytes) — a real PDF saved with a `.bin`
+ * extension (base64 path) is still routed to Ghostscript, not sharp. Never
+ * throws: on any failure the original path is returned.
  */
-async function shrinkIfBig(filePath: string, logLabel: string): Promise<string> {
+async function normalizeForUpload(
+  filePath: string,
+  docKey: string,
+  logLabel: string,
+): Promise<string> {
   let size: number;
   try {
     size = (await fs.stat(filePath)).size;
   } catch {
     return filePath;
   }
-  if (size <= MAX_UPLOAD_BYTES) return filePath;
 
   const kb = (n: number) => Math.round(n / 1024);
 
-  // --- PDF → Ghostscript ---------------------------------------------------
+  // --- PDF → Ghostscript (ALWAYS normalize, any size) ----------------------
   if (await isPdfFile(filePath)) {
     const out = filePath.replace(/\.[^.]+$/, "") + ".min.pdf";
     try {
@@ -295,17 +307,18 @@ async function shrinkIfBig(filePath: string, logLabel: string): Promise<string> 
         filePath,
       ]);
       const outSize = (await fs.stat(out)).size;
-      if (outSize > 0 && outSize < size) {
-        console.log(`[portal-profile] ${logLabel} compressed pdf ${kb(size)}→${kb(outSize)} KB`);
+      if (outSize > 0) {
+        console.log(`[portal-profile] ${logLabel} normalized pdf ${docKey} ${kb(size)}→${kb(outSize)} KB`);
         return out;
       }
     } catch (err) {
-      console.warn(`[portal-profile] ${logLabel} gs compress failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`[portal-profile] ${logLabel} gs normalize failed — slot=${docKey}: ${err instanceof Error ? err.message : String(err)}`);
     }
     return filePath;
   }
 
-  // --- Image → sharp -------------------------------------------------------
+  // --- Image → sharp (only when oversized) ---------------------------------
+  if (size <= MAX_UPLOAD_BYTES) return filePath;
   const out = filePath.replace(/\.[^.]+$/, "") + ".min.jpg";
   try {
     await sharp(filePath)
@@ -314,19 +327,20 @@ async function shrinkIfBig(filePath: string, logLabel: string): Promise<string> 
       .toFile(out);
     const outSize = (await fs.stat(out)).size;
     if (outSize > 0 && outSize < size) {
-      console.log(`[portal-profile] ${logLabel} compressed image ${kb(size)}→${kb(outSize)} KB`);
+      console.log(`[portal-profile] ${logLabel} compressed image ${docKey} ${kb(size)}→${kb(outSize)} KB`);
       return out;
     }
   } catch (err) {
-    console.warn(`[portal-profile] ${logLabel} image compress failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`[portal-profile] ${logLabel} image compress failed — slot=${docKey}: ${err instanceof Error ? err.message : String(err)}`);
   }
   return filePath;
 }
 
 /**
  * Per-slot upload-format normalization. photo → JPEG; passport / transcript /
- * diploma → PDF. Both helpers are content-based and never throw. After the
- * format conversion, oversized files (>MAX_UPLOAD_BYTES) are compressed.
+ * diploma → PDF (image→pdf via pdf-lib). Both helpers are content-based and
+ * never throw. After conversion, every PDF (native or image→pdf output) is
+ * rewritten through Ghostscript; oversized photos are downscaled.
  */
 async function ensureUploadFormat(
   filePath: string,
@@ -336,7 +350,7 @@ async function ensureUploadFormat(
   const converted = PDF_DOC_SLOTS.has(docKey)
     ? await ensurePdfDocument(filePath, docKey, logLabel)
     : await ensureJpegImage(filePath, docKey, logLabel);
-  return shrinkIfBig(converted, logLabel);
+  return normalizeForUpload(converted, docKey, logLabel);
 }
 
 /**
