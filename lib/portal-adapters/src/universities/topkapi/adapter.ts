@@ -711,6 +711,12 @@ export const topkapiAdapter: UniversityAdapter = {
         `[topkapi] No program match for "${profile.programName}" (programId=${profile.programId}). All ${programOptions.length} options (value: label):`,
         programOptions.map((o) => `${o.id}: ${o.name}`),
       );
+      // Full, NON-truncated dump (logger array args can be clipped by the log
+      // transport) — every option as {v,t} so missing program values are visible.
+      console.log(
+        "[topkapi] ALL OPTIONS:",
+        JSON.stringify(programOptions.map((o) => ({ v: o.id, t: o.name }))),
+      );
       { const s = await takeShot(page, "step4-no-program"); if (s) screenshots.push(s); }
       return {
         programMissing: true,
