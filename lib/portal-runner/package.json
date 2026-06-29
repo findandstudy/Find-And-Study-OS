@@ -10,7 +10,8 @@
     "@workspace/db": "workspace:*",
     "@workspace/object-storage": "workspace:*",
     "@workspace/portal-adapters": "workspace:*",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "sharp": "^0.35.2"
   },
   "devDependencies": {
     "@types/node": "catalog:",

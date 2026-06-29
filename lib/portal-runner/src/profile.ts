@@ -16,6 +16,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import sharp from "sharp";
 import {
   db,
   portalSubmissionsTable,
@@ -95,6 +96,60 @@ interface DownloadedDocs {
 }
 
 /**
+ * Non-JPEG raster image formats we convert to JPEG. JPEG is intentionally
+ * absent (already accepted), as are vector/document formats (svg, pdf) and any
+ * format sharp reports that we don't want to rasterize.
+ */
+const CONVERTIBLE_RASTER_FORMATS = new Set([
+  "png",
+  "webp",
+  "gif",
+  "tiff",
+  "avif",
+  "heif", // HEIC reports as "heif" — converted only if this sharp build supports it
+]);
+
+/**
+ * Some portals (e.g. Topkapı) accept only JPG/JPEG for the photo and reject
+ * PNG / WEBP / HEIC with "Dosya türü geçersiz". Convert any non-JPEG raster
+ * IMAGE to JPEG before upload (PDFs and already-JPEG files are left untouched).
+ *
+ * Detection is CONTENT-based via sharp.metadata() — the extension and DB
+ * mimeType are NOT trusted, so a PNG mislabeled as .jpg / image/jpeg is still
+ * converted. Only formats in CONVERTIBLE_RASTER_FORMATS are converted, so real
+ * JPEGs, PDFs, SVGs and anything sharp can't read are left exactly as-is.
+ * Returns the (possibly new .jpg) path; never throws — on failure the original
+ * path is returned so the upload still proceeds.
+ */
+async function ensureJpegImage(
+  filePath: string,
+  docKey: string,
+  logLabel: string,
+): Promise<string> {
+  let format: string | undefined;
+  try {
+    format = (await sharp(filePath).metadata()).format;
+  } catch {
+    // Not a sharp-decodable image (e.g. PDF or unsupported codec) — leave as is.
+    return filePath;
+  }
+  if (!format || !CONVERTIBLE_RASTER_FORMATS.has(format)) return filePath;
+
+  const jpgPath = filePath.replace(/\.[^.]+$/, "") + ".jpg";
+  try {
+    await sharp(filePath).jpeg({ quality: 90 }).toFile(jpgPath);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[portal-profile] ${logLabel} jpeg conversion failed — slot=${docKey} format=${format}: ${msg}`,
+    );
+    return filePath;
+  }
+  console.log(`[portal-profile] ${logLabel} converted ${docKey} ${format}→jpg`);
+  return jpgPath;
+}
+
+/**
  * Downloads a student's documents into a fresh temp directory.
  *
  * Document resolution order per slot:
@@ -166,7 +221,7 @@ async function downloadStudentDocuments(
           const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "bin";
           const dest = path.join(tempDir, `${docKey}.${ext}`);
           await downloadFile(url, dest);
-          files[docKey] = dest;
+          files[docKey] = await ensureJpegImage(dest, docKey, logLabel);
           return;
         }
 
@@ -175,7 +230,7 @@ async function downloadStudentDocuments(
           const buf = Buffer.from(doc.fileData, "base64");
           const dest = path.join(tempDir, `${docKey}.bin`);
           await fs.writeFile(dest, buf);
-          files[docKey] = dest;
+          files[docKey] = await ensureJpegImage(dest, docKey, logLabel);
           return;
         }
       } catch (err) {
