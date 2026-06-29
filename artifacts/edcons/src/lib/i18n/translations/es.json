@@ -4800,6 +4800,10 @@
       },
       "defaultsDialog": {
         "title": "Edit Defaults",
+        "editTitle": "Edit University",
+        "nameLabel": "University Name",
+        "adapterLabel": "Portal Adapter",
+        "defaultsHeading": "Submission Defaults",
         "description": "Set the default values pre-filled when submitting to this portal.",
         "intakeLabel": "Default Intake Type",
         "intakeNone": "— None —",
@@ -4842,7 +4846,14 @@
         "clearSuccess": "Credenciales eliminadas.",
         "clearError": "Error al eliminar las credenciales."
       },
-      "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters."
+      "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters.",
+      "deleteButton": "Delete",
+      "deleteConfirmTitle": "Delete university?",
+      "deleteConfirmDescription": "This will remove \"{{name}}\" from portal automation. Existing submissions are kept. This action cannot be undone.",
+      "deleteConfirmButton": "Delete",
+      "deleting": "Deleting…",
+      "deleteSuccess": "University deleted.",
+      "deleteError": "Failed to delete university."
     },
     "programMapping": {
       "title": "Program Mapping",

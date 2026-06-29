@@ -4800,6 +4800,10 @@
       },
       "defaultsDialog": {
         "title": "Varsayılanları Düzenle",
+        "editTitle": "Üniversiteyi Düzenle",
+        "nameLabel": "Üniversite Adı",
+        "adapterLabel": "Portal Adaptörü",
+        "defaultsHeading": "Gönderim Varsayılanları",
         "description": "Bu portala gönderimde önceden doldurulacak varsayılan değerleri ayarlayın.",
         "intakeLabel": "Varsayılan Başvuru Dönemi",
         "intakeNone": "— Yok —",
@@ -4842,7 +4846,14 @@
         "clearSuccess": "Kimlik bilgileri silindi.",
         "clearError": "Kimlik bilgileri silinemedi."
       },
-      "autoProcessExperimentalBlocked": "Deneysel adaptörlerde otomatik işleme devre dışıdır."
+      "autoProcessExperimentalBlocked": "Deneysel adaptörlerde otomatik işleme devre dışıdır.",
+      "deleteButton": "Sil",
+      "deleteConfirmTitle": "Üniversite silinsin mi?",
+      "deleteConfirmDescription": "\"{{name}}\" portal otomasyonundan kaldırılacak. Mevcut gönderimler korunur. Bu işlem geri alınamaz.",
+      "deleteConfirmButton": "Sil",
+      "deleting": "Siliniyor…",
+      "deleteSuccess": "Üniversite silindi.",
+      "deleteError": "Üniversite silinemedi."
     },
     "programMapping": {
       "title": "Program Haritalama",

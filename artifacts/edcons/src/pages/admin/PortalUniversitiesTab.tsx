@@ -42,6 +42,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Plus,
   Search,
   CheckCircle2,
@@ -263,16 +273,19 @@ interface EditDefaultsDialogProps {
   uni: PortalUniversity | null;
   onClose: () => void;
   onSaved: (updated: PortalUniversity) => void;
+  registryAdapters: RegistryAdapter[];
 }
 
 const INTAKE_OPTIONS = ["fall", "spring", "summer", "rolling"] as const;
 const DEGREE_OPTIONS = ["bachelor", "master", "phd"] as const;
 
-function EditDefaultsDialog({ uni, onClose, onSaved }: EditDefaultsDialogProps) {
+function EditDefaultsDialog({ uni, onClose, onSaved, registryAdapters }: EditDefaultsDialogProps) {
   const { t } = useI18n();
   const { toast } = useToast();
   const defaults = (uni?.defaults ?? {}) as UniversityDefaults;
 
+  const [name,        setName]        = useState(uni?.universityName ?? "");
+  const [adapterKey,  setAdapterKey]  = useState(uni?.adapterKey     ?? "");
   const [intakeType,  setIntakeType]  = useState(defaults.intakeType  ?? "");
   const [semester,    setSemester]    = useState(defaults.semester     ?? "");
   const [degreeLevel, setDegreeLevel] = useState(defaults.degreeLevel  ?? "");
@@ -281,13 +294,25 @@ function EditDefaultsDialog({ uni, onClose, onSaved }: EditDefaultsDialogProps) 
   // Sync when uni changes
   useEffect(() => {
     const d = (uni?.defaults ?? {}) as UniversityDefaults;
+    setName(uni?.universityName ?? "");
+    setAdapterKey(uni?.adapterKey ?? "");
     setIntakeType(d.intakeType ?? "");
     setSemester(d.semester ?? "");
     setDegreeLevel(d.degreeLevel ?? "");
   }, [uni]);
 
+  // The stored adapter may not be present in the live registry — keep it
+  // selectable so editing other fields never silently drops the binding.
+  const adapterOptions = useMemo(() => {
+    const list = registryAdapters.map((a) => ({ key: a.key, label: a.label, kind: a.kind }));
+    if (adapterKey && !list.some((a) => a.key === adapterKey)) {
+      list.unshift({ key: adapterKey, label: adapterKey, kind: "code" });
+    }
+    return list;
+  }, [registryAdapters, adapterKey]);
+
   const save = async () => {
-    if (!uni) return;
+    if (!uni || !name.trim() || !adapterKey) return;
     setSaving(true);
     const newDefaults: UniversityDefaults = {};
     if (intakeType)  newDefaults.intakeType  = intakeType;
@@ -299,6 +324,8 @@ function EditDefaultsDialog({ uni, onClose, onSaved }: EditDefaultsDialogProps) 
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          universityName: name.trim(),
+          adapterKey,
           defaults: Object.keys(newDefaults).length ? newDefaults : null,
         }),
       });
@@ -336,7 +363,7 @@ function EditDefaultsDialog({ uni, onClose, onSaved }: EditDefaultsDialogProps) 
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {t("portalAutomation.unis.defaultsDialog.title")}
+            {t("portalAutomation.unis.defaultsDialog.editTitle")}
             {uni && (
               <span className="ml-2 text-sm font-normal text-muted-foreground">
                 — {uni.universityName}
@@ -345,11 +372,45 @@ function EditDefaultsDialog({ uni, onClose, onSaved }: EditDefaultsDialogProps) 
           </DialogTitle>
         </DialogHeader>
 
-        <p className="text-sm text-muted-foreground">
-          {t("portalAutomation.unis.defaultsDialog.description")}
-        </p>
-
         <div className="space-y-4 py-1">
+          {/* University name */}
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-uni-name">{t("portalAutomation.unis.defaultsDialog.nameLabel")}</Label>
+            <Input
+              id="edit-uni-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="İstanbul Üniversitesi"
+            />
+          </div>
+
+          {/* Adapter */}
+          <div className="space-y-1.5">
+            <Label>{t("portalAutomation.unis.defaultsDialog.adapterLabel")}</Label>
+            <Select value={adapterKey} onValueChange={setAdapterKey}>
+              <SelectTrigger>
+                <SelectValue placeholder={t("portalAutomation.unis.defaultsDialog.adapterLabel")} />
+              </SelectTrigger>
+              <SelectContent>
+                {adapterOptions.map((a) => (
+                  <SelectItem key={a.key} value={a.key}>
+                    <span className="font-medium">{a.label}</span>
+                    <span className="ml-2 text-xs text-muted-foreground font-mono">({a.key})</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="border-t pt-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              {t("portalAutomation.unis.defaultsDialog.defaultsHeading")}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {t("portalAutomation.unis.defaultsDialog.description")}
+            </p>
+          </div>
+
           {/* Intake type */}
           <div className="space-y-1.5">
             <Label>{t("portalAutomation.unis.defaultsDialog.intakeLabel")}</Label>
@@ -402,7 +463,7 @@ function EditDefaultsDialog({ uni, onClose, onSaved }: EditDefaultsDialogProps) 
           <Button variant="outline" onClick={onClose} disabled={saving}>
             {t("common.cancel")}
           </Button>
-          <Button onClick={save} disabled={saving}>
+          <Button onClick={save} disabled={saving || !name.trim() || !adapterKey}>
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {saving
               ? t("portalAutomation.unis.defaultsDialog.saving")
@@ -627,13 +688,14 @@ interface RowProps {
   onTestLogin: (id: number) => Promise<void>;
   onEditDefaults: (uni: PortalUniversity) => void;
   onManageCreds: (uni: PortalUniversity) => void;
+  onDelete: (uni: PortalUniversity) => void;
   experimental:           boolean;
   togglingId:             number | null;
   togglingAutoProcessId:  number | null;
   testingId:              number | null;
 }
 
-function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, experimental, togglingId, togglingAutoProcessId, testingId }: RowProps) {
+function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, onDelete, experimental, togglingId, togglingAutoProcessId, testingId }: RowProps) {
   const { t } = useI18n();
   const isToggling            = togglingId            === uni.id;
   const isTogglingAutoProcess = togglingAutoProcessId === uni.id;
@@ -807,6 +869,26 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEdit
                 ? t("portalAutomation.unis.testLoginTesting")
                 : t("portalAutomation.unis.testLoginButton")}
             </Button>
+
+            {/* Delete button */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => onDelete(uni)}
+                    aria-label={t("portalAutomation.unis.deleteButton")}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {t("portalAutomation.unis.deleteButton")}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
       </CardContent>
@@ -835,6 +917,8 @@ export default function PortalUniversitiesTab() {
   const [addOpen, setAddOpen]         = useState(false);
   const [editTarget, setEditTarget]   = useState<PortalUniversity | null>(null);
   const [credsTarget, setCredsTarget] = useState<PortalUniversity | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PortalUniversity | null>(null);
+  const [deletingId, setDeletingId]   = useState<number | null>(null);
   const [registryAdapters, setRegistryAdapters] = useState<RegistryAdapter[]>([]);
 
   const experimentalKeys = useMemo(
@@ -947,6 +1031,24 @@ export default function PortalUniversitiesTab() {
     }
   };
 
+  // Soft-delete a university
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeletingId(target.id);
+    try {
+      await customFetch(`/api/portal-universities/${target.id}`, { method: "DELETE" });
+      setUnis((prev) => prev.filter((u) => u.id !== target.id));
+      setTotal((n) => Math.max(0, n - 1));
+      toast({ title: t("portalAutomation.unis.deleteSuccess") });
+      setDeleteTarget(null);
+    } catch {
+      toast({ title: t("portalAutomation.unis.deleteError"), variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   // After creation — prepend to list
   const handleCreated = (uni: PortalUniversity) => {
     setUnis((prev) => [uni, ...prev]);
@@ -1010,6 +1112,7 @@ export default function PortalUniversitiesTab() {
               onTestLogin={handleTestLogin}
               onEditDefaults={setEditTarget}
               onManageCreds={setCredsTarget}
+              onDelete={setDeleteTarget}
               experimental={experimentalKeys.has(uni.adapterKey)}
               togglingId={togglingId}
               togglingAutoProcessId={togglingAutoProcessId}
@@ -1037,6 +1140,7 @@ export default function PortalUniversitiesTab() {
         uni={editTarget}
         onClose={() => setEditTarget(null)}
         onSaved={handleDefaultsSaved}
+        registryAdapters={registryAdapters}
       />
 
       {/* Credentials dialog */}
@@ -1046,6 +1150,31 @@ export default function PortalUniversitiesTab() {
         onSaved={handleCredsSaved}
         onCleared={handleCredsCleared}
       />
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o && deletingId === null) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("portalAutomation.unis.deleteConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("portalAutomation.unis.deleteConfirmDescription", { name: deleteTarget?.universityName ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingId !== null}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); void handleDelete(); }}
+              disabled={deletingId !== null}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingId !== null && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {deletingId !== null
+                ? t("portalAutomation.unis.deleting")
+                : t("portalAutomation.unis.deleteConfirmButton")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
