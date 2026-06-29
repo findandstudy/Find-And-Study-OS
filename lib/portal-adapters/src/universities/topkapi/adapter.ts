@@ -734,11 +734,12 @@ export const topkapiAdapter: UniversityAdapter = {
     }
 
     // ── FINAL SUBMIT ─────────────────────────────────────────────────────────
-    // A bare HTTP 200 is NOT proof of submission. Real success requires the
-    // COMBINATION of: (a) confirming the .jconfirm summary modal (when it
-    // appears), (b) a 2xx/3xx response from application-save.php, and (c) the
-    // page landing on /applications/success/<uuid>. The <uuid> is returned as
-    // externalRef so the runner persists it to portal_submissions.external_ref.
+    // Success criterion mirrors the proven fas-automation engine: a 2xx/3xx
+    // response from application-save.php IS the submission proof (submitted=true).
+    // The /applications/success/<uuid> redirect is best-effort — used only to
+    // capture externalRef when present; it is NOT required for success. The
+    // captured <uuid> is returned as externalRef so the runner persists it to
+    // portal_submissions.external_ref.
     logger.info("[topkapi] clicking Başvuruyu Tamamla");
 
     // Clear any leftover modal, then make sure the final-submit button is reachable.
@@ -790,34 +791,38 @@ export const topkapiAdapter: UniversityAdapter = {
     const saveStatus = resp ? resp.status() : 0;
     logger.info("[topkapi] application-save.php " + saveStatus);
 
-    // (c) Confirm the success redirect and capture the application uuid.
+    // (c) Best-effort: wait for the success redirect to capture the application
+    // uuid. This is NOT a success condition — a missing redirect does not fail.
     await page
-      .waitForURL(/\/applications\/success\/[0-9a-f-]{8,}/i, { timeout: 8000 })
+      .waitForURL(/\/applications\/success\/[0-9a-f-]{8,}/i, { timeout: 15000 })
       .catch(() => {});
-    await page.waitForTimeout(2000).catch(() => {});
     const successMatch = page.url().match(/\/applications\/success\/([0-9a-f-]{8,})/i);
     const externalRef = successMatch ? successMatch[1] : undefined;
 
     { const s2 = await takeShot(page, "final").catch(() => null); if (s2) screenshots.push(s2); }
 
-    // HTTP 200 alone is NEVER success — require save-ok AND the success uuid.
+    // Submission proof = application-save.php 2xx/3xx. The success-url is optional.
     const saveOk = !!resp && saveStatus >= 200 && saveStatus < 400;
-    const submitted = saveOk && externalRef !== undefined;
+    const submitted = saveOk;
 
     if (submitted) {
-      logger.info("[topkapi] success url " + externalRef);
+      if (externalRef !== undefined) {
+        logger.info("[topkapi] success url " + externalRef);
+      } else {
+        logger.warn("[topkapi] saved but success-url not captured — save=" + saveStatus + " url=" + page.url());
+      }
       return { submitted: true, alreadyExists: false, programMissing: false, externalRef, screenshots };
     }
 
     logger.warn(
-      "[topkapi] no success url — save=" + saveStatus + " modal=" + modalAppeared + " url=" + page.url(),
+      "[topkapi] submit not saved — save=" + saveStatus + " modal=" + modalAppeared + " url=" + page.url(),
     );
     return {
       submitted: false,
       alreadyExists: false,
       programMissing: false,
       detail:
-        "submit confirmation not reached (modal/save/success-url); application-save.php status " + saveStatus,
+        "submit not confirmed — application-save.php did not return 2xx/3xx (status " + saveStatus + ")",
       screenshots,
     };
   },

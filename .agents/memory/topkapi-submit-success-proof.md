@@ -5,29 +5,27 @@ description: Why a portal HTTP 200 is not proof of submission, and what counts a
 
 # Topkapı final-submit success proof
 
-A bare HTTP 200 from the portal's save endpoint is NOT proof that an application
-was actually created. The Topkapı adapter once set `submitted=true` on a passive
-`application-save.php` 2xx/3xx listener — but the portal showed no record and
-`external_ref` was empty (false positive).
+**Current rule (matches the proven fas-automation engine):** the submission
+proof is a 2xx/3xx response from `application-save.php`. That alone sets
+`submitted = saveOk`. The `/applications/success/<uuid>` redirect is BEST-EFFORT
+— used only to capture `externalRef` when present; a missing redirect does NOT
+fail the submit (log "saved but success-url not captured").
 
-**Real success = the COMBINATION of:**
-1. confirming the `.jconfirm` summary modal when it appears (optional — not all
-   flows show it),
-2. a 2xx/3xx response from `application-save.php` (arm `waitForResponse` BEFORE
-   the submit click so a fast response is never missed — a passive listener races),
-3. the page landing on `/applications/success/<uuid>`.
+History: an earlier version required the COMBINATION (modal + save 2xx/3xx +
+success-url uuid) to fix a false-positive, but that proved TOO STRICT — a real
+save-200 with no/late success redirect was wrongly reported as failed. The
+owner deliberately reverted to the save-200 = success behavior with optional
+external_ref. Do not re-tighten without an explicit request.
 
-`submitted = saveOk && externalRef !== undefined`, where `externalRef` is the
-`<uuid>` parsed from the success URL. HTTP 200 alone is never success. On failure
-return `submitted=false` with a meaningful `detail` so the run is recorded as
-`failed`, never `submitted`.
+**Mechanics that stay regardless of the criterion:**
+- Arm `waitForResponse(application-save.php)` BEFORE the submit click (a passive
+  `page.on("response")` listener races a fast response and misses it).
+- Confirm the optional `.jconfirm` summary modal when it appears.
+- `saveOk = !!resp && status>=200 && status<400`. If save is NOT 2xx/3xx →
+  `submitted=false` with a meaningful `detail` (no false positive).
 
-**Why:** silent false-positives mean students look "submitted" in the CRM while
-no portal record exists — the worst failure mode for the automation.
-
-**How to apply:** any portal adapter's real-submit branch should prove success by
-a portal-side artifact (success URL / confirmation id), not just a network status.
-`SubmitResult.externalRef` carries that id; the runner writeback
-(`stageWriteback.ts`) persists it to `portal_submissions.external_ref` ONLY when
-present (conditional spread) so a later non-submitted run can't clobber it. Never
-touch the DRY (`doSubmit=false`) branch when changing real-submit logic.
+**How to apply:** `SubmitResult.externalRef` carries the captured uuid; the
+runner writeback (`stageWriteback.ts`) persists it to
+`portal_submissions.external_ref` ONLY when present (conditional spread) so a
+later run with no ref can't clobber it. Never touch the DRY (`doSubmit=false`)
+branch, `alreadyExists`, or `programMissing` when changing real-submit logic.
