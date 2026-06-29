@@ -119,6 +119,9 @@ export async function writebackResult(
                         ? { ...runResult.meta, result: runResult.result }
                         : { error: errorMessage ?? "unknown error" },
       screenshotUrls: runResult?.screenshotUrls ?? [],
+      // Persist the portal-assigned reference (e.g. Topkapı success-page uuid)
+      // only when present so a later non-submitted run never clobbers it.
+      ...(result?.externalRef ? { externalRef: result.externalRef } : {}),
       error:          submissionStatus === "failed"
                         ? (errorMessage ?? "submission failed")
                         : null,

@@ -734,52 +734,92 @@ export const topkapiAdapter: UniversityAdapter = {
     }
 
     // ── FINAL SUBMIT ─────────────────────────────────────────────────────────
+    // A bare HTTP 200 is NOT proof of submission. Real success requires the
+    // COMBINATION of: (a) confirming the .jconfirm summary modal (when it
+    // appears), (b) a 2xx/3xx response from application-save.php, and (c) the
+    // page landing on /applications/success/<uuid>. The <uuid> is returned as
+    // externalRef so the runner persists it to portal_submissions.external_ref.
     logger.info("[topkapi] clicking Başvuruyu Tamamla");
-    let saveStatus = 0;
-  page.on("response", (r) => { try { if (r.url().includes("application-save.php")) saveStatus = r.status(); } catch (e) {} });
 
+    // Clear any leftover modal, then make sure the final-submit button is reachable.
     for (let i = 0; i < 5; i++) { if ((await page.locator(".jconfirm.jconfirm-open").count()) === 0) break; await dismissJconfirm(page, logger); await page.waitForTimeout(400); }
-  for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 5; i++) {
       const finBtn = page.getByRole("button", { name: /Başvuruyu Tamamla/i });
       if (await finBtn.isVisible().catch(() => false)) { logger.warn("[topkapi] final-submit visible after " + i + " advance(s)"); break; }
       logger.warn("[topkapi] advancing to final step (Sonraki Adım) #" + (i + 1));
       await clickNext(page, logger).catch(() => {});
       await page.waitForTimeout(1800).catch(() => {});
     }
-  await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click().catch(async () => { await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click({ force: true }).catch(() => {}); });
 
-    // Handle optional jconfirm confirmation modal
-    try {
-      await page.waitForSelector(".jconfirm", { timeout: 6000 });
-      try {
-        await page
-          .locator(".jconfirm")
-          .getByRole("button", { name: /Tamamla|Onayla|Evet|Gönder|Confirm/i })
-          .first()
-          .click({ timeout: 2000 });
-      } catch {
-        await page
+    // Arm the application-save.php response wait BEFORE clicking submit so we
+    // never miss a fast response.
+    const savePromise = page
+      .waitForResponse((r) => r.url().includes("application-save.php"), { timeout: 45_000 })
+      .catch(() => null);
+
+    await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click().catch(async () => { await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click({ force: true }).catch(() => {}); });
+
+    // (a) Confirm the optional .jconfirm summary modal if it appears.
+    const modalAppeared = await page
+      .waitForSelector(".jconfirm", { timeout: 6000 })
+      .then(() => true)
+      .catch(() => false);
+    if (modalAppeared) {
+      let confirmed = await page
+        .locator(".jconfirm")
+        .getByRole("button", { name: /Tamamla|Onayla|Evet|Gönder|Confirm/i })
+        .first()
+        .click({ timeout: 2000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!confirmed) {
+        confirmed = await page
           .locator(".jconfirm .btn-blue, .jconfirm .btn-primary, .jconfirm button")
           .first()
-          .click({ timeout: 2000 });
+          .click({ timeout: 2000 })
+          .then(() => true)
+          .catch(() => false);
       }
-    } catch { /* no modal — direct submit */ }
-  for (let i = 0; i < 30 && saveStatus === 0; i++) { await page.waitForTimeout(1000).catch(() => {}); }
+      logger.info("[topkapi] summary modal " + (confirmed ? "confirmed" : "appeared but confirm click failed"));
+    } else {
+      logger.info("[topkapi] no summary modal — direct submit");
+    }
 
-  { const s2 = await takeShot(page, "final").catch(() => null); if (s2) screenshots.push(s2); }
+    // (b) Wait for the application-save.php response (2xx/3xx == saved).
+    const resp = await savePromise;
+    const saveStatus = resp ? resp.status() : 0;
+    logger.info("[topkapi] application-save.php " + saveStatus);
 
-  if (saveStatus >= 200 && saveStatus < 400) {
-    logger.info("[topkapi] application submitted (HTTP " + saveStatus + ")");
-    return { submitted: true, alreadyExists: false, programMissing: false, screenshots };
-  }
-  logger.warn("[topkapi] application-save.php status=" + saveStatus + " (0=no response captured)");
-  return {
-    submitted: false,
-    alreadyExists: false,
-    programMissing: false,
-    detail: "application-save.php status " + saveStatus,
-    screenshots,
-  };
+    // (c) Confirm the success redirect and capture the application uuid.
+    await page
+      .waitForURL(/\/applications\/success\/[0-9a-f-]{8,}/i, { timeout: 8000 })
+      .catch(() => {});
+    await page.waitForTimeout(2000).catch(() => {});
+    const successMatch = page.url().match(/\/applications\/success\/([0-9a-f-]{8,})/i);
+    const externalRef = successMatch ? successMatch[1] : undefined;
+
+    { const s2 = await takeShot(page, "final").catch(() => null); if (s2) screenshots.push(s2); }
+
+    // HTTP 200 alone is NEVER success — require save-ok AND the success uuid.
+    const saveOk = !!resp && saveStatus >= 200 && saveStatus < 400;
+    const submitted = saveOk && externalRef !== undefined;
+
+    if (submitted) {
+      logger.info("[topkapi] success url " + externalRef);
+      return { submitted: true, alreadyExists: false, programMissing: false, externalRef, screenshots };
+    }
+
+    logger.warn(
+      "[topkapi] no success url — save=" + saveStatus + " modal=" + modalAppeared + " url=" + page.url(),
+    );
+    return {
+      submitted: false,
+      alreadyExists: false,
+      programMissing: false,
+      detail:
+        "submit confirmation not reached (modal/save/success-url); application-save.php status " + saveStatus,
+      screenshots,
+    };
   },
 };
 
