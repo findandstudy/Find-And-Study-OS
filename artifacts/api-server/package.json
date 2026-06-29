@@ -102,6 +102,7 @@
     "pdf-lib": "^1.17.1",
     "playwright-core": "^1.59.1",
     "rate-limiter-flexible": "^11.0.1",
+    "sharp": "^0.35.2",
     "xlsx": "npm:@e965/xlsx@^0.20.3",
     "zod": "catalog:"
   },

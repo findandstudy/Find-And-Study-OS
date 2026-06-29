@@ -281,6 +281,9 @@ importers:
       rate-limiter-flexible:
         specifier: ^11.0.1
         version: 11.0.1
+      sharp:
+        specifier: ^0.35.2
+        version: 0.35.2
       xlsx:
         specifier: npm:@e965/xlsx@^0.20.3
         version: '@e965/xlsx@0.20.3'
