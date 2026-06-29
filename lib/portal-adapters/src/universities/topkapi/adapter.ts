@@ -9,7 +9,7 @@ import type {
 import type { Page } from "playwright-core";
 import { launchPortal, saveState, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
-import { matchProgram } from "../../programMatch.js";
+import { matchProgram, fold } from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -196,11 +196,16 @@ function resolveCountry(
 // ---------------------------------------------------------------------------
 // Education level → Topkapi portal value
 // ---------------------------------------------------------------------------
-function mapEduLevel(level: string): string {
+function mapEduLevel(level: string, programName = ""): string {
   const f = level.toLowerCase();
   if (/associate|önlisans|onlisans|foundation/.test(f)) return "Associate";
   if (/master|yüksek|yuksek/.test(f)) {
-    if (/non[- ]?thesis|tezsiz/.test(f)) return "Masters (Non Thesis)";
+    // Thesis vs non-thesis is encoded in the CRM PROGRAM NAME (e.g. "İşletme
+    // Yüksek Lisans (Tezsiz)"), not the degree level — read both. fold()
+    // (not toLowerCase) so ALL-CAPS Turkish dotted-İ in "TEZSİZ" normalises
+    // correctly. Handles Turkish (tezli/tezsiz) and English (thesis/non-thesis).
+    const combined = fold(`${level} ${programName}`);
+    if (/non[- ]?thesis|tezsiz/.test(combined)) return "Masters (Non Thesis)";
     return "Masters (Thesis)";
   }
   if (/phd|doctor|doktora/.test(f)) return "Doctorate";
@@ -402,7 +407,7 @@ export const topkapiAdapter: UniversityAdapter = {
   ): Promise<SubmitResult> {
     const { page } = session;
     const country  = resolveCountry(profile.nationality, profile.countryOverrides);
-    const eduLevel = mapEduLevel(profile.level);
+    const eduLevel = mapEduLevel(profile.level, profile.programName);
     const screenshots: string[] = [];
 
     logger.info(
@@ -663,18 +668,48 @@ export const topkapiAdapter: UniversityAdapter = {
       ? { ...PROGRAM_MAP, ...profile.programOverrides }
       : PROGRAM_MAP;
 
-    const matchResult = matchProgram(
-      profile.programName,
-      programOptions,
-      profile.programId,
-      mergedProgramMap,
-      profile.programSynonyms,
-    );
+    // ── Explicit override resolution (DB program_overrides) ──────────────────
+    // The panel maps CRM programId → portal option value (or label). When an
+    // override exists for this application's programId, resolve it directly
+    // against the LIVE dropdown options BEFORE any fuzzy matching: by option
+    // value first, then exact folded label, then partial folded label. A hit
+    // wins with conf 1.0. A miss (stale/typo'd override) logs all options and
+    // falls back to fuzzy so a bad override never silently blocks a submission.
+    let matchResult: ReturnType<typeof matchProgram> = null;
+    const overrideValue = profile.programOverrides?.[String(profile.programId)];
+    if (overrideValue) {
+      const ovFolded = fold(overrideValue);
+      const found =
+        programOptions.find((o) => o.id === overrideValue) ??
+        programOptions.find((o) => fold(o.name) === ovFolded) ??
+        programOptions.find((o) => fold(o.name).includes(ovFolded));
+      if (found) {
+        logger.info(
+          `[topkapi] program override hit — programId=${profile.programId} → "${found.id}: ${found.name}" (override="${overrideValue}")`,
+        );
+        matchResult = { match: found, conf: 1.0 };
+      } else {
+        logger.warn(
+          `[topkapi] program override "${overrideValue}" (programId=${profile.programId}) matched no option — falling back to fuzzy. All ${programOptions.length} options:`,
+          programOptions.map((o) => `${o.id}: ${o.name}`),
+        );
+      }
+    }
+
+    if (!matchResult) {
+      matchResult = matchProgram(
+        profile.programName,
+        programOptions,
+        profile.programId,
+        mergedProgramMap,
+        profile.programSynonyms,
+      );
+    }
 
     if (!matchResult) {
       logger.warn(
-        "[topkapi] No program match. Available options:",
-        programOptions.map((o) => o.name),
+        `[topkapi] No program match for "${profile.programName}" (programId=${profile.programId}). All ${programOptions.length} options (value: label):`,
+        programOptions.map((o) => `${o.id}: ${o.name}`),
       );
       { const s = await takeShot(page, "step4-no-program"); if (s) screenshots.push(s); }
       return {

@@ -85,3 +85,19 @@ The portal rejects passport/transcript/diploma uploaded as JPG/PNG with "Dosya t
 **Where:** `lib/portal-runner/src/profile.ts` normalizes each downloaded doc before the adapter uploads it. `ensureUploadFormat()` dispatches by slot: `photo` → `ensureJpegImage`, `passport|transcript|diploma` (PDF_DOC_SLOTS) → `ensurePdfDocument` (wraps an image into a single-page PDF via pdf-lib; already-PDF detected by `%PDF-` magic bytes and passed through; non-decodable files left as-is).
 
 **How to apply:** detection is CONTENT-based (sharp.metadata + magic bytes), never the DB mimeType/extension — a PNG mislabeled `.jpg`/`image/jpeg` is still handled. If a new portal needs different per-slot formats, change the slot→format mapping here, not in the adapter.
+
+---
+
+## 8. Master Tezli/Tezsiz lives in the program NAME, not the degree level
+
+For Topkapı Master applications the thesis flag (Tezli/Tezsiz) is encoded in the CRM **program name** (e.g. "İşletme Yüksek Lisans (Tezsiz)"), NOT in `profile.level` (which is just "Yüksek Lisans"). So `mapEduLevel` must take BOTH `level` and `programName` and test the combined string; passing level alone silently defaults every master to "Masters (Thesis)".
+
+**How to apply:** detect Turkish (tezli/tezsiz) AND English (thesis/non-thesis); use `fold()` not `toLowerCase()` so ALL-CAPS Turkish "TEZSİZ" normalises (dotted-İ → i). Same dual-form rule applies to `programMatch.applyHardFilters` (hasTez/hasTezsiz) which only matches Turkish tokens.
+
+---
+
+## 9. DB program_overrides resolved against LIVE options before fuzzy
+
+`portal_program_mapping.program_overrides` (CRM programId → portal option value/label) is threaded as `profile.programOverrides` and must be resolved DIRECTLY against the live dropdown options BEFORE `matchProgram`: by exact option value → exact folded label → partial folded label. A hit wins conf 1.0. A miss must log ALL options as `"value: label"` and fall back to fuzzy — never hard-block on a stale/typo'd override.
+
+**Why:** `matchProgram`'s built-in override step only does exact id/folded-name match, so subtle portal-label drift silently fell through to fuzzy (which could pick the wrong Tezli/Tezsiz variant) with no debug trail. The explicit adapter-level path adds partial match + full option logging.
