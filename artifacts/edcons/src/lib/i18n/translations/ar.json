@@ -5071,6 +5071,26 @@
       "noPortals": "No portal universities configured.",
       "credentialsSet": "Credentials Set",
       "noCredentials": "No Credentials"
+    },
+    "manualSubmit": {
+      "newButton": "New Submission",
+      "title": "Manual Portal Submission",
+      "description": "Pick applications and queue them for portal submission without waiting for the auto-tour.",
+      "searchPlaceholder": "Search by student name, email or application #…",
+      "noResults": "No eligible applications found.",
+      "loadError": "Failed to load eligible applications.",
+      "modeDry": "Dry Run",
+      "modeLive": "Live",
+      "selectedCount": "{count} selected",
+      "queueButton": "Queue",
+      "queuedToast": "{count} submission(s) queued.",
+      "skippedNote": "{count} skipped (already queued or not eligible).",
+      "rateLimited": "Too many submissions, please slow down.",
+      "submitError": "Failed to queue submissions.",
+      "confirmTitle": "Submit live to the portal?",
+      "confirmBody": "{count} application(s) will be really submitted to the university portal. This cannot be undone.",
+      "confirmCancel": "Cancel",
+      "confirmAccept": "Submit live"
     }
   },
   "activityFeed": {

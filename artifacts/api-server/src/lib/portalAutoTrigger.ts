@@ -48,6 +48,47 @@ export interface AutoTriggerParams {
 const ACTIVE_STATUSES = ["queued", "running", "submitted"] as const;
 
 /**
+ * Resolves the active portal_universities row for an application's university,
+ * matching by crmUniversityId (exact) then universityName (case-insensitive).
+ *
+ * Single source of truth shared by the auto-trigger and the manual-submit
+ * endpoint so both pick the same adapter from the application's OWN record
+ * (never a hardcoded universityKey). Returns null when no active match exists.
+ */
+export async function findActivePortalUniversity(args: {
+  universityId: number | null;
+  universityName: string | null;
+}): Promise<typeof portalUniversitiesTable.$inferSelect | null> {
+  const { universityId, universityName } = args;
+  if (universityId == null && !universityName) return null;
+
+  const baseConditions = [
+    isNull(portalUniversitiesTable.deletedAt),
+    eq(portalUniversitiesTable.isActive, true),
+  ];
+
+  let matchCondition;
+  if (universityId != null && universityName) {
+    matchCondition = or(
+      eq(portalUniversitiesTable.crmUniversityId, universityId),
+      sql`LOWER(${portalUniversitiesTable.universityName}) = LOWER(${universityName})`,
+    );
+  } else if (universityId != null) {
+    matchCondition = eq(portalUniversitiesTable.crmUniversityId, universityId);
+  } else {
+    matchCondition = sql`LOWER(${portalUniversitiesTable.universityName}) = LOWER(${universityName!})`;
+  }
+
+  const [row] = await db
+    .select()
+    .from(portalUniversitiesTable)
+    .where(and(...baseConditions, matchCondition!))
+    .limit(1);
+
+  return row ?? null;
+}
+
+/**
  * Evaluates the portal-automation policy for the given application/stage
  * transition and inserts a portal_submissions row when all gates pass.
  *
@@ -74,31 +115,7 @@ export async function maybeEnqueuePortalSubmission(
   if (!triggerStages.includes(newStage)) return;
 
   // ----- Gate 2: find matching portal_universities row ------------------
-  if (!universityId && !universityName) return;
-
-  const baseConditions = [
-    isNull(portalUniversitiesTable.deletedAt),
-    eq(portalUniversitiesTable.isActive, true),
-  ];
-
-  // Match priority: crmUniversityId (exact) → name (case-insensitive)
-  let matchCondition;
-  if (universityId != null && universityName) {
-    matchCondition = or(
-      eq(portalUniversitiesTable.crmUniversityId, universityId),
-      sql`LOWER(${portalUniversitiesTable.universityName}) = LOWER(${universityName})`,
-    );
-  } else if (universityId != null) {
-    matchCondition = eq(portalUniversitiesTable.crmUniversityId, universityId);
-  } else {
-    matchCondition = sql`LOWER(${portalUniversitiesTable.universityName}) = LOWER(${universityName!})`;
-  }
-
-  const [portalUni] = await db
-    .select()
-    .from(portalUniversitiesTable)
-    .where(and(...baseConditions, matchCondition!))
-    .limit(1);
+  const portalUni = await findActivePortalUniversity({ universityId, universityName });
 
   if (!portalUni) return;
 

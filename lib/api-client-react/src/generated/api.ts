@@ -59,6 +59,8 @@ import type {
   ErrorResponse,
   GetActivitySummaryParams,
   GetBlogPostParams,
+  GetEligibleApplications200,
+  GetEligibleApplicationsParams,
   GetFinanceSummary200,
   GetFinanceSummaryParams,
   GetKommoSummaryParams,
@@ -94,6 +96,8 @@ import type {
   ListUniversityContracts200,
   ListUniversityContractsParams,
   ListUsersParams,
+  ManualSubmitBody,
+  ManualSubmitResult,
   MultiPortalListResponse,
   MultiPortalMembersResponse,
   Note,
@@ -8548,6 +8552,198 @@ export const useEnqueuePortalSubmission = <
 > => {
   return useMutation(getEnqueuePortalSubmissionMutationOptions(options));
 };
+
+/**
+ * @summary Manually queue one or many applications for portal submission
+ */
+export const getManualSubmitPortalUrl = () => {
+  return `/api/portal-automation/submit`;
+};
+
+export const manualSubmitPortal = async (
+  manualSubmitBody: ManualSubmitBody,
+  options?: RequestInit,
+): Promise<ManualSubmitResult> => {
+  return customFetch<ManualSubmitResult>(getManualSubmitPortalUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(manualSubmitBody),
+  });
+};
+
+export const getManualSubmitPortalMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof manualSubmitPortal>>,
+    TError,
+    { data: BodyType<ManualSubmitBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof manualSubmitPortal>>,
+  TError,
+  { data: BodyType<ManualSubmitBody> },
+  TContext
+> => {
+  const mutationKey = ["manualSubmitPortal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof manualSubmitPortal>>,
+    { data: BodyType<ManualSubmitBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return manualSubmitPortal(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ManualSubmitPortalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof manualSubmitPortal>>
+>;
+export type ManualSubmitPortalMutationBody = BodyType<ManualSubmitBody>;
+export type ManualSubmitPortalMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Manually queue one or many applications for portal submission
+ */
+export const useManualSubmitPortal = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof manualSubmitPortal>>,
+    TError,
+    { data: BodyType<ManualSubmitBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof manualSubmitPortal>>,
+  TError,
+  { data: BodyType<ManualSubmitBody> },
+  TContext
+> => {
+  return useMutation(getManualSubmitPortalMutationOptions(options));
+};
+
+/**
+ * @summary List applications eligible for manual portal submission
+ */
+export const getGetEligibleApplicationsUrl = (
+  params?: GetEligibleApplicationsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/portal-automation/eligible-applications?${stringifiedParams}`
+    : `/api/portal-automation/eligible-applications`;
+};
+
+export const getEligibleApplications = async (
+  params?: GetEligibleApplicationsParams,
+  options?: RequestInit,
+): Promise<GetEligibleApplications200> => {
+  return customFetch<GetEligibleApplications200>(
+    getGetEligibleApplicationsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetEligibleApplicationsQueryKey = (
+  params?: GetEligibleApplicationsParams,
+) => {
+  return [
+    `/api/portal-automation/eligible-applications`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetEligibleApplicationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEligibleApplications>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetEligibleApplicationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEligibleApplications>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetEligibleApplicationsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getEligibleApplications>>
+  > = ({ signal }) =>
+    getEligibleApplications(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getEligibleApplications>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetEligibleApplicationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEligibleApplications>>
+>;
+export type GetEligibleApplicationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List applications eligible for manual portal submission
+ */
+
+export function useGetEligibleApplications<
+  TData = Awaited<ReturnType<typeof getEligibleApplications>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetEligibleApplicationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEligibleApplications>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetEligibleApplicationsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List portal submissions (paginated)

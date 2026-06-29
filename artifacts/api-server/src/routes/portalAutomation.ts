@@ -1,14 +1,16 @@
 import { Router, type IRouter } from "express";
-import { and, asc, count, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
   applicationsTable,
+  studentsTable,
   portalSubmissionsTable,
   portalUniversitiesTable,
   portalProgramMappingTable,
   portalProgramCacheTable,
 } from "@workspace/db";
+import { findActivePortalUniversity } from "../lib/portalAutoTrigger.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import {
   adapterMetadata,
@@ -109,6 +111,240 @@ router.post(
     );
 
     res.status(201).json(row);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Manual submit — in-memory per-user rate limiter (short window).
+// Prevents an admin from hammering the queue; counts /submit calls per user.
+// ---------------------------------------------------------------------------
+const MANUAL_SUBMIT_WINDOW_MS = 10_000;
+const MANUAL_SUBMIT_MAX = 20;
+const _manualSubmitHits = new Map<number, number[]>();
+
+function manualSubmitRateLimited(userId: number): boolean {
+  const now = Date.now();
+  const recent = (_manualSubmitHits.get(userId) ?? []).filter(
+    (t) => now - t < MANUAL_SUBMIT_WINDOW_MS,
+  );
+  recent.push(now);
+  _manualSubmitHits.set(userId, recent);
+  return recent.length > MANUAL_SUBMIT_MAX;
+}
+
+// ---------------------------------------------------------------------------
+// POST /portal-automation/submit — manual enqueue of one or many applications
+//
+// Body: { applicationIds: number[], mode: "dry"|"real", confirm?: boolean }
+// The university/adapter is resolved from each application's OWN record
+// (findActivePortalUniversity); universityKey is never hardcoded. Queuing only
+// inserts status='queued' rows — it never enables auto-process (drain-once
+// still keys off portal_universities.autoProcess=true only).
+// ---------------------------------------------------------------------------
+const manualSubmitBodySchema = z.object({
+  applicationIds: z.array(z.coerce.number().int().positive()).min(1).max(100),
+  mode: z.enum(["dry", "real"]),
+  confirm: z.boolean().optional(),
+});
+type ManualSubmitSchemas = { body: typeof manualSubmitBodySchema };
+
+type SkipReason = "NOT_FOUND" | "NO_PORTAL" | "ALREADY_QUEUED";
+
+router.post(
+  "/portal-automation/submit",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ body: manualSubmitBodySchema }),
+  async (req, res): Promise<void> => {
+    const user = req.user!;
+    const { applicationIds, mode, confirm } = getValidated<ManualSubmitSchemas>(req).body;
+
+    if (manualSubmitRateLimited(user.id)) {
+      res.status(429).json({ error: "RATE_LIMITED", message: "Too many submissions, slow down." });
+      return;
+    }
+
+    if (mode === "real" && !confirm) {
+      res.status(422).json({
+        error: "CONFIRM_REQUIRED",
+        message: "Set confirm:true to submit in real mode",
+      });
+      return;
+    }
+
+    const uniqueIds = [...new Set(applicationIds)];
+
+    const apps = await db
+      .select({
+        id:             applicationsTable.id,
+        studentId:      applicationsTable.studentId,
+        universityId:   applicationsTable.universityId,
+        universityName: applicationsTable.universityName,
+      })
+      .from(applicationsTable)
+      .where(and(inArray(applicationsTable.id, uniqueIds), isNull(applicationsTable.deletedAt)));
+
+    const appMap = new Map(apps.map((a) => [a.id, a]));
+
+    const queued: { applicationId: number; submissionId: number; universityKey: string }[] = [];
+    const skipped: { applicationId: number; reason: SkipReason; submissionId?: number }[] = [];
+
+    for (const appId of uniqueIds) {
+      const app = appMap.get(appId);
+      if (!app) {
+        skipped.push({ applicationId: appId, reason: "NOT_FOUND" });
+        continue;
+      }
+
+      const portalUni = await findActivePortalUniversity({
+        universityId:   app.universityId,
+        universityName: app.universityName,
+      });
+      if (!portalUni) {
+        skipped.push({ applicationId: appId, reason: "NO_PORTAL" });
+        continue;
+      }
+
+      // Duplicate guard: an active (queued/running) submission for this
+      // application × university must not be re-queued.
+      const [existing] = await db
+        .select({ id: portalSubmissionsTable.id })
+        .from(portalSubmissionsTable)
+        .where(
+          and(
+            eq(portalSubmissionsTable.applicationId, appId),
+            eq(portalSubmissionsTable.universityKey, portalUni.universityKey),
+            inArray(portalSubmissionsTable.status, ["queued", "running"]),
+            isNull(portalSubmissionsTable.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (existing) {
+        skipped.push({ applicationId: appId, reason: "ALREADY_QUEUED", submissionId: existing.id });
+        continue;
+      }
+
+      const [row] = await db
+        .insert(portalSubmissionsTable)
+        .values({
+          applicationId:  appId,
+          studentId:      app.studentId,
+          universityKey:  portalUni.universityKey,
+          universityName: portalUni.universityName,
+          mode,
+          status:         "queued",
+          enqueuedBy:     user.id,
+        })
+        .returning({ id: portalSubmissionsTable.id });
+
+      queued.push({ applicationId: appId, submissionId: row.id, universityKey: portalUni.universityKey });
+    }
+
+    // Single-application strictness: surface the precise failure instead of an
+    // empty 200 so the per-application "Portala Gönder" button can react.
+    if (uniqueIds.length === 1 && queued.length === 0) {
+      const only = skipped[0];
+      if (only?.reason === "NOT_FOUND") {
+        res.status(404).json({ error: "NOT_FOUND" });
+        return;
+      }
+      if (only?.reason === "NO_PORTAL") {
+        res.status(400).json({
+          error: "NO_PORTAL",
+          message: "No active portal university matches this application",
+        });
+        return;
+      }
+      // ALREADY_QUEUED → fall through to a 200 idempotent response.
+    }
+
+    await logAudit(
+      user.id,
+      "portal.manualSubmit",
+      "portal_submission",
+      queued[0]?.submissionId ?? 0,
+      { ids: uniqueIds, mode, queued: queued.length, skipped: skipped.length },
+      req.ip,
+    );
+
+    res.status(queued.length > 0 ? 201 : 200).json({ queued, skipped });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/eligible-applications — searchable, paginated list of
+// applications that can be manually submitted (deleted_at IS NULL AND map to an
+// active portal_universities row). Optional filters: stage, universityKey, q.
+// ---------------------------------------------------------------------------
+const eligibleQuerySchema = z.object({
+  stage:         z.string().min(1).optional(),
+  universityKey: z.string().min(1).optional(),
+  q:             z.string().trim().min(1).optional(),
+});
+type EligibleSchemas = { query: typeof eligibleQuerySchema };
+
+router.get(
+  "/portal-automation/eligible-applications",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ query: eligibleQuerySchema }),
+  async (req, res): Promise<void> => {
+    const { stage, universityKey, q } = getValidated<EligibleSchemas>(req).query;
+    const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: "small" });
+
+    // An application is submittable when an active portal_universities row
+    // matches its university by crmUniversityId (exact) OR name (case-insensitive).
+    const joinCondition = and(
+      isNull(portalUniversitiesTable.deletedAt),
+      eq(portalUniversitiesTable.isActive, true),
+      or(
+        eq(portalUniversitiesTable.crmUniversityId, applicationsTable.universityId),
+        sql`LOWER(${portalUniversitiesTable.universityName}) = LOWER(${applicationsTable.universityName})`,
+      ),
+    );
+
+    const filters = and(
+      isNull(applicationsTable.deletedAt),
+      stage !== undefined ? eq(applicationsTable.stage, stage) : undefined,
+      universityKey !== undefined ? eq(portalUniversitiesTable.universityKey, universityKey) : undefined,
+      q !== undefined
+        ? or(
+            ilike(studentsTable.firstName, `%${q}%`),
+            ilike(studentsTable.lastName, `%${q}%`),
+            ilike(studentsTable.email, `%${q}%`),
+            sql`CAST(${applicationsTable.id} AS TEXT) = ${q}`,
+          )
+        : undefined,
+    );
+
+    const [{ total }] = await db
+      .select({ total: count(sql`DISTINCT ${applicationsTable.id}`) })
+      .from(applicationsTable)
+      .innerJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+      .innerJoin(portalUniversitiesTable, joinCondition)
+      .where(filters);
+
+    const rows = await db
+      .selectDistinctOn([applicationsTable.id], {
+        id:                  applicationsTable.id,
+        stage:               applicationsTable.stage,
+        universityName:      applicationsTable.universityName,
+        studentFirstName:    studentsTable.firstName,
+        studentLastName:     studentsTable.lastName,
+        studentEmail:        studentsTable.email,
+        portalUniversityKey: portalUniversitiesTable.universityKey,
+        portalUniversityName: portalUniversitiesTable.universityName,
+      })
+      .from(applicationsTable)
+      .innerJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+      .innerJoin(portalUniversitiesTable, joinCondition)
+      .where(filters)
+      .orderBy(desc(applicationsTable.id))
+      .limit(pageParams.limit)
+      .offset(pageParams.offset);
+
+    res.json({ data: rows, ...buildPageMeta(total, pageParams) });
   },
 );
 

@@ -2332,6 +2332,94 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /portal-automation/submit:
+    post:
+      operationId: manualSubmitPortal
+      tags: [portal-automation]
+      summary: Manually queue one or many applications for portal submission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualSubmitBody"
+      responses:
+        "200":
+          description: Nothing newly queued (all skipped)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualSubmitResult"
+        "201":
+          description: One or more submissions queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualSubmitResult"
+        "400":
+          description: Application has no matching active portal university (single)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Application not found or deleted (single)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Confirm required for real mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many submissions, rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-automation/eligible-applications:
+    get:
+      operationId: getEligibleApplications
+      tags: [portal-automation]
+      summary: List applications eligible for manual portal submission
+      parameters:
+        - name: stage
+          in: query
+          schema: { type: string }
+        - name: universityKey
+          in: query
+          schema: { type: string }
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Paginated list of eligible applications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EligibleApplication"
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+                  totalPages: { type: integer }
+                required: [data, total, page, limit, totalPages]
+
   /portal-submissions:
     get:
       operationId: getPortalSubmissions
@@ -5319,6 +5407,58 @@ components:
           enum: [dry, real]
         confirm: { type: boolean }
       required: [universityKey, mode]
+
+    ManualSubmitBody:
+      type: object
+      properties:
+        applicationIds:
+          type: array
+          items: { type: integer }
+          minItems: 1
+          maxItems: 100
+        mode:
+          type: string
+          enum: [dry, real]
+        confirm: { type: boolean }
+      required: [applicationIds, mode]
+
+    ManualSubmitResult:
+      type: object
+      properties:
+        queued:
+          type: array
+          items:
+            type: object
+            properties:
+              applicationId: { type: integer }
+              submissionId: { type: integer }
+              universityKey: { type: string }
+            required: [applicationId, submissionId, universityKey]
+        skipped:
+          type: array
+          items:
+            type: object
+            properties:
+              applicationId: { type: integer }
+              reason:
+                type: string
+                enum: [NOT_FOUND, NO_PORTAL, ALREADY_QUEUED]
+              submissionId: { type: integer }
+            required: [applicationId, reason]
+      required: [queued, skipped]
+
+    EligibleApplication:
+      type: object
+      properties:
+        id: { type: integer }
+        stage: { type: string }
+        universityName: { type: string, nullable: true }
+        studentFirstName: { type: string }
+        studentLastName: { type: string }
+        studentEmail: { type: string, nullable: true }
+        portalUniversityKey: { type: string }
+        portalUniversityName: { type: string }
+      required: [id, stage, studentFirstName, studentLastName, portalUniversityKey, portalUniversityName]
 
     UniversityPortal:
       type: object

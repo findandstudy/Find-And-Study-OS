@@ -26,9 +26,10 @@ import {
 import {
   RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
   CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
-  PlayCircle, ListStart, Eye,
+  PlayCircle, ListStart, Eye, Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ManualSubmitDialog } from "@/components/admin/ManualSubmitDialog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -296,6 +297,7 @@ export default function PortalSubmissionsTab() {
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [processingAll, setProcessingAll] = useState(false);
   const [resetingStuck, setResetingStuck] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
 
   const load = useCallback(async (p: number, status: string, mode: string) => {
     setLoading(true);
@@ -478,6 +480,15 @@ export default function PortalSubmissionsTab() {
           </Select>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={() => setManualOpen(true)}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {t("portalAutomation.manualSubmit.newButton")}
+          </Button>
           {hasRunning && (
             <Button
               variant="outline"
@@ -566,6 +577,12 @@ export default function PortalSubmissionsTab() {
           </Button>
         </div>
       )}
+
+      <ManualSubmitDialog
+        open={manualOpen}
+        onOpenChange={setManualOpen}
+        onQueued={() => load(1, statusFilter, modeFilter)}
+      />
     </div>
   );
 }

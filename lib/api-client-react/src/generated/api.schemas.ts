@@ -1883,6 +1883,61 @@ export interface EnqueuePortalSubmissionBody {
   confirm?: boolean;
 }
 
+export type ManualSubmitBodyMode =
+  (typeof ManualSubmitBodyMode)[keyof typeof ManualSubmitBodyMode];
+
+export const ManualSubmitBodyMode = {
+  dry: "dry",
+  real: "real",
+} as const;
+
+export interface ManualSubmitBody {
+  /**
+   * @minItems 1
+   * @maxItems 100
+   */
+  applicationIds: number[];
+  mode: ManualSubmitBodyMode;
+  confirm?: boolean;
+}
+
+export type ManualSubmitResultQueuedItem = {
+  applicationId: number;
+  submissionId: number;
+  universityKey: string;
+};
+
+export type ManualSubmitResultSkippedItemReason =
+  (typeof ManualSubmitResultSkippedItemReason)[keyof typeof ManualSubmitResultSkippedItemReason];
+
+export const ManualSubmitResultSkippedItemReason = {
+  NOT_FOUND: "NOT_FOUND",
+  NO_PORTAL: "NO_PORTAL",
+  ALREADY_QUEUED: "ALREADY_QUEUED",
+} as const;
+
+export type ManualSubmitResultSkippedItem = {
+  applicationId: number;
+  reason: ManualSubmitResultSkippedItemReason;
+  submissionId?: number;
+};
+
+export interface ManualSubmitResult {
+  queued: ManualSubmitResultQueuedItem[];
+  skipped: ManualSubmitResultSkippedItem[];
+}
+
+export interface EligibleApplication {
+  id: number;
+  stage: string;
+  universityName?: string | null;
+  studentFirstName: string;
+  studentLastName: string;
+  studentEmail?: string | null;
+  portalUniversityKey: string;
+  portalUniversityName: string;
+}
+
 export interface UniversityPortal {
   key: string;
   label: string;
@@ -2145,6 +2200,29 @@ export type GetUniversityContract200 = {
 
 export type UpdateUniversityContract200 = {
   data: UniversityContract;
+};
+
+export type GetEligibleApplicationsParams = {
+  stage?: string;
+  universityKey?: string;
+  q?: string;
+  /**
+   * @minimum 1
+   */
+  page?: number;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+};
+
+export type GetEligibleApplications200 = {
+  data: EligibleApplication[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };
 
 export type GetPortalSubmissionsParams = {

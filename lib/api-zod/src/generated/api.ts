@@ -2556,6 +2556,74 @@ export const EnqueuePortalSubmissionBody = zod.object({
 });
 
 /**
+ * @summary Manually queue one or many applications for portal submission
+ */
+export const manualSubmitPortalBodyApplicationIdsMax = 100;
+
+export const ManualSubmitPortalBody = zod.object({
+  applicationIds: zod
+    .array(zod.number())
+    .min(1)
+    .max(manualSubmitPortalBodyApplicationIdsMax),
+  mode: zod.enum(["dry", "real"]),
+  confirm: zod.boolean().optional(),
+});
+
+export const ManualSubmitPortalResponse = zod.object({
+  queued: zod.array(
+    zod.object({
+      applicationId: zod.number(),
+      submissionId: zod.number(),
+      universityKey: zod.string(),
+    }),
+  ),
+  skipped: zod.array(
+    zod.object({
+      applicationId: zod.number(),
+      reason: zod.enum(["NOT_FOUND", "NO_PORTAL", "ALREADY_QUEUED"]),
+      submissionId: zod.number().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary List applications eligible for manual portal submission
+ */
+
+export const getEligibleApplicationsQueryLimitMax = 100;
+
+export const GetEligibleApplicationsQueryParams = zod.object({
+  stage: zod.coerce.string().optional(),
+  universityKey: zod.coerce.string().optional(),
+  q: zod.coerce.string().optional(),
+  page: zod.coerce.number().min(1).optional(),
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(getEligibleApplicationsQueryLimitMax)
+    .optional(),
+});
+
+export const GetEligibleApplicationsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      stage: zod.string(),
+      universityName: zod.string().nullish(),
+      studentFirstName: zod.string(),
+      studentLastName: zod.string(),
+      studentEmail: zod.string().nullish(),
+      portalUniversityKey: zod.string(),
+      portalUniversityName: zod.string(),
+    }),
+  ),
+  total: zod.number(),
+  page: zod.number(),
+  limit: zod.number(),
+  totalPages: zod.number(),
+});
+
+/**
  * @summary List portal submissions (paginated)
  */
 

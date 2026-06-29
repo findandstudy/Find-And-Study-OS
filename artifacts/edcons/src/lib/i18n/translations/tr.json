@@ -5071,6 +5071,26 @@
       "noPortals": "Yapılandırılmış portal üniversitesi yok.",
       "credentialsSet": "Kimlik Bilgileri Ayarlı",
       "noCredentials": "Kimlik Bilgisi Yok"
+    },
+    "manualSubmit": {
+      "newButton": "Yeni Gönderim",
+      "title": "Manuel Portal Gönderimi",
+      "description": "Otomatik turu beklemeden başvuruları seçip portal gönderimi için kuyruğa alın.",
+      "searchPlaceholder": "Öğrenci adı, e-posta veya başvuru # ile ara…",
+      "noResults": "Uygun başvuru bulunamadı.",
+      "loadError": "Uygun başvurular yüklenemedi.",
+      "modeDry": "Test (Dry)",
+      "modeLive": "Canlı",
+      "selectedCount": "{count} seçili",
+      "queueButton": "Kuyruğa Al",
+      "queuedToast": "{count} gönderim kuyruğa alındı.",
+      "skippedNote": "{count} atlandı (zaten kuyrukta veya uygun değil).",
+      "rateLimited": "Çok fazla gönderim, lütfen yavaşlayın.",
+      "submitError": "Gönderimler kuyruğa alınamadı.",
+      "confirmTitle": "Portala canlı gönderilsin mi?",
+      "confirmBody": "{count} başvuru üniversite portalına gerçekten gönderilecek. Bu işlem geri alınamaz.",
+      "confirmCancel": "İptal",
+      "confirmAccept": "Canlı Gönder"
     }
   },
   "activityFeed": {
