@@ -123,6 +123,12 @@ const CONVERTIBLE_RASTER_FORMATS = new Set([
  * mimeType are NOT trusted, so a PNG mislabeled as .jpg / image/jpeg is still
  * converted. Only formats in CONVERTIBLE_RASTER_FORMATS are converted, so real
  * JPEGs, PDFs, SVGs and anything sharp can't read are left exactly as-is.
+ *
+ * The photo slot is the exception: Topkapı also rejects raw CRM JPEGs on the
+ * "Fotoğraf" field but accepts the same image once re-encoded through sharp, so
+ * the photo is ALWAYS re-encoded (regardless of input format) into a clean
+ * baseline sRGB JPEG with metadata stripped.
+ *
  * Returns the (possibly new .jpg) path; never throws — on failure the original
  * path is returned so the upload still proceeds.
  */
@@ -138,7 +144,41 @@ async function ensureJpegImage(
     // Not a sharp-decodable image (e.g. PDF or unsupported codec) — leave as is.
     return filePath;
   }
-  if (!format || !CONVERTIBLE_RASTER_FORMATS.has(format)) return filePath;
+  if (!format) return filePath;
+
+  // Photo slot: ALWAYS re-encode through sharp, even when already JPEG. The
+  // portal rejects raw CRM JPEGs but accepts sharp-re-encoded baseline JPEGs.
+  if (docKey === "photo") {
+    const jpgPath = filePath.replace(/\.[^.]+$/, "") + ".jpg";
+    const kb = (n: number) => Math.round(n / 1024);
+    let oldSize = 0;
+    try {
+      oldSize = (await fs.stat(filePath)).size;
+    } catch {
+      /* keep 0 */
+    }
+    try {
+      const out = await sharp(filePath)
+        .rotate() // bake in EXIF orientation
+        .flatten({ background: "#ffffff" }) // drop alpha → white
+        .resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 90, progressive: false, mozjpeg: false }) // baseline, no metadata
+        .toBuffer();
+      await fs.writeFile(jpgPath, out);
+      console.log(
+        `[portal-profile] ${logLabel} normalized photo ${kb(oldSize)}→${kb(out.length)} KB`,
+      );
+      return jpgPath;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[portal-profile] ${logLabel} photo normalize failed — format=${format}: ${msg}`,
+      );
+      return filePath;
+    }
+  }
+
+  if (!CONVERTIBLE_RASTER_FORMATS.has(format)) return filePath;
 
   const jpgPath = filePath.replace(/\.[^.]+$/, "") + ".jpg";
   try {
