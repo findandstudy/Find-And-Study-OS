@@ -18,6 +18,33 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface MultiPortalMember {
+  universityKey: string;
+  universityName: string;
+  adapterKey: string;
+}
+
+export interface MultiPortalCompany {
+  universityKey: string;
+  universityName: string;
+  adapterKey: string;
+  isActive: boolean;
+  members: MultiPortalMember[];
+}
+
+export interface MultiPortalListResponse {
+  data: MultiPortalCompany[];
+}
+
+export interface SetMultiPortalMembersBody {
+  universityKeys: string[];
+}
+
+export interface MultiPortalMembersResponse {
+  portalKey: string;
+  members: MultiPortalMember[];
+}
+
 export interface PaginationMeta {
   total: number;
   page: number;

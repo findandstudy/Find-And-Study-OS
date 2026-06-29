@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
@@ -30,6 +30,7 @@ import {
   buildStudentProfile,
   runSubmission,
   writebackResult,
+  resolveAdapterKey,
   type ClaimedSubmission,
 } from "@workspace/portal-runner";
 import { batchPortalCredentialKeys, resolvePortalCreds } from "../lib/portalCreds.js";
@@ -314,28 +315,6 @@ const STUCK_THRESHOLD_MS = 10 * 60_000; // 10 minutes
 /** Inline process timeout: responds early and requeues if work exceeds this. */
 const INLINE_TIMEOUT_MS = 50_000; // 50 seconds
 
-/**
- * Looks up the adapterKey for a universityKey from the portal_universities table.
- * Falls back to universityKey itself when the row isn't found (backward compat).
- */
-async function lookupAdapterKey(universityKey: string): Promise<string> {
-  try {
-    const [row] = await db
-      .select({ adapterKey: portalUniversitiesTable.adapterKey })
-      .from(portalUniversitiesTable)
-      .where(
-        and(
-          eq(portalUniversitiesTable.universityKey, universityKey),
-          isNull(portalUniversitiesTable.deletedAt),
-        ),
-      )
-      .limit(1);
-    return row?.adapterKey ?? universityKey;
-  } catch {
-    return universityKey;
-  }
-}
-
 interface ProcessSingleResult {
   id: number;
   status: "submitted" | "already_exists" | "program_missing" | "failed" | "dry_run" | "skipped" | "requeued";
@@ -370,11 +349,21 @@ async function runWithTimeout(
 
   const workPromise = (async (): Promise<ProcessSingleResult> => {
     const profileResult = await buildStudentProfile(sub.id);
-    const adapterKey = await lookupAdapterKey(sub.universityKey);
+    // Multi-portal routing: if this university routes_via a multi-portal company,
+    // resolveAdapterKey returns the company's adapterKey + the routedVia key.
+    // routedVia is null on the legacy path → no adapter override is passed, so
+    // behaviour is byte-for-byte identical to before this feature.
+    const { adapterKey, routedVia } = await resolveAdapterKey(sub.universityKey);
+    if (routedVia) {
+      console.log(
+        `[portal-process] #${sub.id} routed via multi-portal "${routedVia}" → adapter "${adapterKey}"`,
+      );
+    }
 
     let creds: { user: string; password: string } | undefined;
     try {
-      creds = await resolvePortalCreds(sub.universityKey, adapterKey);
+      // When routed, credentials belong to the multi-portal company (routedVia).
+      creds = await resolvePortalCreds(routedVia ?? sub.universityKey, adapterKey);
     } catch (credsErr) {
       if (sub.mode === "real") throw credsErr;
       // dry mode: missing creds → adapter login will fail and be caught
@@ -386,10 +375,15 @@ async function runWithTimeout(
       profileResult.files,
       profileResult.tempDir,
       creds,
+      routedVia ? { adapterKey } : undefined,
     );
     // Enrich resultJson with doc-slot info so skip reasons are surfaced in the UI
     runResult.meta["filledSlots"]  = profileResult.filledSlots;
     runResult.meta["missingSlots"] = profileResult.missingSlots;
+    if (routedVia) {
+      runResult.meta["routedVia"]      = routedVia;
+      runResult.meta["routedAdapter"]  = adapterKey;
+    }
     await writebackResult(sub.id, runResult, undefined, workerId);
 
     const status: ProcessSingleResult["status"] = runResult.meta["dryRun"]
@@ -977,6 +971,226 @@ router.put(
       countryOverrides: row.countryOverrides,
       updatedAt: row.updatedAt,
     });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/multi-portals
+//
+// Lists every multi-portal company (is_multi_portal=true) together with its
+// member universities (rows whose routes_via points at the company's key).
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-automation/multi-portals",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const portals = await db
+      .select({
+        universityKey: portalUniversitiesTable.universityKey,
+        universityName: portalUniversitiesTable.universityName,
+        adapterKey: portalUniversitiesTable.adapterKey,
+        isActive: portalUniversitiesTable.isActive,
+      })
+      .from(portalUniversitiesTable)
+      .where(
+        and(
+          eq(portalUniversitiesTable.isMultiPortal, true),
+          isNull(portalUniversitiesTable.deletedAt),
+        ),
+      )
+      .orderBy(asc(portalUniversitiesTable.universityName));
+
+    const portalKeys = portals.map((p) => p.universityKey);
+    const memberRows =
+      portalKeys.length > 0
+        ? await db
+            .select({
+              universityKey: portalUniversitiesTable.universityKey,
+              universityName: portalUniversitiesTable.universityName,
+              adapterKey: portalUniversitiesTable.adapterKey,
+              routesVia: portalUniversitiesTable.routesVia,
+            })
+            .from(portalUniversitiesTable)
+            .where(
+              and(
+                inArray(portalUniversitiesTable.routesVia, portalKeys),
+                isNull(portalUniversitiesTable.deletedAt),
+              ),
+            )
+            .orderBy(asc(portalUniversitiesTable.universityName))
+        : [];
+
+    const data = portals.map((p) => ({
+      ...p,
+      members: memberRows
+        .filter((m) => m.routesVia === p.universityKey)
+        .map((m) => ({
+          universityKey: m.universityKey,
+          universityName: m.universityName,
+          adapterKey: m.adapterKey,
+        })),
+    }));
+
+    res.json({ data });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// PUT /portal-automation/multi-portals/:key/members
+//
+// Sets the full member list for a multi-portal company. Selected universities
+// get routes_via=:key; universities previously routed here but omitted are
+// reset to NULL (own adapter). Routing assignment does NOT enable auto-process.
+// ---------------------------------------------------------------------------
+const putMembersBodySchema = z.object({
+  universityKeys: z.array(z.string().min(1)).max(1000),
+});
+type PutMembersSchemas = {
+  params: typeof uniKeyParamsSchema;
+  body: typeof putMembersBodySchema;
+};
+
+router.put(
+  "/portal-automation/multi-portals/:key/members",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: uniKeyParamsSchema, body: putMembersBodySchema }),
+  async (req, res): Promise<void> => {
+    const { key } = getValidated<PutMembersSchemas>(req).params;
+    const { universityKeys } = getValidated<PutMembersSchemas>(req).body;
+    const user = req.user!;
+
+    const portal = await getPortalUniversity(key);
+    if (!portal) {
+      res.status(404).json({ error: "PORTAL_NOT_FOUND" });
+      return;
+    }
+    if (!portal.isMultiPortal) {
+      res.status(400).json({
+        error: "NOT_MULTI_PORTAL",
+        message: `'${key}' is not a multi-portal company`,
+      });
+      return;
+    }
+
+    const requested = Array.from(new Set(universityKeys));
+
+    if (requested.includes(key)) {
+      res.status(400).json({
+        error: "INVALID_MEMBER",
+        message: "A multi-portal company cannot be its own member",
+      });
+      return;
+    }
+
+    if (requested.length > 0) {
+      const rows = await db
+        .select({
+          universityKey: portalUniversitiesTable.universityKey,
+          isMultiPortal: portalUniversitiesTable.isMultiPortal,
+          routesVia: portalUniversitiesTable.routesVia,
+        })
+        .from(portalUniversitiesTable)
+        .where(
+          and(
+            inArray(portalUniversitiesTable.universityKey, requested),
+            isNull(portalUniversitiesTable.deletedAt),
+          ),
+        );
+
+      const foundKeys = new Set(rows.map((r) => r.universityKey));
+      const missing = requested.filter((k) => !foundKeys.has(k));
+      if (missing.length > 0) {
+        res.status(404).json({
+          error: "MEMBER_NOT_FOUND",
+          message: `Unknown university key(s): ${missing.join(", ")}`,
+        });
+        return;
+      }
+
+      const portalsAmongMembers = rows
+        .filter((r) => r.isMultiPortal)
+        .map((r) => r.universityKey);
+      if (portalsAmongMembers.length > 0) {
+        res.status(400).json({
+          error: "INVALID_MEMBER",
+          message: `Cannot route a multi-portal company through another: ${portalsAmongMembers.join(", ")}`,
+        });
+        return;
+      }
+
+      // Double-assign block: a university already routed to a DIFFERENT portal.
+      const conflicts = rows
+        .filter((r) => r.routesVia && r.routesVia !== key)
+        .map((r) => r.universityKey);
+      if (conflicts.length > 0) {
+        res.status(409).json({
+          error: "ALREADY_ASSIGNED",
+          message: `Already assigned to another multi-portal: ${conflicts.join(", ")}`,
+        });
+        return;
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      // Detach removed members (previously routed here, now omitted).
+      const clearCondition =
+        requested.length > 0
+          ? and(
+              eq(portalUniversitiesTable.routesVia, key),
+              notInArray(portalUniversitiesTable.universityKey, requested),
+              isNull(portalUniversitiesTable.deletedAt),
+            )
+          : and(
+              eq(portalUniversitiesTable.routesVia, key),
+              isNull(portalUniversitiesTable.deletedAt),
+            );
+      await tx
+        .update(portalUniversitiesTable)
+        .set({ routesVia: null, updatedAt: new Date() })
+        .where(clearCondition);
+
+      // Attach selected members. Note: only routes_via changes — auto_process
+      // is intentionally left untouched so routing never enables auto-process.
+      if (requested.length > 0) {
+        await tx
+          .update(portalUniversitiesTable)
+          .set({ routesVia: key, updatedAt: new Date() })
+          .where(
+            and(
+              inArray(portalUniversitiesTable.universityKey, requested),
+              isNull(portalUniversitiesTable.deletedAt),
+            ),
+          );
+      }
+    });
+
+    logAudit(
+      user.id,
+      "portal.routing.update",
+      "portal_university",
+      portal.id,
+      { portalKey: key, universityKeys: requested },
+      req.ip,
+    );
+
+    const members = await db
+      .select({
+        universityKey: portalUniversitiesTable.universityKey,
+        universityName: portalUniversitiesTable.universityName,
+        adapterKey: portalUniversitiesTable.adapterKey,
+      })
+      .from(portalUniversitiesTable)
+      .where(
+        and(
+          eq(portalUniversitiesTable.routesVia, key),
+          isNull(portalUniversitiesTable.deletedAt),
+        ),
+      )
+      .orderBy(asc(portalUniversitiesTable.universityName));
+
+    res.json({ portalKey: key, members });
   },
 );
 

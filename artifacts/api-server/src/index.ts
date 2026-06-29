@@ -1444,6 +1444,9 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE portal_automation_settings ADD COLUMN IF NOT EXISTS auto_process_interval_minutes INTEGER NOT NULL DEFAULT 20`);
     await pool.query(`ALTER TABLE portal_automation_settings ADD COLUMN IF NOT EXISTS last_auto_drain_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE portal_universities ADD COLUMN IF NOT EXISTS auto_process BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE portal_universities ADD COLUMN IF NOT EXISTS is_multi_portal BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE portal_universities ADD COLUMN IF NOT EXISTS routes_via TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_uni_routes_via_idx ON portal_universities (routes_via)`);
   } catch (err) {
     console.error("[migrate] portal_automation_settings/portal_universities:", err);
   }

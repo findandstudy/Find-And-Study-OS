@@ -94,6 +94,8 @@ import type {
   ListUniversityContracts200,
   ListUniversityContractsParams,
   ListUsersParams,
+  MultiPortalListResponse,
+  MultiPortalMembersResponse,
   Note,
   OkResponse,
   OverviewStats,
@@ -107,6 +109,7 @@ import type {
   RecordEntityViewResponse,
   RetryPortalSubmission200,
   ServiceFee,
+  SetMultiPortalMembersBody,
   SetPortalCredentialsBody,
   Settings,
   Student,
@@ -9455,4 +9458,170 @@ export const useUpdatePortalProgramMapping = <
   TContext
 > => {
   return useMutation(getUpdatePortalProgramMappingMutationOptions(options));
+};
+
+/**
+ * @summary List multi-portal companies and their member universities (admin only)
+ */
+export const getListMultiPortalsUrl = () => {
+  return `/api/portal-automation/multi-portals`;
+};
+
+export const listMultiPortals = async (
+  options?: RequestInit,
+): Promise<MultiPortalListResponse> => {
+  return customFetch<MultiPortalListResponse>(getListMultiPortalsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListMultiPortalsQueryKey = () => {
+  return [`/api/portal-automation/multi-portals`] as const;
+};
+
+export const getListMultiPortalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listMultiPortals>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMultiPortals>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListMultiPortalsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listMultiPortals>>
+  > = ({ signal }) => listMultiPortals({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listMultiPortals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListMultiPortalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listMultiPortals>>
+>;
+export type ListMultiPortalsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List multi-portal companies and their member universities (admin only)
+ */
+
+export function useListMultiPortals<
+  TData = Awaited<ReturnType<typeof listMultiPortals>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listMultiPortals>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListMultiPortalsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace the member university list for a multi-portal company (admin only)
+ */
+export const getSetMultiPortalMembersUrl = (key: string) => {
+  return `/api/portal-automation/multi-portals/${key}/members`;
+};
+
+export const setMultiPortalMembers = async (
+  key: string,
+  setMultiPortalMembersBody: SetMultiPortalMembersBody,
+  options?: RequestInit,
+): Promise<MultiPortalMembersResponse> => {
+  return customFetch<MultiPortalMembersResponse>(
+    getSetMultiPortalMembersUrl(key),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(setMultiPortalMembersBody),
+    },
+  );
+};
+
+export const getSetMultiPortalMembersMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setMultiPortalMembers>>,
+    TError,
+    { key: string; data: BodyType<SetMultiPortalMembersBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setMultiPortalMembers>>,
+  TError,
+  { key: string; data: BodyType<SetMultiPortalMembersBody> },
+  TContext
+> => {
+  const mutationKey = ["setMultiPortalMembers"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setMultiPortalMembers>>,
+    { key: string; data: BodyType<SetMultiPortalMembersBody> }
+  > = (props) => {
+    const { key, data } = props ?? {};
+
+    return setMultiPortalMembers(key, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetMultiPortalMembersMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setMultiPortalMembers>>
+>;
+export type SetMultiPortalMembersMutationBody =
+  BodyType<SetMultiPortalMembersBody>;
+export type SetMultiPortalMembersMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Replace the member university list for a multi-portal company (admin only)
+ */
+export const useSetMultiPortalMembers = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setMultiPortalMembers>>,
+    TError,
+    { key: string; data: BodyType<SetMultiPortalMembersBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setMultiPortalMembers>>,
+  TError,
+  { key: string; data: BodyType<SetMultiPortalMembersBody> },
+  TContext
+> => {
+  return useMutation(getSetMultiPortalMembersMutationOptions(options));
 };

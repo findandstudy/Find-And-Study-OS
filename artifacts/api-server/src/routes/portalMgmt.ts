@@ -411,6 +411,7 @@ const updateUniversityBodySchema = z.object({
   adapterKey:      z.string().min(1).optional(),
   crmUniversityId: z.coerce.number().int().positive().nullable().optional(),
   defaults:        z.record(z.unknown()).nullable().optional(),
+  isMultiPortal:   z.boolean().optional(),
 }).strict();
 type UpdateUniSchemas = { params: typeof idParamsSchema; body: typeof updateUniversityBodySchema };
 
@@ -461,12 +462,45 @@ router.patch(
     if (body.adapterKey      !== undefined) patch.adapterKey      = body.adapterKey;
     if ("crmUniversityId" in body)          patch.crmUniversityId = body.crmUniversityId ?? null;
     if ("defaults"        in body)          patch.defaults        = body.defaults ?? null;
+    if (body.isMultiPortal !== undefined)   patch.isMultiPortal   = body.isMultiPortal;
 
-    const [updated] = await db
-      .update(portalUniversitiesTable)
-      .set(patch)
-      .where(eq(portalUniversitiesTable.id, id))
-      .returning();
+    const keyRenamed =
+      body.universityKey !== undefined && body.universityKey !== row.universityKey;
+    const disabledMultiPortal = body.isMultiPortal === false;
+
+    const updated = await db.transaction(async (tx) => {
+      const [u] = await tx
+        .update(portalUniversitiesTable)
+        .set(patch)
+        .where(eq(portalUniversitiesTable.id, id))
+        .returning();
+
+      // If the multi-portal flag was turned OFF, detach its members so their
+      // routes_via no longer dangles on a non-portal company (falls back to own
+      // adapter). Routing changes never touch auto_process.
+      if (disabledMultiPortal) {
+        await tx
+          .update(portalUniversitiesTable)
+          .set({ routesVia: null, updatedAt: new Date() })
+          .where(and(
+            eq(portalUniversitiesTable.routesVia, row.universityKey),
+            isNull(portalUniversitiesTable.deletedAt),
+          ));
+      } else if (keyRenamed) {
+        // Renaming the company's key would orphan members whose routes_via
+        // still points at the OLD key (resolveAdapterKey would fall back to
+        // their own adapter). Propagate the rename so routing continuity holds.
+        await tx
+          .update(portalUniversitiesTable)
+          .set({ routesVia: body.universityKey!, updatedAt: new Date() })
+          .where(and(
+            eq(portalUniversitiesTable.routesVia, row.universityKey),
+            isNull(portalUniversitiesTable.deletedAt),
+          ));
+      }
+
+      return u;
+    });
 
     logAudit(
       user.id,

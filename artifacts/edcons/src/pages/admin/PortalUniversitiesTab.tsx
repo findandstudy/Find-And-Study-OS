@@ -63,8 +63,24 @@ import {
   Eye,
   EyeOff,
   Trash2,
+  Network,
+  Check,
+  X,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,7 +95,15 @@ interface PortalUniversity {
   isActive: boolean;
   autoProcess: boolean;
   hasCredentials: boolean;
+  isMultiPortal: boolean;
+  routesVia: string | null;
   createdAt: string;
+}
+
+interface MultiPortalMember {
+  universityKey: string;
+  universityName: string;
+  adapterKey: string;
 }
 
 interface RegistryAdapter {
@@ -289,6 +313,7 @@ function EditDefaultsDialog({ uni, onClose, onSaved, registryAdapters }: EditDef
   const [intakeType,  setIntakeType]  = useState(defaults.intakeType  ?? "");
   const [semester,    setSemester]    = useState(defaults.semester     ?? "");
   const [degreeLevel, setDegreeLevel] = useState(defaults.degreeLevel  ?? "");
+  const [isMultiPortal, setIsMultiPortal] = useState(uni?.isMultiPortal ?? false);
   const [saving, setSaving] = useState(false);
 
   // Sync when uni changes
@@ -299,6 +324,7 @@ function EditDefaultsDialog({ uni, onClose, onSaved, registryAdapters }: EditDef
     setIntakeType(d.intakeType ?? "");
     setSemester(d.semester ?? "");
     setDegreeLevel(d.degreeLevel ?? "");
+    setIsMultiPortal(uni?.isMultiPortal ?? false);
   }, [uni]);
 
   // The stored adapter may not be present in the live registry — keep it
@@ -327,6 +353,7 @@ function EditDefaultsDialog({ uni, onClose, onSaved, registryAdapters }: EditDef
           universityName: name.trim(),
           adapterKey,
           defaults: Object.keys(newDefaults).length ? newDefaults : null,
+          isMultiPortal,
         }),
       });
       toast({ title: t("portalAutomation.unis.defaultsDialog.saveSuccess") });
@@ -400,6 +427,24 @@ function EditDefaultsDialog({ uni, onClose, onSaved, registryAdapters }: EditDef
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Multi-portal company toggle */}
+          <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="edit-uni-multiportal" className="flex items-center gap-1.5">
+                <Network className="w-3.5 h-3.5" />
+                {t("portalAutomation.multiPortal.toggleLabel")}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {t("portalAutomation.multiPortal.toggleDescription")}
+              </p>
+            </div>
+            <Switch
+              id="edit-uni-multiportal"
+              checked={isMultiPortal}
+              onCheckedChange={setIsMultiPortal}
+            />
           </div>
 
           <div className="border-t pt-3">
@@ -678,6 +723,210 @@ function CredentialsDialog({ uni, onClose, onSaved, onCleared }: CredentialsDial
 }
 
 // ---------------------------------------------------------------------------
+// MultiPortalMembersDialog — manage which universities route through a company
+// ---------------------------------------------------------------------------
+interface MembersDialogProps {
+  portal: PortalUniversity | null;
+  allUnis: PortalUniversity[];
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+interface MembersResponse {
+  portalKey: string;
+  members: MultiPortalMember[];
+}
+
+function MultiPortalMembersDialog({ portal, allUnis, onClose, onSaved }: MembersDialogProps) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Candidates: active, non-deleted universities that are neither the portal
+  // itself nor multi-portal companies (you cannot nest portals).
+  const candidates = useMemo(
+    () =>
+      allUnis.filter(
+        (u) =>
+          portal &&
+          u.universityKey !== portal.universityKey &&
+          !u.isMultiPortal,
+      ),
+    [allUnis, portal],
+  );
+
+  // Load the current member list whenever a portal is opened.
+  useEffect(() => {
+    if (!portal) return;
+    let cancelled = false;
+    setLoading(true);
+    setSelected(new Set());
+    (async () => {
+      try {
+        const res = await customFetch<{ data: { universityKey: string; members: MultiPortalMember[] }[] }>(
+          "/api/portal-automation/multi-portals",
+        );
+        const entry = res.data.find((d) => d.universityKey === portal.universityKey);
+        if (!cancelled) {
+          setSelected(new Set((entry?.members ?? []).map((m) => m.universityKey)));
+        }
+      } catch {
+        if (!cancelled) {
+          toast({ title: t("portalAutomation.multiPortal.loadError"), variant: "destructive" });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [portal, t, toast]);
+
+  const toggle = (key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    if (!portal) return;
+    setSaving(true);
+    try {
+      await customFetch<MembersResponse>(
+        `/api/portal-automation/multi-portals/${encodeURIComponent(portal.universityKey)}/members`,
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ universityKeys: Array.from(selected) }),
+        },
+      );
+      toast({ title: t("portalAutomation.multiPortal.saveSuccess") });
+      onSaved();
+      onClose();
+    } catch {
+      toast({ title: t("portalAutomation.multiPortal.saveError"), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectedList = useMemo(
+    () => candidates.filter((c) => selected.has(c.universityKey)),
+    [candidates, selected],
+  );
+
+  return (
+    <Dialog open={!!portal} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Network className="w-4 h-4" />
+            {t("portalAutomation.multiPortal.membersTitle")}
+            {portal && (
+              <span className="text-sm font-normal text-muted-foreground">
+                — {portal.universityName}
+              </span>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3 py-1">
+          <p className="text-sm text-muted-foreground">
+            {t("portalAutomation.multiPortal.membersDescription")}
+          </p>
+
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-full rounded-md" />)}
+            </div>
+          ) : (
+            <>
+              {/* Multi-select picker */}
+              <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    {t("portalAutomation.multiPortal.addMembers")}
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder={t("portalAutomation.multiPortal.searchPlaceholder")} />
+                    <CommandList>
+                      <CommandEmpty>{t("portalAutomation.multiPortal.noCandidates")}</CommandEmpty>
+                      <CommandGroup>
+                        {candidates.map((c) => (
+                          <CommandItem
+                            key={c.universityKey}
+                            value={`${c.universityName} ${c.universityKey}`}
+                            onSelect={() => toggle(c.universityKey)}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${selected.has(c.universityKey) ? "opacity-100" : "opacity-0"}`}
+                            />
+                            <span className="font-medium">{c.universityName}</span>
+                            <span className="ml-2 text-xs text-muted-foreground font-mono">
+                              {c.universityKey}
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+
+              {/* Selected members */}
+              <div className="min-h-[60px] rounded-lg border p-2">
+                {selectedList.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-3">
+                    {t("portalAutomation.multiPortal.noMembers")}
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedList.map((m) => (
+                      <Badge key={m.universityKey} variant="secondary" className="gap-1 pr-1">
+                        {m.universityName}
+                        <button
+                          type="button"
+                          onClick={() => toggle(m.universityKey)}
+                          className="ml-0.5 rounded-sm hover:bg-muted-foreground/20"
+                          aria-label={t("common.remove")}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={save} disabled={saving || loading}>
+            {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {saving
+              ? t("portalAutomation.multiPortal.saving")
+              : t("portalAutomation.multiPortal.saveButton")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // UniversityRow
 // ---------------------------------------------------------------------------
 
@@ -688,6 +937,7 @@ interface RowProps {
   onTestLogin: (id: number) => Promise<void>;
   onEditDefaults: (uni: PortalUniversity) => void;
   onManageCreds: (uni: PortalUniversity) => void;
+  onManageMembers: (uni: PortalUniversity) => void;
   onDelete: (uni: PortalUniversity) => void;
   experimental:           boolean;
   togglingId:             number | null;
@@ -695,7 +945,7 @@ interface RowProps {
   testingId:              number | null;
 }
 
-function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, onDelete, experimental, togglingId, togglingAutoProcessId, testingId }: RowProps) {
+function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, onManageMembers, onDelete, experimental, togglingId, togglingAutoProcessId, testingId }: RowProps) {
   const { t } = useI18n();
   const isToggling            = togglingId            === uni.id;
   const isTogglingAutoProcess = togglingAutoProcessId === uni.id;
@@ -739,6 +989,20 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEdit
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              {/* Multi-portal company badge */}
+              {uni.isMultiPortal && (
+                <Badge className="gap-1 bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 text-xs py-0">
+                  <Network className="w-3 h-3" />
+                  {t("portalAutomation.multiPortal.badge")}
+                </Badge>
+              )}
+              {/* Routed-via badge (member of a multi-portal company) */}
+              {uni.routesVia && (
+                <Badge variant="outline" className="gap-1 text-[11px] py-0 h-4">
+                  <Network className="w-2.5 h-2.5" />
+                  {t("portalAutomation.multiPortal.routedVia", { portal: uni.routesVia })}
+                </Badge>
+              )}
             </div>
             {/* Sub-info */}
             <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -834,6 +1098,28 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEdit
               </Tooltip>
             </TooltipProvider>
 
+            {/* Manage Members button — only for multi-portal companies */}
+            {uni.isMultiPortal && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5"
+                      onClick={() => onManageMembers(uni)}
+                    >
+                      <Network className="w-3.5 h-3.5" />
+                      {t("portalAutomation.multiPortal.manageButton")}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t("portalAutomation.multiPortal.membersDescription")}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
             {/* Credentials button */}
             <TooltipProvider>
               <Tooltip>
@@ -917,6 +1203,7 @@ export default function PortalUniversitiesTab() {
   const [addOpen, setAddOpen]         = useState(false);
   const [editTarget, setEditTarget]   = useState<PortalUniversity | null>(null);
   const [credsTarget, setCredsTarget] = useState<PortalUniversity | null>(null);
+  const [membersTarget, setMembersTarget] = useState<PortalUniversity | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PortalUniversity | null>(null);
   const [deletingId, setDeletingId]   = useState<number | null>(null);
   const [registryAdapters, setRegistryAdapters] = useState<RegistryAdapter[]>([]);
@@ -1112,6 +1399,7 @@ export default function PortalUniversitiesTab() {
               onTestLogin={handleTestLogin}
               onEditDefaults={setEditTarget}
               onManageCreds={setCredsTarget}
+              onManageMembers={setMembersTarget}
               onDelete={setDeleteTarget}
               experimental={experimentalKeys.has(uni.adapterKey)}
               togglingId={togglingId}
@@ -1149,6 +1437,14 @@ export default function PortalUniversitiesTab() {
         onClose={() => setCredsTarget(null)}
         onSaved={handleCredsSaved}
         onCleared={handleCredsCleared}
+      />
+
+      {/* Multi-portal members dialog */}
+      <MultiPortalMembersDialog
+        portal={membersTarget}
+        allUnis={unis}
+        onClose={() => setMembersTarget(null)}
+        onSaved={() => load(search)}
       />
 
       {/* Delete confirmation */}

@@ -2780,3 +2780,46 @@ export const UpdatePortalProgramMappingResponse = zod.object({
   countryOverrides: zod.record(zod.string(), zod.string()),
   updatedAt: zod.date().nullish(),
 });
+
+/**
+ * @summary List multi-portal companies and their member universities (admin only)
+ */
+export const ListMultiPortalsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      universityKey: zod.string(),
+      universityName: zod.string(),
+      adapterKey: zod.string(),
+      isActive: zod.boolean(),
+      members: zod.array(
+        zod.object({
+          universityKey: zod.string(),
+          universityName: zod.string(),
+          adapterKey: zod.string(),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
+ * @summary Replace the member university list for a multi-portal company (admin only)
+ */
+export const SetMultiPortalMembersParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const SetMultiPortalMembersBody = zod.object({
+  universityKeys: zod.array(zod.string()),
+});
+
+export const SetMultiPortalMembersResponse = zod.object({
+  portalKey: zod.string(),
+  members: zod.array(
+    zod.object({
+      universityKey: zod.string(),
+      universityName: zod.string(),
+      adapterKey: zod.string(),
+    }),
+  ),
+});

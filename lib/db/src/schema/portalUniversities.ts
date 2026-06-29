@@ -24,6 +24,16 @@ export const portalUniversitiesTable = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     /** When true, scheduled drain-once.ts will include this university's queued submissions. */
     autoProcess: boolean("auto_process").notNull().default(false),
+    /**
+     * When true this row is a "multi-portal" company: a single panel that submits
+     * applications on behalf of several member universities (e.g. SIT, United).
+     */
+    isMultiPortal: boolean("is_multi_portal").notNull().default(false),
+    /**
+     * If set, applications for this university are routed through the multi-portal
+     * company whose `universityKey` equals this value. NULL = use own adapter.
+     */
+    routesVia: text("routes_via"),
     crmUniversityId: integer("crm_university_id"),
     defaults: jsonb("defaults").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -39,6 +49,7 @@ export const portalUniversitiesTable = pgTable(
     uniqueIndex("portal_uni_university_key_uniq").on(table.universityKey),
     index("portal_uni_adapter_key_idx").on(table.adapterKey),
     index("portal_uni_is_active_idx").on(table.isActive),
+    index("portal_uni_routes_via_idx").on(table.routesVia),
   ],
 );
 

@@ -4722,6 +4722,24 @@
     "studentNotice": "Для вашей заявки отсутствуют обязательные документы: {missing}"
   },
   "portalAutomation": {
+    "multiPortal": {
+      "toggleLabel": "Multi-portal company",
+      "toggleDescription": "This portal submits applications for several universities through one panel.",
+      "badge": "Multi-portal",
+      "routedVia": "via {portal}",
+      "manageButton": "Members",
+      "membersTitle": "Member Universities",
+      "membersDescription": "Select the universities whose applications are submitted through this company's panel.",
+      "addMembers": "Add universities",
+      "searchPlaceholder": "Search universities…",
+      "noCandidates": "No universities found.",
+      "noMembers": "No member universities selected yet.",
+      "loadError": "Failed to load members.",
+      "saveSuccess": "Members updated.",
+      "saveError": "Failed to update members.",
+      "saving": "Saving…",
+      "saveButton": "Save Members"
+    },
     "pageTitle": "Portal Automation",
     "tabs": {
       "rules": "Automation Rules",

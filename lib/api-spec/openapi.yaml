@@ -2623,6 +2623,61 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /portal-automation/multi-portals:
+    get:
+      operationId: listMultiPortals
+      tags: [portal-automation]
+      summary: List multi-portal companies and their member universities (admin only)
+      responses:
+        "200":
+          description: Multi-portal companies with members
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MultiPortalListResponse"
+
+  /portal-automation/multi-portals/{key}/members:
+    put:
+      operationId: setMultiPortalMembers
+      tags: [portal-automation]
+      summary: Replace the member university list for a multi-portal company (admin only)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetMultiPortalMembersBody"
+      responses:
+        "200":
+          description: Updated member list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MultiPortalMembersResponse"
+        "400":
+          description: Not a multi-portal company or invalid member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Portal or member university not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: A member is already assigned to another multi-portal company
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -2650,6 +2705,75 @@ components:
           type: string
       required:
         - error
+
+    MultiPortalMember:
+      type: object
+      properties:
+        universityKey:
+          type: string
+        universityName:
+          type: string
+        adapterKey:
+          type: string
+      required:
+        - universityKey
+        - universityName
+        - adapterKey
+
+    MultiPortalCompany:
+      type: object
+      properties:
+        universityKey:
+          type: string
+        universityName:
+          type: string
+        adapterKey:
+          type: string
+        isActive:
+          type: boolean
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/MultiPortalMember"
+      required:
+        - universityKey
+        - universityName
+        - adapterKey
+        - isActive
+        - members
+
+    MultiPortalListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MultiPortalCompany"
+      required:
+        - data
+
+    SetMultiPortalMembersBody:
+      type: object
+      properties:
+        universityKeys:
+          type: array
+          items:
+            type: string
+      required:
+        - universityKeys
+
+    MultiPortalMembersResponse:
+      type: object
+      properties:
+        portalKey:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/MultiPortalMember"
+      required:
+        - portalKey
+        - members
 
     PaginationMeta:
       type: object

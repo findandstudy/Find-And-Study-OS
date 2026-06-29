@@ -85,10 +85,14 @@ export async function runSubmission(
   files: SubmitFiles,
   tempDir: string,
   creds?: ResolvedCreds,
-  opts?: { headless?: boolean },
+  opts?: { headless?: boolean; adapterKey?: string },
 ): Promise<RunResult> {
   // ----- 1. Resolve adapter -----------------------------------------------
+  // When opts.adapterKey is provided (multi-portal routing) it takes priority.
+  // It is ONLY passed when a routes_via redirect actually applies, so the
+  // legacy NULL path resolves exactly as before (universityKey → name).
   const adapter =
+    (opts?.adapterKey ? adapterByKey(opts.adapterKey) : undefined) ??
     adapterByKey(submission.universityKey) ??
     adapterForUniversity(submission.universityName);
 
