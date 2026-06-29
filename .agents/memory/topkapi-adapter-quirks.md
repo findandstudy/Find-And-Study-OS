@@ -75,3 +75,13 @@ Without these, "Bachelor of Computer Engineering (English)" vs "Bilgisayar Mühe
 **Why:** `typecheck:libs` (lib's own tsconfig) passes clean; only the worker tsconfig surfaces them. Easy to mistake for damage you just caused.
 
 **How to apply:** Before chasing topkapi typecheck errors, `diff` the file against `git show HEAD:...` — if identical, ignore. Verify your own portal-adapters work with `pnpm run typecheck:libs` + the portal-adapters unit tests, not the worker typecheck.
+
+---
+
+## 7. Per-slot upload format: photo=JPEG image, passport/transcript/diploma=PDF
+
+The portal rejects passport/transcript/diploma uploaded as JPG/PNG with "Dosya türü geçersiz" — those three slots accept ONLY PDF. The photo slot is the opposite: it must stay an image (JPEG), never PDF.
+
+**Where:** `lib/portal-runner/src/profile.ts` normalizes each downloaded doc before the adapter uploads it. `ensureUploadFormat()` dispatches by slot: `photo` → `ensureJpegImage`, `passport|transcript|diploma` (PDF_DOC_SLOTS) → `ensurePdfDocument` (wraps an image into a single-page PDF via pdf-lib; already-PDF detected by `%PDF-` magic bytes and passed through; non-decodable files left as-is).
+
+**How to apply:** detection is CONTENT-based (sharp.metadata + magic bytes), never the DB mimeType/extension — a PNG mislabeled `.jpg`/`image/jpeg` is still handled. If a new portal needs different per-slot formats, change the slot→format mapping here, not in the adapter.

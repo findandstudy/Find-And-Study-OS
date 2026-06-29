@@ -17,6 +17,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
+import { PDFDocument } from "pdf-lib";
 import {
   db,
   portalSubmissionsTable,
@@ -150,6 +151,103 @@ async function ensureJpegImage(
 }
 
 /**
+ * Document slots that the portal accepts ONLY as PDF (passport, transcript,
+ * diploma). The photo slot is intentionally absent — it must stay an image
+ * (JPEG), handled by ensureJpegImage above.
+ */
+const PDF_DOC_SLOTS = new Set<string>(["passport", "transcript", "diploma"]);
+
+/**
+ * Some portals (e.g. Topkapı) accept passport / transcript / diploma ONLY as
+ * PDF and reject JPG / PNG with "Dosya türü geçersiz". Wrap any raster IMAGE
+ * for these slots into a single-page PDF before upload.
+ *
+ * Detection is CONTENT-based: files that already start with the %PDF- magic
+ * bytes are left untouched; otherwise sharp decodes the image (JPEG/PNG embed
+ * directly, anything else — webp/heic/tiff/gif/avif — is rasterized to JPEG
+ * first). Files sharp can't read and that aren't PDFs are left exactly as-is so
+ * the upload still proceeds. Never throws — on failure the original path is
+ * returned.
+ */
+async function ensurePdfDocument(
+  filePath: string,
+  docKey: string,
+  logLabel: string,
+): Promise<string> {
+  // Already a PDF? leave untouched (detect by magic bytes, not extension/mime).
+  try {
+    const fh = await fs.open(filePath, "r");
+    try {
+      const head = Buffer.alloc(5);
+      await fh.read(head, 0, 5, 0);
+      if (head.toString("latin1") === "%PDF-") return filePath;
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return filePath;
+  }
+
+  // Not a PDF — must be a sharp-decodable image to wrap, else leave as-is.
+  let format: string | undefined;
+  try {
+    format = (await sharp(filePath).metadata()).format;
+  } catch {
+    return filePath;
+  }
+  if (!format) return filePath;
+
+  try {
+    let embedBytes: Buffer;
+    let isPng: boolean;
+    if (format === "png") {
+      embedBytes = await fs.readFile(filePath);
+      isPng = true;
+    } else if (format === "jpeg") {
+      embedBytes = await fs.readFile(filePath);
+      isPng = false;
+    } else {
+      // webp / heic / tiff / gif / avif → rasterize to JPEG first
+      embedBytes = await sharp(filePath).jpeg({ quality: 90 }).toBuffer();
+      isPng = false;
+    }
+
+    const pdf = await PDFDocument.create();
+    const img = isPng
+      ? await pdf.embedPng(embedBytes)
+      : await pdf.embedJpg(embedBytes);
+    const page = pdf.addPage([img.width, img.height]);
+    page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+
+    const pdfPath = filePath.replace(/\.[^.]+$/, "") + ".pdf";
+    await fs.writeFile(pdfPath, await pdf.save());
+    console.log(`[portal-profile] ${logLabel} converted ${docKey} ${format}→pdf`);
+    return pdfPath;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[portal-profile] ${logLabel} pdf conversion failed — slot=${docKey} format=${format}: ${msg}`,
+    );
+    return filePath;
+  }
+}
+
+/**
+ * Per-slot upload-format normalization. photo → JPEG; passport / transcript /
+ * diploma → PDF. Both helpers are content-based and never throw.
+ */
+async function ensureUploadFormat(
+  filePath: string,
+  docKey: string,
+  logLabel: string,
+): Promise<string> {
+  if (PDF_DOC_SLOTS.has(docKey)) {
+    return ensurePdfDocument(filePath, docKey, logLabel);
+  }
+  return ensureJpegImage(filePath, docKey, logLabel);
+}
+
+/**
  * Downloads a student's documents into a fresh temp directory.
  *
  * Document resolution order per slot:
@@ -221,7 +319,7 @@ async function downloadStudentDocuments(
           const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "bin";
           const dest = path.join(tempDir, `${docKey}.${ext}`);
           await downloadFile(url, dest);
-          files[docKey] = await ensureJpegImage(dest, docKey, logLabel);
+          files[docKey] = await ensureUploadFormat(dest, docKey, logLabel);
           return;
         }
 
@@ -230,7 +328,7 @@ async function downloadStudentDocuments(
           const buf = Buffer.from(doc.fileData, "base64");
           const dest = path.join(tempDir, `${docKey}.bin`);
           await fs.writeFile(dest, buf);
-          files[docKey] = await ensureJpegImage(dest, docKey, logLabel);
+          files[docKey] = await ensureUploadFormat(dest, docKey, logLabel);
           return;
         }
       } catch (err) {
