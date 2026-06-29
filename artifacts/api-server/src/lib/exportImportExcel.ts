@@ -893,3 +893,53 @@ export function toEmbedInsertValues(
     isActive: row.isActive === false ? false : true,
   };
 }
+
+// --- Portal program mapping schema ---------------------------------------
+//
+// Bulk CRM-program → portal-option mapping. The template ships one row per CRM
+// program (id + name + the current override, if any) and an EMPTY portal_value
+// column for the admin to fill. On import only non-empty portal_value rows are
+// upserted into portal_program_mapping.program_overrides.
+
+export const PROGRAM_MAPPING_KIND = "portal_program_mapping";
+
+export const PROGRAM_MAPPING_SHEET = "ProgramMapping";
+
+export const programMappingColumns: readonly ColumnSpec[] = [
+  {
+    key: "crm_program_id",
+    header: "crm_program_id",
+    kind: "string",
+    required: true,
+    width: 16,
+    note: "CRM program ID — eşleme anahtarı. DEĞİŞTİRMEYİN.",
+  },
+  {
+    key: "crm_program_name",
+    header: "crm_program_name",
+    kind: "string",
+    width: 40,
+    note: "Bilgi amaçlı. İçe aktarımda yok sayılır.",
+  },
+  {
+    key: "current_portal_value",
+    header: "current_portal_value",
+    kind: "string",
+    width: 28,
+    note: "Mevcut override. Bilgi amaçlı. İçe aktarımda yok sayılır.",
+  },
+  {
+    key: "portal_value",
+    header: "portal_value",
+    kind: "string",
+    width: 28,
+    note: "Portal opsiyon değeri (v) ya da etiketi (t). Boş bırakılırsa satır atlanır.",
+  },
+  {
+    key: "portal_option_hint",
+    header: "portal_option_hint",
+    kind: "string",
+    width: 44,
+    note: "Canlı portal opsiyon ipucu. Bilgi amaçlı.",
+  },
+];

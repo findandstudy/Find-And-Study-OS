@@ -5091,6 +5091,34 @@
       "confirmBody": "{count} application(s) will be really submitted to the university portal. This cannot be undone.",
       "confirmCancel": "Cancel",
       "confirmAccept": "Submit live"
+    },
+    "mappingImport": {
+      "downloadTemplate": "Download Template",
+      "uploadExcel": "Upload Excel",
+      "dropFile": "Download the template, fill in the portal_value column for each program, then upload it here. Empty rows are skipped; invalid rows are reported.",
+      "selectFile": "Excel file (.xlsx)",
+      "runImport": "Run Import",
+      "close": "Close",
+      "templateReady": "Template downloaded",
+      "templateFailed": "Could not download template",
+      "importFailed": "Import failed",
+      "errorTooLarge": "File exceeds the 2 MB limit",
+      "errorNotXlsx": "Please select an .xlsx file",
+      "errorReadFile": "Could not read the file",
+      "toast": {
+        "imported": "Imported: {applied} applied, {skipped} skipped, {errors} errors"
+      },
+      "result": {
+        "title": "Import result",
+        "applied": "Applied: {n}",
+        "skipped": "Skipped (empty): {n}",
+        "errors": "Errors: {n}",
+        "rowError": "Row {row}: {reason}"
+      },
+      "reason": {
+        "MISSING_CRM_ID": "Missing CRM program id",
+        "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
+      }
     }
   },
   "activityFeed": {

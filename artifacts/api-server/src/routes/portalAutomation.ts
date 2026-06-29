@@ -1,15 +1,27 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, raw } from "express";
 import { and, asc, count, desc, eq, ilike, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
   applicationsTable,
   studentsTable,
+  programsTable,
+  universitiesTable,
   portalSubmissionsTable,
   portalUniversitiesTable,
   portalProgramMappingTable,
   portalProgramCacheTable,
 } from "@workspace/db";
+import {
+  buildWorkbookBuffer,
+  parseWorkbookBuffer,
+  XLSX_CONTENT_TYPE,
+  PROGRAM_MAPPING_KIND,
+  PROGRAM_MAPPING_SHEET,
+  programMappingColumns,
+  type WorkbookSpec,
+} from "../lib/exportImportExcel";
+import { ImportValidationError } from "../lib/exportImport";
 import { findActivePortalUniversity } from "../lib/portalAutoTrigger.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import {
@@ -1207,6 +1219,298 @@ router.put(
       countryOverrides: row.countryOverrides,
       updatedAt: row.updatedAt,
     });
+  },
+);
+
+// ===========================================================================
+// PROGRAM EŞLEME (FAZ 2) — Bulk Excel template export + import
+// ===========================================================================
+
+/**
+ * Folds a value for tolerant matching: lowercase, Turkish letters → ASCII,
+ * strip diacritics, drop everything except [a-z0-9]. Mirrors the matcher's
+ * intent (override resolves by exact option value OR folded option text).
+ */
+function foldProgramValue(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/ı/g, "i")
+    .replace(/i̇/g, "i")
+    .replace(/ş/g, "s")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/** Resolves the CRM university id for a portal university (id, then name). */
+async function resolveCrmUniversityId(
+  uni: typeof portalUniversitiesTable.$inferSelect,
+): Promise<number | null> {
+  if (uni.crmUniversityId != null) return uni.crmUniversityId;
+  const [u] = await db
+    .select({ id: universitiesTable.id })
+    .from(universitiesTable)
+    .where(sql`LOWER(${universitiesTable.name}) = LOWER(${uni.universityName})`)
+    .limit(1);
+  return u?.id ?? null;
+}
+
+/**
+ * Loads the deduped LIVE portal option list for a university from the Faz-1
+ * cache (all cached levels merged). No headless fetch in the request path —
+ * the cache is populated by the program-options endpoint.
+ */
+async function loadCachedPortalOptions(
+  universityKey: string,
+): Promise<Array<{ v: string; t: string }>> {
+  const rows = await db
+    .select({ options: portalProgramCacheTable.options })
+    .from(portalProgramCacheTable)
+    .where(eq(portalProgramCacheTable.universityKey, universityKey));
+  const seen = new Set<string>();
+  const out: Array<{ v: string; t: string }> = [];
+  for (const r of rows) {
+    for (const o of (r.options ?? []) as Array<{ v: unknown; t: unknown }>) {
+      const v = String(o.v ?? "");
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      out.push({ v, t: String(o.t ?? "") });
+    }
+  }
+  return out;
+}
+
+/** Suggests a live portal option for a CRM program name (exact fold, then substring). */
+function suggestPortalHint(
+  programName: string,
+  options: Array<{ v: string; t: string }>,
+): string {
+  if (options.length === 0) return "";
+  const folded = foldProgramValue(programName);
+  if (!folded) return "";
+  const exact = options.find((o) => foldProgramValue(o.t) === folded);
+  const hit =
+    exact ??
+    options.find((o) => {
+      const ft = foldProgramValue(o.t);
+      return ft.includes(folded) || folded.includes(ft);
+    });
+  return hit ? `${hit.t} (${hit.v})` : "";
+}
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/universities/:key/program-template.xlsx
+// Per-university bulk program-mapping template: one row per CRM program with
+// id + name + the current override (if any) + a live portal option hint, plus
+// an empty portal_value column to fill in. Optionally includes a read-only
+// "PortalOptions" reference sheet listing every live portal option.
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-automation/universities/:key/program-template.xlsx",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: uniKeyParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { key } = getValidated<UniKeyParams>(req).params;
+
+    const uni = await getPortalUniversity(key);
+    if (!uni) {
+      res.status(404).json({ error: "UNIVERSITY_NOT_FOUND" });
+      return;
+    }
+
+    const crmUniversityId = await resolveCrmUniversityId(uni);
+    const programs = crmUniversityId
+      ? await db
+          .select({ id: programsTable.id, name: programsTable.name })
+          .from(programsTable)
+          .where(eq(programsTable.universityId, crmUniversityId))
+          .orderBy(asc(programsTable.name))
+      : [];
+
+    const [mappingRow] = await db
+      .select({ programOverrides: portalProgramMappingTable.programOverrides })
+      .from(portalProgramMappingTable)
+      .where(eq(portalProgramMappingTable.universityKey, key))
+      .limit(1);
+    const overrides = mappingRow?.programOverrides ?? {};
+
+    const options = await loadCachedPortalOptions(key);
+
+    const rows = programs.map((p) => {
+      const id = String(p.id);
+      return {
+        crm_program_id: id,
+        crm_program_name: p.name,
+        current_portal_value: overrides[id] ?? "",
+        portal_value: "",
+        portal_option_hint: suggestPortalHint(p.name, options),
+      };
+    });
+
+    const sheets: WorkbookSpec["sheets"] = [
+      { name: PROGRAM_MAPPING_SHEET, columns: programMappingColumns, rows },
+    ];
+    if (options.length > 0) {
+      sheets.push({
+        name: "PortalOptions",
+        columns: [
+          { key: "v", header: "portal_value", kind: "string" as const, width: 28 },
+          { key: "t", header: "portal_label", kind: "string" as const, width: 44 },
+        ],
+        rows: options.map((o) => ({ v: o.v, t: o.t })),
+      });
+    }
+
+    const buf = await buildWorkbookBuffer({
+      sheets,
+      meta: {
+        kind: PROGRAM_MAPPING_KIND,
+        version: "1",
+        universityKey: key,
+        exportedAt: new Date().toISOString(),
+      },
+    });
+
+    res.setHeader("Content-Type", XLSX_CONTENT_TYPE);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${key}-program-mapping-template.xlsx"`,
+    );
+    res.send(buf);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-automation/universities/:key/program-import  (raw .xlsx body)
+// Reads the filled template; skips empty portal_value rows; validates the rest
+// against the LIVE portal option list (cache); UPSERTS valid rows into
+// program_overrides (merge, never deletes). Returns { applied, skipped, errors }.
+// ---------------------------------------------------------------------------
+router.post(
+  "/portal-automation/universities/:key/program-import",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  raw({ type: XLSX_CONTENT_TYPE, limit: "2mb" }),
+  validate({ params: uniKeyParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { key } = getValidated<UniKeyParams>(req).params;
+    const user = req.user!;
+
+    const uni = await getPortalUniversity(key);
+    if (!uni) {
+      res.status(404).json({ error: "UNIVERSITY_NOT_FOUND" });
+      return;
+    }
+
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({
+        error: "Upload an .xlsx file with Content-Type " + XLSX_CONTENT_TYPE,
+      });
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = await parseWorkbookBuffer(
+        req.body,
+        { expectedKind: PROGRAM_MAPPING_KIND },
+        { [PROGRAM_MAPPING_SHEET]: programMappingColumns },
+      );
+    } catch (err) {
+      const e = err as ImportValidationError;
+      res.status(e.status || 400).json({ error: e.message });
+      return;
+    }
+
+    const options = await loadCachedPortalOptions(key);
+    if (options.length === 0) {
+      res.status(400).json({
+        error: "NO_LIVE_OPTIONS",
+        message:
+          "No live portal options cached for this university. Open Program Mapping and refresh the live options first.",
+      });
+      return;
+    }
+
+    const validValues = new Set(options.map((o) => o.v));
+    // Map a folded label → canonical option value, so a label match is stored
+    // as the portal `v` (keeps the "CRM id → portal value" contract intact).
+    const foldedToValue = new Map<string, string>();
+    for (const o of options) {
+      const f = foldProgramValue(o.t);
+      if (f && !foldedToValue.has(f)) foldedToValue.set(f, o.v);
+    }
+
+    const rawRows = parsed.sheets.get(PROGRAM_MAPPING_SHEET)?.rows ?? [];
+    const errors: Array<{ row: number; reason: string }> = [];
+    const toApply: Record<string, string> = {};
+    let applied = 0;
+    let skipped = 0;
+
+    rawRows.forEach((r, i) => {
+      const rowNo = i + 2; // +1 header, +1 to 1-base
+      const id = String(r.crm_program_id ?? "").trim();
+      const value = String(r.portal_value ?? "").trim();
+      if (!value) {
+        skipped++;
+        return;
+      }
+      if (!id) {
+        errors.push({ row: rowNo, reason: "MISSING_CRM_ID" });
+        return;
+      }
+      // Resolve to the canonical portal `v`: exact value wins, else a folded
+      // label match maps to its option value.
+      const canonical = validValues.has(value)
+        ? value
+        : foldedToValue.get(foldProgramValue(value));
+      if (!canonical) {
+        errors.push({ row: rowNo, reason: "INVALID_PORTAL_VALUE" });
+        return;
+      }
+      if (!(id in toApply)) applied++;
+      toApply[id] = canonical;
+    });
+
+    let rowId = 0;
+    if (Object.keys(toApply).length > 0) {
+      const [existing] = await db
+        .select()
+        .from(portalProgramMappingTable)
+        .where(eq(portalProgramMappingTable.universityKey, key))
+        .limit(1);
+      const merged = { ...(existing?.programOverrides ?? {}), ...toApply };
+      if (existing) {
+        const [row] = await db
+          .update(portalProgramMappingTable)
+          .set({ programOverrides: merged, updatedAt: new Date() })
+          .where(eq(portalProgramMappingTable.id, existing.id))
+          .returning({ id: portalProgramMappingTable.id });
+        rowId = row.id;
+      } else {
+        const [row] = await db
+          .insert(portalProgramMappingTable)
+          .values({ universityKey: key, programOverrides: merged })
+          .returning({ id: portalProgramMappingTable.id });
+        rowId = row.id;
+      }
+    }
+
+    await logAudit(
+      user.id,
+      "portal.mapping.import",
+      "portal_program_mapping",
+      rowId,
+      { universityKey: key, applied, skipped, errors: errors.length },
+      req.ip,
+    );
+
+    res.json({ applied, skipped, errors });
   },
 );
 

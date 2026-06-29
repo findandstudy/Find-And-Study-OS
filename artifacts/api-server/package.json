@@ -43,6 +43,7 @@
     "test:inbox-ai-actions": "tsx --test ./scripts/test-inbox-ai-actions.ts",
     "test:inbox-create-lead": "tsx --test ./scripts/test-inbox-create-lead.ts",
     "test:export-import": "tsx --test ./scripts/test-export-import.ts",
+    "test:portal-mapping-excel": "tsx --test ./scripts/test-portal-mapping-excel.ts",
     "test:shared-libs": "tsx --test ./scripts/test-shared-libs.ts",
     "test:gpa-normalize": "tsx ./scripts/test-gpa-normalize.ts",
     "test:public-apply-flow": "tsx ./scripts/test-public-apply-flow.ts",

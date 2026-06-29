@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2, Save, Loader2, ArrowRight, RefreshCw } from "lucide-react";
+import { ProgramMappingImportDialog } from "@/components/admin/ProgramMappingImportDialog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -458,14 +459,20 @@ export default function PortalProgramMappingTab() {
               <p className="text-sm text-muted-foreground">
                 {selectedUni?.universityName}
               </p>
-              <Button size="sm" onClick={save} disabled={saving} className="gap-1.5">
-                {saving
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Save className="w-3.5 h-3.5" />}
-                {saving
-                  ? t("portalAutomation.programMapping.saving")
-                  : t("portalAutomation.programMapping.saveButton")}
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <ProgramMappingImportDialog
+                  universityKey={selectedKey}
+                  onImported={() => loadData(selectedKey)}
+                />
+                <Button size="sm" onClick={save} disabled={saving} className="gap-1.5">
+                  {saving
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Save className="w-3.5 h-3.5" />}
+                  {saving
+                    ? t("portalAutomation.programMapping.saving")
+                    : t("portalAutomation.programMapping.saveButton")}
+                </Button>
+              </div>
             </div>
 
             {/* 1. Label → CRM name mappings */}
