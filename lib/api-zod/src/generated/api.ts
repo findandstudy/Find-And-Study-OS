@@ -2719,3 +2719,64 @@ export const DeletePortalCredentialsParams = zod.object({
 export const DeletePortalCredentialsResponse = zod.object({
   ok: zod.boolean(),
 });
+
+/**
+ * @summary Live portal program options (cached, TTL 24h) for the program mapping editor (admin only)
+ */
+export const GetPortalProgramOptionsParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const GetPortalProgramOptionsQueryParams = zod.object({
+  level: zod.coerce.string().optional(),
+  refresh: zod
+    .union([zod.literal(0), zod.literal(1)])
+    .optional()
+    .describe("Set to 1 to force a live refetch, bypassing the cache."),
+});
+
+export const GetPortalProgramOptionsResponse = zod.object({
+  options: zod.array(
+    zod.object({
+      v: zod.string(),
+      t: zod.string(),
+    }),
+  ),
+  cached: zod.boolean(),
+  stale: zod.boolean(),
+  fetchedAt: zod.date().nullish(),
+});
+
+/**
+ * @summary CRM→portal program mapping for a university (admin only)
+ */
+export const GetPortalProgramMappingParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const GetPortalProgramMappingResponse = zod.object({
+  universityKey: zod.string(),
+  programOverrides: zod.record(zod.string(), zod.string()),
+  synonyms: zod.array(zod.array(zod.string())),
+  countryOverrides: zod.record(zod.string(), zod.string()),
+  updatedAt: zod.date().nullish(),
+});
+
+/**
+ * @summary Replace the program_overrides mapping for a university (admin only)
+ */
+export const UpdatePortalProgramMappingParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const UpdatePortalProgramMappingBody = zod.object({
+  programOverrides: zod.record(zod.string(), zod.string()),
+});
+
+export const UpdatePortalProgramMappingResponse = zod.object({
+  universityKey: zod.string(),
+  programOverrides: zod.record(zod.string(), zod.string()),
+  synonyms: zod.array(zod.array(zod.string())),
+  countryOverrides: zod.record(zod.string(), zod.string()),
+  updatedAt: zod.date().nullish(),
+});

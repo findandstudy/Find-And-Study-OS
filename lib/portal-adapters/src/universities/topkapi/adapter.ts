@@ -5,6 +5,7 @@ import type {
   SubmitFiles,
   SubmitResult,
   LoginOpts,
+  ProgramOption,
 } from "../../types.js";
 import type { Page } from "playwright-core";
 import { launchPortal, saveState, logger } from "../../browser.js";
@@ -321,6 +322,29 @@ async function selectByBest(
     return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Select the first "real" option of a <select> (non-empty, non-"0" value).
+// Used by listPrograms() to satisfy required country dropdowns with any valid
+// value when probing the program list (the actual value is irrelevant there).
+// ---------------------------------------------------------------------------
+async function selectFirstRealOption(
+  page: Page,
+  selector: string,
+): Promise<boolean> {
+  const val = await page
+    .$eval(selector, (el) => {
+      const sel = el as HTMLSelectElement;
+      const opt = Array.from(sel.options).find(
+        (o) => o.value && o.value !== "0" && o.value !== "",
+      );
+      return opt?.value ?? "";
+    })
+    .catch(() => "");
+  if (!val) return false;
+  await page.selectOption(selector, { value: val }).catch(() => {});
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -888,6 +912,147 @@ export const topkapiAdapter: UniversityAdapter = {
         "submit not confirmed — application-save.php body not success (status " + saveStatus + ")",
       screenshots,
     };
+  },
+
+  // -------------------------------------------------------------------------
+  // listPrograms — fetch the LIVE program option list WITHOUT submitting.
+  //
+  // Reuses the same Step 1-4 wizard navigation as submit() but with synthetic
+  // throwaway applicant data, stopping at the Step 4 AJAX program dropdown.
+  // Nothing is persisted on the portal — the final submit click is never made.
+  // The caller owns the session lifecycle (login + creds + close).
+  // -------------------------------------------------------------------------
+  async listPrograms(
+    session: AdapterSession,
+    level?: string,
+  ): Promise<ProgramOption[]> {
+    const { page } = session;
+    const eduLevel = mapEduLevel(level ?? "Bachelor", "");
+    logger.info("[topkapi] listPrograms — level:", level ?? "(default)", "→", eduLevel);
+
+    page.setDefaultTimeout(8000);
+    await page.goto(`${PORTAL_URL}/panel/applications/add`, {
+      waitUntil: "networkidle",
+    });
+
+    // ── STEP 1: synthetic new-student check ──────────────────────────────────
+    const stamp = Date.now();
+    await page.fill("input[name=email]", `program-probe-${stamp}@example.invalid`);
+    await page.fill("input[name=passportNumber]", `PROBE${stamp}`);
+
+    const checkRespPromise = page
+      .waitForResponse((r) =>
+        r.url().includes("application-check-student-exists.php"),
+      )
+      .catch(() => null);
+    await clickNext(page, logger);
+    await checkRespPromise;
+
+    try {
+      await page.waitForSelector("input[name=studentName]", { timeout: 20000 });
+    } catch {
+      throw new Error(
+        "Topkapı: yeni öğrenci formu açılmadı — program listesi çekilemedi",
+      );
+    }
+
+    // ── STEP 2: minimal personal info (throwaway values) ─────────────────────
+    await page.fill("input[name=studentName]", "Program");
+    await page.fill("input[name=studentSurname]", "Probe");
+    await page.fill("input[name=dateOfBirth]", "01.01.2000");
+    await selectByBest(page, "select[name=gender]", "Male");
+    await page.fill("input[name=fathersName]", "-");
+    await page.fill("input[name=mothersName]", "-");
+
+    await page
+      .waitForFunction(
+        () => {
+          const s = document.querySelector("select[name=countryOfBirth]");
+          return !!s && (s as HTMLSelectElement).options.length > 1;
+        },
+        { timeout: 8000 },
+      )
+      .catch(() => {});
+    await selectFirstRealOption(page, "select[name=countryOfBirth]");
+    await selectFirstRealOption(page, "select[name=nationality]");
+    await selectFirstRealOption(page, "select[name=addressCountry]");
+    await page.evaluate(() => {
+      ["countryOfBirth", "nationality", "addressCountry"].forEach((n) => {
+        const e = document.querySelector("select[name=" + n + "]");
+        if (e) {
+          e.dispatchEvent(new Event("change", { bubbles: true }));
+          const w = window as unknown as { jQuery?: (el: Element) => { trigger: (ev: string) => void } };
+          if (w.jQuery) w.jQuery(e).trigger("change");
+        }
+      });
+    });
+    await page.fill("input[name=address]", "-");
+    try { await page.fill("input[name=addressCity]", "-"); } catch { /* optional */ }
+    await page.fill("input[name=mobilePhone]", "5000000000");
+
+    await clickNext(page, logger);
+
+    try {
+      await page.waitForSelector(
+        'select[name="applicationEducationInformationEducationLevel[]"]',
+        { timeout: 20000 },
+      );
+    } catch {
+      throw new Error("Topkapı: eğitim adımı açılmadı — program listesi çekilemedi");
+    }
+
+    // ── STEP 3: education level (drives the Step 4 program list) ──────────────
+    await selectByBest(
+      page,
+      'select[name="applicationEducationInformationEducationLevel[]"]',
+      eduLevel,
+    );
+    try { await page.fill('input[name="schoolName[]"]', "-"); }
+    catch { try { await page.fill("input[name=schoolName]", "-"); } catch { /* optional */ } }
+    try { await page.fill('input[name="GPA[]"]', "-"); } catch { /* optional */ }
+    try { await page.fill('input[name="GraduationDate[]"]', "-"); } catch { /* optional */ }
+    try { await selectFirstRealOption(page, 'select[name="country[]"]'); } catch { /* optional */ }
+
+    await clickNext(page, logger);
+
+    // ── STEP 4: trigger AJAX + extract the program dropdown options ───────────
+    await page.waitForSelector("input[name=educationLevel]", { timeout: 15000 });
+    await page.evaluate((lv: string) => {
+      const radios = document.querySelectorAll<HTMLInputElement>(
+        "input[name=educationLevel]",
+      );
+      for (const r of Array.from(radios)) {
+        if (r.value === lv) {
+          r.checked = true;
+          r.dispatchEvent(new Event("change", { bubbles: true }));
+          r.dispatchEvent(new Event("click", { bubbles: true }));
+          break;
+        }
+      }
+    }, eduLevel);
+
+    await page.waitForFunction(
+      () => {
+        const sel = document.querySelector<HTMLSelectElement>(
+          "select[name=programFirstPreference]",
+        );
+        return sel !== null && sel.options.length > 1;
+      },
+      { timeout: 12000 },
+    );
+
+    const options: ProgramOption[] = await page.$$eval(
+      "select[name=programFirstPreference] option",
+      (opts) =>
+        (opts as HTMLOptionElement[])
+          .filter((o) => o.value && o.value !== "0" && o.value !== "")
+          .map((o) => ({ v: o.value, t: o.textContent?.trim() ?? "" })),
+    );
+
+    logger.info(
+      `[topkapi] listPrograms — ${options.length} option(s) for level=${eduLevel}`,
+    );
+    return options;
   },
 };
 

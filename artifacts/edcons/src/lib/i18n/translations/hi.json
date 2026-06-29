@@ -4886,7 +4886,18 @@
       "countryKeyPlaceholder": "e.g. niger",
       "countryValuePlaceholder": "e.g. Nijer",
       "addCountry": "Add Country",
-      "removeCountry": "Remove"
+      "removeCountry": "Remove",
+      "overrideSelectPlaceholder": "Select portal program…",
+      "overrideCustomSuffix": "(custom)",
+      "overrideNoOptions": "No live options loaded. Choose a level and press Refresh to fetch them from the portal.",
+      "levelAll": "All levels",
+      "refreshOptions": "Refresh",
+      "refreshing": "Refreshing…",
+      "optionsRefreshed": "Live program options refreshed from the portal.",
+      "optionsError": "Failed to fetch live program options from the portal.",
+      "optionsCount": "{{count}} live option(s)",
+      "optionsCached": "cached",
+      "optionsLive": "live"
     },
     "adapters": {
       "title": "Adapter Management",

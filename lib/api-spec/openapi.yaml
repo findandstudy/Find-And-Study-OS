@@ -2532,6 +2532,97 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /portal-automation/universities/{key}/program-options:
+    get:
+      operationId: getPortalProgramOptions
+      tags: [portal-automation]
+      summary: Live portal program options (cached, TTL 24h) for the program mapping editor (admin only)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+        - name: level
+          in: query
+          required: false
+          schema: { type: string }
+        - name: refresh
+          in: query
+          required: false
+          description: Set to 1 to force a live refetch, bypassing the cache.
+          schema: { type: integer, enum: [0, 1] }
+      responses:
+        "200":
+          description: Program options (served from cache or freshly fetched)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalProgramOptionsResponse"
+        "404":
+          description: University or adapter not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Live portal fetch failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-automation/universities/{key}/mapping:
+    get:
+      operationId: getPortalProgramMapping
+      tags: [portal-automation]
+      summary: CRM→portal program mapping for a university (admin only)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Program mapping data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalProgramMapping"
+        "404":
+          description: University not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updatePortalProgramMapping
+      tags: [portal-automation]
+      summary: Replace the program_overrides mapping for a university (admin only)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePortalProgramMappingBody"
+      responses:
+        "200":
+          description: Updated program mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalProgramMapping"
+        "404":
+          description: University not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -5129,3 +5220,48 @@ components:
       properties:
         ok: { type: boolean }
       required: [ok]
+
+    PortalProgramOption:
+      type: object
+      properties:
+        v: { type: string }
+        t: { type: string }
+      required: [v, t]
+
+    PortalProgramOptionsResponse:
+      type: object
+      properties:
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortalProgramOption"
+        cached: { type: boolean }
+        stale: { type: boolean }
+        fetchedAt: { type: string, format: date-time, nullable: true }
+      required: [options, cached, stale]
+
+    PortalProgramMapping:
+      type: object
+      properties:
+        universityKey: { type: string }
+        programOverrides:
+          type: object
+          additionalProperties: { type: string }
+        synonyms:
+          type: array
+          items:
+            type: array
+            items: { type: string }
+        countryOverrides:
+          type: object
+          additionalProperties: { type: string }
+        updatedAt: { type: string, format: date-time, nullable: true }
+      required: [universityKey, programOverrides, synonyms, countryOverrides]
+
+    UpdatePortalProgramMappingBody:
+      type: object
+      properties:
+        programOverrides:
+          type: object
+          additionalProperties: { type: string }
+      required: [programOverrides]

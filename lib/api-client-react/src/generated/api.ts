@@ -63,6 +63,7 @@ import type {
   GetFinanceSummaryParams,
   GetKommoSummaryParams,
   GetOverviewStatsParams,
+  GetPortalProgramOptionsParams,
   GetPortalSubmissions200,
   GetPortalSubmissionsParams,
   GetUniversityContract200,
@@ -96,6 +97,8 @@ import type {
   Note,
   OkResponse,
   OverviewStats,
+  PortalProgramMapping,
+  PortalProgramOptionsResponse,
   PortalSubmission,
   Program,
   ProgramsListResponse,
@@ -122,6 +125,7 @@ import type {
   UpdateDocumentBody,
   UpdateInvoiceBody,
   UpdateLeadBody,
+  UpdatePortalProgramMappingBody,
   UpdateProgramBody,
   UpdateServiceFeeBody,
   UpdateSettingsBody,
@@ -9151,4 +9155,304 @@ export const useDeletePortalCredentials = <
   TContext
 > => {
   return useMutation(getDeletePortalCredentialsMutationOptions(options));
+};
+
+/**
+ * @summary Live portal program options (cached, TTL 24h) for the program mapping editor (admin only)
+ */
+export const getGetPortalProgramOptionsUrl = (
+  key: string,
+  params?: GetPortalProgramOptionsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/portal-automation/universities/${key}/program-options?${stringifiedParams}`
+    : `/api/portal-automation/universities/${key}/program-options`;
+};
+
+export const getPortalProgramOptions = async (
+  key: string,
+  params?: GetPortalProgramOptionsParams,
+  options?: RequestInit,
+): Promise<PortalProgramOptionsResponse> => {
+  return customFetch<PortalProgramOptionsResponse>(
+    getGetPortalProgramOptionsUrl(key, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetPortalProgramOptionsQueryKey = (
+  key: string,
+  params?: GetPortalProgramOptionsParams,
+) => {
+  return [
+    `/api/portal-automation/universities/${key}/program-options`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetPortalProgramOptionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPortalProgramOptions>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  key: string,
+  params?: GetPortalProgramOptionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPortalProgramOptions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPortalProgramOptionsQueryKey(key, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPortalProgramOptions>>
+  > = ({ signal }) =>
+    getPortalProgramOptions(key, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!key,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPortalProgramOptions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPortalProgramOptionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPortalProgramOptions>>
+>;
+export type GetPortalProgramOptionsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Live portal program options (cached, TTL 24h) for the program mapping editor (admin only)
+ */
+
+export function useGetPortalProgramOptions<
+  TData = Awaited<ReturnType<typeof getPortalProgramOptions>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  key: string,
+  params?: GetPortalProgramOptionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPortalProgramOptions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPortalProgramOptionsQueryOptions(
+    key,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary CRM→portal program mapping for a university (admin only)
+ */
+export const getGetPortalProgramMappingUrl = (key: string) => {
+  return `/api/portal-automation/universities/${key}/mapping`;
+};
+
+export const getPortalProgramMapping = async (
+  key: string,
+  options?: RequestInit,
+): Promise<PortalProgramMapping> => {
+  return customFetch<PortalProgramMapping>(getGetPortalProgramMappingUrl(key), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPortalProgramMappingQueryKey = (key: string) => {
+  return [`/api/portal-automation/universities/${key}/mapping`] as const;
+};
+
+export const getGetPortalProgramMappingQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPortalProgramMapping>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  key: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPortalProgramMapping>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPortalProgramMappingQueryKey(key);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPortalProgramMapping>>
+  > = ({ signal }) =>
+    getPortalProgramMapping(key, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!key,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPortalProgramMapping>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPortalProgramMappingQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPortalProgramMapping>>
+>;
+export type GetPortalProgramMappingQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary CRM→portal program mapping for a university (admin only)
+ */
+
+export function useGetPortalProgramMapping<
+  TData = Awaited<ReturnType<typeof getPortalProgramMapping>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  key: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPortalProgramMapping>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPortalProgramMappingQueryOptions(key, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace the program_overrides mapping for a university (admin only)
+ */
+export const getUpdatePortalProgramMappingUrl = (key: string) => {
+  return `/api/portal-automation/universities/${key}/mapping`;
+};
+
+export const updatePortalProgramMapping = async (
+  key: string,
+  updatePortalProgramMappingBody: UpdatePortalProgramMappingBody,
+  options?: RequestInit,
+): Promise<PortalProgramMapping> => {
+  return customFetch<PortalProgramMapping>(
+    getUpdatePortalProgramMappingUrl(key),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updatePortalProgramMappingBody),
+    },
+  );
+};
+
+export const getUpdatePortalProgramMappingMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePortalProgramMapping>>,
+    TError,
+    { key: string; data: BodyType<UpdatePortalProgramMappingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePortalProgramMapping>>,
+  TError,
+  { key: string; data: BodyType<UpdatePortalProgramMappingBody> },
+  TContext
+> => {
+  const mutationKey = ["updatePortalProgramMapping"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePortalProgramMapping>>,
+    { key: string; data: BodyType<UpdatePortalProgramMappingBody> }
+  > = (props) => {
+    const { key, data } = props ?? {};
+
+    return updatePortalProgramMapping(key, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePortalProgramMappingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePortalProgramMapping>>
+>;
+export type UpdatePortalProgramMappingMutationBody =
+  BodyType<UpdatePortalProgramMappingBody>;
+export type UpdatePortalProgramMappingMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Replace the program_overrides mapping for a university (admin only)
+ */
+export const useUpdatePortalProgramMapping = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePortalProgramMapping>>,
+    TError,
+    { key: string; data: BodyType<UpdatePortalProgramMappingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePortalProgramMapping>>,
+  TError,
+  { key: string; data: BodyType<UpdatePortalProgramMappingBody> },
+  TContext
+> => {
+  return useMutation(getUpdatePortalProgramMappingMutationOptions(options));
 };

@@ -1492,6 +1492,26 @@ async function seedClaudeIntegration() {
     console.error("[migrate] portal_adapters/portal_program_mapping:", err);
   }
 
+  // Step 2b13b: Portal Automation — portal_program_cache (LIVE program option
+  // lists cached per (university_key, level); TTL refresh handled in the API).
+  // `level` is NOT NULL DEFAULT '' so the unique key + ON CONFLICT upsert work
+  // (PostgreSQL treats NULLs as distinct, which would break both).
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_program_cache (
+        id SERIAL PRIMARY KEY,
+        university_key TEXT NOT NULL,
+        level TEXT NOT NULL DEFAULT '',
+        options JSONB NOT NULL DEFAULT '[]',
+        fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_prog_cache_key_level_uniq ON portal_program_cache (university_key, level)`);
+  } catch (err) {
+    console.error("[migrate] portal_program_cache:", err);
+  }
+
   // Step 2b12: portal_credentials — encrypted per-portal username/password (AES-256-GCM).
   try {
     await pool.query(`

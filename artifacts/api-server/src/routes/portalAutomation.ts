@@ -1,9 +1,21 @@
 import { Router, type IRouter } from "express";
 import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { db, applicationsTable, portalSubmissionsTable, portalUniversitiesTable } from "@workspace/db";
+import {
+  db,
+  applicationsTable,
+  portalSubmissionsTable,
+  portalUniversitiesTable,
+  portalProgramMappingTable,
+  portalProgramCacheTable,
+} from "@workspace/db";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
-import { adapterMetadata } from "@workspace/portal-adapters";
+import {
+  adapterMetadata,
+  resolveAdapterByKey,
+  setCredsOverride,
+  clearCredsOverride,
+} from "@workspace/portal-adapters";
 import { isAgentRole } from "@workspace/roles";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
@@ -703,5 +715,269 @@ export function startPortalStuckReset(intervalMs = 5 * 60_000): void {
     `[portal-stuck-reset] Started — interval=${intervalMs}ms threshold=${STUCK_THRESHOLD_MS}ms`,
   );
 }
+
+// ===========================================================================
+// PROGRAM EŞLEME (FAZ 1) — LIVE program options + CRM→portal program mapping
+// ===========================================================================
+
+/** Live portal login timeout for listPrograms (mirrors test-login). */
+const PROGRAM_LOGIN_TIMEOUT_MS = 90_000;
+/** Program option cache TTL — entries older than this are refetched. */
+const PROGRAM_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+/** Races a promise against a timeout, rejecting with `msg` if it elapses. */
+function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+  ]);
+}
+
+/**
+ * Resolves an active (non-deleted) portal_universities row by universityKey.
+ * Returns null when the key is unknown — callers respond 404.
+ */
+async function getPortalUniversity(
+  universityKey: string,
+): Promise<typeof portalUniversitiesTable.$inferSelect | null> {
+  const [uni] = await db
+    .select()
+    .from(portalUniversitiesTable)
+    .where(
+      and(
+        eq(portalUniversitiesTable.universityKey, universityKey),
+        isNull(portalUniversitiesTable.deletedAt),
+      ),
+    )
+    .limit(1);
+  return uni ?? null;
+}
+
+const uniKeyParamsSchema = z.object({ key: z.string().min(1) });
+type UniKeyParams = { params: typeof uniKeyParamsSchema };
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/universities/:key/program-options?level=&refresh=0|1
+//
+// Returns the portal's LIVE program option list ({ v, t }[]). Served from the
+// portal_program_cache table; on cache miss / stale (>TTL) / refresh=1 the
+// adapter is driven headless to fetch fresh options, which are then cached.
+// ---------------------------------------------------------------------------
+const programOptionsQuerySchema = z.object({
+  level: z.string().optional(),
+  refresh: z.coerce.number().int().optional(),
+});
+type ProgramOptionsSchemas = {
+  params: typeof uniKeyParamsSchema;
+  query: typeof programOptionsQuerySchema;
+};
+
+router.get(
+  "/portal-automation/universities/:key/program-options",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: uniKeyParamsSchema, query: programOptionsQuerySchema }),
+  async (req, res): Promise<void> => {
+    const { key } = getValidated<ProgramOptionsSchemas>(req).params;
+    const { level: levelRaw, refresh } = getValidated<ProgramOptionsSchemas>(req).query;
+    const level = (levelRaw ?? "").trim();
+    const forceRefresh = refresh === 1;
+
+    const uni = await getPortalUniversity(key);
+    if (!uni) {
+      res.status(404).json({ error: "UNIVERSITY_NOT_FOUND" });
+      return;
+    }
+
+    // Cache read (keyed by universityKey + normalized level).
+    const [cached] = await db
+      .select()
+      .from(portalProgramCacheTable)
+      .where(
+        and(
+          eq(portalProgramCacheTable.universityKey, key),
+          eq(portalProgramCacheTable.level, level),
+        ),
+      )
+      .limit(1);
+
+    const isStale =
+      !cached || Date.now() - cached.fetchedAt.getTime() > PROGRAM_CACHE_TTL_MS;
+
+    if (cached && !isStale && !forceRefresh) {
+      res.json({
+        options: cached.options,
+        cached: true,
+        stale: false,
+        fetchedAt: cached.fetchedAt,
+      });
+      return;
+    }
+
+    // Live fetch via the adapter.
+    const adapter = await resolveAdapterByKey(uni.adapterKey);
+    if (!adapter) {
+      res.status(404).json({
+        error: "ADAPTER_NOT_FOUND",
+        message: `Adapter bulunamadı: '${uni.adapterKey}'`,
+      });
+      return;
+    }
+    if (typeof adapter.listPrograms !== "function") {
+      res.status(400).json({
+        error: "NOT_SUPPORTED",
+        message: `Adapter '${uni.adapterKey}' program listelemeyi desteklemiyor`,
+      });
+      return;
+    }
+
+    let session: Awaited<ReturnType<typeof adapter.login>> | null = null;
+    try {
+      const creds = await resolvePortalCreds(key, uni.adapterKey);
+      setCredsOverride(adapter.key, { user: creds.user, password: creds.password });
+      session = await withTimeout(
+        adapter.login({ headless: true }),
+        PROGRAM_LOGIN_TIMEOUT_MS,
+        "Login zaman aşımına uğradı",
+      );
+      const options = await withTimeout(
+        adapter.listPrograms(session, level || undefined),
+        PROGRAM_LOGIN_TIMEOUT_MS,
+        "Program listesi zaman aşımına uğradı",
+      );
+
+      // Upsert cache (university_key, level) — refresh options + fetchedAt.
+      const [row] = await db
+        .insert(portalProgramCacheTable)
+        .values({ universityKey: key, level, options })
+        .onConflictDoUpdate({
+          target: [
+            portalProgramCacheTable.universityKey,
+            portalProgramCacheTable.level,
+          ],
+          set: { options, fetchedAt: new Date() },
+        })
+        .returning();
+
+      res.json({
+        options: row.options,
+        cached: false,
+        stale: false,
+        fetchedAt: row.fetchedAt,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const safe = msg
+        .replace(/password[^\s]*/gi, "***")
+        .replace(/token[^\s]*/gi, "***");
+      res.status(502).json({ error: "PORTAL_ERROR", message: safe });
+    } finally {
+      clearCredsOverride(adapter.key);
+      session?.close().catch(() => {});
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/universities/:key/mapping
+// Returns the CRM→portal program mapping data for the university.
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-automation/universities/:key/mapping",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: uniKeyParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { key } = getValidated<UniKeyParams>(req).params;
+
+    const uni = await getPortalUniversity(key);
+    if (!uni) {
+      res.status(404).json({ error: "UNIVERSITY_NOT_FOUND" });
+      return;
+    }
+
+    const [row] = await db
+      .select()
+      .from(portalProgramMappingTable)
+      .where(eq(portalProgramMappingTable.universityKey, key))
+      .limit(1);
+
+    res.json({
+      universityKey: key,
+      programOverrides: row?.programOverrides ?? {},
+      synonyms: row?.synonyms ?? [],
+      countryOverrides: row?.countryOverrides ?? {},
+      updatedAt: row?.updatedAt ?? null,
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// PUT /portal-automation/universities/:key/mapping
+// Replaces the program_overrides object wholesale. Other mapping columns
+// (synonyms, country_overrides) are left untouched. Audited.
+// ---------------------------------------------------------------------------
+const putMappingBodySchema = z.object({
+  programOverrides: z.record(z.string()),
+});
+type PutMappingSchemas = {
+  params: typeof uniKeyParamsSchema;
+  body: typeof putMappingBodySchema;
+};
+
+router.put(
+  "/portal-automation/universities/:key/mapping",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: uniKeyParamsSchema, body: putMappingBodySchema }),
+  async (req, res): Promise<void> => {
+    const { key } = getValidated<PutMappingSchemas>(req).params;
+    const { programOverrides } = getValidated<PutMappingSchemas>(req).body;
+    const user = req.user!;
+
+    const uni = await getPortalUniversity(key);
+    if (!uni) {
+      res.status(404).json({ error: "UNIVERSITY_NOT_FOUND" });
+      return;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(portalProgramMappingTable)
+      .where(eq(portalProgramMappingTable.universityKey, key))
+      .limit(1);
+
+    let row;
+    if (existing) {
+      [row] = await db
+        .update(portalProgramMappingTable)
+        .set({ programOverrides, updatedAt: new Date() })
+        .where(eq(portalProgramMappingTable.id, existing.id))
+        .returning();
+    } else {
+      [row] = await db
+        .insert(portalProgramMappingTable)
+        .values({ universityKey: key, programOverrides })
+        .returning();
+    }
+
+    logAudit(
+      user.id,
+      "update_portal_program_mapping",
+      "portal_program_mapping",
+      row.id,
+      { universityKey: key, programOverrides: Object.keys(programOverrides).length },
+      req.ip,
+    );
+
+    res.json({
+      universityKey: key,
+      programOverrides: row.programOverrides,
+      synonyms: row.synonyms,
+      countryOverrides: row.countryOverrides,
+      updatedAt: row.updatedAt,
+    });
+  },
+);
 
 export default router;

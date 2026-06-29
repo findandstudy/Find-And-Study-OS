@@ -79,6 +79,17 @@ export interface SubmitProfile {
 }
 
 // ---------------------------------------------------------------------------
+// A single LIVE portal program option (dropdown value + visible text).
+// Returned by adapter.listPrograms() for the admin "Program Eşleme" editor.
+// ---------------------------------------------------------------------------
+export interface ProgramOption {
+  /** The portal <option> value attribute. */
+  v: string;
+  /** The portal <option> visible text/label. */
+  t: string;
+}
+
+// ---------------------------------------------------------------------------
 // Document file paths (absolute or resolvable by the calling worker)
 // ---------------------------------------------------------------------------
 export interface SubmitFiles {
@@ -147,4 +158,20 @@ export interface UniversityAdapter {
     files: SubmitFiles,
     doSubmit?: boolean,
   ): Promise<SubmitResult>;
+
+  /**
+   * Optional — fetch the portal's LIVE program option list (value + text) for
+   * a given education level WITHOUT submitting an application. Used by the
+   * admin "Program Eşleme" editor to populate mapping dropdowns.
+   *
+   * The caller owns the session lifecycle (login + creds override + close),
+   * mirroring submit(). Adapters that cannot enumerate programs omit this.
+   *
+   * @param level  CRM education level (e.g. "Bachelor", "Masters (Thesis)").
+   *               Adapters map it to their own portal value; absent = default.
+   */
+  listPrograms?(
+    session: AdapterSession,
+    level?: string,
+  ): Promise<ProgramOption[]>;
 }

@@ -4886,7 +4886,18 @@
       "countryKeyPlaceholder": "örn. niger",
       "countryValuePlaceholder": "örn. Nijer",
       "addCountry": "Ülke Ekle",
-      "removeCountry": "Kaldır"
+      "removeCountry": "Kaldır",
+      "overrideSelectPlaceholder": "Portal programı seçin…",
+      "overrideCustomSuffix": "(özel)",
+      "overrideNoOptions": "Canlı seçenek yüklenmedi. Bir seviye seçip portaldan getirmek için Yenile’ye basın.",
+      "levelAll": "Tüm seviyeler",
+      "refreshOptions": "Yenile",
+      "refreshing": "Yenileniyor…",
+      "optionsRefreshed": "Canlı program seçenekleri portaldan yenilendi.",
+      "optionsError": "Portaldan canlı program seçenekleri alınamadı.",
+      "optionsCount": "{{count}} canlı seçenek",
+      "optionsCached": "önbellek",
+      "optionsLive": "canlı"
     },
     "adapters": {
       "title": "Adapter Yönetimi",

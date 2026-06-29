@@ -1876,6 +1876,38 @@ export interface OkResponse {
   ok: boolean;
 }
 
+export interface PortalProgramOption {
+  v: string;
+  t: string;
+}
+
+export interface PortalProgramOptionsResponse {
+  options: PortalProgramOption[];
+  cached: boolean;
+  stale: boolean;
+  fetchedAt?: string | null;
+}
+
+export type PortalProgramMappingProgramOverrides = { [key: string]: string };
+
+export type PortalProgramMappingCountryOverrides = { [key: string]: string };
+
+export interface PortalProgramMapping {
+  universityKey: string;
+  programOverrides: PortalProgramMappingProgramOverrides;
+  synonyms: string[][];
+  countryOverrides: PortalProgramMappingCountryOverrides;
+  updatedAt?: string | null;
+}
+
+export type UpdatePortalProgramMappingBodyProgramOverrides = {
+  [key: string]: string;
+};
+
+export interface UpdatePortalProgramMappingBody {
+  programOverrides: UpdatePortalProgramMappingBodyProgramOverrides;
+}
+
 export type ListUsersParams = {
   role?: string;
   search?: string;
@@ -2139,3 +2171,19 @@ export type RetryPortalSubmission200 = {
 export type CancelPortalSubmission200 = {
   ok: boolean;
 };
+
+export type GetPortalProgramOptionsParams = {
+  level?: string;
+  /**
+   * Set to 1 to force a live refetch, bypassing the cache.
+   */
+  refresh?: GetPortalProgramOptionsRefresh;
+};
+
+export type GetPortalProgramOptionsRefresh =
+  (typeof GetPortalProgramOptionsRefresh)[keyof typeof GetPortalProgramOptionsRefresh];
+
+export const GetPortalProgramOptionsRefresh = {
+  NUMBER_0: 0,
+  NUMBER_1: 1,
+} as const;

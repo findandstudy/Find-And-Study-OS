@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Save, Loader2, ArrowRight } from "lucide-react";
+import { Plus, Trash2, Save, Loader2, ArrowRight, RefreshCw } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,6 +59,26 @@ interface MappingResponse {
   synonyms?: string[][];
   countryOverrides?: Record<string, string>;
 }
+
+interface PortalProgramOption {
+  v: string;
+  t: string;
+}
+
+interface ProgramOptionsResponse {
+  options: PortalProgramOption[];
+  cached: boolean;
+  stale: boolean;
+  fetchedAt?: string | null;
+}
+
+/** Education levels offered as a filter for the live program option list. */
+const LEVEL_OPTIONS = [
+  "Bachelor",
+  "Masters (Thesis)",
+  "Masters (Non-Thesis)",
+  "PhD",
+] as const;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -165,6 +185,91 @@ function PairEditor({
 }
 
 // ---------------------------------------------------------------------------
+// Program-override editor — CRM program id → LIVE portal option (value dropdown)
+// ---------------------------------------------------------------------------
+
+function OverrideEditor({
+  rows, setRows, options, optionsLoading,
+  idPlaceholder, addLabel, removeLabel, selectPlaceholder, customSuffix, noOptionsHint,
+}: {
+  rows: PairRow[];
+  setRows: React.Dispatch<React.SetStateAction<PairRow[]>>;
+  options: PortalProgramOption[];
+  optionsLoading: boolean;
+  idPlaceholder: string;
+  addLabel: string;
+  removeLabel: string;
+  selectPlaceholder: string;
+  customSuffix: string;
+  noOptionsHint: string;
+}) {
+  const update = (id: string, field: "key" | "value", value: string) =>
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  const remove = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
+  const add = () => setRows((prev) => [...prev, { id: rid(), key: "", value: "" }]);
+
+  const knownValues = new Set(options.map((o) => o.v));
+
+  return (
+    <div className="space-y-3">
+      {rows.map((row) => {
+        // Preserve a stored value that is not in the live list as a fallback item.
+        const showCustom = row.value !== "" && !knownValues.has(row.value);
+        return (
+          <div key={row.id} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2">
+            <Input
+              value={row.key}
+              onChange={(e) => update(row.id, "key", e.target.value)}
+              placeholder={idPlaceholder}
+              className="text-sm"
+            />
+            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            <Select
+              value={row.value || undefined}
+              onValueChange={(v) => update(row.id, "value", v)}
+              disabled={optionsLoading}
+            >
+              <SelectTrigger className="text-sm">
+                <SelectValue placeholder={selectPlaceholder} />
+              </SelectTrigger>
+              <SelectContent>
+                {showCustom && (
+                  <SelectItem value={row.value}>
+                    {row.value} {customSuffix}
+                  </SelectItem>
+                )}
+                {options.map((o) => (
+                  <SelectItem key={o.v} value={o.v}>
+                    {o.t}
+                    <span className="ml-1.5 text-xs text-muted-foreground">({o.v})</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-8 h-8 text-destructive hover:text-destructive"
+              onClick={() => remove(row.id)}
+              aria-label={removeLabel}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        );
+      })}
+      {!optionsLoading && options.length === 0 && (
+        <p className="text-xs text-muted-foreground">{noOptionsHint}</p>
+      )}
+      <Button variant="outline" size="sm" onClick={add} className="gap-1.5">
+        <Plus className="w-3.5 h-3.5" />
+        {addLabel}
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -183,6 +288,12 @@ export default function PortalProgramMappingTab() {
 
   const [dataLoading, setDLdg] = useState(false);
   const [saving, setSaving]    = useState(false);
+
+  // Live program options (for the override value dropdown)
+  const [options, setOptions]         = useState<PortalProgramOption[]>([]);
+  const [optionsLoading, setOLdg]     = useState(false);
+  const [optionsLevel, setOLevel]     = useState<string>("");
+  const [optionsMeta, setOMeta]       = useState<{ cached: boolean; stale: boolean; fetchedAt?: string | null } | null>(null);
 
   // Load university list
   useEffect(() => {
@@ -217,13 +328,55 @@ export default function PortalProgramMappingTab() {
     }
   }, [t, toast]);
 
+  // Fetch live portal program options (cache read by default; refresh forces live).
+  const loadOptions = useCallback(
+    async (uniKey: string, level: string, refresh: boolean) => {
+      if (!uniKey) return;
+      setOLdg(true);
+      try {
+        const params = new URLSearchParams();
+        if (level) params.set("level", level);
+        if (refresh) params.set("refresh", "1");
+        const qs = params.toString();
+        const res = await customFetch<ProgramOptionsResponse>(
+          `/api/portal-automation/universities/${uniKey}/program-options${qs ? `?${qs}` : ""}`,
+        );
+        setOptions(res.options ?? []);
+        setOMeta({ cached: res.cached, stale: res.stale, fetchedAt: res.fetchedAt ?? null });
+        if (refresh) {
+          toast({ title: t("portalAutomation.programMapping.optionsRefreshed") });
+        }
+      } catch {
+        toast({
+          title: t("portalAutomation.programMapping.optionsError"),
+          variant: "destructive",
+        });
+      } finally {
+        setOLdg(false);
+      }
+    },
+    [t, toast],
+  );
+
   const handleSelectUni = (key: string) => {
     setSelected(key);
     setMappingRows([]);
     setOverrideRows([]);
     setSynonymRows([]);
     setCountryRows([]);
+    setOptions([]);
+    setOMeta(null);
     loadData(key);
+    loadOptions(key, optionsLevel, false);
+  };
+
+  const handleSelectLevel = (level: string) => {
+    setOLevel(level);
+    if (selectedKey) loadOptions(selectedKey, level, false);
+  };
+
+  const handleRefreshOptions = () => {
+    if (selectedKey) loadOptions(selectedKey, optionsLevel, true);
   };
 
   const save = async () => {
@@ -339,26 +492,72 @@ export default function PortalProgramMappingTab() {
               </CardContent>
             </Card>
 
-            {/* 2. Program ID overrides */}
+            {/* 2. Program ID overrides — CRM program id → live portal option */}
             <Card className="rounded-xl">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  {t("portalAutomation.programMapping.overridesTitle")}
-                </CardTitle>
-                <CardDescription>
-                  {t("portalAutomation.programMapping.overridesDescription")}
-                </CardDescription>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <CardTitle className="text-base">
+                      {t("portalAutomation.programMapping.overridesTitle")}
+                    </CardTitle>
+                    <CardDescription>
+                      {t("portalAutomation.programMapping.overridesDescription")}
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select value={optionsLevel} onValueChange={handleSelectLevel}>
+                      <SelectTrigger className="w-44 text-sm" disabled={optionsLoading}>
+                        <SelectValue
+                          placeholder={t("portalAutomation.programMapping.levelAll")}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LEVEL_OPTIONS.map((lvl) => (
+                          <SelectItem key={lvl} value={lvl}>
+                            {lvl}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefreshOptions}
+                      disabled={optionsLoading}
+                      className="gap-1.5"
+                    >
+                      {optionsLoading
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <RefreshCw className="w-3.5 h-3.5" />}
+                      {optionsLoading
+                        ? t("portalAutomation.programMapping.refreshing")
+                        : t("portalAutomation.programMapping.refreshOptions")}
+                    </Button>
+                  </div>
+                </div>
+                {optionsMeta && !optionsLoading && (
+                  <p className="text-xs text-muted-foreground pt-1">
+                    {t("portalAutomation.programMapping.optionsCount", {
+                      count: String(options.length),
+                    })}
+                    {optionsMeta.cached
+                      ? ` · ${t("portalAutomation.programMapping.optionsCached")}`
+                      : ` · ${t("portalAutomation.programMapping.optionsLive")}`}
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
-                <PairEditor
+                <OverrideEditor
                   rows={overrideRows}
                   setRows={setOverrideRows}
-                  keyCol={t("portalAutomation.programMapping.overrideIdCol")}
-                  valueCol={t("portalAutomation.programMapping.overrideValueCol")}
-                  keyPlaceholder={t("portalAutomation.programMapping.overrideIdPlaceholder")}
-                  valuePlaceholder={t("portalAutomation.programMapping.overrideValuePlaceholder")}
+                  options={options}
+                  optionsLoading={optionsLoading}
+                  idPlaceholder={t("portalAutomation.programMapping.overrideIdPlaceholder")}
                   addLabel={t("portalAutomation.programMapping.addOverride")}
                   removeLabel={t("portalAutomation.programMapping.removeOverride")}
+                  selectPlaceholder={t("portalAutomation.programMapping.overrideSelectPlaceholder")}
+                  customSuffix={t("portalAutomation.programMapping.overrideCustomSuffix")}
+                  noOptionsHint={t("portalAutomation.programMapping.overrideNoOptions")}
                 />
               </CardContent>
             </Card>
