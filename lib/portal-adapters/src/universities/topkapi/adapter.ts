@@ -786,24 +786,46 @@ export const topkapiAdapter: UniversityAdapter = {
       logger.info("[topkapi] no summary modal — direct submit");
     }
 
-    // (b) Wait for the application-save.php response (2xx/3xx == saved).
+    // (b) Read the application-save.php RESPONSE BODY — the body, not the bare
+    // HTTP status, decides success. Always log status + first 600 chars so a
+    // rejection reason is visible (HTTP 200 alone is never treated as success).
     const resp = await savePromise;
     const saveStatus = resp ? resp.status() : 0;
-    logger.info("[topkapi] application-save.php " + saveStatus);
+    let bodyText = "";
+    try { bodyText = resp ? await resp.text() : ""; } catch { /* body unreadable */ }
+    logger.info("[topkapi] application-save.php " + saveStatus + " BODY: " + bodyText.slice(0, 600));
 
-    // (c) Best-effort: wait for the success redirect to capture the application
-    // uuid. This is NOT a success condition — a missing redirect does not fail.
-    await page
-      .waitForURL(/\/applications\/success\/[0-9a-f-]{8,}/i, { timeout: 15000 })
-      .catch(() => {});
-    const successMatch = page.url().match(/\/applications\/success\/([0-9a-f-]{8,})/i);
-    const externalRef = successMatch ? successMatch[1] : undefined;
+    let saved = false;
+    let externalRef: string | undefined;
+    try {
+      const parsed: unknown = JSON.parse(bodyText);
+      if (parsed !== null && typeof parsed === "object") {
+        const j = parsed as Record<string, unknown>;
+        saved = j.status === "success" || j.success === true || !!j.redirect || !!j.applicationId;
+        const rid = typeof j.redirect === "string" ? j.redirect : typeof j.url === "string" ? j.url : "";
+        const mm = rid.match(/success\/([0-9a-f-]{8,})/i);
+        if (mm) externalRef = mm[1];
+        if (!saved && (j.message || j.error)) {
+          logger.warn("[topkapi] SAVE REJECTED: " + String(j.message ?? j.error));
+        }
+      }
+    } catch { /* body is not JSON */ }
+
+    // (c) Best-effort: success URL redirect (captures external_ref AND confirms
+    // saved when the body wasn't conclusive JSON). Not required once saved.
+    if (!externalRef) {
+      try {
+        await page.waitForURL(/\/applications\/success\//i, { timeout: 10000 });
+        const m = page.url().match(/\/applications\/success\/([0-9a-f-]{8,})/i);
+        if (m) { externalRef = m[1]; saved = true; }
+      } catch { /* no redirect */ }
+    }
 
     { const s2 = await takeShot(page, "final").catch(() => null); if (s2) screenshots.push(s2); }
 
-    // Submission proof = application-save.php 2xx/3xx. The success-url is optional.
-    const saveOk = !!resp && saveStatus >= 200 && saveStatus < 400;
-    const submitted = saveOk;
+    // Submission proof = body success/redirect/applicationId (or the success-url
+    // redirect). HTTP 200 alone is NOT success.
+    const submitted = saved;
 
     if (submitted) {
       if (externalRef !== undefined) {
@@ -822,7 +844,7 @@ export const topkapiAdapter: UniversityAdapter = {
       alreadyExists: false,
       programMissing: false,
       detail:
-        "submit not confirmed — application-save.php did not return 2xx/3xx (status " + saveStatus + ")",
+        "submit not confirmed — application-save.php body not success (status " + saveStatus + ")",
       screenshots,
     };
   },
