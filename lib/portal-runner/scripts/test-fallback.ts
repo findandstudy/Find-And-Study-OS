@@ -17,6 +17,15 @@
  *         new submission queued (mode=dry when autoSubmit=false), audit + notif
  *   FB-I5 idempotency → second call returns already_superseded, no duplicate
  *   FB-I6 loop guard → chain depth >= 2 → loop_guard no-op
+ *   FB-I7 concurrency → exactly one supersession (advisory lock)
+ *   FB-I8 wrong status → non-program_full submission never supersedes
+ *   FB-I9 fee source → new app fees from fallback CATALOG, NOT copied from source
+ *   FB-I10 transaction integrity → injected fault rolls back the WHOLE supersession
+ *   FB-I11 disabled rule (enabled=false) → no_rule no-op
+ *   FB-I12 empty meta.openPrograms → no_meta no-op
+ *   FB-I13 fallback rule pointing at a non-existent program → no_open_fallback
+ *
+ * Real submission is NEVER triggered — every integration path runs in dry/mock.
  *
  * Run:
  *   pnpm --filter @workspace/portal-runner test:fallback
@@ -38,7 +47,7 @@ import {
   auditLogsTable,
   notificationsTable,
 } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   handleProgramFull,
   selectFallbackCandidate,
@@ -245,6 +254,9 @@ async function seedScenario(opts?: {
   }).returning({ id: studentsTable.id });
   cleanupStudentIds.push(student.id);
 
+  // Sentinel fees on the SOURCE app. The supersession must source the new app's
+  // fees from the fallback CATALOG, never copy these — so any of these values
+  // showing up on the new app is a regression (see FB-I9).
   const [srcApp] = await db.insert(applicationsTable).values({
     studentId:      student.id,
     programId:      srcProg.id,
@@ -255,6 +267,9 @@ async function seedScenario(opts?: {
     programName:    srcProg.name,
     universityName: uniName,
     country:        "Turkey",
+    tuitionFee:     99999,
+    discountedFee:  88888,
+    commissionRate: 99,
   }).returning({ id: applicationsTable.id });
   cleanupAppIds.push(srcApp.id);
 
@@ -507,4 +522,172 @@ test("FB-I8: submission status != program_full → wrong_status no-op", async ()
     eq(applicationsTable.supersededFromApplicationId, s.srcAppId),
   );
   assert.equal(children.length, 0, "no supersession for non-program_full submission");
+});
+
+// ---------------------------------------------------------------------------
+// FB-I9 — fees come from the fallback catalog, never copied from the source app
+// ---------------------------------------------------------------------------
+
+test("FB-I9: new app fees from fallback catalog, NOT copied from source", async () => {
+  await setKillSwitch(true);
+  // Source app carries sentinel fees (99999 / 88888 / 99); the fallback CATALOG
+  // program has tuition 5000, commission 12 and NO discounted fee.
+  const s = await seedScenario({ autoSubmit: false });
+  const outcome = await handleProgramFull(s.subId);
+
+  assert.equal(outcome.status, "superseded");
+  if (outcome.status !== "superseded") return;
+  cleanupAppIds.push(outcome.newApplicationId);
+  cleanupSubIds.push(outcome.newSubmissionId);
+
+  const [newApp] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, outcome.newApplicationId));
+
+  // Sourced from the fallback catalog…
+  assert.equal(newApp.tuitionFee, 5000, "tuition from fallback catalog");
+  assert.equal(newApp.commissionRate, 12, "commission from fallback catalog");
+  // …catalog gap stays null rather than inheriting the source's discounted fee.
+  assert.equal(newApp.discountedFee, null, "missing catalog fee stays null, not copied");
+
+  // …and explicitly NOT the source app's sentinel values.
+  assert.notEqual(newApp.tuitionFee, 99999, "tuition not copied from source");
+  assert.notEqual(newApp.discountedFee, 88888, "discounted fee not copied from source");
+  assert.notEqual(newApp.commissionRate, 99, "commission not copied from source");
+
+  const audit = await db.select().from(auditLogsTable).where(
+    and(eq(auditLogsTable.action, "program_fallback_supersede"), eq(auditLogsTable.resourceId, s.srcAppId)),
+  );
+  audit.forEach((a) => cleanupAuditIds.push(a.id));
+});
+
+// ---------------------------------------------------------------------------
+// FB-I10 — transaction integrity: an injected fault rolls back EVERYTHING
+// ---------------------------------------------------------------------------
+
+test("FB-I10: injected fault mid-supersession rolls back the whole transaction", async () => {
+  await setKillSwitch(true);
+  const s = await seedScenario({ autoSubmit: false });
+
+  // Inject a deterministic fault that fires on the NEW submission INSERT (step d
+  // of the supersession tx) for THIS scenario only. By then the old app has been
+  // cancelled and the new app inserted within the same tx — so if rollback is not
+  // atomic those partial writes would survive.
+  // fn/trg names are derived from the numeric submission id, and uniKey is
+  // generated as alphanumeric+underscore only, so both are safe to inline. DDL
+  // with a dollar-quoted body can't carry a bound parameter, so use sql.raw.
+  const fn = `fb_test_fail_${s.subId}`;
+  const trg = `fb_test_trg_${s.subId}`;
+  await db.execute(sql.raw(`
+    CREATE FUNCTION ${fn}() RETURNS trigger AS $$
+    BEGIN
+      IF NEW.university_key = '${s.uniKey}' THEN
+        RAISE EXCEPTION 'injected fault for rollback test';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `));
+  await db.execute(sql.raw(`
+    CREATE TRIGGER ${trg} BEFORE INSERT ON portal_submissions
+    FOR EACH ROW EXECUTE FUNCTION ${fn}();
+  `));
+
+  try {
+    await assert.rejects(
+      () => handleProgramFull(s.subId),
+      // drizzle wraps the DB error as "Failed query: …" and carries the real
+      // RAISE EXCEPTION text on `.cause`, so check the whole error chain.
+      (err: unknown) => {
+        const top = String((err as Error)?.message ?? "");
+        const cause = String(((err as { cause?: Error })?.cause)?.message ?? "");
+        return /injected fault for rollback test/.test(top + cause);
+      },
+      "supersession must propagate the injected fault",
+    );
+
+    // Old app must be fully intact — NOT cancelled, NOT linked forward.
+    const [oldApp] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, s.srcAppId));
+    assert.equal(oldApp.stage, "inquiry", "rollback: old app stage unchanged");
+    assert.equal(oldApp.supersededByApplicationId, null, "rollback: no forward link");
+    assert.equal(oldApp.supersedeReason, null, "rollback: no supersede reason");
+
+    // No new application, submission, or audit row leaked from the aborted tx.
+    const children = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(
+      eq(applicationsTable.supersededFromApplicationId, s.srcAppId),
+    );
+    assert.equal(children.length, 0, "rollback: no orphan new application");
+
+    // Explicit: the in-tx new-submission insert (the faulting statement) left no
+    // row behind for this scenario beyond the original program_full one.
+    const subs = await db.select({ id: portalSubmissionsTable.id }).from(portalSubmissionsTable).where(
+      eq(portalSubmissionsTable.universityKey, s.uniKey),
+    );
+    assert.equal(subs.length, 1, "rollback: only the original submission survives");
+    assert.equal(subs[0].id, s.subId, "rollback: surviving submission is the seeded one");
+
+    const audit = await db.select({ id: auditLogsTable.id }).from(auditLogsTable).where(
+      and(eq(auditLogsTable.action, "program_fallback_supersede"), eq(auditLogsTable.resourceId, s.srcAppId)),
+    );
+    assert.equal(audit.length, 0, "rollback: no audit row written");
+  } finally {
+    await db.execute(sql`DROP TRIGGER IF EXISTS ${sql.raw(trg)} ON portal_submissions`);
+    await db.execute(sql`DROP FUNCTION IF EXISTS ${sql.raw(fn)}()`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// FB-I11 — a disabled rule (enabled=false) is ignored
+// ---------------------------------------------------------------------------
+
+test("FB-I11: disabled fallback rule → no_rule no-op", async () => {
+  await setKillSwitch(true);
+  const s = await seedScenario({ autoSubmit: false });
+
+  // Disable the seeded rule.
+  await db.update(portalProgramFallbacksTable)
+    .set({ enabled: false })
+    .where(eq(portalProgramFallbacksTable.sourceProgramId, s.sourceProgramId));
+
+  const outcome = await handleProgramFull(s.subId);
+  assert.equal(outcome.status, "no_rule");
+
+  const [app] = await db.select({ stage: applicationsTable.stage }).from(applicationsTable).where(eq(applicationsTable.id, s.srcAppId));
+  assert.equal(app.stage, "inquiry", "disabled rule leaves source app untouched");
+});
+
+// ---------------------------------------------------------------------------
+// FB-I12 — empty meta.openPrograms short-circuits before any rule lookup
+// ---------------------------------------------------------------------------
+
+test("FB-I12: empty meta.openPrograms → no_meta no-op", async () => {
+  await setKillSwitch(true);
+  const s = await seedScenario({ autoSubmit: false });
+
+  await db.update(portalSubmissionsTable)
+    .set({ meta: { openPrograms: [], reason: "Kontenjan dolu" } })
+    .where(eq(portalSubmissionsTable.id, s.subId));
+
+  const outcome = await handleProgramFull(s.subId);
+  assert.equal(outcome.status, "no_meta");
+});
+
+// ---------------------------------------------------------------------------
+// FB-I13 — a rule pointing only at a non-existent program resolves to nothing
+// ---------------------------------------------------------------------------
+
+test("FB-I13: rule with only a non-existent fallback program → no_open_fallback", async () => {
+  await setKillSwitch(true);
+  const s = await seedScenario({ autoSubmit: false });
+
+  // Repoint the rule at a program id that doesn't exist in the catalog.
+  await db.update(portalProgramFallbacksTable)
+    .set({ fallbackProgramIds: [999_000_001] })
+    .where(eq(portalProgramFallbacksTable.sourceProgramId, s.sourceProgramId));
+
+  const outcome = await handleProgramFull(s.subId);
+  assert.equal(outcome.status, "no_open_fallback");
+
+  const children = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(
+    eq(applicationsTable.supersededFromApplicationId, s.srcAppId),
+  );
+  assert.equal(children.length, 0, "no supersession when no real fallback program resolves");
 });
