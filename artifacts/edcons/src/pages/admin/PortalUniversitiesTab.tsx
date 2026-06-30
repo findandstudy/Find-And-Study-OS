@@ -66,7 +66,11 @@ import {
   Network,
   Check,
   X,
+  Building2,
 } from "lucide-react";
+import {
+  PortalEmptyState, PortalErrorState,
+} from "@/components/admin/PortalTabStates";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Command,
@@ -1193,6 +1197,7 @@ export default function PortalUniversitiesTab() {
   const [unis, setUnis]       = useState<PortalUniversity[]>([]);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch]   = useState("");
   const searchTimer           = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1216,6 +1221,7 @@ export default function PortalUniversitiesTab() {
   // Load universities
   const load = useCallback(async (q: string) => {
     setLoading(true);
+    setLoadError(false);
     try {
       const params = new URLSearchParams({ limit: "100" });
       if (q.trim()) params.set("search", q.trim());
@@ -1225,6 +1231,7 @@ export default function PortalUniversitiesTab() {
       setUnis(res.data ?? []);
       setTotal(res.total ?? 0);
     } catch {
+      setLoadError(true);
       toast({ title: t("portalAutomation.unis.loadError"), variant: "destructive" });
     } finally {
       setLoading(false);
@@ -1384,10 +1391,20 @@ export default function PortalUniversitiesTab() {
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>
+      ) : loadError ? (
+        <PortalErrorState onRetry={() => load(search)} retrying={loading} />
       ) : unis.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground text-sm">
-          {t("portalAutomation.unis.noData")}
-        </div>
+        <PortalEmptyState
+          icon={Building2}
+          title={t("portalAutomation.unis.emptyTitle")}
+          description={t("portalAutomation.unis.noData")}
+          action={
+            <Button size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
+              <Plus className="w-3.5 h-3.5" />
+              {t("portalAutomation.unis.addButton")}
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-3">
           {unis.map((uni) => (

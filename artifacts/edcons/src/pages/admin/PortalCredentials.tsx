@@ -27,6 +27,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KeyRound, ShieldCheck, ShieldOff } from "lucide-react";
+import {
+  PortalEmptyState, PortalErrorState,
+} from "@/components/admin/PortalTabStates";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -40,7 +43,9 @@ export default function PortalCredentials() {
   const {
     data: portalsRaw,
     isLoading,
+    isError,
     refetch,
+    isFetching,
   } = useGetUniversityPortals();
 
   const portals: UniversityPortal[] = Array.isArray(portalsRaw) ? portalsRaw : [];
@@ -64,10 +69,14 @@ export default function PortalCredentials() {
             <Skeleton key={i} className="h-28 w-full rounded-xl" />
           ))}
         </div>
+      ) : isError ? (
+        <PortalErrorState onRetry={() => void refetch()} retrying={isFetching} />
       ) : portals.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          {t("portalAutomation.credentials.noPortals")}
-        </p>
+        <PortalEmptyState
+          icon={KeyRound}
+          title={t("portalAutomation.credentials.emptyTitle")}
+          description={t("portalAutomation.credentials.noPortals")}
+        />
       ) : (
         <div className="space-y-4">
           {portals.map((portal) => (
@@ -171,7 +180,7 @@ function PortalCredentialCard({
               onChange={(e) => setUsername(e.target.value)}
               placeholder={
                 hasSet
-                  ? "••••• (set)"
+                  ? t("portalAutomation.credentials.usernameSetPlaceholder")
                   : t("portalAutomation.credentials.usernameLabel")
               }
               autoComplete="off"
@@ -187,7 +196,7 @@ function PortalCredentialCard({
               onChange={(e) => setPassword(e.target.value)}
               placeholder={
                 hasSet
-                  ? "•••••••• kayıtlı"
+                  ? t("portalAutomation.credentials.passwordSetPlaceholder")
                   : t("portalAutomation.credentials.passwordLabel")
               }
               autoComplete="new-password"

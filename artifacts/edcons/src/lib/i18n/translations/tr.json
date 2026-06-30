@@ -4871,7 +4871,8 @@
       "deleteConfirmButton": "Sil",
       "deleting": "Siliniyor…",
       "deleteSuccess": "Üniversite silindi.",
-      "deleteError": "Üniversite silinemedi."
+      "deleteError": "Üniversite silinemedi.",
+      "emptyTitle": "Henüz portal üniversitesi yok"
     },
     "programMapping": {
       "title": "Program Haritalama",
@@ -4926,7 +4927,8 @@
       "optionsError": "Portaldan canlı program seçenekleri alınamadı.",
       "optionsCount": "{{count}} canlı seçenek",
       "optionsCached": "önbellek",
-      "optionsLive": "canlı"
+      "optionsLive": "canlı",
+      "emptyTitle": "Üniversite yok"
     },
     "adapters": {
       "title": "Adapter Yönetimi",
@@ -4973,7 +4975,9 @@
       "deleteSuccess": "Adapter silindi.",
       "deleteError": "Adapter silinemedi.",
       "loadError": "Adapter'lar yüklenemedi.",
-      "experimental": "Deneysel"
+      "experimental": "Deneysel",
+      "emptyTitle": "Özel adaptör yok",
+      "inactiveBadge": "Pasif"
     },
     "submissions": {
       "title": "Başvuru Panosu",
@@ -5016,7 +5020,29 @@
       "resetStuckSuccess": "{{count}} takılı gönderim kuyruğa alındı.",
       "resetStuckNone": "Takılı gönderim bulunamadı.",
       "resetStuckError": "Sıfırlama başarısız.",
-      "requeuedMessage": "İşlem 50sn'yi aştı, drain-once tarafından tamamlanacak."
+      "requeuedMessage": "İşlem 50sn'yi aştı, drain-once tarafından tamamlanacak.",
+      "statusCanceled": "İptal",
+      "modeReal": "Gerçek",
+      "modeDry": "Deneme",
+      "retryButton": "Yeniden Dene",
+      "cancelButton": "İptal Et",
+      "refreshButton": "Yenile",
+      "attemptsLabel": "Deneme {current}/{max}",
+      "detailShow": "detay",
+      "detailHide": "gizle",
+      "emptyTitle": "Gönderim yok",
+      "emptyDescription": "Geçerli filtrelere uyan gönderim bulunmuyor.",
+      "retryQueued": "Gönderim yeniden kuyruğa alındı.",
+      "retryError": "Yeniden deneme başarısız.",
+      "cancelSuccess": "Gönderim iptal edildi.",
+      "cancelError": "İptal başarısız.",
+      "cancelConfirmTitle": "Bu gönderim iptal edilsin mi?",
+      "cancelConfirmDescription": "Gönderim iptal edildi olarak işaretlenecek. Daha sonra yeniden deneyebilirsiniz.",
+      "processConfirmTitle": "Bu gönderim şimdi işlensin mi?",
+      "processConfirmDescription": "Gerçek modda bu işlem üniversite portalına canlı bir başvuru gönderir.",
+      "processAllConfirmTitle": "Kuyruktaki tüm gönderimler işlensin mi?",
+      "processAllConfirmDescription": "Gerçek modda bu işlem kuyruktaki her öğe için canlı başvuru gönderir.",
+      "confirmProcess": "İşle"
     },
     "auditLog": {
       "title": "Denetim Günlüğü",
@@ -5029,7 +5055,9 @@
       "colDetails": "Detaylar",
       "noData": "Denetim günlüğü kaydı yok.",
       "loadError": "Denetim günlüğü yüklenemedi.",
-      "loadMore": "Daha Fazla Yükle"
+      "loadMore": "Daha Fazla Yükle",
+      "emptyTitle": "Henüz işlem yok",
+      "refreshButton": "Yenile"
     },
     "panel": {
       "panelTitle": "Portala Gönder",
@@ -5070,7 +5098,10 @@
       "saving": "Kaydediliyor…",
       "noPortals": "Yapılandırılmış portal üniversitesi yok.",
       "credentialsSet": "Kimlik Bilgileri Ayarlı",
-      "noCredentials": "Kimlik Bilgisi Yok"
+      "noCredentials": "Kimlik Bilgisi Yok",
+      "emptyTitle": "Portal yok",
+      "usernameSetPlaceholder": "••••• (kayıtlı)",
+      "passwordSetPlaceholder": "•••••••• kayıtlı"
     },
     "manualSubmit": {
       "newButton": "Yeni Gönderim",
@@ -5119,6 +5150,13 @@
         "MISSING_CRM_ID": "CRM program id eksik",
         "INVALID_PORTAL_VALUE": "Portal değeri canlı bir opsiyonla eşleşmiyor"
       }
+    },
+    "states": {
+      "errorTitle": "Yüklenemedi",
+      "errorDescription": "Yüklenirken bir sorun oluştu. Lütfen tekrar deneyin.",
+      "retry": "Tekrar Dene",
+      "on": "Açık",
+      "off": "Kapalı"
     }
   },
   "activityFeed": {

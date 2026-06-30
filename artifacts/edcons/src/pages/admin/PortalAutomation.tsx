@@ -23,6 +23,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PortalErrorState } from "@/components/admin/PortalTabStates";
 import { Bot, Construction, Save, Timer } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -95,11 +96,13 @@ function AutomationRulesTab() {
   const [settings, setSettings] = useState<PortalSettings>(DEFAULTS);
   const [universities, setUniversities] = useState<PortalUniversity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Load settings + universities in parallel
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [settingsData, uniData] = await Promise.all([
         customFetch<PortalSettings>("/api/portal-automation/settings"),
@@ -110,6 +113,7 @@ function AutomationRulesTab() {
       setSettings({ ...DEFAULTS, ...settingsData });
       setUniversities(uniData.data ?? []);
     } catch {
+      setLoadError(true);
       toast({
         title: t("portalAutomation.rules.loadError"),
         variant: "destructive",
@@ -176,6 +180,14 @@ function AutomationRulesTab() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="py-6">
+        <PortalErrorState onRetry={load} retrying={loading} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 py-2">
 
@@ -199,7 +211,9 @@ function AutomationRulesTab() {
                 variant={settings.isEnabled ? "default" : "secondary"}
                 className="text-xs"
               >
-                {settings.isEnabled ? "ON" : "OFF"}
+                {settings.isEnabled
+                  ? t("portalAutomation.states.on")
+                  : t("portalAutomation.states.off")}
               </Badge>
             </div>
           </div>
@@ -373,7 +387,9 @@ function AutomationRulesTab() {
                 variant={settings.autoProcessEnabled ? "default" : "secondary"}
                 className="text-xs"
               >
-                {settings.autoProcessEnabled ? "ON" : "OFF"}
+                {settings.autoProcessEnabled
+                  ? t("portalAutomation.states.on")
+                  : t("portalAutomation.states.off")}
               </Badge>
             </div>
           </div>
@@ -438,14 +454,16 @@ export default function PortalAutomation() {
 
       {/* Tabs */}
       <Tabs defaultValue="rules">
-        <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="rules">{t("portalAutomation.tabs.rules")}</TabsTrigger>
-          <TabsTrigger value="universities">{t("portalAutomation.tabs.universities")}</TabsTrigger>
-          <TabsTrigger value="programMapping">{t("portalAutomation.tabs.programMapping")}</TabsTrigger>
-          <TabsTrigger value="adapters">{t("portalAutomation.tabs.adapters")}</TabsTrigger>
-          <TabsTrigger value="submissions">{t("portalAutomation.tabs.submissions")}</TabsTrigger>
-          <TabsTrigger value="auditLog">{t("portalAutomation.tabs.auditLog")}</TabsTrigger>
-        </TabsList>
+        <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:thin]">
+          <TabsList className="inline-flex w-max justify-start gap-1">
+            <TabsTrigger value="rules" className="shrink-0">{t("portalAutomation.tabs.rules")}</TabsTrigger>
+            <TabsTrigger value="universities" className="shrink-0">{t("portalAutomation.tabs.universities")}</TabsTrigger>
+            <TabsTrigger value="programMapping" className="shrink-0">{t("portalAutomation.tabs.programMapping")}</TabsTrigger>
+            <TabsTrigger value="adapters" className="shrink-0">{t("portalAutomation.tabs.adapters")}</TabsTrigger>
+            <TabsTrigger value="submissions" className="shrink-0">{t("portalAutomation.tabs.submissions")}</TabsTrigger>
+            <TabsTrigger value="auditLog" className="shrink-0">{t("portalAutomation.tabs.auditLog")}</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="rules">
           <AutomationRulesTab />

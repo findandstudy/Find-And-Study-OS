@@ -16,7 +16,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { RefreshCw, Loader2, ChevronDown } from "lucide-react";
+import { RefreshCw, Loader2, ChevronDown, ScrollText } from "lucide-react";
+import {
+  PortalEmptyState, PortalErrorState,
+} from "@/components/admin/PortalTabStates";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -76,11 +79,12 @@ export default function PortalAuditTab() {
   const [total, setTotal]       = useState(0);
   const [page, setPage]         = useState(1);
   const [loading, setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [loadingMore, setLdgMore] = useState(false);
   const limit = 50;
 
   const load = useCallback(async (p: number, append: boolean) => {
-    if (append) setLdgMore(true); else setLoading(true);
+    if (append) setLdgMore(true); else { setLoading(true); setLoadError(false); }
     try {
       const params = new URLSearchParams({
         search: "portal",
@@ -92,6 +96,7 @@ export default function PortalAuditTab() {
       setTotal(res.meta?.total ?? 0);
       setEntries((prev) => append ? [...prev, ...logs] : logs);
     } catch {
+      if (!append) setLoadError(true);
       toast({ title: t("portalAutomation.auditLog.loadError"), variant: "destructive" });
     } finally {
       setLoading(false);
@@ -122,7 +127,7 @@ export default function PortalAuditTab() {
           disabled={loading}
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          Yenile
+          {t("portalAutomation.auditLog.refreshButton")}
         </Button>
       </div>
 
@@ -131,10 +136,14 @@ export default function PortalAuditTab() {
         <div className="space-y-2">
           {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
         </div>
+      ) : loadError ? (
+        <PortalErrorState onRetry={() => { setPage(1); load(1, false); }} retrying={loading} />
       ) : entries.length === 0 ? (
-        <div className="text-center py-16 text-sm text-muted-foreground">
-          {t("portalAutomation.auditLog.noData")}
-        </div>
+        <PortalEmptyState
+          icon={ScrollText}
+          title={t("portalAutomation.auditLog.emptyTitle")}
+          description={t("portalAutomation.auditLog.noData")}
+        />
       ) : (
         <div className="rounded-xl border overflow-hidden divide-y divide-border">
           {entries.map((e) => (

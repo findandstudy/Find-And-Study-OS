@@ -21,15 +21,20 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from "@/components/ui/tooltip";
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
   CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
-  PlayCircle, ListStart, Eye, Plus,
+  PlayCircle, ListStart, Eye, Plus, Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManualSubmitDialog } from "@/components/admin/ManualSubmitDialog";
+import {
+  PortalEmptyState, PortalErrorState,
+} from "@/components/admin/PortalTabStates";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -101,14 +106,58 @@ const STATUS_CONFIG: Record<SubmissionStatus, {
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 // ---------------------------------------------------------------------------
+// Expandable error / detail text — truncates long messages with a toggle.
+// ---------------------------------------------------------------------------
+
+function ErrorDetail({
+  text, prefix, tone = "error",
+}: {
+  text: string;
+  prefix?: string;
+  tone?: "error" | "warning";
+}) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > 80;
+  const toneClass =
+    tone === "warning"
+      ? "text-orange-600 dark:text-orange-400"
+      : "text-destructive";
+  return (
+    <span className="inline-flex max-w-full items-baseline gap-1">
+      <span
+        className={cn(
+          toneClass,
+          "break-words",
+          !expanded && isLong && "inline-block max-w-[220px] truncate align-bottom",
+        )}
+      >
+        {prefix ? `${prefix}: ` : ""}{text}
+      </span>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
+        >
+          {expanded
+            ? t("portalAutomation.submissions.detailHide")
+            : t("portalAutomation.submissions.detailShow")}
+        </button>
+      )}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Submission row
 // ---------------------------------------------------------------------------
 
 interface RowProps {
   sub: PortalSubmission;
   onRetry: (id: number) => Promise<void>;
-  onCancel: (id: number) => Promise<void>;
-  onProcess: (id: number) => Promise<void>;
+  onCancel: (id: number) => void;
+  onProcess: (id: number) => void;
   retryingId: number | null;
   cancelingId: number | null;
   processingId: number | null;
@@ -133,7 +182,7 @@ function SubmissionRow({
     already_exists:  t("portalAutomation.submissions.statusSuccess"),
     program_missing: t("portalAutomation.submissions.statusSkipped"),
     failed:          t("portalAutomation.submissions.statusFailed"),
-    canceled:        "İptal",
+    canceled:        t("portalAutomation.submissions.statusCanceled"),
     dry_run:         t("portalAutomation.submissions.statusDryRun"),
   };
 
@@ -153,7 +202,9 @@ function SubmissionRow({
                 {statusLabel[sub.status]}
               </Badge>
               <Badge variant={sub.mode === "real" ? "default" : "secondary"} className="text-xs py-0">
-                {sub.mode === "real" ? "Real" : "Dry Run"}
+                {sub.mode === "real"
+                  ? t("portalAutomation.submissions.modeReal")
+                  : t("portalAutomation.submissions.modeDry")}
               </Badge>
               <span className="text-xs text-muted-foreground font-medium">
                 {sub.universityName}
@@ -170,33 +221,17 @@ function SubmissionRow({
               {sub.error && (
                 <>
                   <span>·</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="text-destructive truncate max-w-[200px]">{sub.error}</span>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-sm">
-                        <p className="text-xs break-words">{sub.error}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <ErrorDetail text={sub.error} />
                 </>
               )}
               {sub.resultJson?.result?.detail && (
                 <>
                   <span>·</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="text-orange-600 dark:text-orange-400 truncate max-w-[220px]">
-                          {t("portalAutomation.submissions.skipDetailLabel")}: {sub.resultJson.result.detail}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-sm">
-                        <p className="text-xs break-words">{sub.resultJson.result.detail}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <ErrorDetail
+                    text={sub.resultJson.result.detail}
+                    prefix={t("portalAutomation.submissions.skipDetailLabel")}
+                    tone="warning"
+                  />
                 </>
               )}
               {sub.resultJson?.missingSlots && sub.resultJson.missingSlots.length > 0 && (
@@ -210,7 +245,7 @@ function SubmissionRow({
               <span>·</span>
               <span>{new Date(sub.createdAt).toLocaleString()}</span>
               <span>·</span>
-              <span>Deneme {sub.attempts}/{sub.maxAttempts}</span>
+              <span>{t("portalAutomation.submissions.attemptsLabel", { current: String(sub.attempts), max: String(sub.maxAttempts) })}</span>
             </div>
           </div>
 
@@ -252,7 +287,7 @@ function SubmissionRow({
                 {isRetrying
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   : <RotateCcw className="w-3.5 h-3.5" />}
-                Yeniden Dene
+                {t("portalAutomation.submissions.retryButton")}
               </Button>
             )}
             {canCancel && (
@@ -266,7 +301,7 @@ function SubmissionRow({
                 {isCanceling
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   : <XCircle className="w-3.5 h-3.5" />}
-                İptal
+                {t("portalAutomation.submissions.cancelButton")}
               </Button>
             )}
           </div>
@@ -287,6 +322,7 @@ export default function PortalSubmissionsTab() {
   const [subs, setSubs]       = useState<PortalSubmission[]>([]);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [page, setPage]       = useState(1);
   const limit                 = 20;
 
@@ -299,8 +335,14 @@ export default function PortalSubmissionsTab() {
   const [resetingStuck, setResetingStuck] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
 
+  // Confirmation targets for destructive / live actions.
+  const [confirmCancelId, setConfirmCancelId]   = useState<number | null>(null);
+  const [confirmProcessId, setConfirmProcessId] = useState<number | null>(null);
+  const [confirmProcessAll, setConfirmProcessAll] = useState(false);
+
   const load = useCallback(async (p: number, status: string, mode: string) => {
     setLoading(true);
+    setLoadError(false);
     try {
       const params = new URLSearchParams({ page: String(p), limit: String(limit) });
       if (status !== "all") params.set("status", status);
@@ -309,6 +351,7 @@ export default function PortalSubmissionsTab() {
       setSubs(res.data ?? []);
       setTotal(res.total ?? 0);
     } catch {
+      setLoadError(true);
       toast({ title: t("portalAutomation.submissions.loadError"), variant: "destructive" });
     } finally {
       setLoading(false);
@@ -322,9 +365,9 @@ export default function PortalSubmissionsTab() {
     try {
       await customFetch(`/api/portal-submissions/${id}/retry`, { method: "POST" });
       setSubs((prev) => prev.map((s) => s.id === id ? { ...s, status: "queued", error: null, attempts: 0 } : s));
-      toast({ title: "Gönderim yeniden kuyruğa alındı." });
+      toast({ title: t("portalAutomation.submissions.retryQueued") });
     } catch {
-      toast({ title: "Yeniden deneme başarısız.", variant: "destructive" });
+      toast({ title: t("portalAutomation.submissions.retryError"), variant: "destructive" });
     } finally {
       setRetryingId(null);
     }
@@ -335,9 +378,9 @@ export default function PortalSubmissionsTab() {
     try {
       await customFetch(`/api/portal-submissions/${id}/cancel`, { method: "POST" });
       setSubs((prev) => prev.map((s) => s.id === id ? { ...s, status: "canceled" } : s));
-      toast({ title: "Gönderim iptal edildi." });
+      toast({ title: t("portalAutomation.submissions.cancelSuccess") });
     } catch {
-      toast({ title: "İptal başarısız.", variant: "destructive" });
+      toast({ title: t("portalAutomation.submissions.cancelError"), variant: "destructive" });
     } finally {
       setCancelingId(null);
     }
@@ -465,7 +508,7 @@ export default function PortalSubmissionsTab() {
               <SelectItem value="running">{t("portalAutomation.submissions.statusRunning")}</SelectItem>
               <SelectItem value="submitted">{t("portalAutomation.submissions.statusSuccess")}</SelectItem>
               <SelectItem value="failed">{t("portalAutomation.submissions.statusFailed")}</SelectItem>
-              <SelectItem value="canceled">İptal</SelectItem>
+              <SelectItem value="canceled">{t("portalAutomation.submissions.statusCanceled")}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={modeFilter} onValueChange={(v) => { setModeFilter(v); setPage(1); }}>
@@ -474,8 +517,8 @@ export default function PortalSubmissionsTab() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("portalAutomation.submissions.filterAll")}</SelectItem>
-              <SelectItem value="dry">Dry Run</SelectItem>
-              <SelectItem value="real">Real</SelectItem>
+              <SelectItem value="dry">{t("portalAutomation.submissions.modeDry")}</SelectItem>
+              <SelectItem value="real">{t("portalAutomation.submissions.modeReal")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -508,7 +551,7 @@ export default function PortalSubmissionsTab() {
               variant="default"
               size="sm"
               className="h-9 gap-1.5"
-              onClick={handleProcessAll}
+              onClick={() => setConfirmProcessAll(true)}
               disabled={processingAll || processingId !== null || loading}
             >
               {processingAll
@@ -523,7 +566,7 @@ export default function PortalSubmissionsTab() {
             disabled={loading}
           >
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            Yenile
+            {t("portalAutomation.submissions.refreshButton")}
           </Button>
         </div>
       </div>
@@ -533,10 +576,20 @@ export default function PortalSubmissionsTab() {
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>
+      ) : loadError ? (
+        <PortalErrorState onRetry={() => load(page, statusFilter, modeFilter)} retrying={loading} />
       ) : subs.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground text-sm">
-          {t("portalAutomation.submissions.noData")}
-        </div>
+        <PortalEmptyState
+          icon={Inbox}
+          title={t("portalAutomation.submissions.emptyTitle")}
+          description={t("portalAutomation.submissions.emptyDescription")}
+          action={
+            <Button size="sm" className="gap-1.5" onClick={() => setManualOpen(true)}>
+              <Plus className="w-3.5 h-3.5" />
+              {t("portalAutomation.manualSubmit.newButton")}
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-3">
           {subs.map((sub) => (
@@ -544,8 +597,8 @@ export default function PortalSubmissionsTab() {
               key={sub.id}
               sub={sub}
               onRetry={handleRetry}
-              onCancel={handleCancel}
-              onProcess={handleProcess}
+              onCancel={(id) => setConfirmCancelId(id)}
+              onProcess={(id) => setConfirmProcessId(id)}
               retryingId={retryingId}
               cancelingId={cancelingId}
               processingId={processingId}
@@ -563,7 +616,7 @@ export default function PortalSubmissionsTab() {
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1 || loading}
           >
-            Önceki
+            {t("common.previous")}
           </Button>
           <span className="text-sm text-muted-foreground">
             {page} / {totalPages}
@@ -573,7 +626,7 @@ export default function PortalSubmissionsTab() {
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages || loading}
           >
-            Sonraki
+            {t("common.next")}
           </Button>
         </div>
       )}
@@ -583,6 +636,78 @@ export default function PortalSubmissionsTab() {
         onOpenChange={setManualOpen}
         onQueued={() => load(1, statusFilter, modeFilter)}
       />
+
+      {/* Cancel confirmation */}
+      <AlertDialog open={confirmCancelId !== null} onOpenChange={(o) => { if (!o) setConfirmCancelId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("portalAutomation.submissions.cancelConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("portalAutomation.submissions.cancelConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                const id = confirmCancelId;
+                setConfirmCancelId(null);
+                if (id !== null) void handleCancel(id);
+              }}
+            >
+              {t("portalAutomation.submissions.cancelButton")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Process single confirmation */}
+      <AlertDialog open={confirmProcessId !== null} onOpenChange={(o) => { if (!o) setConfirmProcessId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("portalAutomation.submissions.processConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("portalAutomation.submissions.processConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const id = confirmProcessId;
+                setConfirmProcessId(null);
+                if (id !== null) void handleProcess(id);
+              }}
+            >
+              {t("portalAutomation.submissions.confirmProcess")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Process all confirmation */}
+      <AlertDialog open={confirmProcessAll} onOpenChange={setConfirmProcessAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("portalAutomation.submissions.processAllConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("portalAutomation.submissions.processAllConfirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmProcessAll(false);
+                void handleProcessAll();
+              }}
+            >
+              {t("portalAutomation.submissions.confirmProcess")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

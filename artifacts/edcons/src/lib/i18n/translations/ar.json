@@ -4871,7 +4871,8 @@
       "deleteConfirmButton": "Delete",
       "deleting": "Deleting…",
       "deleteSuccess": "University deleted.",
-      "deleteError": "Failed to delete university."
+      "deleteError": "Failed to delete university.",
+      "emptyTitle": "No portal universities yet"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -4926,7 +4927,8 @@
       "optionsError": "Failed to fetch live program options from the portal.",
       "optionsCount": "{{count}} live option(s)",
       "optionsCached": "cached",
-      "optionsLive": "live"
+      "optionsLive": "live",
+      "emptyTitle": "No universities"
     },
     "adapters": {
       "title": "Adapter Management",
@@ -4973,7 +4975,9 @@
       "deleteSuccess": "Adapter deleted.",
       "deleteError": "Failed to delete adapter.",
       "loadError": "Failed to load adapters.",
-      "experimental": "Experimental"
+      "experimental": "Experimental",
+      "emptyTitle": "No custom adapters",
+      "inactiveBadge": "Inactive"
     },
     "submissions": {
       "title": "Submission Board",
@@ -5016,7 +5020,29 @@
       "resetStuckSuccess": "تمت إعادة {{count}} إرسال متوقف إلى قائمة الانتظار.",
       "resetStuckNone": "لا توجد إرسالات متوقفة.",
       "resetStuckError": "فشلت إعادة التعيين.",
-      "requeuedMessage": "استغرقت المعالجة وقتاً طويلاً، ستكتمل بواسطة المهمة المجدولة."
+      "requeuedMessage": "استغرقت المعالجة وقتاً طويلاً، ستكتمل بواسطة المهمة المجدولة.",
+      "statusCanceled": "Canceled",
+      "modeReal": "Real",
+      "modeDry": "Dry Run",
+      "retryButton": "Retry",
+      "cancelButton": "Cancel",
+      "refreshButton": "Refresh",
+      "attemptsLabel": "Attempt {current}/{max}",
+      "detailShow": "details",
+      "detailHide": "hide",
+      "emptyTitle": "No submissions",
+      "emptyDescription": "There are no submissions matching the current filters yet.",
+      "retryQueued": "Submission re-queued.",
+      "retryError": "Retry failed.",
+      "cancelSuccess": "Submission canceled.",
+      "cancelError": "Cancel failed.",
+      "cancelConfirmTitle": "Cancel this submission?",
+      "cancelConfirmDescription": "The submission will be marked as canceled. You can retry it later.",
+      "processConfirmTitle": "Process this submission now?",
+      "processConfirmDescription": "In Real mode this sends a live application to the university portal.",
+      "processAllConfirmTitle": "Process all queued submissions?",
+      "processAllConfirmDescription": "In Real mode this sends live applications for every queued item.",
+      "confirmProcess": "Process"
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5029,7 +5055,9 @@
       "colDetails": "Details",
       "noData": "No audit log entries.",
       "loadError": "Failed to load audit log.",
-      "loadMore": "Load More"
+      "loadMore": "Load More",
+      "emptyTitle": "No activity yet",
+      "refreshButton": "Refresh"
     },
     "panel": {
       "panelTitle": "Submit to Portal",
@@ -5070,7 +5098,10 @@
       "saving": "Saving…",
       "noPortals": "No portal universities configured.",
       "credentialsSet": "Credentials Set",
-      "noCredentials": "No Credentials"
+      "noCredentials": "No Credentials",
+      "emptyTitle": "No portals",
+      "usernameSetPlaceholder": "••••• (set)",
+      "passwordSetPlaceholder": "•••••••• saved"
     },
     "manualSubmit": {
       "newButton": "New Submission",
@@ -5119,6 +5150,13 @@
         "MISSING_CRM_ID": "Missing CRM program id",
         "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
       }
+    },
+    "states": {
+      "errorTitle": "Couldn't load",
+      "errorDescription": "Something went wrong while loading. Please try again.",
+      "retry": "Retry",
+      "on": "On",
+      "off": "Off"
     }
   },
   "activityFeed": {

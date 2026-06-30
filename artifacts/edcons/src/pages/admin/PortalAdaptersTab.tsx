@@ -37,6 +37,9 @@ import {
   Plus, Edit2, Trash2, CheckCircle2, XCircle, Loader2,
   Code2, Braces, KeySquare, Upload, FlaskConical,
 } from "lucide-react";
+import {
+  PortalEmptyState, PortalErrorState,
+} from "@/components/admin/PortalTabStates";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -369,6 +372,7 @@ export default function PortalAdaptersTab() {
   const [registry, setRegistry] = useState<RegistryAdapter[]>([]);
   const [dbAdapters, setDbAdapters] = useState<DbAdapter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<DbAdapter | null>(null);
@@ -377,11 +381,13 @@ export default function PortalAdaptersTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const res = await customFetch<AdaptersResponse>("/api/portal-adapters");
       setRegistry(res.registry ?? []);
       setDbAdapters(res.db ?? []);
     } catch {
+      setLoadError(true);
       toast({ title: t("portalAutomation.adapters.loadError"), variant: "destructive" });
     } finally {
       setLoading(false);
@@ -442,6 +448,14 @@ export default function PortalAdaptersTab() {
       {t("portalAutomation.adapters.credentialsMissing")}
     </Badge>
   );
+
+  if (loadError) {
+    return (
+      <div className="py-6">
+        <PortalErrorState onRetry={load} retrying={loading} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 py-2">
@@ -507,9 +521,21 @@ export default function PortalAdaptersTab() {
               {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
             </div>
           ) : dbAdapters.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              {t("portalAutomation.adapters.noDbAdapters")}
-            </p>
+            <PortalEmptyState
+              icon={Braces}
+              title={t("portalAutomation.adapters.emptyTitle")}
+              description={t("portalAutomation.adapters.noDbAdapters")}
+              action={
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => { setEditing(null); setFormOpen(true); }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  {t("portalAutomation.adapters.addButton")}
+                </Button>
+              }
+            />
           ) : (
             <div className="divide-y divide-border rounded-lg border overflow-hidden">
               {dbAdapters.map((a) => (
@@ -520,7 +546,7 @@ export default function PortalAdaptersTab() {
                       {kindBadge(a.kind)}
                       {!a.isActive && (
                         <Badge variant="outline" className="text-[11px] py-0 h-4 text-muted-foreground">
-                          Pasif
+                          {t("portalAutomation.adapters.inactiveBadge")}
                         </Badge>
                       )}
                     </div>

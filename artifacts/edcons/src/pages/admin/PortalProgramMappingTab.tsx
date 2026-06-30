@@ -29,7 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Save, Loader2, ArrowRight, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Save, Loader2, ArrowRight, RefreshCw, Building2 } from "lucide-react";
+import {
+  PortalEmptyState, PortalErrorState,
+} from "@/components/admin/PortalTabStates";
 import { ProgramMappingImportDialog } from "@/components/admin/ProgramMappingImportDialog";
 
 // ---------------------------------------------------------------------------
@@ -280,6 +283,7 @@ export default function PortalProgramMappingTab() {
 
   const [unis, setUnis]            = useState<PortalUniversity[]>([]);
   const [unisLoading, setULdg]     = useState(true);
+  const [unisError, setUnisError]  = useState(false);
   const [selectedKey, setSelected] = useState<string>("");
 
   const [mappingRows, setMappingRows]   = useState<PairRow[]>([]);
@@ -288,6 +292,7 @@ export default function PortalProgramMappingTab() {
   const [countryRows, setCountryRows]   = useState<PairRow[]>([]);
 
   const [dataLoading, setDLdg] = useState(false);
+  const [dataLoadError, setDataLoadError] = useState(false);
   const [saving, setSaving]    = useState(false);
 
   // Live program options (for the override value dropdown)
@@ -297,25 +302,29 @@ export default function PortalProgramMappingTab() {
   const [optionsMeta, setOMeta]       = useState<{ cached: boolean; stale: boolean; fetchedAt?: string | null } | null>(null);
 
   // Load university list
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await customFetch<{ data: PortalUniversity[] }>(
-          "/api/portal-universities?limit=200",
-        );
-        setUnis(res.data ?? []);
-      } catch {
-        toast({ title: t("portalAutomation.unis.loadError"), variant: "destructive" });
-      } finally {
-        setULdg(false);
-      }
-    })();
+  const loadUnis = useCallback(async () => {
+    setULdg(true);
+    setUnisError(false);
+    try {
+      const res = await customFetch<{ data: PortalUniversity[] }>(
+        "/api/portal-universities?limit=200",
+      );
+      setUnis(res.data ?? []);
+    } catch {
+      setUnisError(true);
+      toast({ title: t("portalAutomation.unis.loadError"), variant: "destructive" });
+    } finally {
+      setULdg(false);
+    }
   }, [t, toast]);
+
+  useEffect(() => { loadUnis(); }, [loadUnis]);
 
   // Load all matching data for the selected university
   const loadData = useCallback(async (uniKey: string) => {
     if (!uniKey) return;
     setDLdg(true);
+    setDataLoadError(false);
     try {
       const res = await customFetch<MappingResponse>(`/api/portal-program-mapping/${uniKey}`);
       setMappingRows(toPairRows(res.mappings));
@@ -323,6 +332,7 @@ export default function PortalProgramMappingTab() {
       setSynonymRows(toSynonymRows(res.synonyms));
       setCountryRows(toPairRows(res.countryOverrides));
     } catch {
+      setDataLoadError(true);
       toast({ title: t("portalAutomation.programMapping.loadError"), variant: "destructive" });
     } finally {
       setDLdg(false);
@@ -419,10 +429,14 @@ export default function PortalProgramMappingTab() {
         <CardContent>
           {unisLoading ? (
             <Skeleton className="h-10 w-72" />
+          ) : unisError ? (
+            <PortalErrorState onRetry={loadUnis} retrying={unisLoading} />
           ) : unis.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("portalAutomation.programMapping.noUniversities")}
-            </p>
+            <PortalEmptyState
+              icon={Building2}
+              title={t("portalAutomation.programMapping.emptyTitle")}
+              description={t("portalAutomation.programMapping.noUniversities")}
+            />
           ) : (
             <Select value={selectedKey} onValueChange={handleSelectUni}>
               <SelectTrigger className="w-full sm:w-72">
@@ -450,6 +464,12 @@ export default function PortalProgramMappingTab() {
           <Card className="rounded-xl">
             <CardContent className="py-6 space-y-3">
               {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
+            </CardContent>
+          </Card>
+        ) : dataLoadError ? (
+          <Card className="rounded-xl">
+            <CardContent className="py-6">
+              <PortalErrorState onRetry={() => loadData(selectedKey)} retrying={dataLoading} />
             </CardContent>
           </Card>
         ) : (
