@@ -164,6 +164,21 @@ test("LANG1 — language mismatch rejected, neutral allowed", () => {
   );
 });
 
+test("LANG2 — desired English + only Turkish candidates → empty pool (programMissing, no fallback)", () => {
+  const desired = "Computer Engineering (English)";
+  const catalog = [
+    { id: "1", name: "Bilgisayar Mühendisliği (Türkçe)" },
+    { id: "2", name: "Makine Mühendisliği (Türkçe)" },
+  ];
+  // This mirrors createApplication()'s language filter. When a language is
+  // desired and every candidate is a different detectable language the pool is
+  // empty, so the adapter must report programMissing rather than fall back to
+  // the full catalog and submit a wrong-language application.
+  const pool = catalog.filter((c) => isLanguageCompatible(desired, c.name));
+  assert.equal(pool.length, 0);
+  assert.ok(catalog.length > 0); // non-empty catalog → the no-fallback guard fires
+});
+
 // ---------------------------------------------------------------------------
 // Selector-constant presence
 // ---------------------------------------------------------------------------

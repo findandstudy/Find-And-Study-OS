@@ -654,7 +654,24 @@ export const sitAdapter: SitAdapter = {
     const langFiltered = catalog.filter((c) =>
       isLanguageCompatible(profile.programName, c.name),
     );
-    const pool = langFiltered.length > 0 ? langFiltered : catalog;
+    // NEVER fall back to the full catalog when language filtering removes every
+    // candidate — that would let a language-mismatched program (e.g. desired
+    // English while only Turkish is offered) be fuzzy-matched and submitted,
+    // creating a wrong application. isLanguageCompatible only drops a candidate
+    // when BOTH the desired and candidate languages are detected AND differ, so
+    // a non-empty catalog with an empty compatible set means no safe match
+    // exists — report programMissing instead of guessing.
+    if (catalog.length > 0 && langFiltered.length === 0) {
+      logger.warn(
+        `[sit] program dil uyumsuz: "${profile.programName}" — ${catalog.length} adayın hiçbiri dil uyumlu değil`,
+      );
+      return {
+        ...base,
+        programMissing: true,
+        detail: `Program bulunamadı: "${profile.programName}" — dil uyumlu aday yok (${catalog.length} aday farklı dilde)`,
+      };
+    }
+    const pool = langFiltered;
     const mergedMap = profile.programOverrides
       ? { ...profile.programOverrides }
       : undefined;
