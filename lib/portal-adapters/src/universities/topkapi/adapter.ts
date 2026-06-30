@@ -1296,17 +1296,47 @@ export const topkapiAdapter: UniversityAdapter = {
       { timeout: 12000 },
     );
 
-    const programOptions: ProgramCandidate[] = await page.$$eval(
+    // Read options WITH their enabled/disabled state. The portal marks a full
+    // programme with the native `disabled` attribute AND/OR a "(Kontenjan Dolu)"
+    // suffix in the option text — a disabled option cannot be selected, so
+    // page.selectOption() would block ~8s ("option being selected is not
+    // enabled") before failing. We capture `disabled` to fast-fail instead.
+    const programOptionsRaw: Array<{
+      id: string;
+      name: string;
+      disabled: boolean;
+    }> = await page.$$eval(
       "select[name=programFirstPreference] option",
       (opts) =>
         (opts as HTMLOptionElement[])
           .filter((o) => o.value && o.value !== "0" && o.value !== "")
-          .map((o) => ({ id: o.value, name: o.textContent?.trim() ?? "" })),
+          .map((o) => {
+            const name = o.textContent?.trim() ?? "";
+            return {
+              id: o.value,
+              name,
+              disabled: o.disabled || /\(\s*Kontenjan\s*Dolu\s*\)/i.test(name),
+            };
+          }),
     );
+    // matchProgram only needs {id,name}; keep a plain ProgramCandidate list.
+    const programOptions: ProgramCandidate[] = programOptionsRaw.map((o) => ({
+      id: o.id,
+      name: o.name,
+    }));
+    const openPrograms = programOptionsRaw.filter((o) => !o.disabled);
 
     logger.info(
-      `[topkapi] ${programOptions.length} program option(s). First 10:`,
-      programOptions.slice(0, 10).map((o) => `${o.id}: ${o.name}`),
+      `[topkapi] ${programOptions.length} program option(s) (${openPrograms.length} açık). First 10:`,
+      programOptionsRaw
+        .slice(0, 10)
+        .map((o) => `${o.id}: ${o.name}${o.disabled ? " [DOLU]" : ""}`),
+    );
+    // Debug: list every OPEN (enabled, not Kontenjan Dolu) programme so an
+    // operator can pick the nearest available one if the target is full.
+    logger.info(
+      `[topkapi] Açık programlar (${openPrograms.length}): ` +
+        openPrograms.map((o) => `${o.id}: ${o.name}`).join(", "),
     );
 
     // Panel-managed mapping data merges OVER the built-in code defaults (DB wins):
@@ -1380,10 +1410,37 @@ export const topkapiAdapter: UniversityAdapter = {
       `[topkapi] Matched: "${matchResult.match.name}" (conf=${matchResult.conf.toFixed(2)})`,
     );
 
-    await page.selectOption(
+    // ── KONTENJAN DOLU fast-fail ─────────────────────────────────────────────
+    // If the matched programme is disabled / "(Kontenjan Dolu)", never attempt
+    // page.selectOption (it would hang ~8s on a not-enabled option). Throw an
+    // immediate, explicit error and surface the open programmes so an operator
+    // can pick the nearest available one.
+    const matchedOpt = programOptionsRaw.find(
+      (o) => o.id === matchResult!.match.id,
+    );
+    if (matchedOpt?.disabled) {
+      const openList = openPrograms
+        .slice(0, 15)
+        .map((o) => `${o.id}: ${o.name}`)
+        .join(", ");
+      logger.warn(
+        `[topkapi] Program kontenjanı dolu — "${matchResult.match.name}". Açık programlar (${openPrograms.length}): ${openPrograms
+          .map((o) => `${o.id}: ${o.name}`)
+          .join(", ")}`,
+      );
+      { const s = await takeShot(page, "step4-kontenjan-dolu"); if (s) screenshots.push(s); }
+      throw new Error(
+        `Topkapı: Program kontenjanı dolu — ${matchResult.match.name}. Farklı program gerekiyor. Açık programlar: [${openList}]`,
+      );
+    }
+
+    // The program dropdown is a HIDDEN select2 (twopulse-select2, aria-hidden),
+    // so page.selectOption() can't reach it (timeout). Select it the same way as
+    // the other select2 fields: jQuery .val().trigger("change") in-page.
+    await setSelectByValue(
+      page,
       "select[name=programFirstPreference]",
-      { value: matchResult.match.id },
-    { force: true },
+      matchResult.match.id,
     );
 
     const selVal = await page.$eval(

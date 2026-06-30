@@ -24,7 +24,12 @@ async function main(): Promise<void> {
 
   const adapter = adapterByKey("topkapi");
   if (!adapter) throw new Error("[dump-programs] No adapter found for key 'topkapi'");
-  const session = await adapter.login({ user: creds.user, password: creds.password });
+  // Pass the DB-resolved credentials explicitly so the script runs standalone
+  // (no TOPKAPI_EMAIL/PASSWORD env requirement — login() only falls back to env
+  // when `credentials` is omitted).
+  const session = await adapter.login({
+    credentials: { user: creds.user, password: creds.password },
+  });
   const { page } = session;
 
   try {
@@ -33,7 +38,7 @@ async function main(): Promise<void> {
 
     // The program dropdown (programFirstPreference) is on an inner wizard step.
     // We walk through steps until we find it.
-    let options: Array<{ id: string; name: string }> = [];
+    let options: Array<{ id: string; name: string; disabled: boolean }> = [];
 
     for (let step = 0; step <= 6; step++) {
       options = await page.$$eval(
@@ -41,7 +46,15 @@ async function main(): Promise<void> {
         (opts) =>
           (opts as HTMLOptionElement[])
             .filter((o) => o.value && o.value !== "0" && o.value !== "")
-            .map((o) => ({ id: o.value, name: o.textContent?.trim() ?? "" })),
+            .map((o) => {
+              const name = o.textContent?.trim() ?? "";
+              return {
+                id: o.value,
+                name,
+                disabled:
+                  o.disabled || /\(\s*Kontenjan\s*Dolu\s*\)/i.test(name),
+              };
+            }),
       ).catch(() => []);
 
       if (options.length > 0) {
@@ -73,10 +86,15 @@ async function main(): Promise<void> {
     }
 
     await fs.writeFile(OUTPUT_PATH, JSON.stringify(options, null, 2), "utf8");
-    console.log(`\n[dump-programs] Written ${options.length} options → ${OUTPUT_PATH}\n`);
-    console.log("=== PROGRAM OPTIONS (id → name) ===");
+    const openCount = options.filter((o) => !o.disabled).length;
+    console.log(
+      `\n[dump-programs] Written ${options.length} options (${openCount} open / ${options.length - openCount} Kontenjan Dolu) → ${OUTPUT_PATH}\n`,
+    );
+    console.log("=== PROGRAM OPTIONS (id → name [state]) ===");
     for (const o of options) {
-      console.log(`  ${String(o.id).padStart(6)}: ${o.name}`);
+      console.log(
+        `  ${String(o.id).padStart(6)}: ${o.name}${o.disabled ? "  [KONTENJAN DOLU]" : ""}`,
+      );
     }
 
     // Generate suggested PROGRAM_MAP entries
