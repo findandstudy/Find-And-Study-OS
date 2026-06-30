@@ -35,6 +35,7 @@ export {
 export {
   mapDocType,
   buildProfile,
+  normalizeGpaRange,
   REQUIRED_DOCS,
   type DocType,
 } from "./profile.js";

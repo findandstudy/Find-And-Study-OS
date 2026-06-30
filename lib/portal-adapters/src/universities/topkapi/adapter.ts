@@ -12,6 +12,7 @@ import { launchPortal, saveState, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
 import { matchProgram, fold } from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
+import { formatGraduationForInput } from "./format.js";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -371,6 +372,54 @@ async function syncChange(page: Page, selector: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Diagnose the real DOM widget for the first present selector and log it. The
+// returned `type` (lowercased input type, or tagName for non-inputs) lets the
+// caller format values for the actual widget (e.g. a native date picker).
+// ---------------------------------------------------------------------------
+async function describeInput(
+  page: Page,
+  selectors: string[],
+  label: string,
+  logger: typeof import("../../browser.js").logger,
+): Promise<{ type: string; desc: string }> {
+  let sel = "";
+  for (const s of selectors) {
+    if (await page.locator(s).count()) {
+      sel = s;
+      break;
+    }
+  }
+  if (!sel) {
+    logger.warn(`[topkapi] Step 3 DOM: ${label} — no element found`);
+    return { type: "", desc: "(not found)" };
+  }
+  const info = await page
+    .$eval(sel, (el) => {
+      const e = el as HTMLInputElement;
+      return {
+        tag: e.tagName.toLowerCase(),
+        type: (e.getAttribute("type") || "").toLowerCase(),
+        placeholder: e.getAttribute("placeholder") || "",
+        readOnly: e.readOnly === true,
+        cls: (e.getAttribute("class") || "").slice(0, 60),
+      };
+    })
+    .catch(() => null);
+  if (!info) {
+    logger.warn(`[topkapi] Step 3 DOM: ${label} — could not read element`);
+    return { type: "", desc: "(unreadable)" };
+  }
+  const type = info.tag === "input" ? info.type || "text" : info.tag;
+  const desc =
+    `tag=${info.tag} type=${info.type || "(none)"}` +
+    (info.readOnly ? " readonly" : "") +
+    (info.placeholder ? ` placeholder="${info.placeholder}"` : "") +
+    (info.cls ? ` class="${info.cls}"` : "");
+  logger.info(`[topkapi] Step 3 DOM: ${label} ${desc}`);
+  return { type, desc };
+}
+
+// ---------------------------------------------------------------------------
 // Read the current .value of an input/select (trimmed; "" on miss).
 // ---------------------------------------------------------------------------
 async function readValue(page: Page, selector: string): Promise<string> {
@@ -726,10 +775,19 @@ export const topkapiAdapter: UniversityAdapter = {
       "educationLevel",
     );
 
+    // Diagnose the REAL DOM widget type for each education field before filling
+    // (the cause of "empty after retry" is field-/widget-specific — don't guess).
+    const schoolSelectors = ['input[name="schoolName[]"]', "input[name=schoolName]"];
+    const gpaSelectors = ['input[name="GPA[]"]', "input[name=GPA]"];
+    const gradSelectors = ['input[name="GraduationDate[]"]', "input[name=GraduationDate]"];
+    await describeInput(page, schoolSelectors, "schoolName", logger);
+    await describeInput(page, gpaSelectors, "gpa", logger);
+    const gradInput = await describeInput(page, gradSelectors, "graduationDate", logger);
+
     logger.info("[topkapi] Step 3b: filling school name");
     const v_school = await fillVerified(
       page,
-      ['input[name="schoolName[]"]', "input[name=schoolName]"],
+      schoolSelectors,
       profile.schoolName ?? "-",
       logger,
       "schoolName",
@@ -738,17 +796,19 @@ export const topkapiAdapter: UniversityAdapter = {
     logger.info("[topkapi] Step 3c: filling GPA");
     const v_gpa = await fillVerified(
       page,
-      ['input[name="GPA[]"]', "input[name=GPA]"],
+      gpaSelectors,
       profile.gpa != null ? String(profile.gpa) : "-",
       logger,
       "gpa",
     );
 
     logger.info("[topkapi] Step 3d: filling graduation date");
+    // Year-only CRM value is expanded to the format the detected widget accepts
+    // (a native date/month picker rejects a bare year and stays empty).
     const v_grad = await fillVerified(
       page,
-      ['input[name="GraduationDate[]"]', "input[name=GraduationDate]"],
-      profile.graduationYear != null ? String(profile.graduationYear) : "-",
+      gradSelectors,
+      formatGraduationForInput(profile.graduationYear, gradInput.type),
       logger,
       "graduationDate",
     );

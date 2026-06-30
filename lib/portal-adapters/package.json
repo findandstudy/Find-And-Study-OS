@@ -13,6 +13,7 @@
     "test:declarative-adapter": "tsx --test ./scripts/test-declarative-adapter.ts",
     "test:db-loader": "tsx --test ./scripts/test-db-loader.ts",
     "test:sit": "tsx --test ./scripts/test-sit.ts",
+    "test:step3": "tsx --test ./scripts/test-step3-normalize.ts",
     "test:adapters": "tsx --test ./scripts/test-*.ts",
     "smoke:sit": "tsx ./scripts/sit-smoke.ts"
   },

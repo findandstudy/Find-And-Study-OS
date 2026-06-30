@@ -108,7 +108,7 @@ export async function buildStudentProfile(
     programId:      app.programId          != null ? String(app.programId) : "",
     universityName: app.universityName       ?? undefined,
     schoolName:     student.highSchool       ?? undefined,
-    gpa:            student.gpa             != null ? Number(student.gpa)            : undefined,
+    gpa:            student.gpa             ?? undefined,
     graduationYear: student.graduationYear  != null ? Number(student.graduationYear) : undefined,
     languageScore:  student.languageScore   != null ? Number(student.languageScore)  : undefined,
     passportIssueDate:  student.passportIssueDate ?? undefined,

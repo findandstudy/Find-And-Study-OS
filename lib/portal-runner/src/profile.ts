@@ -84,7 +84,9 @@ function buildSubmitProfileFromRecords(
     programName:    app.programName         ?? "",
     programId:      app.programId           != null ? String(app.programId) : "",
     universityName: app.universityName      ?? undefined,
-    gpa:            student.gpa             != null ? Number(student.gpa) : undefined,
+    schoolName:     student.highSchool      ?? undefined,
+    gpa:            student.gpa             ?? undefined,
+    graduationYear: student.graduationYear  ?? undefined,
   });
 }
 
