@@ -20,6 +20,7 @@ import {
   buildStudentProfile,
   runSubmission,
   writebackResult,
+  handleProgramFull,
 } from "@workspace/portal-runner";
 import { resolvePortalCreds } from "./credResolver.js";
 
@@ -127,6 +128,24 @@ async function tick(): Promise<void> {
   }
 
   await writebackResult(sub.id, runResult);
+
+  // Program-fallback orchestrator: when the portal reports the requested
+  // programme is full, try to supersede it with a configured fallback. Fully
+  // self-gating (kill-switch, mode=real, idempotency, loop guard) and
+  // best-effort — a failure here must never break the worker loop.
+  if (runResult?.result?.programFull) {
+    try {
+      const outcome = await handleProgramFull(sub.id);
+      console.log(
+        `[portal-worker] Submission #${sub.id} program_full → fallback outcome=${outcome.status}`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[portal-worker] Submission #${sub.id} fallback orchestrator failed (non-fatal): ${msg}`,
+      );
+    }
+  }
 }
 
 async function loop(): Promise<void> {

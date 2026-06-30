@@ -1150,6 +1150,14 @@ async function seedClaudeIntegration() {
     await pool.query(`CREATE INDEX IF NOT EXISTS students_branch_id_idx ON students(branch_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS applications_branch_id_idx ON applications(branch_id)`);
 
+    // Phase 1/3: automatic backup-programme (supersession) links on applications.
+    // When a full programme is superseded by an auto-created fallback the original
+    // points to the new one (superseded_by) and the new one points back
+    // (superseded_from). Idempotent — required in prod for the fallback orchestrator.
+    await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS superseded_by_application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS superseded_from_application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS supersede_reason TEXT`);
+
     // Seed a default branch on first run, then backfill orphan rows once.
     const seedRes = await pool.query(
       `INSERT INTO branches (name) VALUES ('Genel Şube') ON CONFLICT (name) DO NOTHING RETURNING id`
@@ -1521,10 +1529,29 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE portal_automation_settings ADD COLUMN IF NOT EXISTS auto_process_enabled BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE portal_automation_settings ADD COLUMN IF NOT EXISTS auto_process_interval_minutes INTEGER NOT NULL DEFAULT 20`);
     await pool.query(`ALTER TABLE portal_automation_settings ADD COLUMN IF NOT EXISTS last_auto_drain_at TIMESTAMPTZ`);
+    // Phase 3: program-fallback orchestrator kill-switch (opt-in, default off).
+    await pool.query(`ALTER TABLE portal_automation_settings ADD COLUMN IF NOT EXISTS fallback_enabled BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE portal_universities ADD COLUMN IF NOT EXISTS auto_process BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE portal_universities ADD COLUMN IF NOT EXISTS is_multi_portal BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE portal_universities ADD COLUMN IF NOT EXISTS routes_via TEXT`);
     await pool.query(`CREATE INDEX IF NOT EXISTS portal_uni_routes_via_idx ON portal_universities (routes_via)`);
+    // Phase 3: program-fallback (supersession) rules. Maps a SOURCE CRM programme
+    // (the full one) to an ordered list of fallback CRM program ids, scoped to a
+    // portal university. Idempotent — required in prod for the fallback orchestrator.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_program_fallbacks (
+        id SERIAL PRIMARY KEY,
+        university_key TEXT NOT NULL,
+        source_program_id INTEGER NOT NULL,
+        fallback_program_ids JSONB NOT NULL DEFAULT '[]',
+        auto_submit BOOLEAN NOT NULL DEFAULT true,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_prog_fallback_key_source_uniq ON portal_program_fallbacks (university_key, source_program_id)`);
   } catch (err) {
     console.error("[migrate] portal_automation_settings/portal_universities:", err);
   }
