@@ -116,7 +116,8 @@ async function tick(): Promise<void> {
       `[portal-worker] Submission #${sub.id} run complete —` +
       ` submitted=${runResult.result.submitted}` +
       ` alreadyExists=${runResult.result.alreadyExists}` +
-      ` programMissing=${runResult.result.programMissing}`,
+      ` programMissing=${runResult.result.programMissing}` +
+      ` programFull=${runResult.result.programFull ?? false}`,
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

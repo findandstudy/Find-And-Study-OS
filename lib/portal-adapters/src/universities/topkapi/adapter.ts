@@ -1429,9 +1429,26 @@ export const topkapiAdapter: UniversityAdapter = {
           .join(", ")}`,
       );
       { const s = await takeShot(page, "step4-kontenjan-dolu"); if (s) screenshots.push(s); }
-      throw new Error(
-        `Topkapı: Program kontenjanı dolu — ${matchResult.match.name}. Farklı program gerekiyor. Açık programlar: [${openList}]`,
-      );
+      // Structural result (NO throw): surface the requested-but-full programme
+      // and the full programme list (enabled flags) so the orchestrator can
+      // supersede. The submission did not proceed.
+      return {
+        submitted: false,
+        alreadyExists: false,
+        programMissing: false,
+        programFull: true,
+        requestedProgram: {
+          value: matchResult.match.id,
+          name: matchResult.match.name,
+        },
+        openPrograms: programOptionsRaw.map((o) => ({
+          value: o.id,
+          name: o.name,
+          enabled: !o.disabled,
+        })),
+        detail: `Program kontenjanı dolu — ${matchResult.match.name}. Açık programlar: [${openList}]`,
+        screenshots,
+      };
     }
 
     // The program dropdown is a HIDDEN select2 (twopulse-select2, aria-hidden),

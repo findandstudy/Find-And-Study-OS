@@ -7,7 +7,11 @@
  *                                 application.stage='documents'
  * Rule 3: alreadyExists=true   → portal_submissions.status='already_exists'
  *                                 application.stage='already_registered'
- * Rule 4: error / none matched → portal_submissions.status='failed'
+ * Rule 4: programFull=true    → portal_submissions.status='program_full'
+ *                                 portal_submissions.meta={requestedProgram,
+ *                                 openPrograms, reason, detectedAt}
+ *                                 application stage unchanged
+ * Rule 5: error / none matched → portal_submissions.status='failed'
  *                                 application stage unchanged (stays in Inquiry)
  *
  * Stage changes are BEST-EFFORT: if the target pipeline stage key does not
@@ -32,6 +36,7 @@ type SubmissionStatus =
   | "submitted"
   | "program_missing"
   | "already_exists"
+  | "program_full"
   | "failed"
   | "dry_run";
 
@@ -51,6 +56,12 @@ function resolveTarget(
 ): WritebackTarget {
   if (!result) {
     return { submissionStatus: "failed", stageKey: null };
+  }
+  // Quota-full ("Kontenjan Dolu") is a structural finding regardless of dry/real
+  // mode — surface it (ahead of dry_run) so the orchestrator can supersede the
+  // full programme. The application stage is left unchanged.
+  if (result.programFull) {
+    return { submissionStatus: "program_full", stageKey: null };
   }
   // Dry runs: pipeline smoke-test only, no real portal interaction → dry_run status
   if (meta?.["dryRun"]) {
@@ -122,6 +133,18 @@ export async function writebackResult(
       // Persist the portal-assigned reference (e.g. Topkapı success-page uuid)
       // only when present so a later non-submitted run never clobbers it.
       ...(result?.externalRef ? { externalRef: result.externalRef } : {}),
+      // Structured quota-full context (Phase 2) → meta jsonb. Only set on
+      // programFull so other flows never clobber the meta column.
+      ...(result?.programFull
+        ? {
+            meta: {
+              requestedProgram: result.requestedProgram,
+              openPrograms:     result.openPrograms,
+              reason:           "Kontenjan dolu",
+              detectedAt:       new Date().toISOString(),
+            },
+          }
+        : {}),
       error:          submissionStatus === "failed"
                         ? (errorMessage ?? "submission failed")
                         : null,

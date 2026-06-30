@@ -1439,6 +1439,9 @@ async function seedClaudeIntegration() {
       ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'dry_run'
     `);
     await pool.query(`
+      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'program_full'
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS portal_submissions (
         id SERIAL PRIMARY KEY,
         application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
@@ -1464,6 +1467,9 @@ async function seedClaudeIntegration() {
     await pool.query(`CREATE INDEX IF NOT EXISTS portal_submissions_application_id_idx ON portal_submissions USING btree (application_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS portal_submissions_status_idx ON portal_submissions USING btree (status)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS portal_submissions_locked_at_idx ON portal_submissions USING btree (locked_at)`);
+    // Free-form metadata jsonb (supersession context / structured "Kontenjan
+    // Dolu" program_full payload: requestedProgram + openPrograms). Idempotent.
+    await pool.query(`ALTER TABLE portal_submissions ADD COLUMN IF NOT EXISTS meta JSONB`);
   } catch (err) {
     console.error("[migrate] portal_submissions:", err);
   }

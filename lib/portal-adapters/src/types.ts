@@ -35,6 +35,24 @@ export interface SubmitResult {
    * detect missing uploads.
    */
   missingDocuments?: string[];
+  /**
+   * True when the matched programme exists in the portal but its quota is full
+   * ("Kontenjan Dolu"). The submission did NOT proceed. Defaults to false/absent.
+   * Set together with requestedProgram + openPrograms so downstream
+   * orchestration can supersede the full programme structurally.
+   */
+  programFull?: boolean;
+  /**
+   * The CRM-resolved programme that the portal reports as full. Set together
+   * with programFull. `value` is the portal <option> value when known.
+   */
+  requestedProgram?: { value?: string; name: string };
+  /**
+   * The full Step-4 programme list captured from the portal dropdown. `enabled`
+   * is true for selectable (open) programmes and false for full ones. Set
+   * together with programFull.
+   */
+  openPrograms?: Array<{ value: string; name: string; enabled: boolean }>;
 }
 
 // ---------------------------------------------------------------------------
