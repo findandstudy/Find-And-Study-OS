@@ -12,7 +12,12 @@ import { launchPortal, saveState, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
 import { matchProgram, fold } from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
-import { formatGraduationForInput } from "./format.js";
+import {
+  formatGraduationForInput,
+  mapEduLevel,
+  eduLevelCandidates,
+  isPlaceholderChoice,
+} from "./format.js";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -195,24 +200,8 @@ function resolveCountry(
   return nationality; // fallback: pass raw to portal (label-match will try)
 }
 
-// ---------------------------------------------------------------------------
-// Education level → Topkapi portal value
-// ---------------------------------------------------------------------------
-function mapEduLevel(level: string, programName = ""): string {
-  const f = level.toLowerCase();
-  if (/associate|önlisans|onlisans|foundation/.test(f)) return "Associate";
-  if (/master|yüksek|yuksek/.test(f)) {
-    // Thesis vs non-thesis is encoded in the CRM PROGRAM NAME (e.g. "İşletme
-    // Yüksek Lisans (Tezsiz)"), not the degree level — read both. fold()
-    // (not toLowerCase) so ALL-CAPS Turkish dotted-İ in "TEZSİZ" normalises
-    // correctly. Handles Turkish (tezli/tezsiz) and English (thesis/non-thesis).
-    const combined = fold(`${level} ${programName}`);
-    if (/non[- ]?thesis|tezsiz/.test(combined)) return "Masters (Non Thesis)";
-    return "Masters (Thesis)";
-  }
-  if (/phd|doctor|doktora/.test(f)) return "Doctorate";
-  return "Bachelor";
-}
+// mapEduLevel (applied program-level label) now lives in ./format.js so the
+// pure mapping logic is unit-testable without pulling in Playwright.
 
 // ---------------------------------------------------------------------------
 // ISO-8601 date → Turkish dd.mm.yyyy
@@ -431,30 +420,180 @@ async function readValue(page: Page, selector: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Select a select2/<select> value, fire change, read it back; retry once.
-// Logs "Step 3 verified: <label>=<value>". Returns the final value ("" if it
-// never stuck) so the caller can hard-fail instead of submitting blanks.
+// Read a <select>'s full option list ({value,text}). Casts to HTMLSelectElement
+// so .options is typed; returns [] when the element is absent.
 // ---------------------------------------------------------------------------
-async function selectVerified(
+async function readSelectOptions(
+  page: Page,
+  selector: string,
+): Promise<{ value: string; text: string }[]> {
+  return page
+    .$eval(selector, (el) => {
+      const s = el as HTMLSelectElement;
+      return Array.from(s.options).map((o) => ({
+        value: o.value,
+        text: (o.text || "").trim(),
+      }));
+    })
+    .catch(() => [] as { value: string; text: string }[]);
+}
+
+// ---------------------------------------------------------------------------
+// Read a <select>'s currently-selected {value,text,index}. Works on a select2
+// because select2 keeps the underlying native <select> in sync.
+// ---------------------------------------------------------------------------
+async function readSelectChoice(
+  page: Page,
+  selector: string,
+): Promise<{ value: string; text: string; index: number }> {
+  return page
+    .$eval(selector, (el) => {
+      const s = el as HTMLSelectElement;
+      const i = s.selectedIndex;
+      const o = i >= 0 ? s.options[i] : null;
+      return {
+        value: (s.value || "").trim(),
+        text: (o ? o.text : "").trim(),
+        index: i,
+      };
+    })
+    .catch(() => ({ value: "", text: "", index: -1 }));
+}
+
+// ---------------------------------------------------------------------------
+// Set a <select> to an exact option VALUE in-page and fire change. Uses
+// jQuery.val().trigger("change") when present so a HIDDEN select2 widget repaints
+// its visible chip and runs its AJAX change handler (page.selectOption() can't
+// click a display:none select2). Falls back to native value + dispatched events.
+// ---------------------------------------------------------------------------
+async function setSelectByValue(
   page: Page,
   selector: string,
   value: string,
-  logger: typeof import("../../browser.js").logger,
+): Promise<void> {
+  await page
+    .evaluate(
+      (arg) => {
+        const s = document.querySelector(arg.sel) as HTMLSelectElement | null;
+        if (!s) return;
+        const idx = Array.from(s.options).findIndex((o) => o.value === arg.val);
+        if (idx < 0) return;
+        s.selectedIndex = idx;
+        s.value = arg.val;
+        s.dispatchEvent(new Event("input", { bubbles: true }));
+        s.dispatchEvent(new Event("change", { bubbles: true }));
+        const w = window as unknown as {
+          jQuery?: (el: Element) => {
+            val: (v: string) => { trigger: (ev: string) => void };
+          };
+        };
+        if (w.jQuery) w.jQuery(s).val(arg.val).trigger("change");
+      },
+      { sel: selector, val: value },
+    )
+    .catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Diagnose the REAL Step-3 dropdown widget BEFORE selecting: select2 detection,
+// option list, and outerHTML. This is what tells us why a value "won't stick".
+// ---------------------------------------------------------------------------
+async function logEduWidget(
+  page: Page,
+  selector: string,
   label: string,
+  logger: typeof import("../../browser.js").logger,
+): Promise<void> {
+  const info = await page
+    .evaluate((sel) => {
+      const s = document.querySelector(sel) as HTMLSelectElement | null;
+      if (!s) return null;
+      const sib = s.nextElementSibling as HTMLElement | null;
+      const isSelect2 =
+        s.classList.contains("select2-hidden-accessible") ||
+        (!!sib && (sib.className || "").indexOf("select2") >= 0) ||
+        !!(s.parentElement && s.parentElement.querySelector(".select2-container"));
+      const opts = Array.from(s.options).map(
+        (o) => `${o.value}::${(o.text || "").trim()}`,
+      );
+      return {
+        tag: s.tagName.toLowerCase(),
+        cls: (s.getAttribute("class") || "").slice(0, 100),
+        isSelect2,
+        optCount: s.options.length,
+        opts: opts.slice(0, 30),
+        outerHTML: s.outerHTML.slice(0, 400),
+      };
+    }, selector)
+    .catch(() => null);
+  if (!info) {
+    logger.warn(`[topkapi] Step 3 widget: ${label} — element not found`);
+    return;
+  }
+  logger.info(
+    `[topkapi] Step 3 widget: ${label} tag=${info.tag} select2=${info.isSelect2} optCount=${info.optCount} class="${info.cls}"`,
+  );
+  logger.info(
+    `[topkapi] Step 3 widget: ${label} options=${JSON.stringify(info.opts)}`,
+  );
+  logger.info(`[topkapi] Step 3 widget: ${label} outerHTML=${info.outerHTML}`);
+}
+
+// ---------------------------------------------------------------------------
+// Select a <select>/select2 by trying ordered label CANDIDATES against the real
+// option texts (exact fold match first, then substring), set it in-page, fire
+// change, and verify the read-back is NOT a placeholder ("Seçim Yapın"). Retries
+// once. Returns the final option text ("" if nothing stuck) so the caller can
+// hard-fail instead of submitting blanks. With diagnose=true the widget is
+// logged first (used for the education-level dropdown).
+// ---------------------------------------------------------------------------
+async function selectByCandidatesVerified(
+  page: Page,
+  selector: string,
+  candidates: string[],
+  label: string,
+  logger: typeof import("../../browser.js").logger,
+  diagnose = false,
 ): Promise<string> {
+  if (diagnose) await logEduWidget(page, selector, label, logger);
+  const options = await readSelectOptions(page, selector);
+  if (options.length === 0) {
+    logger.warn(`[topkapi] Step 3 ${label}: no <select> options found`);
+    return "";
+  }
+  // Skip index 0 (the placeholder option) when matching.
+  const folded = options.map((o, i) => ({ ...o, i, ft: fold(o.text) }));
+  const pickable = (o: { i: number; value: string }) =>
+    o.i > 0 && !!o.value && o.value !== "0";
   for (let attempt = 1; attempt <= 2; attempt++) {
-    await selectByBest(page, selector, value).catch(() => false);
-    await syncChange(page, selector);
-    const v = await readValue(page, selector);
-    if (v && v !== "0") {
-      logger.info(`[topkapi] Step 3 verified: ${label}=${v}`);
-      return v;
+    for (const cand of candidates) {
+      const cf = fold(cand);
+      if (!cf) continue;
+      const match =
+        folded.find((o) => pickable(o) && o.ft === cf) ||
+        folded.find((o) => pickable(o) && o.ft.includes(cf));
+      if (!match) continue;
+      await setSelectByValue(page, selector, match.value);
+      await syncChange(page, selector);
+      const choice = await readSelectChoice(page, selector);
+      if (!isPlaceholderChoice(choice.value, choice.text)) {
+        logger.info(
+          `[topkapi] Step 3 verified: ${label}=${choice.text} (value=${choice.value}) via "${cand}"`,
+        );
+        return choice.text;
+      }
     }
     logger.warn(
-      `[topkapi] Step 3 ${label} empty after attempt ${attempt} — retrying`,
+      `[topkapi] Step 3 ${label} not set after attempt ${attempt} — retrying`,
     );
   }
-  logger.warn(`[topkapi] Step 3 verified: ${label}=(empty)`);
+  logger.warn(
+    `[topkapi] Step 3 verified: ${label}=(empty) — tried [${candidates.join(", ")}] vs options [${options
+      .map((o) => o.text)
+      .filter(Boolean)
+      .slice(0, 20)
+      .join(", ")}]`,
+  );
   return "";
 }
 
@@ -767,13 +906,42 @@ export const topkapiAdapter: UniversityAdapter = {
     await ensureEducationRow(page, logger);
 
     logger.info("[topkapi] Step 3a: selecting education level");
-    const v_level = await selectVerified(
+    // Step 3 records the applicant's COMPLETED (prior) schooling, NOT the level
+    // of the program being applied to — a Bachelor applicant's prior level is
+    // "Lise"/"High School". Try prior-level labels against the widget's REAL
+    // option texts (logged via diagnose=true) and never accept the placeholder
+    // ("Seçim Yapın") as a real selection — that false-positive was why the
+    // AJAX-rendered dependent fields (school/GPA/grad/country) never appeared.
+    const eduCandidates = eduLevelCandidates(profile.level, profile.programName);
+    const v_level = await selectByCandidatesVerified(
       page,
       'select[name="applicationEducationInformationEducationLevel[]"]',
-      eduLevel,
-      logger,
+      eduCandidates,
       "educationLevel",
+      logger,
+      true,
     );
+
+    // A real education-level selection makes the portal AJAX-render the dependent
+    // row fields (schoolName / GPA / graduationDate / country). Wait for them to
+    // appear before describing/filling — probing earlier is the root cause of the
+    // "no element found" / "empty after retry" failures.
+    if (v_level) {
+      await page
+        .waitForSelector('input[name="schoolName[]"], input[name=schoolName]', {
+          timeout: 12000,
+        })
+        .then(() =>
+          logger.info(
+            "[topkapi] Step 3: dependent fields rendered after level select",
+          ),
+        )
+        .catch(() =>
+          logger.warn(
+            "[topkapi] Step 3: dependent fields not visible 12s after level select",
+          ),
+        );
+    }
 
     // Diagnose the REAL DOM widget type for each education field before filling
     // (the cause of "empty after retry" is field-/widget-specific — don't guess).
@@ -814,7 +982,13 @@ export const topkapiAdapter: UniversityAdapter = {
     );
 
     logger.info("[topkapi] Step 3e: selecting country");
-    await selectVerified(page, 'select[name="country[]"]', country, logger, "country");
+    await selectByCandidatesVerified(
+      page,
+      'select[name="country[]"]',
+      [country],
+      "country",
+      logger,
+    );
 
     logger.info("[topkapi] Step 3f: filling main language");
     try {
@@ -822,7 +996,13 @@ export const topkapiAdapter: UniversityAdapter = {
       if (await ml.count()) {
         const tag = await ml.evaluate((e) => e.tagName).catch(() => "");
         if (tag === "SELECT") {
-          await selectVerified(page, "select[name=mainLanguage]", "English", logger, "mainLanguage");
+          await selectByCandidatesVerified(
+            page,
+            "select[name=mainLanguage]",
+            ["English", "İngilizce", "Ingilizce"],
+            "mainLanguage",
+            logger,
+          );
         } else {
           await ml.fill("English");
           await syncChange(page, "input[name=mainLanguage]");
