@@ -348,6 +348,133 @@ async function selectFirstRealOption(
 }
 
 // ---------------------------------------------------------------------------
+// Fire native + jQuery "change" so select2 / jQuery-bound widgets sync to a
+// value that was set programmatically. Playwright's selectOption()/fill() sets
+// the underlying native control, but the select2 (twopulse-select2) rendered
+// widget only updates when jQuery's change handler runs — without this the
+// portal keeps the field visually/server-side EMPTY. Mirrors the proven Step 2
+// country pattern used elsewhere in this adapter.
+// ---------------------------------------------------------------------------
+async function syncChange(page: Page, selector: string): Promise<void> {
+  await page
+    .evaluate((sel) => {
+      const e = document.querySelector(sel);
+      if (!e) return;
+      e.dispatchEvent(new Event("input", { bubbles: true }));
+      e.dispatchEvent(new Event("change", { bubbles: true }));
+      const w = window as unknown as {
+        jQuery?: (el: Element) => { trigger: (ev: string) => void };
+      };
+      if (w.jQuery) w.jQuery(e).trigger("change");
+    }, selector)
+    .catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Read the current .value of an input/select (trimmed; "" on miss).
+// ---------------------------------------------------------------------------
+async function readValue(page: Page, selector: string): Promise<string> {
+  return page
+    .$eval(selector, (el) =>
+      ((el as HTMLInputElement | HTMLSelectElement).value ?? "").trim(),
+    )
+    .catch(() => "");
+}
+
+// ---------------------------------------------------------------------------
+// Select a select2/<select> value, fire change, read it back; retry once.
+// Logs "Step 3 verified: <label>=<value>". Returns the final value ("" if it
+// never stuck) so the caller can hard-fail instead of submitting blanks.
+// ---------------------------------------------------------------------------
+async function selectVerified(
+  page: Page,
+  selector: string,
+  value: string,
+  logger: typeof import("../../browser.js").logger,
+  label: string,
+): Promise<string> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await selectByBest(page, selector, value).catch(() => false);
+    await syncChange(page, selector);
+    const v = await readValue(page, selector);
+    if (v && v !== "0") {
+      logger.info(`[topkapi] Step 3 verified: ${label}=${v}`);
+      return v;
+    }
+    logger.warn(
+      `[topkapi] Step 3 ${label} empty after attempt ${attempt} — retrying`,
+    );
+  }
+  logger.warn(`[topkapi] Step 3 verified: ${label}=(empty)`);
+  return "";
+}
+
+// ---------------------------------------------------------------------------
+// Fill the first present text input among `selectors`, fire change, read back;
+// retry once. Logs "Step 3 verified: <label>=<value>". Returns final value.
+// ---------------------------------------------------------------------------
+async function fillVerified(
+  page: Page,
+  selectors: string[],
+  value: string,
+  logger: typeof import("../../browser.js").logger,
+  label: string,
+): Promise<string> {
+  let sel = "";
+  for (const s of selectors) {
+    if (await page.locator(s).count()) {
+      sel = s;
+      break;
+    }
+  }
+  if (!sel) {
+    logger.warn(`[topkapi] Step 3 ${label}: no input found`);
+    return "";
+  }
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await page.fill(sel, value).catch(() => {});
+    await syncChange(page, sel);
+    const v = await readValue(page, sel);
+    if (v) {
+      logger.info(`[topkapi] Step 3 verified: ${label}=${v}`);
+      return v;
+    }
+    logger.warn(
+      `[topkapi] Step 3 ${label} empty after attempt ${attempt} — retrying`,
+    );
+  }
+  logger.warn(`[topkapi] Step 3 verified: ${label}=(empty)`);
+  return "";
+}
+
+// ---------------------------------------------------------------------------
+// Ensure at least one education-history row exists. Some portal configs start
+// with zero rows and require clicking the green "Eğitim Geçmişi Ekle" button
+// before the row's fields exist. No-op when a row is already present (the
+// common case — the wizard renders one by default).
+// ---------------------------------------------------------------------------
+async function ensureEducationRow(
+  page: Page,
+  logger: typeof import("../../browser.js").logger,
+): Promise<void> {
+  const rowSel =
+    'select[name="applicationEducationInformationEducationLevel[]"], input[name="schoolName[]"], input[name=schoolName]';
+  if (await page.locator(rowSel).count()) return;
+  logger.info(
+    "[topkapi] Step 3: no education row present — clicking add-row button",
+  );
+  const addBtn = page
+    .getByRole("button", { name: /E[ğg]itim Ge[çc]mi[şs]i.*Ekle|Ge[çc]mi[şs]i Ekle/i })
+    .first();
+  if (await addBtn.count()) {
+    await addBtn.click({ force: true }).catch(() => {});
+    await page.waitForSelector(rowSel, { timeout: 5000 }).catch(() => {});
+  } else {
+    logger.warn("[topkapi] Step 3: add-row button not found");
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Screenshot helper — writes a viewport PNG to /tmp and returns the path.
 // Returns null and logs a warning on any failure (non-fatal).
 // ---------------------------------------------------------------------------
@@ -581,50 +708,65 @@ export const topkapiAdapter: UniversityAdapter = {
     { const s = await takeShot(page, "step2-personal"); if (s) screenshots.push(s); }
 
     // ── STEP 3: education background ─────────────────────────────────────────
+    // Every field is set THEN read back (with one retry). select2 dropdowns
+    // (education level, country) need a native+jQuery change to actually stick —
+    // see syncChange(). If school/GPA/graduation/level are still empty after the
+    // retry we throw "education fill failed" instead of submitting blanks.
     logger.info("[topkapi] Step 3: education background");
+
+    // Some configs start with zero education-history rows — add one if needed.
+    await ensureEducationRow(page, logger);
+
     logger.info("[topkapi] Step 3a: selecting education level");
-    await selectByBest(
+    const v_level = await selectVerified(
       page,
       'select[name="applicationEducationInformationEducationLevel[]"]',
       eduLevel,
+      logger,
+      "educationLevel",
     );
 
     logger.info("[topkapi] Step 3b: filling school name");
-    try {
-      await page.fill('input[name="schoolName[]"]', profile.schoolName ?? "-");
-    } catch {
-      try { await page.fill("input[name=schoolName]", profile.schoolName ?? "-"); }
-      catch { /* optional */ }
-    }
+    const v_school = await fillVerified(
+      page,
+      ['input[name="schoolName[]"]', "input[name=schoolName]"],
+      profile.schoolName ?? "-",
+      logger,
+      "schoolName",
+    );
 
     logger.info("[topkapi] Step 3c: filling GPA");
-    try {
-      await page.fill(
-        'input[name="GPA[]"]',
-        profile.gpa != null ? String(profile.gpa) : "-",
-      );
-    } catch { /* optional */ }
+    const v_gpa = await fillVerified(
+      page,
+      ['input[name="GPA[]"]', "input[name=GPA]"],
+      profile.gpa != null ? String(profile.gpa) : "-",
+      logger,
+      "gpa",
+    );
 
     logger.info("[topkapi] Step 3d: filling graduation date");
-    try {
-      await page.fill(
-        'input[name="GraduationDate[]"]',
-        profile.graduationYear != null ? String(profile.graduationYear) : "-",
-      );
-    } catch { /* optional */ }
+    const v_grad = await fillVerified(
+      page,
+      ['input[name="GraduationDate[]"]', "input[name=GraduationDate]"],
+      profile.graduationYear != null ? String(profile.graduationYear) : "-",
+      logger,
+      "graduationDate",
+    );
 
     logger.info("[topkapi] Step 3e: selecting country");
-    try {
-      await selectByBest(page, 'select[name="country[]"]', country);
-    } catch { /* optional */ }
+    await selectVerified(page, 'select[name="country[]"]', country, logger, "country");
 
     logger.info("[topkapi] Step 3f: filling main language");
     try {
       const ml = page.locator("input[name=mainLanguage], select[name=mainLanguage]").first();
       if (await ml.count()) {
         const tag = await ml.evaluate((e) => e.tagName).catch(() => "");
-        if (tag === "SELECT") { await selectByBest(page, "select[name=mainLanguage]", "English"); }
-        else { await ml.fill("English"); }
+        if (tag === "SELECT") {
+          await selectVerified(page, "select[name=mainLanguage]", "English", logger, "mainLanguage");
+        } else {
+          await ml.fill("English");
+          await syncChange(page, "input[name=mainLanguage]");
+        }
       }
     } catch (e) { /* main language not shown for this program */ }
 
@@ -632,7 +774,23 @@ export const topkapiAdapter: UniversityAdapter = {
       logger.info("[topkapi] Step 3g: filling language score");
       try {
         await page.fill("input[name=toeflIbtScore]", String(profile.languageScore));
+        await syncChange(page, "input[name=toeflIbtScore]");
       } catch { /* optional */ }
+    }
+
+    // Hard gate: never advance with a silently-empty education section. Education
+    // level drives the Step 4 program list; school+GPA+graduation are portal-
+    // required. Fail loudly (and screenshot) instead of a blank submission.
+    const eduMissing: string[] = [];
+    if (!v_level) eduMissing.push("educationLevel");
+    if (!v_school) eduMissing.push("schoolName");
+    if (!v_gpa) eduMissing.push("gpa");
+    if (!v_grad) eduMissing.push("graduationDate");
+    if (eduMissing.length > 0) {
+      { const s = await takeShot(page, "step3-education-fail"); if (s) screenshots.push(s); }
+      throw new Error(
+        `Topkapı Step 3: education fill failed — empty after retry: ${eduMissing.join(", ")}`,
+      );
     }
 
     logger.info("[topkapi] Step 3: clicking Next");

@@ -113,3 +113,13 @@ For Topkapı Master applications the thesis flag (Tezli/Tezsiz) is encoded in th
 `portal_program_mapping.program_overrides` (CRM programId → portal option value/label) is threaded as `profile.programOverrides` and must be resolved DIRECTLY against the live dropdown options BEFORE `matchProgram`: by exact option value → exact folded label → partial folded label. A hit wins conf 1.0. A miss must log ALL options as `"value: label"` and fall back to fuzzy — never hard-block on a stale/typo'd override.
 
 **Why:** `matchProgram`'s built-in override step only does exact id/folded-name match, so subtle portal-label drift silently fell through to fuzzy (which could pick the wrong Tezli/Tezsiz variant) with no debug trail. The explicit adapter-level path adds partial match + full option logging.
+
+---
+
+## 10. select2 fields need a native+jQuery `change` after programmatic set (or they save EMPTY)
+
+Topkapı dropdowns are select2 (`twopulse-select2`). Playwright `selectOption()` / `fill()` sets the underlying native control, but the rendered select2 widget — and the value the portal actually persists — only updates when jQuery's change handler fires. Setting the value without firing change makes the field log as "filled" yet submit EMPTY (the exact Step 3 education-history bug: level/school/GPA/graduation/country all blank on the portal despite no error).
+
+**Fix:** after any programmatic select/fill, dispatch native `input`+`change` AND `window.jQuery(e).trigger("change")` (helper `syncChange()` in the adapter). This mirrors the long-working Step 2 country block. Then READ THE VALUE BACK (`readValue`) and retry once; if a required field is still empty, throw `"Topkapı Step 3: education fill failed"` + screenshot instead of advancing — never submit silent blanks.
+
+**How to apply:** any new portal field on a select2/jQuery form must go through the set→syncChange→read-back→retry pattern (`selectVerified`/`fillVerified`), not a bare `selectOption`/`fill`. The `"-"` placeholder for null gpa/graduation is intentional (preserves prior behavior, passes the non-empty gate; it is NOT a silent-empty submit).
