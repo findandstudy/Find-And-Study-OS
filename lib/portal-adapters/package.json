@@ -10,6 +10,7 @@
     "test:program-match": "tsx --test ./scripts/test-program-match.ts",
     "test:registry": "tsx --test ./scripts/test-registry.ts",
     "test:declarative": "tsx --test ./scripts/test-declarative.ts",
+    "test:declarative-adapter": "tsx --test ./scripts/test-declarative-adapter.ts",
     "test:db-loader": "tsx --test ./scripts/test-db-loader.ts",
     "test:sit": "tsx --test ./scripts/test-sit.ts",
     "test:adapters": "tsx --test ./scripts/test-*.ts",
@@ -17,6 +18,7 @@
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
+    "drizzle-orm": "catalog:",
     "playwright-core": "^1.59.1",
     "zod": "catalog:"
   },

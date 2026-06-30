@@ -18,6 +18,9 @@ import type {
 
 import type {
   ActivitySummary,
+  AdapterSpecListResponse,
+  AdapterSpecValidationResponse,
+  AdapterSpecVersionsResponse,
   AddInboxConversationNoteBody,
   AddInboxConversationNoteResponse,
   AddInboxConversationTaskBody,
@@ -103,6 +106,8 @@ import type {
   Note,
   OkResponse,
   OverviewStats,
+  PatchAdapterSpecBody,
+  PatchAdapterSpecResponse,
   PortalProgramMapping,
   PortalProgramOptionsResponse,
   PortalSubmission,
@@ -140,8 +145,11 @@ import type {
   UpdateUniversityBody,
   UpdateUniversityContract200,
   UpdateUserBody,
+  UpsertAdapterSpecBody,
+  UpsertAdapterSpecResponse,
   UserProfile,
   UsersListResponse,
+  ValidateAdapterSpecBody,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -9820,4 +9828,435 @@ export const useSetMultiPortalMembers = <
   TContext
 > => {
   return useMutation(getSetMultiPortalMembersMutationOptions(options));
+};
+
+/**
+ * @summary List declarative adapter specs, one entry per key (admin only)
+ */
+export const getListAdapterSpecsUrl = () => {
+  return `/api/portal-automation/adapter-specs`;
+};
+
+export const listAdapterSpecs = async (
+  options?: RequestInit,
+): Promise<AdapterSpecListResponse> => {
+  return customFetch<AdapterSpecListResponse>(getListAdapterSpecsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdapterSpecsQueryKey = () => {
+  return [`/api/portal-automation/adapter-specs`] as const;
+};
+
+export const getListAdapterSpecsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdapterSpecs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdapterSpecs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdapterSpecsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdapterSpecs>>
+  > = ({ signal }) => listAdapterSpecs({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdapterSpecs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdapterSpecsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdapterSpecs>>
+>;
+export type ListAdapterSpecsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List declarative adapter specs, one entry per key (admin only)
+ */
+
+export function useListAdapterSpecs<
+  TData = Awaited<ReturnType<typeof listAdapterSpecs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdapterSpecs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdapterSpecsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new adapter spec version, optionally enabling it (admin only)
+ */
+export const getUpsertAdapterSpecUrl = () => {
+  return `/api/portal-automation/adapter-specs`;
+};
+
+export const upsertAdapterSpec = async (
+  upsertAdapterSpecBody: UpsertAdapterSpecBody,
+  options?: RequestInit,
+): Promise<UpsertAdapterSpecResponse> => {
+  return customFetch<UpsertAdapterSpecResponse>(getUpsertAdapterSpecUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(upsertAdapterSpecBody),
+  });
+};
+
+export const getUpsertAdapterSpecMutationOptions = <
+  TError = ErrorType<AdapterSpecValidationResponse | ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertAdapterSpec>>,
+    TError,
+    { data: BodyType<UpsertAdapterSpecBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof upsertAdapterSpec>>,
+  TError,
+  { data: BodyType<UpsertAdapterSpecBody> },
+  TContext
+> => {
+  const mutationKey = ["upsertAdapterSpec"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof upsertAdapterSpec>>,
+    { data: BodyType<UpsertAdapterSpecBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return upsertAdapterSpec(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpsertAdapterSpecMutationResult = NonNullable<
+  Awaited<ReturnType<typeof upsertAdapterSpec>>
+>;
+export type UpsertAdapterSpecMutationBody = BodyType<UpsertAdapterSpecBody>;
+export type UpsertAdapterSpecMutationError = ErrorType<
+  AdapterSpecValidationResponse | ErrorResponse
+>;
+
+/**
+ * @summary Create a new adapter spec version, optionally enabling it (admin only)
+ */
+export const useUpsertAdapterSpec = <
+  TError = ErrorType<AdapterSpecValidationResponse | ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertAdapterSpec>>,
+    TError,
+    { data: BodyType<UpsertAdapterSpecBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof upsertAdapterSpec>>,
+  TError,
+  { data: BodyType<UpsertAdapterSpecBody> },
+  TContext
+> => {
+  return useMutation(getUpsertAdapterSpecMutationOptions(options));
+};
+
+/**
+ * @summary Validate an adapter spec without persisting it (admin only)
+ */
+export const getValidateAdapterSpecUrl = () => {
+  return `/api/portal-automation/adapter-specs/validate`;
+};
+
+export const validateAdapterSpec = async (
+  validateAdapterSpecBody: ValidateAdapterSpecBody,
+  options?: RequestInit,
+): Promise<AdapterSpecValidationResponse> => {
+  return customFetch<AdapterSpecValidationResponse>(
+    getValidateAdapterSpecUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(validateAdapterSpecBody),
+    },
+  );
+};
+
+export const getValidateAdapterSpecMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof validateAdapterSpec>>,
+    TError,
+    { data: BodyType<ValidateAdapterSpecBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof validateAdapterSpec>>,
+  TError,
+  { data: BodyType<ValidateAdapterSpecBody> },
+  TContext
+> => {
+  const mutationKey = ["validateAdapterSpec"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof validateAdapterSpec>>,
+    { data: BodyType<ValidateAdapterSpecBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return validateAdapterSpec(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ValidateAdapterSpecMutationResult = NonNullable<
+  Awaited<ReturnType<typeof validateAdapterSpec>>
+>;
+export type ValidateAdapterSpecMutationBody = BodyType<ValidateAdapterSpecBody>;
+export type ValidateAdapterSpecMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Validate an adapter spec without persisting it (admin only)
+ */
+export const useValidateAdapterSpec = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof validateAdapterSpec>>,
+    TError,
+    { data: BodyType<ValidateAdapterSpecBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof validateAdapterSpec>>,
+  TError,
+  { data: BodyType<ValidateAdapterSpecBody> },
+  TContext
+> => {
+  return useMutation(getValidateAdapterSpecMutationOptions(options));
+};
+
+/**
+ * @summary List the full version history for an adapter spec key (admin only)
+ */
+export const getListAdapterSpecVersionsUrl = (key: string) => {
+  return `/api/portal-automation/adapter-specs/${key}/versions`;
+};
+
+export const listAdapterSpecVersions = async (
+  key: string,
+  options?: RequestInit,
+): Promise<AdapterSpecVersionsResponse> => {
+  return customFetch<AdapterSpecVersionsResponse>(
+    getListAdapterSpecVersionsUrl(key),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListAdapterSpecVersionsQueryKey = (key: string) => {
+  return [`/api/portal-automation/adapter-specs/${key}/versions`] as const;
+};
+
+export const getListAdapterSpecVersionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdapterSpecVersions>>,
+  TError = ErrorType<unknown>,
+>(
+  key: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdapterSpecVersions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAdapterSpecVersionsQueryKey(key);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdapterSpecVersions>>
+  > = ({ signal }) =>
+    listAdapterSpecVersions(key, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!key,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdapterSpecVersions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdapterSpecVersionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdapterSpecVersions>>
+>;
+export type ListAdapterSpecVersionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List the full version history for an adapter spec key (admin only)
+ */
+
+export function useListAdapterSpecVersions<
+  TData = Awaited<ReturnType<typeof listAdapterSpecVersions>>,
+  TError = ErrorType<unknown>,
+>(
+  key: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdapterSpecVersions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdapterSpecVersionsQueryOptions(key, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+ */
+export const getPatchAdapterSpecUrl = (key: string) => {
+  return `/api/portal-automation/adapter-specs/${key}`;
+};
+
+export const patchAdapterSpec = async (
+  key: string,
+  patchAdapterSpecBody: PatchAdapterSpecBody,
+  options?: RequestInit,
+): Promise<PatchAdapterSpecResponse> => {
+  return customFetch<PatchAdapterSpecResponse>(getPatchAdapterSpecUrl(key), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(patchAdapterSpecBody),
+  });
+};
+
+export const getPatchAdapterSpecMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchAdapterSpec>>,
+    TError,
+    { key: string; data: BodyType<PatchAdapterSpecBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchAdapterSpec>>,
+  TError,
+  { key: string; data: BodyType<PatchAdapterSpecBody> },
+  TContext
+> => {
+  const mutationKey = ["patchAdapterSpec"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchAdapterSpec>>,
+    { key: string; data: BodyType<PatchAdapterSpecBody> }
+  > = (props) => {
+    const { key, data } = props ?? {};
+
+    return patchAdapterSpec(key, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchAdapterSpecMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchAdapterSpec>>
+>;
+export type PatchAdapterSpecMutationBody = BodyType<PatchAdapterSpecBody>;
+export type PatchAdapterSpecMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+ */
+export const usePatchAdapterSpec = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchAdapterSpec>>,
+    TError,
+    { key: string; data: BodyType<PatchAdapterSpecBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchAdapterSpec>>,
+  TError,
+  { key: string; data: BodyType<PatchAdapterSpecBody> },
+  TContext
+> => {
+  return useMutation(getPatchAdapterSpecMutationOptions(options));
 };

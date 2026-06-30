@@ -80,3 +80,36 @@ export {
   type ParseResult,
   type DeclarativeAdapterRow,
 } from "./dbLoader.js";
+
+// Declarative SPEC engine (richer, versioned, opt-in parallel system)
+export {
+  adapterSpecSchema,
+  parseAdapterSpec,
+  specHasJsHook,
+  type AdapterSpec,
+  type SpecStep,
+  type SpecParseResult,
+  type SpecIssue,
+} from "./declarative/schema.js";
+
+export {
+  createSpecAdapter,
+  resolveProfileValue,
+  applyTransform,
+  resolveProgramValue,
+  classifyResult,
+  type SpecPage,
+} from "./declarative/interpreter.js";
+
+export {
+  loadSpecAdaptersFromDb,
+  invalidateSpecAdapterCache,
+  resolveSpecAdapterByKey,
+  resolveSpecAdapterForUniversity,
+  buildSpecAdapterFromRow,
+  buildSpecAdaptersFromRows,
+  specRowAllowsJsHook,
+  listSpecVersions,
+  maxSpecVersion,
+  enabledSpecVersion,
+} from "./specLoader.js";

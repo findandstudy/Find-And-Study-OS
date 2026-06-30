@@ -40,6 +40,7 @@ import {
 import {
   PortalEmptyState, PortalErrorState,
 } from "@/components/admin/PortalTabStates";
+import AdapterSpecsSection from "./AdapterSpecsSection";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -598,6 +599,9 @@ export default function PortalAdaptersTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* === Declarative adapter SPECs (opt-in versioned engine) === */}
+      <AdapterSpecsSection />
 
       {/* Form dialog */}
       <AdapterFormDialog

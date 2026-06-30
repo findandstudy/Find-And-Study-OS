@@ -5,6 +5,105 @@
  * Education Consultancy Operating System API
  * OpenAPI spec version: 0.1.0
  */
+export type AdapterSpecSummarySource =
+  (typeof AdapterSpecSummarySource)[keyof typeof AdapterSpecSummarySource];
+
+export const AdapterSpecSummarySource = {
+  builtin: "builtin",
+  uploaded: "uploaded",
+} as const;
+
+export interface AdapterSpecSummary {
+  key: string;
+  name: string;
+  latestVersion: number;
+  enabledVersion: number | null;
+  versionCount: number;
+  source: AdapterSpecSummarySource;
+  jsHookApproved: boolean;
+  hasJsHook: boolean;
+  updatedAt: string;
+}
+
+export interface AdapterSpecListResponse {
+  specs: AdapterSpecSummary[];
+}
+
+export type AdapterSpecVersionSource =
+  (typeof AdapterSpecVersionSource)[keyof typeof AdapterSpecVersionSource];
+
+export const AdapterSpecVersionSource = {
+  builtin: "builtin",
+  uploaded: "uploaded",
+} as const;
+
+export interface AdapterSpecVersion {
+  version: number;
+  name: string;
+  enabled: boolean;
+  source: AdapterSpecVersionSource;
+  jsHookApproved: boolean;
+  hasJsHook: boolean;
+  createdBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdapterSpecVersionsResponse {
+  key: string;
+  versions: AdapterSpecVersion[];
+}
+
+export interface AdapterSpecIssue {
+  path: string;
+  message: string;
+}
+
+export type ValidateAdapterSpecBodySpec = { [key: string]: unknown };
+
+export interface ValidateAdapterSpecBody {
+  spec: ValidateAdapterSpecBodySpec;
+}
+
+export interface AdapterSpecValidationResponse {
+  ok: boolean;
+  key?: string;
+  name?: string;
+  hasJsHook?: boolean;
+  error?: string;
+  message?: string;
+  issues?: AdapterSpecIssue[];
+}
+
+export type UpsertAdapterSpecBodySpec = { [key: string]: unknown };
+
+export interface UpsertAdapterSpecBody {
+  spec: UpsertAdapterSpecBodySpec;
+  enable?: boolean;
+  approveJsHook?: boolean;
+}
+
+export interface UpsertAdapterSpecResponse {
+  key: string;
+  version: number;
+  enabled: boolean;
+  jsHookApproved: boolean;
+  hasJsHook: boolean;
+}
+
+export interface PatchAdapterSpecBody {
+  enableVersion?: number;
+  disable?: boolean;
+  rollbackTo?: number;
+  jsHookApproved?: boolean;
+}
+
+export interface PatchAdapterSpecResponse {
+  key: string;
+  enabledVersion: number | null;
+  jsHookApproved: boolean;
+}
+
 export interface HealthStatus {
   status: string;
 }

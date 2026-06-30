@@ -2891,3 +2891,99 @@ export const SetMultiPortalMembersResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary List declarative adapter specs, one entry per key (admin only)
+ */
+export const ListAdapterSpecsResponse = zod.object({
+  specs: zod.array(
+    zod.object({
+      key: zod.string(),
+      name: zod.string(),
+      latestVersion: zod.number(),
+      enabledVersion: zod.number().nullable(),
+      versionCount: zod.number(),
+      source: zod.enum(["builtin", "uploaded"]),
+      jsHookApproved: zod.boolean(),
+      hasJsHook: zod.boolean(),
+      updatedAt: zod.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Create a new adapter spec version, optionally enabling it (admin only)
+ */
+export const UpsertAdapterSpecBody = zod.object({
+  spec: zod.record(zod.string(), zod.unknown()),
+  enable: zod.boolean().optional(),
+  approveJsHook: zod.boolean().optional(),
+});
+
+/**
+ * @summary Validate an adapter spec without persisting it (admin only)
+ */
+export const ValidateAdapterSpecBody = zod.object({
+  spec: zod.record(zod.string(), zod.unknown()),
+});
+
+export const ValidateAdapterSpecResponse = zod.object({
+  ok: zod.boolean(),
+  key: zod.string().optional(),
+  name: zod.string().optional(),
+  hasJsHook: zod.boolean().optional(),
+  error: zod.string().optional(),
+  message: zod.string().optional(),
+  issues: zod
+    .array(
+      zod.object({
+        path: zod.string(),
+        message: zod.string(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * @summary List the full version history for an adapter spec key (admin only)
+ */
+export const ListAdapterSpecVersionsParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const ListAdapterSpecVersionsResponse = zod.object({
+  key: zod.string(),
+  versions: zod.array(
+    zod.object({
+      version: zod.number(),
+      name: zod.string(),
+      enabled: zod.boolean(),
+      source: zod.enum(["builtin", "uploaded"]),
+      jsHookApproved: zod.boolean(),
+      hasJsHook: zod.boolean(),
+      createdBy: zod.number().nullable(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+ */
+export const PatchAdapterSpecParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const PatchAdapterSpecBody = zod.object({
+  enableVersion: zod.number().optional(),
+  disable: zod.boolean().optional(),
+  rollbackTo: zod.number().optional(),
+  jsHookApproved: zod.boolean().optional(),
+});
+
+export const PatchAdapterSpecResponse = zod.object({
+  key: zod.string(),
+  enabledVersion: zod.number().nullable(),
+  jsHookApproved: zod.boolean(),
+});

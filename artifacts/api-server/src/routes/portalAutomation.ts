@@ -11,6 +11,7 @@ import {
   portalUniversitiesTable,
   portalProgramMappingTable,
   portalProgramCacheTable,
+  portalAdapterSpecsTable,
 } from "@workspace/db";
 import {
   buildWorkbookBuffer,
@@ -29,6 +30,10 @@ import {
   resolveAdapterByKey,
   setCredsOverride,
   clearCredsOverride,
+  parseAdapterSpec,
+  specHasJsHook,
+  invalidateSpecAdapterCache,
+  listSpecVersions,
 } from "@workspace/portal-adapters";
 import { isAgentRole } from "@workspace/roles";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
@@ -1731,6 +1736,332 @@ router.put(
       .orderBy(asc(portalUniversitiesTable.universityName));
 
     res.json({ portalKey: key, members });
+  },
+);
+
+// ===========================================================================
+// Declarative adapter SPECs (opt-in, versioned parallel engine)
+// ---------------------------------------------------------------------------
+// CRUD/validate/version/rollback over portal_adapter_specs. The flat
+// portal_adapters table is unchanged; these endpoints manage the richer,
+// versioned spec format. jsHook execution is a separate, super_admin-gated
+// trust decision (jsHookApproved); uploading a jsHook spec is super_admin-only.
+// ===========================================================================
+
+const specKeyParamsSchema = z.object({ key: z.string().min(1).max(100) });
+const rawSpecObjectSchema = z.record(z.string(), z.unknown());
+
+const validateSpecBodySchema = z.object({ spec: rawSpecObjectSchema });
+const upsertSpecBodySchema = z.object({
+  spec: rawSpecObjectSchema,
+  enable: z.boolean().optional(),
+  approveJsHook: z.boolean().optional(),
+});
+const patchSpecBodySchema = z
+  .object({
+    enableVersion: z.number().int().positive().optional(),
+    disable: z.boolean().optional(),
+    rollbackTo: z.number().int().positive().optional(),
+    jsHookApproved: z.boolean().optional(),
+  })
+  .strict();
+
+function isSuperAdmin(role: string): boolean {
+  return role === "super_admin";
+}
+
+/**
+ * Atomically makes a single version the enabled one for a key (disabling all
+ * others). Pass version=null to disable all versions for the key.
+ */
+// Serialize all enable/rollback/version-creation for a given key. A transaction
+// scoped advisory lock keyed by the adapter key prevents interleaving updates
+// from leaving two enabled rows (which the partial unique index would otherwise
+// reject with a 500) or from racing on the next version number.
+type SpecTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function lockSpecKey(tx: SpecTx, key: string): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${key}))`);
+}
+
+// Enable exactly one version for a key (or disable all when version is null),
+// inside an already-locked transaction.
+async function setEnabledSpecVersionTx(
+  tx: SpecTx,
+  key: string,
+  version: number | null,
+): Promise<void> {
+  await tx
+    .update(portalAdapterSpecsTable)
+    .set({ enabled: false, updatedAt: new Date() })
+    .where(eq(portalAdapterSpecsTable.key, key));
+  if (version !== null) {
+    await tx
+      .update(portalAdapterSpecsTable)
+      .set({ enabled: true, updatedAt: new Date() })
+      .where(
+        and(
+          eq(portalAdapterSpecsTable.key, key),
+          eq(portalAdapterSpecsTable.version, version),
+        ),
+      );
+  }
+}
+
+async function setEnabledSpecVersion(
+  key: string,
+  version: number | null,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await lockSpecKey(tx, key);
+    await setEnabledSpecVersionTx(tx, key, version);
+  });
+  invalidateSpecAdapterCache();
+}
+
+// GET /portal-automation/adapter-specs — one entry per key (enabled + latest).
+router.get(
+  "/adapter-specs",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(portalAdapterSpecsTable)
+      .orderBy(
+        asc(portalAdapterSpecsTable.key),
+        desc(portalAdapterSpecsTable.version),
+      );
+
+    const byKey = new Map<
+      string,
+      {
+        key: string;
+        name: string;
+        latestVersion: number;
+        enabledVersion: number | null;
+        versionCount: number;
+        source: string;
+        jsHookApproved: boolean;
+        hasJsHook: boolean;
+        updatedAt: Date;
+      }
+    >();
+    for (const row of rows) {
+      const existing = byKey.get(row.key);
+      if (!existing) {
+        byKey.set(row.key, {
+          key: row.key,
+          name: row.name,
+          latestVersion: row.version,
+          enabledVersion: row.enabled ? row.version : null,
+          versionCount: 1,
+          source: row.source,
+          jsHookApproved: row.jsHookApproved,
+          hasJsHook: specHasJsHook(row.spec),
+          updatedAt: row.updatedAt,
+        });
+      } else {
+        existing.versionCount += 1;
+        if (row.enabled) existing.enabledVersion = row.version;
+      }
+    }
+
+    res.json({ specs: Array.from(byKey.values()) });
+  },
+);
+
+// GET /portal-automation/adapter-specs/:key/versions — full version history.
+router.get(
+  "/adapter-specs/:key/versions",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: specKeyParamsSchema }),
+  async (req, res) => {
+    const { key } = getValidated<{ params: typeof specKeyParamsSchema }>(req).params;
+    const rows = await listSpecVersions(key);
+    res.json({
+      key,
+      versions: rows.map((row) => ({
+        version: row.version,
+        name: row.name,
+        enabled: row.enabled,
+        source: row.source,
+        jsHookApproved: row.jsHookApproved,
+        hasJsHook: specHasJsHook(row.spec),
+        createdBy: row.createdBy,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      })),
+    });
+  },
+);
+
+// POST /portal-automation/adapter-specs/validate — validate without persisting.
+router.post(
+  "/adapter-specs/validate",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ body: validateSpecBodySchema }),
+  async (req, res) => {
+    const { spec } = getValidated<{ body: typeof validateSpecBodySchema }>(req).body;
+    const parsed = parseAdapterSpec(spec);
+    if (!parsed.ok) {
+      res.json({ ok: false, error: parsed.error, issues: parsed.issues ?? [] });
+      return;
+    }
+    res.json({
+      ok: true,
+      key: parsed.spec.meta.key,
+      name: parsed.spec.meta.name,
+      hasJsHook: specHasJsHook(spec),
+    });
+  },
+);
+
+// POST /portal-automation/adapter-specs — create a new version (optionally enable).
+router.post(
+  "/adapter-specs",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ body: upsertSpecBodySchema }),
+  async (req, res) => {
+    const user = req.user!;
+    const { spec, enable, approveJsHook } = getValidated<{
+      body: typeof upsertSpecBodySchema;
+    }>(req).body;
+
+    const parsed = parseAdapterSpec(spec);
+    if (!parsed.ok) {
+      res.status(400).json({ error: "INVALID_SPEC", message: parsed.error, issues: parsed.issues ?? [] });
+      return;
+    }
+
+    const hasJsHook = specHasJsHook(spec);
+    // Uploading a spec that contains jsHook steps is super_admin-only.
+    if (hasJsHook && !isSuperAdmin(user.role)) {
+      res.status(403).json({ error: "JSHOOK_FORBIDDEN", message: "Only super_admin may upload specs containing jsHook steps." });
+      return;
+    }
+    // Approving jsHook execution is likewise super_admin-only.
+    const jsHookApproved = approveJsHook === true && isSuperAdmin(user.role);
+
+    const key = parsed.spec.meta.key;
+
+    // Lock the key so the next-version computation, the insert, and the optional
+    // enable all happen atomically — concurrent uploads can't collide on the
+    // (key, version) unique index or leave two enabled rows.
+    const { created, nextVersion } = await db.transaction(async (tx) => {
+      await lockSpecKey(tx, key);
+      const [maxRow] = await tx
+        .select({ version: portalAdapterSpecsTable.version })
+        .from(portalAdapterSpecsTable)
+        .where(eq(portalAdapterSpecsTable.key, key))
+        .orderBy(desc(portalAdapterSpecsTable.version))
+        .limit(1);
+      const next = (maxRow?.version ?? 0) + 1;
+      const [row] = await tx
+        .insert(portalAdapterSpecsTable)
+        .values({
+          key,
+          name: parsed.spec.meta.name,
+          spec,
+          version: next,
+          enabled: false,
+          source: "uploaded",
+          jsHookApproved,
+          createdBy: user.id,
+        })
+        .returning();
+      if (enable) {
+        await setEnabledSpecVersionTx(tx, key, next);
+      }
+      return { created: row, nextVersion: next };
+    });
+    if (enable) invalidateSpecAdapterCache();
+
+    await logAudit(
+      user.id,
+      "upsert_adapter_spec",
+      "portal_adapter_spec",
+      created.id,
+      { key, version: nextVersion, enabled: enable === true, hasJsHook, jsHookApproved },
+      req.ip,
+    );
+
+    res.status(201).json({
+      key,
+      version: nextVersion,
+      enabled: enable === true,
+      jsHookApproved,
+      hasJsHook,
+    });
+  },
+);
+
+// PATCH /portal-automation/adapter-specs/:key — enable/disable/rollback/approve.
+router.patch(
+  "/adapter-specs/:key",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: specKeyParamsSchema, body: patchSpecBodySchema }),
+  async (req, res) => {
+    const user = req.user!;
+    const { key } = getValidated<{ params: typeof specKeyParamsSchema }>(req).params;
+    const body = getValidated<{ body: typeof patchSpecBodySchema }>(req).body;
+
+    const versions = await listSpecVersions(key);
+    if (versions.length === 0) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    // jsHook approval toggle (super_admin only).
+    if (body.jsHookApproved !== undefined) {
+      if (!isSuperAdmin(user.role)) {
+        res.status(403).json({ error: "JSHOOK_FORBIDDEN", message: "Only super_admin may approve jsHook execution." });
+        return;
+      }
+      await db
+        .update(portalAdapterSpecsTable)
+        .set({ jsHookApproved: body.jsHookApproved, updatedAt: new Date() })
+        .where(eq(portalAdapterSpecsTable.key, key));
+      invalidateSpecAdapterCache();
+    }
+
+    const targetVersion = body.enableVersion ?? body.rollbackTo;
+    if (body.disable) {
+      await setEnabledSpecVersion(key, null);
+    } else if (targetVersion !== undefined) {
+      if (!versions.some((v) => v.version === targetVersion)) {
+        res.status(404).json({ error: "VERSION_NOT_FOUND", message: `Version ${targetVersion} does not exist for ${key}.` });
+        return;
+      }
+      await setEnabledSpecVersion(key, targetVersion);
+    }
+
+    await logAudit(
+      user.id,
+      "patch_adapter_spec",
+      "portal_adapter_spec",
+      versions[0].id,
+      {
+        key,
+        enableVersion: body.enableVersion,
+        rollbackTo: body.rollbackTo,
+        disable: body.disable === true,
+        jsHookApproved: body.jsHookApproved,
+      },
+      req.ip,
+    );
+
+    const refreshed = await listSpecVersions(key);
+    const enabled = refreshed.find((v) => v.enabled) ?? null;
+    res.json({
+      key,
+      enabledVersion: enabled?.version ?? null,
+      jsHookApproved: refreshed[0]?.jsHookApproved ?? false,
+    });
   },
 );
 

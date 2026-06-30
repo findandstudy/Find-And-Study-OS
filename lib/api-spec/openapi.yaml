@@ -2766,8 +2766,253 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /portal-automation/adapter-specs:
+    get:
+      operationId: listAdapterSpecs
+      tags: [portal-automation]
+      summary: List declarative adapter specs, one entry per key (admin only)
+      responses:
+        "200":
+          description: Adapter spec summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterSpecListResponse"
+    post:
+      operationId: upsertAdapterSpec
+      tags: [portal-automation]
+      summary: Create a new adapter spec version, optionally enabling it (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertAdapterSpecBody"
+      responses:
+        "201":
+          description: New adapter spec version created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpsertAdapterSpecResponse"
+        "400":
+          description: Invalid spec
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterSpecValidationResponse"
+        "403":
+          description: jsHook upload forbidden for the current role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-automation/adapter-specs/validate:
+    post:
+      operationId: validateAdapterSpec
+      tags: [portal-automation]
+      summary: Validate an adapter spec without persisting it (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateAdapterSpecBody"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterSpecValidationResponse"
+
+  /portal-automation/adapter-specs/{key}/versions:
+    get:
+      operationId: listAdapterSpecVersions
+      tags: [portal-automation]
+      summary: List the full version history for an adapter spec key (admin only)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Version history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterSpecVersionsResponse"
+
+  /portal-automation/adapter-specs/{key}:
+    patch:
+      operationId: patchAdapterSpec
+      tags: [portal-automation]
+      summary: Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchAdapterSpecBody"
+      responses:
+        "200":
+          description: Updated enabled state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatchAdapterSpecResponse"
+        "403":
+          description: jsHook approval forbidden for the current role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Spec key or version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
+    AdapterSpecSummary:
+      type: object
+      required:
+        - key
+        - name
+        - latestVersion
+        - enabledVersion
+        - versionCount
+        - source
+        - jsHookApproved
+        - hasJsHook
+        - updatedAt
+      properties:
+        key: { type: string }
+        name: { type: string }
+        latestVersion: { type: integer }
+        enabledVersion:
+          type: integer
+          nullable: true
+        versionCount: { type: integer }
+        source:
+          type: string
+          enum: [builtin, uploaded]
+        jsHookApproved: { type: boolean }
+        hasJsHook: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    AdapterSpecListResponse:
+      type: object
+      required: [specs]
+      properties:
+        specs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecSummary"
+    AdapterSpecVersion:
+      type: object
+      required:
+        - version
+        - name
+        - enabled
+        - source
+        - jsHookApproved
+        - hasJsHook
+        - createdBy
+        - createdAt
+        - updatedAt
+      properties:
+        version: { type: integer }
+        name: { type: string }
+        enabled: { type: boolean }
+        source:
+          type: string
+          enum: [builtin, uploaded]
+        jsHookApproved: { type: boolean }
+        hasJsHook: { type: boolean }
+        createdBy:
+          type: integer
+          nullable: true
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AdapterSpecVersionsResponse:
+      type: object
+      required: [key, versions]
+      properties:
+        key: { type: string }
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecVersion"
+    AdapterSpecIssue:
+      type: object
+      required: [path, message]
+      properties:
+        path: { type: string }
+        message: { type: string }
+    ValidateAdapterSpecBody:
+      type: object
+      required: [spec]
+      properties:
+        spec:
+          type: object
+          additionalProperties: true
+    AdapterSpecValidationResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        key: { type: string }
+        name: { type: string }
+        hasJsHook: { type: boolean }
+        error: { type: string }
+        message: { type: string }
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecIssue"
+    UpsertAdapterSpecBody:
+      type: object
+      required: [spec]
+      properties:
+        spec:
+          type: object
+          additionalProperties: true
+        enable: { type: boolean }
+        approveJsHook: { type: boolean }
+    UpsertAdapterSpecResponse:
+      type: object
+      required: [key, version, enabled, jsHookApproved, hasJsHook]
+      properties:
+        key: { type: string }
+        version: { type: integer }
+        enabled: { type: boolean }
+        jsHookApproved: { type: boolean }
+        hasJsHook: { type: boolean }
+    PatchAdapterSpecBody:
+      type: object
+      properties:
+        enableVersion: { type: integer }
+        disable: { type: boolean }
+        rollbackTo: { type: integer }
+        jsHookApproved: { type: boolean }
+    PatchAdapterSpecResponse:
+      type: object
+      required: [key, enabledVersion, jsHookApproved]
+      properties:
+        key: { type: string }
+        enabledVersion:
+          type: integer
+          nullable: true
+        jsHookApproved: { type: boolean }
     HealthStatus:
       type: object
       properties:

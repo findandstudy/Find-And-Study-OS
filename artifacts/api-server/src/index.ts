@@ -805,6 +805,38 @@ async function seedClaudeIntegration() {
     console.error("[migrate] api_tokens table:", err);
   }
 
+  // Step 2b2b2: Versioned DB-backed declarative adapter SPECs (opt-in parallel
+  // system to portal_adapters). Mirrors lib/db migration 0024. Idempotent —
+  // this is the prod migration path (deploys run no Drizzle migrate step).
+  try {
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE "portal_adapter_spec_source" AS ENUM ('builtin', 'uploaded');
+      EXCEPTION WHEN duplicate_object THEN null; END $$;
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_adapter_specs (
+        id SERIAL PRIMARY KEY,
+        key TEXT NOT NULL,
+        name TEXT NOT NULL,
+        spec JSONB NOT NULL,
+        version INTEGER NOT NULL,
+        enabled BOOLEAN NOT NULL DEFAULT false,
+        source portal_adapter_spec_source NOT NULL DEFAULT 'uploaded',
+        js_hook_approved BOOLEAN NOT NULL DEFAULT false,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_adapter_specs_key_version_uniq ON portal_adapter_specs(key, version)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_adapter_specs_key_idx ON portal_adapter_specs(key)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_adapter_specs_enabled_idx ON portal_adapter_specs(enabled)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_adapter_specs_one_enabled_per_key ON portal_adapter_specs(key) WHERE enabled`);
+  } catch (err) {
+    console.error("[migrate] portal_adapter_specs table:", err);
+  }
+
   // Step 2b2d: Finance Sprint Phase 1 — staff commission fields on commissions +
   // new staff_commission_payouts table.
   // Mirrors lib/db migration 0014_finance_staff_columns. Idempotent (IF NOT EXISTS /
