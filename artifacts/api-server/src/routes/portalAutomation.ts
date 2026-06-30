@@ -12,6 +12,7 @@ import {
   portalProgramMappingTable,
   portalProgramCacheTable,
   portalAdapterSpecsTable,
+  portalAccountUniversitiesTable,
 } from "@workspace/db";
 import {
   buildWorkbookBuffer,
@@ -606,10 +607,12 @@ async function runWithTimeout(
     // resolveAdapterKey returns the company's adapterKey + the routedVia key.
     // routedVia is null on the legacy path → no adapter override is passed, so
     // behaviour is byte-for-byte identical to before this feature.
-    const { adapterKey, routedVia } = await resolveAdapterKey(sub.universityKey);
+    const { adapterKey, routedVia, memberUniversityId } =
+      await resolveAdapterKey(sub.universityKey);
     if (routedVia) {
       console.log(
-        `[portal-process] #${sub.id} routed via multi-portal "${routedVia}" → adapter "${adapterKey}"`,
+        `[portal-process] #${sub.id} routed via multi-portal "${routedVia}" → adapter "${adapterKey}"` +
+          (memberUniversityId != null ? ` (member catalog #${memberUniversityId})` : ""),
       );
     }
 
@@ -628,7 +631,17 @@ async function runWithTimeout(
       profileResult.files,
       profileResult.tempDir,
       creds,
-      routedVia ? { adapterKey } : undefined,
+      routedVia
+        ? {
+            adapterKey,
+            // Junction-routed → load member-level program overrides keyed by
+            // (account portal key, member catalog id). routes_via fallback
+            // (memberUniversityId null) keeps Phase 2 mapping behaviour.
+            ...(memberUniversityId != null
+              ? { programMappingKey: routedVia, memberUniversityId }
+              : {}),
+          }
+        : undefined,
     );
     // Enrich resultJson with doc-slot info so skip reasons are surfaced in the UI
     runResult.meta["filledSlots"]  = profileResult.filledSlots;
@@ -1736,6 +1749,311 @@ router.put(
       .orderBy(asc(portalUniversitiesTable.universityName));
 
     res.json({ portalKey: key, members });
+  },
+);
+
+// ===========================================================================
+// Phase 3 — multi-portal MEMBERSHIP (catalog-id keyed junction)
+// ---------------------------------------------------------------------------
+// The Phase 2 endpoints above route members by universityKey (portal_universities
+// rows). Phase 3 manages members of a multi-portal ACCOUNT directly from the
+// FAS-OS catalog (universities table), keyed by catalog id, via the
+// portal_account_universities junction. UNIQUE(catalog_university_id) guarantees
+// one school maps to at most one account; reassigning requires force.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/catalog-universities?q=&page=&pageSize=
+// Searchable, paginated catalog list (id/name/country) for the member picker.
+// Does NOT reuse /api/universities (that endpoint silently caps limit at 100).
+// ---------------------------------------------------------------------------
+const catalogUniversitiesQuerySchema = z.object({
+  q: z.string().trim().max(200).optional(),
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(100).optional(),
+});
+type CatalogUniversitiesSchemas = { query: typeof catalogUniversitiesQuerySchema };
+
+router.get(
+  "/portal-automation/catalog-universities",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ query: catalogUniversitiesQuerySchema }),
+  async (req, res): Promise<void> => {
+    const { q, page, pageSize } = getValidated<CatalogUniversitiesSchemas>(req).query;
+    const limit = pageSize ?? 20;
+    const offset = ((page ?? 1) - 1) * limit;
+
+    const where = q
+      ? or(
+          ilike(universitiesTable.name, `%${q}%`),
+          ilike(universitiesTable.country, `%${q}%`),
+        )
+      : undefined;
+
+    const [rows, [{ total }]] = await Promise.all([
+      db
+        .select({
+          id: universitiesTable.id,
+          name: universitiesTable.name,
+          country: universitiesTable.country,
+        })
+        .from(universitiesTable)
+        .where(where)
+        .orderBy(asc(universitiesTable.name))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ total: count() })
+        .from(universitiesTable)
+        .where(where),
+    ]);
+
+    res.json({
+      data: rows,
+      meta: buildPageMeta(total, { page: page ?? 1, limit, offset }),
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/accounts/:key/members
+// Current member universities (catalog ids) of a multi-portal account.
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-automation/accounts/:key/members",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: uniKeyParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { key } = getValidated<UniKeyParams>(req).params;
+
+    const portal = await getPortalUniversity(key);
+    if (!portal) {
+      res.status(404).json({ error: "PORTAL_NOT_FOUND" });
+      return;
+    }
+    if (!portal.isMultiPortal) {
+      res.status(400).json({
+        error: "NOT_MULTI_PORTAL",
+        message: `'${key}' is not a multi-portal company`,
+      });
+      return;
+    }
+
+    const members = await db
+      .select({
+        catalogUniversityId: portalAccountUniversitiesTable.catalogUniversityId,
+        enabled: portalAccountUniversitiesTable.enabled,
+        universityName: universitiesTable.name,
+        country: universitiesTable.country,
+      })
+      .from(portalAccountUniversitiesTable)
+      .innerJoin(
+        universitiesTable,
+        eq(portalAccountUniversitiesTable.catalogUniversityId, universitiesTable.id),
+      )
+      .where(eq(portalAccountUniversitiesTable.portalKey, key))
+      .orderBy(asc(universitiesTable.name));
+
+    res.json({ portalKey: key, members });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// PUT /portal-automation/accounts/:key/members
+// Replace the account's member set with the given catalog ids. A catalog id
+// already owned by a DIFFERENT account → 409 ALREADY_ASSIGNED unless force=true
+// (then it is moved to this account). Members omitted from the set are removed.
+// ---------------------------------------------------------------------------
+const putAccountMembersBodySchema = z.object({
+  catalogUniversityIds: z.array(z.number().int().positive()).max(2000),
+  force: z.boolean().optional(),
+});
+type PutAccountMembersSchemas = {
+  params: typeof uniKeyParamsSchema;
+  body: typeof putAccountMembersBodySchema;
+};
+
+router.put(
+  "/portal-automation/accounts/:key/members",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: uniKeyParamsSchema, body: putAccountMembersBodySchema }),
+  async (req, res): Promise<void> => {
+    const { key } = getValidated<PutAccountMembersSchemas>(req).params;
+    const { catalogUniversityIds, force } = getValidated<PutAccountMembersSchemas>(req).body;
+    const user = req.user!;
+
+    const portal = await getPortalUniversity(key);
+    if (!portal) {
+      res.status(404).json({ error: "PORTAL_NOT_FOUND" });
+      return;
+    }
+    if (!portal.isMultiPortal) {
+      res.status(400).json({
+        error: "NOT_MULTI_PORTAL",
+        message: `'${key}' is not a multi-portal company`,
+      });
+      return;
+    }
+
+    const requested = Array.from(new Set(catalogUniversityIds));
+
+    if (requested.length > 0) {
+      // Validate every catalog id exists.
+      const existing = await db
+        .select({ id: universitiesTable.id })
+        .from(universitiesTable)
+        .where(inArray(universitiesTable.id, requested));
+      const foundIds = new Set(existing.map((r) => r.id));
+      const missing = requested.filter((id) => !foundIds.has(id));
+      if (missing.length > 0) {
+        res.status(404).json({
+          error: "MEMBER_NOT_FOUND",
+          message: `Unknown catalog university id(s): ${missing.join(", ")}`,
+        });
+        return;
+      }
+
+      // Conflict: a catalog id already owned by a DIFFERENT account.
+      const conflicts = await db
+        .select({
+          catalogUniversityId: portalAccountUniversitiesTable.catalogUniversityId,
+          portalKey: portalAccountUniversitiesTable.portalKey,
+        })
+        .from(portalAccountUniversitiesTable)
+        .where(
+          and(
+            inArray(portalAccountUniversitiesTable.catalogUniversityId, requested),
+            sql`${portalAccountUniversitiesTable.portalKey} <> ${key}`,
+          ),
+        );
+      if (conflicts.length > 0 && !force) {
+        res.status(409).json({
+          error: "ALREADY_ASSIGNED",
+          message: `Already assigned to another portal account: ${conflicts
+            .map((c) => `${c.catalogUniversityId}→${c.portalKey}`)
+            .join(", ")}`,
+          conflicts,
+        });
+        return;
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      // Remove members of THIS account omitted from the new set.
+      const removeCondition =
+        requested.length > 0
+          ? and(
+              eq(portalAccountUniversitiesTable.portalKey, key),
+              notInArray(portalAccountUniversitiesTable.catalogUniversityId, requested),
+            )
+          : eq(portalAccountUniversitiesTable.portalKey, key);
+      await tx.delete(portalAccountUniversitiesTable).where(removeCondition);
+
+      // Upsert requested. ON CONFLICT(catalog_university_id) → move to this
+      // account (force path already validated above; without force there were
+      // no cross-account conflicts so this only re-affirms same-account rows).
+      if (requested.length > 0) {
+        await tx
+          .insert(portalAccountUniversitiesTable)
+          .values(
+            requested.map((catalogUniversityId) => ({
+              portalKey: key,
+              catalogUniversityId,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: portalAccountUniversitiesTable.catalogUniversityId,
+            set: { portalKey: key, updatedAt: new Date() },
+          });
+      }
+    });
+
+    logAudit(
+      user.id,
+      "portal.membership.update",
+      "portal_university",
+      portal.id,
+      { portalKey: key, catalogUniversityIds: requested, force: force ?? false },
+      req.ip,
+    );
+
+    const members = await db
+      .select({
+        catalogUniversityId: portalAccountUniversitiesTable.catalogUniversityId,
+        enabled: portalAccountUniversitiesTable.enabled,
+        universityName: universitiesTable.name,
+        country: universitiesTable.country,
+      })
+      .from(portalAccountUniversitiesTable)
+      .innerJoin(
+        universitiesTable,
+        eq(portalAccountUniversitiesTable.catalogUniversityId, universitiesTable.id),
+      )
+      .where(eq(portalAccountUniversitiesTable.portalKey, key))
+      .orderBy(asc(universitiesTable.name));
+
+    res.json({ portalKey: key, members });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/resolve?applicationId=
+// Resolves the submission target for an application's university so the UI can
+// show "Gönderim hedefi: <portal>". Mirrors runner resolution: own portal row →
+// resolveAdapterKey → portalKey = routedVia ?? own universityKey.
+// ---------------------------------------------------------------------------
+const resolveQuerySchema = z.object({
+  applicationId: z.coerce.number().int().positive(),
+});
+type ResolveSchemas = { query: typeof resolveQuerySchema };
+
+router.get(
+  "/portal-automation/resolve",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ query: resolveQuerySchema }),
+  async (req, res): Promise<void> => {
+    const { applicationId } = getValidated<ResolveSchemas>(req).query;
+
+    const [app] = await db
+      .select({
+        universityId: applicationsTable.universityId,
+        universityName: universitiesTable.name,
+      })
+      .from(applicationsTable)
+      .leftJoin(universitiesTable, eq(applicationsTable.universityId, universitiesTable.id))
+      .where(eq(applicationsTable.id, applicationId))
+      .limit(1);
+    if (!app) {
+      res.status(404).json({ error: "APPLICATION_NOT_FOUND" });
+      return;
+    }
+
+    const portalUni = await findActivePortalUniversity({
+      universityId: app.universityId,
+      universityName: app.universityName,
+    });
+    if (!portalUni) {
+      res.json({ resolved: false });
+      return;
+    }
+
+    const { adapterKey, routedVia, memberUniversityId } = await resolveAdapterKey(
+      portalUni.universityKey,
+    );
+
+    res.json({
+      resolved: true,
+      ownUniversityKey: portalUni.universityKey,
+      ownUniversityName: portalUni.universityName,
+      portalKey: routedVia ?? portalUni.universityKey,
+      routed: routedVia != null,
+      adapterKey,
+      memberUniversityId,
+    });
   },
 );
 

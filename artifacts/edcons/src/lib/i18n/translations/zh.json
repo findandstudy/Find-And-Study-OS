@@ -5197,6 +5197,25 @@
       "noVersions": "未找到版本。",
       "enableVersion": "启用",
       "close": "关闭"
+    },
+    "members": {
+      "title": "Member Universities",
+      "description": "Select catalog universities whose applications are submitted through this account's portal.",
+      "addMembers": "Add universities",
+      "searchPlaceholder": "Search universities…",
+      "noCandidates": "No universities found.",
+      "noMembers": "No member universities selected yet.",
+      "loadError": "Failed to load members.",
+      "saveSuccess": "Members updated.",
+      "saveError": "Failed to update members.",
+      "saving": "Saving…",
+      "saveButton": "Save Members",
+      "conflictTitle": "Already assigned",
+      "conflictBody": "One or more selected universities are already assigned to another portal account. Move them to this account?",
+      "forceMove": "Move here",
+      "targetLabel": "Submission target",
+      "targetTooltip": "The portal account this application will be submitted through.",
+      "routedTag": "routed"
     }
   },
   "activityFeed": {

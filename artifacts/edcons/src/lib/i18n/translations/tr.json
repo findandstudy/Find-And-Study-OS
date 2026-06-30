@@ -5197,6 +5197,25 @@
       "noVersions": "Sürüm bulunamadı.",
       "enableVersion": "Etkinleştir",
       "close": "Kapat"
+    },
+    "members": {
+      "title": "Üye Üniversiteler",
+      "description": "Başvuruları bu hesabın portalı üzerinden gönderilecek katalog üniversitelerini seçin.",
+      "addMembers": "Üniversite ekle",
+      "searchPlaceholder": "Üniversite ara…",
+      "noCandidates": "Üniversite bulunamadı.",
+      "noMembers": "Henüz üye üniversite seçilmedi.",
+      "loadError": "Üyeler yüklenemedi.",
+      "saveSuccess": "Üyeler güncellendi.",
+      "saveError": "Üyeler güncellenemedi.",
+      "saving": "Kaydediliyor…",
+      "saveButton": "Üyeleri Kaydet",
+      "conflictTitle": "Zaten atanmış",
+      "conflictBody": "Seçilen üniversitelerden biri veya birkaçı zaten başka bir portal hesabına atanmış. Bu hesaba taşınsın mı?",
+      "forceMove": "Buraya taşı",
+      "targetLabel": "Gönderim hedefi",
+      "targetTooltip": "Bu başvurunun gönderileceği portal hesabı.",
+      "routedTag": "yönlendirildi"
     }
   },
   "activityFeed": {

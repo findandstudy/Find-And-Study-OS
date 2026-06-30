@@ -45,6 +45,7 @@ export * from "./aiExtractors";
 export * from "./portalSubmissions";
 export * from "./portalAutomationSettings";
 export * from "./portalUniversities";
+export * from "./portalAccountUniversities";
 export * from "./portalAdapters";
 export * from "./portalAdapterSpecs";
 export * from "./portalProgramMapping";

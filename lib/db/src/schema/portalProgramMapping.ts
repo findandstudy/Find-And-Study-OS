@@ -2,10 +2,13 @@ import {
   pgTable,
   serial,
   text,
+  integer,
   jsonb,
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { universitiesTable } from "./universities";
 
 // ---------------------------------------------------------------------------
 // Table — per-university program name translation dictionary
@@ -17,6 +20,16 @@ export const portalProgramMappingTable = pgTable(
   {
     id: serial("id").primaryKey(),
     universityKey: text("university_key").notNull(),
+    /**
+     * Multi-portal member dimension (Phase 3). NULL = 1:1 university (Topkapı —
+     * today's behaviour). When set, this row holds the program overrides for the
+     * member catalog university (universities.id) of the multi-portal account
+     * identified by `universityKey` (the company's portal key).
+     */
+    memberUniversityId: integer("member_university_id").references(
+      () => universitiesTable.id,
+      { onDelete: "cascade" },
+    ),
     /** { "portal label": "CRM program name" } — legacy human dictionary (panel). */
     mappings: jsonb("mappings")
       .$type<Record<string, string>>()
@@ -56,7 +69,15 @@ export const portalProgramMappingTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    uniqueIndex("portal_prog_map_key_uniq").on(table.universityKey),
+    // 1:1 universities (Topkapı): one mapping row per universityKey when there
+    // is no member dimension.
+    uniqueIndex("portal_prog_map_key_nomem_uniq")
+      .on(table.universityKey)
+      .where(sql`member_university_id IS NULL`),
+    // Multi-portal members: one mapping row per (company portal key, member).
+    uniqueIndex("portal_prog_map_key_mem_uniq")
+      .on(table.universityKey, table.memberUniversityId)
+      .where(sql`member_university_id IS NOT NULL`),
   ],
 );
 

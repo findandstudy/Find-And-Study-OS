@@ -837,6 +837,46 @@ async function seedClaudeIntegration() {
     console.error("[migrate] portal_adapter_specs table:", err);
   }
 
+  // Step 2b2b3: Phase 3 multi-portal membership. Junction
+  // portal_account_universities (catalog university ↔ multi-portal account) +
+  // member dimension on portal_program_mapping. Mirrors lib/db migration 0025.
+  // Idempotent — this is the prod migration path (no Drizzle migrate on deploy).
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_account_universities (
+        id SERIAL PRIMARY KEY,
+        portal_key TEXT NOT NULL,
+        catalog_university_id INTEGER NOT NULL REFERENCES universities(id) ON DELETE CASCADE,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_acct_uni_catalog_uniq ON portal_account_universities(catalog_university_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_acct_uni_portal_key_idx ON portal_account_universities(portal_key)`);
+
+    await pool.query(`ALTER TABLE portal_program_mapping ADD COLUMN IF NOT EXISTS member_university_id INTEGER REFERENCES universities(id) ON DELETE CASCADE`);
+    // Replace the old single UNIQUE(university_key) with two partial uniques so a
+    // company key can hold one 1:1 row (member NULL) plus N member-scoped rows.
+    await pool.query(`DROP INDEX IF EXISTS portal_prog_map_key_uniq`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_prog_map_key_nomem_uniq ON portal_program_mapping(university_key) WHERE member_university_id IS NULL`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_prog_map_key_mem_uniq ON portal_program_mapping(university_key, member_university_id) WHERE member_university_id IS NOT NULL`);
+
+    // Migrate Phase 2 routes_via members → junction (idempotent). Only members
+    // with a catalog id can be expressed in the catalog-keyed junction.
+    await pool.query(`
+      INSERT INTO portal_account_universities (portal_key, catalog_university_id, enabled)
+      SELECT routes_via, crm_university_id, true
+        FROM portal_universities
+       WHERE routes_via IS NOT NULL
+         AND crm_university_id IS NOT NULL
+         AND deleted_at IS NULL
+      ON CONFLICT (catalog_university_id) DO NOTHING
+    `);
+  } catch (err) {
+    console.error("[migrate] portal_account_universities table:", err);
+  }
+
   // Step 2b2d: Finance Sprint Phase 1 — staff commission fields on commissions +
   // new staff_commission_payouts table.
   // Mirrors lib/db migration 0014_finance_staff_columns. Idempotent (IF NOT EXISTS /

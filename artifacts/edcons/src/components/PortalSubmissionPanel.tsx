@@ -5,9 +5,10 @@
  * Orval hook'ları kullanır; queued/running durumlarında 5 sn'de bir poll yapar.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  customFetch,
   useGetUniversityPortals,
   useEnqueuePortalSubmission,
   useRetryPortalSubmission,
@@ -80,6 +81,34 @@ export default function PortalSubmissionPanel({ applicationId, universityName }:
   const { user: authUser } = useAuth();
 
   const canSendReal = authUser ? REAL_SUBMISSION_ROLES.includes(authUser.role) : false;
+
+  // ----- Resolved submission target (multi-portal routing badge) ----------
+  const [resolveInfo, setResolveInfo] = useState<{
+    portalKey: string;
+    routed: boolean;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await customFetch<{
+          resolved: boolean;
+          portalKey?: string;
+          routed?: boolean;
+        }>(`/api/portal-automation/resolve?applicationId=${applicationId}`);
+        if (!cancelled) {
+          setResolveInfo(
+            res.resolved && res.portalKey
+              ? { portalKey: res.portalKey, routed: res.routed ?? false }
+              : null,
+          );
+        }
+      } catch {
+        if (!cancelled) setResolveInfo(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [applicationId]);
 
   // ----- Portal list -------------------------------------------------------
   const { data: portalsRaw, isLoading: portalsLoading } = useGetUniversityPortals();
@@ -176,9 +205,23 @@ export default function PortalSubmissionPanel({ applicationId, universityName }:
   return (
     <Card className="rounded-2xl border shadow-sm mt-6" dir={dir}>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
+        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
           <Send className="w-4 h-4" />
           {t("portalAutomation.panel.panelTitle")}
+          {resolveInfo && (
+            <Badge
+              variant="secondary"
+              className="font-normal gap-1"
+              title={t("portalAutomation.members.targetTooltip")}
+            >
+              {t("portalAutomation.members.targetLabel")}: {resolveInfo.portalKey}
+              {resolveInfo.routed && (
+                <span className="text-xs text-muted-foreground">
+                  ({t("portalAutomation.members.routedTag")})
+                </span>
+              )}
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
 

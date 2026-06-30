@@ -10,7 +10,7 @@
  */
 
 import { db, portalProgramMappingTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 export interface ProgramMappingData {
   /** CRM programId → portal option value/text. */
@@ -28,8 +28,15 @@ export interface ProgramMappingData {
  */
 export async function loadProgramMapping(
   universityKey: string,
+  memberUniversityId: number | null = null,
 ): Promise<ProgramMappingData> {
   try {
+    // memberUniversityId null → 1:1 row (member_university_id IS NULL), today's
+    // behaviour. Non-null → the multi-portal account's row for that member.
+    const memberCondition =
+      memberUniversityId == null
+        ? isNull(portalProgramMappingTable.memberUniversityId)
+        : eq(portalProgramMappingTable.memberUniversityId, memberUniversityId);
     const [row] = await db
       .select({
         programOverrides: portalProgramMappingTable.programOverrides,
@@ -37,7 +44,12 @@ export async function loadProgramMapping(
         countryOverrides: portalProgramMappingTable.countryOverrides,
       })
       .from(portalProgramMappingTable)
-      .where(eq(portalProgramMappingTable.universityKey, universityKey));
+      .where(
+        and(
+          eq(portalProgramMappingTable.universityKey, universityKey),
+          memberCondition,
+        ),
+      );
 
     if (!row) return {};
 

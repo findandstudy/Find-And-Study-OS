@@ -85,7 +85,14 @@ export async function runSubmission(
   files: SubmitFiles,
   tempDir: string,
   creds?: ResolvedCreds,
-  opts?: { headless?: boolean; adapterKey?: string },
+  opts?: {
+    headless?: boolean;
+    adapterKey?: string;
+    /** Program-mapping key override (multi-portal account key when routed). */
+    programMappingKey?: string;
+    /** Member catalog university id for member-level program overrides. */
+    memberUniversityId?: number | null;
+  },
 ): Promise<RunResult> {
   // ----- 1. Resolve adapter -----------------------------------------------
   // When opts.adapterKey is provided (multi-portal routing) it takes priority.
@@ -129,7 +136,10 @@ export async function runSubmission(
     // keyed by universityKey. Empty/missing row → fields omitted → the adapter
     // falls back to its built-in code defaults (no behaviour change). The DB
     // values, when present, are merged OVER the built-ins by the adapter.
-    const mapping = await loadProgramMapping(submission.universityKey);
+    const mapping = await loadProgramMapping(
+      opts?.programMappingKey ?? submission.universityKey,
+      opts?.memberUniversityId ?? null,
+    );
     const enrichedProfile: SubmitProfile = { ...profile, ...mapping };
 
     const result = await adapter.submit(session, enrichedProfile, files, !isDry);
