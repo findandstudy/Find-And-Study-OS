@@ -2987,3 +2987,84 @@ export const PatchAdapterSpecResponse = zod.object({
   enabledVersion: zod.number().nullable(),
   jsHookApproved: zod.boolean(),
 });
+
+/**
+ * @summary List program fallback rules (optionally filtered by university)
+ */
+export const ListProgramFallbacksQueryParams = zod.object({
+  universityKey: zod.coerce.string().optional(),
+});
+
+export const ListProgramFallbacksResponseItem = zod.object({
+  id: zod.number(),
+  universityKey: zod.string(),
+  sourceProgramId: zod.number(),
+  sourceProgramName: zod.string().nullish(),
+  fallbackProgramIds: zod.array(zod.number()),
+  fallbackPrograms: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string().nullable(),
+    }),
+  ),
+  autoSubmit: zod.boolean(),
+  enabled: zod.boolean(),
+  createdAt: zod.string().nullish(),
+  updatedAt: zod.string().nullish(),
+});
+export const ListProgramFallbacksResponse = zod.array(
+  ListProgramFallbacksResponseItem,
+);
+
+/**
+ * @summary Create a program fallback rule (one per university+source program)
+ */
+export const CreateProgramFallbackBody = zod.object({
+  universityKey: zod.string(),
+  sourceProgramId: zod.number(),
+  fallbackProgramIds: zod.array(zod.number()).optional(),
+  autoSubmit: zod.boolean().optional(),
+  enabled: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update a program fallback rule (order, autoSubmit, enabled)
+ */
+export const UpdateProgramFallbackParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateProgramFallbackBody = zod.object({
+  fallbackProgramIds: zod.array(zod.number()).optional(),
+  autoSubmit: zod.boolean().optional(),
+  enabled: zod.boolean().optional(),
+});
+
+export const UpdateProgramFallbackResponse = zod.object({
+  id: zod.number(),
+  universityKey: zod.string(),
+  sourceProgramId: zod.number(),
+  sourceProgramName: zod.string().nullish(),
+  fallbackProgramIds: zod.array(zod.number()),
+  fallbackPrograms: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string().nullable(),
+    }),
+  ),
+  autoSubmit: zod.boolean(),
+  enabled: zod.boolean(),
+  createdAt: zod.string().nullish(),
+  updatedAt: zod.string().nullish(),
+});
+
+/**
+ * @summary Soft-delete a program fallback rule
+ */
+export const DeleteProgramFallbackParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteProgramFallbackResponse = zod.object({
+  ok: zod.boolean(),
+});

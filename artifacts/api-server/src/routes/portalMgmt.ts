@@ -75,6 +75,7 @@ router.get(
         selectedUniversityKeys: [],
         autoProcessEnabled: false,
         autoProcessIntervalMinutes: 20,
+        fallbackEnabled: false,
         lastAutoDrainAt: null,
         createdAt: null,
         updatedAt: null,
@@ -97,6 +98,7 @@ const putSettingsBodySchema = z.object({
   selectedUniversityKeys: z.array(z.string()),
   autoProcessEnabled: z.boolean().optional(),
   autoProcessIntervalMinutes: z.number().int().min(1).max(1440).optional(),
+  fallbackEnabled: z.boolean().optional(),
 });
 type PutSettingsSchemas = { body: typeof putSettingsBodySchema };
 
@@ -127,6 +129,7 @@ router.put(
           selectedUniversityKeys:      body.selectedUniversityKeys,
           ...(body.autoProcessEnabled !== undefined && { autoProcessEnabled: body.autoProcessEnabled }),
           ...(body.autoProcessIntervalMinutes !== undefined && { autoProcessIntervalMinutes: body.autoProcessIntervalMinutes }),
+          ...(body.fallbackEnabled !== undefined && { fallbackEnabled: body.fallbackEnabled }),
           updatedAt:                   new Date(),
         })
         .where(eq(portalAutomationSettingsTable.id, existing.id))
@@ -142,6 +145,7 @@ router.put(
           selectedUniversityKeys:      body.selectedUniversityKeys,
           autoProcessEnabled:          body.autoProcessEnabled ?? false,
           autoProcessIntervalMinutes:  body.autoProcessIntervalMinutes ?? 20,
+          fallbackEnabled:             body.fallbackEnabled ?? false,
         })
         .returning();
     }
@@ -158,6 +162,7 @@ router.put(
         triggerStagesCount: body.triggerStages.length,
         autoProcessEnabled: body.autoProcessEnabled,
         autoProcessIntervalMinutes: body.autoProcessIntervalMinutes,
+        fallbackEnabled: body.fallbackEnabled,
       },
       req.ip,
     );

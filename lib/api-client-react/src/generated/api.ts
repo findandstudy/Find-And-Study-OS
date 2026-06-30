@@ -51,6 +51,7 @@ import type {
   CreateLeadFromConversationResponse,
   CreateNoteBody,
   CreateProgramBody,
+  CreateProgramFallbackBody,
   CreateServiceFeeBody,
   CreateStudentBody,
   CreateUniversityBody,
@@ -91,6 +92,7 @@ import type {
   ListDocumentsParams,
   ListInvoicesParams,
   ListLeadsParams,
+  ListProgramFallbacksParams,
   ListProgramsParams,
   ListServiceFees200,
   ListServiceFeesParams,
@@ -112,6 +114,7 @@ import type {
   PortalProgramOptionsResponse,
   PortalSubmission,
   Program,
+  ProgramFallback,
   ProgramsListResponse,
   PublicLeadBody,
   RecordEntityViewBody,
@@ -139,6 +142,7 @@ import type {
   UpdateLeadBody,
   UpdatePortalProgramMappingBody,
   UpdateProgramBody,
+  UpdateProgramFallbackBody,
   UpdateServiceFeeBody,
   UpdateSettingsBody,
   UpdateStudentBody,
@@ -10259,4 +10263,366 @@ export const usePatchAdapterSpec = <
   TContext
 > => {
   return useMutation(getPatchAdapterSpecMutationOptions(options));
+};
+
+/**
+ * @summary List program fallback rules (optionally filtered by university)
+ */
+export const getListProgramFallbacksUrl = (
+  params?: ListProgramFallbacksParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/portal-program-fallbacks?${stringifiedParams}`
+    : `/api/portal-program-fallbacks`;
+};
+
+export const listProgramFallbacks = async (
+  params?: ListProgramFallbacksParams,
+  options?: RequestInit,
+): Promise<ProgramFallback[]> => {
+  return customFetch<ProgramFallback[]>(getListProgramFallbacksUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListProgramFallbacksQueryKey = (
+  params?: ListProgramFallbacksParams,
+) => {
+  return [
+    `/api/portal-program-fallbacks`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListProgramFallbacksQueryOptions = <
+  TData = Awaited<ReturnType<typeof listProgramFallbacks>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListProgramFallbacksParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listProgramFallbacks>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListProgramFallbacksQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listProgramFallbacks>>
+  > = ({ signal }) =>
+    listProgramFallbacks(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listProgramFallbacks>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListProgramFallbacksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listProgramFallbacks>>
+>;
+export type ListProgramFallbacksQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List program fallback rules (optionally filtered by university)
+ */
+
+export function useListProgramFallbacks<
+  TData = Awaited<ReturnType<typeof listProgramFallbacks>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListProgramFallbacksParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listProgramFallbacks>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListProgramFallbacksQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a program fallback rule (one per university+source program)
+ */
+export const getCreateProgramFallbackUrl = () => {
+  return `/api/portal-program-fallbacks`;
+};
+
+export const createProgramFallback = async (
+  createProgramFallbackBody: CreateProgramFallbackBody,
+  options?: RequestInit,
+): Promise<ProgramFallback> => {
+  return customFetch<ProgramFallback>(getCreateProgramFallbackUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createProgramFallbackBody),
+  });
+};
+
+export const getCreateProgramFallbackMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createProgramFallback>>,
+    TError,
+    { data: BodyType<CreateProgramFallbackBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createProgramFallback>>,
+  TError,
+  { data: BodyType<CreateProgramFallbackBody> },
+  TContext
+> => {
+  const mutationKey = ["createProgramFallback"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createProgramFallback>>,
+    { data: BodyType<CreateProgramFallbackBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createProgramFallback(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateProgramFallbackMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createProgramFallback>>
+>;
+export type CreateProgramFallbackMutationBody =
+  BodyType<CreateProgramFallbackBody>;
+export type CreateProgramFallbackMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a program fallback rule (one per university+source program)
+ */
+export const useCreateProgramFallback = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createProgramFallback>>,
+    TError,
+    { data: BodyType<CreateProgramFallbackBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createProgramFallback>>,
+  TError,
+  { data: BodyType<CreateProgramFallbackBody> },
+  TContext
+> => {
+  return useMutation(getCreateProgramFallbackMutationOptions(options));
+};
+
+/**
+ * @summary Update a program fallback rule (order, autoSubmit, enabled)
+ */
+export const getUpdateProgramFallbackUrl = (id: number) => {
+  return `/api/portal-program-fallbacks/${id}`;
+};
+
+export const updateProgramFallback = async (
+  id: number,
+  updateProgramFallbackBody: UpdateProgramFallbackBody,
+  options?: RequestInit,
+): Promise<ProgramFallback> => {
+  return customFetch<ProgramFallback>(getUpdateProgramFallbackUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateProgramFallbackBody),
+  });
+};
+
+export const getUpdateProgramFallbackMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProgramFallback>>,
+    TError,
+    { id: number; data: BodyType<UpdateProgramFallbackBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateProgramFallback>>,
+  TError,
+  { id: number; data: BodyType<UpdateProgramFallbackBody> },
+  TContext
+> => {
+  const mutationKey = ["updateProgramFallback"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateProgramFallback>>,
+    { id: number; data: BodyType<UpdateProgramFallbackBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateProgramFallback(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateProgramFallbackMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateProgramFallback>>
+>;
+export type UpdateProgramFallbackMutationBody =
+  BodyType<UpdateProgramFallbackBody>;
+export type UpdateProgramFallbackMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update a program fallback rule (order, autoSubmit, enabled)
+ */
+export const useUpdateProgramFallback = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProgramFallback>>,
+    TError,
+    { id: number; data: BodyType<UpdateProgramFallbackBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateProgramFallback>>,
+  TError,
+  { id: number; data: BodyType<UpdateProgramFallbackBody> },
+  TContext
+> => {
+  return useMutation(getUpdateProgramFallbackMutationOptions(options));
+};
+
+/**
+ * @summary Soft-delete a program fallback rule
+ */
+export const getDeleteProgramFallbackUrl = (id: number) => {
+  return `/api/portal-program-fallbacks/${id}`;
+};
+
+export const deleteProgramFallback = async (
+  id: number,
+  options?: RequestInit,
+): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getDeleteProgramFallbackUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteProgramFallbackMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteProgramFallback>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteProgramFallback>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteProgramFallback"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteProgramFallback>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteProgramFallback(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteProgramFallbackMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteProgramFallback>>
+>;
+
+export type DeleteProgramFallbackMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Soft-delete a program fallback rule
+ */
+export const useDeleteProgramFallback = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteProgramFallback>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteProgramFallback>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteProgramFallbackMutationOptions(options));
 };

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   serial,
@@ -57,11 +58,11 @@ export const portalProgramFallbacksTable = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => [
-    // One fallback rule per (portal university, source programme).
-    uniqueIndex("portal_prog_fallback_key_source_uniq").on(
-      table.universityKey,
-      table.sourceProgramId,
-    ),
+    // One ACTIVE fallback rule per (portal university, source programme).
+    // Partial (deleted_at IS NULL) so a soft-deleted rule can be recreated.
+    uniqueIndex("portal_prog_fallback_key_source_uniq")
+      .on(table.universityKey, table.sourceProgramId)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 

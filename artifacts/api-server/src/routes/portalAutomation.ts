@@ -1,5 +1,5 @@
 import { Router, type IRouter, raw } from "express";
-import { and, asc, count, desc, eq, ilike, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
@@ -427,8 +427,16 @@ router.get(
       .where(where);
 
     const rows = await db
-      .select()
+      .select({
+        ...getTableColumns(portalSubmissionsTable),
+        supersededByApplicationId: applicationsTable.supersededByApplicationId,
+        supersededFromApplicationId: applicationsTable.supersededFromApplicationId,
+      })
       .from(portalSubmissionsTable)
+      .leftJoin(
+        applicationsTable,
+        eq(applicationsTable.id, portalSubmissionsTable.applicationId),
+      )
       .where(where)
       .orderBy(desc(portalSubmissionsTable.createdAt))
       .limit(pageParams.limit)

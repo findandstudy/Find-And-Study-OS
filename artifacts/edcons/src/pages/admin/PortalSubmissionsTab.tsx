@@ -28,7 +28,7 @@ import {
 import {
   RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
   CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
-  PlayCircle, ListStart, Eye, Plus, Inbox,
+  PlayCircle, ListStart, Eye, Plus, Inbox, Layers, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManualSubmitDialog } from "@/components/admin/ManualSubmitDialog";
@@ -42,7 +42,7 @@ import {
 
 type SubmissionStatus =
   | "queued" | "running" | "submitted" | "already_exists"
-  | "program_missing" | "failed" | "canceled" | "dry_run";
+  | "program_missing" | "failed" | "canceled" | "dry_run" | "program_full";
 
 type SubmissionMode = "dry" | "real";
 
@@ -76,6 +76,8 @@ interface PortalSubmission {
   enqueuedBy: number | null;
   createdAt: string;
   updatedAt: string;
+  supersededByApplicationId: number | null;
+  supersededFromApplicationId: number | null;
 }
 
 interface ListResponse {
@@ -101,6 +103,7 @@ const STATUS_CONFIG: Record<SubmissionStatus, {
   failed:          { icon: AlertCircle, className: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400" },
   canceled:        { icon: MinusCircle, className: "bg-muted text-muted-foreground" },
   dry_run:         { icon: Eye, className: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400" },
+  program_full:    { icon: Layers, className: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400" },
 };
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -184,6 +187,7 @@ function SubmissionRow({
     failed:          t("portalAutomation.submissions.statusFailed"),
     canceled:        t("portalAutomation.submissions.statusCanceled"),
     dry_run:         t("portalAutomation.submissions.statusDryRun"),
+    program_full:    t("portalFallback.programFull"),
   };
 
   const canRetry   = sub.status === "failed" || sub.status === "canceled" || sub.status === "dry_run";
@@ -212,6 +216,30 @@ function SubmissionRow({
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
               <span>#{sub.applicationId}</span>
+              {sub.supersededByApplicationId != null && (
+                <>
+                  <span>·</span>
+                  <a
+                    href={`${BASE_URL}/admin/applications/${sub.supersededByApplicationId}`}
+                    className="inline-flex items-center gap-1 text-purple-600 dark:text-purple-400 hover:underline"
+                  >
+                    <ArrowRight className="w-3 h-3" />
+                    {t("portalFallback.supersededTo", { id: sub.supersededByApplicationId })}
+                  </a>
+                </>
+              )}
+              {sub.supersededFromApplicationId != null && (
+                <>
+                  <span>·</span>
+                  <a
+                    href={`${BASE_URL}/admin/applications/${sub.supersededFromApplicationId}`}
+                    className="inline-flex items-center gap-1 text-purple-600 dark:text-purple-400 hover:underline"
+                  >
+                    <Layers className="w-3 h-3" />
+                    {t("portalFallback.supersededFrom", { id: sub.supersededFromApplicationId })}
+                  </a>
+                </>
+              )}
               {sub.externalRef && (
                 <>
                   <span>·</span>

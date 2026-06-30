@@ -2881,6 +2881,100 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /portal-program-fallbacks:
+    get:
+      operationId: listProgramFallbacks
+      tags: [portal-automation]
+      summary: List program fallback rules (optionally filtered by university)
+      parameters:
+        - name: universityKey
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of fallback rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProgramFallback"
+    post:
+      operationId: createProgramFallback
+      tags: [portal-automation]
+      summary: Create a program fallback rule (one per university+source program)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProgramFallbackBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramFallback"
+        "409":
+          description: A rule already exists for this university+source program
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-program-fallbacks/{id}:
+    patch:
+      operationId: updateProgramFallback
+      tags: [portal-automation]
+      summary: Update a program fallback rule (order, autoSubmit, enabled)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProgramFallbackBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramFallback"
+        "404":
+          description: Rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteProgramFallback
+      tags: [portal-automation]
+      summary: Soft-delete a program fallback rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          description: Rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     AdapterSpecSummary:
@@ -3038,6 +3132,69 @@ components:
           type: string
       required:
         - error
+
+    ProgramFallbackProgram:
+      type: object
+      properties:
+        id: { type: integer }
+        name:
+          type: string
+          nullable: true
+      required: [id, name]
+
+    ProgramFallback:
+      type: object
+      properties:
+        id: { type: integer }
+        universityKey: { type: string }
+        sourceProgramId: { type: integer }
+        sourceProgramName:
+          type: string
+          nullable: true
+        fallbackProgramIds:
+          type: array
+          items: { type: integer }
+        fallbackPrograms:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProgramFallbackProgram"
+        autoSubmit: { type: boolean }
+        enabled: { type: boolean }
+        createdAt:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - universityKey
+        - sourceProgramId
+        - fallbackProgramIds
+        - fallbackPrograms
+        - autoSubmit
+        - enabled
+
+    CreateProgramFallbackBody:
+      type: object
+      properties:
+        universityKey: { type: string }
+        sourceProgramId: { type: integer }
+        fallbackProgramIds:
+          type: array
+          items: { type: integer }
+        autoSubmit: { type: boolean }
+        enabled: { type: boolean }
+      required: [universityKey, sourceProgramId]
+
+    UpdateProgramFallbackBody:
+      type: object
+      properties:
+        fallbackProgramIds:
+          type: array
+          items: { type: integer }
+        autoSubmit: { type: boolean }
+        enabled: { type: boolean }
 
     MultiPortalMember:
       type: object

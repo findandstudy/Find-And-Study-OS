@@ -1,3 +1,4 @@
+- [Portal program-fallback rules](portal-program-fallbacks.md) — soft-delete needs PARTIAL unique index (WHERE deleted_at IS NULL) or recreate 500s; supersede links live on applications (join in submissions list); program picker must paginate (100 cap).
 - [VPS storage driver abstraction](vps-storage-driver.md) — STORAGE_DRIVER=local/replit; LocalStorageFile duck-types GCS; prod active fileKeys = 56 unique (65 rows, 9 shared); export script in scripts/export-object-storage.ts.
 - [Vite ships render-time ReferenceErrors](vite-runtime-referenceerror.md) — esbuild strips types without scope-checking; out-of-scope refs only fail at runtime → ErrorBoundary reload loop. Run tsc.
 - [Photo doc filter & PDF avatar](photo-doc-filter-pdf-avatar.md) — Document API doesn't expose fileData; filter must use fileKey||fileUrl; PDF photos need pdfjs-dist canvas render (lazy) not <img>; photo endpoint needs fileUrl redirect with SSRF guard.

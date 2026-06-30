@@ -117,6 +117,38 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface ProgramFallbackProgram {
+  id: number;
+  name: string | null;
+}
+
+export interface ProgramFallback {
+  id: number;
+  universityKey: string;
+  sourceProgramId: number;
+  sourceProgramName?: string | null;
+  fallbackProgramIds: number[];
+  fallbackPrograms: ProgramFallbackProgram[];
+  autoSubmit: boolean;
+  enabled: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface CreateProgramFallbackBody {
+  universityKey: string;
+  sourceProgramId: number;
+  fallbackProgramIds?: number[];
+  autoSubmit?: boolean;
+  enabled?: boolean;
+}
+
+export interface UpdateProgramFallbackBody {
+  fallbackProgramIds?: number[];
+  autoSubmit?: boolean;
+  enabled?: boolean;
+}
+
 export interface MultiPortalMember {
   universityKey: string;
   universityName: string;
@@ -2391,3 +2423,7 @@ export const GetPortalProgramOptionsRefresh = {
   NUMBER_0: 0,
   NUMBER_1: 1,
 } as const;
+
+export type ListProgramFallbacksParams = {
+  universityKey?: string;
+};

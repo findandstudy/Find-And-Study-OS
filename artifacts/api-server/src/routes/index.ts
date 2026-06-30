@@ -53,6 +53,7 @@ import apiTokensRouter from "./apiTokens";
 import cmsRouter from "./cms";
 import portalAutomationRouter from "./portalAutomation";
 import portalMgmtRouter from "./portalMgmt";
+import portalProgramFallbacksRouter from "./portalProgramFallbacks";
 import personFeedRouter from "./personFeed";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
@@ -191,6 +192,7 @@ router.use(apiTokensRouter);
 router.use(cmsRouter);
 router.use(portalAutomationRouter);
 router.use(portalMgmtRouter);
+router.use(portalProgramFallbacksRouter);
 router.use(personFeedRouter);
 
 export default router;

@@ -1551,7 +1551,10 @@ async function seedClaudeIntegration() {
         deleted_at TIMESTAMPTZ
       )
     `);
-    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_prog_fallback_key_source_uniq ON portal_program_fallbacks (university_key, source_program_id)`);
+    // Partial unique: only one ACTIVE rule per (university_key, source_program_id),
+    // so a soft-deleted rule can be recreated. Drop any non-partial legacy index first.
+    await pool.query(`DROP INDEX IF EXISTS portal_prog_fallback_key_source_uniq`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_prog_fallback_key_source_uniq ON portal_program_fallbacks (university_key, source_program_id) WHERE deleted_at IS NULL`);
   } catch (err) {
     console.error("[migrate] portal_automation_settings/portal_universities:", err);
   }

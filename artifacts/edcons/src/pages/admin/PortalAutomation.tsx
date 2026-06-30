@@ -53,6 +53,7 @@ interface PortalSettings {
   maxRetries: number;
   autoProcessEnabled: boolean;
   autoProcessIntervalMinutes: number;
+  fallbackEnabled: boolean;
 }
 
 interface PortalUniversity {
@@ -73,6 +74,7 @@ const DEFAULTS: PortalSettings = {
   maxRetries: 2,
   autoProcessEnabled: false,
   autoProcessIntervalMinutes: 20,
+  fallbackEnabled: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -148,6 +150,7 @@ function AutomationRulesTab() {
           maxRetries: settings.maxRetries,
           autoProcessEnabled: settings.autoProcessEnabled,
           autoProcessIntervalMinutes: settings.autoProcessIntervalMinutes,
+          fallbackEnabled: settings.fallbackEnabled,
         }),
       });
       toast({ title: t("portalAutomation.rules.saveSuccess") });
@@ -241,6 +244,40 @@ function AutomationRulesTab() {
                 className="text-xs"
               >
                 {settings.isEnabled
+                  ? t("portalAutomation.states.on")
+                  : t("portalAutomation.states.off")}
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── fallbackEnabled (global kill-switch) ────────────────────────── */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-medium">{t("portalFallback.globalToggle")}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {t("portalFallback.globalToggleDescription")}
+              </p>
+              {!settings.fallbackEnabled && (
+                <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">
+                  {t("portalFallback.globalToggleWarning")}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Switch
+                id="pa-fallback-enabled"
+                checked={settings.fallbackEnabled}
+                onCheckedChange={(v) => setSettings((p) => ({ ...p, fallbackEnabled: v }))}
+              />
+              <Badge
+                variant={settings.fallbackEnabled ? "default" : "secondary"}
+                className="text-xs"
+              >
+                {settings.fallbackEnabled
                   ? t("portalAutomation.states.on")
                   : t("portalAutomation.states.off")}
               </Badge>

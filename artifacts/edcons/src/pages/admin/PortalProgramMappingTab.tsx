@@ -14,13 +14,22 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { customFetch } from "@workspace/api-client-react";
+import {
+  customFetch,
+  useListProgramFallbacks,
+  useCreateProgramFallback,
+  useUpdateProgramFallback,
+  useDeleteProgramFallback,
+  type ProgramFallback,
+} from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -29,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Save, Loader2, ArrowRight, RefreshCw, Building2 } from "lucide-react";
+import { Plus, Trash2, Save, Loader2, ArrowRight, RefreshCw, Building2, ArrowUp, ArrowDown, Layers } from "lucide-react";
 import {
   PortalEmptyState, PortalErrorState,
 } from "@/components/admin/PortalTabStates";
@@ -44,6 +53,12 @@ interface PortalUniversity {
   universityKey: string;
   universityName: string;
   isActive: boolean;
+  crmUniversityId?: number | null;
+}
+
+interface CrmProgram {
+  id: number;
+  name: string;
 }
 
 interface PairRow {
@@ -667,9 +682,413 @@ export default function PortalProgramMappingTab() {
                 />
               </CardContent>
             </Card>
+
+            {/* 5. Yedek Programlar — fallback / supersession rules */}
+            <ProgramFallbackSection
+              universityKey={selectedKey}
+              crmUniversityId={selectedUni?.crmUniversityId ?? null}
+            />
           </>
         )
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Yedek Programlar — fallback rule editor (one rule per source program)
+// ---------------------------------------------------------------------------
+
+/** Fetch ALL CRM programs for a university (paginates around the 100 cap). */
+async function fetchAllPrograms(crmUniversityId: number): Promise<CrmProgram[]> {
+  const all: CrmProgram[] = [];
+  for (let page = 1; page <= 50; page++) {
+    const res = await customFetch<{ data: CrmProgram[] }>(
+      `/api/programs?universityId=${crmUniversityId}&limit=100&page=${page}`,
+    );
+    const batch = res.data ?? [];
+    all.push(...batch.map((p) => ({ id: p.id, name: p.name })));
+    if (batch.length < 100) break;
+  }
+  return all;
+}
+
+function ProgramFallbackSection({
+  universityKey,
+  crmUniversityId,
+}: {
+  universityKey: string;
+  crmUniversityId: number | null;
+}) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+
+  const [programs, setPrograms] = useState<CrmProgram[]>([]);
+  const [programsLoading, setPLdg] = useState(false);
+
+  const {
+    data: rules,
+    isLoading: rulesLoading,
+    refetch,
+  } = useListProgramFallbacks({ universityKey });
+
+  const createMut = useCreateProgramFallback();
+  const updateMut = useUpdateProgramFallback();
+  const deleteMut = useDeleteProgramFallback();
+
+  // New-rule draft
+  const [newSource, setNewSource] = useState<string>("");
+
+  // Load CRM programs for the source/fallback pickers
+  useEffect(() => {
+    let cancelled = false;
+    if (!crmUniversityId) {
+      setPrograms([]);
+      return;
+    }
+    setPLdg(true);
+    fetchAllPrograms(crmUniversityId)
+      .then((rows) => {
+        if (!cancelled) setPrograms(rows);
+      })
+      .catch(() => {
+        if (!cancelled)
+          toast({
+            title: t("portalFallback.programsError"),
+            variant: "destructive",
+          });
+      })
+      .finally(() => {
+        if (!cancelled) setPLdg(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [crmUniversityId, t, toast]);
+
+  const programName = useCallback(
+    (id: number) => programs.find((p) => p.id === id)?.name ?? `#${id}`,
+    [programs],
+  );
+
+  const usedSourceIds = new Set((rules ?? []).map((r) => r.sourceProgramId));
+
+  const handleCreate = async () => {
+    const sourceProgramId = Number(newSource);
+    if (!sourceProgramId) return;
+    try {
+      await createMut.mutateAsync({
+        data: { universityKey, sourceProgramId, fallbackProgramIds: [] },
+      });
+      setNewSource("");
+      await refetch();
+      toast({ title: t("portalFallback.saveSuccess") });
+    } catch {
+      toast({ title: t("portalFallback.saveError"), variant: "destructive" });
+    }
+  };
+
+  if (!crmUniversityId) {
+    return (
+      <Card className="rounded-xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Layers className="w-4 h-4" />
+            {t("portalFallback.title")}
+          </CardTitle>
+          <CardDescription>{t("portalFallback.description")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            {t("portalFallback.noCrmUniversity")}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="rounded-xl">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Layers className="w-4 h-4" />
+          {t("portalFallback.title")}
+        </CardTitle>
+        <CardDescription>{t("portalFallback.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Add a new rule */}
+        <div className="flex items-end gap-2 flex-wrap">
+          <div className="flex-1 min-w-56 space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              {t("portalFallback.sourceProgram")}
+            </Label>
+            <Select
+              value={newSource}
+              onValueChange={setNewSource}
+              disabled={programsLoading}
+            >
+              <SelectTrigger className="text-sm">
+                <SelectValue
+                  placeholder={t("portalFallback.selectSourceProgram")}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {programs
+                  .filter((p) => !usedSourceIds.has(p.id))
+                  .map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            size="sm"
+            onClick={handleCreate}
+            disabled={!newSource || createMut.isPending}
+            className="gap-1.5"
+          >
+            {createMut.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Plus className="w-3.5 h-3.5" />
+            )}
+            {t("portalFallback.addRule")}
+          </Button>
+        </div>
+
+        {/* Existing rules */}
+        {rulesLoading || programsLoading ? (
+          <div className="space-y-3">
+            {[...Array(2)].map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : (rules ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t("portalFallback.empty")}
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {(rules ?? []).map((rule) => (
+              <FallbackRuleCard
+                key={rule.id}
+                rule={rule}
+                programs={programs}
+                programName={programName}
+                onChanged={refetch}
+              />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FallbackRuleCard({
+  rule,
+  programs,
+  programName,
+  onChanged,
+}: {
+  rule: ProgramFallback;
+  programs: CrmProgram[];
+  programName: (id: number) => string;
+  onChanged: () => void;
+}) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const updateMut = useUpdateProgramFallback();
+  const deleteMut = useDeleteProgramFallback();
+
+  const [order, setOrder] = useState<number[]>(rule.fallbackProgramIds);
+  const [autoSubmit, setAutoSubmit] = useState<boolean>(rule.autoSubmit);
+  const [enabled, setEnabled] = useState<boolean>(rule.enabled);
+  const [addPick, setAddPick] = useState<string>("");
+
+  const dirty =
+    JSON.stringify(order) !== JSON.stringify(rule.fallbackProgramIds) ||
+    autoSubmit !== rule.autoSubmit ||
+    enabled !== rule.enabled;
+
+  const move = (idx: number, dir: -1 | 1) => {
+    setOrder((prev) => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  };
+
+  const removeAt = (idx: number) =>
+    setOrder((prev) => prev.filter((_, i) => i !== idx));
+
+  const addFallback = () => {
+    const id = Number(addPick);
+    if (!id || order.includes(id) || id === rule.sourceProgramId) return;
+    setOrder((prev) => [...prev, id]);
+    setAddPick("");
+  };
+
+  const save = async () => {
+    try {
+      await updateMut.mutateAsync({
+        id: rule.id,
+        data: { fallbackProgramIds: order, autoSubmit, enabled },
+      });
+      onChanged();
+      toast({ title: t("portalFallback.saveSuccess") });
+    } catch {
+      toast({ title: t("portalFallback.saveError"), variant: "destructive" });
+    }
+  };
+
+  const remove = async () => {
+    try {
+      await deleteMut.mutateAsync({ id: rule.id });
+      onChanged();
+      toast({ title: t("portalFallback.deleteSuccess") });
+    } catch {
+      toast({ title: t("portalFallback.deleteError"), variant: "destructive" });
+    }
+  };
+
+  const available = programs.filter(
+    (p) => p.id !== rule.sourceProgramId && !order.includes(p.id),
+  );
+
+  return (
+    <div className="rounded-lg border p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          <Badge variant="secondary" className="shrink-0">
+            {t("portalFallback.sourceProgram")}
+          </Badge>
+          <span className="text-sm font-medium truncate">
+            {rule.sourceProgramName ?? programName(rule.sourceProgramId)}
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-8 h-8 text-destructive hover:text-destructive"
+          onClick={remove}
+          disabled={deleteMut.isPending}
+          aria-label={t("portalFallback.deleteRule")}
+        >
+          {deleteMut.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="w-3.5 h-3.5" />
+          )}
+        </Button>
+      </div>
+
+      {/* Ordered fallback list */}
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">
+          {t("portalFallback.fallbackPrograms")}
+        </Label>
+        {order.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {t("portalFallback.noFallbacks")}
+          </p>
+        ) : (
+          order.map((id, idx) => (
+            <div
+              key={id}
+              className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5"
+            >
+              <span className="text-xs text-muted-foreground w-5 shrink-0">
+                {idx + 1}.
+              </span>
+              <span className="text-sm flex-1 truncate">{programName(id)}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-7 h-7"
+                onClick={() => move(idx, -1)}
+                disabled={idx === 0}
+                aria-label={t("portalFallback.moveUp")}
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-7 h-7"
+                onClick={() => move(idx, 1)}
+                disabled={idx === order.length - 1}
+                aria-label={t("portalFallback.moveDown")}
+              >
+                <ArrowDown className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-7 h-7 text-destructive hover:text-destructive"
+                onClick={() => removeAt(idx)}
+                aria-label={t("portalFallback.removeFallback")}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          ))
+        )}
+        <div className="flex items-center gap-2">
+          <Select value={addPick} onValueChange={setAddPick}>
+            <SelectTrigger className="text-sm flex-1">
+              <SelectValue placeholder={t("portalFallback.addFallback")} />
+            </SelectTrigger>
+            <SelectContent>
+              {available.map((p) => (
+                <SelectItem key={p.id} value={String(p.id)}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={addFallback}
+            disabled={!addPick}
+            className="gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {t("portalFallback.add")}
+          </Button>
+        </div>
+      </div>
+
+      {/* Switches */}
+      <div className="flex items-center gap-6 flex-wrap pt-1">
+        <div className="flex items-center gap-2">
+          <Switch checked={autoSubmit} onCheckedChange={setAutoSubmit} />
+          <Label className="text-sm">{t("portalFallback.autoSubmit")}</Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+          <Label className="text-sm">{t("portalFallback.enabled")}</Label>
+        </div>
+        <Button
+          size="sm"
+          onClick={save}
+          disabled={!dirty || updateMut.isPending}
+          className="gap-1.5 ml-auto"
+        >
+          {updateMut.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Save className="w-3.5 h-3.5" />
+          )}
+          {t("portalFallback.save")}
+        </Button>
+      </div>
     </div>
   );
 }
