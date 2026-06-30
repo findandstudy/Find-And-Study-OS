@@ -149,6 +149,32 @@ export interface UpdateProgramFallbackBody {
   enabled?: boolean;
 }
 
+export interface UniversityExclusion {
+  id: number;
+  universityKey: string;
+  nationality: string;
+  agencyName?: string | null;
+  note?: string | null;
+  enabled: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface CreateUniversityExclusionBody {
+  universityKey: string;
+  nationality: string;
+  agencyName?: string;
+  note?: string;
+  enabled?: boolean;
+}
+
+export interface UpdateUniversityExclusionBody {
+  nationality?: string;
+  agencyName?: string | null;
+  note?: string | null;
+  enabled?: boolean;
+}
+
 export interface MultiPortalMember {
   universityKey: string;
   universityName: string;
@@ -2425,5 +2451,9 @@ export const GetPortalProgramOptionsRefresh = {
 } as const;
 
 export type ListProgramFallbacksParams = {
+  universityKey?: string;
+};
+
+export type ListUniversityExclusionsParams = {
   universityKey?: string;
 };

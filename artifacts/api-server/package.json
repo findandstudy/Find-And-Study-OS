@@ -74,6 +74,7 @@
     "test:portal-routing": "tsx --test ./scripts/test-portal-routing.ts",
     "test:portal-membership": "tsx --test ./scripts/test-portal-membership.ts",
     "test:portal-fallbacks": "tsx --test ./scripts/test-portal-fallbacks.ts",
+    "test:university-exclusions": "tsx --test ./scripts/test-university-exclusions.ts",
     "test:portal": "tsx --test ./scripts/test-portal-api.ts",
     "test:doc-slot-mapping": "tsx --test ./scripts/test-portal-process.ts"
   },

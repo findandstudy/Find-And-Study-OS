@@ -54,6 +54,7 @@ import cmsRouter from "./cms";
 import portalAutomationRouter from "./portalAutomation";
 import portalMgmtRouter from "./portalMgmt";
 import portalProgramFallbacksRouter from "./portalProgramFallbacks";
+import portalUniversityExclusionsRouter from "./portalUniversityExclusions";
 import personFeedRouter from "./personFeed";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
@@ -193,6 +194,7 @@ router.use(cmsRouter);
 router.use(portalAutomationRouter);
 router.use(portalMgmtRouter);
 router.use(portalProgramFallbacksRouter);
+router.use(portalUniversityExclusionsRouter);
 router.use(personFeedRouter);
 
 export default router;

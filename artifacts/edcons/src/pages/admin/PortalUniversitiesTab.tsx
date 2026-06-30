@@ -72,6 +72,7 @@ import {
   PortalEmptyState, PortalErrorState,
 } from "@/components/admin/PortalTabStates";
 import { PortalMembersDialog } from "@/components/admin/PortalMembersDialog";
+import ExclusiveRegionsSection from "./ExclusiveRegionsSection";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Command,
@@ -1246,6 +1247,9 @@ export default function PortalUniversitiesTab() {
         onSaved={handleCredsSaved}
         onCleared={handleCredsCleared}
       />
+
+      {/* Exclusive Bölgeler — university nationality exclusions */}
+      <ExclusiveRegionsSection />
 
       {/* Multi-portal members dialog (Phase 3 catalog-keyed) */}
       <PortalMembersDialog

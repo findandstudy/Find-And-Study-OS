@@ -5054,7 +5054,8 @@
       "processConfirmDescription": "In Real mode this sends a live application to the university portal.",
       "processAllConfirmTitle": "Process all queued submissions?",
       "processAllConfirmDescription": "In Real mode this sends live applications for every queued item.",
-      "confirmProcess": "Process"
+      "confirmProcess": "Process",
+      "statusExclusiveRegion": "Exclusive Region"
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5346,5 +5347,29 @@
     "programFull": "Program full",
     "supersededTo": "Superseded → #{id}",
     "supersededFrom": "Backup of #{id}"
+  },
+  "portalExclusion": {
+    "title": "Exclusive Regions",
+    "description": "Block submissions for specific nationalities at a university. Matching applications are parked with an \"exclusive region\" status instead of being submitted.",
+    "universityLabel": "University",
+    "universityPlaceholder": "Select a university",
+    "selectUniversityHint": "Select a university to view and manage its nationality exclusions.",
+    "empty": "No exclusions defined for this university yet.",
+    "colNationality": "Nationality",
+    "colAgency": "Agency",
+    "colNote": "Note",
+    "colEnabled": "Enabled",
+    "addTitle": "Add exclusion",
+    "nationalityPlaceholder": "e.g. Uzbekistan",
+    "agencyPlaceholder": "Optional agency name",
+    "notePlaceholder": "Optional note",
+    "addButton": "Add",
+    "toastCreated": "Exclusion added",
+    "toastDeleted": "Exclusion deleted",
+    "errorDuplicate": "An exclusion for this nationality already exists.",
+    "errorGeneric": "Something went wrong. Please try again.",
+    "deleteConfirmTitle": "Delete exclusion?",
+    "deleteConfirmDescription": "Are you sure you want to delete the exclusion for {nationality}?",
+    "deleteConfirmButton": "Delete"
   }
 }

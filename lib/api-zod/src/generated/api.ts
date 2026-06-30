@@ -3068,3 +3068,79 @@ export const DeleteProgramFallbackParams = zod.object({
 export const DeleteProgramFallbackResponse = zod.object({
   ok: zod.boolean(),
 });
+
+/**
+ * @summary Distinct student nationalities (autocomplete source for exclusions)
+ */
+export const ListExclusionNationalitySuggestionsResponseItem = zod.string();
+export const ListExclusionNationalitySuggestionsResponse = zod.array(
+  ListExclusionNationalitySuggestionsResponseItem,
+);
+
+/**
+ * @summary List exclusive-region exclusions (optionally filtered by university)
+ */
+export const ListUniversityExclusionsQueryParams = zod.object({
+  universityKey: zod.coerce.string().optional(),
+});
+
+export const ListUniversityExclusionsResponseItem = zod.object({
+  id: zod.number(),
+  universityKey: zod.string(),
+  nationality: zod.string(),
+  agencyName: zod.string().nullish(),
+  note: zod.string().nullish(),
+  enabled: zod.boolean(),
+  createdAt: zod.string().nullish(),
+  updatedAt: zod.string().nullish(),
+});
+export const ListUniversityExclusionsResponse = zod.array(
+  ListUniversityExclusionsResponseItem,
+);
+
+/**
+ * @summary Create an exclusion rule (one per university+nationality)
+ */
+export const CreateUniversityExclusionBody = zod.object({
+  universityKey: zod.string(),
+  nationality: zod.string(),
+  agencyName: zod.string().optional(),
+  note: zod.string().optional(),
+  enabled: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update an exclusion rule (nationality, agency, note, enabled)
+ */
+export const UpdateUniversityExclusionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateUniversityExclusionBody = zod.object({
+  nationality: zod.string().optional(),
+  agencyName: zod.string().nullish(),
+  note: zod.string().nullish(),
+  enabled: zod.boolean().optional(),
+});
+
+export const UpdateUniversityExclusionResponse = zod.object({
+  id: zod.number(),
+  universityKey: zod.string(),
+  nationality: zod.string(),
+  agencyName: zod.string().nullish(),
+  note: zod.string().nullish(),
+  enabled: zod.boolean(),
+  createdAt: zod.string().nullish(),
+  updatedAt: zod.string().nullish(),
+});
+
+/**
+ * @summary Soft-delete an exclusion rule
+ */
+export const DeleteUniversityExclusionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteUniversityExclusionResponse = zod.object({
+  ok: zod.boolean(),
+});

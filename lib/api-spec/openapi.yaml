@@ -2975,6 +2975,120 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /portal-automation/university-exclusions/nationality-suggestions:
+    get:
+      operationId: listExclusionNationalitySuggestions
+      tags: [portal-automation]
+      summary: Distinct student nationalities (autocomplete source for exclusions)
+      responses:
+        "200":
+          description: Distinct nationality strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string }
+
+  /portal-automation/university-exclusions:
+    get:
+      operationId: listUniversityExclusions
+      tags: [portal-automation]
+      summary: List exclusive-region exclusions (optionally filtered by university)
+      parameters:
+        - name: universityKey
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of exclusion rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UniversityExclusion"
+    post:
+      operationId: createUniversityExclusion
+      tags: [portal-automation]
+      summary: Create an exclusion rule (one per university+nationality)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUniversityExclusionBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UniversityExclusion"
+        "409":
+          description: An exclusion for this nationality already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-automation/university-exclusions/{id}:
+    patch:
+      operationId: updateUniversityExclusion
+      tags: [portal-automation]
+      summary: Update an exclusion rule (nationality, agency, note, enabled)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUniversityExclusionBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UniversityExclusion"
+        "404":
+          description: Rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: An exclusion for this nationality already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteUniversityExclusion
+      tags: [portal-automation]
+      summary: Soft-delete an exclusion rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          description: Rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     AdapterSpecSummary:
@@ -3194,6 +3308,53 @@ components:
           type: array
           items: { type: integer }
         autoSubmit: { type: boolean }
+        enabled: { type: boolean }
+
+    UniversityExclusion:
+      type: object
+      properties:
+        id: { type: integer }
+        universityKey: { type: string }
+        nationality: { type: string }
+        agencyName:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        enabled: { type: boolean }
+        createdAt:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - universityKey
+        - nationality
+        - enabled
+
+    CreateUniversityExclusionBody:
+      type: object
+      properties:
+        universityKey: { type: string }
+        nationality: { type: string }
+        agencyName: { type: string }
+        note: { type: string }
+        enabled: { type: boolean }
+      required: [universityKey, nationality]
+
+    UpdateUniversityExclusionBody:
+      type: object
+      properties:
+        nationality: { type: string }
+        agencyName:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
         enabled: { type: boolean }
 
     MultiPortalMember:

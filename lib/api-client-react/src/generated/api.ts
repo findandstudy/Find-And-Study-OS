@@ -56,6 +56,7 @@ import type {
   CreateStudentBody,
   CreateUniversityBody,
   CreateUniversityContract201,
+  CreateUniversityExclusionBody,
   CreateUserBody,
   Document,
   DocumentExtraction,
@@ -100,6 +101,7 @@ import type {
   ListUniversitiesParams,
   ListUniversityContracts200,
   ListUniversityContractsParams,
+  ListUniversityExclusionsParams,
   ListUsersParams,
   ManualSubmitBody,
   ManualSubmitResult,
@@ -131,6 +133,7 @@ import type {
   UniversitiesListResponse,
   University,
   UniversityContractWriteBody,
+  UniversityExclusion,
   UniversityPortal,
   UpdateAgentBody,
   UpdateAnnouncementBody,
@@ -148,6 +151,7 @@ import type {
   UpdateStudentBody,
   UpdateUniversityBody,
   UpdateUniversityContract200,
+  UpdateUniversityExclusionBody,
   UpdateUserBody,
   UpsertAdapterSpecBody,
   UpsertAdapterSpecResponse,
@@ -10625,4 +10629,449 @@ export const useDeleteProgramFallback = <
   TContext
 > => {
   return useMutation(getDeleteProgramFallbackMutationOptions(options));
+};
+
+/**
+ * @summary Distinct student nationalities (autocomplete source for exclusions)
+ */
+export const getListExclusionNationalitySuggestionsUrl = () => {
+  return `/api/portal-automation/university-exclusions/nationality-suggestions`;
+};
+
+export const listExclusionNationalitySuggestions = async (
+  options?: RequestInit,
+): Promise<string[]> => {
+  return customFetch<string[]>(getListExclusionNationalitySuggestionsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListExclusionNationalitySuggestionsQueryKey = () => {
+  return [
+    `/api/portal-automation/university-exclusions/nationality-suggestions`,
+  ] as const;
+};
+
+export const getListExclusionNationalitySuggestionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listExclusionNationalitySuggestions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listExclusionNationalitySuggestions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListExclusionNationalitySuggestionsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listExclusionNationalitySuggestions>>
+  > = ({ signal }) =>
+    listExclusionNationalitySuggestions({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listExclusionNationalitySuggestions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListExclusionNationalitySuggestionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listExclusionNationalitySuggestions>>
+>;
+export type ListExclusionNationalitySuggestionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Distinct student nationalities (autocomplete source for exclusions)
+ */
+
+export function useListExclusionNationalitySuggestions<
+  TData = Awaited<ReturnType<typeof listExclusionNationalitySuggestions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listExclusionNationalitySuggestions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions =
+    getListExclusionNationalitySuggestionsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List exclusive-region exclusions (optionally filtered by university)
+ */
+export const getListUniversityExclusionsUrl = (
+  params?: ListUniversityExclusionsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/portal-automation/university-exclusions?${stringifiedParams}`
+    : `/api/portal-automation/university-exclusions`;
+};
+
+export const listUniversityExclusions = async (
+  params?: ListUniversityExclusionsParams,
+  options?: RequestInit,
+): Promise<UniversityExclusion[]> => {
+  return customFetch<UniversityExclusion[]>(
+    getListUniversityExclusionsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListUniversityExclusionsQueryKey = (
+  params?: ListUniversityExclusionsParams,
+) => {
+  return [
+    `/api/portal-automation/university-exclusions`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListUniversityExclusionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listUniversityExclusions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListUniversityExclusionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUniversityExclusions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListUniversityExclusionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listUniversityExclusions>>
+  > = ({ signal }) =>
+    listUniversityExclusions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listUniversityExclusions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListUniversityExclusionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listUniversityExclusions>>
+>;
+export type ListUniversityExclusionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List exclusive-region exclusions (optionally filtered by university)
+ */
+
+export function useListUniversityExclusions<
+  TData = Awaited<ReturnType<typeof listUniversityExclusions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListUniversityExclusionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUniversityExclusions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListUniversityExclusionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create an exclusion rule (one per university+nationality)
+ */
+export const getCreateUniversityExclusionUrl = () => {
+  return `/api/portal-automation/university-exclusions`;
+};
+
+export const createUniversityExclusion = async (
+  createUniversityExclusionBody: CreateUniversityExclusionBody,
+  options?: RequestInit,
+): Promise<UniversityExclusion> => {
+  return customFetch<UniversityExclusion>(getCreateUniversityExclusionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createUniversityExclusionBody),
+  });
+};
+
+export const getCreateUniversityExclusionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createUniversityExclusion>>,
+    TError,
+    { data: BodyType<CreateUniversityExclusionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createUniversityExclusion>>,
+  TError,
+  { data: BodyType<CreateUniversityExclusionBody> },
+  TContext
+> => {
+  const mutationKey = ["createUniversityExclusion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createUniversityExclusion>>,
+    { data: BodyType<CreateUniversityExclusionBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createUniversityExclusion(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateUniversityExclusionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createUniversityExclusion>>
+>;
+export type CreateUniversityExclusionMutationBody =
+  BodyType<CreateUniversityExclusionBody>;
+export type CreateUniversityExclusionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create an exclusion rule (one per university+nationality)
+ */
+export const useCreateUniversityExclusion = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createUniversityExclusion>>,
+    TError,
+    { data: BodyType<CreateUniversityExclusionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createUniversityExclusion>>,
+  TError,
+  { data: BodyType<CreateUniversityExclusionBody> },
+  TContext
+> => {
+  return useMutation(getCreateUniversityExclusionMutationOptions(options));
+};
+
+/**
+ * @summary Update an exclusion rule (nationality, agency, note, enabled)
+ */
+export const getUpdateUniversityExclusionUrl = (id: number) => {
+  return `/api/portal-automation/university-exclusions/${id}`;
+};
+
+export const updateUniversityExclusion = async (
+  id: number,
+  updateUniversityExclusionBody: UpdateUniversityExclusionBody,
+  options?: RequestInit,
+): Promise<UniversityExclusion> => {
+  return customFetch<UniversityExclusion>(getUpdateUniversityExclusionUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateUniversityExclusionBody),
+  });
+};
+
+export const getUpdateUniversityExclusionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateUniversityExclusion>>,
+    TError,
+    { id: number; data: BodyType<UpdateUniversityExclusionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateUniversityExclusion>>,
+  TError,
+  { id: number; data: BodyType<UpdateUniversityExclusionBody> },
+  TContext
+> => {
+  const mutationKey = ["updateUniversityExclusion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateUniversityExclusion>>,
+    { id: number; data: BodyType<UpdateUniversityExclusionBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateUniversityExclusion(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateUniversityExclusionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateUniversityExclusion>>
+>;
+export type UpdateUniversityExclusionMutationBody =
+  BodyType<UpdateUniversityExclusionBody>;
+export type UpdateUniversityExclusionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update an exclusion rule (nationality, agency, note, enabled)
+ */
+export const useUpdateUniversityExclusion = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateUniversityExclusion>>,
+    TError,
+    { id: number; data: BodyType<UpdateUniversityExclusionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateUniversityExclusion>>,
+  TError,
+  { id: number; data: BodyType<UpdateUniversityExclusionBody> },
+  TContext
+> => {
+  return useMutation(getUpdateUniversityExclusionMutationOptions(options));
+};
+
+/**
+ * @summary Soft-delete an exclusion rule
+ */
+export const getDeleteUniversityExclusionUrl = (id: number) => {
+  return `/api/portal-automation/university-exclusions/${id}`;
+};
+
+export const deleteUniversityExclusion = async (
+  id: number,
+  options?: RequestInit,
+): Promise<OkResponse> => {
+  return customFetch<OkResponse>(getDeleteUniversityExclusionUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteUniversityExclusionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteUniversityExclusion>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteUniversityExclusion>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteUniversityExclusion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteUniversityExclusion>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteUniversityExclusion(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteUniversityExclusionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteUniversityExclusion>>
+>;
+
+export type DeleteUniversityExclusionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Soft-delete an exclusion rule
+ */
+export const useDeleteUniversityExclusion = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteUniversityExclusion>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteUniversityExclusion>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteUniversityExclusionMutationOptions(options));
 };

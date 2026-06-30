@@ -5054,7 +5054,8 @@
       "processConfirmDescription": "Gerçek modda bu işlem üniversite portalına canlı bir başvuru gönderir.",
       "processAllConfirmTitle": "Kuyruktaki tüm gönderimler işlensin mi?",
       "processAllConfirmDescription": "Gerçek modda bu işlem kuyruktaki her öğe için canlı başvuru gönderir.",
-      "confirmProcess": "İşle"
+      "confirmProcess": "İşle",
+      "statusExclusiveRegion": "Exclusive Bölge"
     },
     "auditLog": {
       "title": "Denetim Günlüğü",
@@ -5346,5 +5347,29 @@
     "programFull": "Program dolu",
     "supersededTo": "Devredildi → #{id}",
     "supersededFrom": "#{id} yedeği"
+  },
+  "portalExclusion": {
+    "title": "Exclusive Bölgeler",
+    "description": "Bir üniversitede belirli uyruklar için başvuruları engelleyin. Eşleşen başvurular gönderilmek yerine \"exclusive bölge\" durumuyla beklemeye alınır.",
+    "universityLabel": "Üniversite",
+    "universityPlaceholder": "Bir üniversite seçin",
+    "selectUniversityHint": "Uyruk istisnalarını görüntülemek ve yönetmek için bir üniversite seçin.",
+    "empty": "Bu üniversite için henüz bir istisna tanımlanmadı.",
+    "colNationality": "Uyruk",
+    "colAgency": "Acente",
+    "colNote": "Not",
+    "colEnabled": "Etkin",
+    "addTitle": "İstisna ekle",
+    "nationalityPlaceholder": "örn. Özbekistan",
+    "agencyPlaceholder": "Acente adı (isteğe bağlı)",
+    "notePlaceholder": "Not (isteğe bağlı)",
+    "addButton": "Ekle",
+    "toastCreated": "İstisna eklendi",
+    "toastDeleted": "İstisna silindi",
+    "errorDuplicate": "Bu uyruk için zaten bir istisna mevcut.",
+    "errorGeneric": "Bir hata oluştu. Lütfen tekrar deneyin.",
+    "deleteConfirmTitle": "İstisna silinsin mi?",
+    "deleteConfirmDescription": "{nationality} uyruğu için istisnayı silmek istediğinizden emin misiniz?",
+    "deleteConfirmButton": "Sil"
   }
 }

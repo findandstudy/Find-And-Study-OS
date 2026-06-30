@@ -28,7 +28,7 @@ import {
 import {
   RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
   CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
-  PlayCircle, ListStart, Eye, Plus, Inbox, Layers, ArrowRight,
+  PlayCircle, ListStart, Eye, Plus, Inbox, Layers, ArrowRight, Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManualSubmitDialog } from "@/components/admin/ManualSubmitDialog";
@@ -42,7 +42,8 @@ import {
 
 type SubmissionStatus =
   | "queued" | "running" | "submitted" | "already_exists"
-  | "program_missing" | "failed" | "canceled" | "dry_run" | "program_full";
+  | "program_missing" | "failed" | "canceled" | "dry_run" | "program_full"
+  | "exclusive_region";
 
 type SubmissionMode = "dry" | "real";
 
@@ -104,6 +105,7 @@ const STATUS_CONFIG: Record<SubmissionStatus, {
   canceled:        { icon: MinusCircle, className: "bg-muted text-muted-foreground" },
   dry_run:         { icon: Eye, className: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400" },
   program_full:    { icon: Layers, className: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400" },
+  exclusive_region: { icon: Globe, className: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400" },
 };
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -188,6 +190,7 @@ function SubmissionRow({
     canceled:        t("portalAutomation.submissions.statusCanceled"),
     dry_run:         t("portalAutomation.submissions.statusDryRun"),
     program_full:    t("portalFallback.programFull"),
+    exclusive_region: t("portalAutomation.submissions.statusExclusiveRegion"),
   };
 
   const canRetry   = sub.status === "failed" || sub.status === "canceled" || sub.status === "dry_run";
