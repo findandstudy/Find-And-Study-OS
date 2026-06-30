@@ -68,36 +68,42 @@ test("formatGraduationForInput — missing year → placeholder", () => {
   assert.equal(formatGraduationForInput(undefined, "text"), "-");
 });
 
-test("eduLevelCandidates — Bachelor applicant → prior is high school", () => {
+test("eduLevelCandidates — Bachelor applicant → applied degree value first", () => {
   const c = eduLevelCandidates("Bachelor", "Computer Engineering");
-  assert.equal(c[0], "Lise");
-  assert.ok(c.includes("High School"));
-  // applied level appended last as a defensive fallback
-  assert.equal(c[c.length - 1], "Bachelor");
+  // option VALUE is the English key (matched first), Turkish label second
+  assert.equal(c[0], "Bachelor");
+  assert.ok(c.includes("Lisans"));
 });
 
-test("eduLevelCandidates — Associate / Foundation applicant → high school", () => {
-  assert.equal(eduLevelCandidates("Associate", "")[0], "Lise");
-  assert.equal(eduLevelCandidates("Foundation Year", "")[0], "Lise");
+test("eduLevelCandidates — Associate / Foundation applicant → Associate value", () => {
+  const ass = eduLevelCandidates("Associate", "");
+  assert.equal(ass[0], "Associate");
+  assert.ok(ass.includes("Önlisans"));
+  // Foundation maps to the Associate (Önlisans) option set
+  assert.equal(eduLevelCandidates("Foundation Year", "")[0], "Associate");
 });
 
-test("eduLevelCandidates — Masters applicant → prior is Bachelor", () => {
+test("eduLevelCandidates — Masters (Thesis) applicant → thesis value + label", () => {
   const c = eduLevelCandidates("Masters (Thesis)", "Business");
-  assert.equal(c[0], "Lisans");
-  assert.ok(c.includes("Bachelor"));
-  // applied (Masters …) is the fallback, never first
-  assert.notEqual(c[0], "Masters (Thesis)");
+  assert.equal(c[0], "Masters (Thesis)");
+  assert.ok(c.includes("Yüksek Lisans (Tezli)"));
 });
 
-test("eduLevelCandidates — Turkish 'Yüksek Lisans' applicant → prior is Bachelor", () => {
+test("eduLevelCandidates — non-thesis Masters → non-thesis value + label", () => {
+  const c = eduLevelCandidates("Masters (Non Thesis)", "Business");
+  assert.equal(c[0], "Masters (Non Thesis)");
+  assert.ok(c.includes("Yüksek Lisans (Tezsiz)"));
+});
+
+test("eduLevelCandidates — Turkish 'Yüksek Lisans' applicant → Masters value", () => {
   const c = eduLevelCandidates("Yüksek Lisans", "İşletme");
-  assert.equal(c[0], "Lisans");
+  assert.equal(c[0], "Masters (Thesis)");
 });
 
-test("eduLevelCandidates — Doctorate applicant → prior is Masters", () => {
+test("eduLevelCandidates — Doctorate applicant → Doctorate value + Doktora", () => {
   const c = eduLevelCandidates("PhD", "Physics");
-  assert.equal(c[0], "Yüksek Lisans");
-  assert.ok(c.includes("Master"));
+  assert.equal(c[0], "Doctorate");
+  assert.ok(c.includes("Doktora"));
 });
 
 test("isPlaceholderChoice — placeholders are rejected", () => {

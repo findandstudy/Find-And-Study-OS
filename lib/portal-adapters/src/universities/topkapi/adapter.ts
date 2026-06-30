@@ -409,6 +409,43 @@ async function describeInput(
 }
 
 // ---------------------------------------------------------------------------
+// Dump every Step-3 dependent field the portal AJAX-renders after the education
+// level is selected (name family `applicationEducationInformation*` plus the
+// legacy bare names). Logs name/tag/type for each — definitive evidence for the
+// next dry-run if a fill selector still misses. Best-effort; never throws.
+// ---------------------------------------------------------------------------
+async function logEduDependents(
+  page: Page,
+  logger: typeof import("../../browser.js").logger,
+): Promise<void> {
+  const fields = await page
+    .$$eval(
+      '[name^="applicationEducationInformation"], input[name="schoolName[]"], input[name="GPA[]"], input[name="GraduationDate[]"], select[name="country[]"]',
+      (els) =>
+        els.map((el) => {
+          const e = el as HTMLInputElement;
+          return {
+            name: e.getAttribute("name") || "",
+            tag: e.tagName.toLowerCase(),
+            type: (e.getAttribute("type") || "").toLowerCase(),
+          };
+        }),
+    )
+    .catch(() => [] as Array<{ name: string; tag: string; type: string }>);
+  if (fields.length === 0) {
+    logger.warn(
+      "[topkapi] Step 3 dependents: no applicationEducationInformation* fields found",
+    );
+    return;
+  }
+  logger.info(
+    `[topkapi] Step 3 dependents: ${fields
+      .map((f) => `${f.name}(${f.tag}${f.type ? ":" + f.type : ""})`)
+      .join(", ")}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Read the current .value of an input/select (trimmed; "" on miss).
 // ---------------------------------------------------------------------------
 async function readValue(page: Page, selector: string): Promise<string> {
@@ -561,8 +598,17 @@ async function selectByCandidatesVerified(
     logger.warn(`[topkapi] Step 3 ${label}: no <select> options found`);
     return "";
   }
-  // Skip index 0 (the placeholder option) when matching.
-  const folded = options.map((o, i) => ({ ...o, i, ft: fold(o.text) }));
+  // Skip index 0 (the placeholder option) when matching. Match candidates
+  // against BOTH the option VALUE and the visible TEXT (folded): the
+  // education-level select2 carries English degree keys as option VALUES
+  // ("Bachelor") with Turkish labels as TEXT ("Lisans"), while country uses a
+  // numeric VALUE ("162") with the country name as TEXT ("Pakistan").
+  const folded = options.map((o, i) => ({
+    ...o,
+    i,
+    ft: fold(o.text),
+    fv: fold(o.value),
+  }));
   const pickable = (o: { i: number; value: string }) =>
     o.i > 0 && !!o.value && o.value !== "0";
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -570,8 +616,10 @@ async function selectByCandidatesVerified(
       const cf = fold(cand);
       if (!cf) continue;
       const match =
-        folded.find((o) => pickable(o) && o.ft === cf) ||
-        folded.find((o) => pickable(o) && o.ft.includes(cf));
+        folded.find((o) => pickable(o) && (o.fv === cf || o.ft === cf)) ||
+        folded.find(
+          (o) => pickable(o) && (o.fv.includes(cf) || o.ft.includes(cf)),
+        );
       if (!match) continue;
       await setSelectByValue(page, selector, match.value);
       await syncChange(page, selector);
@@ -906,12 +954,14 @@ export const topkapiAdapter: UniversityAdapter = {
     await ensureEducationRow(page, logger);
 
     logger.info("[topkapi] Step 3a: selecting education level");
-    // Step 3 records the applicant's COMPLETED (prior) schooling, NOT the level
-    // of the program being applied to — a Bachelor applicant's prior level is
-    // "Lise"/"High School". Try prior-level labels against the widget's REAL
-    // option texts (logged via diagnose=true) and never accept the placeholder
-    // ("Seçim Yapın") as a real selection — that false-positive was why the
-    // AJAX-rendered dependent fields (school/GPA/grad/country) never appeared.
+    // The education-level select2 is the DEGREE LEVEL OF THE PROGRAM BEING
+    // APPLIED TO (Associate/Bachelor/Masters/Doctorate) — the live option dump
+    // has NO "Lise"/"High School". Select the applied degree by its option VALUE
+    // (mapEduLevel → "Bachelor", Turkish label "Lisans" as fallback) via the
+    // select2 jQuery val+trigger path (native value alone won't stick on an
+    // aria-hidden select2). Never accept the placeholder ("Seçim Yapın") as a
+    // real selection — that false-positive was why the AJAX-rendered dependent
+    // fields (school/GPA/grad/country) never appeared.
     const eduCandidates = eduLevelCandidates(profile.level, profile.programName);
     const v_level = await selectByCandidatesVerified(
       page,
@@ -925,12 +975,28 @@ export const topkapiAdapter: UniversityAdapter = {
     // A real education-level selection makes the portal AJAX-render the dependent
     // row fields (schoolName / GPA / graduationDate / country). Wait for them to
     // appear before describing/filling — probing earlier is the root cause of the
-    // "no element found" / "empty after retry" failures.
+    // "no element found" / "empty after retry" failures. The Step-3 field name
+    // family is `applicationEducationInformation*[]` (confirmed for educationLevel
+    // and country); legacy bare names are kept as fallbacks.
+    const schoolSelectors = [
+      'input[name="applicationEducationInformationSchoolName[]"]',
+      'input[name="schoolName[]"]',
+      "input[name=schoolName]",
+    ];
+    const gpaSelectors = [
+      'input[name="applicationEducationInformationGpa[]"]',
+      'input[name="applicationEducationInformationGPA[]"]',
+      'input[name="GPA[]"]',
+      "input[name=GPA]",
+    ];
+    const gradSelectors = [
+      'input[name="applicationEducationInformationGraduationDate[]"]',
+      'input[name="GraduationDate[]"]',
+      "input[name=GraduationDate]",
+    ];
     if (v_level) {
       await page
-        .waitForSelector('input[name="schoolName[]"], input[name=schoolName]', {
-          timeout: 12000,
-        })
+        .waitForSelector(schoolSelectors.join(", "), { timeout: 12000 })
         .then(() =>
           logger.info(
             "[topkapi] Step 3: dependent fields rendered after level select",
@@ -942,12 +1008,12 @@ export const topkapiAdapter: UniversityAdapter = {
           ),
         );
     }
+    // Dump the REAL dependent-field names/widgets once they render — definitive
+    // evidence for the next dry-run if any selector below still misses.
+    await logEduDependents(page, logger);
 
     // Diagnose the REAL DOM widget type for each education field before filling
     // (the cause of "empty after retry" is field-/widget-specific — don't guess).
-    const schoolSelectors = ['input[name="schoolName[]"]', "input[name=schoolName]"];
-    const gpaSelectors = ['input[name="GPA[]"]', "input[name=GPA]"];
-    const gradSelectors = ['input[name="GraduationDate[]"]', "input[name=GraduationDate]"];
     await describeInput(page, schoolSelectors, "schoolName", logger);
     await describeInput(page, gpaSelectors, "gpa", logger);
     const gradInput = await describeInput(page, gradSelectors, "graduationDate", logger);
@@ -982,9 +1048,14 @@ export const topkapiAdapter: UniversityAdapter = {
     );
 
     logger.info("[topkapi] Step 3e: selecting country");
+    // The dependent country field shares the educationLevel name family
+    // (`applicationEducationInformationCountry[]`, confirmed in the live select
+    // dump) and is a select2 whose option VALUE is numeric (e.g. Pakistan=162)
+    // with the country name as visible TEXT — so match the resolved country name
+    // against the option text. Legacy bare `country[]` kept as a fallback.
     await selectByCandidatesVerified(
       page,
-      'select[name="country[]"]',
+      'select[name="applicationEducationInformationCountry[]"], select[name="country[]"]',
       [country],
       "country",
       logger,

@@ -61,33 +61,34 @@ export function mapEduLevel(level: string, programName = ""): string {
 }
 
 // ---------------------------------------------------------------------------
-// Step 3's education-history dropdown asks for the applicant's COMPLETED (prior)
-// schooling — NOT the level of the program being applied to. Derive the prior
-// level from the applied level and return an ordered list of label candidates
-// (Turkish + English) to match against the portal's real option texts:
+// Step 3's education-level dropdown is the DEGREE LEVEL OF THE PROGRAM BEING
+// APPLIED TO (Associate/Bachelor/Masters/Doctorate) — NOT the applicant's prior
+// schooling. The live widget dump confirms the option set is
+// exactly the applied degree levels (option VALUE is the English key, the
+// visible label is Turkish):
 //
-//   apply Bachelor / Associate / Foundation  → prior = High School (Lise)
-//   apply Masters                            → prior = Bachelor (Lisans)
-//   apply Doctorate                          → prior = Masters (Yüksek Lisans)
+//   Associate            :: Önlisans
+//   Bachelor             :: Lisans
+//   Masters (Non Thesis) :: Yüksek Lisans (Tezsiz)
+//   Masters (Thesis)     :: Yüksek Lisans (Tezli)
+//   Doctorate            :: Doktora
 //
-// The applied-level label is appended LAST as a defensive fallback for portals
-// whose history dropdown only lists program levels (avoids a regression where
-// no prior-level option exists).
+// So map the applied level straight to the option VALUE (via mapEduLevel) and
+// return the Turkish label as a secondary candidate, letting the matcher hit
+// the value exactly with the visible label as a fallback.
 // ---------------------------------------------------------------------------
 export function eduLevelCandidates(level: string, programName = ""): string[] {
-  const f = fold(`${level} ${programName}`);
   const applied = mapEduLevel(level, programName);
-  let prior: string[];
-  if (/doktora|doctor|phd/.test(f)) {
-    prior = ["Yüksek Lisans", "Master", "Masters", "Graduate"];
-  } else if (/yukseklisans|master/.test(f)) {
-    prior = ["Lisans", "Bachelor", "Undergraduate", "Licence"];
-  } else {
-    prior = ["Lise", "High School", "Highschool", "Secondary", "Ortaöğretim", "Ortaogretim"];
-  }
+  const turkish: Record<string, string> = {
+    Associate: "Önlisans",
+    Bachelor: "Lisans",
+    "Masters (Thesis)": "Yüksek Lisans (Tezli)",
+    "Masters (Non Thesis)": "Yüksek Lisans (Tezsiz)",
+    Doctorate: "Doktora",
+  };
   const out: string[] = [];
-  for (const c of [...prior, applied]) {
-    if (!out.some((x) => fold(x) === fold(c))) out.push(c);
+  for (const c of [applied, turkish[applied]]) {
+    if (c && !out.some((x) => fold(x) === fold(c))) out.push(c);
   }
   return out;
 }
