@@ -65,6 +65,9 @@ export const portalSubmissionsTable = pgTable(
     screenshotUrls: jsonb("screenshot_urls"),
     error:          text("error"),
 
+    /** Free-form metadata (e.g. supersession context, fallback chain). */
+    meta:           jsonb("meta"),
+
     attempts:    integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(3),
 

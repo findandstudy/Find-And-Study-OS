@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, boolean, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { studentsTable } from "./students";
@@ -44,6 +44,19 @@ export const applicationsTable = pgTable("applications", {
   originLocked: boolean("origin_locked").notNull().default(false),
   originStudentId: integer("origin_student_id"),
   branchId: integer("branch_id"),
+  // Automatic backup-programme (supersession) links. When a full programme is
+  // superseded by an auto-created fallback application, the original points to
+  // the new one (superseded_by) and the new one points back (superseded_from).
+  supersededByApplicationId: integer("superseded_by_application_id").references(
+    (): AnyPgColumn => applicationsTable.id,
+    { onDelete: "set null" },
+  ),
+  supersededFromApplicationId: integer(
+    "superseded_from_application_id",
+  ).references((): AnyPgColumn => applicationsTable.id, {
+    onDelete: "set null",
+  }),
+  supersedeReason: text("supersede_reason"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   deletedBy: integer("deleted_by").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

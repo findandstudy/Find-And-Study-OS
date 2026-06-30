@@ -49,5 +49,6 @@ export * from "./portalAccountUniversities";
 export * from "./portalAdapters";
 export * from "./portalAdapterSpecs";
 export * from "./portalProgramMapping";
+export * from "./portalProgramFallbacks";
 export * from "./portalProgramCache";
 export * from "./portalCredentials";
