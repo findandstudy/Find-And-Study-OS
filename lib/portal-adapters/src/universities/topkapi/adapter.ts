@@ -7,13 +7,14 @@ import type {
   LoginOpts,
   ProgramOption,
 } from "../../types.js";
-import type { Page } from "playwright-core";
+import type { Page, Locator } from "playwright-core";
 import { launchPortal, saveState, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
 import { matchProgram, fold } from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
 import {
   formatGraduationForInput,
+  formatGraduationForDatepicker,
   mapEduLevel,
   eduLevelCandidates,
   isPlaceholderChoice,
@@ -684,6 +685,147 @@ async function fillVerified(
 }
 
 // ---------------------------------------------------------------------------
+// Locate the VISIBLE instance of a repeatable (`name="...[]"`) education-row
+// input. The portal keeps a hidden template row alongside the real one, so a
+// bare querySelector/page.fill targets the template and the read-back is always
+// empty. Scans every selector's matches, logs count + visible index (confirms
+// the hidden-template theory), and returns the first visible element handle
+// (falling back to the first match when none report visible).
+// ---------------------------------------------------------------------------
+async function locateVisibleInput(
+  page: Page,
+  selectors: string[],
+  label: string,
+  logger: typeof import("../../browser.js").logger,
+): Promise<Locator | null> {
+  let fallback: Locator | null = null;
+  for (const sel of selectors) {
+    const loc = page.locator(sel);
+    const count = await loc.count().catch(() => 0);
+    if (count === 0) continue;
+    let visibleIndex = -1;
+    for (let i = 0; i < count; i++) {
+      if (await loc.nth(i).isVisible().catch(() => false)) {
+        visibleIndex = i;
+        break;
+      }
+    }
+    logger.info(
+      `[topkapi] Step 3 instances: ${label} sel="${sel}" count=${count} visibleIndex=${visibleIndex}`,
+    );
+    if (visibleIndex >= 0) return loc.nth(visibleIndex);
+    if (!fallback) fallback = loc.first();
+  }
+  if (!fallback) logger.warn(`[topkapi] Step 3 ${label}: no input found`);
+  return fallback;
+}
+
+// ---------------------------------------------------------------------------
+// Set a text input's value via real DOM events (focus → value → input+change
+// (bubbles) → blur). Needed for twopulse-bound inputs where a plain assignment
+// or page.fill doesn't notify the framework, so the field reverts to empty.
+// ---------------------------------------------------------------------------
+async function setValueViaEvents(loc: Locator, value: string): Promise<void> {
+  await loc
+    .evaluate((el, val) => {
+      const input = el as HTMLInputElement;
+      input.focus();
+      input.value = val as string;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      input.blur();
+    }, value)
+    .catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Fill the VISIBLE instance of a repeatable text input and verify the read-back
+// on the SAME element handle (not a fresh querySelector, which hits the hidden
+// template). Tries Playwright's locator.fill() first (dispatches proper input/
+// change), then falls back to explicit event dispatch; retries once. For a
+// datepicker the calendar overlay is dismissed (Escape) so it can't block later
+// steps. Returns the final value ("" on failure — caller's gate still throws).
+// ---------------------------------------------------------------------------
+async function fillVisibleVerified(
+  page: Page,
+  selectors: string[],
+  value: string,
+  logger: typeof import("../../browser.js").logger,
+  label: string,
+  opts: { datepicker?: boolean } = {},
+): Promise<string> {
+  const loc = await locateVisibleInput(page, selectors, label, logger);
+  if (!loc) {
+    logger.warn(`[topkapi] Step 3 verified: ${label}=(empty)`);
+    return "";
+  }
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (opts.datepicker) {
+      await loc.click({ timeout: 3000 }).catch(() => {});
+      await setValueViaEvents(loc, value);
+      await page.keyboard.press("Escape").catch(() => {});
+    } else {
+      await loc.fill(value, { timeout: 5000 }).catch(() => {});
+    }
+    let v = (await loc.inputValue().catch(() => "")).trim();
+    if (!v) {
+      // Fallback: framework-style event dispatch for twopulse-bound inputs.
+      await setValueViaEvents(loc, value);
+      v = (await loc.inputValue().catch(() => "")).trim();
+    }
+    if (v) {
+      logger.info(`[topkapi] Step 3 verified: ${label}=${v}`);
+      return v;
+    }
+    logger.warn(
+      `[topkapi] Step 3 ${label} empty after attempt ${attempt} — retrying`,
+    );
+  }
+  logger.warn(`[topkapi] Step 3 verified: ${label}=(empty)`);
+  return "";
+}
+
+// ---------------------------------------------------------------------------
+// Log a datepicker input's outerHTML + data-* attributes (esp. data-date-format)
+// from its VISIBLE instance, and return the detected date format ("" if none).
+// Drives formatGraduationForDatepicker so the value matches what the widget
+// accepts instead of guessing.
+// ---------------------------------------------------------------------------
+async function readDatepickerFormat(
+  page: Page,
+  selectors: string[],
+  logger: typeof import("../../browser.js").logger,
+): Promise<string> {
+  const loc = await locateVisibleInput(page, selectors, "graduationDate", logger);
+  if (!loc) return "";
+  const info = await loc
+    .evaluate((el) => {
+      const e = el as HTMLInputElement;
+      const data: Record<string, string> = {};
+      for (const a of Array.from(e.attributes)) {
+        if (a.name.startsWith("data-")) data[a.name] = a.value;
+      }
+      return {
+        outer: e.outerHTML.slice(0, 300),
+        dateFormat:
+          e.getAttribute("data-date-format") ||
+          e.getAttribute("data-format") ||
+          data["data-date-format"] ||
+          "",
+        data,
+      };
+    })
+    .catch(() => null);
+  if (!info) return "";
+  logger.info(
+    `[topkapi] Step 3 datepicker: dateFormat="${info.dateFormat}" data=${JSON.stringify(
+      info.data,
+    )} outer=${info.outer}`,
+  );
+  return info.dateFormat;
+}
+
+// ---------------------------------------------------------------------------
 // Ensure at least one education-history row exists. Some portal configs start
 // with zero rows and require clicking the green "Eğitim Geçmişi Ekle" button
 // before the row's fields exist. No-op when a row is already present (the
@@ -1018,8 +1160,11 @@ export const topkapiAdapter: UniversityAdapter = {
     await describeInput(page, gpaSelectors, "gpa", logger);
     const gradInput = await describeInput(page, gradSelectors, "graduationDate", logger);
 
+    // These are repeatable (`name="...[]"`) rows with a hidden template alongside
+    // the visible one, so fill+verify must target the SAME visible element (via
+    // fillVisibleVerified) and use real input/change events (twopulse binding).
     logger.info("[topkapi] Step 3b: filling school name");
-    const v_school = await fillVerified(
+    const v_school = await fillVisibleVerified(
       page,
       schoolSelectors,
       profile.schoolName ?? "-",
@@ -1028,7 +1173,7 @@ export const topkapiAdapter: UniversityAdapter = {
     );
 
     logger.info("[topkapi] Step 3c: filling GPA");
-    const v_gpa = await fillVerified(
+    const v_gpa = await fillVisibleVerified(
       page,
       gpaSelectors,
       profile.gpa != null ? String(profile.gpa) : "-",
@@ -1037,14 +1182,25 @@ export const topkapiAdapter: UniversityAdapter = {
     );
 
     logger.info("[topkapi] Step 3d: filling graduation date");
-    // Year-only CRM value is expanded to the format the detected widget accepts
-    // (a native date/month picker rejects a bare year and stays empty).
-    const v_grad = await fillVerified(
+    // graduationDate is a twopulse-datepicker (native type="text"), so a bare
+    // year gets cleared. Read the picker's data-date-format and expand the year
+    // into a full date the widget accepts; fall back to the native-type path when
+    // the field is NOT a datepicker.
+    const gradIsDatepicker = /datepicker/i.test(gradInput.desc);
+    let gradValue: string;
+    if (gradIsDatepicker) {
+      const fmt = await readDatepickerFormat(page, gradSelectors, logger);
+      gradValue = formatGraduationForDatepicker(profile.graduationYear, fmt);
+    } else {
+      gradValue = formatGraduationForInput(profile.graduationYear, gradInput.type);
+    }
+    const v_grad = await fillVisibleVerified(
       page,
       gradSelectors,
-      formatGraduationForInput(profile.graduationYear, gradInput.type),
+      gradValue,
       logger,
       "graduationDate",
+      { datepicker: gradIsDatepicker },
     );
 
     logger.info("[topkapi] Step 3e: selecting country");

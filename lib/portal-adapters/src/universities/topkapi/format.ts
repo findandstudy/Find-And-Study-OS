@@ -43,6 +43,33 @@ export function formatGraduationForInput(
   }
 }
 
+/**
+ * Expands a year-only graduation value into a FULL date string for a jQuery-style
+ * datepicker (Topkapı's `twopulse-datepicker`), whose native input type is
+ * "text" so {@link formatGraduationForInput} would return a bare year that the
+ * picker silently clears.
+ *
+ * The format is driven by the input's runtime `data-date-format` attribute when
+ * present (token map: y→year, m→"01", d→"01", separators preserved); otherwise
+ * it defaults to the common Turkish `dd.mm.yyyy` shape ("01.01.YYYY").
+ *
+ * Returns "-" when no year is available so the caller's placeholder / gate
+ * behaviour is unchanged.
+ */
+export function formatGraduationForDatepicker(
+  year: number | null | undefined,
+  dateFormat?: string | null,
+): string {
+  if (year == null || !Number.isFinite(Number(year))) return "-";
+  const y = String(year);
+  const fmt = (dateFormat || "").trim();
+  if (!fmt) return `01.01.${y}`;
+  return fmt
+    .replace(/y{2,4}/i, y)
+    .replace(/m{1,2}/i, "01")
+    .replace(/d{1,2}/i, "01");
+}
+
 // ---------------------------------------------------------------------------
 // CRM education level → Topkapı program-level label (the level of the program
 // being APPLIED to). Used for Step 4's program-level radio. Thesis vs non-thesis
