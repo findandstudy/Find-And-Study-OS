@@ -14,6 +14,9 @@ export type {
 // Credential helper — reads from process.env (or injected override)
 export { portalCreds, setCredsOverride, clearCredsOverride, type ResolvedCreds } from "./portalCreds.js";
 
+// Reactive exclusive-region detection (portal response safety net)
+export { detectExclusiveRegion } from "./exclusiveRegion.js";
+
 // Browser utilities
 export {
   launchPortal,

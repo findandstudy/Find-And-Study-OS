@@ -37,6 +37,7 @@ type SubmissionStatus =
   | "program_missing"
   | "already_exists"
   | "program_full"
+  | "exclusive_region"
   | "failed"
   | "dry_run";
 
@@ -56,6 +57,13 @@ function resolveTarget(
 ): WritebackTarget {
   if (!result) {
     return { submissionStatus: "failed", stageKey: null };
+  }
+  // Exclusive-region (nationality restricted to a specific agency) is a permanent
+  // finding regardless of dry/real mode — surface it ahead of EVERYTHING (incl.
+  // programFull and dry_run). The portal was skipped (preventive) or rejected the
+  // application (reactive). Application stage unchanged; no retry.
+  if (result.exclusiveRegion) {
+    return { submissionStatus: "exclusive_region", stageKey: null };
   }
   // Quota-full ("Kontenjan Dolu") is a structural finding regardless of dry/real
   // mode — surface it (ahead of dry_run) so the orchestrator can supersede the
@@ -145,9 +153,24 @@ export async function writebackResult(
             },
           }
         : {}),
-      error:          submissionStatus === "failed"
-                        ? (errorMessage ?? "submission failed")
-                        : null,
+      // Exclusive-region context → meta jsonb. Only set on exclusiveRegion so
+      // other flows never clobber the meta column.
+      ...(result?.exclusiveRegion
+        ? {
+            meta: {
+              reason:          "Exclusive bölge",
+              exclusiveAgency: result.exclusiveAgency ?? null,
+              detectedAt:      new Date().toISOString(),
+            },
+          }
+        : {}),
+      error:          submissionStatus === "exclusive_region"
+                        ? (result?.exclusiveAgency
+                            ? `Exclusive bölge — ${result.exclusiveAgency} üzerinden başvurulmalı`
+                            : "Exclusive bölge — acenta üzerinden başvurulmalı")
+                        : submissionStatus === "failed"
+                          ? (errorMessage ?? "submission failed")
+                          : null,
       lockedAt:       null,
       lockedBy:       null,
       updatedAt:      new Date(),

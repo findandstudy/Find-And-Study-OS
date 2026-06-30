@@ -583,7 +583,7 @@ const INLINE_TIMEOUT_MS = 50_000; // 50 seconds
 
 interface ProcessSingleResult {
   id: number;
-  status: "submitted" | "already_exists" | "program_missing" | "failed" | "dry_run" | "skipped" | "requeued";
+  status: "submitted" | "already_exists" | "program_missing" | "program_full" | "exclusive_region" | "failed" | "dry_run" | "skipped" | "requeued";
   error?: string;
   message?: string;
 }
@@ -664,8 +664,13 @@ async function runWithTimeout(
     }
     await writebackResult(sub.id, runResult, undefined, workerId);
 
-    const status: ProcessSingleResult["status"] = runResult.meta["dryRun"]
-      ? "dry_run"
+    // Structural outcomes (exclusive_region, program_full) take precedence over
+    // dry_run so the inline API status matches the DB status written by
+    // resolveTarget(), which checks them before dryRun.
+    const status: ProcessSingleResult["status"] = runResult.result.exclusiveRegion
+      ? "exclusive_region"
+      : runResult.result.programFull    ? "program_full"
+      : runResult.meta["dryRun"]        ? "dry_run"
       : runResult.result.submitted      ? "submitted"
       : runResult.result.alreadyExists  ? "already_exists"
       : runResult.result.programMissing ? "program_missing"

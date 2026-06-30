@@ -12,6 +12,7 @@ import { launchPortal, saveState, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
 import { matchProgram, fold } from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
+import { detectExclusiveRegion } from "../../exclusiveRegion.js";
 import {
   formatGraduationForInput,
   formatGraduationForDatepicker,
@@ -1598,6 +1599,22 @@ export const topkapiAdapter: UniversityAdapter = {
         logger.warn("[topkapi] saved but success-url not captured — save=" + saveStatus + " url=" + page.url());
       }
       return { submitted: true, alreadyExists: false, programMissing: false, externalRef, screenshots };
+    }
+
+    // Reactive exclusive-region safety net: some restricted nationalities are
+    // rejected with an "Exclusive bölge / acenta üzerinden" message instead of
+    // being saved. Detect it WITHOUT overriding a successful submit (checked
+    // only in the not-saved branch). Permanent skip — no retry.
+    if (detectExclusiveRegion(bodyText)) {
+      logger.warn("[topkapi] exclusive-region response detected — marking exclusive_region");
+      return {
+        submitted: false,
+        alreadyExists: false,
+        programMissing: false,
+        exclusiveRegion: true,
+        detail: "Exclusive bölge — acenta üzerinden başvurulmalı",
+        screenshots,
+      };
     }
 
     logger.warn(

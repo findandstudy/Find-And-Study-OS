@@ -53,6 +53,16 @@ export interface SubmitResult {
    * together with programFull.
    */
   openPrograms?: Array<{ value: string; name: string; enabled: boolean }>;
+  /**
+   * True when the application is blocked for the student's nationality — it must
+   * go through a specific agency ("exclusive region") instead of the portal.
+   * Set either preventively by the runner (portal_university_exclusions lookup,
+   * portal never run) or reactively by an adapter that detects an exclusive
+   * response. Permanent skip — no retry.
+   */
+  exclusiveRegion?: boolean;
+  /** The agency the application must go through, when known. */
+  exclusiveAgency?: string;
 }
 
 // ---------------------------------------------------------------------------

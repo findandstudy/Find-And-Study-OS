@@ -32,6 +32,7 @@ export const portalSubmissionStatusEnum = pgEnum("portal_submission_status", [
   "canceled",
   "dry_run",
   "program_full",
+  "exclusive_region",
 ]);
 
 // ---------------------------------------------------------------------------

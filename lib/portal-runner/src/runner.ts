@@ -42,6 +42,7 @@ import {
 } from "@workspace/object-storage";
 import type { ClaimedSubmission } from "./queue.js";
 import { loadProgramMapping } from "./programMappingLoader.js";
+import { resolveNationalityExclusion } from "./exclusions.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,6 +95,33 @@ export async function runSubmission(
     memberUniversityId?: number | null;
   },
 ): Promise<RunResult> {
+  // ----- 0. Preventive nationality-exclusion check ------------------------
+  // If the student's nationality is on this university's exclusive-region list
+  // the application must go through a specific agency — skip the portal ENTIRELY
+  // (no login, no submit) and surface a permanent exclusive_region result. This
+  // fires for BOTH dry and real mode; the writeback maps it ahead of dry_run.
+  const exclusion = await resolveNationalityExclusion(
+    submission.universityKey,
+    profile.nationality,
+  );
+  if (exclusion.excluded) {
+    await cleanup(tempDir);
+    return {
+      result: {
+        submitted: false,
+        alreadyExists: false,
+        programMissing: false,
+        exclusiveRegion: true,
+        ...(exclusion.agencyName ? { exclusiveAgency: exclusion.agencyName } : {}),
+        detail: exclusion.agencyName
+          ? `Exclusive bölge — ${exclusion.agencyName} üzerinden başvurulmalı`
+          : "Exclusive bölge — acenta üzerinden başvurulmalı",
+      },
+      screenshotUrls: [],
+      meta: { exclusionSkipped: true },
+    };
+  }
+
   // ----- 1. Resolve adapter -----------------------------------------------
   // When opts.adapterKey is provided (multi-portal routing) it takes priority.
   // It is ONLY passed when a routes_via redirect actually applies, so the

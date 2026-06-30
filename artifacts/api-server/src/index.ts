@@ -1450,6 +1450,9 @@ async function seedClaudeIntegration() {
       ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'program_full'
     `);
     await pool.query(`
+      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'exclusive_region'
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS portal_submissions (
         id SERIAL PRIMARY KEY,
         application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
@@ -1555,6 +1558,26 @@ async function seedClaudeIntegration() {
     // so a soft-deleted rule can be recreated. Drop any non-partial legacy index first.
     await pool.query(`DROP INDEX IF EXISTS portal_prog_fallback_key_source_uniq`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_prog_fallback_key_source_uniq ON portal_program_fallbacks (university_key, source_program_id) WHERE deleted_at IS NULL`);
+    // University-based nationality exclusions ("exclusive region"). When a
+    // student's nationality is on the exclusive list for a portal university the
+    // worker skips the portal entirely and marks status='exclusive_region'.
+    // Idempotent — required in prod for the preventive exclusion check.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portal_university_exclusions (
+        id SERIAL PRIMARY KEY,
+        university_key TEXT NOT NULL,
+        nationality TEXT NOT NULL,
+        agency_name TEXT,
+        note TEXT,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      )
+    `);
+    // Partial unique: only one ACTIVE rule per (university_key, nationality),
+    // so a soft-deleted rule can be recreated.
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS portal_uni_exclusion_key_nat_uniq ON portal_university_exclusions (university_key, nationality) WHERE deleted_at IS NULL`);
   } catch (err) {
     console.error("[migrate] portal_automation_settings/portal_universities:", err);
   }
