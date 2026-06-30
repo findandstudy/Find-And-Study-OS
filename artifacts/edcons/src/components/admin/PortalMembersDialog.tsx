@@ -13,7 +13,8 @@
  * The user is then asked to confirm a force-move (retry with force=true).
  */
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { customFetch, ApiError } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -28,19 +29,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -50,7 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Network, Plus, Check, X, Loader2 } from "lucide-react";
+import { Network, Check, X, Loader2, ChevronDown } from "lucide-react";
 
 interface PortalAccount {
   universityKey: string;
@@ -98,6 +86,72 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
 
   // 409 force-move confirmation state.
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+
+  // ── Picker dropdown (portaled INTO the dialog content) ─────────────────────
+  // A Radix Popover + cmdk Command nested in a Radix Dialog breaks: the dialog's
+  // FocusScope snatches focus back on every keystroke and its body
+  // `pointer-events:none` swallows clicks, so typing/selecting silently fails.
+  // We mirror the codebase's SearchableSelect fix instead: portal INTO the
+  // dialog content element (keeps FocusScope happy), position:fixed (escapes the
+  // dialog's overflow clipping), pointerEvents:auto, close on "click".
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [portalTarget, setPortalTarget] = useState<Element | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [openUp, setOpenUp] = useState(false);
+
+  // Resolve portal target + track trigger position while the picker is open.
+  useLayoutEffect(() => {
+    if (!pickerOpen || !triggerRef.current) return;
+    const dialogContent = triggerRef.current.closest("[data-radix-dialog-content]");
+    setPortalTarget(dialogContent ?? document.body);
+    function update() {
+      if (!triggerRef.current) return;
+      const rect = triggerRef.current.getBoundingClientRect();
+      const up = window.innerHeight - rect.bottom < 360;
+      setOpenUp(up);
+      setPos({ top: up ? rect.top : rect.bottom, left: rect.left, width: rect.width });
+    }
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [pickerOpen]);
+
+  // Outside-click closes the picker. Listen to "click" (not "mousedown") so
+  // dragging the results scrollbar doesn't dismiss it prematurely.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function handleClick(e: MouseEvent) {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (popRef.current?.contains(target)) return;
+      setPickerOpen(false);
+    }
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [pickerOpen]);
+
+  // Focus the search box each time the picker opens.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const id = setTimeout(() => searchInputRef.current?.focus(), 0);
+    return () => clearTimeout(id);
+  }, [pickerOpen]);
+
+  // Tear the picker down whenever the dialog closes, so it never lingers as an
+  // orphaned floating element and always re-anchors fresh on the next open.
+  useEffect(() => {
+    if (!portal) {
+      setPickerOpen(false);
+      setPos(null);
+      setPortalTarget(null);
+    }
+  }, [portal]);
 
   // Load current members whenever a portal is opened.
   useEffect(() => {
@@ -238,50 +292,81 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
               </div>
             ) : (
               <>
-                {/* Catalog multi-select (server-side search) */}
-                <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between">
-                      {t("portalAutomation.members.addMembers")}
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command shouldFilter={false}>
-                      <CommandInput
-                        placeholder={t("portalAutomation.members.searchPlaceholder")}
+                {/* Catalog multi-select (server-side search, portaled picker) */}
+                <button
+                  ref={triggerRef}
+                  type="button"
+                  onClick={() => setPickerOpen((o) => !o)}
+                  className="flex w-full items-center justify-between h-10 px-3 rounded-md border border-input bg-background text-sm hover:bg-accent/30 transition-colors"
+                >
+                  <span className="text-muted-foreground">
+                    {t("portalAutomation.members.addMembers")}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-muted-foreground transition-transform ${pickerOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                {portal && pickerOpen && pos && portalTarget && createPortal(
+                  <div
+                    ref={popRef}
+                    style={{
+                      position: "fixed",
+                      top: openUp ? pos.top - 4 : pos.top + 4,
+                      left: pos.left,
+                      width: Math.max(pos.width, 280),
+                      transform: openUp ? "translateY(-100%)" : "translateY(0)",
+                      pointerEvents: "auto",
+                      zIndex: 9999,
+                    }}
+                    className="bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+                  >
+                    <div className="p-2 border-b border-border">
+                      <input
+                        ref={searchInputRef}
+                        type="text"
                         value={query}
-                        onValueChange={setQuery}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder={t("portalAutomation.members.searchPlaceholder")}
+                        className="w-full h-8 px-2 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                       />
-                      <CommandList>
-                        {searching ? (
-                          <div className="py-4 flex justify-center">
-                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                          </div>
-                        ) : (
-                          <CommandEmpty>{t("portalAutomation.members.noCandidates")}</CommandEmpty>
-                        )}
-                        <CommandGroup>
-                          {results.map((c) => (
-                            <CommandItem
+                    </div>
+                    <div className="max-h-72 overflow-y-auto p-1">
+                      {searching ? (
+                        <div className="py-4 flex justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : results.length === 0 ? (
+                        <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                          {t("portalAutomation.members.noCandidates")}
+                        </div>
+                      ) : (
+                        results.map((c) => {
+                          const isSelected = selected.has(c.id);
+                          return (
+                            <button
                               key={c.id}
-                              value={String(c.id)}
-                              onSelect={() => toggle(c)}
+                              type="button"
+                              onClick={() => toggle(c)}
+                              className={`flex items-center w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
+                                isSelected ? "bg-primary/10" : "hover:bg-primary/10"
+                              }`}
                             >
                               <Check
-                                className={`mr-2 h-4 w-4 ${selected.has(c.id) ? "opacity-100" : "opacity-0"}`}
+                                className={`mr-2 h-4 w-4 shrink-0 ${isSelected ? "opacity-100 text-primary" : "opacity-0"}`}
                               />
-                              <span className="font-medium">{c.name}</span>
-                              <span className="ml-2 text-xs text-muted-foreground">
+                              <span className="font-medium flex-1 truncate">{c.name}</span>
+                              <span className="ml-2 text-xs text-muted-foreground shrink-0">
                                 {c.country}
                               </span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>,
+                  portalTarget,
+                )}
 
                 {/* Selected members */}
                 <div className="min-h-[60px] rounded-lg border p-2">

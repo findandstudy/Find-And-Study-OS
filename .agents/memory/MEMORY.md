@@ -18,6 +18,7 @@
 - [Notification template dispatch](notification-template-dispatch.md) — multilingual templates: field-level fallback (lang→top-level→en→tr), escape vars in HTML email bodies, per-channel try/catch, await the error-safe dispatch.
 - [i18n key parity](i18n-key-parity.md) — locale JSONs must contain EVERY en string key (getTranslation falls back to en silently); don't letter-filter the parity/fill step, only the translate step.
 - [Dropdown overflow clipping](dropdown-overflow-clipping.md) — absolute+z-index doesn't escape ancestor overflow; portal the menu (fixed pos from rect, flip/clamp, click outside-close).
+- [Popover/cmdk inside a Dialog breaks](dropdown-popover-in-dialog.md) — Radix Popover+cmdk in a Dialog silently kills typing/click (FocusScope+pointer-events:none); portal the menu INTO dialog-content, fixed pos, reset on close.
 - [Admin-contract deadline suspension](admin-contract-deadline-suspension.md) — suspend agent (users.isActive=false) on missed admin_driven contract deadline; filter mode=admin_driven AND gate suspend on conditional-expire rowcount or you suspend signed-in-time accounts.
 - [Fast Refresh mixed exports crash](fast-refresh-mixed-exports.md) — a .tsx exporting a component + a hook/util/type breaks Fast Refresh → full reload can crash mounted shells (empty {} ErrorBoundary). Dev-only; not the prod stale-chunk case.
 - [Lifted child submit/readiness](lifted-child-submit-ref.md) — moving a child's action button to a parent footer via ref+state stale-enables across mounts; clean up on unmount + reset on view change.
