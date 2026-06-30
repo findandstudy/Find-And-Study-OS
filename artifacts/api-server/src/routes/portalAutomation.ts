@@ -13,6 +13,7 @@ import {
   portalProgramCacheTable,
   portalAdapterSpecsTable,
   portalAccountUniversitiesTable,
+  portalAutomationSettingsTable,
 } from "@workspace/db";
 import {
   buildWorkbookBuffer,
@@ -24,7 +25,10 @@ import {
   type WorkbookSpec,
 } from "../lib/exportImportExcel";
 import { ImportValidationError } from "../lib/exportImport";
-import { findActivePortalUniversity } from "../lib/portalAutoTrigger.js";
+import {
+  findActivePortalUniversity,
+  scanAndEnqueueTriggerStageApplications,
+} from "../lib/portalAutoTrigger.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import {
   adapterMetadata,
@@ -717,6 +721,39 @@ async function processSingle(
   return runWithTimeout(sub, workerId);
 }
 
+/**
+ * Drains the entire queued backlog sequentially (eşzaman 1).  Releases stale
+ * locks first, then claims+runs every queued submission with a per-submission
+ * inline timeout + heartbeat.  Caller MUST hold _processMutex.  Shared by the
+ * manual process-queued endpoint and the Run Now endpoint so the immediate
+ * processing path is identical (and interval-independent).
+ */
+async function drainQueue(workerId: string): Promise<ProcessSingleResult[]> {
+  const results: ProcessSingleResult[] = [];
+
+  // Release stale locks first (crash recovery: inline requests that died
+  // without requeuing leave orphan 'running' rows).
+  const staleIds = await releaseStale(STUCK_THRESHOLD_MS);
+  if (staleIds.length > 0) {
+    console.log(
+      `[portal-process] Released ${staleIds.length} stale submission(s): ${staleIds.join(",")}`,
+    );
+  }
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const sub = await claimNext(workerId);
+    if (!sub) break;
+
+    console.log(
+      `[portal-process] Processing #${sub.id} uni=${sub.universityKey} mode=${sub.mode} attempt=${sub.attempts}/${sub.maxAttempts}`,
+    );
+    results.push(await runWithTimeout(sub, workerId));
+  }
+
+  return results;
+}
+
 // ---------------------------------------------------------------------------
 // POST /portal-submissions/process-queued
 // Processes ALL queued submissions sequentially; eşzaman 1.
@@ -739,28 +776,10 @@ router.post(
     const workerId = `api-manual-${user.id}-${Date.now()}`;
 
     _processMutex = true;
-    const results: ProcessSingleResult[] = [];
+    let results: ProcessSingleResult[] = [];
 
     try {
-      // Release stale locks first (crash recovery: inline requests that died
-      // without requeuing leave orphan 'running' rows).
-      const staleIds = await releaseStale(STUCK_THRESHOLD_MS);
-      if (staleIds.length > 0) {
-        console.log(
-          `[portal-process-queued] Released ${staleIds.length} stale submission(s): ${staleIds.join(",")}`,
-        );
-      }
-
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const sub = await claimNext(workerId);
-        if (!sub) break;
-
-        console.log(
-          `[portal-process] Processing #${sub.id} uni=${sub.universityKey} mode=${sub.mode} attempt=${sub.attempts}/${sub.maxAttempts}`,
-        );
-        results.push(await runWithTimeout(sub, workerId));
-      }
+      results = await drainQueue(workerId);
     } finally {
       _processMutex = false;
     }
@@ -782,6 +801,88 @@ router.post(
     );
 
     res.json({ processed: processedCount, results });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-automation/run-now
+// Admin-only "Run Now": scans every trigger-stage application, enqueues the
+// eligible ones (respecting all Automation Rules + dedup), then immediately
+// drains the queue in-process — no 10-minute interval wait.
+// ---------------------------------------------------------------------------
+router.post(
+  "/portal-automation/run-now",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const user = req.user!;
+
+    // ----- Gate: global kill-switch -------------------------------------
+    const [settings] = await db
+      .select()
+      .from(portalAutomationSettingsTable)
+      .limit(1);
+
+    if (!settings?.isEnabled) {
+      res.status(409).json({
+        error: "AUTOMATION_DISABLED",
+        message: "Portal automation is disabled — enable it before running.",
+      });
+      return;
+    }
+
+    // ----- Enqueue every eligible trigger-stage application -------------
+    const summary = await scanAndEnqueueTriggerStageApplications(user.id, settings);
+
+    // ----- Immediately drain the queue (interval-independent) -----------
+    // Reuses the exact manual process-queued path (50s inline cap per
+    // submission + requeue), guarded by the shared mutex.  If a process run is
+    // already in flight we skip draining here — those rows are picked up by the
+    // in-flight run (or the always-on worker) within seconds.
+    let processed = 0;
+    let results: ProcessSingleResult[] = [];
+    let drained = false;
+
+    if (!_processMutex) {
+      const workerId = `api-runnow-${user.id}-${Date.now()}`;
+      _processMutex = true;
+      try {
+        results = await drainQueue(workerId);
+        drained = true;
+      } finally {
+        _processMutex = false;
+      }
+      processed = results.filter(
+        (r) => r.status !== "skipped" && r.status !== "requeued",
+      ).length;
+    }
+
+    await logAudit(
+      user.id,
+      "portal.runNow",
+      "portal_submission",
+      undefined,
+      {
+        scanned: summary.scanned,
+        queued: summary.queued,
+        skipped: summary.skipped,
+        reasons: summary.reasons,
+        processed,
+        drained,
+      },
+      req.ip,
+    );
+
+    res.json({
+      scanned: summary.scanned,
+      queued: summary.queued,
+      skipped: summary.skipped,
+      reasons: summary.reasons,
+      queuedIds: summary.queuedIds,
+      processed,
+      drained,
+      results: results.map((r) => ({ id: r.id, status: r.status })),
+    });
   },
 );
 

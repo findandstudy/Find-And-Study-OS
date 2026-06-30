@@ -24,10 +24,14 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PortalErrorState } from "@/components/admin/PortalTabStates";
-import { Bot, Construction, Save, Timer } from "lucide-react";
+import { Bot, Construction, Play, Save, Timer } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import PortalUniversitiesTab from "./PortalUniversitiesTab";
 import PortalProgramMappingTab from "./PortalProgramMappingTab";
 import PortalAdaptersTab from "./PortalAdaptersTab";
@@ -98,6 +102,8 @@ function AutomationRulesTab() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [confirmRunOpen, setConfirmRunOpen] = useState(false);
 
   // Load settings + universities in parallel
   const load = useCallback(async () => {
@@ -149,6 +155,29 @@ function AutomationRulesTab() {
       toast({ title: t("portalAutomation.rules.saveError"), variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Run Now — enqueue + immediately process eligible trigger-stage applications.
+  const runNow = async () => {
+    setConfirmRunOpen(false);
+    setRunning(true);
+    try {
+      const res = await customFetch<{ scanned: number; queued: number; skipped: number }>(
+        "/api/portal-automation/run-now",
+        { method: "POST" },
+      );
+      toast({
+        title: t("portalAutomation.runNow.resultTitle"),
+        description: t("portalAutomation.runNow.resultBody", {
+          queued: String(res.queued),
+          skipped: String(res.skipped),
+        }),
+      });
+    } catch {
+      toast({ title: t("portalAutomation.runNow.errorToast"), variant: "destructive" });
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -419,8 +448,20 @@ function AutomationRulesTab() {
         </CardContent>
       </Card>
 
-      {/* ── Save button ─────────────────────────────────────────────────── */}
-      <div className="flex justify-end">
+      {/* ── Actions ─────────────────────────────────────────────────────── */}
+      <div className="flex justify-end gap-3">
+        <Button
+          variant="outline"
+          onClick={() => setConfirmRunOpen(true)}
+          disabled={running || saving || !settings.isEnabled}
+          className="gap-2"
+          title={!settings.isEnabled ? t("portalAutomation.runNow.disabled") : undefined}
+        >
+          <Play className="w-4 h-4" />
+          {running
+            ? t("portalAutomation.runNow.running")
+            : t("portalAutomation.runNow.button")}
+        </Button>
         <Button onClick={save} disabled={saving} className="gap-2">
           <Save className="w-4 h-4" />
           {saving
@@ -428,6 +469,25 @@ function AutomationRulesTab() {
             : t("portalAutomation.rules.saveButton")}
         </Button>
       </div>
+
+      <AlertDialog open={confirmRunOpen} onOpenChange={setConfirmRunOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("portalAutomation.runNow.confirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {settings.mode === "real"
+                ? t("portalAutomation.runNow.liveWarning")
+                : t("portalAutomation.runNow.confirmBody")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={runNow}>
+              {t("portalAutomation.runNow.confirmAction")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

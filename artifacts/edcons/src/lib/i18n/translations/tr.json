@@ -4785,6 +4785,18 @@
         "interval60": "Her saat"
       }
     },
+    "runNow": {
+      "button": "Şimdi Çalıştır",
+      "running": "Çalışıyor…",
+      "disabled": "Şimdi Çalıştır için Portal Otomasyonunu etkinleştirin.",
+      "confirmTitle": "Otomasyon şimdi çalıştırılsın mı?",
+      "confirmBody": "Bu işlem, tetikleyici aşamalardaki uygun başvuruları zamanlanmış aralığı beklemeden hemen kuyruğa alıp işler. Test Modu formları göndermeden doldurur.",
+      "liveWarning": "Canlı Mod açık. Bu işlem uygun başvuruları üniversite portallarına HEMEN ve GERÇEKTEN gönderir. Emin misiniz?",
+      "confirmAction": "Şimdi Çalıştır",
+      "resultTitle": "Şimdi Çalıştır tamamlandı",
+      "resultBody": "{queued} kuyruğa alındı, {skipped} atlandı.",
+      "errorToast": "Şimdi Çalıştır başarısız oldu. Lütfen tekrar deneyin."
+    },
     "comingSoon": "Yakında",
     "comingSoonHint": "Bu bölüm yapım aşamasındadır.",
     "unis": {

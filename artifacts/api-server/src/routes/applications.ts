@@ -728,6 +728,20 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     templateVars: { studentName: studentFullName || "", universityName: snapshotUniversityName || "", programName: snapshotProgramName || "" },
   }).catch(() => {});
 
+  // Portal automation auto-trigger (fire-and-forget — never blocks response).
+  // Fires when a brand-new application is created at a trigger stage (e.g.
+  // "inquiry"); the gate inside enforces enabled/triggerStages/scope/dedup.
+  maybeEnqueuePortalSubmission({
+    applicationId:  app.id,
+    studentId:      app.studentId,
+    newStage:       String(app.stage),
+    universityName: app.universityName ?? null,
+    universityId:   app.universityId ?? null,
+    actorUserId:    req.user!.id,
+  }).catch((err) =>
+    console.error("[portal-auto] Trigger failed for new app", app.id, ":", err),
+  );
+
   res.status(201).json(app);
 });
 

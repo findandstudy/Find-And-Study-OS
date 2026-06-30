@@ -4785,6 +4785,18 @@
         "interval60": "Every hour"
       }
     },
+    "runNow": {
+      "button": "Run Now",
+      "running": "Running…",
+      "disabled": "Enable Portal Automation to use Run Now.",
+      "confirmTitle": "Run automation now?",
+      "confirmBody": "This will immediately queue and process eligible applications in the trigger stages — without waiting for the scheduled interval. Test Mode fills the forms without submitting.",
+      "liveWarning": "Live Mode is on. This will REALLY submit eligible applications to the university portals immediately. Are you sure?",
+      "confirmAction": "Run Now",
+      "resultTitle": "Run Now complete",
+      "resultBody": "{queued} queued, {skipped} skipped.",
+      "errorToast": "Run Now failed. Please try again."
+    },
     "comingSoon": "Coming Soon",
     "comingSoonHint": "This section is under construction.",
     "unis": {
