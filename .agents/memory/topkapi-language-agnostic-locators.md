@@ -7,6 +7,15 @@ The Topkapı adapter physically switches the portal UI to English after login
 (`ensureEnglishLanguage` in `login()`) BEFORE program discovery, so the program
 dropdown loads English-track options that would be missing/Turkish-only otherwise.
 
+**The switch MUST use real Playwright locators, not a single `page.evaluate`.**
+**Why:** a one-pass in-page evaluate that opens the flag menu and clicks
+"English" in the same synchronous tick fails silently — the animated dropdown
+hasn't rendered its items yet, and `el.click()` doesn't fire the theme's
+(Metronic/Bootstrap) framework handlers, so the run stays Turkish even though
+the code "exists". Prefer trigger-click → wait → option-click with Playwright
+locators; verify with `isEnglishUI` after each attempt; keep DOM-heuristic +
+locale-URL GETs only as later fallbacks. Idempotent + non-fatal.
+
 **Rule:** every text-based Playwright locator in the Topkapı adapter must be
 bilingual/language-agnostic, or it silently times out in English mode.
 

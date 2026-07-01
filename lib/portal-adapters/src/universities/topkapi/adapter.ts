@@ -895,7 +895,7 @@ async function isEnglishUI(page: Page): Promise<boolean> {
  * survives theme markup changes. Returns true when a switch action was
  * performed (the caller verifies the result via isEnglishUI).
  */
-async function clickEnglishSwitch(page: Page): Promise<boolean> {
+async function clickEnglishSwitchInPage(page: Page): Promise<boolean> {
   return await page.evaluate(() => {
     const norm = (s: string | null | undefined) =>
       (s || "")
@@ -965,6 +965,91 @@ async function clickEnglishSwitch(page: Page): Promise<boolean> {
 }
 
 /**
+ * Open the top-right language menu (flag + dropdown) with a REAL Playwright
+ * click so the theme's (Metronic/Bootstrap) framework handlers fire and an
+ * animated dropdown gets time to paint its items before we look for "English".
+ * Best-effort: tries several trigger shapes, most-specific first. Never throws.
+ */
+async function openLanguageMenu(page: Page): Promise<void> {
+  const triggerCandidates: Locator[] = [
+    // Metronic KT dropdown toggle carrying a country flag — the usual switcher.
+    page.locator("[data-kt-menu-trigger]").filter({
+      has: page.locator("img[src*='flag'], img[src*='flags']"),
+    }),
+    // Any header/topbar/nav clickable that contains a flag image (top-right).
+    page
+      .locator(
+        "header a, header button, .app-header a, .app-header button, " +
+          ".app-navbar a, .app-navbar button, .topbar a, .topbar button, " +
+          "nav a, nav button",
+      )
+      .filter({ has: page.locator("img[src*='flag'], img[src*='flags']") }),
+    // A clickable whose WHOLE label is a language autonym / short code.
+    page.getByRole("button", { name: /^\s*(türkçe|turkce|english|ingilizce|tr|en)\s*$/i }),
+    page.getByRole("link", { name: /^\s*(türkçe|turkce|english|ingilizce|tr|en)\s*$/i }),
+    // Generic language-classed toggles.
+    page.locator(
+      ".language-switch, .lang-switch, [class*='language'] [data-bs-toggle], " +
+        "[class*='lang'] [data-bs-toggle], [class*='language'] [data-kt-menu-trigger]",
+    ),
+  ];
+  for (const cand of triggerCandidates) {
+    const el = cand.first();
+    try {
+      if ((await el.count()) === 0) continue;
+      if (!(await el.isVisible())) continue;
+      await el.click({ timeout: 3000 });
+      // Give an animated dropdown time to render its language entries.
+      await page.waitForTimeout(500);
+      return;
+    } catch { /* try next trigger shape */ }
+  }
+}
+
+/**
+ * Click a visible "English" entry using real Playwright locators. Returns true
+ * when a click was dispatched (the caller verifies the effect via isEnglishUI).
+ * Text matches are anchored to the WHOLE element label (^english$ / ^ingilizce$)
+ * so they never catch a long programme name like "English Language and
+ * Literature". Attribute/route-based candidates come first as they are the most
+ * robust and language-agnostic.
+ */
+async function clickEnglishOption(page: Page): Promise<boolean> {
+  const optionCandidates: Locator[] = [
+    // Explicit locale data-attributes / hreflang (most robust, language-agnostic).
+    page.locator("[data-kt-lang='en'], [data-lang='en'], a[hreflang='en']"),
+    // Locale routes encoded in the href.
+    page.locator(
+      "a[href*='lang=en'], a[href*='/lang/en'], a[href*='locale=en'], " +
+        "a[href*='/locale/en'], a[href*='language=en'], a[href*='/language/en']",
+    ),
+    // Menu item / link / button whose whole label is the English autonym
+    // ("English") or the Turkish word for it ("İngilizce").
+    page.getByRole("menuitem", { name: /^\s*(english|ingilizce)\s*$/i }),
+    page.getByRole("link", { name: /^\s*(english|ingilizce)\s*$/i }),
+    page.getByRole("button", { name: /^\s*(english|ingilizce)\s*$/i }),
+    // Any clickable whose ENTIRE text is English/İngilizce (excludes programmes).
+    page
+      .locator("a, button, li, [role='menuitem']")
+      .filter({ hasText: /^\s*(english|ingilizce)\s*$/i }),
+    // Flag image explicitly labelled English inside a clickable.
+    page
+      .locator("a, button, [role='menuitem']")
+      .filter({ has: page.locator("img[alt*='English' i], img[title*='English' i]") }),
+  ];
+  for (const cand of optionCandidates) {
+    const el = cand.first();
+    try {
+      if ((await el.count()) === 0) continue;
+      if (!(await el.isVisible())) continue;
+      await el.click({ timeout: 3000 });
+      return true;
+    } catch { /* try next option shape */ }
+  }
+  return false;
+}
+
+/**
  * Ensure the portal UI is in English. Idempotent + non-fatal. Must be called on
  * a panel page (where the language switcher lives) BEFORE any application form
  * is opened. Language preference persists at session level, so a single call
@@ -980,21 +1065,43 @@ async function ensureEnglishLanguage(page: Page): Promise<void> {
 
   logger.info("[topkapi] switching portal language to English (pre-program-discovery)");
 
-  // Strategy A — discover + activate an English switch control in the page.
+  // Strategy A — REAL interaction with the top-right language menu: open the
+  // flag dropdown, wait for it to render, then click the "English" entry. Two
+  // passes because the first click sometimes only opens the dropdown (focus).
+  // Each attempt is accepted only after isEnglishUI() confirms the reload.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await openLanguageMenu(page);
+      const clicked = await clickEnglishOption(page);
+      if (clicked) {
+        await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+        await page.waitForTimeout(300);
+        if (await isEnglishUI(page).catch(() => false)) {
+          logger.info("[topkapi] language switched to English (top-right menu)");
+          return;
+        }
+      }
+    } catch (e) {
+      logger.warn("[topkapi] language menu interaction failed:", (e as Error).message);
+    }
+  }
+
+  // Strategy B — in-page DOM heuristic (survives unusual switcher markup where
+  // Playwright role/text locators do not resolve).
   try {
-    const clicked = await clickEnglishSwitch(page);
+    const clicked = await clickEnglishSwitchInPage(page);
     if (clicked) {
       await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
       if (await isEnglishUI(page).catch(() => false)) {
-        logger.info("[topkapi] language switched to English (via UI control)");
+        logger.info("[topkapi] language switched to English (DOM heuristic)");
         return;
       }
     }
   } catch (e) {
-    logger.warn("[topkapi] language switch (UI control) failed:", (e as Error).message);
+    logger.warn("[topkapi] language switch (DOM heuristic) failed:", (e as Error).message);
   }
 
-  // Strategy B — common Laravel/Metronic locale routes (GET, idempotent). The
+  // Strategy C — common Laravel/Metronic locale routes (GET, idempotent). The
   // query-param form is tried first as it is the least intrusive; each attempt
   // is only accepted after isEnglishUI() confirms the switch took effect.
   const localeUrls = [
