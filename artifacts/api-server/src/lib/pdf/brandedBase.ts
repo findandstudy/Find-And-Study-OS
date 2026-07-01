@@ -8,6 +8,8 @@ export interface BrandedPdfSettings {
   pdfSealImageUrl?: string | null;
   pdfFooterText?: string | null;
   pdfHeaderText?: string | null;
+  pdfWatermarkText?: string | null;
+  pdfSignatureLabel?: string | null;
 }
 
 export async function loadBrandedPdfSettings(): Promise<BrandedPdfSettings> {
@@ -19,6 +21,8 @@ export async function loadBrandedPdfSettings(): Promise<BrandedPdfSettings> {
     pdfSealImageUrl: settingsTable.pdfSealImageUrl,
     pdfFooterText: settingsTable.pdfFooterText,
     pdfHeaderText: settingsTable.pdfHeaderText,
+    pdfWatermarkText: settingsTable.pdfWatermarkText,
+    pdfSignatureLabel: settingsTable.pdfSignatureLabel,
   }).from(settingsTable);
   return row ?? {};
 }
@@ -60,6 +64,8 @@ export interface BuildBrandedHtmlOptions {
   settings: BrandedPdfSettings;
   logoBuri?: string | null;
   sealUri?: string | null;
+  /** BCP-47 locale tag used to format the "Generated" timestamp. */
+  locale?: string;
 }
 
 export async function resolveBrandedAssets(s: BrandedPdfSettings): Promise<{ logoUri: string | null; sealUri: string | null }> {
@@ -76,7 +82,10 @@ export function buildBrandedHtml(opts: BuildBrandedHtmlOptions): string {
   const accent = s.pdfAccentColor || "#0ea5e9";
   const company = esc(s.companyName || "Find & Study");
   const footerText = esc(s.pdfFooterText || "");
-  const generatedAt = new Date().toLocaleString("en-GB", {
+  const headerText = esc(s.pdfHeaderText || "");
+  const watermarkText = esc(s.pdfWatermarkText || "");
+  const signatureLabel = esc(s.pdfSignatureLabel || "");
+  const generatedAt = new Date().toLocaleString(opts.locale || "en-GB", {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 
@@ -84,8 +93,26 @@ export function buildBrandedHtml(opts: BuildBrandedHtmlOptions): string {
     ? `<img src="${logoBuri}" alt="${company}" style="height:36px;object-fit:contain;max-width:180px;display:block" />`
     : `<span style="font-size:17px;font-weight:700;color:${esc(primary)}">${company}</span>`;
 
+  const headerBlockHtml = `<div style="display:flex;flex-direction:column;gap:3px">
+    ${logoHtml}
+    ${headerText ? `<div style="font-size:9px;color:#64748b;line-height:1.3;max-width:220px">${headerText}</div>` : ""}
+  </div>`;
+
   const sealHtml = sealUri
     ? `<img src="${sealUri}" alt="seal" style="height:56px;width:56px;object-fit:contain;opacity:.12;position:absolute;right:0;top:50%;transform:translateY(-50%)" />`
+    : "";
+
+  const watermarkHtml = watermarkText
+    ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-32deg);font-size:78px;font-weight:800;color:${esc(primary)};opacity:.06;white-space:nowrap;z-index:0;pointer-events:none;letter-spacing:.05em">${watermarkText}</div>`
+    : "";
+
+  const signatureHtml = signatureLabel
+    ? `<div style="margin-top:38px;display:flex;justify-content:flex-end">
+    <div style="text-align:center;min-width:190px">
+      <div style="border-top:1px solid #94a3b8;margin-bottom:5px;height:34px"></div>
+      <div style="font-size:9px;color:#64748b">${signatureLabel}</div>
+    </div>
+  </div>`
     : "";
 
   return `<!doctype html>
@@ -117,8 +144,10 @@ footer{position:fixed;bottom:6mm;left:16mm;right:16mm;font-size:8px;color:#94a3b
 .page-num::before{content:counter(page)}
 .page-count::before{content:counter(pages)}
 </style></head><body>
+${watermarkHtml}
+<div style="position:relative;z-index:1">
 <div class="pdf-header">
-  ${logoHtml}
+  ${headerBlockHtml}
   ${sealHtml}
   <div style="text-align:right">
     <div class="pdf-title" style="font-size:15px">${esc(title)}</div>
@@ -126,6 +155,8 @@ footer{position:fixed;bottom:6mm;left:16mm;right:16mm;font-size:8px;color:#94a3b
   </div>
 </div>
 ${body}
+${signatureHtml}
+</div>
 <footer>
   <span>${company}${footerText ? " &mdash; " + footerText : ""}</span>
   <span style="display:flex;align-items:center;gap:6px">Generated: ${generatedAt} &nbsp;|&nbsp; Page <span class="page-num"></span> / <span class="page-count"></span></span>

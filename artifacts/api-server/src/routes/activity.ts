@@ -10,7 +10,9 @@ import {
   usersTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, gte, lte, inArray, ne } from "drizzle-orm";
+import { z } from "zod";
 import { requireAuth, requireRole } from "../lib/auth";
+import { getValidated, validate } from "../middlewares/validate";
 import { ADMIN_ROLES } from "../lib/roles";
 import { withRenderLock } from "../lib/renderLock";
 import {
@@ -26,6 +28,16 @@ import {
 } from "../lib/pdf/brandedBase";
 
 const MAX_SESSION_SEC = 8 * 3600;
+
+// Map the app's i18n language codes to BCP-47 tags so PDF dates format per the
+// viewer's selected locale (no hardcoded date locale).
+const LOCALE_MAP: Record<string, string> = {
+  en: "en-GB", tr: "tr-TR", ar: "ar", fr: "fr-FR", ru: "ru-RU",
+  fa: "fa-IR", zh: "zh-CN", hi: "hi-IN", es: "es-ES", id: "id-ID",
+};
+function resolveLocale(l?: string): string {
+  return (l && LOCALE_MAP[l]) || "en-GB";
+}
 
 function capSessionWallClock<T extends {
   startedAt: Date | string | null;
@@ -215,7 +227,15 @@ router.post("/activity/session/end", requireAuth, async (req, res): Promise<void
   res.json({ ok: true });
 });
 
-router.get("/activity/presence", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+const presenceQuerySchema = z.object({
+  userId: z.coerce.number().int().positive().optional(),
+});
+type PresenceSchemas = { query: typeof presenceQuerySchema };
+
+router.get("/activity/presence", requireAuth, requireRole(...ADMIN_ROLES), validate({ query: presenceQuerySchema }), async (req, res): Promise<void> => {
+  const { userId: targetUserId } = getValidated<PresenceSchemas>(req).query;
+  const presenceConditions = [ne(userPresenceTable.status, "offline")];
+  if (targetUserId) presenceConditions.push(eq(userPresenceTable.userId, targetUserId));
   const presences = await db.select({
     userId: userPresenceTable.userId,
     status: userPresenceTable.status,
@@ -231,7 +251,7 @@ router.get("/activity/presence", requireAuth, requireRole(...ADMIN_ROLES), async
   })
   .from(userPresenceTable)
   .innerJoin(usersTable, eq(userPresenceTable.userId, usersTable.id))
-  .where(ne(userPresenceTable.status, "offline"))
+  .where(and(...presenceConditions))
   .orderBy(desc(userPresenceTable.lastActiveAt));
 
   res.json({ data: presences });
@@ -361,10 +381,20 @@ router.get("/activity/user/:userId", requireAuth, requireRole(...ADMIN_ROLES), a
   });
 });
 
-router.get("/activity/modules", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { from, to } = req.query as Record<string, string>;
+const modulesQuerySchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  userId: z.coerce.number().int().positive().optional(),
+});
+type ModulesSchemas = { query: typeof modulesQuerySchema };
+
+router.get("/activity/modules", requireAuth, requireRole(...ADMIN_ROLES), validate({ query: modulesQuerySchema }), async (req, res): Promise<void> => {
+  const { from, to, userId: targetUserId } = getValidated<ModulesSchemas>(req).query;
   const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
   const dateTo = to ? new Date(to) : new Date();
+
+  const moduleConditions = [gte(userPageVisitsTable.enteredAt, dateFrom), lte(userPageVisitsTable.enteredAt, dateTo)];
+  if (targetUserId) moduleConditions.push(eq(userPageVisitsTable.userId, targetUserId));
 
   const modules = await db.select({
     moduleName: userPageVisitsTable.moduleName,
@@ -375,7 +405,7 @@ router.get("/activity/modules", requireAuth, requireRole(...ADMIN_ROLES), async 
     avgDuration: sql<number>`avg(${userPageVisitsTable.totalDurationSeconds})`,
   })
   .from(userPageVisitsTable)
-  .where(and(gte(userPageVisitsTable.enteredAt, dateFrom), lte(userPageVisitsTable.enteredAt, dateTo)))
+  .where(and(...moduleConditions))
   .groupBy(userPageVisitsTable.moduleName)
   .orderBy(sql`count(*) desc`);
 
@@ -391,13 +421,17 @@ router.get("/activity/modules", requireAuth, requireRole(...ADMIN_ROLES), async 
   res.json({ data: normalizeModuleBreakdown(rawModules).map(m => ({ ...m, avgDuration: m.avgDuration ?? 0 })) });
 });
 
-router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { userId: userIdStr, from, to } = req.query as Record<string, string>;
-  const targetUserId = parseInt(String(userIdStr), 10);
-  if (!targetUserId || isNaN(targetUserId)) {
-    res.status(400).json({ error: "userId required" });
-    return;
-  }
+const pdfReportQuerySchema = z.object({
+  userId: z.coerce.number().int().positive(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  locale: z.string().max(10).optional(),
+});
+type PdfReportSchemas = { query: typeof pdfReportQuerySchema };
+
+router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), validate({ query: pdfReportQuerySchema }), async (req, res): Promise<void> => {
+  const { userId: targetUserId, from, to, locale: localeParam } = getValidated<PdfReportSchemas>(req).query;
+  const locale = resolveLocale(localeParam);
 
   const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
   const dateTo = to ? new Date(to) : new Date();
@@ -444,8 +478,8 @@ router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), asy
   const totalIdle = cappedPdfSessions.reduce((s, x) => s + (x.idleDurationSeconds || 0), 0);
   const totalTotal = cappedPdfSessions.reduce((s, x) => s + (x.totalDurationSeconds || 0), 0);
 
-  const fromLabel = dateFrom.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-  const toLabel = dateTo.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  const fromLabel = dateFrom.toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" });
+  const toLabel = dateTo.toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" });
 
   function fmtDur(s: number): string {
     if (!s || s < 0) return "—";
@@ -496,8 +530,8 @@ router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), asy
   }).join("");
 
   const sessionRows = sessions.slice(0, 50).map((s, idx) => {
-    const start = s.startedAt ? new Date(s.startedAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
-    const end = s.endedAt ? new Date(s.endedAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+    const start = s.startedAt ? new Date(s.startedAt).toLocaleString(locale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+    const end = s.endedAt ? new Date(s.endedAt).toLocaleString(locale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
     const reason = s.endReason ? pesc(s.endReason.replace(/_/g, " ")) : "—";
     const bg = idx % 2 === 0 ? "#fff" : "#f8fafc";
     return `<tr style="background:${bg}">
@@ -568,6 +602,7 @@ ${sessions.length > 0 ? `
     settings: brandSettings,
     logoBuri: logoUri,
     sealUri,
+    locale,
   });
 
   function resolveChromium(): string | undefined {

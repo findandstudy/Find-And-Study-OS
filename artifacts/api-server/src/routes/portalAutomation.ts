@@ -1,5 +1,5 @@
 import { Router, type IRouter, raw } from "express";
-import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
@@ -1893,6 +1893,8 @@ router.put(
 // ---------------------------------------------------------------------------
 const catalogUniversitiesQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
+  country: z.string().trim().max(120).optional(),
+  type: z.string().trim().max(60).optional(),
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(100).optional(),
 });
@@ -1904,16 +1906,22 @@ router.get(
   requireRole(...ADMIN_ROLES),
   validate({ query: catalogUniversitiesQuerySchema }),
   async (req, res): Promise<void> => {
-    const { q, page, pageSize } = getValidated<CatalogUniversitiesSchemas>(req).query;
+    const { q, country, type, page, pageSize } = getValidated<CatalogUniversitiesSchemas>(req).query;
     const limit = pageSize ?? 20;
     const offset = ((page ?? 1) - 1) * limit;
 
-    const where = q
-      ? or(
+    const conditions = [];
+    if (q) {
+      conditions.push(
+        or(
           ilike(universitiesTable.name, `%${q}%`),
           ilike(universitiesTable.country, `%${q}%`),
-        )
-      : undefined;
+        ),
+      );
+    }
+    if (country) conditions.push(ilike(universitiesTable.country, country));
+    if (type) conditions.push(ilike(universitiesTable.universityType, type));
+    const where = conditions.length ? and(...conditions) : undefined;
 
     const [rows, [{ total }]] = await Promise.all([
       db
@@ -1921,6 +1929,7 @@ router.get(
           id: universitiesTable.id,
           name: universitiesTable.name,
           country: universitiesTable.country,
+          universityType: universitiesTable.universityType,
         })
         .from(universitiesTable)
         .where(where)
@@ -1936,6 +1945,36 @@ router.get(
     res.json({
       data: rows,
       meta: buildPageMeta(total, { page: page ?? 1, limit, offset }),
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/catalog-university-filters
+// Distinct non-empty country + university-type values, for the member picker's
+// filter dropdowns. Keeps the picker's filter options in sync with the catalog.
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-automation/catalog-university-filters",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const [countryRows, typeRows] = await Promise.all([
+      db
+        .selectDistinct({ country: universitiesTable.country })
+        .from(universitiesTable)
+        .where(and(isNotNull(universitiesTable.country), ne(universitiesTable.country, "")))
+        .orderBy(asc(universitiesTable.country)),
+      db
+        .selectDistinct({ universityType: universitiesTable.universityType })
+        .from(universitiesTable)
+        .where(and(isNotNull(universitiesTable.universityType), ne(universitiesTable.universityType, "")))
+        .orderBy(asc(universitiesTable.universityType)),
+    ]);
+
+    res.json({
+      countries: countryRows.map((r) => r.country).filter((c): c is string => !!c),
+      types: typeRows.map((r) => r.universityType).filter((t): t is string => !!t),
     });
   },
 );

@@ -49,6 +49,12 @@ interface CatalogUniversity {
   id: number;
   name: string;
   country: string;
+  universityType: string | null;
+}
+
+interface CatalogFilters {
+  countries: string[];
+  types: string[];
 }
 
 interface MemberRow {
@@ -83,6 +89,11 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CatalogUniversity[]>([]);
   const [searching, setSearching] = useState(false);
+
+  // Country + university-type filters for the picker.
+  const [filterCountry, setFilterCountry] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterOptions, setFilterOptions] = useState<CatalogFilters>({ countries: [], types: [] });
 
   // 409 force-move confirmation state.
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
@@ -161,6 +172,8 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
     setSelected(new Map());
     setQuery("");
     setResults([]);
+    setFilterCountry("");
+    setFilterType("");
     (async () => {
       try {
         const res = await customFetch<MembersResponse>(
@@ -194,6 +207,8 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
         try {
           const params = new URLSearchParams({ pageSize: "20" });
           if (query.trim()) params.set("q", query.trim());
+          if (filterCountry) params.set("country", filterCountry);
+          if (filterType) params.set("type", filterType);
           const res = await customFetch<{ data: CatalogUniversity[] }>(
             `/api/portal-automation/catalog-universities?${params.toString()}`,
           );
@@ -209,7 +224,24 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, portal]);
+  }, [query, portal, filterCountry, filterType]);
+
+  // Load distinct country + type filter options once a portal opens.
+  useEffect(() => {
+    if (!portal) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await customFetch<CatalogFilters>(
+          `/api/portal-automation/catalog-university-filters`,
+        );
+        if (!cancelled) setFilterOptions(res);
+      } catch {
+        if (!cancelled) setFilterOptions({ countries: [], types: [] });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [portal]);
 
   const toggle = (uni: CatalogUniversity) => {
     setSelected((prev) => {
@@ -321,7 +353,7 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
                     }}
                     className="bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
                   >
-                    <div className="p-2 border-b border-border">
+                    <div className="p-2 border-b border-border space-y-2">
                       <input
                         ref={searchInputRef}
                         type="text"
@@ -330,6 +362,28 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
                         placeholder={t("portalAutomation.members.searchPlaceholder")}
                         className="w-full h-8 px-2 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                       />
+                      <div className="flex gap-2">
+                        <select
+                          value={filterCountry}
+                          onChange={(e) => setFilterCountry(e.target.value)}
+                          className="flex-1 h-8 px-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        >
+                          <option value="">{t("portalAutomation.members.allCountries")}</option>
+                          {filterOptions.countries.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={filterType}
+                          onChange={(e) => setFilterType(e.target.value)}
+                          className="flex-1 h-8 px-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        >
+                          <option value="">{t("portalAutomation.members.allTypes")}</option>
+                          {filterOptions.types.map((ty) => (
+                            <option key={ty} value={ty}>{ty}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                     <div className="max-h-72 overflow-y-auto p-1">
                       {searching ? (

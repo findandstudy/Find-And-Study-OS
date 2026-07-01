@@ -5228,7 +5228,9 @@
       "forceMove": "Buraya taşı",
       "targetLabel": "Gönderim hedefi",
       "targetTooltip": "Bu başvurunun gönderileceği portal hesabı.",
-      "routedTag": "yönlendirildi"
+      "routedTag": "yönlendirildi",
+      "allCountries": "Tüm ülkeler",
+      "allTypes": "Tüm türler"
     }
   },
   "activityFeed": {

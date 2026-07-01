@@ -205,10 +205,22 @@ const CHANNELS = [
   { key: "other", i18nKey: "adminActivity.channelOther" as const, icon: MessageSquare },
 ] as const;
 
-function PanelPage() {
+interface StaffUser {
+  id: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  role: string;
+}
+
+interface StaffFilterProps {
+  staffId: number | undefined;
+  setStaffId: (id: number | undefined) => void;
+  staffList: StaffUser[];
+}
+
+function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
   const { t } = useI18n();
   const [preset, setPreset] = useState<PanelPreset>("today");
-  const [staffId, setStaffId] = useState<number | undefined>(undefined);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
 
@@ -217,13 +229,6 @@ function PanelPage() {
     [preset, customFrom, customTo],
   );
   const activityRange = useMemo(() => getPanelActivityRange(preset), [preset]);
-
-  const staffQuery = useListUsers({ limit: 200 });
-  const staffList = useMemo(() => {
-    const data = (staffQuery.data as any);
-    const arr: any[] = Array.isArray(data) ? data : (data?.data ?? data?.items ?? []);
-    return arr.filter((u: any) => STAFF_ROLES.has(u.role));
-  }, [staffQuery.data]);
 
   const activityQuery = useGetActivitySummary({ range: activityRange, staffId });
   const kommoQuery = useGetKommoSummary({ from: from.toISOString(), to: to.toISOString(), staffId });
@@ -285,7 +290,7 @@ function PanelPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("adminActivity.staffAll")}</SelectItem>
-            {staffList.map((u: any) => (
+            {staffList.map((u) => (
               <SelectItem key={u.id} value={String(u.id)}>
                 {u.firstName} {u.lastName}
               </SelectItem>
@@ -439,7 +444,7 @@ function PanelPage() {
   );
 }
 
-function OverviewPage() {
+function OverviewPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const [preset, setPreset] = useState<DatePreset>("today");
@@ -453,17 +458,18 @@ function OverviewPage() {
 
   useEffect(() => {
     const range = getDateRange(preset);
+    const userParam = staffId !== undefined ? `&userId=${staffId}` : "";
     setLoading(true);
     Promise.all([
-      customFetch(`/api/activity/analytics?from=${range.from}&to=${range.to}`),
-      customFetch(`/api/activity/presence`),
-      customFetch(`/api/activity/modules?from=${range.from}&to=${range.to}`),
+      customFetch(`/api/activity/analytics?from=${range.from}&to=${range.to}${userParam}`),
+      customFetch(`/api/activity/presence${staffId !== undefined ? `?userId=${staffId}` : ""}`),
+      customFetch(`/api/activity/modules?from=${range.from}&to=${range.to}${userParam}`),
     ]).then(([a, p, m]) => {
       setAnalytics(a);
       setPresence((p as any).data || []);
       setModules((m as any).data || []);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [preset]);
+  }, [preset, staffId]);
 
   const totals = analytics?.totals || {};
   const userData = (analytics?.data || []) as any[];
@@ -542,6 +548,22 @@ function OverviewPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-end gap-2 flex-wrap">
+        <Select
+          value={staffId !== undefined ? String(staffId) : "all"}
+          onValueChange={v => setStaffId(v === "all" ? undefined : Number(v))}
+        >
+          <SelectTrigger className="w-44 h-8 text-xs rounded-xl">
+            <SelectValue placeholder={t("adminActivity.staffAll")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("adminActivity.staffAll")}</SelectItem>
+            {staffList.map((u) => (
+              <SelectItem key={u.id} value={String(u.id)}>
+                {u.firstName} {u.lastName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {(["today", "yesterday", "7days", "30days"] as DatePreset[]).map(p => (
           <Button key={p} size="sm" variant={preset === p ? "default" : "outline"} className="rounded-xl text-xs"
             onClick={() => setPreset(p)}>
@@ -705,7 +727,7 @@ function OverviewPage() {
 }
 
 function UserDetailPage({ userId }: { userId: number }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [preset, setPreset] = useState<DatePreset>("7days");
@@ -738,7 +760,7 @@ function UserDetailPage({ userId }: { userId: number }) {
     setPdfLoading(true);
     try {
       const range = getDateRange(preset);
-      const url = `/api/activity/report/pdf?userId=${userId}&from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+      const url = `/api/activity/report/pdf?userId=${userId}&from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}&locale=${encodeURIComponent(lang)}`;
       const response = await fetch(url, { credentials: "include" });
       if (!response.ok) throw new Error("PDF generation failed");
       const blob = await response.blob();
@@ -955,6 +977,18 @@ function UserDetailPage({ userId }: { userId: number }) {
 export default function AdminActivity({ userId }: { userId?: number }) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<"panel" | "overview">("panel");
+  const [staffId, setStaffId] = useState<number | undefined>(undefined);
+
+  const staffQuery = useListUsers({ limit: 200 });
+  const staffList = useMemo<StaffUser[]>(() => {
+    const data = staffQuery.data as unknown;
+    const arr = Array.isArray(data)
+      ? data
+      : ((data as { data?: unknown; items?: unknown })?.data
+        ?? (data as { items?: unknown })?.items
+        ?? []);
+    return (arr as StaffUser[]).filter((u) => STAFF_ROLES.has(u.role));
+  }, [staffQuery.data]);
 
   if (userId) return <UserDetailPage userId={userId} />;
 
@@ -985,7 +1019,9 @@ export default function AdminActivity({ userId }: { userId?: number }) {
         </div>
       </div>
 
-      {activeTab === "panel" ? <PanelPage /> : <OverviewPage />}
+      {activeTab === "panel"
+        ? <PanelPage staffId={staffId} setStaffId={setStaffId} staffList={staffList} />
+        : <OverviewPage staffId={staffId} setStaffId={setStaffId} staffList={staffList} />}
     </div>
   );
 }

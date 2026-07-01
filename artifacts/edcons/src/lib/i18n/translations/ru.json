@@ -5228,7 +5228,9 @@
       "forceMove": "Move here",
       "targetLabel": "Submission target",
       "targetTooltip": "The portal account this application will be submitted through.",
-      "routedTag": "routed"
+      "routedTag": "routed",
+      "allCountries": "All countries",
+      "allTypes": "All types"
     }
   },
   "activityFeed": {
