@@ -116,69 +116,48 @@ const COUNTRY_NAME_MAP: Record<string, string> = {
   "united kingdom": "Birleşik Krallık",
   "united states": "Amerika Birleşik Devletleri",
   "united states of america": "Amerika Birleşik Devletleri",
-  "germany": "Almanya",
-  "france": "Fransa",
-  "india": "Hindistan",
-  "pakistan": "Pakistan",
-  "nigeria": "Nijerya",
+  "united arab emirates": "Birleşik Arap Emirlikleri",
+  afghanistan: "Afganistan",
+  algeria: "Cezayir",
+  azerbaijan: "Azerbaycan",
+  bahrain: "Bahreyn",
+  bangladesh: "Bangladeş",
+  cameroon: "Kamerun",
+  china: "Çin",
+  egypt: "Mısır",
+  france: "Fransa",
+  germany: "Almanya",
+  ghana: "Gana",
+  india: "Hindistan",
+  indonesia: "Endonezya",
+  iran: "İran",
+  iraq: "Irak",
+  jordan: "Ürdün",
+  kazakhstan: "Kazakistan",
+  kenya: "Kenya",
+  kuwait: "Kuveyt",
+  kyrgyzstan: "Kırgızistan",
+  lebanon: "Lübnan",
+  libya: "Libya",
+  morocco: "Fas",
+  nigeria: "Nijerya",
+  oman: "Umman",
+  pakistan: "Pakistan",
+  palestine: "Filistin",
+  qatar: "Katar",
+  russia: "Rusya",
   "saudi arabia": "Suudi Arabistan",
-  "kuwait": "Kuveyt",
-  "qatar": "Katar",
-  "oman": "Umman",
-  "palestine": "Filistin",
-  "russia": "Rusya",
-  "ukraine": "Ukrayna",
-  "ghana": "Gana",
-  "kenya": "Kenya",
-  "tanzania": "Tanzanya",
-  "cameroon": "Kamerun",
-  "indonesia": "Endonezya",
-  "kazakhstan": "Kazakistan",
-  "uzbekistan": "Özbekistan",
-  "morocco": "Fas",
-  "jordan": "Ürdün",
-  "iran": "İran",
-  "iraq": "Irak",
-  "syria": "Suriye",
-  "lebanon": "Lübnan",
-  "tunisia": "Tunus",
-  afghanistan:              "Afganistan",
-  algeria:                  "Cezayir",
-  azerbaijan:               "Azerbaycan",
-  bahrain:                  "Bahreyn",
-  bangladesh:               "Bangladeş",
-  china:                    "Çin",
-  egypt:                    "Mısır",
-  "united arab emirates":   "Birleşik Arap Emirlikleri",
-  france:                   "Fransa",
-  germany:                  "Almanya",
-  india:                    "Hindistan",
-  iran:                     "İran",
-  iraq:                     "Irak",
-  jordan:                   "Ürdün",
-  kazakhstan:               "Kazakistan",
-  kuwait:                   "Kuveyt",
-  kyrgyzstan:               "Kırgızistan",
-  lebanon:                  "Lübnan",
-  libya:                    "Libya",
-  morocco:                  "Fas",
-  nigeria:                  "Nijerya",
-  oman:                     "Umman",
-  pakistan:                 "Pakistan",
-  palestine:                "Filistin",
-  qatar:                    "Katar",
-  russia:                   "Rusya",
-  "saudi arabia":           "Suudi Arabistan",
-  somalia:                  "Somali",
-  sudan:                    "Sudan",
-  syria:                    "Suriye",
-  tajikistan:               "Tacikistan",
-  tunisia:                  "Tunus",
-  turkey:                   "Türkiye",
-  turkmenistan:             "Türkmenistan",
-  ukraine:                  "Ukrayna",
-  uzbekistan:               "Özbekistan",
-  yemen:                    "Yemen",
+  somalia: "Somali",
+  sudan: "Sudan",
+  syria: "Suriye",
+  tajikistan: "Tacikistan",
+  tanzania: "Tanzanya",
+  tunisia: "Tunus",
+  turkey: "Türkiye",
+  turkmenistan: "Türkmenistan",
+  ukraine: "Ukrayna",
+  uzbekistan: "Özbekistan",
+  yemen: "Yemen",
 };
 
 function resolveCountry(
@@ -245,7 +224,7 @@ async function dismissJconfirm(page: Page, logger: typeof import("../../browser.
 }
 
 // ---------------------------------------------------------------------------
-// Click the visible "Sonraki Adım" button.
+// Click the visible "Next Step" / "Sonraki Adım" button (language-agnostic).
 // Pre-dismisses any open jconfirm before clicking (e.g. lingering from prev
 // step), then post-dismisses one that may open as a result (e.g. new-student
 // confirmation). DOM-click used to bypass Playwright overlay detection.
@@ -258,7 +237,7 @@ async function clickNext(page: Page, logger: typeof import("../../browser.js").l
     await page.waitForTimeout(400);
   }
 
-  const btn = page.getByRole("button", { name: /Sonraki Adım/i });
+  const btn = page.getByRole("button", { name: /(Sonraki Adım|Next Step)/i });
   await btn.waitFor({ state: "visible", timeout: 8000 });
   await btn.click({ force: true });
 
@@ -843,7 +822,9 @@ async function ensureEducationRow(
     "[topkapi] Step 3: no education row present — clicking add-row button",
   );
   const addBtn = page
-    .getByRole("button", { name: /E[ğg]itim Ge[çc]mi[şs]i.*Ekle|Ge[çc]mi[şs]i Ekle/i })
+    .getByRole("button", {
+      name: /E[ğg]itim Ge[çc]mi[şs]i.*Ekle|Ge[çc]mi[şs]i Ekle|Add.*Education|Education.*Add/i,
+    })
     .first();
   if (await addBtn.count()) {
     await addBtn.click({ force: true }).catch(() => {});
@@ -1493,7 +1474,9 @@ export const topkapiAdapter: UniversityAdapter = {
             return {
               id: o.value,
               name,
-              disabled: o.disabled || /\(\s*Kontenjan\s*Dolu\s*\)/i.test(name),
+              disabled:
+                o.disabled ||
+                /\(\s*(?:Kontenjan\s*Dolu|Quota\s*Full)\s*\)/i.test(name),
             };
           }),
     );
@@ -1694,14 +1677,14 @@ export const topkapiAdapter: UniversityAdapter = {
     // capture externalRef when present; it is NOT required for success. The
     // captured <uuid> is returned as externalRef so the runner persists it to
     // portal_submissions.external_ref.
-    logger.info("[topkapi] clicking Başvuruyu Tamamla");
+    logger.info("[topkapi] clicking Complete Application / Başvuruyu Tamamla");
 
     // Clear any leftover modal, then make sure the final-submit button is reachable.
     for (let i = 0; i < 5; i++) { if ((await page.locator(".jconfirm.jconfirm-open").count()) === 0) break; await dismissJconfirm(page, logger); await page.waitForTimeout(400); }
     for (let i = 0; i < 5; i++) {
-      const finBtn = page.getByRole("button", { name: /Başvuruyu Tamamla/i });
+      const finBtn = page.getByRole("button", { name: /(Başvuruyu Tamamla|Complete Application)/i });
       if (await finBtn.isVisible().catch(() => false)) { logger.warn("[topkapi] final-submit visible after " + i + " advance(s)"); break; }
-      logger.warn("[topkapi] advancing to final step (Sonraki Adım) #" + (i + 1));
+      logger.warn("[topkapi] advancing to final step (Next Step / Sonraki Adım) #" + (i + 1));
       await clickNext(page, logger).catch(() => {});
       await page.waitForTimeout(1800).catch(() => {});
     }
@@ -1712,7 +1695,7 @@ export const topkapiAdapter: UniversityAdapter = {
       .waitForResponse((r) => r.url().includes("application-save.php"), { timeout: 45_000 })
       .catch(() => null);
 
-    await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click().catch(async () => { await page.getByRole("button", { name: /Başvuruyu Tamamla/i }).click({ force: true }).catch(() => {}); });
+    await page.getByRole("button", { name: /(Başvuruyu Tamamla|Complete Application)/i }).click().catch(async () => { await page.getByRole("button", { name: /(Başvuruyu Tamamla|Complete Application)/i }).click({ force: true }).catch(() => {}); });
 
     // (a) Confirm the optional .jconfirm summary modal if it appears.
     const modalAppeared = await page
@@ -1722,7 +1705,7 @@ export const topkapiAdapter: UniversityAdapter = {
     if (modalAppeared) {
       let confirmed = await page
         .locator(".jconfirm")
-        .getByRole("button", { name: /Tamamla|Onayla|Evet|Gönder|Confirm/i })
+        .getByRole("button", { name: /Tamamla|Onayla|Evet|Gönder|Confirm|Complete|Approve|Yes|Submit|OK/i })
         .first()
         .click({ timeout: 2000 })
         .then(() => true)
