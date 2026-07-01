@@ -143,6 +143,76 @@ test("LANG1 — English query only matches English-medium candidates", () => {
 });
 
 // ---------------------------------------------------------------------------
+// LANG2 — track hard filter (Turkish direction): a Turkish-medium query must
+// NOT match an English-medium variant, even when subject tokens are identical.
+// ---------------------------------------------------------------------------
+
+test("LANG2 — Turkish query only matches Turkish-medium candidates", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "ba-en", name: "Business Administration - English (Bachelor)" },
+    { id: "ba-tr", name: "Business Administration - Turkish (Bachelor)" },
+  ];
+
+  const result = matchProgram("Business Administration (Turkish)", candidates);
+
+  assert.ok(result !== null,               "Expected a Turkish-medium match");
+  assert.equal(result.match.id, "ba-tr",  "Must match the Turkish variant, not English");
+});
+
+// ---------------------------------------------------------------------------
+// LANG3 — English-mode portal labels: a CRM English program name matches the
+// English-track option (near-exact) and never the Turkish-track sibling.
+// ---------------------------------------------------------------------------
+
+test("LANG3 — CRM English name matches English-track option (track-aware)", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "1", name: "International Trade and Business - English (Bachelor)" },
+    { id: "2", name: "International Trade and Business - Turkish (Bachelor)" },
+    { id: "3", name: "Interior Architecture and Environmental Design - Turkish (Bachelor)" },
+  ];
+
+  const result = matchProgram(
+    "Bachelor of International Trade and Business (English)",
+    candidates,
+  );
+
+  assert.ok(result !== null,            "Expected an English-track match");
+  assert.equal(result.match.id, "1",   "Must match the English variant, not Turkish");
+});
+
+// ---------------------------------------------------------------------------
+// LANG4 — strict track: an explicit English query with ONLY Turkish-labeled
+// candidates returns null (programMissing) rather than a cross-track match.
+// ---------------------------------------------------------------------------
+
+test("LANG4 — English query + only Turkish-medium candidates → null", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "ba-tr",  name: "Business Administration - Turkish (Bachelor)" },
+    { id: "law-tr", name: "Law - Turkish (Bachelor)" },
+  ];
+
+  const result = matchProgram("Business Administration (English)", candidates);
+
+  assert.equal(result, null, "Must NOT cross-match an English query to a Turkish option");
+});
+
+// ---------------------------------------------------------------------------
+// LANG5 — strict track (reverse): a Turkish query with ONLY English-labeled
+// candidates returns null rather than a cross-track match.
+// ---------------------------------------------------------------------------
+
+test("LANG5 — Turkish query + only English-medium candidates → null", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "ba-en",  name: "Business Administration - English (Bachelor)" },
+    { id: "law-en", name: "Law - English (Bachelor)" },
+  ];
+
+  const result = matchProgram("Business Administration (Turkish)", candidates);
+
+  assert.equal(result, null, "Must NOT cross-match a Turkish query to an English option");
+});
+
+// ---------------------------------------------------------------------------
 // DICT1 — EN↔TR dictionary: English query → Turkish candidate
 // ---------------------------------------------------------------------------
 

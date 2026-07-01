@@ -368,9 +368,43 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 function hasTez(f: string): boolean    { return /\btezli\b/.test(f); }
 /** True when the folded string indicates a non-thesis (tezsiz) programme. */
 function hasTezsiz(f: string): boolean { return /\btezsiz\b/.test(f); }
-/** True when the programme is taught in English. */
-function hasEnglish(f: string): boolean {
-  return /\b(ingilizce|english)\b/.test(f);
+
+// ---------------------------------------------------------------------------
+// parseTrack — extract the language-of-instruction "track" from a program label
+//
+// Recognises the medium as a STRUCTURED marker (never a leading subject word),
+// covering every format we handle:
+//   • Portal English mode:  "International Trade and Business - English (Bachelor)"
+//   • CRM English names:     "Bachelor of International Trade and Business (English)"
+//   • CRM / portal Turkish:  "İşletme (Türkçe)", "... (İngilizce - Lisans - ...)"
+//   • Synthetic trailing:    "Psikoloji English"
+//
+// A leading subject like "English Language and Literature", or a teaching
+// programme ("İngilizce/Türkçe Öğretmenliği"), deliberately returns null — the
+// language word there is the SUBJECT, not the medium. Returns null when no
+// track is present OR when both are present (ambiguous → don't hard-filter).
+// ---------------------------------------------------------------------------
+function normLang(s: string): string {
+  return s
+    .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
+    .replace(/[şŞ]/g, "s").replace(/[çÇ]/g, "c").replace(/[öÖ]/g, "o")
+    .replace(/[üÜ]/g, "u").replace(/[ğĞ]/g, "g")
+    .toLowerCase();
+}
+
+export function parseTrack(name: string): "en" | "tr" | null {
+  const s = normLang(name);
+  const en =
+    /[-(]\s*(?:english|ingilizce)\b/.test(s) ||
+    /\benglish medium\b/.test(s) ||
+    /\b(?:english|ingilizce)\s*\)?\s*$/.test(s);
+  const tr =
+    /[-(]\s*(?:turkish|turkce)\b/.test(s) ||
+    /\bturkish medium\b/.test(s) ||
+    /\b(?:turkish|turkce)\s*\)?\s*$/.test(s);
+  if (en && !tr) return "en";
+  if (tr && !en) return "tr";
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -381,6 +415,7 @@ function hasEnglish(f: string): boolean {
 // ---------------------------------------------------------------------------
 function applyHardFilters(
   queryFolded: string,
+  queryTrack: "en" | "tr" | null,
   candidates: ProgramCandidate[],
 ): ProgramCandidate[] {
   let pool = candidates;
@@ -394,10 +429,24 @@ function applyHardFilters(
     if (f.length > 0) pool = f;
   }
 
-  // Language: English-medium
-  if (hasEnglish(queryFolded)) {
-    const f = pool.filter(c => hasEnglish(fold(c.name)));
-    if (f.length > 0) pool = f;
+  // Language-of-instruction track (English ↔ Turkish). Prevents an English CRM
+  // program from matching a Turkish portal option (and vice versa). Only
+  // applies when the QUERY declares an explicit track. Unlabeled candidates are
+  // kept (open-world), but an explicit opposite-track option is NEVER matched —
+  // if the pool is exclusively opposite-track the result is null (programMissing).
+  if (queryTrack) {
+    const opposite = queryTrack === "en" ? "tr" : "en";
+    const same = pool.filter(c => parseTrack(c.name) === queryTrack);
+    if (same.length > 0) {
+      pool = same;
+    } else {
+      // No same-track candidate — drop the OPPOSITE explicit track entirely so
+      // an EN query never lands on a TR-labeled option (and vice versa).
+      // Unlabeled (null-track) candidates are kept. If EVERY candidate is the
+      // opposite track this leaves the pool empty, and matchProgram returns
+      // null (→ programMissing) rather than ever producing a cross-track match.
+      pool = pool.filter(c => parseTrack(c.name) !== opposite);
+    }
   }
 
   return pool;
@@ -457,7 +506,8 @@ export function matchProgram(
 
   // --- 2. Hard filters ---
   const queryFolded = fold(programName);
-  const pool = applyHardFilters(queryFolded, candidates);
+  const queryTrack  = parseTrack(programName);
+  const pool = applyHardFilters(queryFolded, queryTrack, candidates);
 
   // --- 3. Primary Jaccard (no expansion) ---
   // Synonym map: built-in groups, optionally extended with DB-supplied groups

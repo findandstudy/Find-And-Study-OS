@@ -872,6 +872,177 @@ async function takeShot(page: Page, step: string): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
+// Language — switch the portal UI to English BEFORE any program discovery so
+// Step-4 program labels arrive in English (e.g.
+// "International Trade and Business - English (Bachelor)"), giving near-exact
+// matches against CRM English program names and recovering English-track
+// programs that read as "not found" while the portal was in Turkish.
+//
+// Fully idempotent (skips when already English) and NON-FATAL: if the switch
+// cannot be performed the run continues in the current language and the matcher
+// falls back to its EN↔TR synonym dictionary exactly as before.
+// ---------------------------------------------------------------------------
+
+/** Cheap, idempotent check: is the panel UI currently rendered in English? */
+async function isEnglishUI(page: Page): Promise<boolean> {
+  return await page.evaluate(() => {
+    const htmlLang = (document.documentElement.getAttribute("lang") || "")
+      .trim()
+      .toLowerCase();
+    if (htmlLang.startsWith("en")) return true;
+    if (htmlLang.startsWith("tr")) return false;
+    // Fallback heuristic only when <html lang> is unset/ambiguous: compare the
+    // count of well-known Turkish vs English UI words in the visible chrome.
+    const txt = (document.body?.innerText || "").toLowerCase();
+    const tr = [
+      "başvuru", "basvuru", "çıkış", "cikis", "kaydet", "ileri", "öğrenci",
+      "ogrenci", "giriş", "giris", "kişisel", "kisisel", "eğitim",
+    ];
+    const en = [
+      "application", "logout", "sign out", "save", "next", "student",
+      "login", "personal", "education",
+    ];
+    const trHits = tr.filter((w) => txt.includes(w)).length;
+    const enHits = en.filter((w) => txt.includes(w)).length;
+    return enHits > trHits;
+  });
+}
+
+/**
+ * Discover and activate an English language switch in the CURRENT page.
+ * Adaptive (scans the live DOM rather than hard-coding a single selector) so it
+ * survives theme markup changes. Returns true when a switch action was
+ * performed (the caller verifies the result via isEnglishUI).
+ */
+async function clickEnglishSwitch(page: Page): Promise<boolean> {
+  return await page.evaluate(() => {
+    const norm = (s: string | null | undefined) =>
+      (s || "")
+        .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
+        .toLowerCase()
+        .trim();
+
+    // Best-effort: open any language-menu toggles first so on-demand menus
+    // render their English entry (clicking a toggle is harmless).
+    document
+      .querySelectorAll<HTMLElement>(
+        "[data-kt-menu-trigger], .language-switch, .lang-switch, [class*='language'] [data-bs-toggle], [class*='lang'] [data-bs-toggle]",
+      )
+      .forEach((t) => {
+        try { t.click(); } catch { /* ignore */ }
+      });
+
+    const clickables = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        "a, button, [role='menuitem'], [data-kt-lang], [data-lang], li[data-value], option",
+      ),
+    );
+
+    const scoreEnglish = (el: HTMLElement): number => {
+      const text = norm(el.textContent);
+      const href = norm(el.getAttribute("href"));
+      const dataLang = norm(
+        el.getAttribute("data-kt-lang") ||
+          el.getAttribute("data-lang") ||
+          el.getAttribute("data-value") ||
+          el.getAttribute("hreflang") ||
+          el.getAttribute("lang"),
+      );
+      let score = 0;
+      if (dataLang === "en" || dataLang === "english") score += 100;
+      if (
+        /(?:^|[\/=?&])lang(?:uage)?[=\/]en(?![a-z])/.test(href) ||
+        /(?:^|[\/=?&])locale[=\/]en(?![a-z])/.test(href)
+      ) {
+        score += 90;
+      }
+      if (text === "english" || text === "en") score += 60;
+      // A short label containing "english" (e.g. a flag menu item) — but never a
+      // long program name like "English Language and Literature".
+      if (/\benglish\b/.test(text) && text.length <= 24) score += 25;
+      return score;
+    };
+
+    let best: HTMLElement | null = null;
+    let bestScore = 0;
+    for (const el of clickables) {
+      const s = scoreEnglish(el);
+      if (s > bestScore) { bestScore = s; best = el; }
+    }
+    if (!best || bestScore < 60) return false;
+
+    if (best.tagName === "OPTION") {
+      const sel = best.closest("select") as HTMLSelectElement | null;
+      if (sel) {
+        sel.value = (best as HTMLOptionElement).value;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      }
+    }
+    try { best.click(); return true; } catch { return false; }
+  });
+}
+
+/**
+ * Ensure the portal UI is in English. Idempotent + non-fatal. Must be called on
+ * a panel page (where the language switcher lives) BEFORE any application form
+ * is opened. Language preference persists at session level, so a single call
+ * per login covers submit(), dry-runs and listPrograms().
+ */
+async function ensureEnglishLanguage(page: Page): Promise<void> {
+  try {
+    if (await isEnglishUI(page)) {
+      logger.info("[topkapi] language already English — skipping switch");
+      return;
+    }
+  } catch { /* detection best-effort */ }
+
+  logger.info("[topkapi] switching portal language to English (pre-program-discovery)");
+
+  // Strategy A — discover + activate an English switch control in the page.
+  try {
+    const clicked = await clickEnglishSwitch(page);
+    if (clicked) {
+      await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+      if (await isEnglishUI(page).catch(() => false)) {
+        logger.info("[topkapi] language switched to English (via UI control)");
+        return;
+      }
+    }
+  } catch (e) {
+    logger.warn("[topkapi] language switch (UI control) failed:", (e as Error).message);
+  }
+
+  // Strategy B — common Laravel/Metronic locale routes (GET, idempotent). The
+  // query-param form is tried first as it is the least intrusive; each attempt
+  // is only accepted after isEnglishUI() confirms the switch took effect.
+  const localeUrls = [
+    `${PORTAL_URL}/panel?lang=en`,
+    `${PORTAL_URL}/lang/en`,
+    `${PORTAL_URL}/locale/en`,
+    `${PORTAL_URL}/language/en`,
+  ];
+  for (const url of localeUrls) {
+    try {
+      await page.goto(url, { waitUntil: "networkidle", timeout: 8000 });
+      if (await isEnglishUI(page).catch(() => false)) {
+        logger.info(`[topkapi] language switched to English (via ${url})`);
+        return;
+      }
+    } catch { /* try next candidate */ }
+  }
+
+  logger.warn(
+    "[topkapi] could not switch portal to English — continuing in current language " +
+      "(matcher falls back to EN↔TR synonyms). URL=" + page.url(),
+  );
+  // Non-fatal: restore a known panel page so downstream navigation is stable.
+  try {
+    await page.goto(`${PORTAL_URL}/panel`, { waitUntil: "networkidle", timeout: 8000 });
+  } catch { /* ignore */ }
+}
+
+// ---------------------------------------------------------------------------
 // Adapter
 // ---------------------------------------------------------------------------
 export const topkapiAdapter: UniversityAdapter = {
@@ -916,6 +1087,12 @@ export const topkapiAdapter: UniversityAdapter = {
         { timeout: 15000 },
       );
     }
+
+    // Switch the portal UI to English BEFORE any application form is opened, so
+    // Step-4 program labels arrive in English for near-exact CRM matching. The
+    // preference persists at session level, so this single call covers submit(),
+    // dry-runs and listPrograms(). Idempotent + non-fatal.
+    await ensureEnglishLanguage(page);
 
     await saveState(page, STORAGE_PATH);
     logger.info("[topkapi] login successful — URL:", page.url());
