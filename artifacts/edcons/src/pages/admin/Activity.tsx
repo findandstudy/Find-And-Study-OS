@@ -445,9 +445,11 @@ function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
 }
 
 function OverviewPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [preset, setPreset] = useState<DatePreset>("today");
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [analytics, setAnalytics] = useState<any>(null);
   const [presence, setPresence] = useState<any[]>([]);
   const [modules, setModules] = useState<any[]>([]);
@@ -499,6 +501,27 @@ function OverviewPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
 
   function handleSort(key: string) {
     setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" });
+  }
+
+  async function handleDownloadPdf() {
+    if (pdfLoading || staffId === undefined) return;
+    setPdfLoading(true);
+    try {
+      const range = getDateRange(preset);
+      const url = `/api/activity/report/pdf?userId=${staffId}&from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}&locale=${encodeURIComponent(lang)}`;
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) throw new Error("PDF generation failed");
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `activity-${staffId}.pdf`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch {
+      toast({ title: t("common.error"), description: t("adminActivity.pdfError"), variant: "destructive" });
+    } finally {
+      setPdfLoading(false);
+    }
   }
 
   function SortTh({ label, sortKey, className }: { label: string; sortKey: string; className?: string }) {
@@ -570,6 +593,15 @@ function OverviewPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
             {t(`adminActivity.preset.${p}` as any)}
           </Button>
         ))}
+        {staffId !== undefined && (
+          <Button
+            size="sm" variant="outline" className="rounded-xl text-xs gap-1.5"
+            onClick={handleDownloadPdf} disabled={pdfLoading}
+          >
+            {pdfLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            {pdfLoading ? t("adminActivity.downloadingPdf") : t("adminActivity.downloadPdf")}
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

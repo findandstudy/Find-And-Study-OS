@@ -81,13 +81,9 @@ export function buildBrandedHtml(opts: BuildBrandedHtmlOptions): string {
   const primary = s.pdfPrimaryColor || "#2563eb";
   const accent = s.pdfAccentColor || "#0ea5e9";
   const company = esc(s.companyName || "Find & Study");
-  const footerText = esc(s.pdfFooterText || "");
   const headerText = esc(s.pdfHeaderText || "");
   const watermarkText = esc(s.pdfWatermarkText || "");
   const signatureLabel = esc(s.pdfSignatureLabel || "");
-  const generatedAt = new Date().toLocaleString(opts.locale || "en-GB", {
-    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-  });
 
   const logoHtml = logoBuri
     ? `<img src="${logoBuri}" alt="${company}" style="height:36px;object-fit:contain;max-width:180px;display:block" />`
@@ -140,9 +136,6 @@ tbody td{padding:4px 8px;border-bottom:1px solid #f1f5f9;font-size:9.5px;vertica
 .bar-chart{margin-bottom:16px}
 .pct-bar{height:6px;background:${esc(accent)}33;border-radius:3px;overflow:hidden;margin-top:2px}
 .pct-bar-fill{height:100%;background:${esc(primary)};border-radius:3px}
-footer{position:fixed;bottom:6mm;left:16mm;right:16mm;font-size:8px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:4px;display:flex;justify-content:space-between}
-.page-num::before{content:counter(page)}
-.page-count::before{content:counter(pages)}
 </style></head><body>
 ${watermarkHtml}
 <div style="position:relative;z-index:1">
@@ -157,11 +150,26 @@ ${watermarkHtml}
 ${body}
 ${signatureHtml}
 </div>
-<footer>
-  <span>${company}${footerText ? " &mdash; " + footerText : ""}</span>
-  <span style="display:flex;align-items:center;gap:6px">Generated: ${generatedAt} &nbsp;|&nbsp; Page <span class="page-num"></span> / <span class="page-count"></span></span>
-</footer>
 </body></html>`;
+}
+
+/**
+ * Build the footer markup for Chromium's `page.pdf({ displayHeaderFooter, footerTemplate })`.
+ * Chromium does NOT resolve CSS `counter(page)`/`counter(pages)` in body content (they render
+ * as 0), so page numbering must live in the print header/footer template where the special
+ * `pageNumber` / `totalPages` classes are substituted. Keeps the branded footer (company,
+ * footer text, generated timestamp) consistent with the in-body report.
+ */
+export function buildBrandedFooterTemplate(s: BrandedPdfSettings, locale?: string): string {
+  const company = esc(s.companyName || "Find & Study");
+  const footerText = esc(s.pdfFooterText || "");
+  const generatedAt = new Date().toLocaleString(locale || "en-GB", {
+    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  return `<div style="font-size:8px;color:#94a3b8;width:100%;margin:0 16mm;padding-top:4px;border-top:1px solid #e2e8f0;font-family:'DejaVu Sans','Noto Sans',Arial,sans-serif;display:flex;justify-content:space-between;-webkit-print-color-adjust:exact">
+  <span>${company}${footerText ? " — " + footerText : ""}</span>
+  <span>Generated: ${generatedAt} &nbsp;|&nbsp; Page <span class="pageNumber"></span> / <span class="totalPages"></span></span>
+</div>`;
 }
 
 export function buildDailyBarChartSvg(

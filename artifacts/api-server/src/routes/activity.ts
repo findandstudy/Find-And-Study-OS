@@ -24,6 +24,7 @@ import {
   loadBrandedPdfSettings,
   resolveBrandedAssets,
   buildBrandedHtml,
+  buildBrandedFooterTemplate,
   buildDailyBarChartSvg,
 } from "../lib/pdf/brandedBase";
 
@@ -597,13 +598,14 @@ ${sessions.length > 0 ? `
 
   const html = buildBrandedHtml({
     title: `${(user.firstName || "")} ${(user.lastName || "")}`.trim() || "Activity Report",
-    subtitle: `Activity Report &mdash; ${fromLabel} &ndash; ${toLabel}`,
+    subtitle: `Activity Report — ${fromLabel} – ${toLabel}`,
     body,
     settings: brandSettings,
     logoBuri: logoUri,
     sealUri,
     locale,
   });
+  const footerTemplate = buildBrandedFooterTemplate(brandSettings, locale);
 
   function resolveChromium(): string | undefined {
     const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
@@ -642,7 +644,14 @@ ${sessions.length > 0 ? `
         const page = await browser.newPage();
         page.setDefaultTimeout(30000);
         await page.setContent(html, { waitUntil: "domcontentloaded" });
-        return await page.pdf({ format: "A4", printBackground: true });
+        return await page.pdf({
+          format: "A4",
+          printBackground: true,
+          displayHeaderFooter: true,
+          headerTemplate: "<span></span>",
+          footerTemplate,
+          margin: { top: "18mm", right: "16mm", bottom: "22mm", left: "16mm" },
+        });
       } finally {
         await browser.close();
       }
