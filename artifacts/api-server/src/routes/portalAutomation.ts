@@ -1910,7 +1910,11 @@ router.get(
     const limit = pageSize ?? 20;
     const offset = ((page ?? 1) - 1) * limit;
 
+    // Only active (non-soft-deleted) catalog universities. The filter-options
+    // endpoint below applies this identical base filter, so a country/type can
+    // only surface as an option when at least one matching university exists.
     const conditions = [];
+    conditions.push(eq(universitiesTable.isActive, true));
     if (q) {
       conditions.push(
         or(
@@ -1921,7 +1925,7 @@ router.get(
     }
     if (country) conditions.push(ilike(universitiesTable.country, country));
     if (type) conditions.push(ilike(universitiesTable.universityType, type));
-    const where = conditions.length ? and(...conditions) : undefined;
+    const where = and(...conditions);
 
     const [rows, [{ total }]] = await Promise.all([
       db
@@ -1963,12 +1967,20 @@ router.get(
       db
         .selectDistinct({ country: universitiesTable.country })
         .from(universitiesTable)
-        .where(and(isNotNull(universitiesTable.country), ne(universitiesTable.country, "")))
+        .where(and(
+          eq(universitiesTable.isActive, true),
+          isNotNull(universitiesTable.country),
+          ne(universitiesTable.country, ""),
+        ))
         .orderBy(asc(universitiesTable.country)),
       db
         .selectDistinct({ universityType: universitiesTable.universityType })
         .from(universitiesTable)
-        .where(and(isNotNull(universitiesTable.universityType), ne(universitiesTable.universityType, "")))
+        .where(and(
+          eq(universitiesTable.isActive, true),
+          isNotNull(universitiesTable.universityType),
+          ne(universitiesTable.universityType, ""),
+        ))
         .orderBy(asc(universitiesTable.universityType)),
     ]);
 
