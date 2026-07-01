@@ -12,7 +12,7 @@
 
 import os from "node:os";
 import { and, eq, isNull } from "drizzle-orm";
-import { db, portalUniversitiesTable } from "@workspace/db";
+import { db, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
 import { isExperimentalAdapterKey } from "@workspace/portal-adapters";
 import {
   claimNext,
@@ -74,6 +74,19 @@ async function loadAutoProcessKeys(): Promise<string[]> {
     .map((u) => u.universityKey);
 }
 
+/**
+ * Loads the configured trigger stages. Only applications currently in one of
+ * these stages are eligible for auto-processing (mirrors the enqueue-time
+ * candidate selection). An empty array means nothing is auto-processed.
+ */
+async function loadTriggerStages(): Promise<string[]> {
+  const [settings] = await db
+    .select({ triggerStages: portalAutomationSettingsTable.triggerStages })
+    .from(portalAutomationSettingsTable)
+    .limit(1);
+  return settings?.triggerStages ?? [];
+}
+
 async function tick(): Promise<void> {
   // Reset stale locks on every tick (cheap, idempotent)
   const released = await releaseStale(STALE_MS);
@@ -86,7 +99,11 @@ async function tick(): Promise<void> {
   const autoProcessKeys = await loadAutoProcessKeys();
   if (autoProcessKeys.length === 0) return;
 
-  const sub = await claimNext(WORKER_ID, autoProcessKeys);
+  // Gate on configured trigger stages: only claim submissions whose application
+  // is currently in one of those stages (mirrors the enqueue scan).
+  const triggerStages = await loadTriggerStages();
+
+  const sub = await claimNext(WORKER_ID, autoProcessKeys, triggerStages);
   if (!sub) return; // Nothing to do
 
   console.log(

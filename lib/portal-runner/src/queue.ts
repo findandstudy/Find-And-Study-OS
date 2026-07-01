@@ -78,40 +78,53 @@ const CLAIM_COLS = `
  *   When provided (non-empty), only submissions belonging to these
  *   universities are considered. Used by auto-drain to respect the
  *   per-university `autoProcess` flag.
+ * @param triggerStages  Optional list of application stages that gate which
+ *   submissions may be claimed. When provided (an array, even empty), only
+ *   submissions whose application is currently in one of these stages are
+ *   claimed — an empty array matches nothing, mirroring the enqueue-time
+ *   candidate selection. `undefined` skips the stage filter entirely (used by
+ *   the manual "process all queued" path, which must not be stage-gated).
  *
  * Returns null when the queue is empty or all rows are locked by other workers.
  */
 export async function claimNext(
   workerId: string,
   universityKeys?: string[],
+  triggerStages?: string[],
 ): Promise<ClaimedSubmission | null> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    let sel: { rows: ClaimedSubmission[] };
+    const conds: string[] = ["status = 'queued'", "deleted_at IS NULL"];
+    const params: unknown[] = [];
+
     if (universityKeys && universityKeys.length > 0) {
-      sel = await client.query<ClaimedSubmission>(`
-        SELECT ${CLAIM_COLS}
-        FROM portal_submissions
-        WHERE status = 'queued'
-          AND deleted_at IS NULL
-          AND university_key = ANY($1::text[])
-        ORDER BY created_at ASC
-        LIMIT 1
-        FOR UPDATE SKIP LOCKED
-      `, [universityKeys]);
-    } else {
-      sel = await client.query<ClaimedSubmission>(`
-        SELECT ${CLAIM_COLS}
-        FROM portal_submissions
-        WHERE status = 'queued'
-          AND deleted_at IS NULL
-        ORDER BY created_at ASC
-        LIMIT 1
-        FOR UPDATE SKIP LOCKED
-      `);
+      params.push(universityKeys);
+      conds.push(`university_key = ANY($${params.length}::text[])`);
     }
+
+    if (triggerStages !== undefined) {
+      params.push(triggerStages);
+      conds.push(
+        `EXISTS (
+          SELECT 1 FROM applications a
+          WHERE a.id = portal_submissions.application_id
+            AND a.deleted_at IS NULL
+            AND a.stage = ANY($${params.length}::text[])
+        )`,
+      );
+    }
+
+    const sel = await client.query<ClaimedSubmission>(
+      `SELECT ${CLAIM_COLS}
+       FROM portal_submissions
+       WHERE ${conds.join("\n         AND ")}
+       ORDER BY created_at ASC
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED`,
+      params,
+    );
 
     if (sel.rows.length === 0) {
       await client.query("COMMIT");

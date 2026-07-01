@@ -740,8 +740,16 @@ async function processSingle(
  * inline timeout + heartbeat.  Caller MUST hold _processMutex.  Shared by the
  * manual process-queued endpoint and the Run Now endpoint so the immediate
  * processing path is identical (and interval-independent).
+ *
+ * When `triggerStages` is provided (Run Now), only submissions whose
+ * application is currently in one of those stages are claimed — mirroring the
+ * enqueue-time candidate selection. When omitted (manual process-queued), all
+ * queued submissions are drained regardless of stage.
  */
-async function drainQueue(workerId: string): Promise<ProcessSingleResult[]> {
+async function drainQueue(
+  workerId: string,
+  triggerStages?: string[],
+): Promise<ProcessSingleResult[]> {
   const results: ProcessSingleResult[] = [];
 
   // Release stale locks first (crash recovery: inline requests that died
@@ -755,7 +763,7 @@ async function drainQueue(workerId: string): Promise<ProcessSingleResult[]> {
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const sub = await claimNext(workerId);
+    const sub = await claimNext(workerId, undefined, triggerStages);
     if (!sub) break;
 
     console.log(
@@ -860,7 +868,9 @@ router.post(
       const workerId = `api-runnow-${user.id}-${Date.now()}`;
       _processMutex = true;
       try {
-        results = await drainQueue(workerId);
+        // Run Now must only process applications currently in a configured
+        // trigger stage — same gate as the enqueue scan above.
+        results = await drainQueue(workerId, settings.triggerStages ?? []);
         drained = true;
       } finally {
         _processMutex = false;

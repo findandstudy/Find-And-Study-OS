@@ -105,6 +105,7 @@ async function drain(): Promise<void> {
   let autoProcessIntervalMinutes = 20;
   let lastAutoDrainAt: Date | null = null;
   let settingsId: number | null   = null;
+  let triggerStages: string[]     = [];
 
   try {
     const [settings] = await db
@@ -113,6 +114,7 @@ async function drain(): Promise<void> {
         autoProcessEnabled:          portalAutomationSettingsTable.autoProcessEnabled,
         autoProcessIntervalMinutes:  portalAutomationSettingsTable.autoProcessIntervalMinutes,
         lastAutoDrainAt:             portalAutomationSettingsTable.lastAutoDrainAt,
+        triggerStages:               portalAutomationSettingsTable.triggerStages,
       })
       .from(portalAutomationSettingsTable)
       .limit(1);
@@ -122,6 +124,7 @@ async function drain(): Promise<void> {
       autoProcessIntervalMinutes = settings.autoProcessIntervalMinutes ?? 20;
       lastAutoDrainAt            = settings.lastAutoDrainAt ? new Date(settings.lastAutoDrainAt) : null;
       settingsId                 = settings.id;
+      triggerStages              = settings.triggerStages ?? [];
     }
   } catch (err) {
     console.error("[drain-once] Fatal: failed to read settings:", err instanceof Error ? err.message : err);
@@ -215,8 +218,10 @@ async function drain(): Promise<void> {
   // Drain loop — only claims submissions for autoProcess universities
   // ---------------------------------------------------------------------------
   while (true) {
-    // Pass the university key filter so non-autoProcess submissions are never claimed
-    const sub = await claimNext(WORKER_ID, autoProcessKeys);
+    // Pass the university key filter so non-autoProcess submissions are never
+    // claimed, plus the trigger-stage filter so only applications currently in
+    // a configured trigger stage are auto-processed (mirrors the enqueue scan).
+    const sub = await claimNext(WORKER_ID, autoProcessKeys, triggerStages);
     if (!sub) break; // Queue drained for auto-process universities
 
     // Cooldown between jobs: let V8 GC reclaim the previous browser's heap
