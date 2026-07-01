@@ -24,6 +24,9 @@
  *   FB-I11 disabled rule (enabled=false) → no_rule no-op
  *   FB-I12 empty meta.openPrograms → no_meta no-op
  *   FB-I13 fallback rule pointing at a non-existent program → no_open_fallback
+ *   FB-I14 program_missing (not_in_dropdown) → SAME supersession via availablePrograms
+ *   FB-I15 program_missing WITHOUT availablePrograms (dropdown unreached) → no_meta no-op
+ *   FB-I16 handleProgramFull alias still supersedes a program_full submission
  *
  * Real submission is NEVER triggered — every integration path runs in dry/mock.
  *
@@ -50,6 +53,7 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import {
   handleProgramFull,
+  handleNeedsFallback,
   selectFallbackCandidate,
   type OpenProgram,
   type FallbackCandidate,
@@ -209,10 +213,18 @@ async function seedScenario(opts?: {
   autoSubmit?: boolean;
   withRule?: boolean;
   fallbackEnabledMeta?: boolean;
+  /**
+   * Which structural trigger to seed. "program_full" (default) carries
+   * meta.openPrograms; "program_missing" carries meta.availablePrograms +
+   * resolution="not_in_dropdown" (program not found in the portal dropdown).
+   * Both must drive the SAME supersession flow.
+   */
+  trigger?: "program_full" | "program_missing";
 }): Promise<Scenario> {
   const mode = opts?.mode ?? "real";
   const autoSubmit = opts?.autoSubmit ?? false;
   const withRule = opts?.withRule ?? true;
+  const trigger = opts?.trigger ?? "program_full";
   const uniKey = `${RUN}_${Math.random().toString(36).slice(2, 6)}`;
 
   const [user] = await db.insert(usersTable).values({
@@ -292,22 +304,37 @@ async function seedScenario(opts?: {
     cleanupMappingIds.push(map.id);
   }
 
+  // program_full → meta.openPrograms; program_missing → meta.availablePrograms
+  // + resolution="not_in_dropdown". Both list the same two options so the
+  // fallback resolves identically to the OPEN programme.
+  const optionList = [
+    { value: "src",               name: srcProg.name, enabled: false },
+    { value: fallbackPortalValue, name: fbProg.name,  enabled: true  },
+  ];
+  const meta =
+    trigger === "program_missing"
+      ? {
+          requestedProgram:  { name: srcProg.name },
+          availablePrograms: optionList,
+          resolution:        "not_in_dropdown",
+          reason:            "Program portalda bulunamadı",
+          detectedAt:        new Date().toISOString(),
+        }
+      : {
+          requestedProgram: { value: "src", name: srcProg.name },
+          openPrograms:     optionList,
+          reason:           "Kontenjan dolu",
+          detectedAt:       new Date().toISOString(),
+        };
+
   const [sub] = await db.insert(portalSubmissionsTable).values({
     applicationId:  srcApp.id,
     studentId:      student.id,
     universityKey:  uniKey,
     universityName: uniName,
     mode,
-    status:         "program_full",
-    meta: {
-      requestedProgram: { value: "src", name: srcProg.name },
-      openPrograms: [
-        { value: "src",               name: srcProg.name, enabled: false },
-        { value: fallbackPortalValue, name: fbProg.name,  enabled: true  },
-      ],
-      reason:     "Kontenjan dolu",
-      detectedAt: new Date().toISOString(),
-    },
+    status:         trigger,
+    meta,
   }).returning({ id: portalSubmissionsTable.id });
   cleanupSubIds.push(sub.id);
 
@@ -690,4 +717,76 @@ test("FB-I13: rule with only a non-existent fallback program → no_open_fallbac
     eq(applicationsTable.supersededFromApplicationId, s.srcAppId),
   );
   assert.equal(children.length, 0, "no supersession when no real fallback program resolves");
+});
+
+// ---------------------------------------------------------------------------
+// FB-I14 — "not in dropdown" (program_missing) drives the SAME supersession
+// ---------------------------------------------------------------------------
+
+test("FB-I14: program_missing (not_in_dropdown) → supersede via availablePrograms", async () => {
+  await setKillSwitch(true);
+  const s = await seedScenario({ autoSubmit: false, trigger: "program_missing" });
+  const outcome = await handleNeedsFallback(s.subId);
+
+  assert.equal(outcome.status, "superseded");
+  if (outcome.status !== "superseded") return;
+  cleanupAppIds.push(outcome.newApplicationId);
+  cleanupSubIds.push(outcome.newSubmissionId);
+  assert.equal(outcome.fallbackProgramId, s.fallbackProgramId);
+
+  // Old app cancelled + linked forward.
+  const [oldApp] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, s.srcAppId));
+  assert.equal(oldApp.stage, "cancelled", "old app cancelled");
+  assert.equal(oldApp.supersededByApplicationId, outcome.newApplicationId, "old app links to new");
+
+  // New app on the fallback programme with catalog fees.
+  const [newApp] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, outcome.newApplicationId));
+  assert.equal(newApp.programId, s.fallbackProgramId, "new app on fallback program");
+  assert.equal(newApp.supersededFromApplicationId, s.srcAppId, "new app links back to old");
+  assert.equal(newApp.tuitionFee, 5000, "tuition from fallback catalog");
+
+  const audit = await db.select().from(auditLogsTable).where(
+    and(eq(auditLogsTable.action, "program_fallback_supersede"), eq(auditLogsTable.resourceId, s.srcAppId)),
+  );
+  assert.equal(audit.length, 1, "one audit row written");
+  audit.forEach((a) => cleanupAuditIds.push(a.id));
+
+  const notifs = await db.select().from(notificationsTable).where(eq(notificationsTable.userId, s.assignedToId));
+  assert.ok(notifs.some((n) => n.type === "program_fallback"), "consultant notified");
+});
+
+// ---------------------------------------------------------------------------
+// FB-I15 — program_missing with NO availablePrograms (dropdown unreached) no-ops
+// ---------------------------------------------------------------------------
+
+test("FB-I15: program_missing without availablePrograms → no_meta no-op", async () => {
+  await setKillSwitch(true);
+  const s = await seedScenario({ autoSubmit: false, trigger: "program_missing" });
+
+  // Dropdown never reached → alternatives unknown. Must NOT guess a fallback.
+  await db.update(portalSubmissionsTable)
+    .set({ meta: { reason: "Program bulunamadı" } })
+    .where(eq(portalSubmissionsTable.id, s.subId));
+
+  const outcome = await handleNeedsFallback(s.subId);
+  assert.equal(outcome.status, "no_meta");
+
+  const [app] = await db.select({ stage: applicationsTable.stage }).from(applicationsTable).where(eq(applicationsTable.id, s.srcAppId));
+  assert.equal(app.stage, "inquiry", "source app untouched when alternatives unknown");
+});
+
+// ---------------------------------------------------------------------------
+// FB-I16 — handleProgramFull alias still routes program_full (regression)
+// ---------------------------------------------------------------------------
+
+test("FB-I16: handleProgramFull alias still supersedes a program_full submission", async () => {
+  await setKillSwitch(true);
+  const s = await seedScenario({ autoSubmit: false, trigger: "program_full" });
+  const outcome = await handleProgramFull(s.subId);
+
+  assert.equal(outcome.status, "superseded", "alias preserves quota-full behavior");
+  if (outcome.status !== "superseded") return;
+  cleanupAppIds.push(outcome.newApplicationId);
+  cleanupSubIds.push(outcome.newSubmissionId);
+  assert.equal(outcome.fallbackProgramId, s.fallbackProgramId);
 });

@@ -9,6 +9,21 @@ export interface AdapterSession {
 }
 
 // ---------------------------------------------------------------------------
+// Shared portal <option> shape (used by both openPrograms and availablePrograms)
+// ---------------------------------------------------------------------------
+/**
+ * A single portal programme <option>. `enabled` is true for selectable (open)
+ * programmes and false for full/disabled ones. This is the common shape written
+ * to `portal_submissions.meta.openPrograms` (quota-full) and
+ * `portal_submissions.meta.availablePrograms` (program not in dropdown).
+ */
+export interface PortalProgramOption {
+  value: string;
+  name: string;
+  enabled: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Result returned by adapter.submit()
 // ---------------------------------------------------------------------------
 export interface SubmitResult {
@@ -52,7 +67,22 @@ export interface SubmitResult {
    * is true for selectable (open) programmes and false for full ones. Set
    * together with programFull.
    */
-  openPrograms?: Array<{ value: string; name: string; enabled: boolean }>;
+  openPrograms?: PortalProgramOption[];
+  /**
+   * The full portal dropdown option list captured when the requested programme
+   * was NOT found in the dropdown but the dropdown WAS reached. Same shape as
+   * openPrograms. Set together with programMissing + resolution="not_in_dropdown"
+   * so the orchestrator can supersede to a configured backup programme. MUST be
+   * omitted when the dropdown was never reached (login/level/mapping failure) —
+   * absence signals "alternatives unknown" and suppresses fallback.
+   */
+  availablePrograms?: PortalProgramOption[];
+  /**
+   * Why a programMissing result occurred. "not_in_dropdown" means the dropdown
+   * was reached and its options are known (see availablePrograms) — eligible for
+   * fallback. Absent for other programMissing causes.
+   */
+  resolution?: "not_in_dropdown";
   /**
    * True when the application is blocked for the student's nationality — it must
    * go through a specific agency ("exclusive region") instead of the portal.

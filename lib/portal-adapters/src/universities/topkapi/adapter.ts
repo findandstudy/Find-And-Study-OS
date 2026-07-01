@@ -1398,10 +1398,22 @@ export const topkapiAdapter: UniversityAdapter = {
         JSON.stringify(programOptions.map((o) => ({ v: o.id, t: o.name }))),
       );
       { const s = await takeShot(page, "step4-no-program"); if (s) screenshots.push(s); }
+      // Structural result (NO throw): the dropdown WAS reached but the requested
+      // programme is not offered. Surface the full option list (with enabled
+      // flags) + resolution so the orchestrator can supersede to a configured
+      // backup programme — exactly like the Kontenjan Dolu branch, but triggered
+      // by "not in dropdown" instead of "quota full".
       return {
         programMissing: true,
         submitted: false,
         alreadyExists: false,
+        resolution: "not_in_dropdown",
+        requestedProgram: { name: profile.programName },
+        availablePrograms: programOptionsRaw.map((o) => ({
+          value: o.id,
+          name: o.name,
+          enabled: !o.disabled,
+        })),
         detail: `Program "${profile.programName}" not found in dropdown (${programOptions.length} option(s) available)`,
         screenshots,
       };

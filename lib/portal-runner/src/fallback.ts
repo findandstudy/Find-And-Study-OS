@@ -171,20 +171,26 @@ export type FallbackOutcome =
     };
 
 // ---------------------------------------------------------------------------
-// handleProgramFull — orchestrator entry point
+// handleNeedsFallback — orchestrator entry point (aka handleProgramFull alias)
 // ---------------------------------------------------------------------------
 
 /**
- * Process a program_full submission and, when a fallback rule applies, supersede
- * the full programme with the first open fallback.
+ * Process a submission that NEEDS a program fallback and, when a rule applies,
+ * supersede the source programme with the first open/available fallback.
+ *
+ * Two triggering statuses are handled identically:
+ *   - `program_full`     ("Kontenjan Dolu")     → candidates from meta.openPrograms
+ *   - `program_missing`  (not found in dropdown) → candidates from meta.availablePrograms
+ * In both cases a candidate is eligible only when it resolves to an option that
+ * is present AND enabled in the option list.
  *
  * Safe to call for ANY submission id — it self-gates on kill-switch, mode and
  * status and returns a no-op outcome otherwise. Never throws for business
  * no-ops; it only throws on unexpected DB failures (caller logs).
  *
- * @param submissionId  portal_submissions.id of the program_full submission.
+ * @param submissionId  portal_submissions.id of the submission needing fallback.
  */
-export async function handleProgramFull(
+export async function handleNeedsFallback(
   submissionId: number,
 ): Promise<FallbackOutcome> {
   // ----- Kill-switch ------------------------------------------------------
@@ -227,21 +233,42 @@ export async function handleProgramFull(
     return { status: "not_real_mode" };
   }
 
-  // ----- status guard: only a program_full submission may supersede --------
-  if (sub.status !== "program_full") {
+  // ----- status guard: only program_full or program_missing may supersede --
+  if (sub.status !== "program_full" && sub.status !== "program_missing") {
     console.log(
-      `[fallback] Submission #${submissionId}: status=${sub.status} (not program_full) — no-op`,
+      `[fallback] Submission #${submissionId}: status=${sub.status} (not program_full/program_missing) — no-op`,
     );
     return { status: "wrong_status" };
   }
 
+  // Candidate option list: quota-full uses meta.openPrograms, "not in dropdown"
+  // uses meta.availablePrograms. Both share the OpenProgram shape and are treated
+  // identically (present + enabled = eligible). When neither is present the
+  // dropdown was never reached → we don't know the alternatives, so no-op and
+  // leave the submission for a human (prevents sending a wrong programme).
   const meta = (sub.meta ?? {}) as {
     openPrograms?: OpenProgram[];
+    availablePrograms?: OpenProgram[];
+    resolution?: string;
   };
-  const openPrograms = Array.isArray(meta.openPrograms) ? meta.openPrograms : [];
-  if (openPrograms.length === 0) {
+  // Defense in depth (must match worker + stageWriteback gating exactly): a
+  // program_missing submission may only supersede when the dropdown was actually
+  // reached (resolution="not_in_dropdown"). Any other program_missing cause means
+  // the alternatives are unknown → never guess a fallback.
+  if (sub.status === "program_missing" && meta.resolution !== "not_in_dropdown") {
     console.log(
-      `[fallback] Submission #${submissionId}: no openPrograms in meta — no-op`,
+      `[fallback] Submission #${submissionId}: program_missing resolution=${meta.resolution ?? "none"} (not not_in_dropdown) — no-op`,
+    );
+    return { status: "no_meta" };
+  }
+  const optionList = Array.isArray(meta.openPrograms)
+    ? meta.openPrograms
+    : Array.isArray(meta.availablePrograms)
+      ? meta.availablePrograms
+      : [];
+  if (optionList.length === 0) {
+    console.log(
+      `[fallback] Submission #${submissionId}: no openPrograms/availablePrograms in meta — no-op`,
     );
     return { status: "no_meta" };
   }
@@ -314,7 +341,7 @@ export async function handleProgramFull(
       ),
     );
 
-  const selected = selectFallbackCandidate(candidates, openPrograms, {
+  const selected = selectFallbackCandidate(candidates, optionList, {
     programOverrides: mapping?.programOverrides ?? {},
     synonyms:         mapping?.synonyms ?? [],
   });
@@ -335,7 +362,11 @@ export async function handleProgramFull(
   // observes the first caller's committed child and no-ops instead of creating
   // a duplicate supersession.
   const newMode = rule.autoSubmit ? sub.mode : "dry";
-  const reason = `Kontenjan dolu — ${srcApp.programName ?? srcApp.programId} → ${fallbackProgram.name}`;
+  const triggerReason =
+    sub.status === "program_missing"
+      ? "Program portalda bulunamadı"
+      : "Kontenjan dolu";
+  const reason = `${triggerReason} — ${srcApp.programName ?? srcApp.programId} → ${fallbackProgram.name}`;
 
   const txResult = await db.transaction(async (tx) => {
     const now = new Date();
@@ -467,8 +498,12 @@ export async function handleProgramFull(
       await db.insert(notificationsTable).values({
         userId:    srcApp.assignedToId,
         type:      "program_fallback",
-        title:     "Program kontenjanı dolu — otomatik yedeklendi",
-        body:      `Öğrencinin programı kontenjan dolu; ${fallbackProgram.name} programına otomatik taşındı ve gönderim kuyruğa alındı.`,
+        title:     sub.status === "program_missing"
+                     ? "Program portalda açık değil — otomatik yedeklendi"
+                     : "Program kontenjanı dolu — otomatik yedeklendi",
+        body:      sub.status === "program_missing"
+                     ? `Öğrencinin programı portalda açık değil; ${fallbackProgram.name} programına otomatik taşındı ve gönderim kuyruğa alındı.`
+                     : `Öğrencinin programı kontenjan dolu; ${fallbackProgram.name} programına otomatik taşındı ve gönderim kuyruğa alındı.`,
         icon:      "Repeat",
         actionUrl: `/applications/${newAppId}`,
         data:      {
@@ -491,6 +526,14 @@ export async function handleProgramFull(
     fallbackProgramId:   selected.programId,
   };
 }
+
+/**
+ * Back-compat alias. The orchestrator entry point was originally named
+ * `handleProgramFull` (quota-full only). It now also handles program_missing
+ * ("not in dropdown"), so the canonical name is `handleNeedsFallback`. Existing
+ * callers/tests may keep using `handleProgramFull`.
+ */
+export const handleProgramFull = handleNeedsFallback;
 
 // ---------------------------------------------------------------------------
 // Helpers

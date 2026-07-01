@@ -71,6 +71,19 @@ function resolveTarget(
   if (result.programFull) {
     return { submissionStatus: "program_full", stageKey: null };
   }
+  // Program not found in the portal dropdown, but the dropdown WAS reached and
+  // its options are known (resolution="not_in_dropdown"). Like program_full this
+  // is a structural finding surfaced ahead of dry_run so the orchestrator can
+  // supersede to a backup programme even on a dry run. Application stage is left
+  // unchanged. Only when availablePrograms is non-empty — otherwise this falls
+  // through to the plain program_missing rule below (dropdown unreachable).
+  if (
+    result.programMissing &&
+    result.resolution === "not_in_dropdown" &&
+    (result.availablePrograms?.length ?? 0) > 0
+  ) {
+    return { submissionStatus: "program_missing", stageKey: null };
+  }
   // Dry runs: pipeline smoke-test only, no real portal interaction → dry_run status
   if (meta?.["dryRun"]) {
     return { submissionStatus: "dry_run", stageKey: null };
@@ -150,6 +163,22 @@ export async function writebackResult(
               openPrograms:     result.openPrograms,
               reason:           "Kontenjan dolu",
               detectedAt:       new Date().toISOString(),
+            },
+          }
+        : {}),
+      // Program-not-in-dropdown context → meta jsonb. Only set when the dropdown
+      // was reached (availablePrograms non-empty) so the orchestrator can
+      // supersede; other flows never clobber the meta column.
+      ...(result?.programMissing &&
+      result.resolution === "not_in_dropdown" &&
+      (result.availablePrograms?.length ?? 0) > 0
+        ? {
+            meta: {
+              requestedProgram:  result.requestedProgram,
+              availablePrograms: result.availablePrograms,
+              resolution:        "not_in_dropdown",
+              reason:            "Program portalda bulunamadı",
+              detectedAt:        new Date().toISOString(),
             },
           }
         : {}),

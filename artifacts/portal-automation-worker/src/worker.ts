@@ -20,7 +20,7 @@ import {
   buildStudentProfile,
   runSubmission,
   writebackResult,
-  handleProgramFull,
+  handleNeedsFallback,
 } from "@workspace/portal-runner";
 import { resolvePortalCreds } from "./credResolver.js";
 
@@ -130,14 +130,22 @@ async function tick(): Promise<void> {
   await writebackResult(sub.id, runResult);
 
   // Program-fallback orchestrator: when the portal reports the requested
-  // programme is full, try to supersede it with a configured fallback. Fully
-  // self-gating (kill-switch, mode=real, idempotency, loop guard) and
-  // best-effort — a failure here must never break the worker loop.
-  if (runResult?.result?.programFull) {
+  // programme is full ("Kontenjan Dolu") OR the programme is not found in the
+  // portal dropdown (but the dropdown WAS reached, so alternatives are known),
+  // try to supersede it with a configured fallback. Fully self-gating
+  // (kill-switch, mode=real, idempotency, loop guard) and best-effort — a
+  // failure here must never break the worker loop.
+  const needsFallback =
+    runResult?.result?.programFull === true ||
+    (runResult?.result?.programMissing === true &&
+      runResult?.result?.resolution === "not_in_dropdown" &&
+      (runResult?.result?.availablePrograms?.length ?? 0) > 0);
+  if (needsFallback) {
     try {
-      const outcome = await handleProgramFull(sub.id);
+      const outcome = await handleNeedsFallback(sub.id);
+      const trigger = runResult?.result?.programFull ? "program_full" : "program_missing";
       console.log(
-        `[portal-worker] Submission #${sub.id} program_full → fallback outcome=${outcome.status}`,
+        `[portal-worker] Submission #${sub.id} ${trigger} → fallback outcome=${outcome.status}`,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
