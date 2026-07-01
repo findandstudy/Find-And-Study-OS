@@ -13,8 +13,7 @@
  * The user is then asked to confirm a force-move (retry with force=true).
  */
 
-import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
-import { createPortal } from "react-dom";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { customFetch, ApiError } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -98,40 +97,27 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
   // 409 force-move confirmation state.
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
 
-  // ── Picker dropdown (portaled INTO the dialog content) ─────────────────────
-  // A Radix Popover + cmdk Command nested in a Radix Dialog breaks: the dialog's
-  // FocusScope snatches focus back on every keystroke and its body
-  // `pointer-events:none` swallows clicks, so typing/selecting silently fails.
-  // We mirror the codebase's SearchableSelect fix instead: portal INTO the
-  // dialog content element (keeps FocusScope happy), position:fixed (escapes the
-  // dialog's overflow clipping), pointerEvents:auto, close on "click".
+  // ── Picker dropdown (rendered INLINE inside the dialog content) ────────────
+  // Do NOT portal this to document.body: a modal Radix Dialog marks every
+  // sibling of its portal as inert (`pointer-events:none` + aria-hidden) and
+  // traps focus inside its content, so a body-portaled dropdown renders but
+  // can't be typed in or clicked. Rendering the menu inline keeps it inside the
+  // dialog's FocusScope (typing works) and interactive, and absolute
+  // positioning relative to the trigger avoids the transformed-ancestor issue
+  // that breaks position:fixed inside the translated DialogContent.
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [portalTarget, setPortalTarget] = useState<Element | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [openUp, setOpenUp] = useState(false);
 
-  // Resolve portal target + track trigger position while the picker is open.
-  useLayoutEffect(() => {
-    if (!pickerOpen || !triggerRef.current) return;
-    const dialogContent = triggerRef.current.closest("[data-radix-dialog-content]");
-    setPortalTarget(dialogContent ?? document.body);
-    function update() {
-      if (!triggerRef.current) return;
+  // Toggle the picker, flipping it upward when there isn't room below the trigger.
+  const togglePicker = () => {
+    if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      const up = window.innerHeight - rect.bottom < 360;
-      setOpenUp(up);
-      setPos({ top: up ? rect.top : rect.bottom, left: rect.left, width: rect.width });
+      setOpenUp(window.innerHeight - rect.bottom < 360);
     }
-    update();
-    window.addEventListener("scroll", update, true);
-    window.addEventListener("resize", update);
-    return () => {
-      window.removeEventListener("scroll", update, true);
-      window.removeEventListener("resize", update);
-    };
-  }, [pickerOpen]);
+    setPickerOpen((o) => !o);
+  };
 
   // Outside-click closes the picker. Listen to "click" (not "mousedown") so
   // dragging the results scrollbar doesn't dismiss it prematurely.
@@ -159,8 +145,6 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
   useEffect(() => {
     if (!portal) {
       setPickerOpen(false);
-      setPos(null);
-      setPortalTarget(null);
     }
   }, [portal]);
 
@@ -324,103 +308,95 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
               </div>
             ) : (
               <>
-                {/* Catalog multi-select (server-side search, portaled picker) */}
-                <button
-                  ref={triggerRef}
-                  type="button"
-                  onClick={() => setPickerOpen((o) => !o)}
-                  className="flex w-full items-center justify-between h-10 px-3 rounded-md border border-input bg-background text-sm hover:bg-accent/30 transition-colors"
-                >
-                  <span className="text-muted-foreground">
-                    {t("portalAutomation.members.addMembers")}
-                  </span>
-                  <ChevronDown
-                    className={`w-4 h-4 text-muted-foreground transition-transform ${pickerOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
-
-                {portal && pickerOpen && pos && portalTarget && createPortal(
-                  <div
-                    ref={popRef}
-                    style={{
-                      position: "fixed",
-                      top: openUp ? pos.top - 4 : pos.top + 4,
-                      left: pos.left,
-                      width: Math.max(pos.width, 280),
-                      transform: openUp ? "translateY(-100%)" : "translateY(0)",
-                      pointerEvents: "auto",
-                      zIndex: 9999,
-                    }}
-                    className="bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+                {/* Catalog multi-select (server-side search, inline picker) */}
+                <div className="relative">
+                  <button
+                    ref={triggerRef}
+                    type="button"
+                    onClick={togglePicker}
+                    className="flex w-full items-center justify-between h-10 px-3 rounded-md border border-input bg-background text-sm hover:bg-accent/30 transition-colors"
                   >
-                    <div className="p-2 border-b border-border space-y-2">
-                      <input
-                        ref={searchInputRef}
-                        type="text"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder={t("portalAutomation.members.searchPlaceholder")}
-                        className="w-full h-8 px-2 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                      <div className="flex gap-2">
-                        <select
-                          value={filterCountry}
-                          onChange={(e) => setFilterCountry(e.target.value)}
-                          className="flex-1 h-8 px-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        >
-                          <option value="">{t("portalAutomation.members.allCountries")}</option>
-                          {filterOptions.countries.map((c) => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={filterType}
-                          onChange={(e) => setFilterType(e.target.value)}
-                          className="flex-1 h-8 px-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                        >
-                          <option value="">{t("portalAutomation.members.allTypes")}</option>
-                          {filterOptions.types.map((ty) => (
-                            <option key={ty} value={ty}>{ty}</option>
-                          ))}
-                        </select>
+                    <span className="text-muted-foreground">
+                      {t("portalAutomation.members.addMembers")}
+                    </span>
+                    <ChevronDown
+                      className={`w-4 h-4 text-muted-foreground transition-transform ${pickerOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+
+                  {pickerOpen && (
+                    <div
+                      ref={popRef}
+                      className={`absolute left-0 right-0 z-50 ${openUp ? "bottom-full mb-1" : "top-full mt-1"} bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95`}
+                    >
+                      <div className="p-2 border-b border-border space-y-2">
+                        <input
+                          ref={searchInputRef}
+                          type="text"
+                          value={query}
+                          onChange={(e) => setQuery(e.target.value)}
+                          placeholder={t("portalAutomation.members.searchPlaceholder")}
+                          className="w-full h-8 px-2 text-sm rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={filterCountry}
+                            onChange={(e) => setFilterCountry(e.target.value)}
+                            className="flex-1 h-8 px-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                          >
+                            <option value="">{t("portalAutomation.members.allCountries")}</option>
+                            {filterOptions.countries.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={filterType}
+                            onChange={(e) => setFilterType(e.target.value)}
+                            className="flex-1 h-8 px-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                          >
+                            <option value="">{t("portalAutomation.members.allTypes")}</option>
+                            {filterOptions.types.map((ty) => (
+                              <option key={ty} value={ty}>{ty}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="max-h-72 overflow-y-auto p-1">
+                        {searching ? (
+                          <div className="py-4 flex justify-center">
+                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                          </div>
+                        ) : results.length === 0 ? (
+                          <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                            {t("portalAutomation.members.noCandidates")}
+                          </div>
+                        ) : (
+                          results.map((c) => {
+                            const isSelected = selected.has(c.id);
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => toggle(c)}
+                                className={`flex items-center w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
+                                  isSelected ? "bg-primary/10" : "hover:bg-primary/10"
+                                }`}
+                              >
+                                <Check
+                                  className={`mr-2 h-4 w-4 shrink-0 ${isSelected ? "opacity-100 text-primary" : "opacity-0"}`}
+                                />
+                                <span className="font-medium flex-1 truncate">{c.name}</span>
+                                <span className="ml-2 text-xs text-muted-foreground shrink-0">
+                                  {c.country}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
-                    <div className="max-h-72 overflow-y-auto p-1">
-                      {searching ? (
-                        <div className="py-4 flex justify-center">
-                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                        </div>
-                      ) : results.length === 0 ? (
-                        <div className="px-3 py-3 text-xs text-muted-foreground text-center">
-                          {t("portalAutomation.members.noCandidates")}
-                        </div>
-                      ) : (
-                        results.map((c) => {
-                          const isSelected = selected.has(c.id);
-                          return (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => toggle(c)}
-                              className={`flex items-center w-full px-2.5 py-2 text-sm rounded-md transition-colors text-left ${
-                                isSelected ? "bg-primary/10" : "hover:bg-primary/10"
-                              }`}
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 shrink-0 ${isSelected ? "opacity-100 text-primary" : "opacity-0"}`}
-                              />
-                              <span className="font-medium flex-1 truncate">{c.name}</span>
-                              <span className="ml-2 text-xs text-muted-foreground shrink-0">
-                                {c.country}
-                              </span>
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>,
-                  portalTarget,
-                )}
+                  )}
+                </div>
 
                 {/* Selected members */}
                 <div className="min-h-[60px] rounded-lg border p-2">
