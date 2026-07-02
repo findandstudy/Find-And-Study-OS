@@ -1038,6 +1038,13 @@ async function dumpLanguageSwitcher(page: Page): Promise<void> {
  */
 async function openLanguageMenu(page: Page): Promise<void> {
   const triggerCandidates: Locator[] = [
+    // VERIFIED (live DOM): the trigger is a top-right flag + text showing the
+    // CURRENT language autonym ("Türkçe" while Turkish, "English" once English),
+    // and it is NOT necessarily a button/link — it can be a plain <span>/<div>.
+    // Match by visible text inside the header so a text-only trigger is caught.
+    page
+      .locator("header, .app-header, .header, #kt_app_header, [class*='header']")
+      .getByText(/^\s*(English|Türkçe|İngilizce|Turkish)\s*$/i),
     // Metronic KT dropdown toggle carrying a country flag — the usual switcher.
     page.locator("[data-kt-menu-trigger]").filter({
       has: page.locator("img[src*='flag'], img[src*='flags']"),
@@ -1060,15 +1067,21 @@ async function openLanguageMenu(page: Page): Promise<void> {
     ),
   ];
   for (const cand of triggerCandidates) {
-    const el = cand.first();
+    // Iterate ALL matches and click the first VISIBLE one (the text trigger can
+    // resolve to a hidden template alongside the real top-right switcher).
+    let els: Locator[];
     try {
-      if ((await el.count()) === 0) continue;
-      if (!(await el.isVisible())) continue;
-      await el.click({ timeout: 3000 });
-      // Give an animated dropdown time to render its language entries.
-      await page.waitForTimeout(500);
-      return;
-    } catch { /* try next trigger shape */ }
+      els = await cand.all();
+    } catch { continue; }
+    for (const el of els) {
+      try {
+        if (!(await el.isVisible().catch(() => false))) continue;
+        await el.click({ timeout: 3000 });
+        // Give an animated dropdown time to render its language entries.
+        await page.waitForTimeout(500);
+        return;
+      } catch { /* try next matching element */ }
+    }
   }
 }
 
@@ -1082,6 +1095,9 @@ async function openLanguageMenu(page: Page): Promise<void> {
  */
 async function clickEnglishOption(page: Page): Promise<boolean> {
   const optionCandidates: Locator[] = [
+    // VERIFIED (live DOM): the menu entry is a real <a> link whose exact text is
+    // "English" (href="javascript:;", client-side handler). Try it first.
+    page.getByRole("link", { name: /^\s*english\s*$/i }),
     // Explicit locale data-attributes / hreflang (most robust, language-agnostic).
     page.locator("[data-kt-lang='en'], [data-lang='en'], a[hreflang='en']"),
     // Locale routes encoded in the href.
@@ -1104,13 +1120,20 @@ async function clickEnglishOption(page: Page): Promise<boolean> {
       .filter({ has: page.locator("img[alt*='English' i], img[title*='English' i]") }),
   ];
   for (const cand of optionCandidates) {
-    const el = cand.first();
+    // Iterate ALL matches, not just .first(): the portal renders a hidden
+    // template <a>English</a> alongside the visible menu entry, and .first()
+    // may resolve to the hidden one — skipping the whole candidate.
+    let els: Locator[];
     try {
-      if ((await el.count()) === 0) continue;
-      if (!(await el.isVisible())) continue;
-      await el.click({ timeout: 3000 });
-      return true;
-    } catch { /* try next option shape */ }
+      els = await cand.all();
+    } catch { continue; }
+    for (const el of els) {
+      try {
+        if (!(await el.isVisible().catch(() => false))) continue;
+        await el.click({ timeout: 3000 });
+        return true;
+      } catch { /* try next matching element */ }
+    }
   }
   return false;
 }

@@ -21,6 +21,19 @@ submission marked failed, process stays alive. Required log lines:
 `[topkapi] language: switching to English…` then `…confirmed English` or
 `…SWITCH FAILED (still Turkish)`.
 
+**VERIFIED live-DOM switcher mechanism (do NOT guess generic selectors):** the
+trigger is a top-right flag + text showing the CURRENT language autonym
+("Türkçe" while Turkish, "English" once switched) and may be a plain
+`<span>`/`<div>`, NOT a button/link — so open it with
+`page.locator("header,…[class*='header']").getByText(/^(English|Türkçe|…)$/)`,
+not `getByRole("button")`. The menu entries are real `<a>` links whose exact text
+is `English`/`Türkçe` with `href="javascript:;"` (client-side handler) — click
+`getByRole("link",{name:/^english$/i})`. Generic `[data-kt-lang]/.language-switch/
+[class*='language']` selectors do NOT hit the real link. A HIDDEN template
+`<a>English</a>` renders alongside the visible entry, so iterate ALL matches and
+click the first `isVisible()` one — `.first()` may resolve to the hidden template
+and skip the switch entirely (this was the silent-Turkish bug).
+
 **The switch is client-side (no reload/navigation event).** So: verify by
 POLLING rendered content (`waitForEnglish` polls `isEnglishUI` ~5s), NOT by a
 navigation/`networkidle` wait; and `isEnglishUI` must be content-first (compare
