@@ -24,7 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PortalErrorState } from "@/components/admin/PortalTabStates";
-import { Bot, Construction, Play, Save, Timer } from "lucide-react";
+import { Bot, Construction, Play, Rocket, Save, Timer } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -106,6 +106,15 @@ function AutomationRulesTab() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [confirmRunOpen, setConfirmRunOpen] = useState(false);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
+  const [bulkCount, setBulkCount] = useState<{ applications: number; universities: number } | null>(null);
+  const [bulkCountLoading, setBulkCountLoading] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{
+    applications: number;
+    universities: number;
+    counts: { queued: number; excluded: number; noProgram: number; duplicate: number; failed: number };
+  } | null>(null);
 
   // Load settings + universities in parallel
   const load = useCallback(async () => {
@@ -181,6 +190,61 @@ function AutomationRulesTab() {
       toast({ title: t("portalAutomation.runNow.errorToast"), variant: "destructive" });
     } finally {
       setRunning(false);
+    }
+  };
+
+  // Bulk apply-to-all — fan out every trigger-stage application to all
+  // credential-ready universities (reuses the shared backend fan-out core).
+  const openBulkConfirm = async () => {
+    setConfirmBulkOpen(true);
+    setBulkCount(null);
+    setBulkCountLoading(true);
+    try {
+      const c = await customFetch<{ applications: number; universities: number }>(
+        "/api/portal-automation/apply-to-all-bulk/count",
+      );
+      setBulkCount(c);
+    } catch {
+      setBulkCount(null);
+    } finally {
+      setBulkCountLoading(false);
+    }
+  };
+
+  const runBulk = async () => {
+    setConfirmBulkOpen(false);
+    setBulkRunning(true);
+    setBulkResult(null);
+    try {
+      const res = await customFetch<{
+        mode: "dry" | "real";
+        applications: number;
+        universities: number;
+        counts: { queued: number; excluded: number; noProgram: number; duplicate: number; failed: number };
+      }>("/api/portal-automation/apply-to-all-bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: settings.mode,
+          confirm: settings.mode === "real" ? true : undefined,
+        }),
+      });
+      setBulkResult(res);
+      toast({
+        title: t("portalAutomation.applyAllBulk.resultTitle"),
+        description: t("portalAutomation.applyAllBulk.resultBody", {
+          applications: String(res.applications),
+          queued: String(res.counts.queued),
+          duplicate: String(res.counts.duplicate),
+          noProgram: String(res.counts.noProgram),
+          excluded: String(res.counts.excluded),
+          failed: String(res.counts.failed),
+        }),
+      });
+    } catch {
+      toast({ title: t("portalAutomation.applyAllBulk.errorToast"), variant: "destructive" });
+    } finally {
+      setBulkRunning(false);
     }
   };
 
@@ -486,7 +550,18 @@ function AutomationRulesTab() {
       </Card>
 
       {/* ── Actions ─────────────────────────────────────────────────────── */}
-      <div className="flex justify-end gap-3">
+      <div className="flex flex-wrap justify-end gap-3">
+        <Button
+          variant="outline"
+          onClick={openBulkConfirm}
+          disabled={bulkRunning || running || saving}
+          className="gap-2"
+        >
+          <Rocket className="w-4 h-4" />
+          {bulkRunning
+            ? t("portalAutomation.applyAllBulk.running")
+            : t("portalAutomation.applyAllBulk.button")}
+        </Button>
         <Button
           variant="outline"
           onClick={() => setConfirmRunOpen(true)}
@@ -507,6 +582,39 @@ function AutomationRulesTab() {
         </Button>
       </div>
 
+      {/* ── Bulk apply-to-all result panel ──────────────────────────────── */}
+      {bulkResult && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              {t("portalAutomation.applyAllBulk.resultPanelTitle")}
+            </CardTitle>
+            <CardDescription>
+              {t("portalAutomation.applyAllBulk.resultPanelHint")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {([
+                ["statApplications", bulkResult.applications],
+                ["statQueued",       bulkResult.counts.queued],
+                ["statDuplicate",    bulkResult.counts.duplicate],
+                ["statNoProgram",    bulkResult.counts.noProgram],
+                ["statExcluded",     bulkResult.counts.excluded],
+                ["statFailed",       bulkResult.counts.failed],
+              ] as const).map(([key, value]) => (
+                <div key={key} className="rounded-lg border p-3">
+                  <p className="text-2xl font-semibold tabular-nums">{value}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t(`portalAutomation.applyAllBulk.${key}`)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <AlertDialog open={confirmRunOpen} onOpenChange={setConfirmRunOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -521,6 +629,50 @@ function AutomationRulesTab() {
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={runNow}>
               {t("portalAutomation.runNow.confirmAction")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmBulkOpen} onOpenChange={setConfirmBulkOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("portalAutomation.applyAllBulk.confirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {bulkCountLoading ? (
+                  <span>{t("portalAutomation.applyAllBulk.counting")}</span>
+                ) : bulkCount && bulkCount.applications > 0 ? (
+                  <>
+                    <span>
+                      {t("portalAutomation.applyAllBulk.confirmBody", {
+                        applications: String(bulkCount.applications),
+                        universities: String(bulkCount.universities),
+                        mode:
+                          settings.mode === "real"
+                            ? t("portalAutomation.applyAllBulk.modeLive")
+                            : t("portalAutomation.applyAllBulk.modeTest"),
+                      })}
+                    </span>
+                    {settings.mode === "real" && (
+                      <span className="block mt-2 font-medium text-destructive">
+                        {t("portalAutomation.applyAllBulk.liveWarning")}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span>{t("portalAutomation.applyAllBulk.noApplications")}</span>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={runBulk}
+              disabled={bulkCountLoading || !bulkCount || bulkCount.applications === 0}
+            >
+              {t("portalAutomation.applyAllBulk.confirmAction")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

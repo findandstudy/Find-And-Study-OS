@@ -1465,6 +1465,146 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
+// GET /portal-automation/apply-to-all-bulk/count — preview for the bulk confirm
+// dialog: how many trigger-stage applications would fan out, and how many
+// credential-ready universities they'd target. Read-only, no side effects.
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-automation/apply-to-all-bulk/count",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const [settings] = await db
+      .select()
+      .from(portalAutomationSettingsTable)
+      .limit(1);
+    const triggerStages = Array.isArray(settings?.triggerStages)
+      ? (settings.triggerStages as string[])
+      : [];
+
+    if (triggerStages.length === 0) {
+      res.json({ applications: 0, universities: 0, triggerStages: [] });
+      return;
+    }
+
+    const [row] = await db
+      .select({ n: count() })
+      .from(applicationsTable)
+      .where(and(
+        inArray(applicationsTable.stage, triggerStages),
+        isNull(applicationsTable.deletedAt),
+      ));
+
+    const unis = await loadCredentialReadyPortalUniversities();
+    res.json({
+      applications: Number(row?.n ?? 0),
+      universities: unis.length,
+      triggerStages,
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-automation/apply-to-all-bulk — fan out EVERY application that is
+// currently in a configured trigger stage to ALL credential-ready portal
+// universities. Thin wrapper over the SAME shared fan-out core used by the
+// single apply-to-all endpoint (no parallel engine). Existing per-university
+// dedup means already-submitted (student+university) pairs are skipped, so
+// re-runs never double-submit. Terminal stages are excluded automatically
+// because they are never configured as trigger stages.
+//
+// Body: { mode: "dry"|"real", confirm?: boolean }
+// ---------------------------------------------------------------------------
+const applyToAllBulkBodySchema = z.object({
+  mode: z.enum(["dry", "real"]),
+  confirm: z.boolean().optional(),
+});
+type ApplyToAllBulkSchemas = { body: typeof applyToAllBulkBodySchema };
+
+router.post(
+  "/portal-automation/apply-to-all-bulk",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ body: applyToAllBulkBodySchema }),
+  async (req, res): Promise<void> => {
+    const user = req.user!;
+    const { mode, confirm } = getValidated<ApplyToAllBulkSchemas>(req).body;
+
+    if (manualSubmitRateLimited(user.id)) {
+      res.status(429).json({ error: "RATE_LIMITED", message: "Too many submissions, slow down." });
+      return;
+    }
+    if (mode === "real" && !confirm) {
+      res.status(422).json({
+        error: "CONFIRM_REQUIRED",
+        message: "Set confirm:true to submit in real mode",
+      });
+      return;
+    }
+
+    // ----- Resolve trigger stages from settings ----------------------------
+    const [settings] = await db
+      .select()
+      .from(portalAutomationSettingsTable)
+      .limit(1);
+    const triggerStages = Array.isArray(settings?.triggerStages)
+      ? (settings.triggerStages as string[])
+      : [];
+    if (triggerStages.length === 0) {
+      res.status(409).json({
+        error: "NO_TRIGGER_STAGES",
+        message: "No trigger stages configured — select at least one before bulk submitting.",
+      });
+      return;
+    }
+
+    // ----- Source applications (trigger-stage, non-deleted) ----------------
+    const srcApps = await db
+      .select()
+      .from(applicationsTable)
+      .where(and(
+        inArray(applicationsTable.stage, triggerStages),
+        isNull(applicationsTable.deletedAt),
+      ))
+      .orderBy(asc(applicationsTable.id));
+
+    // ----- Fan out each application via the shared core --------------------
+    const unis = await loadCredentialReadyPortalUniversities();
+    const allResults: ApplyToAllItem[] = [];
+    for (const srcApp of srcApps) {
+      const results = await fanOutApplicationToUniversities(srcApp, unis, mode, user.id);
+      allResults.push(...results);
+    }
+    const counts = computeApplyToAllCounts(allResults);
+
+    // ----- Trigger a background drain (non-blocking) -----------------------
+    if (counts.queued > 0) triggerBackgroundDrain(`applyallbulk-${user.id}`);
+
+    await logAudit(
+      user.id,
+      "portal.applyToAllBulk",
+      "application",
+      undefined,
+      {
+        mode,
+        applications: srcApps.length,
+        universities: unis.length,
+        ...counts,
+        total: allResults.length,
+      },
+      req.ip,
+    );
+
+    res.status(counts.queued > 0 ? 201 : 200).json({
+      mode,
+      applications: srcApps.length,
+      universities: unis.length,
+      counts,
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
 // GET /university-portals
 // Returns active portal universities that have credentials configured.
 // Used by app-detail Submit dropdown — shows only credential-ready entries.

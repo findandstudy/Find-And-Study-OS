@@ -5261,6 +5261,29 @@
         "duplicate": "Duplicado",
         "failed": "Fallido"
       }
+    },
+    "applyAllBulk": {
+      "button": "Enviar todas las solicitudes",
+      "running": "Enviando…",
+      "confirmTitle": "¿Enviar todas las solicitudes a todas las universidades?",
+      "confirmBody": "Esto distribuirá {applications} solicitud(es) en las etapas de activación a {universities} portal(es) universitario(s) con credenciales listas en {mode}. Los pares ya enviados se omiten automáticamente.",
+      "liveWarning": "El modo real está activado. Esto enviará REALMENTE estas solicitudes a los portales universitarios. ¿Está seguro?",
+      "modeTest": "Modo de prueba",
+      "modeLive": "Modo real",
+      "counting": "Contando solicitudes elegibles…",
+      "noApplications": "No hay solicitudes en las etapas de activación configuradas. Configure las etapas de activación o mueva solicitudes a ellas primero.",
+      "confirmAction": "Enviar todas",
+      "resultTitle": "Envío masivo iniciado",
+      "resultBody": "{applications} solicitud(es): {queued} en cola, {duplicate} duplicadas, {noProgram} sin programa, {excluded} excluidas, {failed} fallidas.",
+      "errorToast": "El envío masivo falló. Inténtelo de nuevo.",
+      "resultPanelTitle": "Último envío masivo",
+      "resultPanelHint": "Siga los envíos individuales en el tablero de envíos.",
+      "statApplications": "Solicitudes",
+      "statQueued": "En cola",
+      "statDuplicate": "Duplicadas",
+      "statNoProgram": "Sin programa",
+      "statExcluded": "Excluidas",
+      "statFailed": "Fallidas"
     }
   },
   "activityFeed": {

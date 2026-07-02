@@ -5261,6 +5261,29 @@
         "duplicate": "Zaten var",
         "failed": "Başarısız"
       }
+    },
+    "applyAllBulk": {
+      "button": "Tüm Başvuruları Gönder",
+      "running": "Gönderiliyor…",
+      "confirmTitle": "Tüm başvurular tüm üniversitelere gönderilsin mi?",
+      "confirmBody": "Bu işlem, tetikleyici aşamalardaki {applications} başvuruyu, kimlik bilgisi hazır {universities} üniversite portalına {mode} ile dağıtır. Daha önce gönderilmiş eşleşmeler otomatik atlanır.",
+      "liveWarning": "Canlı Mod açık. Bu işlem başvuruları üniversite portallarına GERÇEKTEN gönderir. Emin misiniz?",
+      "modeTest": "Test Modu",
+      "modeLive": "Canlı Mod",
+      "counting": "Uygun başvurular sayılıyor…",
+      "noApplications": "Yapılandırılmış tetikleyici aşamalarda başvuru yok. Önce tetikleyici aşamaları yapılandırın veya başvuruları bu aşamalara taşıyın.",
+      "confirmAction": "Tümünü Gönder",
+      "resultTitle": "Toplu gönderim başlatıldı",
+      "resultBody": "{applications} başvuru: {queued} kuyruğa alındı, {duplicate} tekrar, {noProgram} program yok, {excluded} hariç, {failed} başarısız.",
+      "errorToast": "Toplu gönderim başarısız. Lütfen tekrar deneyin.",
+      "resultPanelTitle": "Son toplu gönderim",
+      "resultPanelHint": "Bireysel gönderimleri Gönderim Panosunda izleyin.",
+      "statApplications": "Başvurular",
+      "statQueued": "Kuyrukta",
+      "statDuplicate": "Tekrar",
+      "statNoProgram": "Program yok",
+      "statExcluded": "Hariç",
+      "statFailed": "Başarısız"
     }
   },
   "activityFeed": {

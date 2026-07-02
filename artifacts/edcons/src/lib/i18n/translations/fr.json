@@ -5261,6 +5261,29 @@
         "duplicate": "Doublon",
         "failed": "Échec"
       }
+    },
+    "applyAllBulk": {
+      "button": "Soumettre toutes les candidatures",
+      "running": "Envoi…",
+      "confirmTitle": "Soumettre toutes les candidatures à toutes les universités ?",
+      "confirmBody": "Cela répartira {applications} candidature(s) aux étapes de déclenchement vers {universities} portail(s) universitaire(s) prêt(s) en {mode}. Les paires déjà soumises sont ignorées automatiquement.",
+      "liveWarning": "Le mode réel est activé. Cela soumettra RÉELLEMENT ces candidatures aux portails universitaires. Êtes-vous sûr ?",
+      "modeTest": "Mode test",
+      "modeLive": "Mode réel",
+      "counting": "Comptage des candidatures éligibles…",
+      "noApplications": "Aucune candidature dans les étapes de déclenchement configurées. Configurez d'abord les étapes de déclenchement ou déplacez-y des candidatures.",
+      "confirmAction": "Tout soumettre",
+      "resultTitle": "Soumission groupée démarrée",
+      "resultBody": "{applications} candidature(s) : {queued} en file, {duplicate} en double, {noProgram} sans programme, {excluded} exclues, {failed} échouées.",
+      "errorToast": "Échec de la soumission groupée. Veuillez réessayer.",
+      "resultPanelTitle": "Dernière soumission groupée",
+      "resultPanelHint": "Suivez les soumissions individuelles sur le tableau des soumissions.",
+      "statApplications": "Candidatures",
+      "statQueued": "En file",
+      "statDuplicate": "Doublon",
+      "statNoProgram": "Sans programme",
+      "statExcluded": "Exclues",
+      "statFailed": "Échouées"
     }
   },
   "activityFeed": {

@@ -5261,6 +5261,29 @@
         "duplicate": "重复",
         "failed": "失败"
       }
+    },
+    "applyAllBulk": {
+      "button": "提交所有申请",
+      "running": "提交中…",
+      "confirmTitle": "将所有申请提交到所有大学？",
+      "confirmBody": "此操作将把触发阶段的 {applications} 份申请分发到 {universities} 个凭据就绪的大学门户，模式为 {mode}。已提交的组合将自动跳过。",
+      "liveWarning": "已开启实盘模式。此操作将真正把这些申请提交到大学门户。确定吗？",
+      "modeTest": "测试模式",
+      "modeLive": "实盘模式",
+      "counting": "正在统计符合条件的申请…",
+      "noApplications": "已配置的触发阶段中没有申请。请先配置触发阶段或将申请移入其中。",
+      "confirmAction": "全部提交",
+      "resultTitle": "批量提交已开始",
+      "resultBody": "{applications} 份申请：{queued} 已排队，{duplicate} 重复，{noProgram} 无项目，{excluded} 已排除，{failed} 失败。",
+      "errorToast": "批量提交失败，请重试。",
+      "resultPanelTitle": "上次批量提交",
+      "resultPanelHint": "在提交面板上跟踪各个提交。",
+      "statApplications": "申请",
+      "statQueued": "已排队",
+      "statDuplicate": "重复",
+      "statNoProgram": "无项目",
+      "statExcluded": "已排除",
+      "statFailed": "失败"
     }
   },
   "activityFeed": {

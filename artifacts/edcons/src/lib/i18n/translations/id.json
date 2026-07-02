@@ -5261,6 +5261,29 @@
         "duplicate": "Duplikat",
         "failed": "Gagal"
       }
+    },
+    "applyAllBulk": {
+      "button": "Kirim Semua Aplikasi",
+      "running": "Mengirim…",
+      "confirmTitle": "Kirim semua aplikasi ke semua universitas?",
+      "confirmBody": "Ini akan menyebarkan {applications} aplikasi pada tahap pemicu ke {universities} portal universitas yang kredensialnya siap dalam {mode}. Pasangan yang sudah dikirim otomatis dilewati.",
+      "liveWarning": "Mode Langsung aktif. Ini akan BENAR-BENAR mengirim aplikasi ini ke portal universitas. Anda yakin?",
+      "modeTest": "Mode Uji",
+      "modeLive": "Mode Langsung",
+      "counting": "Menghitung aplikasi yang memenuhi syarat…",
+      "noApplications": "Tidak ada aplikasi pada tahap pemicu yang dikonfigurasi. Konfigurasikan tahap pemicu atau pindahkan aplikasi ke sana terlebih dahulu.",
+      "confirmAction": "Kirim Semua",
+      "resultTitle": "Pengiriman massal dimulai",
+      "resultBody": "{applications} aplikasi: {queued} antre, {duplicate} duplikat, {noProgram} tanpa program, {excluded} dikecualikan, {failed} gagal.",
+      "errorToast": "Pengiriman massal gagal. Silakan coba lagi.",
+      "resultPanelTitle": "Pengiriman massal terakhir",
+      "resultPanelHint": "Lacak pengiriman individual di Papan Pengiriman.",
+      "statApplications": "Aplikasi",
+      "statQueued": "Antre",
+      "statDuplicate": "Duplikat",
+      "statNoProgram": "Tanpa program",
+      "statExcluded": "Dikecualikan",
+      "statFailed": "Gagal"
     }
   },
   "activityFeed": {

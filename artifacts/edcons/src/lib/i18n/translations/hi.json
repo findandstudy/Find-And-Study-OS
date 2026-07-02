@@ -5261,6 +5261,29 @@
         "duplicate": "डुप्लिकेट",
         "failed": "विफल"
       }
+    },
+    "applyAllBulk": {
+      "button": "सभी आवेदन जमा करें",
+      "running": "जमा किया जा रहा है…",
+      "confirmTitle": "सभी आवेदन सभी विश्वविद्यालयों को भेजें?",
+      "confirmBody": "यह ट्रिगर चरणों के {applications} आवेदन को {universities} क्रेडेंशियल-तैयार विश्वविद्यालय पोर्टल पर {mode} में वितरित करेगा। पहले से भेजे गए जोड़े स्वतः छोड़ दिए जाते हैं।",
+      "liveWarning": "लाइव मोड चालू है। यह वास्तव में इन आवेदनों को विश्वविद्यालय पोर्टल पर भेज देगा। क्या आप निश्चित हैं?",
+      "modeTest": "टेस्ट मोड",
+      "modeLive": "लाइव मोड",
+      "counting": "योग्य आवेदन गिने जा रहे हैं…",
+      "noApplications": "कॉन्फ़िगर किए गए ट्रिगर चरणों में कोई आवेदन नहीं है। पहले ट्रिगर चरण कॉन्फ़िगर करें या आवेदनों को उनमें ले जाएँ।",
+      "confirmAction": "सभी जमा करें",
+      "resultTitle": "थोक सबमिशन शुरू हुआ",
+      "resultBody": "{applications} आवेदन: {queued} कतार में, {duplicate} डुप्लिकेट, {noProgram} कोई प्रोग्राम नहीं, {excluded} बाहर, {failed} विफल।",
+      "errorToast": "थोक सबमिशन विफल। कृपया पुनः प्रयास करें।",
+      "resultPanelTitle": "अंतिम थोक सबमिशन",
+      "resultPanelHint": "सबमिशन बोर्ड पर अलग-अलग सबमिशन ट्रैक करें।",
+      "statApplications": "आवेदन",
+      "statQueued": "कतार में",
+      "statDuplicate": "डुप्लिकेट",
+      "statNoProgram": "कोई प्रोग्राम नहीं",
+      "statExcluded": "बाहर",
+      "statFailed": "विफल"
     }
   },
   "activityFeed": {

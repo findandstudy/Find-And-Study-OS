@@ -5261,6 +5261,29 @@
         "duplicate": "Duplicate",
         "failed": "Failed"
       }
+    },
+    "applyAllBulk": {
+      "button": "Submit All Applications",
+      "running": "Submitting…",
+      "confirmTitle": "Submit all applications to all universities?",
+      "confirmBody": "This will fan out {applications} application(s) in the trigger stages to {universities} credential-ready university portal(s) in {mode}. Already-submitted pairs are skipped automatically.",
+      "liveWarning": "Live Mode is on. This will REALLY submit these applications to the university portals. Are you sure?",
+      "modeTest": "Test Mode",
+      "modeLive": "Live Mode",
+      "counting": "Counting eligible applications…",
+      "noApplications": "No applications in the configured trigger stages. Configure trigger stages or move applications into them first.",
+      "confirmAction": "Submit All",
+      "resultTitle": "Bulk submission started",
+      "resultBody": "{applications} application(s): {queued} queued, {duplicate} duplicate, {noProgram} no program, {excluded} excluded, {failed} failed.",
+      "errorToast": "Bulk submission failed. Please try again.",
+      "resultPanelTitle": "Last bulk submission",
+      "resultPanelHint": "Track individual submissions on the Submission Board.",
+      "statApplications": "Applications",
+      "statQueued": "Queued",
+      "statDuplicate": "Duplicate",
+      "statNoProgram": "No program",
+      "statExcluded": "Excluded",
+      "statFailed": "Failed"
     }
   },
   "activityFeed": {

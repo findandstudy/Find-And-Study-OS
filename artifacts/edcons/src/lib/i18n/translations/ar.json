@@ -5261,6 +5261,29 @@
         "duplicate": "مكرر",
         "failed": "فشل"
       }
+    },
+    "applyAllBulk": {
+      "button": "إرسال جميع الطلبات",
+      "running": "جارٍ الإرسال…",
+      "confirmTitle": "إرسال جميع الطلبات إلى جميع الجامعات؟",
+      "confirmBody": "سيؤدي هذا إلى توزيع {applications} طلب في مراحل التشغيل على {universities} بوابة جامعية جاهزة بالاعتماد في {mode}. يتم تخطي الأزواج المرسلة مسبقًا تلقائيًا.",
+      "liveWarning": "الوضع المباشر مفعّل. سيؤدي هذا إلى إرسال هذه الطلبات فعليًا إلى بوابات الجامعات. هل أنت متأكد؟",
+      "modeTest": "وضع الاختبار",
+      "modeLive": "الوضع المباشر",
+      "counting": "جارٍ حساب الطلبات المؤهلة…",
+      "noApplications": "لا توجد طلبات في مراحل التشغيل المُهيأة. قم بتهيئة مراحل التشغيل أو انقل الطلبات إليها أولًا.",
+      "confirmAction": "إرسال الكل",
+      "resultTitle": "بدأ الإرسال الجماعي",
+      "resultBody": "{applications} طلب: {queued} في قائمة الانتظار، {duplicate} مكرر، {noProgram} بلا برنامج، {excluded} مستبعد، {failed} فشل.",
+      "errorToast": "فشل الإرسال الجماعي. يرجى المحاولة مرة أخرى.",
+      "resultPanelTitle": "آخر إرسال جماعي",
+      "resultPanelHint": "تتبّع الإرسالات الفردية في لوحة الإرسال.",
+      "statApplications": "الطلبات",
+      "statQueued": "في الانتظار",
+      "statDuplicate": "مكرر",
+      "statNoProgram": "بلا برنامج",
+      "statExcluded": "مستبعد",
+      "statFailed": "فشل"
     }
   },
   "activityFeed": {
