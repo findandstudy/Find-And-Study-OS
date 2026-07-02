@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +68,10 @@ import {
   Check,
   X,
   Building2,
+  Link2,
+  Link2Off,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import {
   PortalEmptyState, PortalErrorState,
@@ -103,6 +108,10 @@ interface PortalUniversity {
   hasCredentials: boolean;
   isMultiPortal: boolean;
   routesVia: string | null;
+  crmUniversityId: number | null;
+  crmUniversityName: string | null;
+  programCount: number;
+  linkStatus: "linked" | "stale" | "unlinked";
   createdAt: string;
 }
 
@@ -726,6 +735,61 @@ function CredentialsDialog({ uni, onClose, onSaved, onCleared }: CredentialsDial
 // UniversityRow
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// LinkStatusBadge — CRM ⇄ portal link state per row (backend linkStatus)
+//   linked   : crm_university_id set AND resolves to a CRM university w/ programs
+//   stale    : crm_university_id set BUT CRM missing OR has 0 active programs
+//   unlinked : crm_university_id NULL (excluded from fan-out until linked)
+// ---------------------------------------------------------------------------
+function LinkStatusBadge({ uni }: { uni: PortalUniversity }) {
+  const { t } = useI18n();
+
+  if (uni.linkStatus === "unlinked") {
+    return (
+      <Badge
+        variant="outline"
+        className="gap-1 text-[11px] py-0 h-4 border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400"
+      >
+        <Link2Off className="w-2.5 h-2.5" />
+        {t("portalAutomation.unis.link.unlinked")}
+      </Badge>
+    );
+  }
+
+  if (uni.linkStatus === "stale") {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="gap-1 text-[11px] py-0 h-4 border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
+            >
+              <AlertTriangle className="w-2.5 h-2.5" />
+              {t("portalAutomation.unis.link.stale")}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>{t("portalAutomation.unis.link.staleHint")}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge className="gap-1 text-[11px] py-0 h-4 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400">
+            <Link2 className="w-2.5 h-2.5" />
+            {t("portalAutomation.unis.link.linked", { count: uni.programCount })}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>{uni.crmUniversityName}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 interface RowProps {
   uni: PortalUniversity;
   onToggle: (id: number, active: boolean) => Promise<void>;
@@ -810,6 +874,8 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEdit
                 <KeySquare className="w-2.5 h-2.5" />
                 {uni.adapterKey}
               </Badge>
+              <span className="text-[11px] text-muted-foreground">·</span>
+              <LinkStatusBadge uni={uni} />
               {hasDefaults && (
                 <>
                   <span className="text-[11px] text-muted-foreground">·</span>
@@ -985,8 +1051,11 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEdit
 export default function PortalUniversitiesTab() {
   const { t } = useI18n();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   const [unis, setUnis]       = useState<PortalUniversity[]>([]);
+  const [relinking, setRelinking] = useState(false);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -1156,6 +1225,38 @@ export default function PortalUniversitiesTab() {
     setUnis((prev) => prev.map((u) => u.universityKey === portalKey ? { ...u, hasCredentials: false } : u));
   };
 
+  // Re-link portal ⇄ CRM universities (admin only) — fills crm_university_id by
+  // Turkish-aware name matching, then reloads so link badges refresh.
+  const handleRelink = async () => {
+    setRelinking(true);
+    try {
+      const res = await customFetch<{
+        linked: unknown[];
+        alreadyLinked: number;
+        unmatched: unknown[];
+        stale: unknown[];
+      }>("/api/portal-automation/relink-universities", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      toast({
+        title: t("portalAutomation.unis.link.relinkSuccess"),
+        description: t("portalAutomation.unis.link.relinkSummary", {
+          linked: res.linked.length,
+          alreadyLinked: res.alreadyLinked,
+          unmatched: res.unmatched.length,
+          stale: res.stale.length,
+        }),
+      });
+      await load(search);
+    } catch {
+      toast({ title: t("portalAutomation.unis.link.relinkError"), variant: "destructive" });
+    } finally {
+      setRelinking(false);
+    }
+  };
+
   return (
     <div className="space-y-4 py-2">
       {/* Toolbar */}
@@ -1169,13 +1270,37 @@ export default function PortalUniversitiesTab() {
             onChange={(e) => handleSearch(e.target.value)}
           />
         </div>
-        <Button
-          className="gap-2 shrink-0"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-          {t("portalAutomation.unis.addButton")}
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          {isAdmin && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={handleRelink}
+                    disabled={relinking}
+                  >
+                    {relinking
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <RefreshCw className="w-4 h-4" />}
+                    {relinking
+                      ? t("portalAutomation.unis.link.relinking")
+                      : t("portalAutomation.unis.link.relinkButton")}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t("portalAutomation.unis.link.relinkHint")}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          <Button
+            className="gap-2"
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            {t("portalAutomation.unis.addButton")}
+          </Button>
+        </div>
       </div>
 
       {/* List */}

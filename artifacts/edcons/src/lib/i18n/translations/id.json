@@ -4884,7 +4884,19 @@
       "deleting": "Deleting…",
       "deleteSuccess": "University deleted.",
       "deleteError": "Failed to delete university.",
-      "emptyTitle": "No portal universities yet"
+      "emptyTitle": "No portal universities yet",
+      "link": {
+        "relinkButton": "Tautkan Universitas",
+        "relinking": "Menautkan…",
+        "relinkHint": "Mencocokkan universitas portal yang belum tertaut dengan universitas CRM berdasarkan nama agar disertakan dalam fan-out.",
+        "relinkSuccess": "Universitas ditautkan ulang",
+        "relinkSummary": "Tertaut {linked} · Sudah tertaut {alreadyLinked} · Tidak cocok {unmatched} · Usang {stale}",
+        "relinkError": "Gagal menautkan universitas.",
+        "linked": "Tertaut · {count} program",
+        "unlinked": "Tidak tertaut",
+        "stale": "Tautan usang",
+        "staleHint": "Universitas portal ini menunjuk ke universitas CRM yang sudah tidak ada atau tidak memiliki program."
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

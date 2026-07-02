@@ -17,7 +17,7 @@
  */
 
 import { Router, type IRouter } from "express";
-import { and, asc, count, eq, ilike, isNull, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
@@ -26,6 +26,8 @@ import {
   portalAdaptersTable,
   portalProgramMappingTable,
   portalCredentialsTable,
+  universitiesTable,
+  programsTable,
 } from "@workspace/db";
 import { resolveAdapterByKey, adapterMetadata, setCredsOverride, clearCredsOverride, invalidateDeclarativeAdapterCache } from "@workspace/portal-adapters";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
@@ -228,6 +230,35 @@ router.get(
       .limit(pageParams.limit)
       .offset(pageParams.offset);
 
+    // CRM link status — resolve the linked CRM university name + active program
+    // count for the crm_university_id column (drives the frontend Linked/Stale
+    // badge). Batched by the collected ids (no paginated join).
+    const crmIds = Array.from(
+      new Set(rows.map((r) => r.crmUniversityId).filter((x): x is number => x != null)),
+    );
+    const crmInfo = new Map<number, { name: string; programCount: number }>();
+    if (crmIds.length > 0) {
+      const info = await db
+        .select({
+          id: universitiesTable.id,
+          name: universitiesTable.name,
+          programCount: count(programsTable.id),
+        })
+        .from(universitiesTable)
+        .leftJoin(
+          programsTable,
+          and(
+            eq(programsTable.universityId, universitiesTable.id),
+            eq(programsTable.isActive, true),
+          ),
+        )
+        .where(inArray(universitiesTable.id, crmIds))
+        .groupBy(universitiesTable.id, universitiesTable.name);
+      for (const i of info) {
+        crmInfo.set(i.id, { name: i.name, programCount: Number(i.programCount) || 0 });
+      }
+    }
+
     // Attach hasCredentials boolean — DB-first by adapterKey (canonical), then universityKey
     // as fallback, then env. NEVER expose actual credential values.
     const dbCredKeys = await batchPortalCredentialKeys();
@@ -238,7 +269,24 @@ router.get(
         process.env[`${K}_PASSWORD`]
       );
       const hasCredentials = dbCredKeys.has(row.adapterKey) || dbCredKeys.has(row.universityKey) || envHas;
-      return { ...row, hasCredentials };
+      const crm = row.crmUniversityId != null ? crmInfo.get(row.crmUniversityId) : undefined;
+      const programCount = crm?.programCount ?? 0;
+      // linkStatus mirrors the reconciler: a link is "stale" when the CRM row is
+      // gone (missing) or carries no active programs (gives fan-out nothing);
+      // "linked" only when it resolves to a CRM university with programs.
+      const linkStatus: "linked" | "stale" | "unlinked" =
+        row.crmUniversityId == null
+          ? "unlinked"
+          : !crm || programCount === 0
+            ? "stale"
+            : "linked";
+      return {
+        ...row,
+        hasCredentials,
+        crmUniversityName: crm?.name ?? null,
+        programCount,
+        linkStatus,
+      };
     });
 
     res.json({ data: rowsWithCreds, ...buildPageMeta(total, pageParams) });

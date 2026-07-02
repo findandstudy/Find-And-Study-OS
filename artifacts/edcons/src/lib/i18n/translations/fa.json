@@ -4884,7 +4884,19 @@
       "deleting": "Deleting…",
       "deleteSuccess": "University deleted.",
       "deleteError": "Failed to delete university.",
-      "emptyTitle": "No portal universities yet"
+      "emptyTitle": "No portal universities yet",
+      "link": {
+        "relinkButton": "پیوند دانشگاه‌ها",
+        "relinking": "در حال پیوند…",
+        "relinkHint": "دانشگاه‌های پورتال بدون پیوند را بر اساس نام با دانشگاه‌های CRM مطابقت می‌دهد تا در توزیع گنجانده شوند.",
+        "relinkSuccess": "دانشگاه‌ها پیوند داده شدند",
+        "relinkSummary": "پیوندشده {linked} · قبلاً پیوندشده {alreadyLinked} · بدون تطابق {unmatched} · منسوخ {stale}",
+        "relinkError": "پیوند دانشگاه‌ها ناموفق بود.",
+        "linked": "پیوندشده · {count} برنامه",
+        "unlinked": "بدون پیوند",
+        "stale": "پیوند منسوخ",
+        "staleHint": "این دانشگاه پورتال به یک دانشگاه CRM اشاره می‌کند که دیگر وجود ندارد یا برنامه‌ای ندارد."
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

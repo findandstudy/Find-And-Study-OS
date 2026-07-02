@@ -62,6 +62,7 @@ import {
   type ClaimedSubmission,
 } from "@workspace/portal-runner";
 import { batchPortalCredentialKeys, resolvePortalCreds } from "../lib/portalCreds.js";
+import { reconcilePortalUniversityCrmLinks } from "../lib/portalUniversityLinker.js";
 
 const router: IRouter = Router();
 
@@ -1466,6 +1467,46 @@ router.get("/university-portals", requireAuth, async (_req, res): Promise<void> 
 
   res.json(result);
 });
+
+// ---------------------------------------------------------------------------
+// POST /portal-automation/relink-universities
+//
+// Manually triggers the portal ⇄ CRM university auto-linker. Fills
+// portal_universities.crm_university_id by Turkish-aware name matching so
+// fan-out can see each portal university's CRM program catalog. Never
+// wrong-links: ambiguous names are left NULL and surfaced as `unmatched`.
+// `force` recomputes even already-linked rows (still safe).
+// ---------------------------------------------------------------------------
+const relinkUniversitiesBodySchema = z.object({
+  force: z.boolean().optional(),
+});
+type RelinkUniversitiesSchemas = { body: typeof relinkUniversitiesBodySchema };
+
+router.post(
+  "/portal-automation/relink-universities",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ body: relinkUniversitiesBodySchema }),
+  async (req, res): Promise<void> => {
+    const { force } = getValidated<RelinkUniversitiesSchemas>(req).body;
+    const result = await reconcilePortalUniversityCrmLinks({ force: !!force });
+    logAudit(
+      req.user!.id,
+      "relink_portal_universities",
+      "portal_universities",
+      undefined,
+      {
+        force: !!force,
+        linked: result.linked.length,
+        alreadyLinked: result.alreadyLinked,
+        unmatched: result.unmatched.length,
+        stale: result.stale.length,
+      },
+      req.ip,
+    );
+    res.json(result);
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Background job: periodic stuck-reset

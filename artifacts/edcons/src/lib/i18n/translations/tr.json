@@ -4884,7 +4884,19 @@
       "deleting": "Siliniyor…",
       "deleteSuccess": "Üniversite silindi.",
       "deleteError": "Üniversite silinemedi.",
-      "emptyTitle": "Henüz portal üniversitesi yok"
+      "emptyTitle": "Henüz portal üniversitesi yok",
+      "link": {
+        "relinkButton": "Üniversiteleri Eşle",
+        "relinking": "Eşleniyor…",
+        "relinkHint": "Bağlanmamış portal üniversitelerini isme göre CRM üniversiteleriyle eşleyerek fan-out’a dahil eder.",
+        "relinkSuccess": "Üniversiteler eşlendi",
+        "relinkSummary": "Eşlenen {linked} · Zaten bağlı {alreadyLinked} · Eşleşmeyen {unmatched} · Geçersiz {stale}",
+        "relinkError": "Üniversiteler eşlenemedi.",
+        "linked": "Bağlı · {count} program",
+        "unlinked": "Bağlı değil",
+        "stale": "Geçersiz bağ",
+        "staleHint": "Bu portal üniversitesi artık var olmayan veya programı olmayan bir CRM üniversitesine işaret ediyor."
+      }
     },
     "programMapping": {
       "title": "Program Haritalama",

@@ -4884,7 +4884,19 @@
       "deleting": "Deleting…",
       "deleteSuccess": "University deleted.",
       "deleteError": "Failed to delete university.",
-      "emptyTitle": "No portal universities yet"
+      "emptyTitle": "No portal universities yet",
+      "link": {
+        "relinkButton": "关联大学",
+        "relinking": "关联中…",
+        "relinkHint": "按名称将未关联的门户大学与 CRM 大学匹配，以便纳入分发。",
+        "relinkSuccess": "大学已重新关联",
+        "relinkSummary": "已关联 {linked} · 已存在 {alreadyLinked} · 未匹配 {unmatched} · 失效 {stale}",
+        "relinkError": "关联大学失败。",
+        "linked": "已关联 · {count} 个项目",
+        "unlinked": "未关联",
+        "stale": "关联失效",
+        "staleHint": "此门户大学指向的 CRM 大学已不存在或没有任何项目。"
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

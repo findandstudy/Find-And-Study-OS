@@ -2010,6 +2010,8 @@ async function seedClaudeIntegration() {
     startFollowUpChecker();
     const { startPortalStuckReset } = await import("./routes/portalAutomation");
     startPortalStuckReset();
+    const { startPortalUniversityLinker } = await import("./lib/portalUniversityLinker");
+    startPortalUniversityLinker();
   }
 
   serveStaticFrontend();

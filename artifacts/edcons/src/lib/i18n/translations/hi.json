@@ -4884,7 +4884,19 @@
       "deleting": "Deleting…",
       "deleteSuccess": "University deleted.",
       "deleteError": "Failed to delete university.",
-      "emptyTitle": "No portal universities yet"
+      "emptyTitle": "No portal universities yet",
+      "link": {
+        "relinkButton": "विश्वविद्यालय जोड़ें",
+        "relinking": "जोड़ा जा रहा है…",
+        "relinkHint": "बिना जुड़े पोर्टल विश्वविद्यालयों को नाम से CRM विश्वविद्यालयों से मिलाता है ताकि वे फैन-आउट में शामिल हों।",
+        "relinkSuccess": "विश्वविद्यालय फिर से जोड़े गए",
+        "relinkSummary": "जुड़े {linked} · पहले से जुड़े {alreadyLinked} · बेमेल {unmatched} · पुराने {stale}",
+        "relinkError": "विश्वविद्यालयों को जोड़ने में विफल।",
+        "linked": "जुड़ा · {count} प्रोग्राम",
+        "unlinked": "अजुड़ा",
+        "stale": "पुराना लिंक",
+        "staleHint": "यह पोर्टल विश्वविद्यालय एक ऐसे CRM विश्वविद्यालय की ओर इशारा करता है जो अब मौजूद नहीं है या जिसमें कोई प्रोग्राम नहीं है।"
+      }
     },
     "programMapping": {
       "title": "Program Mapping",

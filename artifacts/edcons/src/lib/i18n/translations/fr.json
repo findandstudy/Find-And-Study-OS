@@ -4884,7 +4884,19 @@
       "deleting": "Deleting…",
       "deleteSuccess": "University deleted.",
       "deleteError": "Failed to delete university.",
-      "emptyTitle": "No portal universities yet"
+      "emptyTitle": "No portal universities yet",
+      "link": {
+        "relinkButton": "Relier les universités",
+        "relinking": "Liaison…",
+        "relinkHint": "Associe les universités du portail non reliées aux universités CRM par nom afin de les inclure dans la diffusion.",
+        "relinkSuccess": "Universités reliées",
+        "relinkSummary": "Reliées {linked} · Déjà reliées {alreadyLinked} · Non appariées {unmatched} · Obsolètes {stale}",
+        "relinkError": "Échec de la liaison des universités.",
+        "linked": "Reliée · {count} programmes",
+        "unlinked": "Non reliée",
+        "stale": "Lien obsolète",
+        "staleHint": "Cette université du portail pointe vers une université CRM qui n’existe plus ou n’a aucun programme."
+      }
     },
     "programMapping": {
       "title": "Program Mapping",
