@@ -194,6 +194,24 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
+// Crash-loop containment: a stray async error (e.g. a Playwright fire-and-forget
+// promise, a browser subprocess hiccup, or a throw outside the tick try/catch)
+// must NOT take the whole worker down and trigger a PM2/pnpm ELIFECYCLE restart
+// loop. Log it and keep polling — per-submission failures are already handled in
+// tick() (marked as error via writebackResult), so staying up is always correct.
+process.on("unhandledRejection", (reason) => {
+  console.error(
+    "[portal-worker] Unhandled promise rejection (contained — worker stays up):",
+    reason,
+  );
+});
+process.on("uncaughtException", (err) => {
+  console.error(
+    "[portal-worker] Uncaught exception (contained — worker stays up):",
+    err,
+  );
+});
+
 loop().catch((err) => {
   console.error("[portal-worker] Fatal loop error:", err);
   process.exit(1);

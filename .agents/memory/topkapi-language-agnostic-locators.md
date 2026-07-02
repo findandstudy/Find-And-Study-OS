@@ -34,6 +34,27 @@ is `English`/`Türkçe` with `href="javascript:;"` (client-side handler) — cli
 click the first `isVisible()` one — `.first()` may resolve to the hidden template
 and skip the switch entirely (this was the silent-Turkish bug).
 
+**The program `<select>` is AJAX-CACHED in whatever language was active when the
+education-level radio was checked.** Switching the UI to English AFTER the radio
+fired does NOT re-fetch it — the options stay Turkish. So the language switch must
+be guaranteed BEFORE Step-4 program discovery (call ensureEnglishLanguage
+unconditionally + fatal right before the radio trigger, not only on /add load),
+AND if the read list still looks Turkish-only, RE-TRIGGER the education-level radio
+to force an English reload, then re-read. Detect "Turkish-only" by: has a
+Turkish-track label (`(Türkçe - Lisans …)`) AND no option carries a parenthesised
+degree (`(Bachelor)/(Master)…`) or `- English` track — English mode always renders
+the parenthesised degree on every option, so that guard prevents false-positive
+aborts. If STILL Turkish-only after switch+refetch → FATAL throw (never submit a
+Turkish dropdown; override/synonyms/fallback are the English-path safety net only).
+Add an `ENTER` log as the FIRST line of ensureEnglishLanguage — if it never
+appears in the live worker log, the call site was on a dead/stale-bundle path.
+
+**Worker ELIFECYCLE crash-loop after a submission** is usually a stray
+unhandledRejection (Playwright fire-and-forget / browser subprocess), NOT the tick
+error (tick already try/catches per-submission and loop() wraps tick). Add global
+`process.on("unhandledRejection")` + `("uncaughtException")` that LOG and do NOT
+exit, or one bad job crashes Node → PM2 restart loop.
+
 **The switch is client-side (no reload/navigation event).** So: verify by
 POLLING rendered content (`waitForEnglish` polls `isEnglishUI` ~5s), NOT by a
 navigation/`networkidle` wait; and `isEnglishUI` must be content-first (compare

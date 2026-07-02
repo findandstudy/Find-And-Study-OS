@@ -1178,6 +1178,12 @@ async function ensureEnglishLanguage(
   const { fatal = false, returnTo, context } = opts;
   const tag = context ? ` (${context})` : "";
 
+  // Proof-of-entry: if this line is ABSENT from the live worker log, the call
+  // site was never reached (dead/guarded path). Emitted before anything else.
+  logger.info(
+    `[topkapi] ensureEnglishLanguage() ENTER url=${page.url()}${tag} fatal=${fatal}`,
+  );
+
   try {
     if (await isEnglishUI(page)) {
       logger.info(`[topkapi] language: already English${tag} — skipping switch`);
@@ -1681,6 +1687,18 @@ export const topkapiAdapter: UniversityAdapter = {
     { const s = await takeShot(page, "step3-education"); if (s) screenshots.push(s); }
 
     // ── STEP 4: program selection (AJAX) ─────────────────────────────────────
+    // GUARANTEED English switch immediately before program discovery. Do NOT
+    // rely on the earlier /add call alone — a wizard step can revert to the
+    // account default (Turkish), which hides/renames English-track programmes.
+    // Unconditional + fatal so we never read a Turkish dropdown. When English is
+    // already active this returns immediately (logs "already English"), so it is
+    // a cheap no-op on the happy path and never resets the wizard.
+    await ensureEnglishLanguage(page, {
+      fatal: true,
+      context: "pre-step4",
+      returnTo: `${PORTAL_URL}/panel/applications/add`,
+    });
+
     logger.info("[topkapi] Step 4: program selection (AJAX)");
     await page.waitForSelector("input[name=educationLevel]", { timeout: 15000 }).catch(async () => { const d = await page.evaluate(() => { const r=[...document.querySelectorAll("input[type=radio]")].map(x=>x.name); const se=[...document.querySelectorAll("select")].map(x=>x.name); return { radios:[...new Set(r)], selects:[...new Set(se)] }; }); logger.warn("[topkapi] STEP4 DBG " + JSON.stringify(d)); });
 
@@ -1715,26 +1733,91 @@ export const topkapiAdapter: UniversityAdapter = {
     // suffix in the option text — a disabled option cannot be selected, so
     // page.selectOption() would block ~8s ("option being selected is not
     // enabled") before failing. We capture `disabled` to fast-fail instead.
-    const programOptionsRaw: Array<{
-      id: string;
-      name: string;
-      disabled: boolean;
-    }> = await page.$$eval(
-      "select[name=programFirstPreference] option",
-      (opts) =>
-        (opts as HTMLOptionElement[])
-          .filter((o) => o.value && o.value !== "0" && o.value !== "")
-          .map((o) => {
-            const name = o.textContent?.trim() ?? "";
-            return {
-              id: o.value,
-              name,
-              disabled:
-                o.disabled ||
-                /\(\s*(?:Kontenjan\s*Dolu|Quota\s*Full)\s*\)/i.test(name),
-            };
-          }),
-    );
+    type RawProgramOption = { id: string; name: string; disabled: boolean };
+    const readProgramOptions = (): Promise<RawProgramOption[]> =>
+      page.$$eval(
+        "select[name=programFirstPreference] option",
+        (opts) =>
+          (opts as HTMLOptionElement[])
+            .filter((o) => o.value && o.value !== "0" && o.value !== "")
+            .map((o) => {
+              const name = o.textContent?.trim() ?? "";
+              return {
+                id: o.value,
+                name,
+                disabled:
+                  o.disabled ||
+                  /\(\s*(?:Kontenjan\s*Dolu|Quota\s*Full)\s*\)/i.test(name),
+              };
+            }),
+      );
+
+    let programOptionsRaw: RawProgramOption[] = await readProgramOptions();
+
+    // The program <select> is populated by an AJAX call fired when the
+    // education-level radio is checked. If that AJAX ran while the UI was still
+    // Turkish, switching language afterwards does NOT re-fetch it — the options
+    // stay Turkish-labelled. English mode always renders a parenthesised degree
+    // ("(Bachelor)"/"(Master)"…) and an explicit track ("- English"/"- Turkish");
+    // Turkish mode renders "(Türkçe - Lisans …)" with no parenthesised degree.
+    const looksTurkishOnly = (opts: RawProgramOption[]): boolean =>
+      opts.length > 0 &&
+      opts.some((o) =>
+        /(?:türkçe|turkce)\s*[-–]\s*(?:lisans|önlisans|onlisans|yüksek|yuksek|doktora)/i.test(
+          o.name,
+        ),
+      ) &&
+      !opts.some(
+        (o) =>
+          /[-–]\s*english\b/i.test(o.name) ||
+          /\(\s*(?:bachelor|master|associate|phd|doctorate)\s*\)/i.test(o.name),
+      );
+
+    if (looksTurkishOnly(programOptionsRaw)) {
+      logger.warn(
+        "[topkapi] Step 4: program list still Turkish after English switch — re-triggering AJAX to reload in English",
+      );
+      await page.evaluate((lv: string) => {
+        const radios = document.querySelectorAll<HTMLInputElement>(
+          "input[name=educationLevel]",
+        );
+        for (const r of Array.from(radios)) {
+          if (r.value === lv) {
+            r.checked = true;
+            r.dispatchEvent(new Event("change", { bubbles: true }));
+            r.dispatchEvent(new Event("click", { bubbles: true }));
+            break;
+          }
+        }
+      }, eduLevel);
+      await page
+        .waitForFunction(
+          () => {
+            const sel = document.querySelector<HTMLSelectElement>(
+              "select[name=programFirstPreference]",
+            );
+            return sel !== null && sel.options.length > 1;
+          },
+          { timeout: 12000 },
+        )
+        .catch(() => {});
+      const reread = await readProgramOptions();
+      if (reread.length > 0) programOptionsRaw = reread;
+    }
+
+    // Fatal: if the list is STILL Turkish-only after the switch + refetch, the
+    // English switch did not take effect on program discovery — abort instead of
+    // silently submitting the wrong (Turkish) programme. Override/synonyms/
+    // fallback stay as the safety net for the English path only.
+    if (looksTurkishOnly(programOptionsRaw)) {
+      logger.error(
+        "[topkapi] language: SWITCH FAILED — aborting submission (program list still Turkish)",
+      );
+      throw new Error(
+        "topkapi: could not switch portal to English before program discovery",
+      );
+    }
+
     // matchProgram only needs {id,name}; keep a plain ProgramCandidate list.
     const programOptions: ProgramCandidate[] = programOptionsRaw.map((o) => ({
       id: o.id,
