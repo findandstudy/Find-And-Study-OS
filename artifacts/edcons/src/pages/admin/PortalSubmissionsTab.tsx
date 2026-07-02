@@ -108,6 +108,26 @@ const STATUS_CONFIG: Record<SubmissionStatus, {
   exclusive_region: { icon: Globe, className: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400" },
 };
 
+// Canonical status → i18n label key. SINGLE SOURCE shared by the row badge AND
+// the status filter dropdown so the two can never drift.
+const STATUS_LABEL_KEYS: Record<SubmissionStatus, string> = {
+  queued:           "portalAutomation.submissions.statusPending",
+  running:          "portalAutomation.submissions.statusRunning",
+  submitted:        "portalAutomation.submissions.statusSuccess",
+  already_exists:   "portalAutomation.submissions.statusSuccess",
+  program_missing:  "portalAutomation.submissions.statusSkipped",
+  failed:           "portalAutomation.submissions.statusFailed",
+  canceled:         "portalAutomation.submissions.statusCanceled",
+  dry_run:          "portalAutomation.submissions.statusDryRun",
+  program_full:     "portalFallback.programFull",
+  exclusive_region: "portalAutomation.submissions.statusExclusiveRegion",
+};
+
+// All canonical statuses in display order — drives the filter dropdown so any
+// new enum value (added to STATUS_CONFIG) is covered automatically. No
+// hardcoded subset: dropdown options and row badges share this source.
+const ALL_STATUSES = Object.keys(STATUS_CONFIG) as SubmissionStatus[];
+
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 // ---------------------------------------------------------------------------
@@ -180,19 +200,6 @@ function SubmissionRow({
   const isCanceling  = cancelingId === sub.id;
   const isProcessing = processingId === sub.id;
 
-  const statusLabel: Record<SubmissionStatus, string> = {
-    queued:          t("portalAutomation.submissions.statusPending"),
-    running:         t("portalAutomation.submissions.statusRunning"),
-    submitted:       t("portalAutomation.submissions.statusSuccess"),
-    already_exists:  t("portalAutomation.submissions.statusSuccess"),
-    program_missing: t("portalAutomation.submissions.statusSkipped"),
-    failed:          t("portalAutomation.submissions.statusFailed"),
-    canceled:        t("portalAutomation.submissions.statusCanceled"),
-    dry_run:         t("portalAutomation.submissions.statusDryRun"),
-    program_full:    t("portalFallback.programFull"),
-    exclusive_region: t("portalAutomation.submissions.statusExclusiveRegion"),
-  };
-
   const canRetry   = sub.status === "failed" || sub.status === "canceled" || sub.status === "dry_run";
   const canCancel  = sub.status === "queued"  || sub.status === "running";
   const canProcess = sub.status === "queued";
@@ -206,7 +213,7 @@ function SubmissionRow({
             <div className="flex items-center gap-2 flex-wrap">
               <Badge className={cn("gap-1 text-xs py-0", cfg.className)}>
                 <Icon className="w-3 h-3" />
-                {statusLabel[sub.status]}
+                {t(STATUS_LABEL_KEYS[sub.status])}
               </Badge>
               <Badge variant={sub.mode === "real" ? "default" : "secondary"} className="text-xs py-0">
                 {sub.mode === "real"
@@ -535,11 +542,9 @@ export default function PortalSubmissionsTab() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("portalAutomation.submissions.filterAll")}</SelectItem>
-              <SelectItem value="queued">{t("portalAutomation.submissions.statusPending")}</SelectItem>
-              <SelectItem value="running">{t("portalAutomation.submissions.statusRunning")}</SelectItem>
-              <SelectItem value="submitted">{t("portalAutomation.submissions.statusSuccess")}</SelectItem>
-              <SelectItem value="failed">{t("portalAutomation.submissions.statusFailed")}</SelectItem>
-              <SelectItem value="canceled">{t("portalAutomation.submissions.statusCanceled")}</SelectItem>
+              {ALL_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>{t(STATUS_LABEL_KEYS[s])}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={modeFilter} onValueChange={(v) => { setModeFilter(v); setPage(1); }}>

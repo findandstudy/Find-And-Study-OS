@@ -14,7 +14,6 @@ import {
   portalAdapterSpecsTable,
   portalAccountUniversitiesTable,
   portalAutomationSettingsTable,
-  pipelineStagesTable,
 } from "@workspace/db";
 import {
   buildWorkbookBuffer,
@@ -382,7 +381,10 @@ router.get(
 const listQuerySchema = z.object({
   applicationId: z.coerce.number().int().positive().optional(),
   status: z
-    .enum(["queued", "running", "submitted", "already_exists", "program_missing", "failed", "canceled"])
+    .enum([
+      "queued", "running", "submitted", "already_exists", "program_missing",
+      "failed", "canceled", "dry_run", "program_full", "exclusive_region",
+    ])
     .optional(),
   mode: z.enum(["dry", "real"]).optional(),
 });
