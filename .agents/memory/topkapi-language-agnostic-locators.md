@@ -3,18 +3,38 @@ name: Topkapı language-agnostic locators
 description: Why Topkapı Playwright locators must be bilingual once the portal UI is physically switched to English
 ---
 
-The Topkapı adapter physically switches the portal UI to English after login
-(`ensureEnglishLanguage` in `login()`) BEFORE program discovery, so the program
-dropdown loads English-track options that would be missing/Turkish-only otherwise.
+The Topkapı adapter physically switches the portal UI to English BEFORE program
+discovery, so the Step-4 dropdown loads English-track options that are
+missing/Turkish-only otherwise.
 
-**The switch MUST use real Playwright locators, not a single `page.evaluate`.**
-**Why:** a one-pass in-page evaluate that opens the flag menu and clicks
-"English" in the same synchronous tick fails silently — the animated dropdown
-hasn't rendered its items yet, and `el.click()` doesn't fire the theme's
-(Metronic/Bootstrap) framework handlers, so the run stays Turkish even though
-the code "exists". Prefer trigger-click → wait → option-click with Playwright
-locators; verify with `isEnglishUI` after each attempt; keep DOM-heuristic +
-locale-URL GETs only as later fallbacks. Idempotent + non-fatal.
+**Enforce the switch on the `/add` form page, not only in `login()`.**
+**Why:** the login-time switch runs on `/panel`, but `submit()` and
+`listPrograms()` then `goto(/panel/applications/add)` with a FRESH url, which
+reverts to the account default (Turkish) → Step-4 shows Turkish options. The
+login call is a non-fatal pre-warm only; the authoritative call is
+`ensureEnglishLanguage(page, {fatal:true, returnTo:/add})` right after the
+`goto(/add)` in BOTH `submit()` and `listPrograms()`, before Step 1.
+**How to apply:** it is FATAL on the `/add` path — if it can't confirm English
+after a retry it throws (never silently submits through a Turkish dropdown). The
+worker (`portal-automation-worker/src/runner.ts`) lets that error propagate →
+submission marked failed, process stays alive. Required log lines:
+`[topkapi] language: switching to English…` then `…confirmed English` or
+`…SWITCH FAILED (still Turkish)`.
+
+**The switch is client-side (no reload/navigation event).** So: verify by
+POLLING rendered content (`waitForEnglish` polls `isEnglishUI` ~5s), NOT by a
+navigation/`networkidle` wait; and `isEnglishUI` must be content-first (compare
+TR vs EN UI-word + wizard-step-title counts) because `<html lang>` may not update
+— use `<html lang>` only as a tiebreaker. Strategy ladder: A real menu
+trigger→option click (2 passes), B in-page DOM heuristic, C locale-URL GET then
+re-land on `returnTo`. `dumpLanguageSwitcher` logs candidate switcher DOM once
+per attempt so the real selector can be pinned from a live dry-run.
+
+**All `page.evaluate` in the switch path MUST be string-literal**, not arrow/
+named-function callbacks: esbuild keep-names wraps inner fns with `__name`, which
+doesn't exist in the browser sandbox and throws → the strategy dies silently in
+the bundled worker (dev/tsx hides it). `isEnglishUI`, `clickEnglishSwitchInPage`,
+`dumpLanguageSwitcher` are all string-literal for this reason.
 
 **Rule:** every text-based Playwright locator in the Topkapı adapter must be
 bilingual/language-agnostic, or it silently times out in English mode.
