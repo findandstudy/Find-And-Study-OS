@@ -44,6 +44,7 @@ import { isAgentRole } from "@workspace/roles";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
+import { transliterateToLatin } from "../lib/textNormalize";
 import { getValidated, validate } from "../middlewares/validate";
 import {
   claimById,
@@ -1916,10 +1917,19 @@ router.get(
     const conditions = [];
     conditions.push(eq(universitiesTable.isActive, true));
     if (q) {
+      // Turkish-aware, diacritic-folded substring match. Catalog names are
+      // stored ASCII ("Kultur", "Gelisim") but admins type natural Turkish
+      // ("Kültür", "Gelişim"), so fold ç/ğ/ı/İ/ö/ş/ü (+ common accents) and
+      // lowercase BOTH sides before comparing. The query is folded in JS via
+      // the shared normalizer; the column is folded in-SQL via translate() so
+      // the match stays a plain case/diacritic-insensitive substring (includes).
+      const foldedQuery = `%${transliterateToLatin(q).toLowerCase()}%`;
+      const trFrom = "çÇğĞıİöÖşŞüÜâÂîÎûÛ";
+      const trTo = "cCgGiIoOsSuUaAiIuU";
       conditions.push(
         or(
-          ilike(universitiesTable.name, `%${q}%`),
-          ilike(universitiesTable.country, `%${q}%`),
+          sql`LOWER(translate(${universitiesTable.name}, ${trFrom}, ${trTo})) LIKE ${foldedQuery}`,
+          sql`LOWER(translate(${universitiesTable.country}, ${trFrom}, ${trTo})) LIKE ${foldedQuery}`,
         ),
       );
     }
