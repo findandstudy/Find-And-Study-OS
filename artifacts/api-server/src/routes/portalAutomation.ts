@@ -14,6 +14,7 @@ import {
   portalAdapterSpecsTable,
   portalAccountUniversitiesTable,
   portalAutomationSettingsTable,
+  pipelineStagesTable,
 } from "@workspace/db";
 import {
   buildWorkbookBuffer,
@@ -1079,6 +1080,335 @@ function levelGroup(raw: string | null | undefined): string {
   return s;
 }
 
+// ---------------------------------------------------------------------------
+// Shared apply-to-all fan-out core (reused by the single endpoint AND the bulk
+// endpoint — no parallel engine / no copy-paste).
+// ---------------------------------------------------------------------------
+
+/** Env-var credential fallback — mirrors GET /university-portals exactly. */
+function envHasKey(k: string): boolean {
+  const K = k.toUpperCase().replace(/-/g, "_");
+  return !!(
+    (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
+    process.env[`${K}_PASSWORD`]
+  );
+}
+
+interface CredentialReadyUniversity {
+  universityKey: string;
+  universityName: string;
+  adapterKey: string;
+  crmUniversityId: number;
+}
+
+/**
+ * Loads the fan-out target universities: active, not deleted, mapped to a CRM
+ * university (crm_university_id set so catalog programmes are resolvable) AND
+ * credential-ready (DB row or env vars). Credential gate mirrors
+ * GET /university-portals exactly. Shared by the single + bulk endpoints so both
+ * target the exact same set (and universitiesTargeted counts match).
+ */
+async function loadCredentialReadyPortalUniversities(): Promise<CredentialReadyUniversity[]> {
+  const [dbCredKeys, unis] = await Promise.all([
+    batchPortalCredentialKeys(),
+    db
+      .select({
+        universityKey:   portalUniversitiesTable.universityKey,
+        universityName:  portalUniversitiesTable.universityName,
+        adapterKey:      portalUniversitiesTable.adapterKey,
+        crmUniversityId: portalUniversitiesTable.crmUniversityId,
+      })
+      .from(portalUniversitiesTable)
+      .where(
+        and(
+          eq(portalUniversitiesTable.isActive, true),
+          isNull(portalUniversitiesTable.deletedAt),
+          isNotNull(portalUniversitiesTable.crmUniversityId),
+        ),
+      ),
+  ]);
+
+  return unis
+    .filter(
+      (uni) =>
+        dbCredKeys.has(uni.adapterKey) ||
+        dbCredKeys.has(uni.universityKey) ||
+        envHasKey(uni.adapterKey),
+    )
+    .map((uni) => ({
+      universityKey:   uni.universityKey,
+      universityName:  uni.universityName,
+      adapterKey:      uni.adapterKey,
+      crmUniversityId: uni.crmUniversityId as number,
+    }));
+}
+
+/**
+ * Fan-out ONE application to the given credential-ready universities. Per
+ * candidate university: exclusion → "excluded"; same-level program match
+ * (exact-first via matchProgram, then fuzzy) → "no-program"; else advisory-
+ * locked reuse/create application + dedup/enqueue submission → "duplicate" /
+ * "queued". Does NOT trigger the drain, audit, or rate-limit — callers own those
+ * so the bulk loop drains/audits once. REUSES the existing queue / matcher /
+ * exclusion core.
+ */
+async function fanOutApplicationToUniversities(
+  srcApp: typeof applicationsTable.$inferSelect,
+  unis: CredentialReadyUniversity[],
+  mode: "dry" | "real",
+  userId: number,
+): Promise<ApplyToAllItem[]> {
+  const [student] = await db
+    .select({ nationality: studentsTable.nationality })
+    .from(studentsTable)
+    .where(eq(studentsTable.id, srcApp.studentId))
+    .limit(1);
+  const nationality = student?.nationality ?? null;
+
+  const sourceProgramName = srcApp.programName ?? "";
+  const sourceLevel = levelGroup(srcApp.level);
+
+  const results: ApplyToAllItem[] = [];
+
+  for (const uni of unis) {
+    const crmUniversityId = uni.crmUniversityId;
+    try {
+      // --- Exclusion (nationality / exclusive region) ---
+      const excl = await resolveNationalityExclusion(uni.universityKey, nationality);
+      if (excl.excluded) {
+        results.push({
+          universityKey:  uni.universityKey,
+          universityName: uni.universityName,
+          outcome:        "excluded",
+          message:        excl.agencyName ?? undefined,
+        });
+        continue;
+      }
+
+      // --- Program match at the SAME level ---
+      const programs = await db
+        .select({
+          id:              programsTable.id,
+          name:            programsTable.name,
+          degree:          programsTable.degree,
+          language:        programsTable.language,
+          tuitionFee:      programsTable.tuitionFee,
+          discountedFee:   programsTable.discountedFee,
+          scholarship:     programsTable.scholarship,
+          commissionRate:  programsTable.commissionRate,
+          serviceFeeAmount: programsTable.serviceFeeAmount,
+          applicationFee:  programsTable.applicationFee,
+          depositFee:      programsTable.depositFee,
+          advancedFee:     programsTable.advancedFee,
+          languageFee:     programsTable.languageFee,
+          currency:        programsTable.currency,
+        })
+        .from(programsTable)
+        .where(
+          and(
+            eq(programsTable.universityId, crmUniversityId),
+            eq(programsTable.isActive, true),
+          ),
+        );
+
+      // When the source has a known level, only same-level programmes are
+      // eligible (mandatory level match). Unknown source level → match by
+      // name across all programmes (best effort).
+      const candidatePrograms = sourceLevel
+        ? programs.filter((p) => levelGroup(p.degree) === sourceLevel)
+        : programs;
+
+      if (candidatePrograms.length === 0) {
+        results.push({
+          universityKey:  uni.universityKey,
+          universityName: uni.universityName,
+          outcome:        "no-program",
+        });
+        continue;
+      }
+
+      const candidates: ProgramCandidate[] = candidatePrograms.map((p) => ({
+        id:   String(p.id),
+        name: p.name,
+      }));
+      const matched = matchProgram(sourceProgramName, candidates);
+      if (!matched) {
+        results.push({
+          universityKey:  uni.universityKey,
+          universityName: uni.universityName,
+          outcome:        "no-program",
+        });
+        continue;
+      }
+      const program = candidatePrograms.find((p) => String(p.id) === matched.match.id)!;
+
+      // --- Dedup + reuse/create application, then dedup + enqueue submission.
+      // Serialize both with transaction-scoped Postgres advisory locks
+      // (studentId, crmUniversityId) for the application and
+      // (applicationId, universityKey) for the submission — the latter mirrors
+      // enqueueIfEligible so all enqueue paths serialize on the same key.
+      const now = new Date();
+      const txOutcome = await db.transaction(
+        async (
+          tx,
+        ): Promise<
+          | { kind: "duplicate"; appId: number; subId: number }
+          | { kind: "queued"; appId: number; subId: number }
+        > => {
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(${srcApp.studentId}, ${crmUniversityId})`,
+          );
+
+          let appId: number;
+          const [existingApp] = await tx
+            .select({ id: applicationsTable.id })
+            .from(applicationsTable)
+            .where(
+              and(
+                eq(applicationsTable.studentId, srcApp.studentId),
+                eq(applicationsTable.universityId, crmUniversityId),
+                isNull(applicationsTable.deletedAt),
+              ),
+            )
+            .limit(1);
+
+          if (existingApp) {
+            appId = existingApp.id;
+          } else {
+            const [newApp] = await tx
+              .insert(applicationsTable)
+              .values({
+                studentId:           srcApp.studentId,
+                programId:           program.id,
+                universityId:        crmUniversityId,
+                agentId:             srcApp.agentId,
+                assignedToId:        srcApp.assignedToId,
+                season:              srcApp.season,
+                stage:               "inquiry",
+                level:               program.degree ?? srcApp.level ?? null,
+                instructionLanguage: program.language ?? null,
+                programName:         program.name,
+                universityName:      uni.universityName,
+                country:             srcApp.country,
+                tuitionFee:          program.tuitionFee ?? null,
+                discountedFee:       program.discountedFee ?? null,
+                scholarship:         program.scholarship ?? null,
+                commissionRate:      program.commissionRate ?? null,
+                serviceFeeAmount:    program.serviceFeeAmount ?? null,
+                applicationFee:      program.applicationFee ?? null,
+                depositFee:          program.depositFee ?? null,
+                advancedFee:         program.advancedFee ?? null,
+                languageFee:         program.languageFee ?? null,
+                currency:            program.currency ?? null,
+                // Origin attribution copied verbatim from the source application.
+                originType:          srcApp.originType,
+                originEntityType:    srcApp.originEntityType,
+                originEntityId:      srcApp.originEntityId,
+                originDisplayName:   srcApp.originDisplayName,
+                originLocked:        srcApp.originLocked,
+                originStudentId:     srcApp.originStudentId,
+                branchId:            srcApp.branchId,
+                createdAt:           now,
+                updatedAt:           now,
+              })
+              .returning({ id: applicationsTable.id });
+            appId = newApp.id;
+          }
+
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(${appId}, hashtext(${uni.universityKey}))`,
+          );
+
+          const [existingSub] = await tx
+            .select({ id: portalSubmissionsTable.id })
+            .from(portalSubmissionsTable)
+            .where(
+              and(
+                eq(portalSubmissionsTable.applicationId, appId),
+                eq(portalSubmissionsTable.universityKey, uni.universityKey),
+                inArray(portalSubmissionsTable.status, ["queued", "running"]),
+                isNull(portalSubmissionsTable.deletedAt),
+              ),
+            )
+            .limit(1);
+
+          if (existingSub) {
+            return { kind: "duplicate", appId, subId: existingSub.id };
+          }
+
+          const [subRow] = await tx
+            .insert(portalSubmissionsTable)
+            .values({
+              applicationId:  appId,
+              studentId:      srcApp.studentId,
+              universityKey:  uni.universityKey,
+              universityName: uni.universityName,
+              mode,
+              status:         "queued",
+              enqueuedBy:     userId,
+            })
+            .returning({ id: portalSubmissionsTable.id });
+
+          return { kind: "queued", appId, subId: subRow.id };
+        },
+      );
+
+      results.push({
+        universityKey:  uni.universityKey,
+        universityName: uni.universityName,
+        outcome:        txOutcome.kind === "duplicate" ? "duplicate" : "queued",
+        applicationId:  txOutcome.appId,
+        submissionId:   txOutcome.subId,
+        programName:    program.name,
+        confidence:     matched.conf,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[apply-to-all] uni=${uni.universityKey} failed:`, msg);
+      results.push({
+        universityKey:  uni.universityKey,
+        universityName: uni.universityName,
+        outcome:        "failed",
+        message:        msg,
+      });
+    }
+  }
+
+  return results;
+}
+
+/** Tally per-outcome counts for an apply-to-all result list. */
+function computeApplyToAllCounts(results: ApplyToAllItem[]) {
+  return {
+    queued:    results.filter((r) => r.outcome === "queued").length,
+    excluded:  results.filter((r) => r.outcome === "excluded").length,
+    noProgram: results.filter((r) => r.outcome === "no-program").length,
+    duplicate: results.filter((r) => r.outcome === "duplicate").length,
+    failed:    results.filter((r) => r.outcome === "failed").length,
+  };
+}
+
+/**
+ * Fire a NON-BLOCKING background drain (guarded by the shared _processMutex).
+ * Reuses the exact manual drain path; not awaited so the caller returns
+ * immediately. If a run is already in flight the rows are picked up by it (or
+ * the always-on worker).
+ */
+function triggerBackgroundDrain(label: string): void {
+  if (_processMutex) return;
+  const workerId = `api-${label}-${Date.now()}`;
+  _processMutex = true;
+  void (async () => {
+    try {
+      await drainQueue(workerId);
+    } catch (err) {
+      console.error(`[${label}] background drain failed:`, err);
+    } finally {
+      _processMutex = false;
+    }
+  })();
+}
+
 router.post(
   "/portal-automation/apply-to-all",
   requireAuth,
@@ -1100,7 +1430,7 @@ router.post(
       return;
     }
 
-    // ----- Source application + student nationality -------------------------
+    // ----- Source application ----------------------------------------------
     const [srcApp] = await db
       .select()
       .from(applicationsTable)
@@ -1111,291 +1441,13 @@ router.post(
       return;
     }
 
-    const [student] = await db
-      .select({ nationality: studentsTable.nationality })
-      .from(studentsTable)
-      .where(eq(studentsTable.id, srcApp.studentId))
-      .limit(1);
-    const nationality = student?.nationality ?? null;
-
-    const sourceProgramName = srcApp.programName ?? "";
-    const sourceLevel = levelGroup(srcApp.level);
-
-    // ----- Candidate universities: active + mapped to a CRM university ------
-    // (crm_university_id is required so we can look up the catalog programmes
-    // and create/reuse an application there). Credential gate mirrors
-    // GET /university-portals exactly.
-    const [dbCredKeys, unis] = await Promise.all([
-      batchPortalCredentialKeys(),
-      db
-        .select({
-          universityKey:   portalUniversitiesTable.universityKey,
-          universityName:  portalUniversitiesTable.universityName,
-          adapterKey:      portalUniversitiesTable.adapterKey,
-          crmUniversityId: portalUniversitiesTable.crmUniversityId,
-        })
-        .from(portalUniversitiesTable)
-        .where(
-          and(
-            eq(portalUniversitiesTable.isActive, true),
-            isNull(portalUniversitiesTable.deletedAt),
-            isNotNull(portalUniversitiesTable.crmUniversityId),
-          ),
-        ),
-    ]);
-
-    function envHasKey(k: string): boolean {
-      const K = k.toUpperCase().replace(/-/g, "_");
-      return !!(
-        (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
-        process.env[`${K}_PASSWORD`]
-      );
-    }
-
-    const results: ApplyToAllItem[] = [];
-
-    for (const uni of unis) {
-      const crmUniversityId = uni.crmUniversityId as number;
-      try {
-        // --- Credential gate (only credential-ready universities count) ---
-        const hasCreds =
-          dbCredKeys.has(uni.adapterKey) ||
-          dbCredKeys.has(uni.universityKey) ||
-          envHasKey(uni.adapterKey);
-        if (!hasCreds) continue;
-
-        // --- Exclusion (nationality / exclusive region) ---
-        const excl = await resolveNationalityExclusion(uni.universityKey, nationality);
-        if (excl.excluded) {
-          results.push({
-            universityKey:  uni.universityKey,
-            universityName: uni.universityName,
-            outcome:        "excluded",
-            message:        excl.agencyName ?? undefined,
-          });
-          continue;
-        }
-
-        // --- Program match at the SAME level ---
-        const programs = await db
-          .select({
-            id:              programsTable.id,
-            name:            programsTable.name,
-            degree:          programsTable.degree,
-            language:        programsTable.language,
-            tuitionFee:      programsTable.tuitionFee,
-            discountedFee:   programsTable.discountedFee,
-            scholarship:     programsTable.scholarship,
-            commissionRate:  programsTable.commissionRate,
-            serviceFeeAmount: programsTable.serviceFeeAmount,
-            applicationFee:  programsTable.applicationFee,
-            depositFee:      programsTable.depositFee,
-            advancedFee:     programsTable.advancedFee,
-            languageFee:     programsTable.languageFee,
-            currency:        programsTable.currency,
-          })
-          .from(programsTable)
-          .where(
-            and(
-              eq(programsTable.universityId, crmUniversityId),
-              eq(programsTable.isActive, true),
-            ),
-          );
-
-        // When the source has a known level, only same-level programmes are
-        // eligible (mandatory level match). Unknown source level → match by
-        // name across all programmes (best effort).
-        const candidatePrograms = sourceLevel
-          ? programs.filter((p) => levelGroup(p.degree) === sourceLevel)
-          : programs;
-
-        if (candidatePrograms.length === 0) {
-          results.push({
-            universityKey:  uni.universityKey,
-            universityName: uni.universityName,
-            outcome:        "no-program",
-          });
-          continue;
-        }
-
-        const candidates: ProgramCandidate[] = candidatePrograms.map((p) => ({
-          id:   String(p.id),
-          name: p.name,
-        }));
-        const matched = matchProgram(sourceProgramName, candidates);
-        if (!matched) {
-          results.push({
-            universityKey:  uni.universityKey,
-            universityName: uni.universityName,
-            outcome:        "no-program",
-          });
-          continue;
-        }
-        const program = candidatePrograms.find((p) => String(p.id) === matched.match.id)!;
-
-        // --- Dedup + reuse/create application, then dedup + enqueue submission
-        // A plain SELECT-then-INSERT is racy: concurrent apply-to-all calls (or
-        // overlap with the auto-trigger / Run Now enqueue surfaces) can all pass
-        // the read and insert duplicate application or submission rows. There is
-        // no partial unique index (schema change out of scope), so serialize both
-        // the application reuse/create and the submission dedup/insert with
-        // transaction-scoped Postgres advisory locks (released on commit/rollback).
-        // Two locks: (studentId, crmUniversityId) for the application and
-        // (applicationId, universityKey) for the submission — the latter mirrors
-        // enqueueIfEligible so all enqueue paths serialize on the same key.
-        const now = new Date();
-        const txOutcome = await db.transaction(
-          async (
-            tx,
-          ): Promise<
-            | { kind: "duplicate"; appId: number; subId: number }
-            | { kind: "queued"; appId: number; subId: number }
-          > => {
-            await tx.execute(
-              sql`SELECT pg_advisory_xact_lock(${srcApp.studentId}, ${crmUniversityId})`,
-            );
-
-            let appId: number;
-            const [existingApp] = await tx
-              .select({ id: applicationsTable.id })
-              .from(applicationsTable)
-              .where(
-                and(
-                  eq(applicationsTable.studentId, srcApp.studentId),
-                  eq(applicationsTable.universityId, crmUniversityId),
-                  isNull(applicationsTable.deletedAt),
-                ),
-              )
-              .limit(1);
-
-            if (existingApp) {
-              appId = existingApp.id;
-            } else {
-              const [newApp] = await tx
-                .insert(applicationsTable)
-                .values({
-                  studentId:           srcApp.studentId,
-                  programId:           program.id,
-                  universityId:        crmUniversityId,
-                  agentId:             srcApp.agentId,
-                  assignedToId:        srcApp.assignedToId,
-                  season:              srcApp.season,
-                  stage:               "inquiry",
-                  level:               program.degree ?? srcApp.level ?? null,
-                  instructionLanguage: program.language ?? null,
-                  programName:         program.name,
-                  universityName:      uni.universityName,
-                  country:             srcApp.country,
-                  tuitionFee:          program.tuitionFee ?? null,
-                  discountedFee:       program.discountedFee ?? null,
-                  scholarship:         program.scholarship ?? null,
-                  commissionRate:      program.commissionRate ?? null,
-                  serviceFeeAmount:    program.serviceFeeAmount ?? null,
-                  applicationFee:      program.applicationFee ?? null,
-                  depositFee:          program.depositFee ?? null,
-                  advancedFee:         program.advancedFee ?? null,
-                  languageFee:         program.languageFee ?? null,
-                  currency:            program.currency ?? null,
-                  // Origin attribution copied verbatim from the source application.
-                  originType:          srcApp.originType,
-                  originEntityType:    srcApp.originEntityType,
-                  originEntityId:      srcApp.originEntityId,
-                  originDisplayName:   srcApp.originDisplayName,
-                  originLocked:        srcApp.originLocked,
-                  originStudentId:     srcApp.originStudentId,
-                  branchId:            srcApp.branchId,
-                  createdAt:           now,
-                  updatedAt:           now,
-                })
-                .returning({ id: applicationsTable.id });
-              appId = newApp.id;
-            }
-
-            await tx.execute(
-              sql`SELECT pg_advisory_xact_lock(${appId}, hashtext(${uni.universityKey}))`,
-            );
-
-            const [existingSub] = await tx
-              .select({ id: portalSubmissionsTable.id })
-              .from(portalSubmissionsTable)
-              .where(
-                and(
-                  eq(portalSubmissionsTable.applicationId, appId),
-                  eq(portalSubmissionsTable.universityKey, uni.universityKey),
-                  inArray(portalSubmissionsTable.status, ["queued", "running"]),
-                  isNull(portalSubmissionsTable.deletedAt),
-                ),
-              )
-              .limit(1);
-
-            if (existingSub) {
-              return { kind: "duplicate", appId, subId: existingSub.id };
-            }
-
-            const [subRow] = await tx
-              .insert(portalSubmissionsTable)
-              .values({
-                applicationId:  appId,
-                studentId:      srcApp.studentId,
-                universityKey:  uni.universityKey,
-                universityName: uni.universityName,
-                mode,
-                status:         "queued",
-                enqueuedBy:     user.id,
-              })
-              .returning({ id: portalSubmissionsTable.id });
-
-            return { kind: "queued", appId, subId: subRow.id };
-          },
-        );
-
-        results.push({
-          universityKey:  uni.universityKey,
-          universityName: uni.universityName,
-          outcome:        txOutcome.kind === "duplicate" ? "duplicate" : "queued",
-          applicationId:  txOutcome.appId,
-          submissionId:   txOutcome.subId,
-          programName:    program.name,
-          confidence:     matched.conf,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[apply-to-all] uni=${uni.universityKey} failed:`, msg);
-        results.push({
-          universityKey:  uni.universityKey,
-          universityName: uni.universityName,
-          outcome:        "failed",
-          message:        msg,
-        });
-      }
-    }
-
-    const counts = {
-      queued:    results.filter((r) => r.outcome === "queued").length,
-      excluded:  results.filter((r) => r.outcome === "excluded").length,
-      noProgram: results.filter((r) => r.outcome === "no-program").length,
-      duplicate: results.filter((r) => r.outcome === "duplicate").length,
-      failed:    results.filter((r) => r.outcome === "failed").length,
-    };
+    // Fan-out via the shared core (credential-ready, CRM-linked universities).
+    const unis = await loadCredentialReadyPortalUniversities();
+    const results = await fanOutApplicationToUniversities(srcApp, unis, mode, user.id);
+    const counts = computeApplyToAllCounts(results);
 
     // ----- Trigger a background drain (non-blocking) -----------------------
-    // Reuses the exact manual drain path (per-submission inline cap + requeue),
-    // guarded by the shared mutex. Not awaited: the caller gets the result list
-    // immediately. If a run is already in flight the rows are picked up by it
-    // (or the always-on worker).
-    if (counts.queued > 0 && !_processMutex) {
-      const workerId = `api-applyall-${user.id}-${Date.now()}`;
-      _processMutex = true;
-      void (async () => {
-        try {
-          await drainQueue(workerId);
-        } catch (err) {
-          console.error("[apply-to-all] background drain failed:", err);
-        } finally {
-          _processMutex = false;
-        }
-      })();
-    }
+    if (counts.queued > 0) triggerBackgroundDrain(`applyall-${user.id}`);
 
     await logAudit(
       user.id,
