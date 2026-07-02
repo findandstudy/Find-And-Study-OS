@@ -12,9 +12,14 @@ import {
   useGetUniversityPortals,
   useEnqueuePortalSubmission,
   useRetryPortalSubmission,
+  useApplyToAllUniversities,
   getGetPortalSubmissionsQueryOptions,
 } from "@workspace/api-client-react";
-import type { PortalSubmission, UniversityPortal } from "@workspace/api-client-react";
+import type {
+  PortalSubmission,
+  UniversityPortal,
+  ApplyToAllItem,
+} from "@workspace/api-client-react";
 import { formatDate } from "@workspace/i18n";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -39,7 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Send, RefreshCw, ShieldCheck } from "lucide-react";
+import { Send, RefreshCw, ShieldCheck, Rocket } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -56,6 +61,14 @@ const STATUS_COLORS: Record<string, string> = {
   failed:          "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
   canceled:        "bg-muted text-muted-foreground",
   dry_run:         "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+};
+
+const APPLY_ALL_OUTCOME_COLORS: Record<string, string> = {
+  queued:       "bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-300",
+  excluded:     "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  "no-program": "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+  duplicate:    "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300",
+  failed:       "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
 /** Roles that may trigger a "real" (non-dry) submission */
@@ -137,6 +150,8 @@ export default function PortalSubmissionPanel({ applicationId, universityName }:
   const effectiveKey = selectedKey || defaultKey;
   const [mode, setMode] = useState<"dry" | "real">("dry");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [applyAllOpen, setApplyAllOpen] = useState(false);
+  const [applyAllResults, setApplyAllResults] = useState<ApplyToAllItem[] | null>(null);
 
   // ----- Mutations ---------------------------------------------------------
   const enqueueMutation = useEnqueuePortalSubmission({
@@ -169,6 +184,24 @@ export default function PortalSubmissionPanel({ applicationId, universityName }:
     },
   });
 
+  const applyAllMutation = useApplyToAllUniversities({
+    mutation: {
+      onSuccess: (data) => {
+        setApplyAllResults(data.results);
+        toast({
+          title: t("portalAutomation.applyAll.done", { queued: data.counts.queued }),
+        });
+        void refetchSubs();
+      },
+      onError: () => {
+        toast({
+          title: t("portalAutomation.applyAll.error"),
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
   // ----- Handlers ----------------------------------------------------------
   function handleEnqueue() {
     if (!effectiveKey) return;
@@ -192,6 +225,18 @@ export default function PortalSubmissionPanel({ applicationId, universityName }:
 
   function handleRetry(id: number) {
     retryMutation.mutate({ id });
+  }
+
+  function handleConfirmApplyAll() {
+    setApplyAllOpen(false);
+    setApplyAllResults(null);
+    applyAllMutation.mutate({
+      data: {
+        applicationId,
+        mode,
+        ...(mode === "real" ? { confirm: true } : {}),
+      },
+    });
   }
 
   // ----- Derived -----------------------------------------------------------
@@ -304,7 +349,68 @@ export default function PortalSubmissionPanel({ applicationId, universityName }:
               </>
             )}
           </Button>
+
+          {/* Apply-to-all button */}
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-9 gap-1.5"
+            onClick={() => { setApplyAllResults(null); setApplyAllOpen(true); }}
+            disabled={portals.length === 0 || applyAllMutation.isPending}
+            title={t("portalAutomation.applyAll.buttonHint")}
+          >
+            {applyAllMutation.isPending ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />
+                {t("portalAutomation.applyAll.submitting")}
+              </>
+            ) : (
+              <>
+                <Rocket className="w-3.5 h-3.5" />
+                {t("portalAutomation.applyAll.button")}
+              </>
+            )}
+          </Button>
         </div>
+
+        {/* ---- Apply-to-all results ---- */}
+        {applyAllResults && applyAllResults.length > 0 && (
+          <div className="space-y-2 pt-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              {t("portalAutomation.applyAll.resultsTitle")}
+            </p>
+            <div className="rounded-lg border divide-y divide-border overflow-hidden">
+              {applyAllResults.map((r) => (
+                <div
+                  key={r.universityKey}
+                  className="flex items-center gap-2 px-3 py-2 text-xs bg-card flex-wrap"
+                >
+                  <Badge
+                    className={`text-[11px] py-0 h-5 ${APPLY_ALL_OUTCOME_COLORS[r.outcome] ?? "bg-muted text-muted-foreground"}`}
+                  >
+                    {t(`portalAutomation.applyAll.outcome.${r.outcome === "no-program" ? "noProgram" : r.outcome}`)}
+                  </Badge>
+                  <span className="font-medium">{r.universityName}</span>
+                  {r.programName && (
+                    <span className="text-muted-foreground truncate max-w-[220px]">
+                      {r.programName}
+                      {typeof r.confidence === "number" && (
+                        <span className="ml-1 opacity-70">
+                          ({Math.round(r.confidence * 100)}%)
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {r.message && (
+                    <span className="text-muted-foreground truncate max-w-[220px]">
+                      {r.message}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ---- Submissions list ---- */}
         {subs.length > 0 && (
@@ -387,6 +493,40 @@ export default function PortalSubmissionPanel({ applicationId, universityName }:
                 <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />
               ) : (
                 t("portalAutomation.panel.enqueue")
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---- Apply-to-all confirm dialog ---- */}
+      <Dialog open={applyAllOpen} onOpenChange={setApplyAllOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Rocket className="w-5 h-5 text-primary" />
+              {t("portalAutomation.applyAll.confirmTitle")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("portalAutomation.applyAll.confirmBody", {
+                count: portals.length,
+                mode: t(mode === "real" ? "portalAutomation.panel.modeReal" : "portalAutomation.panel.modeDry"),
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApplyAllOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant={mode === "real" ? "destructive" : "default"}
+              onClick={handleConfirmApplyAll}
+              disabled={applyAllMutation.isPending}
+            >
+              {applyAllMutation.isPending ? (
+                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />
+              ) : (
+                t("portalAutomation.applyAll.confirmCta")
               )}
             </Button>
           </DialogFooter>

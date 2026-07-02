@@ -5231,6 +5231,24 @@
       "routedTag": "routed",
       "allCountries": "All countries",
       "allTypes": "All types"
+    },
+    "applyAll": {
+      "button": "التقديم للجميع",
+      "buttonHint": "إرسال هذا الطلب إلى جميع جامعات البوابة النشطة",
+      "submitting": "جارٍ الإرسال…",
+      "confirmTitle": "التقديم لجميع الجامعات",
+      "confirmBody": "سيتم إرسال هذا الطلب إلى {count} جامعة بوابة في وضع {mode}. تُتخطى المدارس غير المؤهلة (استثناءات المنطقة أو عدم وجود برنامج مطابق) تلقائيًا.",
+      "confirmCta": "التقديم للجميع",
+      "done": "تم إدراج {queued} طلب في قائمة الانتظار",
+      "error": "فشل التقديم للجميع",
+      "resultsTitle": "نتائج الإرسال",
+      "outcome": {
+        "queued": "في قائمة الانتظار",
+        "excluded": "مستبعد",
+        "noProgram": "لا يوجد برنامج",
+        "duplicate": "مكرر",
+        "failed": "فشل"
+      }
     }
   },
   "activityFeed": {

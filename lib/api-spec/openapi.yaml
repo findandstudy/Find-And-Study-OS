@@ -2381,6 +2381,49 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /portal-automation/apply-to-all:
+    post:
+      operationId: applyToAllUniversities
+      tags: [portal-automation]
+      summary: Fan-out one application to all active portal universities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyToAllBody"
+      responses:
+        "200":
+          description: Processed, nothing newly queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyToAllResult"
+        "201":
+          description: One or more submissions queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyToAllResult"
+        "404":
+          description: Application not found or deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Confirm required for real mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many submissions, rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /portal-automation/eligible-applications:
     get:
       operationId: getEligibleApplications
@@ -6009,6 +6052,52 @@ components:
               submissionId: { type: integer }
             required: [applicationId, reason]
       required: [queued, skipped]
+
+    ApplyToAllBody:
+      type: object
+      properties:
+        applicationId: { type: integer }
+        mode:
+          type: string
+          enum: [dry, real]
+        confirm: { type: boolean }
+      required: [applicationId, mode]
+
+    ApplyToAllItem:
+      type: object
+      properties:
+        universityKey: { type: string }
+        universityName: { type: string }
+        outcome:
+          type: string
+          enum: [queued, excluded, no-program, duplicate, failed]
+        message: { type: string }
+        applicationId: { type: integer }
+        submissionId: { type: integer }
+        programName: { type: string }
+        confidence: { type: number }
+      required: [universityKey, universityName, outcome]
+
+    ApplyToAllResult:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [dry, real]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApplyToAllItem"
+        counts:
+          type: object
+          properties:
+            queued: { type: integer }
+            excluded: { type: integer }
+            noProgram: { type: integer }
+            duplicate: { type: integer }
+            failed: { type: integer }
+          required: [queued, excluded, noProgram, duplicate, failed]
+      required: [mode, results, counts]
 
     EligibleApplication:
       type: object

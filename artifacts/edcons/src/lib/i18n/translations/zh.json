@@ -5231,6 +5231,24 @@
       "routedTag": "routed",
       "allCountries": "All countries",
       "allTypes": "All types"
+    },
+    "applyAll": {
+      "button": "提交至全部",
+      "buttonHint": "将此申请分发到所有启用的门户大学",
+      "submitting": "提交中…",
+      "confirmTitle": "提交至所有大学",
+      "confirmBody": "此申请将以{mode}模式提交至 {count} 所门户大学。不符合条件的学校（地区限制或无匹配专业）将被自动跳过。",
+      "confirmCta": "提交至全部",
+      "done": "已排队 {queued} 个提交",
+      "error": "批量提交失败",
+      "resultsTitle": "分发结果",
+      "outcome": {
+        "queued": "已排队",
+        "excluded": "已排除",
+        "noProgram": "无专业",
+        "duplicate": "重复",
+        "failed": "失败"
+      }
     }
   },
   "activityFeed": {

@@ -5231,6 +5231,24 @@
       "routedTag": "routed",
       "allCountries": "All countries",
       "allTypes": "All types"
+    },
+    "applyAll": {
+      "button": "Kirim ke semua",
+      "buttonHint": "Sebarkan aplikasi ini ke semua universitas portal yang aktif",
+      "submitting": "Mengirim…",
+      "confirmTitle": "Ajukan ke semua universitas",
+      "confirmBody": "Aplikasi ini akan dikirim ke {count} universitas portal dalam mode {mode}. Sekolah yang tidak memenuhi syarat (pengecualian wilayah atau tidak ada program yang cocok) otomatis dilewati.",
+      "confirmCta": "Kirim ke semua",
+      "done": "{queued} pengiriman diantrekan",
+      "error": "Gagal mengirim ke semua",
+      "resultsTitle": "Hasil pengiriman",
+      "outcome": {
+        "queued": "Diantrekan",
+        "excluded": "Dikecualikan",
+        "noProgram": "Tidak ada program",
+        "duplicate": "Duplikat",
+        "failed": "Gagal"
+      }
     }
   },
   "activityFeed": {

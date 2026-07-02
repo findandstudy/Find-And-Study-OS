@@ -5231,6 +5231,24 @@
       "routedTag": "routed",
       "allCountries": "All countries",
       "allTypes": "All types"
+    },
+    "applyAll": {
+      "button": "Envoyer à toutes",
+      "buttonHint": "Diffuser cette candidature à toutes les universités du portail actives",
+      "submitting": "Envoi…",
+      "confirmTitle": "Postuler à toutes les universités",
+      "confirmBody": "Cette candidature sera envoyée à {count} universités du portail en mode {mode}. Les établissements inéligibles (exclusions régionales ou absence de programme correspondant) sont ignorés automatiquement.",
+      "confirmCta": "Envoyer à toutes",
+      "done": "{queued} envoi(s) en file d’attente",
+      "error": "Échec de l’envoi à toutes",
+      "resultsTitle": "Résultats de l’envoi",
+      "outcome": {
+        "queued": "En file",
+        "excluded": "Exclu",
+        "noProgram": "Aucun programme",
+        "duplicate": "Doublon",
+        "failed": "Échec"
+      }
     }
   },
   "activityFeed": {

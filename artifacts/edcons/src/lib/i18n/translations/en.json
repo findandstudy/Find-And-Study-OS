@@ -5231,6 +5231,24 @@
       "routedTag": "routed",
       "allCountries": "All countries",
       "allTypes": "All types"
+    },
+    "applyAll": {
+      "button": "Submit to all",
+      "buttonHint": "Fan out this application to every active portal university",
+      "submitting": "Submitting…",
+      "confirmTitle": "Submit to all universities",
+      "confirmBody": "This will submit this application to {count} portal universities in {mode} mode. Ineligible schools (region exclusions or no matching program) are skipped automatically.",
+      "confirmCta": "Submit to all",
+      "done": "Queued {queued} submission(s)",
+      "error": "Submit-to-all failed",
+      "resultsTitle": "Fan-out results",
+      "outcome": {
+        "queued": "Queued",
+        "excluded": "Excluded",
+        "noProgram": "No program",
+        "duplicate": "Duplicate",
+        "failed": "Failed"
+      }
     }
   },
   "activityFeed": {

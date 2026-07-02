@@ -2587,6 +2587,44 @@ export const ManualSubmitPortalResponse = zod.object({
 });
 
 /**
+ * @summary Fan-out one application to all active portal universities
+ */
+export const ApplyToAllUniversitiesBody = zod.object({
+  applicationId: zod.number(),
+  mode: zod.enum(["dry", "real"]),
+  confirm: zod.boolean().optional(),
+});
+
+export const ApplyToAllUniversitiesResponse = zod.object({
+  mode: zod.enum(["dry", "real"]),
+  results: zod.array(
+    zod.object({
+      universityKey: zod.string(),
+      universityName: zod.string(),
+      outcome: zod.enum([
+        "queued",
+        "excluded",
+        "no-program",
+        "duplicate",
+        "failed",
+      ]),
+      message: zod.string().optional(),
+      applicationId: zod.number().optional(),
+      submissionId: zod.number().optional(),
+      programName: zod.string().optional(),
+      confidence: zod.number().optional(),
+    }),
+  ),
+  counts: zod.object({
+    queued: zod.number(),
+    excluded: zod.number(),
+    noProgram: zod.number(),
+    duplicate: zod.number(),
+    failed: zod.number(),
+  }),
+});
+
+/**
  * @summary List applications eligible for manual portal submission
  */
 

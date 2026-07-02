@@ -5231,6 +5231,24 @@
       "routedTag": "routed",
       "allCountries": "All countries",
       "allTypes": "All types"
+    },
+    "applyAll": {
+      "button": "Enviar a todas",
+      "buttonHint": "Distribuir esta solicitud a todas las universidades del portal activas",
+      "submitting": "Enviando…",
+      "confirmTitle": "Postular a todas las universidades",
+      "confirmBody": "Esta solicitud se enviará a {count} universidades del portal en modo {mode}. Las escuelas no elegibles (exclusiones regionales o sin programa coincidente) se omiten automáticamente.",
+      "confirmCta": "Enviar a todas",
+      "done": "{queued} envío(s) en cola",
+      "error": "Error al enviar a todas",
+      "resultsTitle": "Resultados del envío",
+      "outcome": {
+        "queued": "En cola",
+        "excluded": "Excluido",
+        "noProgram": "Sin programa",
+        "duplicate": "Duplicado",
+        "failed": "Fallido"
+      }
     }
   },
   "activityFeed": {

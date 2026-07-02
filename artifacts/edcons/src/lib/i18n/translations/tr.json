@@ -5231,6 +5231,24 @@
       "routedTag": "yönlendirildi",
       "allCountries": "Tüm ülkeler",
       "allTypes": "Tüm türler"
+    },
+    "applyAll": {
+      "button": "Tümüne başvur",
+      "buttonHint": "Bu başvuruyu tüm aktif portal üniversitelerine gönder",
+      "submitting": "Gönderiliyor…",
+      "confirmTitle": "Tüm üniversitelere başvur",
+      "confirmBody": "Bu başvuru {count} portal üniversitesine {mode} modunda gönderilecek. Uygun olmayan okullar (bölge kısıtı veya eşleşen program yok) otomatik atlanır.",
+      "confirmCta": "Tümüne başvur",
+      "done": "{queued} gönderim sıraya alındı",
+      "error": "Tümüne başvuru başarısız",
+      "resultsTitle": "Gönderim sonuçları",
+      "outcome": {
+        "queued": "Sıraya alındı",
+        "excluded": "Hariç tutuldu",
+        "noProgram": "Program yok",
+        "duplicate": "Zaten var",
+        "failed": "Başarısız"
+      }
     }
   },
   "activityFeed": {

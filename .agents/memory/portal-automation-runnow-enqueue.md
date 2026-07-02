@@ -35,6 +35,18 @@ not re-implement the SELECT-then-INSERT). The advisory lock releases on
 commit/rollback. A parallel-race regression test lives in
 `scripts/test-portal-trigger.ts` (RN7b).
 
+## Apply-to-all is a new enqueue surface (extra application-level race)
+
+`POST /portal-automation/apply-to-all` (ADMIN_ROLES) fans one application out to
+ALL active adapter+credentialed portal universities. It does NOT reuse
+`enqueueIfEligible` (it deliberately bypasses the trigger-stage/scope gates), but
+it MUST replicate the atomic dedup. Unlike other surfaces it also reuses/creates
+an `applications` row per uni, so it takes TWO transaction-scoped advisory locks
+in one tx: `pg_advisory_xact_lock(studentId, crmUniversityId)` around the app
+reuse/create, then `pg_advisory_xact_lock(applicationId, hashtext(universityKey))`
+around the submission dedup/insert. Without the first lock, concurrent calls
+create duplicate applications; without the second, duplicate submissions.
+
 ## Gotchas
 - `portalAutomation.ts` route file did NOT import `portalAutomationSettingsTable`
   even though the run-now route reads it → runtime 500 (`ReferenceError`), not a

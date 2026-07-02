@@ -34,6 +34,8 @@ import type {
   Announcement,
   Application,
   ApplicationsListResponse,
+  ApplyToAllBody,
+  ApplyToAllResult,
   AuditLogsListResponse,
   BlogPost,
   BlogPostsListResponse,
@@ -8653,6 +8655,92 @@ export const useManualSubmitPortal = <
   TContext
 > => {
   return useMutation(getManualSubmitPortalMutationOptions(options));
+};
+
+/**
+ * @summary Fan-out one application to all active portal universities
+ */
+export const getApplyToAllUniversitiesUrl = () => {
+  return `/api/portal-automation/apply-to-all`;
+};
+
+export const applyToAllUniversities = async (
+  applyToAllBody: ApplyToAllBody,
+  options?: RequestInit,
+): Promise<ApplyToAllResult> => {
+  return customFetch<ApplyToAllResult>(getApplyToAllUniversitiesUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(applyToAllBody),
+  });
+};
+
+export const getApplyToAllUniversitiesMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyToAllUniversities>>,
+    TError,
+    { data: BodyType<ApplyToAllBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof applyToAllUniversities>>,
+  TError,
+  { data: BodyType<ApplyToAllBody> },
+  TContext
+> => {
+  const mutationKey = ["applyToAllUniversities"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof applyToAllUniversities>>,
+    { data: BodyType<ApplyToAllBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return applyToAllUniversities(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApplyToAllUniversitiesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof applyToAllUniversities>>
+>;
+export type ApplyToAllUniversitiesMutationBody = BodyType<ApplyToAllBody>;
+export type ApplyToAllUniversitiesMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Fan-out one application to all active portal universities
+ */
+export const useApplyToAllUniversities = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyToAllUniversities>>,
+    TError,
+    { data: BodyType<ApplyToAllBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof applyToAllUniversities>>,
+  TError,
+  { data: BodyType<ApplyToAllBody> },
+  TContext
+> => {
+  return useMutation(getApplyToAllUniversitiesMutationOptions(options));
 };
 
 /**

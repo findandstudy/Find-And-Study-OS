@@ -2084,6 +2084,64 @@ export interface ManualSubmitResult {
   skipped: ManualSubmitResultSkippedItem[];
 }
 
+export type ApplyToAllBodyMode =
+  (typeof ApplyToAllBodyMode)[keyof typeof ApplyToAllBodyMode];
+
+export const ApplyToAllBodyMode = {
+  dry: "dry",
+  real: "real",
+} as const;
+
+export interface ApplyToAllBody {
+  applicationId: number;
+  mode: ApplyToAllBodyMode;
+  confirm?: boolean;
+}
+
+export type ApplyToAllItemOutcome =
+  (typeof ApplyToAllItemOutcome)[keyof typeof ApplyToAllItemOutcome];
+
+export const ApplyToAllItemOutcome = {
+  queued: "queued",
+  excluded: "excluded",
+  "no-program": "no-program",
+  duplicate: "duplicate",
+  failed: "failed",
+} as const;
+
+export interface ApplyToAllItem {
+  universityKey: string;
+  universityName: string;
+  outcome: ApplyToAllItemOutcome;
+  message?: string;
+  applicationId?: number;
+  submissionId?: number;
+  programName?: string;
+  confidence?: number;
+}
+
+export type ApplyToAllResultMode =
+  (typeof ApplyToAllResultMode)[keyof typeof ApplyToAllResultMode];
+
+export const ApplyToAllResultMode = {
+  dry: "dry",
+  real: "real",
+} as const;
+
+export type ApplyToAllResultCounts = {
+  queued: number;
+  excluded: number;
+  noProgram: number;
+  duplicate: number;
+  failed: number;
+};
+
+export interface ApplyToAllResult {
+  mode: ApplyToAllResultMode;
+  results: ApplyToAllItem[];
+  counts: ApplyToAllResultCounts;
+}
+
 export interface EligibleApplication {
   id: number;
   stage: string;

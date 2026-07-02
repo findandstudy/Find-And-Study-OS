@@ -5231,6 +5231,24 @@
       "routedTag": "routed",
       "allCountries": "All countries",
       "allTypes": "All types"
+    },
+    "applyAll": {
+      "button": "सभी को भेजें",
+      "buttonHint": "इस आवेदन को सभी सक्रिय पोर्टल विश्वविद्यालयों में भेजें",
+      "submitting": "भेजा जा रहा है…",
+      "confirmTitle": "सभी विश्वविद्यालयों में आवेदन करें",
+      "confirmBody": "यह आवेदन {mode} मोड में {count} पोर्टल विश्वविद्यालयों को भेजा जाएगा। अयोग्य स्कूल (क्षेत्रीय बहिष्करण या कोई मेल खाता प्रोग्राम नहीं) स्वतः छोड़ दिए जाते हैं।",
+      "confirmCta": "सभी को भेजें",
+      "done": "{queued} सबमिशन कतार में",
+      "error": "सभी को भेजना विफल",
+      "resultsTitle": "वितरण परिणाम",
+      "outcome": {
+        "queued": "कतार में",
+        "excluded": "बहिष्कृत",
+        "noProgram": "कोई प्रोग्राम नहीं",
+        "duplicate": "डुप्लिकेट",
+        "failed": "विफल"
+      }
     }
   },
   "activityFeed": {

@@ -5231,6 +5231,24 @@
       "routedTag": "routed",
       "allCountries": "All countries",
       "allTypes": "All types"
+    },
+    "applyAll": {
+      "button": "ارسال به همه",
+      "buttonHint": "ارسال این درخواست به همه دانشگاه‌های فعال پرتال",
+      "submitting": "در حال ارسال…",
+      "confirmTitle": "ارسال به همه دانشگاه‌ها",
+      "confirmBody": "این درخواست به {count} دانشگاه پرتال در حالت {mode} ارسال می‌شود. مدارس واجد شرایط نبودن (محدودیت منطقه یا نبود برنامه منطبق) به‌طور خودکار نادیده گرفته می‌شوند.",
+      "confirmCta": "ارسال به همه",
+      "done": "{queued} ارسال در صف قرار گرفت",
+      "error": "ارسال به همه ناموفق بود",
+      "resultsTitle": "نتایج ارسال",
+      "outcome": {
+        "queued": "در صف",
+        "excluded": "مستثنی",
+        "noProgram": "بدون برنامه",
+        "duplicate": "تکراری",
+        "failed": "ناموفق"
+      }
     }
   },
   "activityFeed": {
