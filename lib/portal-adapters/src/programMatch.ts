@@ -364,10 +364,15 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return union === 0 ? 0 : intersection / union;
 }
 
-/** True when the folded string indicates a thesis (tezli) programme. */
-function hasTez(f: string): boolean    { return /\btezli\b/.test(f); }
-/** True when the folded string indicates a non-thesis (tezsiz) programme. */
-function hasTezsiz(f: string): boolean { return /\btezsiz\b/.test(f); }
+/** Non-thesis (tezsiz) — TR "tezsiz" or EN "non thesis"/"nonthesis". */
+function hasTezsiz(f: string): boolean {
+  return /\btezsiz\b/.test(f) || /\bnon ?thesis\b/.test(f) || /\bnonthesis\b/.test(f);
+}
+/** Thesis (tezli) — TR "tezli" or EN "thesis" (but NOT "non thesis"). */
+function hasTez(f: string): boolean {
+  if (hasTezsiz(f)) return false;          // "thesis" inside "non thesis" is NOT tezli
+  return /\btezli\b/.test(f) || /\bthesis\b/.test(f);
+}
 
 // ---------------------------------------------------------------------------
 // parseTrack — extract the language-of-instruction "track" from a program label
@@ -503,6 +508,16 @@ export function matchProgram(
   }
 
   if (candidates.length === 0) return null;
+
+  // --- 1.5 Exact / folded-name match always wins (bypasses the margin gate) ---
+  // "prefer the identical programme, else the closest" rule. An identical folded
+  // name implies the same track + same thesis mode, so it is safe to return
+  // immediately at conf 1.0. Without this, near-identical siblings (Thesis vs
+  // Non-Thesis) collapse the margin below MARGIN_THRESHOLD and swallow the
+  // conf-1.0 exact hit, yielding a spurious "no program".
+  const qFold = fold(programName);
+  const exact = candidates.find(c => fold(c.name) === qFold);
+  if (exact) return { match: exact, conf: 1.0 };
 
   // --- 2. Hard filters ---
   const queryFolded = fold(programName);

@@ -126,6 +126,46 @@ test("TESZ1 — tezli query only matches tezli candidates", () => {
 });
 
 // ---------------------------------------------------------------------------
+// EXACT1 — folded-name exact match wins over near-identical sibling (margin bypass)
+// Live repro: source "Master of Cyber Security (Non-Thesis) (Turkish)" vs Topkapı
+// candidates 13600 (identical) + 13599 (Thesis sibling). Margin was < 0.15 so the
+// old matcher returned null despite a conf-1.0 exact hit.
+// ---------------------------------------------------------------------------
+
+test("EXACT1 — exact folded name wins over near-identical sibling", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "13600", name: "Master of Cyber Security (Non-Thesis) (Turkish)" },
+    { id: "13599", name: "Master of Cyber Security (Thesis) (Turkish)" },
+  ];
+
+  const result = matchProgram("Master of Cyber Security (Non-Thesis) (Turkish)", candidates);
+
+  assert.ok(result !== null,             "Exact match must not return null");
+  assert.equal(result.match.id, "13600", "Identical folded name must win at conf 1.0");
+  assert.equal(result.conf, 1.0,         "Exact match confidence must be 1.0");
+});
+
+// ---------------------------------------------------------------------------
+// EXACT2 — EN "Thesis"/"Non-Thesis" separate correctly in the tez hard filter
+// A thesis query must reach the thesis sibling, not the non-thesis one (no exact
+// hit here — query differs from both candidate names).
+// ---------------------------------------------------------------------------
+
+test("EXACT2 — EN thesis query only matches the thesis sibling", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "nt", name: "Master of Cyber Security (Non-Thesis) (Turkish)" },
+    { id: "t",  name: "Master of Cyber Security (Thesis) (Turkish)" },
+  ];
+
+  // Non-exact query (missing "of") so the exact short-circuit does NOT fire;
+  // scores ≥0.6 against the thesis sibling while the non-thesis one is hard-filtered.
+  const result = matchProgram("Master Cyber Security Thesis Turkish", candidates);
+
+  assert.ok(result !== null,          "Expected a thesis match");
+  assert.equal(result.match.id, "t",  "EN 'Thesis' query must match the Thesis sibling, not Non-Thesis");
+});
+
+// ---------------------------------------------------------------------------
 // LANG1 — language hard filter (English-medium)
 // ---------------------------------------------------------------------------
 
