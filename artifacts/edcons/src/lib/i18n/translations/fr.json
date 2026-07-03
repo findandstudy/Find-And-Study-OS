@@ -2728,6 +2728,9 @@
     "importFailed": "Échec de l'import"
   },
   "applicationsPage": {
+    "source": "Source",
+    "excludeAutomation": "Exclure l'automatisation",
+    "onlyAutomation": "Automatisation uniquement",
     "editApplication": "Modifier la candidature",
     "stage": "Étape",
     "country": "Pays",

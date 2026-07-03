@@ -2677,6 +2677,9 @@
     "importFailed": "इम्पोर्ट विफल रहा"
   },
   "applicationsPage": {
+    "source": "स्रोत",
+    "excludeAutomation": "स्वचालन को छोड़कर",
+    "onlyAutomation": "केवल स्वचालन",
     "editApplication": "आवेदन संपादित करें",
     "stage": "चरण",
     "country": "देश",

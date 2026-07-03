@@ -2728,6 +2728,9 @@
     "importFailed": "Не удалось импортировать"
   },
   "applicationsPage": {
+    "source": "Источник",
+    "excludeAutomation": "Кроме автоматизации",
+    "onlyAutomation": "Только автоматизация",
     "editApplication": "Редактировать заявку",
     "stage": "Этап",
     "country": "Страна",

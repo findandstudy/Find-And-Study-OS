@@ -2979,6 +2979,9 @@
     "moveDown": "Move down"
   },
   "applicationsPage": {
+    "source": "Source",
+    "excludeAutomation": "Exclude Automation",
+    "onlyAutomation": "Only Automation",
     "editApplication": "Edit Application",
     "stage": "Stage",
     "country": "Country",

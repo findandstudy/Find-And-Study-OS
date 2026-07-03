@@ -2677,6 +2677,9 @@
     "importFailed": "Impor gagal"
   },
   "applicationsPage": {
+    "source": "Sumber",
+    "excludeAutomation": "Kecuali Otomasi",
+    "onlyAutomation": "Hanya Otomasi",
     "editApplication": "Ubah Aplikasi",
     "stage": "Tahap",
     "country": "Negara",

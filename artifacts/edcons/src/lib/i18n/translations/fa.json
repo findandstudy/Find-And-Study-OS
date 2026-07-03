@@ -2677,6 +2677,9 @@
     "importFailed": "ورود ناموفق بود"
   },
   "applicationsPage": {
+    "source": "منبع",
+    "excludeAutomation": "بدون خودکارسازی",
+    "onlyAutomation": "فقط خودکارسازی",
     "editApplication": "ویرایش درخواست",
     "stage": "مرحله",
     "country": "کشور",

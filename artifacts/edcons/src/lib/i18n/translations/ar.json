@@ -2728,6 +2728,9 @@
     "importFailed": "فشل الاستيراد"
   },
   "applicationsPage": {
+    "source": "المصدر",
+    "excludeAutomation": "باستثناء الأتمتة",
+    "onlyAutomation": "الأتمتة فقط",
     "editApplication": "تعديل الطلب",
     "stage": "المرحلة",
     "country": "الدولة",

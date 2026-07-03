@@ -1060,8 +1060,8 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
 }
 
 /* ── FilterPopover ────────────────────────────────────────── */
-type AppFilters = { stage: string; country: string; source: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string; originType: string };
-const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "mine_unassigned", dateRange: "all", originType: "all" };
+type AppFilters = { stage: string; country: string; source: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string; originType: string; createdSource: string };
+const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "mine_unassigned", dateRange: "all", originType: "all", createdSource: "all" };
 
 function isDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -1203,14 +1203,13 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canVie
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Origin</Label>
-          <Select value={filters.originType} onValueChange={v => onChange({ ...filters, originType: v })}>
+          <Label className="text-xs">{t("applicationsPage.source")}</Label>
+          <Select value={filters.createdSource} onValueChange={v => onChange({ ...filters, createdSource: v })}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="direct">Direct</SelectItem>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="sub_agent">Sub-Agent</SelectItem>
+              <SelectItem value="all">{t("applicationsPage.all")}</SelectItem>
+              <SelectItem value="exclude_automation">{t("applicationsPage.excludeAutomation")}</SelectItem>
+              <SelectItem value="only_automation">{t("applicationsPage.onlyAutomation")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1580,6 +1579,8 @@ export default function ApplicationsPage() {
     if (filters.assignedTo === "unassigned" && a.assignedToId != null) return false;
     if (filters.assignedTo !== "all" && filters.assignedTo !== "mine" && filters.assignedTo !== "mine_unassigned" && filters.assignedTo !== "unassigned" && !isNaN(Number(filters.assignedTo)) && a.assignedToId !== Number(filters.assignedTo)) return false;
     if (filters.originType !== "all" && (a.originType || "direct") !== filters.originType) return false;
+    if (filters.createdSource === "exclude_automation" && (a.createdSource || "student") === "automation") return false;
+    if (filters.createdSource === "only_automation" && (a.createdSource || "student") !== "automation") return false;
     if (filters.dateRange !== "all" && a.createdAt && !isDateInRange(a.createdAt, filters.dateRange)) return false;
     if (search) {
       const q = search.toLowerCase();

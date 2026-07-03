@@ -2677,6 +2677,9 @@
     "importFailed": "Error al importar"
   },
   "applicationsPage": {
+    "source": "Fuente",
+    "excludeAutomation": "Excluir automatización",
+    "onlyAutomation": "Solo automatización",
     "editApplication": "Editar solicitud",
     "stage": "Etapa",
     "country": "País",

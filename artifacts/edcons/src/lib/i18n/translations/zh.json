@@ -2677,6 +2677,9 @@
     "importFailed": "导入失败"
   },
   "applicationsPage": {
+    "source": "来源",
+    "excludeAutomation": "排除自动化",
+    "onlyAutomation": "仅自动化",
     "editApplication": "编辑申请",
     "stage": "阶段",
     "country": "国家",
