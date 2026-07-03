@@ -87,6 +87,9 @@ interface PortalSubmission {
   programName: string | null;
   programLanguage: string | null;
   programLevel: string | null;
+  /** Chain step label (X1/X2/X3/Y1/Y2/Y3) — derived server-side for every
+   *  attempt; null only for the admin-rule fallback path. */
+  fallbackStep: string | null;
   meta: {
     fallbackStep?: string | null;
     fallbackSource?: string | null;
@@ -264,17 +267,17 @@ function SubmissionRow({
                   ? t("portalAutomation.submissions.modeReal")
                   : t("portalAutomation.submissions.modeDry")}
               </Badge>
-              {sub.meta?.fallbackStep && (
+              {sub.fallbackStep && (
                 <Badge
                   variant="outline"
                   className="gap-1 text-xs py-0 border-purple-300 text-purple-700 dark:border-purple-800 dark:text-purple-300"
                 >
                   <Layers className="w-3 h-3" />
                   {t(
-                    sub.meta.fallbackSource === "rule"
+                    sub.meta?.fallbackSource === "rule"
                       ? "portalFallback.fallbackStepRule"
                       : "portalFallback.fallbackStepAuto",
-                    { step: sub.meta.fallbackStep },
+                    { step: sub.fallbackStep },
                   )}
                 </Badge>
               )}

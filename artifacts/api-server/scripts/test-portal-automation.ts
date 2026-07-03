@@ -249,6 +249,51 @@ test("T4: list filtered by applicationId returns only that application's submiss
 });
 
 // ---------------------------------------------------------------------------
+// T4b — step-1 chain labels: original applied app → X1; fan-out copy (linked via
+//       mainApplicationId to a different-university root) → Y1. Every attempt is
+//       labeled and surfaced on the board (acceptance: X1/Y1 visible per attempt).
+// ---------------------------------------------------------------------------
+test("T4b: step-1 attempts are labeled X1 (original) and Y1 (fan-out)", async () => {
+  const studentId = await createStudent();
+  // Original applied application (no supersession parent, no mainApplicationId).
+  const originalAppId = await createApp(studentId);
+  // Fan-out copy: same student, linked to the original as its chain root.
+  const [fanOut] = await db
+    .insert(applicationsTable)
+    .values({ studentId, mainApplicationId: originalAppId })
+    .returning({ id: applicationsTable.id });
+  cleanupAppIds.push(fanOut.id);
+
+  const app = buildApp();
+  const server = await listen(app);
+  try {
+    const rOrig = await sendReq(server, "POST", `/api/applications/${originalAppId}/portal-submissions`, {
+      universityKey: "uskudar",
+      mode: "dry",
+    });
+    assert.equal(rOrig.status, 201);
+    cleanupSubmissionIds.push(rOrig.body.id);
+
+    const rFan = await sendReq(server, "POST", `/api/applications/${fanOut.id}/portal-submissions`, {
+      universityKey: "uskudar",
+      mode: "dry",
+    });
+    assert.equal(rFan.status, 201);
+    cleanupSubmissionIds.push(rFan.body.id);
+
+    const origList = await sendReq(server, "GET", `/api/portal-submissions?applicationId=${originalAppId}`);
+    assert.equal(origList.status, 200);
+    assert.equal(origList.body.data[0]?.fallbackStep, "X1", "original applied attempt must be labeled X1");
+
+    const fanList = await sendReq(server, "GET", `/api/portal-submissions?applicationId=${fanOut.id}`);
+    assert.equal(fanList.status, 200);
+    assert.equal(fanList.body.data[0]?.fallbackStep, "Y1", "fan-out attempt must be labeled Y1");
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+  }
+});
+
+// ---------------------------------------------------------------------------
 // T5 — cancel: queued→canceled; second cancel → 409
 // ---------------------------------------------------------------------------
 test("T5: cancel queued submission, then 409 on second cancel", async () => {

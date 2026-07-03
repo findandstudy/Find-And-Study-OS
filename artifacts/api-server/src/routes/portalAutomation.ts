@@ -476,6 +476,7 @@ router.get(
         ...getTableColumns(portalSubmissionsTable),
         supersededByApplicationId: applicationsTable.supersededByApplicationId,
         supersededFromApplicationId: applicationsTable.supersededFromApplicationId,
+        mainApplicationId: applicationsTable.mainApplicationId,
         // Student full name + the program the automation actually targeted
         // (application is already the superseded/fallback one when applicable).
         studentName: sql<string | null>`nullif(trim(concat_ws(' ', ${studentsTable.firstName}, ${studentsTable.lastName})), '')`,
@@ -497,7 +498,27 @@ router.get(
       .limit(pageParams.limit)
       .offset(pageParams.offset);
 
-    res.json({ data: rows, ...buildPageMeta(total, pageParams) });
+    // Every attempt carries a chain step label so the board can surface it:
+    //   - Fallback children (superseded from another app) keep their PERSISTED
+    //     meta.fallbackStep (X2/X3/Y2/Y3 for the automatic chain; null for the
+    //     admin-rule path, which is intentionally unlabeled).
+    //   - Step-1 original attempts (no supersession parent) are derived: X1 when
+    //     the application is the applied/main app itself (same-university), Y1
+    //     when it is a fan-out copy pointing at a different-university root.
+    const data = rows.map((r) => {
+      const persisted =
+        (r.meta as { fallbackStep?: string | null } | null)?.fallbackStep ?? null;
+      const isChild = r.supersededFromApplicationId != null;
+      const fallbackStep = isChild
+        ? persisted
+        : persisted ??
+          (r.mainApplicationId == null || r.mainApplicationId === r.applicationId
+            ? "X1"
+            : "Y1");
+      return { ...r, fallbackStep };
+    });
+
+    res.json({ data, ...buildPageMeta(total, pageParams) });
   },
 );
 

@@ -47,6 +47,23 @@ it emits `programMissing + resolution:'not_in_dropdown' + availablePrograms + re
   never copied from the old app.** Origin_* attribution IS copied verbatim.
 - New submission mode = `rule.autoSubmit ? sub.mode : 'dry'`.
 
+## Chain step labels (X1/X2/X3 · Y1/Y2/Y3)
+X = same-university chain (applied uni), Y = different-university (fan-out). Steps
+2/3 (fallback children) PERSIST their label in `meta.fallbackStep` at supersession
+time (null for the admin-rule path — intentionally unlabeled). Step-1 originals are
+NOT persisted; they are DERIVED read-time in the board list endpoint
+(`GET /portal-submissions`) as a top-level `fallbackStep`: child rows
+(`supersededFromApplicationId != null`) use persisted meta; non-child rows →
+`X1` when `mainApplicationId` is null/self (applied/main app), else `Y1` (fan-out
+copy pointing at a different-university root).
+**Why:** deriving on read avoids touching the enqueue/fan-out hot paths (zero
+regression to process/cancel/fan-out). The mainApplicationId null/self heuristic is
+safe because same-uni fallback children carry supersededFromApplicationId (→ meta
+branch) and fan-out dedups same-uni apps (never makes a same-uni copy), so the only
+non-child rows with a foreign mainApplicationId are genuine Y (different-uni) fan-outs.
+**How to apply:** UI badge reads `sub.fallbackStep` (top-level), NOT
+`sub.meta.fallbackStep`; i18n key still keys off `meta.fallbackSource==='rule'`.
+
 ## Prod migration path
 Schema lives in Drizzle (`portalAutomationSettings.fallbackEnabled`,
 `drizzle/0028_fallback_enabled.sql`) BUT prod runs no migration — parity DDL
