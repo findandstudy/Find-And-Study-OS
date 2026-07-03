@@ -108,18 +108,50 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [openUp, setOpenUp] = useState(false);
+  const [placement, setPlacement] = useState<{ up: boolean; maxH: number }>({
+    up: false,
+    maxH: 340,
+  });
 
-  // Toggle the picker, flipping it upward when there isn't room below the trigger.
+  // Anchor the picker to the trigger and size it so it always fits inside the
+  // viewport (and therefore inside the centered modal). Prefer opening downward;
+  // flip upward only when there is more room above than below, and cap the height
+  // to the available space so the panel can never float past the modal's
+  // top/bottom edge. maxH is bounded by min(45vh, 340px) per design.
+  const computePlacement = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const MARGIN = 8;
+    const spaceBelow = window.innerHeight - rect.bottom - MARGIN;
+    const spaceAbove = rect.top - MARGIN;
+    const cap = Math.min(340, Math.round(window.innerHeight * 0.45));
+    const up = spaceBelow < cap && spaceAbove > spaceBelow;
+    const avail = up ? spaceAbove : spaceBelow;
+    // Use as much of the available space as the cap allows, but keep a usable
+    // floor (160px) so an extremely short viewport can't collapse the panel to
+    // nothing — always bounded by the cap so it still respects the design max.
+    const maxH = Math.min(cap, Math.max(160, avail));
+    setPlacement({ up, maxH });
+  };
+
+  // Toggle the picker, computing its anchored placement just before it opens.
   const togglePicker = () => {
-    if (triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      // Flip upward unless there's room for the full dropdown (filters header +
-      // the up-to-420px scrollable list) below the trigger.
-      setOpenUp(window.innerHeight - rect.bottom < 520);
-    }
+    if (!pickerOpen) computePlacement();
     setPickerOpen((o) => !o);
   };
+
+  // Keep the picker anchored & contained if the viewport changes while it is open.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onResize = () => computePlacement();
+    window.addEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
+    };
+  }, [pickerOpen]);
 
   // Outside-click closes the picker. Listen to "click" (not "mousedown") so
   // dragging the results scrollbar doesn't dismiss it prematurely.
@@ -346,9 +378,10 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
                   {pickerOpen && (
                     <div
                       ref={popRef}
-                      className={`absolute left-0 right-0 z-50 ${openUp ? "bottom-full mb-1" : "top-full mt-1"} bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95`}
+                      style={{ maxHeight: placement.maxH }}
+                      className={`absolute left-0 right-0 z-50 flex flex-col ${placement.up ? "bottom-full mb-1" : "top-full mt-1"} bg-popover border border-border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95`}
                     >
-                      <div className="p-2 border-b border-border space-y-2">
+                      <div className="p-2 border-b border-border space-y-2 shrink-0">
                         <input
                           ref={searchInputRef}
                           type="text"
@@ -380,7 +413,7 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
                           </select>
                         </div>
                       </div>
-                      <div className="max-h-[min(60vh,420px)] overflow-y-auto p-1">
+                      <div className="flex-1 min-h-0 overflow-y-auto p-1">
                         {searching ? (
                           <div className="py-4 flex justify-center">
                             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
