@@ -129,11 +129,17 @@ export interface SubmitProfile {
   // present, these EXTEND/OVERRIDE the built-ins (DB wins). See programMatch.ts.
   // ---------------------------------------------------------------------------
   /**
-   * { portal option label → CRM program name } — panel-managed Program Mappings
-   * (General ∪ university, university wins). Name-based; consulted by the matcher
-   * BEFORE fuzzy matching. Replaces the removed CRM-programId override path.
+   * { portal option label → CRM program name } — panel-managed Program Mappings,
+   * UNIVERSITY tier. Name-based; consulted by the matcher BEFORE the General tier
+   * and BEFORE fuzzy matching. Replaces the removed CRM-programId override path.
    */
   programNameMap?: Record<string, string>;
+  /**
+   * { portal option label → CRM program name } — GENERAL (all-schools default)
+   * tier, already shadowed by any same-label university entry. The matcher
+   * consults it only after `programNameMap` yields no hit (University > General).
+   */
+  programNameMapGeneral?: Record<string, string>;
   /** EN↔TR synonym groups (folded single tokens). Extends built-in synonyms. */
   programSynonyms?: string[][];
   /** Country name/adjective (lowercase) → portal label. Merged over country maps. */

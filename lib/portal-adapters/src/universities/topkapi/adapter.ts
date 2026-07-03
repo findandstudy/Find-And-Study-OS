@@ -1813,6 +1813,7 @@ export const topkapiAdapter: UniversityAdapter = {
     // name map is reverse-resolved inside matchProgram (conf 1.0) before fuzzy.
     const matchResult = matchProgram(profile.programName, programOptions, {
       nameMap: profile.programNameMap,
+      nameMapGeneral: profile.programNameMapGeneral,
       synonyms: profile.programSynonyms,
     });
 

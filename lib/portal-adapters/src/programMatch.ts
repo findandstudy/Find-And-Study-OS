@@ -489,8 +489,14 @@ function scorePool(
 //   synonyms: EN↔TR equivalence groups that EXTEND the built-in dictionary.
 // ---------------------------------------------------------------------------
 export interface MatchOptions {
-  /** { portal option label → CRM program name } — merged General ∪ university. */
+  /** { portal option label → CRM program name } — UNIVERSITY tier (checked FIRST). */
   nameMap?: Record<string, string>;
+  /**
+   * { portal option label → CRM program name } — GENERAL (all-schools) tier,
+   * consulted only after `nameMap` misses (University > General). Callers must
+   * have already shadowed same-label university entries out of this map.
+   */
+  nameMapGeneral?: Record<string, string>;
   /** EN↔TR synonym groups (folded single tokens) extending the built-ins. */
   synonyms?: readonly (readonly string[])[];
 }
@@ -540,7 +546,11 @@ export function matchProgram(
 ): MatchResult | null {
 
   // --- 1. Name mapping (panel-managed, highest confidence) ---
-  const mapped = resolveByNameMap(programName, candidates, opts?.nameMap);
+  // University tier is consulted BEFORE the General (all-schools) tier so a
+  // per-university mapping always wins (University > General > fuzzy).
+  const mapped =
+    resolveByNameMap(programName, candidates, opts?.nameMap) ??
+    resolveByNameMap(programName, candidates, opts?.nameMapGeneral);
   if (mapped) return { match: mapped, conf: 1.0 };
 
   if (candidates.length === 0) return null;

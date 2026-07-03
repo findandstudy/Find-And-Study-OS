@@ -46,26 +46,69 @@ test("fold — Turkish chars mapped correctly before toLower", () => {
 });
 
 // ---------------------------------------------------------------------------
-// PM1 — programMap override returns conf 1.0
+// PM1 — name mapping (portal label → CRM name) returns conf 1.0
 // ---------------------------------------------------------------------------
 
-test("PM1 — programMap override → conf 1.0", () => {
+test("PM1 — name mapping override → conf 1.0", () => {
   const candidates: ProgramCandidate[] = [
     { id: "cs-101", name: "Computer Science" },
     { id: "se-201", name: "Software Engineering" },
     { id: "it-301", name: "Information Technology" },
   ];
 
+  // Panel-managed mapping: the portal option "Computer Science" is declared to
+  // mean the CRM program "Bilgisayar Mühendisliği". Given that CRM name we must
+  // reverse-resolve to the mapped portal candidate at conf 1.0.
   const result = matchProgram(
     "Bilgisayar Mühendisliği",
     candidates,
-    "crm-prog-42",
-    { "crm-prog-42": "cs-101" },
+    { nameMap: { "Computer Science": "Bilgisayar Mühendisliği" } },
   );
 
-  assert.ok(result !== null, "Expected a match via programMap override");
-  assert.equal(result.match.id,   "cs-101",  "Should match the overridden candidate id");
+  assert.ok(result !== null, "Expected a match via name mapping override");
+  assert.equal(result.match.id,   "cs-101",  "Should match the mapped candidate id");
   assert.equal(result.conf,       1.0,        "Override confidence must be exactly 1.0");
+});
+
+// ---------------------------------------------------------------------------
+// PM1b — University tier wins over General when both map the SAME CRM name to
+//        DIFFERENT portal options (University > General resolution order).
+// ---------------------------------------------------------------------------
+
+test("PM1b — University name mapping wins over General (same CRM, diff label)", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "cs-eng", name: "Computer Engineering (English)" },
+    { id: "cs-tr",  name: "Computer Engineering (Turkish)" },
+  ];
+
+  const result = matchProgram("Bilgisayar Mühendisliği", candidates, {
+    nameMap:        { "Computer Engineering (Turkish)": "Bilgisayar Mühendisliği" },
+    nameMapGeneral: { "Computer Engineering (English)": "Bilgisayar Mühendisliği" },
+  });
+
+  assert.ok(result !== null, "Expected a mapped match");
+  assert.equal(result.match.id, "cs-tr", "University tier must win over General");
+  assert.equal(result.conf,     1.0,     "Mapped confidence must be exactly 1.0");
+});
+
+// ---------------------------------------------------------------------------
+// PM1c — General tier applies when the University tier has no matching entry.
+// ---------------------------------------------------------------------------
+
+test("PM1c — General name mapping applies when University tier misses", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "law-1", name: "Law" },
+    { id: "med-1", name: "Medicine" },
+  ];
+
+  const result = matchProgram("Hukuk", candidates, {
+    nameMap:        {},
+    nameMapGeneral: { "Law": "Hukuk" },
+  });
+
+  assert.ok(result !== null, "General tier must resolve when University is empty");
+  assert.equal(result.match.id, "law-1", "Should fall through to the General mapping");
+  assert.equal(result.conf,     1.0,     "Mapped confidence must be exactly 1.0");
 });
 
 // ---------------------------------------------------------------------------
@@ -313,9 +356,7 @@ test("SYN-DB1 — DB synonym group extends the built-in dictionary (gap-fill)", 
   const withDb = matchProgram(
     "Underground Mining Engineering",
     candidates,
-    undefined,
-    undefined,
-    [["underground", "yeralti"], ["mining", "maden"]],
+    { synonyms: [["underground", "yeralti"], ["mining", "maden"]] },
   );
 
   assert.ok(withDb !== null, "DB synonyms must enable the gap-fill match");
@@ -373,7 +414,7 @@ test("SYN-DB2 — empty DB synonyms leave built-in matching unchanged", () => {
   ];
 
   const baseline = matchProgram("Computer Engineering", candidates);
-  const withEmpty = matchProgram("Computer Engineering", candidates, undefined, undefined, []);
+  const withEmpty = matchProgram("Computer Engineering", candidates, { synonyms: [] });
 
   assert.ok(baseline !== null && withEmpty !== null, "Both should match via built-in dict");
   assert.equal(withEmpty.match.id, baseline.match.id, "Empty DB synonyms must not change the result");

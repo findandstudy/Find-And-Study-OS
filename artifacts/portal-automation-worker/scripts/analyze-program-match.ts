@@ -50,13 +50,13 @@ console.log("NOTE: Run dump-program-options.ts against live portal for real opti
 
 let risks = 0;
 for (const crm of CRM_PROGRAMS) {
-  const result = matchProgram(crm.name, ESTIMATED_PORTAL_OPTIONS, crm.id, {});
+  const result = matchProgram(crm.name, ESTIMATED_PORTAL_OPTIONS);
   const icon = result ? "✅" : "❌";
   console.log(`[${crm.id}] ${crm.name}`);
   if (result) {
     console.log(`  → "${result.match.name}" (id=${result.match.id}, conf=${result.conf.toFixed(2)})`);
   } else {
-    console.log(`  → NO MATCH — needs manual override in PROGRAM_MAP`);
+    console.log(`  → NO MATCH — needs a name mapping (portal label → CRM name)`);
     risks++;
   }
   console.log();
@@ -64,4 +64,4 @@ for (const crm of CRM_PROGRAMS) {
 
 console.log(`Summary: ${CRM_PROGRAMS.length - risks}/${CRM_PROGRAMS.length} matched, ${risks} at risk`);
 console.log("\nNext step: run dump-program-options.ts to get real portal option IDs,");
-console.log("then populate PROGRAM_MAP in topkapi/adapter.ts with confirmed mappings.");
+console.log("then add name mappings (portal label → CRM name) in the Program Mapping panel.");

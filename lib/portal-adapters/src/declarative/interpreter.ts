@@ -106,6 +106,7 @@ export function resolveProgramValue(
   const candidates = options.map((o) => ({ id: o.v, name: o.t }));
   const res = matchProgram(programName, candidates, {
     nameMap: profile.programNameMap,
+    nameMapGeneral: profile.programNameMapGeneral,
     synonyms: profile.programSynonyms,
   });
   if (!res) return null;

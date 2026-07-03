@@ -742,6 +742,7 @@ export const sitAdapter: SitAdapter = {
     const pool = langFiltered;
     const match = matchProgram(profile.programName, pool, {
       nameMap: profile.programNameMap,
+      nameMapGeneral: profile.programNameMapGeneral,
       synonyms: profile.programSynonyms,
     });
 

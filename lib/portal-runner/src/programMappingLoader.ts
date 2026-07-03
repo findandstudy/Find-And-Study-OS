@@ -13,8 +13,14 @@ import { db, portalProgramMappingTable, GENERAL_MAPPING_KEY } from "@workspace/d
 import { and, eq, isNull } from "drizzle-orm";
 
 export interface ProgramMappingData {
-  /** { portal option label → CRM program name } — General ∪ university (uni wins). */
+  /** { portal option label → CRM program name } — UNIVERSITY tier (checked first). */
   programNameMap?: Record<string, string>;
+  /**
+   * { portal option label → CRM program name } — GENERAL (all-schools) tier,
+   * with any same-label university entry already shadowed out. Consulted only
+   * after `programNameMap` misses (University > General).
+   */
+  programNameMapGeneral?: Record<string, string>;
   /** EN↔TR synonym equivalence groups (folded single tokens) — General ∪ uni. */
   programSynonyms?: string[][];
   /** Country name/adjective (lowercase) → portal label — General ∪ uni (uni wins). */
@@ -30,8 +36,11 @@ interface MappingRow {
 /**
  * Fetch the panel-managed mapping data for a university, MERGED with the GENERAL
  * (all-universities default) tier. Resolution is University > General:
- *   - programNameMap / countryOverrides: { ...general, ...uni } (uni key wins)
- *   - programSynonyms:                   [ ...general, ...uni ] (both extend)
+ *   - programNameMap:        UNIVERSITY tier only (checked first by the matcher)
+ *   - programNameMapGeneral: GENERAL tier, minus any portal label the university
+ *                            remapped (a uni entry shadows the same label)
+ *   - countryOverrides:      { ...general, ...uni } (uni key wins)
+ *   - programSynonyms:       [ ...general, ...uni ] (both extend)
  *
  * Fully name-based — the removed CRM-programId override column is no longer read.
  * Never throws — on any DB error returns {} so the adapter falls back to its
@@ -89,11 +98,18 @@ function mergeTiers(
 ): ProgramMappingData {
   const out: ProgramMappingData = {};
 
-  const nameMap = {
-    ...(general?.mappings ?? {}),
-    ...(uni?.mappings ?? {}),
-  };
-  if (Object.keys(nameMap).length > 0) out.programNameMap = nameMap;
+  const uniMap = uni?.mappings ?? {};
+  if (Object.keys(uniMap).length > 0) out.programNameMap = { ...uniMap };
+
+  // General tier minus any portal label the university explicitly remapped — a
+  // per-university entry shadows the same label in General so the two-tier
+  // lookup (uni first, then general) can never let General override it.
+  const generalForLookup: Record<string, string> = {};
+  for (const [label, crmName] of Object.entries(general?.mappings ?? {})) {
+    if (!(label in uniMap)) generalForLookup[label] = crmName;
+  }
+  if (Object.keys(generalForLookup).length > 0)
+    out.programNameMapGeneral = generalForLookup;
 
   const synonyms = [
     ...(Array.isArray(general?.synonyms) ? general!.synonyms : []),
