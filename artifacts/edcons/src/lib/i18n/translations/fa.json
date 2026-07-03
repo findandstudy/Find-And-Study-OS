@@ -5022,6 +5022,8 @@
       "statusPending": "Pending",
       "statusRunning": "Running",
       "statusSuccess": "Success",
+      "statusSubmitted": "ارسال شد",
+      "statusAlreadyRegistered": "قبلاً ثبت شده",
       "statusFailed": "Failed",
       "statusSkipped": "Skipped",
       "statusDryRun": "آزمایش",

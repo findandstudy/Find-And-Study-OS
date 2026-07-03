@@ -28,7 +28,7 @@ import {
 import {
   RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
   CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
-  PlayCircle, ListStart, Eye, Plus, Inbox, Layers, ArrowRight, Globe,
+  PlayCircle, ListStart, Eye, Plus, Inbox, Layers, ArrowRight, Globe, UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManualSubmitDialog } from "@/components/admin/ManualSubmitDialog";
@@ -99,7 +99,7 @@ const STATUS_CONFIG: Record<SubmissionStatus, {
   queued:          { icon: Clock,       className: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400" },
   running:         { icon: Play,        className: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400" },
   submitted:       { icon: CheckCircle2, className: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400" },
-  already_exists:  { icon: CheckCircle2, className: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400" },
+  already_exists:  { icon: UserCheck, className: "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400" },
   program_missing: { icon: SkipForward, className: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400" },
   failed:          { icon: AlertCircle, className: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400" },
   canceled:        { icon: MinusCircle, className: "bg-muted text-muted-foreground" },
@@ -113,8 +113,8 @@ const STATUS_CONFIG: Record<SubmissionStatus, {
 const STATUS_LABEL_KEYS: Record<SubmissionStatus, string> = {
   queued:           "portalAutomation.submissions.statusPending",
   running:          "portalAutomation.submissions.statusRunning",
-  submitted:        "portalAutomation.submissions.statusSuccess",
-  already_exists:   "portalAutomation.submissions.statusSuccess",
+  submitted:        "portalAutomation.submissions.statusSubmitted",
+  already_exists:   "portalAutomation.submissions.statusAlreadyRegistered",
   program_missing:  "portalAutomation.submissions.statusSkipped",
   failed:           "portalAutomation.submissions.statusFailed",
   canceled:         "portalAutomation.submissions.statusCanceled",

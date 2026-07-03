@@ -5022,6 +5022,8 @@
       "statusPending": "Pending",
       "statusRunning": "Running",
       "statusSuccess": "Success",
+      "statusSubmitted": "Enviado",
+      "statusAlreadyRegistered": "Ya registrado",
       "statusFailed": "Failed",
       "statusSkipped": "Skipped",
       "statusDryRun": "Prueba",

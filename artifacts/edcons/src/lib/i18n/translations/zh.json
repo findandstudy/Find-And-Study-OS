@@ -5022,6 +5022,8 @@
       "statusPending": "Pending",
       "statusRunning": "Running",
       "statusSuccess": "Success",
+      "statusSubmitted": "已提交",
+      "statusAlreadyRegistered": "已注册",
       "statusFailed": "Failed",
       "statusSkipped": "Skipped",
       "statusDryRun": "测试运行",

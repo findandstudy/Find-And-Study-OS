@@ -5022,6 +5022,8 @@
       "statusPending": "Pending",
       "statusRunning": "Running",
       "statusSuccess": "Success",
+      "statusSubmitted": "Отправлено",
+      "statusAlreadyRegistered": "Уже зарегистрирован",
       "statusFailed": "Failed",
       "statusSkipped": "Skipped",
       "statusDryRun": "Тест",

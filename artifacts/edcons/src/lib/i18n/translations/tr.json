@@ -5022,6 +5022,8 @@
       "statusPending": "Bekleyen",
       "statusRunning": "Çalışıyor",
       "statusSuccess": "Başarılı",
+      "statusSubmitted": "Başvuru Yapıldı",
+      "statusAlreadyRegistered": "Zaten Kayıtlı",
       "statusFailed": "Başarısız",
       "statusSkipped": "Atlandı",
       "statusDryRun": "Test Çalışması",

@@ -5022,6 +5022,8 @@
       "statusPending": "Pending",
       "statusRunning": "Running",
       "statusSuccess": "Success",
+      "statusSubmitted": "सबमिट किया गया",
+      "statusAlreadyRegistered": "पहले से पंजीकृत",
       "statusFailed": "Failed",
       "statusSkipped": "Skipped",
       "statusDryRun": "परीक्षण",

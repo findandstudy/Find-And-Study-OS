@@ -5022,6 +5022,8 @@
       "statusPending": "Pending",
       "statusRunning": "Running",
       "statusSuccess": "Success",
+      "statusSubmitted": "تم التقديم",
+      "statusAlreadyRegistered": "مسجّل بالفعل",
       "statusFailed": "Failed",
       "statusSkipped": "Skipped",
       "statusDryRun": "تجربة",
