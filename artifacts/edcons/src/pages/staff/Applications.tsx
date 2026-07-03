@@ -1060,8 +1060,8 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
 }
 
 /* ── FilterPopover ────────────────────────────────────────── */
-type AppFilters = { stage: string; country: string; source: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string; originType: string; createdSource: string };
-const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", source: "all", university: "all", universityType: "all", agent: "all", assignedTo: "mine_unassigned", dateRange: "all", originType: "all", createdSource: "all" };
+type AppFilters = { stage: string; country: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string; originType: string; createdSource: string };
+const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", university: "all", universityType: "all", agent: "all", assignedTo: "mine_unassigned", dateRange: "all", originType: "all", createdSource: "all" };
 
 function isDateInRange(dateStr: string, range: string): boolean {
   if (range === "all") return true;
@@ -1563,8 +1563,6 @@ export default function ApplicationsPage() {
     if (colFilters.intake && !(a.intake || "").toLowerCase().includes(colFilters.intake.toLowerCase())) return false;
     if (filters.stage !== "all" && a.stage !== filters.stage) return false;
     if (filters.country !== "all" && a.country !== filters.country) return false;
-    if (filters.source === "agent" && !a.agentId) return false;
-    if (filters.source === "staff" && a.agentId) return false;
     if (filters.university !== "all" && String(a.universityId) !== filters.university) return false;
     if (filters.universityType !== "all") {
       const uType = (a.universityType || "").toLowerCase();
