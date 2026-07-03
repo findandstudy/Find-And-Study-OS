@@ -554,16 +554,19 @@ router.get(
       }
     }
 
-    // Dedup by universityKey so a university with inconsistent name spellings
-    // across submissions appears once. Prefer the canonical portal_universities
-    // name, falling back to the submission's stored name (Job G).
+    // Job G: source filter options from the canonical portal_universities
+    // table so every school appears exactly ONCE with its clean name. The
+    // INNER JOIN drops submissions whose universityKey has no canonical row
+    // (raw/unmapped keys), and the label is ALWAYS the canonical
+    // university_name — never a raw key or a submission's stored spelling.
+    // Dedup is by universityKey.
     const rows = await db
       .selectDistinctOn([portalSubmissionsTable.universityKey], {
         key: portalSubmissionsTable.universityKey,
-        label: sql<string>`COALESCE(${portalUniversitiesTable.universityName}, ${portalSubmissionsTable.universityName})`,
+        label: portalUniversitiesTable.universityName,
       })
       .from(portalSubmissionsTable)
-      .leftJoin(
+      .innerJoin(
         portalUniversitiesTable,
         eq(portalUniversitiesTable.universityKey, portalSubmissionsTable.universityKey),
       )
@@ -573,7 +576,7 @@ router.get(
           visibleAppIds !== null ? inArray(portalSubmissionsTable.applicationId, visibleAppIds) : undefined,
         ),
       )
-      .orderBy(portalSubmissionsTable.universityKey, asc(portalSubmissionsTable.universityName));
+      .orderBy(portalSubmissionsTable.universityKey, asc(portalUniversitiesTable.universityName));
 
     res.json({ data: rows });
   },

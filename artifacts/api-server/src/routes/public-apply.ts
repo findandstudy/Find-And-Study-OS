@@ -14,6 +14,7 @@ import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp } from "../lib/clientIp";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
+import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { getActiveExtractor, buildExtractionPrompt, isFallbackExtractor, recordExtractorRun } from "../lib/aiExtractorService";
 import { getCurrentSeason } from "../lib/season";
 import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
@@ -333,7 +334,8 @@ export async function createApplicationForStudent(studentId: number, programId: 
 }
 
 router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: Response): Promise<void> => {
-  const { firstName, lastName, email, phone, phoneCode, nationality, programId, programName, universityName, notes, motherName, fatherName, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, documents, reuseDocumentIds } = req.body;
+  let { firstName, lastName, motherName, fatherName } = req.body;
+  const { email, phone, phoneCode, nationality, programId, programName, universityName, notes, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, documents, reuseDocumentIds } = req.body;
   let leadId: number | null = null;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality || !gender) {
@@ -351,6 +353,21 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
   if (!emailRegex.test(email)) {
     res.status(400).json({ error: "Invalid email format" });
     return;
+  }
+
+  // Latin-only name enforcement (mirrors embed/students/leads): reject
+  // Arabic/Cyrillic/CJK names with a coded 400 and no record; Latin/Turkish
+  // names pass and are transliterated to UPPERCASE for storage.
+  {
+    const { error: nameErr, normalized: normNames } = normalizeAndValidateNames(
+      { firstName, lastName, motherName, fatherName },
+      ["firstName", "lastName", "motherName", "fatherName"],
+    );
+    if (nameErr) { res.status(400).json({ error: nameErr }); return; }
+    firstName = normNames.firstName as string;
+    lastName = normNames.lastName as string;
+    motherName = normNames.motherName as string;
+    fatherName = normNames.fatherName as string;
   }
 
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;

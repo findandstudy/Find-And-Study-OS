@@ -23,7 +23,7 @@ import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
 import { validate, getValidated } from "../middlewares/validate";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
-import { toLatinUpper, normalizePhoneField } from "../lib/textNormalize";
+import { toLatinUpper, normalizePhoneField, containsNonLatinLetter, NON_LATIN_NAME_CODE } from "../lib/textNormalize";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { resolveIdentity } from "../lib/inbox/identityResolver";
 import {
@@ -774,6 +774,12 @@ router.post(
 
     // Parse fullName into first/last
     const trimmedName = body.fullName.trim();
+    // Latin-only name enforcement — reject non-Latin (Arabic/Cyrillic/CJK)
+    // names before any record is created (mirrors embed/students/leads).
+    if (containsNonLatinLetter(trimmedName)) {
+      res.status(400).json({ error: `${NON_LATIN_NAME_CODE}:fullName: This field must contain only Latin letters.` });
+      return;
+    }
     const parts = trimmedName.split(/\s+/).filter(Boolean);
     const firstName = parts[0] || trimmedName;
     const lastName = parts.slice(1).join(" ") || "Contact";
@@ -862,6 +868,12 @@ router.post(
       return;
     }
     const displayName = contact.displayName || "Unknown";
+    // Latin-only name enforcement — a non-Latin WhatsApp/chat display name must
+    // not create a lead; staff can use the smart-new-lead flow to type a Latin name.
+    if (containsNonLatinLetter(displayName)) {
+      res.status(400).json({ error: `${NON_LATIN_NAME_CODE}:fullName: This field must contain only Latin letters.` });
+      return;
+    }
     const [firstName, ...rest] = displayName.split(/\s+/);
     const lastName = rest.join(" ") || "Contact";
     const [lead] = await db
