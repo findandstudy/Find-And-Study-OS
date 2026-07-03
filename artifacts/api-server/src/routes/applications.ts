@@ -180,6 +180,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       tuitionFee: applicationsTable.tuitionFee,
       scholarship: applicationsTable.scholarship,
       notes: applicationsTable.notes,
+      createdSource: applicationsTable.createdSource,
       createdAt: applicationsTable.createdAt,
       updatedAt: applicationsTable.updatedAt,
       studentFirstName: studentsTable.firstName,
@@ -606,6 +607,8 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   }
   const [app] = await db.insert(applicationsTable).values({
     branchId: inheritedBranchId,
+    // Authenticated panel "New Application" create = staff/admin (also agents).
+    createdSource: "staff",
     studentId, stage,
     season: season || currentYear,
     universityId: snapshotUniversityId || null,
@@ -767,6 +770,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
       tuitionFee: applicationsTable.tuitionFee,
       scholarship: applicationsTable.scholarship,
       notes: applicationsTable.notes,
+      createdSource: applicationsTable.createdSource,
       createdAt: applicationsTable.createdAt,
       updatedAt: applicationsTable.updatedAt,
       studentFirstName: studentsTable.firstName,

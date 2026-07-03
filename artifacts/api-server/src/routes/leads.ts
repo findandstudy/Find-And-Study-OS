@@ -1195,6 +1195,8 @@ async function createApplicationFromSubmission(studentId: number, submission: an
 
     await db.insert(applicationsTable).values({
       studentId,
+      // Lead submission (public intake form) → student self-service.
+      createdSource: "student",
       programId: program.id,
       universityId: program.universityId,
       programName: program.name,

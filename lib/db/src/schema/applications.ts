@@ -44,6 +44,11 @@ export const applicationsTable = pgTable("applications", {
   originLocked: boolean("origin_locked").notNull().default(false),
   originStudentId: integer("origin_student_id"),
   branchId: integer("branch_id"),
+  // WHO created this application, for the 3-group split on the student profile
+  // (student self-service / staff-admin panel / portal-automation fan-out).
+  // Distinct from originType (acquisition channel: direct/agent/sub_agent).
+  // Nullable; null is treated as "student" (safe default) by the UI.
+  createdSource: text("created_source"),
   // Automatic backup-programme (supersession) links. When a full programme is
   // superseded by an auto-created fallback application, the original points to
   // the new one (superseded_by) and the new one points back (superseded_from).

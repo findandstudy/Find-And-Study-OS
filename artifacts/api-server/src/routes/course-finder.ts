@@ -470,6 +470,8 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
     agentId: student.agentId || null,
     season: currentYear,
     stage: "inquiry",
+    // Authenticated panel Course Finder "apply" = staff/admin (also agents).
+    createdSource: "staff",
     programName: program.name,
     universityName: program.universityName,
     country: program.universityCountry || null,

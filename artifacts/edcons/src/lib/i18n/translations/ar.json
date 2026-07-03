@@ -2513,6 +2513,9 @@
     "error": "خطأ"
   },
   "studentDetailPage": {
+    "appGroupStudent": "طلبات الطالب",
+    "appGroupStaff": "طلبات الموظفين/الإدارة",
+    "appGroupAutomation": "طلبات الأتمتة",
     "profile": "الملف الشخصي",
     "allMessaging": "جميع الرسائل",
     "direct": "مباشر",

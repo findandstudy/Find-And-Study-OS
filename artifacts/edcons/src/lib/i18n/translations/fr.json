@@ -2513,6 +2513,9 @@
     "error": "Erreur"
   },
   "studentDetailPage": {
+    "appGroupStudent": "Candidatures de l’étudiant",
+    "appGroupStaff": "Candidatures du personnel/admin",
+    "appGroupAutomation": "Candidatures d’automatisation",
     "profile": "Profil",
     "allMessaging": "Toutes les messageries",
     "direct": "Direct",

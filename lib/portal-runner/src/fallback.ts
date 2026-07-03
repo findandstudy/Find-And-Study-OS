@@ -434,6 +434,8 @@ export async function handleNeedsFallback(
         originStudentId:     srcApp.originStudentId,
         branchId:            srcApp.branchId,
         supersededFromApplicationId: srcApp.id,
+        // Auto-created supersession (backup-programme) fallback = automation.
+        createdSource:       "automation",
         createdAt:           now,
         updatedAt:           now,
       })

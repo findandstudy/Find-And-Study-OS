@@ -4062,6 +4062,9 @@ components:
           type: ["number", "null"]
         notes:
           type: ["string", "null"]
+        createdSource:
+          type: ["string", "null"]
+          description: "Who created the application: student | staff | automation. Null is treated as student."
         createdAt:
           type: string
           format: date-time

@@ -721,6 +721,12 @@ export const ListApplicationsResponse = zod.object({
       tuitionFee: zod.number().nullish(),
       scholarship: zod.number().nullish(),
       notes: zod.string().nullish(),
+      createdSource: zod
+        .string()
+        .nullish()
+        .describe(
+          "Who created the application: student | staff | automation. Null is treated as student.",
+        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     }),
@@ -778,6 +784,12 @@ export const GetApplicationResponse = zod.object({
   tuitionFee: zod.number().nullish(),
   scholarship: zod.number().nullish(),
   notes: zod.string().nullish(),
+  createdSource: zod
+    .string()
+    .nullish()
+    .describe(
+      "Who created the application: student | staff | automation. Null is treated as student.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -823,6 +835,12 @@ export const UpdateApplicationResponse = zod.object({
   tuitionFee: zod.number().nullish(),
   scholarship: zod.number().nullish(),
   notes: zod.string().nullish(),
+  createdSource: zod
+    .string()
+    .nullish()
+    .describe(
+      "Who created the application: student | staff | automation. Null is treated as student.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });

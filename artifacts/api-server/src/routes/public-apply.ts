@@ -229,6 +229,8 @@ export async function createApplicationForStudent(studentId: number, programId: 
       studentId,
       stage,
       season: currentYear,
+      // Public/embed/self-fill intake = student self-service.
+      createdSource: "student",
       universityId: snapshotUniversityId,
       programId: programId || null,
       agentId: null,

@@ -2462,6 +2462,9 @@
     "error": "خطا"
   },
   "studentDetailPage": {
+    "appGroupStudent": "درخواست‌های دانشجو",
+    "appGroupStaff": "درخواست‌های کارکنان/مدیر",
+    "appGroupAutomation": "درخواست‌های خودکارسازی",
     "profile": "پروفایل",
     "allMessaging": "همه پیام‌ها",
     "direct": "مستقیم",

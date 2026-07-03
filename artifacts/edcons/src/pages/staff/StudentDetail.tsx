@@ -101,6 +101,31 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const applications: any[] = (applicationsResp as any)?.data || applicationsResp || [];
   const documents: any[] = Array.isArray(documentsResp) ? documentsResp : (documentsResp as any)?.data || [];
 
+  // Split the student's applications into 3 groups by WHO created each one.
+  // null / unknown created_source falls back to the "student" group (safe default).
+  // This only affects the student-profile Applications tab; the main pipeline is untouched.
+  const applicationGroups = useMemo(() => {
+    const buckets: Record<"student" | "staff" | "automation", any[]> = {
+      student: [],
+      staff: [],
+      automation: [],
+    };
+    for (const app of applications) {
+      const src =
+        app?.createdSource === "staff"
+          ? "staff"
+          : app?.createdSource === "automation"
+            ? "automation"
+            : "student";
+      buckets[src].push(app);
+    }
+    return [
+      { key: "student", titleKey: "studentDetailPage.appGroupStudent", items: buckets.student },
+      { key: "staff", titleKey: "studentDetailPage.appGroupStaff", items: buckets.staff },
+      { key: "automation", titleKey: "studentDetailPage.appGroupAutomation", items: buckets.automation },
+    ] as const;
+  }, [applications]);
+
   // Endpoint-first existence probe (defense-in-depth): /api/students/:id/photo is
   // the single source of truth that serves the bytes (object-storage key, legacy
   // fileData, or fileUrl). Probing it directly means the avatar renders correctly
@@ -1129,56 +1154,66 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   </div>
                 )}
 
-                <div className="bg-card rounded-2xl border shadow-sm divide-y overflow-hidden">
-                  {applications.map((app: any) => (
-                    <div
-                      key={app.id}
-                      className="flex items-center gap-3 sm:gap-4 px-4 py-3 hover:bg-primary/5 transition-colors"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        <GraduationCap className="w-5 h-5 text-primary" />
+                {applicationGroups.map((group) => (
+                    <div key={group.key} className="space-y-2">
+                      <div className="flex items-center gap-2 px-1">
+                        <h3 className="text-sm font-semibold text-foreground">{t(group.titleKey)}</h3>
+                        <span className="text-xs font-medium text-muted-foreground tabular-nums bg-muted rounded-full px-2 py-0.5">
+                          {group.items.length}
+                        </span>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-foreground truncate">{app.universityName ?? app.universityId ?? "\u2014"}</p>
-                        <p className="text-sm text-muted-foreground truncate">{app.programName ?? app.programId ?? "\u2014"}</p>
-                      </div>
-                      <Badge
-                        className={`capitalize text-xs px-2 py-0.5 border-0 rounded-full shrink-0 ${STAGE_COLORS[app.stage] ?? "bg-gray-100 text-gray-600"}`}
-                      >
-                        {app.stage?.replace(/_/g, " ")}
-                      </Badge>
-                      <div className="hidden md:block w-24 text-right text-xs text-muted-foreground shrink-0">
-                        {new Date(app.createdAt).toLocaleDateString()}
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setLocation(`${basePath}/applications/${app.id}`)}
-                        >
-                          View
-                        </Button>
-                        {canDeleteApplication && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            disabled={deletingAppId === app.id}
-                            title="Delete application"
-                            aria-label="Delete application"
-                            onClick={() => handleDeleteApplication(app)}
+                      <div className="bg-card rounded-2xl border shadow-sm divide-y overflow-hidden">
+                        {group.items.map((app: any) => (
+                          <div
+                            key={app.id}
+                            className="flex items-center gap-3 sm:gap-4 px-4 py-3 hover:bg-primary/5 transition-colors"
                           >
-                            {deletingAppId === app.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                          </Button>
-                        )}
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                              <GraduationCap className="w-5 h-5 text-primary" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-foreground truncate">{app.universityName ?? app.universityId ?? "\u2014"}</p>
+                              <p className="text-sm text-muted-foreground truncate">{app.programName ?? app.programId ?? "\u2014"}</p>
+                            </div>
+                            <Badge
+                              className={`capitalize text-xs px-2 py-0.5 border-0 rounded-full shrink-0 ${STAGE_COLORS[app.stage] ?? "bg-gray-100 text-gray-600"}`}
+                            >
+                              {app.stage?.replace(/_/g, " ")}
+                            </Badge>
+                            <div className="hidden md:block w-24 text-right text-xs text-muted-foreground shrink-0">
+                              {new Date(app.createdAt).toLocaleDateString()}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setLocation(`${basePath}/applications/${app.id}`)}
+                              >
+                                View
+                              </Button>
+                              {canDeleteApplication && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  disabled={deletingAppId === app.id}
+                                  title="Delete application"
+                                  aria-label="Delete application"
+                                  onClick={() => handleDeleteApplication(app)}
+                                >
+                                  {deletingAppId === app.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
-                </div>
               </div>
             )}
           </TabsContent>

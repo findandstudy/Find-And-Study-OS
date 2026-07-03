@@ -2462,6 +2462,9 @@
     "error": "Kesalahan"
   },
   "studentDetailPage": {
+    "appGroupStudent": "Aplikasi Siswa",
+    "appGroupStaff": "Aplikasi Staf/Admin",
+    "appGroupAutomation": "Aplikasi Otomatisasi",
     "profile": "Profil",
     "allMessaging": "Semua Pesan",
     "direct": "Langsung",

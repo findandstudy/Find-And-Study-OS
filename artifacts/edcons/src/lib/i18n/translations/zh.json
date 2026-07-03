@@ -2462,6 +2462,9 @@
     "error": "错误"
   },
   "studentDetailPage": {
+    "appGroupStudent": "学生的申请",
+    "appGroupStaff": "员工/管理员申请",
+    "appGroupAutomation": "自动化申请",
     "profile": "个人资料",
     "allMessaging": "所有消息",
     "direct": "直接",

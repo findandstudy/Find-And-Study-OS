@@ -36,6 +36,11 @@ export interface Application {
   scholarship?: number | null;
   /** @nullable */
   notes?: string | null;
+  /**
+   * Who created the application: student | staff | automation. Null is treated as student.
+   * @nullable
+   */
+  createdSource?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

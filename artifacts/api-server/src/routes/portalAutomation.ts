@@ -1310,6 +1310,8 @@ async function fanOutApplicationToUniversities(
                 originLocked:        srcApp.originLocked,
                 originStudentId:     srcApp.originStudentId,
                 branchId:            srcApp.branchId,
+                // Portal-automation fan-out (apply-to-all / apply-to-all-bulk).
+                createdSource:       "automation",
                 createdAt:           now,
                 updatedAt:           now,
               })

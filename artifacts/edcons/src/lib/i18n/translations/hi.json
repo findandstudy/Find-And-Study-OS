@@ -2462,6 +2462,9 @@
     "error": "त्रुटि"
   },
   "studentDetailPage": {
+    "appGroupStudent": "छात्र के आवेदन",
+    "appGroupStaff": "स्टाफ/एडमिन आवेदन",
+    "appGroupAutomation": "स्वचालन आवेदन",
     "profile": "प्रोफ़ाइल",
     "allMessaging": "सभी संदेश",
     "direct": "सीधा",

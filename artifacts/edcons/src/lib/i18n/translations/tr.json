@@ -2695,6 +2695,9 @@
     "error": "Hata"
   },
   "studentDetailPage": {
+    "appGroupStudent": "Öğrencinin Başvuruları",
+    "appGroupStaff": "Staff/Admin Başvuruları",
+    "appGroupAutomation": "Otomasyon Başvuruları",
     "profile": "Profil",
     "allMessaging": "Tüm Mesajlar",
     "direct": "Doğrudan",

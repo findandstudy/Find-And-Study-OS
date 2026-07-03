@@ -2513,6 +2513,9 @@
     "error": "Ошибка"
   },
   "studentDetailPage": {
+    "appGroupStudent": "Заявки студента",
+    "appGroupStaff": "Заявки персонала/админа",
+    "appGroupAutomation": "Заявки автоматизации",
     "profile": "Профиль",
     "allMessaging": "Все сообщения",
     "direct": "Прямой",

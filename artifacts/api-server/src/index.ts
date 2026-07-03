@@ -1158,6 +1158,33 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS superseded_from_application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL`);
     await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS supersede_reason TEXT`);
 
+    // created_source: WHO created the application (student self-service / staff
+    // panel / portal-automation fan-out), for the 3-group split on the student
+    // profile. Additive & nullable; distinct from origin_type (acquisition
+    // channel). null is treated as "student" by the UI (safe default).
+    await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS created_source TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS applications_created_source_idx ON applications(created_source)`);
+    // One-time backfill: automation-created applications are (a) auto-created
+    // supersession/fallback apps (superseded_from_application_id set) and (b) the
+    // best-available proxy for fan-out apps — those that have a portal submission
+    // attached. Only rows still NULL are touched, so this is idempotent and never
+    // overwrites a value set by the creation code. Note: a manually-enqueued
+    // portal submission on a human-created app is an accepted best-effort false
+    // positive (there is no created_by history to distinguish it pre-migration).
+    await pool.query(`
+      UPDATE applications a
+      SET created_source = 'automation'
+      WHERE a.created_source IS NULL
+        AND (
+          a.superseded_from_application_id IS NOT NULL
+          OR EXISTS (
+            SELECT 1 FROM portal_submissions ps WHERE ps.application_id = a.id
+          )
+        )
+    `);
+    // Everything else still NULL is safest treated as student self-service.
+    await pool.query(`UPDATE applications SET created_source = 'student' WHERE created_source IS NULL`);
+
     // Seed a default branch on first run, then backfill orphan rows once.
     const seedRes = await pool.query(
       `INSERT INTO branches (name) VALUES ('Genel Şube') ON CONFLICT (name) DO NOTHING RETURNING id`

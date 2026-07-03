@@ -2462,6 +2462,9 @@
     "error": "Error"
   },
   "studentDetailPage": {
+    "appGroupStudent": "Solicitudes del estudiante",
+    "appGroupStaff": "Solicitudes de personal/admin",
+    "appGroupAutomation": "Solicitudes de automatización",
     "profile": "Perfil",
     "allMessaging": "Toda la mensajería",
     "direct": "Directo",
