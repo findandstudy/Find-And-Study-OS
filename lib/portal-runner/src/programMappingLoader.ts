@@ -9,20 +9,31 @@
  * is omitted, so the adapter behaves exactly as before — no prod change.
  */
 
-import { db, portalProgramMappingTable } from "@workspace/db";
+import { db, portalProgramMappingTable, GENERAL_MAPPING_KEY } from "@workspace/db";
 import { and, eq, isNull } from "drizzle-orm";
 
 export interface ProgramMappingData {
-  /** CRM programId → portal option value/text. */
-  programOverrides?: Record<string, string>;
-  /** EN↔TR synonym equivalence groups (folded single tokens). */
+  /** { portal option label → CRM program name } — General ∪ university (uni wins). */
+  programNameMap?: Record<string, string>;
+  /** EN↔TR synonym equivalence groups (folded single tokens) — General ∪ uni. */
   programSynonyms?: string[][];
-  /** Country name/adjective (lowercase) → portal label. */
+  /** Country name/adjective (lowercase) → portal label — General ∪ uni (uni wins). */
   countryOverrides?: Record<string, string>;
 }
 
+interface MappingRow {
+  mappings: Record<string, string> | null;
+  synonyms: string[][] | null;
+  countryOverrides: Record<string, string> | null;
+}
+
 /**
- * Fetch the mapping row for a university and return only the populated fields.
+ * Fetch the panel-managed mapping data for a university, MERGED with the GENERAL
+ * (all-universities default) tier. Resolution is University > General:
+ *   - programNameMap / countryOverrides: { ...general, ...uni } (uni key wins)
+ *   - programSynonyms:                   [ ...general, ...uni ] (both extend)
+ *
+ * Fully name-based — the removed CRM-programId override column is no longer read.
  * Never throws — on any DB error returns {} so the adapter falls back to its
  * built-in defaults (the submission must not fail because the table is missing).
  */
@@ -31,15 +42,30 @@ export async function loadProgramMapping(
   memberUniversityId: number | null = null,
 ): Promise<ProgramMappingData> {
   try {
-    // memberUniversityId null → 1:1 row (member_university_id IS NULL), today's
-    // behaviour. Non-null → the multi-portal account's row for that member.
+    // GENERAL tier: single row keyed by the reserved sentinel, member NULL.
+    const [generalRow] = await db
+      .select({
+        mappings:         portalProgramMappingTable.mappings,
+        synonyms:         portalProgramMappingTable.synonyms,
+        countryOverrides: portalProgramMappingTable.countryOverrides,
+      })
+      .from(portalProgramMappingTable)
+      .where(
+        and(
+          eq(portalProgramMappingTable.universityKey, GENERAL_MAPPING_KEY),
+          isNull(portalProgramMappingTable.memberUniversityId),
+        ),
+      );
+
+    // UNIVERSITY tier. memberUniversityId null → 1:1 row (member IS NULL),
+    // today's behaviour. Non-null → the multi-portal account's row for that member.
     const memberCondition =
       memberUniversityId == null
         ? isNull(portalProgramMappingTable.memberUniversityId)
         : eq(portalProgramMappingTable.memberUniversityId, memberUniversityId);
-    const [row] = await db
+    const [uniRow] = await db
       .select({
-        programOverrides: portalProgramMappingTable.programOverrides,
+        mappings:         portalProgramMappingTable.mappings,
         synonyms:         portalProgramMappingTable.synonyms,
         countryOverrides: portalProgramMappingTable.countryOverrides,
       })
@@ -51,20 +77,35 @@ export async function loadProgramMapping(
         ),
       );
 
-    if (!row) return {};
-
-    const out: ProgramMappingData = {};
-    if (row.programOverrides && Object.keys(row.programOverrides).length > 0) {
-      out.programOverrides = row.programOverrides;
-    }
-    if (Array.isArray(row.synonyms) && row.synonyms.length > 0) {
-      out.programSynonyms = row.synonyms;
-    }
-    if (row.countryOverrides && Object.keys(row.countryOverrides).length > 0) {
-      out.countryOverrides = row.countryOverrides;
-    }
-    return out;
+    return mergeTiers(generalRow ?? null, uniRow ?? null);
   } catch {
     return {};
   }
+}
+
+function mergeTiers(
+  general: MappingRow | null,
+  uni: MappingRow | null,
+): ProgramMappingData {
+  const out: ProgramMappingData = {};
+
+  const nameMap = {
+    ...(general?.mappings ?? {}),
+    ...(uni?.mappings ?? {}),
+  };
+  if (Object.keys(nameMap).length > 0) out.programNameMap = nameMap;
+
+  const synonyms = [
+    ...(Array.isArray(general?.synonyms) ? general!.synonyms : []),
+    ...(Array.isArray(uni?.synonyms) ? uni!.synonyms : []),
+  ];
+  if (synonyms.length > 0) out.programSynonyms = synonyms;
+
+  const country = {
+    ...(general?.countryOverrides ?? {}),
+    ...(uni?.countryOverrides ?? {}),
+  };
+  if (Object.keys(country).length > 0) out.countryOverrides = country;
+
+  return out;
 }

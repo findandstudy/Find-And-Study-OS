@@ -4908,6 +4908,7 @@
       "title": "Program Haritalama",
       "description": "Portal program etiketlerini her üniversite için CRM program adlarıyla eşleştirin.",
       "selectUniversity": "Bir üniversite seçin",
+      "generalTier": "Genel (Tüm Üniversiteler)",
       "noUniversities": "Yapılandırılmış üniversite yok. Önce üniversite ekleyin.",
       "mappingsTitle": "Program Eşleştirmeleri",
       "mappingsDescription": "Portal etiketi → CRM program adı. Otomasyon, portal programlarını CRM kayıtlarıyla eşleştirmek için bunu kullanır.",

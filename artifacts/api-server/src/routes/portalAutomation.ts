@@ -2252,6 +2252,26 @@ router.post(
       toApply[id] = canonical;
     });
 
+    // Resolve the applied CRM ids → program names so we can ALSO write the
+    // name-based mappings { portalValue → crmProgramName } that the matcher now
+    // consumes. programOverrides is kept in lockstep as a historical column.
+    const appliedIds = [...new Set(Object.keys(toApply).map(Number))].filter(
+      (n) => Number.isInteger(n) && n > 0,
+    );
+    const idToName = new Map<number, string>();
+    if (appliedIds.length > 0) {
+      const progs = await db
+        .select({ id: programsTable.id, name: programsTable.name })
+        .from(programsTable)
+        .where(inArray(programsTable.id, appliedIds));
+      for (const p of progs) idToName.set(p.id, p.name);
+    }
+    const nameToApply: Record<string, string> = {};
+    for (const [idStr, portalValue] of Object.entries(toApply)) {
+      const crmName = idToName.get(Number(idStr));
+      if (crmName) nameToApply[portalValue] = crmName;
+    }
+
     let rowId = 0;
     if (Object.keys(toApply).length > 0) {
       const [existing] = await db
@@ -2260,17 +2280,18 @@ router.post(
         .where(eq(portalProgramMappingTable.universityKey, key))
         .limit(1);
       const merged = { ...(existing?.programOverrides ?? {}), ...toApply };
+      const mergedNames = { ...(existing?.mappings ?? {}), ...nameToApply };
       if (existing) {
         const [row] = await db
           .update(portalProgramMappingTable)
-          .set({ programOverrides: merged, updatedAt: new Date() })
+          .set({ programOverrides: merged, mappings: mergedNames, updatedAt: new Date() })
           .where(eq(portalProgramMappingTable.id, existing.id))
           .returning({ id: portalProgramMappingTable.id });
         rowId = row.id;
       } else {
         const [row] = await db
           .insert(portalProgramMappingTable)
-          .values({ universityKey: key, programOverrides: merged })
+          .values({ universityKey: key, programOverrides: merged, mappings: mergedNames })
           .returning({ id: portalProgramMappingTable.id });
         rowId = row.id;
       }

@@ -740,16 +740,10 @@ export const sitAdapter: SitAdapter = {
       };
     }
     const pool = langFiltered;
-    const mergedMap = profile.programOverrides
-      ? { ...profile.programOverrides }
-      : undefined;
-    const match = matchProgram(
-      profile.programName,
-      pool,
-      profile.programId,
-      mergedMap,
-      profile.programSynonyms,
-    );
+    const match = matchProgram(profile.programName, pool, {
+      nameMap: profile.programNameMap,
+      synonyms: profile.programSynonyms,
+    });
 
     if (!match) {
       logger.warn(

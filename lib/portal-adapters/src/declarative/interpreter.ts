@@ -78,11 +78,11 @@ export function applyTransform(value: string, transform?: Transform): string {
 
 /**
  * Resolves the portal option value for the applicant's program. Priority:
- *   1. spec programSelection.overrides[programId]
- *   2. profile.programOverrides[programId]   (DB program-mapping, DB wins)
- *   3. exact option match (by value, then by folded label)
- *   4. fuzzy match via matchProgram() against the candidate option labels
- * Returns null when nothing meets the threshold.
+ *   1. spec programSelection.overrides[programId]   (spec-authored, not DB)
+ *   2. exact option match (by value, then by folded label)
+ *   3. name mapping + fuzzy match via matchProgram() (fully name-based)
+ * Returns null when nothing meets the threshold. The DB CRM-programId override
+ * path has been removed — matching is name-based (programNameMap + fuzzy).
  */
 export function resolveProgramValue(
   options: ProgramOption[],
@@ -95,9 +95,6 @@ export function resolveProgramValue(
   const specOverride = ps?.overrides?.[programId];
   if (specOverride) return { value: specOverride, conf: 1 };
 
-  const dbOverride = profile.programOverrides?.[programId];
-  if (dbOverride) return { value: dbOverride, conf: 1 };
-
   // Exact match on option value, then on folded label.
   const byValue = options.find((o) => o.v === programName || o.v === programId);
   if (byValue) return { value: byValue.v, conf: 1 };
@@ -105,15 +102,12 @@ export function resolveProgramValue(
   const byLabel = options.find((o) => fold(o.t) === foldedName);
   if (byLabel) return { value: byLabel.v, conf: 1 };
 
-  // Fuzzy fallback.
+  // Name mapping + fuzzy fallback.
   const candidates = options.map((o) => ({ id: o.v, name: o.t }));
-  const res = matchProgram(
-    programName,
-    candidates,
-    programId,
-    undefined,
-    profile.programSynonyms,
-  );
+  const res = matchProgram(programName, candidates, {
+    nameMap: profile.programNameMap,
+    synonyms: profile.programSynonyms,
+  });
   if (!res) return null;
   const threshold = ps?.fuzzyThreshold ?? 0;
   if (threshold > 0 && res.conf < threshold) return null;

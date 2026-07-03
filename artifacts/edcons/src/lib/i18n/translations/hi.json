@@ -4908,6 +4908,7 @@
       "title": "Program Mapping",
       "description": "Map portal program labels to CRM program names for each university.",
       "selectUniversity": "Select a university",
+      "generalTier": "सामान्य (सभी विश्वविद्यालय)",
       "noUniversities": "No universities configured. Add universities first.",
       "mappingsTitle": "Program Mappings",
       "mappingsDescription": "Portal label → CRM program name. The automation uses this to match portal programs to CRM records.",

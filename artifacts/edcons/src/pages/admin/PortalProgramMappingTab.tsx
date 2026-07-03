@@ -72,6 +72,21 @@ interface SynonymRow {
   tokens: string;  // comma/space separated tokens for one equivalence group
 }
 
+/**
+ * Reserved sentinel key for the GENERAL (all-universities default) tier. Editing
+ * it targets defaults applied to every school; per-university rows override it.
+ * Must match GENERAL_MAPPING_KEY on the backend.
+ */
+const GENERAL_MAPPING_KEY = "__general__";
+
+/**
+ * Program matching is now fully NAME-based (portal label → CRM program name +
+ * synonyms + fuzzy). The legacy "Program ID Overrides" editor (CRM programId →
+ * portal option) is retired and hidden; its data column is preserved server-side
+ * for rollback. Flip to true only to inspect legacy overrides.
+ */
+const SHOW_PROGRAM_ID_OVERRIDES = false;
+
 interface MappingResponse {
   mappings?: Record<string, string>;
   programOverrides?: Record<string, string>;
@@ -393,7 +408,11 @@ export default function PortalProgramMappingTab() {
     setOptions([]);
     setOMeta(null);
     loadData(key);
-    loadOptions(key, optionsLevel, false);
+    // Live portal options only feed the (retired) ID-override editor. Skip the
+    // fetch when hidden or for the General tier (no live portal to query).
+    if (SHOW_PROGRAM_ID_OVERRIDES && key !== GENERAL_MAPPING_KEY) {
+      loadOptions(key, optionsLevel, false);
+    }
   };
 
   const handleSelectLevel = (level: string) => {
@@ -458,6 +477,9 @@ export default function PortalProgramMappingTab() {
                 <SelectValue placeholder={t("portalAutomation.programMapping.selectUniversity")} />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={GENERAL_MAPPING_KEY}>
+                  🌐 {t("portalAutomation.programMapping.generalTier")}
+                </SelectItem>
                 {unis.map((u) => (
                   <SelectItem key={u.universityKey} value={u.universityKey}>
                     {u.universityName}
@@ -492,13 +514,17 @@ export default function PortalProgramMappingTab() {
             {/* Save bar */}
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <p className="text-sm text-muted-foreground">
-                {selectedUni?.universityName}
+                {selectedKey === GENERAL_MAPPING_KEY
+                  ? `🌐 ${t("portalAutomation.programMapping.generalTier")}`
+                  : selectedUni?.universityName}
               </p>
               <div className="flex items-center gap-2 flex-wrap">
-                <ProgramMappingImportDialog
-                  universityKey={selectedKey}
-                  onImported={() => loadData(selectedKey)}
-                />
+                {selectedKey !== GENERAL_MAPPING_KEY && (
+                  <ProgramMappingImportDialog
+                    universityKey={selectedKey}
+                    onImported={() => loadData(selectedKey)}
+                  />
+                )}
                 <Button size="sm" onClick={save} disabled={saving} className="gap-1.5">
                   {saving
                     ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -534,7 +560,8 @@ export default function PortalProgramMappingTab() {
               </CardContent>
             </Card>
 
-            {/* 2. Program ID overrides — CRM program id → live portal option */}
+            {/* 2. Program ID overrides — RETIRED (matching is now name-based). */}
+            {SHOW_PROGRAM_ID_OVERRIDES && (
             <Card className="rounded-xl">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -603,6 +630,7 @@ export default function PortalProgramMappingTab() {
                 />
               </CardContent>
             </Card>
+            )}
 
             {/* 3. Synonyms */}
             <Card className="rounded-xl">

@@ -139,13 +139,9 @@ function resolvePortalValue(
   }
 
   // 2. Fuzzy match the CRM catalog name against the portal options.
-  const m = matchProgram(
-    cand.name,
-    matchCandidates,
-    String(cand.programId),
-    overrides,
-    synonyms,
-  );
+  //    (The programId → override path lives in step 1 above; matchProgram itself
+  //    is now fully name-based.)
+  const m = matchProgram(cand.name, matchCandidates, { synonyms });
   return m ? m.match.id : null;
 }
 

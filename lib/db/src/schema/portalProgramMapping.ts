@@ -10,6 +10,15 @@ import {
 import { sql } from "drizzle-orm";
 import { universitiesTable } from "./universities";
 
+/**
+ * Reserved sentinel `university_key` for the GENERAL (all-universities default)
+ * tier of Program Mappings + Synonyms. A single row with this key + NULL member
+ * holds defaults that apply to every school; a per-university row overrides/
+ * extends it (University > General > fuzzy). No real portal university may use
+ * this key — the create/rename endpoints reject it.
+ */
+export const GENERAL_MAPPING_KEY = "__general__";
+
 // ---------------------------------------------------------------------------
 // Table — per-university program name translation dictionary
 // Stores a { "portal label" → "CRM program name" } override map.

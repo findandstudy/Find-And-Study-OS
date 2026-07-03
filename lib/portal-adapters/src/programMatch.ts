@@ -479,33 +479,69 @@ function scorePool(
 }
 
 // ---------------------------------------------------------------------------
+// Name-based mapping options.
+//   nameMap:  { "portal option label" → "CRM program name" }. The panel-managed
+//             Program Mappings (General ∪ university, university wins), reverse-
+//             looked-up here: given the applicant's CRM program name, find the
+//             portal label whose mapped CRM name folds-equal, then resolve that
+//             label to a live <option>. This REPLACES the old CRM-programId path
+//             so re-syncing a catalog (which changes IDs) never breaks a mapping.
+//   synonyms: EN↔TR equivalence groups that EXTEND the built-in dictionary.
+// ---------------------------------------------------------------------------
+export interface MatchOptions {
+  /** { portal option label → CRM program name } — merged General ∪ university. */
+  nameMap?: Record<string, string>;
+  /** EN↔TR synonym groups (folded single tokens) extending the built-ins. */
+  synonyms?: readonly (readonly string[])[];
+}
+
+/**
+ * Reverse-resolve a portal <option> from the panel-managed name mapping.
+ * The mapping is stored portal-label → CRM-name; given the CRM program name we
+ * find every label mapped to it (folded-equal) and return the first candidate
+ * option that matches that label by folded text, by option value, or by folded
+ * substring. Returns null when no mapping applies.
+ */
+function resolveByNameMap(
+  programName: string,
+  candidates: ProgramCandidate[],
+  nameMap?: Record<string, string>,
+): ProgramCandidate | null {
+  if (!nameMap) return null;
+  const qFold = fold(programName);
+  if (!qFold) return null;
+  for (const [portalLabel, crmName] of Object.entries(nameMap)) {
+    if (fold(crmName) !== qFold) continue;
+    const lblFold = fold(portalLabel);
+    const found =
+      candidates.find(c => c.id === portalLabel) ??
+      candidates.find(c => fold(c.name) === lblFold) ??
+      (lblFold ? candidates.find(c => fold(c.name).includes(lblFold)) : undefined);
+    if (found) return found;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // matchProgram — main entry point
 //
-// Resolution order:
-//   1. programMap[programId] → conf 1.0 (manual override)
-//   2. Hard degree/thesis/language filter
-//   3. Token-Jaccard scoring (primary — no expansion)
-//   4. EN↔TR synonym expansion (fallback — only when step 3 finds NO candidates)
-//   5. Confidence gate: conf ≥ 0.6 AND (single candidate OR margin ≥ 0.15)
+// Resolution order (fully NAME-based — CRM program IDs are never consulted):
+//   1. Name mapping (nameMap portal-label→CRM-name reverse lookup) → conf 1.0
+//   2. Exact / folded-name match → conf 1.0
+//   3. Hard degree/thesis/language filter
+//   4. Token-Jaccard scoring (primary — no expansion)
+//   5. EN↔TR synonym expansion (fallback — only when step 4 finds NO candidates)
+//   6. Confidence gate: conf ≥ 0.6 AND (single candidate OR margin ≥ 0.15)
 // ---------------------------------------------------------------------------
 export function matchProgram(
   programName: string,
   candidates: ProgramCandidate[],
-  programId?: string,
-  programMap?: Record<string, string>,
-  synonyms?: readonly (readonly string[])[],
+  opts?: MatchOptions,
 ): MatchResult | null {
 
-  // --- 1. Manual override (highest confidence) ---
-  if (programId && programMap) {
-    const override = programMap[programId];
-    if (override !== undefined) {
-      const found =
-        candidates.find(c => c.id === override) ??
-        candidates.find(c => fold(c.name) === fold(override));
-      if (found) return { match: found, conf: 1.0 };
-    }
-  }
+  // --- 1. Name mapping (panel-managed, highest confidence) ---
+  const mapped = resolveByNameMap(programName, candidates, opts?.nameMap);
+  if (mapped) return { match: mapped, conf: 1.0 };
 
   if (candidates.length === 0) return null;
 
@@ -529,6 +565,7 @@ export function matchProgram(
   // (panel-managed). DB groups EXTEND the proven defaults — they never remove
   // built-in coverage. With no extras the shared default map is reused (zero
   // allocation, behaviour identical to before this parameter existed).
+  const synonyms = opts?.synonyms;
   const synonymMap =
     synonyms && synonyms.length > 0
       ? buildSynonymMap([...SYNONYM_GROUPS, ...synonyms])

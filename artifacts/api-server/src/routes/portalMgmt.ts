@@ -28,6 +28,7 @@ import {
   portalCredentialsTable,
   universitiesTable,
   programsTable,
+  GENERAL_MAPPING_KEY,
 } from "@workspace/db";
 import { resolveAdapterByKey, adapterMetadata, setCredsOverride, clearCredsOverride, invalidateDeclarativeAdapterCache } from "@workspace/portal-adapters";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
@@ -297,7 +298,7 @@ router.get(
 // POST /portal-universities
 // ---------------------------------------------------------------------------
 const createUniversityBodySchema = z.object({
-  universityKey:    z.string().min(1).regex(/^[a-z0-9_-]+$/, "Only lowercase letters, digits, underscores and hyphens"),
+  universityKey:    z.string().min(1).regex(/^[a-z0-9_-]+$/, "Only lowercase letters, digits, underscores and hyphens").refine((k) => k !== GENERAL_MAPPING_KEY, `'${GENERAL_MAPPING_KEY}' is reserved for the General mapping tier`),
   universityName:   z.string().min(1),
   adapterKey:       z.string().min(1),
   crmUniversityId:  z.coerce.number().int().positive().optional(),
@@ -459,7 +460,7 @@ router.patch(
 // PATCH /portal-universities/:id
 // ---------------------------------------------------------------------------
 const updateUniversityBodySchema = z.object({
-  universityKey:   z.string().min(1).regex(/^[a-z0-9_-]+$/).optional(),
+  universityKey:   z.string().min(1).regex(/^[a-z0-9_-]+$/).refine((k) => k !== GENERAL_MAPPING_KEY, `'${GENERAL_MAPPING_KEY}' is reserved for the General mapping tier`).optional(),
   universityName:  z.string().min(1).optional(),
   adapterKey:      z.string().min(1).optional(),
   crmUniversityId: z.coerce.number().int().positive().nullable().optional(),
@@ -805,6 +806,106 @@ router.put(
     );
 
     res.json(row);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-program-mapping/migrate-ids-to-names
+//
+// One-shot, IDEMPOTENT backfill: converts every row's legacy
+// programOverrides { crmProgramId → portalValue } into name-based
+// mappings { portalValue → crmProgramName } by looking up the CRM program name.
+//
+//   - Never clobbers an existing mappings[portalValue] entry (panel edits win).
+//   - Never deletes programOverrides (kept as a historical column / rollback).
+//   - Skips overrides whose crmProgramId no longer exists in the programs table
+//     (reported in `missingProgramIds`).
+//
+// Safe to run repeatedly: a second run adds nothing (all keys already present).
+// ADMIN-only, mirrors the PUT write gate.
+// ---------------------------------------------------------------------------
+router.post(
+  "/portal-program-mapping/migrate-ids-to-names",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const user = req.user!;
+
+    const rows = await db.select().from(portalProgramMappingTable);
+
+    // Gather every distinct crmProgramId referenced by any programOverrides map.
+    const allIds = new Set<number>();
+    for (const r of rows) {
+      for (const idStr of Object.keys(r.programOverrides ?? {})) {
+        const n = Number(idStr);
+        if (Number.isInteger(n) && n > 0) allIds.add(n);
+      }
+    }
+
+    // Resolve CRM program id → program name in one query.
+    const idToName = new Map<number, string>();
+    if (allIds.size > 0) {
+      const progs = await db
+        .select({ id: programsTable.id, name: programsTable.name })
+        .from(programsTable)
+        .where(inArray(programsTable.id, [...allIds]));
+      for (const p of progs) idToName.set(p.id, p.name);
+    }
+
+    let rowsScanned = 0;
+    let rowsUpdated = 0;
+    let mappingsAdded = 0;
+    const missingProgramIds = new Set<number>();
+
+    for (const r of rows) {
+      rowsScanned++;
+      const overrides = r.programOverrides ?? {};
+      if (Object.keys(overrides).length === 0) continue;
+
+      const nextMappings: Record<string, string> = { ...(r.mappings ?? {}) };
+      let changed = false;
+
+      for (const [idStr, portalValue] of Object.entries(overrides)) {
+        if (!portalValue) continue;
+        const n = Number(idStr);
+        const crmName = Number.isInteger(n) ? idToName.get(n) : undefined;
+        if (!crmName) {
+          if (Number.isInteger(n)) missingProgramIds.add(n);
+          continue;
+        }
+        // Portal option value/label is the key of the name map; do not clobber
+        // an existing (panel-authored) entry.
+        if (nextMappings[portalValue] === undefined) {
+          nextMappings[portalValue] = crmName;
+          mappingsAdded++;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await db
+          .update(portalProgramMappingTable)
+          .set({ mappings: nextMappings, updatedAt: new Date() })
+          .where(eq(portalProgramMappingTable.id, r.id));
+        rowsUpdated++;
+      }
+    }
+
+    logAudit(
+      user.id,
+      "migrate_portal_program_mapping_ids_to_names",
+      "portal_program_mapping",
+      undefined,
+      { rowsScanned, rowsUpdated, mappingsAdded, missingProgramIds: missingProgramIds.size },
+      req.ip,
+    );
+
+    res.json({
+      rowsScanned,
+      rowsUpdated,
+      mappingsAdded,
+      missingProgramIds: [...missingProgramIds],
+    });
   },
 );
 

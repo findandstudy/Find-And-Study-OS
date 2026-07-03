@@ -27,39 +27,6 @@ import os from "node:os";
 const PORTAL_URL   = "https://apply.topkapi.edu.tr";
 const STORAGE_PATH = "/tmp/topkapi-portal-state.json";
 
-/**
- * Manual override map: CRM programId → portal <option> value OR option text.
- *
- * matchProgram() resolves the override as:
- *   1. candidates.find(c => c.id === override)       — by numeric option value
- *   2. candidates.find(c => fold(c.name) === fold(override)) — by option text
- *
- * Values here are the Turkish portal option texts (best-effort).
- * After running `dump-program-options` script against the live portal, replace
- * each value with the exact numeric <option value="..."> string for conf=1.0
- * matching that is immune to portal wording changes.
- *
- * HOW TO UPDATE:
- *   pnpm --filter @workspace/portal-automation-worker dump-program-options
- *   # Then copy the numeric IDs from /tmp/topkapi-program-options.json here.
- */
-const PROGRAM_MAP: Record<string, string> = {
-  // ── Bachelor programmes ──────────────────────────────────────────────────
-  "9303":  "Bilgisayar Mühendisliği (İngilizce)",
-  "9298":  "İşletme (İngilizce)",
-  "9299":  "İşletme (Türkçe)",
-  "9316":  "Uluslararası Ticaret ve İşletme (İngilizce)",
-  "9325":  "Psikoloji (İngilizce)",
-  // ── Master programmes ────────────────────────────────────────────────────
-  "9339":  "İşletme Yüksek Lisans (Tezsiz) (Türkçe)",
-  "13583": "Elektrik-Elektronik Mühendisliği Yüksek Lisans (Tezsiz) (İngilizce)",
-  "13588": "İşletme Yüksek Lisans (Tezli) (İngilizce)",
-  "13589": "İşletme Yüksek Lisans (Tezsiz) (İngilizce)",
-  "13607": "Yönetim Bilişim Sistemleri Yüksek Lisans (Tezsiz) (İngilizce)",
-  // ── Bachelor (EEE) ───────────────────────────────────────────────────────
-  "13610": "Elektrik-Elektronik Mühendisliği (İngilizce)",
-};
-
 // ---------------------------------------------------------------------------
 // Country resolution — nationality text → Topkapi portal dropdown label (Turkish)
 //
@@ -1839,50 +1806,15 @@ export const topkapiAdapter: UniversityAdapter = {
     );
 
     // Panel-managed mapping data merges OVER the built-in code defaults (DB wins):
-    //   - programOverrides: built-in PROGRAM_MAP first, then DB overrides.
-    //   - programSynonyms:  passed through to EXTEND the matcher's dictionary.
-    // When the table is empty both are undefined → identical to prior behaviour.
-    const mergedProgramMap = profile.programOverrides
-      ? { ...PROGRAM_MAP, ...profile.programOverrides }
-      : PROGRAM_MAP;
-
-    // ── Explicit override resolution (DB program_overrides) ──────────────────
-    // The panel maps CRM programId → portal option value (or label). When an
-    // override exists for this application's programId, resolve it directly
-    // against the LIVE dropdown options BEFORE any fuzzy matching: by option
-    // value first, then exact folded label, then partial folded label. A hit
-    // wins with conf 1.0. A miss (stale/typo'd override) logs all options and
-    // falls back to fuzzy so a bad override never silently blocks a submission.
-    let matchResult: ReturnType<typeof matchProgram> = null;
-    const overrideValue = profile.programOverrides?.[String(profile.programId)];
-    if (overrideValue) {
-      const ovFolded = fold(overrideValue);
-      const found =
-        programOptions.find((o) => o.id === overrideValue) ??
-        programOptions.find((o) => fold(o.name) === ovFolded) ??
-        programOptions.find((o) => fold(o.name).includes(ovFolded));
-      if (found) {
-        logger.info(
-          `[topkapi] program override hit — programId=${profile.programId} → "${found.id}: ${found.name}" (override="${overrideValue}")`,
-        );
-        matchResult = { match: found, conf: 1.0 };
-      } else {
-        logger.warn(
-          `[topkapi] program override "${overrideValue}" (programId=${profile.programId}) matched no option — falling back to fuzzy. All ${programOptions.length} options:`,
-          programOptions.map((o) => `${o.id}: ${o.name}`),
-        );
-      }
-    }
-
-    if (!matchResult) {
-      matchResult = matchProgram(
-        profile.programName,
-        programOptions,
-        profile.programId,
-        mergedProgramMap,
-        profile.programSynonyms,
-      );
-    }
+    //   - programNameMap:  portal label → CRM program name (General ∪ university).
+    //   - programSynonyms: passed through to EXTEND the matcher's dictionary.
+    // Matching is fully NAME-based — CRM program IDs are never consulted, so a
+    // catalog re-sync (which renumbers IDs) can no longer break a mapping. The
+    // name map is reverse-resolved inside matchProgram (conf 1.0) before fuzzy.
+    const matchResult = matchProgram(profile.programName, programOptions, {
+      nameMap: profile.programNameMap,
+      synonyms: profile.programSynonyms,
+    });
 
     if (!matchResult) {
       logger.warn(
