@@ -1,6 +1,6 @@
 import { Router, type IRouter, json } from "express";
 import { db, countriesTable, citiesTable, universitiesTable, programsTable, catalogOptionsTable, programDocumentRequirementsTable, degreeDocumentRequirementsTable } from "@workspace/db";
-import { eq, ilike, sql, and, asc, inArray, notInArray, isNotNull } from "drizzle-orm";
+import { eq, ilike, sql, and, or, asc, inArray, notInArray, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalog, loadDocCatalogKeySet } from "../lib/docCatalog";
@@ -70,7 +70,19 @@ router.get("/countries", async (req, res): Promise<void> => {
 router.get("/public/countries", async (req, res): Promise<void> => {
   const { search, withDialCode } = req.query as Record<string, string>;
   const conditions = [eq(countriesTable.isActive, true)];
-  if (search) conditions.push(ilike(countriesTable.name, `%${search}%`));
+  if (search) {
+    const term = search.trim();
+    // Match by country name (Turkish-aware, case-insensitive ilike) OR by dial
+    // code: normalize both the query and the stored code to digits-only so
+    // "90"/"+90"/" 90 " all resolve to Turkey, "213" to Algeria, etc. This
+    // mirrors the embed widget's client-side name+code search.
+    const digits = term.replace(/[^0-9]/g, "");
+    const clauses = [ilike(countriesTable.name, `%${term}%`)];
+    if (digits) {
+      clauses.push(sql`regexp_replace(coalesce(${countriesTable.dialCode}, ''), '[^0-9]', '', 'g') LIKE ${digits + "%"}`);
+    }
+    conditions.push(or(...clauses)!);
+  }
   if (withDialCode === "1" || withDialCode === "true") conditions.push(isNotNull(countriesTable.dialCode));
   const data = await db
     .select({ id: countriesTable.id, name: countriesTable.name, code: countriesTable.code, flagEmoji: countriesTable.flagEmoji, dialCode: countriesTable.dialCode })
