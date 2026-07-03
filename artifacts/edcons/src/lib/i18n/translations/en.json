@@ -580,6 +580,7 @@
     "allRightsReserved": "All rights reserved."
   },
   "common": {
+    "latinOnlyName": "Names must use Latin letters only. Please remove non-Latin characters (e.g. Arabic, Cyrillic).",
     "goHome": "Go to Home",
     "learnMore": "Learn More",
     "getStarted": "Get Started",

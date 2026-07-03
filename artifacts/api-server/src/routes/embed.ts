@@ -17,6 +17,7 @@ import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceG
 import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { findOrUpsertEmbedLead } from "../lib/embedLeadDedup";
+import { containsNonLatinLetter, NON_LATIN_NAME_CODE } from "../lib/textNormalize";
 import {
   emptySummary,
   tallyResult,
@@ -43,6 +44,19 @@ function tlu(v: any, max: number): string | null {
   const str = String(v).replace(/[çÇğĞıİöÖşŞüÜ]/g, (c) => TR_MAP[c] || c).toUpperCase().trim();
   if (!str) return null;
   return str.slice(0, max);
+}
+/**
+ * Returns the first name field that contains a non-Latin-script letter, or null
+ * if all provided names are Latin-only. Used to hard-reject Arabic/Cyrillic/etc.
+ * names on public embed intake (mirrors normalizeAndValidateNames server-side).
+ */
+function firstNonLatinNameField(pairs: Array<[string, unknown]>): string | null {
+  for (const [field, value] of pairs) {
+    if (typeof value === "string" && value.trim() !== "" && containsNonLatinLetter(value.trim())) {
+      return field;
+    }
+  }
+  return null;
 }
 function pn(raw: any, cc: any, max: number): string | null {
   const phoneRaw = raw ? String(raw) : "";
@@ -1015,6 +1029,13 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
     res.status(400).json({ error: "firstName, lastName, and email are required" });
     return;
   }
+  {
+    const badField = firstNonLatinNameField([["firstName", firstName], ["lastName", lastName]]);
+    if (badField) {
+      res.status(400).json({ error: `${NON_LATIN_NAME_CODE}:${badField}: This field must contain only Latin letters.` });
+      return;
+    }
+  }
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     res.status(400).json({ error: "Invalid email format" });
@@ -1077,6 +1098,17 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   if (!firstName || !lastName || !email) {
     res.status(400).json({ error: "firstName, lastName, and email are required" });
     return;
+  }
+  {
+    const badField = firstNonLatinNameField([
+      ["firstName", firstName], ["lastName", lastName],
+      ["motherName", motherName], ["fatherName", fatherName],
+      ["address", address], ["highSchool", highSchool],
+    ]);
+    if (badField) {
+      res.status(400).json({ error: `${NON_LATIN_NAME_CODE}:${badField}: This field must contain only Latin letters.` });
+      return;
+    }
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -3072,6 +3104,8 @@ function renderDetailContent(p){
 
 var EW_TR_MAP={'ç':'C','Ç':'C','ğ':'G','Ğ':'G','ı':'I','İ':'I','ö':'O','Ö':'O','ş':'S','Ş':'S','ü':'U','Ü':'U'};
 function ewToLatinUpper(v){return String(v==null?'':v).replace(/[çÇğĞıİöÖşŞüÜ]/g,function(c){return EW_TR_MAP[c]||c;}).toUpperCase();}
+function ewHasNonLatin(v){var s=String(v==null?'':v);for(var ci=0;ci<s.length;ci++){var ch=s[ci];if(/\p{L}/u.test(ch)&&!/\p{Script=Latin}/u.test(ch))return true;}return false;}
+function ewFirstNonLatinName(){var NLF=['firstName','lastName','motherName','fatherName','highSchool','address'];for(var i=0;i<NLF.length;i++){var val=savedFormData[NLF[i]];if(val&&ewHasNonLatin(val))return NLF[i];}return null;}
 function wireNameAndPhoneNormalizers(scope){
   var root=scope||document;
   var NAMES=['firstName','lastName','motherName','fatherName','highSchool','address'];
@@ -3373,6 +3407,10 @@ function handleNextPersonal(scope){
   sanitizeSavedFormData();
   if(!savedFormData.firstName||!savedFormData.lastName||!savedFormData.email||!savedFormData.phone||!savedFormData.countryCode){
     alert('Please fill in all required fields, including the phone country code.');
+    return;
+  }
+  if(ewFirstNonLatinName()){
+    alert('Names must use Latin letters only. Please remove non-Latin characters (e.g. Arabic, Cyrillic).');
     return;
   }
   // If a lead was already issued during this session (user clicked Next,

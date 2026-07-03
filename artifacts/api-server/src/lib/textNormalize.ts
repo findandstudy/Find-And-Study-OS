@@ -39,6 +39,28 @@ export function isLatinText(text: string): boolean {
   return LATIN_NAME_RE.test(text);
 }
 
+/**
+ * True when `text` contains at least one letter (\p{L}) that is NOT in the Latin
+ * script — i.e. Arabic, Cyrillic, Greek, CJK, Hebrew, etc. Turkish letters
+ * (ç ğ ı ş ö ü â î û) ARE Latin-script so they are accepted (and later
+ * transliterated to ASCII by toLatinUpper). Non-letter characters (spaces,
+ * digits, punctuation, combining marks) are ignored by this check.
+ */
+export function containsNonLatinLetter(text: string): boolean {
+  for (const ch of text) {
+    if (/\p{L}/u.test(ch) && !/\p{Script=Latin}/u.test(ch)) return true;
+  }
+  return false;
+}
+
+/**
+ * Machine-readable prefix returned in the `error` field when a name contains a
+ * non-Latin-script letter. Format: `NON_LATIN_NAME:<field>`. Clients can detect
+ * this prefix to localize the message; the human-readable English suffix is a
+ * safe fallback for surfaces that display the raw string.
+ */
+export const NON_LATIN_NAME_CODE = "NON_LATIN_NAME";
+
 export function normalizeNameField(value: unknown): string {
   if (value === undefined || value === null) return "";
   if (typeof value !== "string") return "";
@@ -64,7 +86,14 @@ export function normalizeAndValidateNames(
   for (const field of checkFields) {
     const val = result[field];
     if (val !== undefined && val !== null && typeof val === "string" && val.trim() !== "") {
-      result[field] = toLatinUpper(val.trim());
+      const trimmed = val.trim();
+      if (containsNonLatinLetter(trimmed)) {
+        return {
+          error: `${NON_LATIN_NAME_CODE}:${field}: This field must contain only Latin letters.`,
+          normalized: result,
+        };
+      }
+      result[field] = toLatinUpper(trimmed);
     }
   }
   return { error: null, normalized: result };

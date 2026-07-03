@@ -9,11 +9,11 @@ import {
   userPresenceTable,
   usersTable,
 } from "@workspace/db";
-import { eq, and, desc, sql, gte, lte, inArray, ne } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte, inArray, ne, count } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../lib/auth";
 import { getValidated, validate } from "../middlewares/validate";
-import { ADMIN_ROLES } from "../lib/roles";
+import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import { withRenderLock } from "../lib/renderLock";
 import {
   deriveModuleName,
@@ -235,7 +235,8 @@ type PresenceSchemas = { query: typeof presenceQuerySchema };
 
 router.get("/activity/presence", requireAuth, requireRole(...ADMIN_ROLES), validate({ query: presenceQuerySchema }), async (req, res): Promise<void> => {
   const { userId: targetUserId } = getValidated<PresenceSchemas>(req).query;
-  const presenceConditions = [ne(userPresenceTable.status, "offline")];
+  // User Activity scope is internal team only — exclude agent/sub_agent/agent_staff (Job H).
+  const presenceConditions = [ne(userPresenceTable.status, "offline"), inArray(usersTable.role, STAFF_ROLES)];
   if (targetUserId) presenceConditions.push(eq(userPresenceTable.userId, targetUserId));
   const presences = await db.select({
     userId: userPresenceTable.userId,
@@ -267,6 +268,8 @@ router.get("/activity/analytics", requireAuth, requireRole(...ADMIN_ROLES), asyn
   const conditions: any[] = [
     gte(userSessionsTable.startedAt, dateFrom),
     lte(userSessionsTable.startedAt, dateTo),
+    // Internal team only — exclude agent roles (Job H).
+    inArray(usersTable.role, STAFF_ROLES),
   ];
   if (targetUserId) conditions.push(eq(userSessionsTable.userId, parseInt(targetUserId)));
 
@@ -323,6 +326,10 @@ router.get("/activity/analytics", requireAuth, requireRole(...ADMIN_ROLES), asyn
 router.get("/activity/user/:userId", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const targetUserId = parseInt(String(req.params.userId), 10);
   const { from, to } = req.query as Record<string, string>;
+
+  // Internal team only — reject agent-role targets (Job H).
+  const [targetRoleRow] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, targetUserId));
+  if (!targetRoleRow || !STAFF_ROLES.includes(targetRoleRow.role)) { res.status(404).json({ error: "User not found" }); return; }
 
   const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
   const dateTo = to ? new Date(to) : new Date();
@@ -394,7 +401,8 @@ router.get("/activity/modules", requireAuth, requireRole(...ADMIN_ROLES), valida
   const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
   const dateTo = to ? new Date(to) : new Date();
 
-  const moduleConditions = [gte(userPageVisitsTable.enteredAt, dateFrom), lte(userPageVisitsTable.enteredAt, dateTo)];
+  // Internal team only — exclude agent roles (Job H).
+  const moduleConditions = [gte(userPageVisitsTable.enteredAt, dateFrom), lte(userPageVisitsTable.enteredAt, dateTo), inArray(usersTable.role, STAFF_ROLES)];
   if (targetUserId) moduleConditions.push(eq(userPageVisitsTable.userId, targetUserId));
 
   const modules = await db.select({
@@ -406,6 +414,7 @@ router.get("/activity/modules", requireAuth, requireRole(...ADMIN_ROLES), valida
     avgDuration: sql<number>`avg(${userPageVisitsTable.totalDurationSeconds})`,
   })
   .from(userPageVisitsTable)
+  .innerJoin(usersTable, eq(userPageVisitsTable.userId, usersTable.id))
   .where(and(...moduleConditions))
   .groupBy(userPageVisitsTable.moduleName)
   .orderBy(sql`count(*) desc`);
@@ -446,12 +455,18 @@ router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), val
     .from(usersTable)
     .where(eq(usersTable.id, targetUserId));
 
-  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  // Internal team only — reject agent-role targets (Job H).
+  if (!user || !STAFF_ROLES.includes(user.role)) { res.status(404).json({ error: "User not found" }); return; }
 
   const sessions = await db.select().from(userSessionsTable)
     .where(and(eq(userSessionsTable.userId, targetUserId), gte(userSessionsTable.startedAt, dateFrom), lte(userSessionsTable.startedAt, dateTo)))
     .orderBy(desc(userSessionsTable.startedAt))
     .limit(100);
+
+  // Real total session count — the KPI must not cap at the 100-row list length (Job I).
+  const [sessionCountRow] = await db.select({ value: count() }).from(userSessionsTable)
+    .where(and(eq(userSessionsTable.userId, targetUserId), gte(userSessionsTable.startedAt, dateFrom), lte(userSessionsTable.startedAt, dateTo)));
+  const totalSessionCount = Number(sessionCountRow?.value) || 0;
 
   const moduleBreakdown = await db.select({
     moduleName: userPageVisitsTable.moduleName,
@@ -550,7 +565,7 @@ router.get("/activity/report/pdf", requireAuth, requireRole(...ADMIN_ROLES), val
 <div style="display:flex;gap:10px;margin-bottom:16px">
   <div style="border:1px solid #e2e8f0;border-radius:7px;padding:9px 13px;flex:1;border-top:3px solid ${pesc(primary)};background:#f8fafc">
     <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">Sessions</div>
-    <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:1px">${sessions.length}</div>
+    <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:1px">${totalSessionCount}</div>
   </div>
   <div style="border:1px solid #e2e8f0;border-radius:7px;padding:9px 13px;flex:1;border-top:3px solid ${pesc(primary)};background:#f8fafc">
     <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">Total Time</div>

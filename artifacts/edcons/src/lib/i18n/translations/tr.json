@@ -580,6 +580,7 @@
     "allRightsReserved": "Tüm hakları saklıdır."
   },
   "common": {
+    "latinOnlyName": "İsimler yalnızca Latin harfleri içermelidir. Lütfen Latin olmayan karakterleri (ör. Arapça, Kiril) kaldırın.",
     "goHome": "Ana Sayfaya Git",
     "learnMore": "Daha Fazla Bilgi",
     "getStarted": "Başlayın",

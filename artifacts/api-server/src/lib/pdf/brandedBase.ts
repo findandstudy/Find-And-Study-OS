@@ -54,7 +54,15 @@ async function fetchAsDataUri(rawUrl: string | null | undefined): Promise<string
 }
 
 function esc(s: string | null | undefined): string {
-  return (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  // Decode the few named HTML entities that leak into report text (dashes,
+  // separators) to their real glyphs BEFORE escaping, so they render as
+  // "—"/"–" instead of literal "&mdash;"/"&ndash;" in the PDF (Job I).
+  const decoded = (s ?? "")
+    .replace(/&mdash;/g, "\u2014")
+    .replace(/&ndash;/g, "\u2013")
+    .replace(/&middot;/g, "\u00b7")
+    .replace(/&nbsp;/g, " ");
+  return decoded.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 export interface BuildBrandedHtmlOptions {
@@ -80,7 +88,8 @@ export function buildBrandedHtml(opts: BuildBrandedHtmlOptions): string {
   const { title, subtitle, body, settings: s, logoBuri, sealUri } = opts;
   const primary = s.pdfPrimaryColor || "#2563eb";
   const accent = s.pdfAccentColor || "#0ea5e9";
-  const company = esc(s.companyName || "Find & Study");
+  // Branding comes entirely from Settings — no hard-coded company name (Job I).
+  const company = esc(s.companyName || "");
   const headerText = esc(s.pdfHeaderText || "");
   const watermarkText = esc(s.pdfWatermarkText || "");
   const signatureLabel = esc(s.pdfSignatureLabel || "");
@@ -161,7 +170,8 @@ ${signatureHtml}
  * footer text, generated timestamp) consistent with the in-body report.
  */
 export function buildBrandedFooterTemplate(s: BrandedPdfSettings, locale?: string): string {
-  const company = esc(s.companyName || "Find & Study");
+  // Branding comes entirely from Settings — no hard-coded company name (Job I).
+  const company = esc(s.companyName || "");
   const footerText = esc(s.pdfFooterText || "");
   const generatedAt = new Date().toLocaleString(locale || "en-GB", {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",

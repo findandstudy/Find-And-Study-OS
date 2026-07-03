@@ -53,6 +53,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { isNonLatinNameError } from "@/lib/latinNameError";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 import { usePersistedFilterValue } from "@/hooks/use-table-prefs";
 import { BulkActionBar } from "@/components/BulkActionBar";
@@ -1586,6 +1587,13 @@ export default function LeadsPage() {
           setCreateOpen(false);
           setForm(EMPTY_FORM);
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+        },
+        onError: (err: any) => {
+          toast({
+            title: t("common.error"),
+            description: isNonLatinNameError(err) ? t("common.latinOnlyName") : err?.message,
+            variant: "destructive",
+          });
         },
       }
     );

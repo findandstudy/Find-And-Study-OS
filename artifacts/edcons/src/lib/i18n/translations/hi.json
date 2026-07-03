@@ -580,6 +580,7 @@
     "allRightsReserved": "सर्वाधिकार सुरक्षित।"
   },
   "common": {
+    "latinOnlyName": "Names must use Latin letters only. Please remove non-Latin characters (e.g. Arabic, Cyrillic).",
     "goHome": "होम पर जाएँ",
     "learnMore": "और जानें",
     "getStarted": "शुरू करें",

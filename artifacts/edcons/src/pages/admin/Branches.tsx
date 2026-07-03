@@ -254,7 +254,11 @@ export default function BranchesPage() {
       fetchBranches();
       fetchStats();
     } catch (err: any) {
-      toast({ title: t("branches.errorTitle"), description: err.message, variant: "destructive" });
+      const issues = err?.data?.issues as Array<{ path?: string; message?: string }> | undefined;
+      const description = Array.isArray(issues) && issues.length > 0
+        ? issues.map((i) => (i.path ? `${i.path}: ${i.message}` : i.message)).join("; ")
+        : err.message;
+      toast({ title: t("branches.errorTitle"), description, variant: "destructive" });
     } finally {
       setSaving(false);
     }

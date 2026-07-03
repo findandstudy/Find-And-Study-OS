@@ -580,6 +580,7 @@
     "allRightsReserved": "جميع الحقوق محفوظة."
   },
   "common": {
+    "latinOnlyName": "Names must use Latin letters only. Please remove non-Latin characters (e.g. Arabic, Cyrillic).",
     "goHome": "الذهاب للرئيسية",
     "learnMore": "اعرف المزيد",
     "getStarted": "ابدأ الآن",

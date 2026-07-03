@@ -580,6 +580,7 @@
     "allRightsReserved": "Все права защищены."
   },
   "common": {
+    "latinOnlyName": "Names must use Latin letters only. Please remove non-Latin characters (e.g. Arabic, Cyrillic).",
     "goHome": "На главную",
     "learnMore": "Узнать больше",
     "getStarted": "Начать",

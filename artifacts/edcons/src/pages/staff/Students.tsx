@@ -44,6 +44,7 @@ import {
   Trophy, XCircle, MessageSquare, Mail, Building2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { isNonLatinNameError } from "@/lib/latinNameError";
 import { CountryFlag } from "@/components/CountryFlag";
 import { useCountrySearch } from "@/hooks/use-countries";
 import { OriginBadge } from "@/components/OriginBadge";
@@ -833,7 +834,7 @@ function AddStudentModal({
           onSuccess();
         },
         onError: (err: any) => {
-          toast({ title: "Failed to create student", description: err?.message, variant: "destructive" });
+          toast({ title: "Failed to create student", description: isNonLatinNameError(err) ? t("common.latinOnlyName") : err?.message, variant: "destructive" });
         },
       }
     );

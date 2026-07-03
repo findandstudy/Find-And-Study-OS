@@ -554,19 +554,26 @@ router.get(
       }
     }
 
+    // Dedup by universityKey so a university with inconsistent name spellings
+    // across submissions appears once. Prefer the canonical portal_universities
+    // name, falling back to the submission's stored name (Job G).
     const rows = await db
-      .selectDistinct({
+      .selectDistinctOn([portalSubmissionsTable.universityKey], {
         key: portalSubmissionsTable.universityKey,
-        label: portalSubmissionsTable.universityName,
+        label: sql<string>`COALESCE(${portalUniversitiesTable.universityName}, ${portalSubmissionsTable.universityName})`,
       })
       .from(portalSubmissionsTable)
+      .leftJoin(
+        portalUniversitiesTable,
+        eq(portalUniversitiesTable.universityKey, portalSubmissionsTable.universityKey),
+      )
       .where(
         and(
           isNull(portalSubmissionsTable.deletedAt),
           visibleAppIds !== null ? inArray(portalSubmissionsTable.applicationId, visibleAppIds) : undefined,
         ),
       )
-      .orderBy(asc(portalSubmissionsTable.universityName));
+      .orderBy(portalSubmissionsTable.universityKey, asc(portalSubmissionsTable.universityName));
 
     res.json({ data: rows });
   },

@@ -28,8 +28,11 @@ import { useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatDuration } from "@/lib/formatDuration";
 import { useToast } from "@/hooks/use-toast";
+import { STAFF_ROLES as INTERNAL_STAFF_ROLES } from "@workspace/roles";
 
-const STAFF_ROLES = new Set(["super_admin","admin","manager","staff","consultant","editor","accountant","agent_staff"]);
+// User Activity is scoped to the internal team only — agent/sub_agent and their
+// staff (agent_staff) are excluded (Job H).
+const STAFF_ROLES = new Set<string>(INTERNAL_STAFF_ROLES);
 
 function fmtTime(dateStr: string | null) {
   if (!dateStr) return "—";

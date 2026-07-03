@@ -580,6 +580,7 @@
     "allRightsReserved": "版权所有。"
   },
   "common": {
+    "latinOnlyName": "Names must use Latin letters only. Please remove non-Latin characters (e.g. Arabic, Cyrillic).",
     "goHome": "返回首页",
     "learnMore": "了解更多",
     "getStarted": "开始使用",

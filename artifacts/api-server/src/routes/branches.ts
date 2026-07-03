@@ -7,15 +7,20 @@ import { validate, getValidated } from "../middlewares/validate";
 import { STAFF_ROLES } from "../lib/roles";
 import { getVisibleBranchIds } from "../lib/branchScope";
 
+// Optional URL/email fields arrive from the UI as "" when the user clears them.
+// Coerce blank strings to null BEFORE .email()/.url() so clearing a field never
+// trips validation (Job D: "Branch save 400 on empty contactEmail/logoUrl").
+const emptyToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
+
 const createBranchBodySchema = z.object({
   name: z.string().trim().min(1, "Şube adı zorunludur."),
   country: z.string().trim().optional().nullable(),
   city: z.string().trim().optional().nullable(),
   contactName: z.string().trim().optional().nullable(),
-  contactEmail: z.string().trim().email().optional().nullable(),
+  contactEmail: z.preprocess(emptyToNull, z.string().trim().email().nullable().optional()),
   contactPhone: z.string().trim().optional().nullable(),
   contactUserId: z.number().int().optional().nullable(),
-  logoUrl: z.string().url().optional().nullable(),
+  logoUrl: z.preprocess(emptyToNull, z.string().trim().url().nullable().optional()),
   notes: z.string().trim().optional().nullable(),
 });
 
@@ -24,10 +29,10 @@ const patchBranchBodySchema = z.object({
   country: z.string().trim().optional().nullable(),
   city: z.string().trim().optional().nullable(),
   contactName: z.string().trim().optional().nullable(),
-  contactEmail: z.string().trim().email().optional().nullable(),
+  contactEmail: z.preprocess(emptyToNull, z.string().trim().email().nullable().optional()),
   contactPhone: z.string().trim().optional().nullable(),
   contactUserId: z.number().int().optional().nullable(),
-  logoUrl: z.string().url().optional().nullable(),
+  logoUrl: z.preprocess(emptyToNull, z.string().trim().url().nullable().optional()),
   notes: z.string().trim().optional().nullable(),
 });
 
