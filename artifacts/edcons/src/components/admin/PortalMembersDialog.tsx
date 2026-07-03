@@ -114,7 +114,9 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
   const togglePicker = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      setOpenUp(window.innerHeight - rect.bottom < 360);
+      // Flip upward unless there's room for the full dropdown (filters header +
+      // the up-to-420px scrollable list) below the trigger.
+      setOpenUp(window.innerHeight - rect.bottom < 520);
     }
     setPickerOpen((o) => !o);
   };
@@ -179,31 +181,48 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
     return () => { cancelled = true; };
   }, [portal, t, toast]);
 
-  // Debounced catalog search.
+  // Debounced catalog search. Fetch the FULL matching catalog (not a capped
+  // first page): the server caps pageSize at 100, so we loop pages until a short
+  // page signals the end and accumulate. searchRunRef makes any in-flight
+  // multi-page run cancellable when the query/filters change under it.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRunRef = useRef(0);
   useEffect(() => {
     if (!portal) return;
+    // Invalidate any in-flight run IMMEDIATELY (not only when the next debounce
+    // fires) so a still-running multi-page fetch from a stale query/filter can
+    // never call setResults after the inputs have changed under it.
+    const runId = ++searchRunRef.current;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      let cancelled = false;
       setSearching(true);
       (async () => {
+        const PAGE = 100;
+        const MAX_PAGES = 50; // hard safety ceiling (≤ 5000 universities)
+        const acc: CatalogUniversity[] = [];
         try {
-          const params = new URLSearchParams({ pageSize: "20" });
-          if (query.trim()) params.set("q", query.trim());
-          if (filterCountry) params.set("country", filterCountry);
-          if (filterType) params.set("type", filterType);
-          const res = await customFetch<{ data: CatalogUniversity[] }>(
-            `/api/portal-automation/catalog-universities?${params.toString()}`,
-          );
-          if (!cancelled) setResults(res.data);
+          for (let pageNo = 1; pageNo <= MAX_PAGES; pageNo++) {
+            const params = new URLSearchParams({
+              pageSize: String(PAGE),
+              page: String(pageNo),
+            });
+            if (query.trim()) params.set("q", query.trim());
+            if (filterCountry) params.set("country", filterCountry);
+            if (filterType) params.set("type", filterType);
+            const res = await customFetch<{ data: CatalogUniversity[] }>(
+              `/api/portal-automation/catalog-universities?${params.toString()}`,
+            );
+            if (searchRunRef.current !== runId) return; // superseded
+            acc.push(...res.data);
+            if (res.data.length < PAGE) break; // last page reached
+          }
+          if (searchRunRef.current === runId) setResults(acc);
         } catch {
-          if (!cancelled) setResults([]);
+          if (searchRunRef.current === runId) setResults([]);
         } finally {
-          if (!cancelled) setSearching(false);
+          if (searchRunRef.current === runId) setSearching(false);
         }
       })();
-      return () => { cancelled = true; };
     }, 250);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -361,7 +380,7 @@ export function PortalMembersDialog({ portal, onClose, onSaved }: PortalMembersD
                           </select>
                         </div>
                       </div>
-                      <div className="max-h-72 overflow-y-auto p-1">
+                      <div className="max-h-[min(60vh,420px)] overflow-y-auto p-1">
                         {searching ? (
                           <div className="py-4 flex justify-center">
                             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />

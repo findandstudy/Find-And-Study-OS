@@ -44,6 +44,7 @@ import {
   matchAllowedUniversity,
   isAllowedUniversity,
   isLanguageCompatible,
+  distinctiveTokens,
 } from "./helpers.js";
 import {
   findStudent,
@@ -173,6 +174,59 @@ async function selectCombo(
     await opt.click({ timeout: 3000 }).catch(() => {});
     await sleep(page, 1100);
     return true;
+  }
+  // Close the dropdown to avoid blocking later interactions.
+  await page.keyboard.press("Escape").catch(() => {});
+  return false;
+}
+
+/**
+ * Open a SIT custom combobox and click the option whose Turkish-FOLDED text
+ * contains ALL of `wantTokens`. Unlike selectCombo (raw regex against raw
+ * option text), this folds both sides so Turkish characters (İ/ı/ş/ç/ö/ğ/ü)
+ * match reliably — e.g. target tokens [istanbul, aydin] pick the SIT option
+ * "İstanbul Aydın Üniversitesi". Requiring FULL token coverage avoids
+ * selecting a look-alike university. Returns true when an option was clicked.
+ */
+async function selectComboByTokens(
+  page: Page,
+  triggerRe: RegExp,
+  wantTokens: readonly string[],
+): Promise<boolean> {
+  if (wantTokens.length === 0) return false;
+  const trigger = page.getByRole("button", { name: triggerRe }).first();
+  if (!(await trigger.count())) return false;
+  await trigger.click({ timeout: 6000 }).catch(() => {});
+  await sleep(page, 1000);
+
+  const options = page.locator("[role=option], li[role=option]");
+  const n = await options.count().catch(() => 0);
+  // Collect every option that covers ALL wanted tokens on a TOKEN-BOUNDARY
+  // basis (exact folded-token membership, not substring) so a distinctive
+  // token like "kent" never matches inside "beykent".
+  const fullMatches: number[] = [];
+  for (let i = 0; i < Math.min(n, 500); i++) {
+    const raw = ((await options.nth(i).innerText().catch(() => "")) || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!raw) continue;
+    const optTokens = new Set(fold(raw).split(" ").filter(Boolean));
+    if (wantTokens.every((tok) => optTokens.has(tok))) {
+      fullMatches.push(i);
+    }
+  }
+  // Exactly one option must cover every distinctive token. Zero = not in list;
+  // more than one = genuinely ambiguous, so fail loud rather than risk picking
+  // the wrong university.
+  if (fullMatches.length === 1) {
+    await options.nth(fullMatches[0]).click({ timeout: 3000 }).catch(() => {});
+    await sleep(page, 1100);
+    return true;
+  }
+  if (fullMatches.length > 1) {
+    logger.warn(
+      `[sit] ambiguous university options (${fullMatches.length}) for tokens: ${wantTokens.join(" ")}`,
+    );
   }
   // Close the dropdown to avoid blocking later interactions.
   await page.keyboard.press("Escape").catch(() => {});
@@ -637,12 +691,26 @@ export const sitAdapter: SitAdapter = {
     }
 
     // Country + university (university constrained to the allowlist entry).
+    // Match SIT's live option list Turkish-aware (folded token coverage) so the
+    // canonical name "İstanbul Aydın Üniversitesi" selects the right option even
+    // when its text carries Turkish characters.
     await selectCombo(page, SIT_APP_FIELDS.country, /turk/i);
-    await selectCombo(
+    const uniTokens = distinctiveTokens(allowedUni);
+    const uniSelected = await selectComboByTokens(
       page,
       SIT_APP_FIELDS.university,
-      new RegExp(fold(allowedUni).split(" ").slice(0, 2).join(".*"), "i"),
+      uniTokens,
     );
+    if (!uniSelected) {
+      logger.warn(
+        `[sit] university not found in SIT list: "${allowedUni}" (tried: ${uniTokens.join(" ")})`,
+      );
+      return {
+        ...base,
+        programMissing: true,
+        detail: `SIT üniversite listesinde bulunamadı: ${allowedUni}`,
+      };
+    }
     await selectCombo(page, SIT_APP_FIELDS.degree, new RegExp(level, "i"));
 
     // If GraphQL catalog was empty, scan the program combobox options instead.

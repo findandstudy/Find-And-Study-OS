@@ -29,6 +29,7 @@ async function gqlRequest<S extends z.ZodTypeAny>(
   query: string,
   variables: Record<string, unknown>,
   dataSchema: S,
+  label: string,
 ): Promise<z.infer<S> | null> {
   try {
     const res = await page.request.post(SIT_URLS.base + GRAPHQL_PATH, {
@@ -38,7 +39,7 @@ async function gqlRequest<S extends z.ZodTypeAny>(
     });
 
     if (!res.ok()) {
-      logger.warn(`[sit:graphql] HTTP ${res.status()}`);
+      logger.warn(`[sit:graphql] ${label}: HTTP ${res.status()}`);
       return null;
     }
 
@@ -51,12 +52,12 @@ async function gqlRequest<S extends z.ZodTypeAny>(
       .safeParse(body);
 
     if (!envelope.success) {
-      logger.warn("[sit:graphql] malformed response envelope");
+      logger.warn(`[sit:graphql] ${label}: malformed response envelope`);
       return null;
     }
     if (envelope.data.errors && envelope.data.errors.length > 0) {
       logger.warn(
-        "[sit:graphql] errors: " +
+        `[sit:graphql] ${label}: errors: ` +
           envelope.data.errors.map((e) => e.message).join("; "),
       );
       return null;
@@ -64,17 +65,40 @@ async function gqlRequest<S extends z.ZodTypeAny>(
 
     const parsed = dataSchema.safeParse(envelope.data.data);
     if (!parsed.success) {
-      logger.warn("[sit:graphql] data shape mismatch");
+      // Shape mismatch is non-fatal: the caller falls back to scanning the UI.
+      // Logged (with the failing field path + query label) rather than thrown,
+      // and never retried, so a diverging live schema degrades gracefully
+      // instead of looping. The live schema may return a connection either as
+      // `{ nodes: [...] }` or a bare array — both are accepted by the schemas
+      // below, so this only fires on a genuinely unexpected shape.
+      const issue = parsed.error.issues[0];
+      const at = issue?.path?.length ? ` at "${issue.path.join(".")}"` : "";
+      logger.warn(`[sit:graphql] ${label}: data shape mismatch${at}`);
       return null;
     }
     return parsed.data;
   } catch (e) {
     logger.warn(
-      "[sit:graphql] request failed: " +
+      `[sit:graphql] ${label}: request failed: ` +
         (e instanceof Error ? e.message : String(e)),
     );
     return null;
   }
+}
+
+/**
+ * A GraphQL connection that may arrive either as `{ nodes: [...] }` (Relay-ish)
+ * or as a bare array `[...]`. Returns a schema that normalises both to
+ * `{ nodes: T[] }` so downstream code has one shape to consume.
+ */
+function connection<T extends z.ZodTypeAny>(
+  node: T,
+): z.ZodType<{ nodes: z.infer<T>[] }> {
+  return z
+    .union([z.object({ nodes: z.array(node) }), z.array(node)])
+    .transform((v) => (Array.isArray(v) ? { nodes: v } : v)) as z.ZodType<{
+    nodes: z.infer<T>[];
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,15 +119,13 @@ const STUDENT_SEARCH_QUERY = /* GraphQL */ `
 `;
 
 const studentSearchSchema = z.object({
-  students: z.object({
-    nodes: z.array(
-      z.object({
-        id: z.union([z.string(), z.number()]).transform((v) => String(v)),
-        email: z.string().nullish(),
-        passportNumber: z.string().nullish(),
-      }),
-    ),
-  }),
+  students: connection(
+    z.object({
+      id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+      email: z.string().nullish(),
+      passportNumber: z.string().nullish(),
+    }),
+  ),
 });
 
 /**
@@ -118,7 +140,13 @@ export async function findStudent(
   const q = (by.email || by.passportNumber || "").trim();
   if (!q) return null;
 
-  const data = await gqlRequest(page, STUDENT_SEARCH_QUERY, { q }, studentSearchSchema);
+  const data = await gqlRequest(
+    page,
+    STUDENT_SEARCH_QUERY,
+    { q },
+    studentSearchSchema,
+    "studentSearch",
+  );
   if (!data) return null;
 
   const email = by.email?.trim().toLowerCase();
@@ -160,18 +188,16 @@ const STUDENT_APPLICATIONS_QUERY = /* GraphQL */ `
 const studentApplicationsSchema = z.object({
   student: z
     .object({
-      applications: z.object({
-        nodes: z.array(
-          z.object({
-            id: z.union([z.string(), z.number()]).transform((v) => String(v)),
-            status: z.string().nullish(),
-            university: z.object({ name: z.string().nullish() }).nullish(),
-            program: z.object({ name: z.string().nullish() }).nullish(),
-          }),
-        ),
-      }),
+      applications: connection(
+        z.object({
+          id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+          status: z.string().nullish(),
+          university: z.object({ name: z.string().nullish() }).nullish(),
+          program: z.object({ name: z.string().nullish() }).nullish(),
+        }),
+      ),
     })
-    .nullable(),
+    .nullish(),
 });
 
 /**
@@ -187,6 +213,7 @@ export async function listStudentApplications(
     STUDENT_APPLICATIONS_QUERY,
     { studentId },
     studentApplicationsSchema,
+    "studentApplications",
   );
   if (!data || !data.student) return [];
 
@@ -213,18 +240,30 @@ const PROGRAMS_QUERY = /* GraphQL */ `
 `;
 
 const programsSchema = z.object({
-  programs: z.object({
-    nodes: z.array(
+  programs: z.union([
+    z.object({
+      nodes: z.array(
+        z.object({
+          id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+          name: z.string(),
+        }),
+      ),
+      // pageInfo is optional: a non-paginated live schema simply omits it, in
+      // which case we treat the single page as complete.
+      pageInfo: z
+        .object({
+          hasNextPage: z.boolean().nullish(),
+          endCursor: z.string().nullish(),
+        })
+        .nullish(),
+    }),
+    z.array(
       z.object({
         id: z.union([z.string(), z.number()]).transform((v) => String(v)),
         name: z.string(),
       }),
     ),
-    pageInfo: z.object({
-      hasNextPage: z.boolean(),
-      endCursor: z.string().nullish(),
-    }),
-  }),
+  ]),
 });
 
 /**
@@ -246,17 +285,37 @@ export async function fetchProgramCatalog(
       PROGRAMS_QUERY,
       { universityName, level: level ?? null, after },
       programsSchema,
+      "programs",
     );
     if (!data) break;
 
-    for (const n of data.programs.nodes) {
+    // Normalise `{ nodes, pageInfo }` vs bare-array shapes.
+    type ProgramNode = { id: string; name: string };
+    type ProgramsPageInfo = {
+      hasNextPage?: boolean | null;
+      endCursor?: string | null;
+    };
+    const programsField = data.programs as
+      | { nodes: ProgramNode[]; pageInfo?: ProgramsPageInfo | null }
+      | ProgramNode[];
+    let nodes: ProgramNode[];
+    let pageInfo: ProgramsPageInfo | undefined;
+    if (Array.isArray(programsField)) {
+      nodes = programsField;
+      pageInfo = undefined;
+    } else {
+      nodes = programsField.nodes;
+      pageInfo = programsField.pageInfo ?? undefined;
+    }
+
+    for (const n of nodes) {
       out.push({ id: n.id, name: n.name });
     }
 
-    if (!data.programs.pageInfo.hasNextPage || !data.programs.pageInfo.endCursor) {
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor) {
       break;
     }
-    after = data.programs.pageInfo.endCursor;
+    after = pageInfo.endCursor;
   }
 
   return out;

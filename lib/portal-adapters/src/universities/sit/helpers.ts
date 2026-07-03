@@ -118,7 +118,12 @@ const GENERIC_TOKENS: ReadonlySet<string> = new Set([
   "univ",
 ]);
 
-function distinctiveTokens(name: string): string[] {
+/**
+ * The Turkish-folded distinctive tokens of a university name (generic tokens
+ * like "university"/"üniversitesi" removed). Exported so the adapter can match
+ * SIT's live combobox option text against the same folded token basis.
+ */
+export function distinctiveTokens(name: string): string[] {
   return fold(name)
     .split(" ")
     .filter((t) => t.length > 1 && !GENERIC_TOKENS.has(t));
@@ -130,14 +135,32 @@ const SIT_ALLOWLIST_TOKENS: ReadonlyArray<{ name: string; tokens: string[] }> =
 /**
  * Resolve a free-form university name to its canonical allowlist entry, or
  * null when the name is not one of the 11 agreed universities.
+ *
+ * Two tiers, both operating on Turkish-folded distinctive tokens:
+ *
+ *   Tier 1 — EXACT token-set equality (highest confidence). Full catalog names
+ *   ("İstanbul Aydın Üniversitesi" → {istanbul, aydin}) match their allowlist
+ *   entry outright.
+ *
+ *   Tier 2 — FLEXIBLE subset: the query's tokens are a subset of exactly ONE
+ *   allowlist entry's tokens. This resolves short portal names ("Aydin
+ *   University" → {aydin}) to their full catalog entry ("İstanbul Aydın
+ *   Üniversitesi" → {istanbul, aydin}) WITHOUT the IDOR risk of the reverse
+ *   direction: we never let a query carrying EXTRA tokens (e.g. "Beykoz
+ *   Lojistik MYO" → {beykoz, lojistik, myo}) match a shorter entry ("Beykoz" →
+ *   {beykoz}). Requiring a UNIQUE containing entry also rejects ambiguous bare
+ *   tokens shared by several entries (e.g. {istanbul} alone → 3 entries → no
+ *   match), while look-alikes stay rejected ({cyprus, aydin} ⊄ {istanbul,
+ *   aydin}; {beykent} ⊄ {istanbul, kent}; {istanbul, medipol} ⊄ {ankara,
+ *   medipol}).
  */
 export function matchAllowedUniversity(name: string): string | null {
   const queryTokens = new Set(distinctiveTokens(name));
   if (queryTokens.size === 0) return null;
 
+  // Tier 1 — exact token-set equality: same size AND every entry token present.
   for (const entry of SIT_ALLOWLIST_TOKENS) {
     if (entry.tokens.length === 0) continue;
-    // Exact token-set equality: same size AND every entry token present.
     if (
       entry.tokens.length === queryTokens.size &&
       entry.tokens.every((t) => queryTokens.has(t))
@@ -145,6 +168,18 @@ export function matchAllowedUniversity(name: string): string | null {
       return entry.name;
     }
   }
+
+  // Tier 2 — flexible subset: every query token appears in the entry, and this
+  // holds for exactly one allowlist entry (unambiguous short-name resolution).
+  const subsetMatches = SIT_ALLOWLIST_TOKENS.filter(
+    (entry) =>
+      entry.tokens.length > 0 &&
+      [...queryTokens].every((t) => entry.tokens.includes(t)),
+  );
+  if (subsetMatches.length === 1) {
+    return subsetMatches[0].name;
+  }
+
   return null;
 }
 
