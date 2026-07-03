@@ -5410,7 +5410,9 @@
     "globalToggleWarning": "Yedekleme kapalı — dolu programlar otomatik olarak devredilmeyecek.",
     "programFull": "Program dolu",
     "supersededTo": "Devredildi → #{id}",
-    "supersededFrom": "#{id} yedeği"
+    "supersededFrom": "#{id} yedeği",
+    "fallbackStepAuto": "Otomatik yedek · {step}",
+    "fallbackStepRule": "Yönetici kuralı · {step}"
   },
   "portalExclusion": {
     "title": "Exclusive Bölgeler",

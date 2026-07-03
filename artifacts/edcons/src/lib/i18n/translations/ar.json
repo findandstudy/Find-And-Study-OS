@@ -5410,7 +5410,9 @@
     "globalToggleWarning": "Fallback is off — full programs will not be automatically superseded.",
     "programFull": "Program full",
     "supersededTo": "Superseded → #{id}",
-    "supersededFrom": "Backup of #{id}"
+    "supersededFrom": "Backup of #{id}",
+    "fallbackStepAuto": "نسخة احتياطية تلقائية · {step}",
+    "fallbackStepRule": "قاعدة المشرف · {step}"
   },
   "portalExclusion": {
     "title": "Exclusive Regions",

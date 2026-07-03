@@ -34,7 +34,13 @@ import {
   notificationsTable,
 } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { matchProgram, type ProgramCandidate } from "@workspace/portal-adapters";
+import {
+  matchProgram,
+  fold,
+  parseTrack,
+  levelGroup,
+  type ProgramCandidate,
+} from "@workspace/portal-adapters";
 import { loadProgramMapping } from "./programMappingLoader.js";
 
 // ---------------------------------------------------------------------------
@@ -48,12 +54,22 @@ export interface OpenProgram {
   enabled: boolean;
 }
 
+/**
+ * Where a fallback candidate came from / its position in the ordered chain.
+ *   - `rule`            : an admin fallback rule (portal_program_fallbacks).
+ *   - `same_lang_fuzzy` : nearest same-language (L) fuzzy match (chain step 2).
+ *   - `opposite_lang`   : the applied programme in the opposite language ¬L (step 3).
+ */
+export type FallbackRole = "rule" | "same_lang_fuzzy" | "opposite_lang";
+
 /** A fallback CRM programme considered for selection. */
 export interface FallbackCandidate {
   /** CRM programs.id */
   programId: number;
   /** CRM catalog programme name (used for fuzzy matching). */
   name: string;
+  /** Chain role (undefined for the legacy rule path — treated as "rule"). */
+  role?: FallbackRole;
 }
 
 export interface SelectedFallback {
@@ -62,6 +78,8 @@ export interface SelectedFallback {
   portalValue: string;
   /** The matched open-program entry. */
   open: OpenProgram;
+  /** Chain role of the selected candidate (undefined for the rule path). */
+  role?: FallbackRole;
 }
 
 /** Maximum supersession chain depth (loop guard). */
@@ -104,7 +122,7 @@ export function selectFallbackCandidate(
 
     const open = openPrograms.find((o) => o.value === portalValue);
     if (open && open.enabled) {
-      return { programId: cand.programId, portalValue, open };
+      return { programId: cand.programId, portalValue, open, role: cand.role };
     }
     // Resolved but full/closed → skip, try the next candidate.
   }
@@ -132,6 +150,124 @@ function resolvePortalValue(
 }
 
 // ---------------------------------------------------------------------------
+// generateProgramChain — pure ordered program+language fallback generator
+// ---------------------------------------------------------------------------
+
+/** One CRM catalog programme the generator ranks over. */
+export interface CatalogEntry {
+  programId: number;
+  name: string;
+  degree: string | null;
+}
+
+/**
+ * Remove an explicit English/Turkish language marker from a programme name so
+ * `parseTrack` on the result returns null. Used to build the STEP-3 query
+ * (applied programme in the OPPOSITE language): matchProgram's own language
+ * hard-filter drops opposite-track options when the QUERY declares a track, so
+ * the applied name must be stripped before searching the opposite-language pool.
+ * Turkish-aware (matches türkçe/turkce, ingilizce/i̇ngilizce).
+ */
+export function stripTrackMarker(name: string): string {
+  return (name ?? "")
+    // "- English" / "(Turkish)" / "( İngilizce" style markers.
+    .replace(/[-(]\s*(?:english|i̇ngilizce|ingilizce|turkish|türkçe|turkce)\b\s*\)?/gi, " ")
+    // "English medium" / "Turkish Medium".
+    .replace(/\b(?:english|i̇ngilizce|ingilizce|turkish|türkçe|turkce)\s+medium\b/gi, " ")
+    // Trailing "... English" / "... Türkçe" (with optional close paren).
+    .replace(/\b(?:english|i̇ngilizce|ingilizce|turkish|türkçe|turkce)\s*\)?\s*$/gi, " ")
+    .replace(/\(\s*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Fuzzy-pick the nearest catalog entry to `query` (null when nothing matches). */
+function pickNearest(
+  query: string,
+  pool: CatalogEntry[],
+  synonyms?: string[][],
+): CatalogEntry | null {
+  if (pool.length === 0 || !query.trim()) return null;
+  const cands: ProgramCandidate[] = pool.map((p) => ({
+    id:   String(p.programId),
+    name: p.name,
+  }));
+  const m = matchProgram(query, cands, { synonyms });
+  if (!m) return null;
+  const id = Number(m.match.id);
+  return pool.find((p) => p.programId === id) ?? null;
+}
+
+/**
+ * Build the ORDERED automatic program+language fallback chain (steps 2 & 3).
+ *
+ * Step 1 is ALWAYS the existing original / fan-out submission (X1 = the exact
+ * applied programme same-school in language L; Y1 = the applied programme's
+ * nearest language-L match at the automation university) and is NOT produced
+ * here — the caller excludes it via `excludeProgramIds`. Steps 2 & 3 are
+ * identical for X (same-university) and Y (different-university):
+ *
+ *   step 2  same_lang_fuzzy — same-school, language L, nearest fuzzy to applied.
+ *   step 3  opposite_lang   — the applied programme in the OPPOSITE language ¬L.
+ *
+ * Invariants:
+ *   - LEVEL always matches (levelGroup(applied.level)); enforced on the pool.
+ *   - L = parseTrack(applied.name). When L is null (no language marker) there is
+ *     no opposite, so step 3 is skipped and step 2 applies no language filter.
+ *   - Already-tried programmes (the whole chain so far, incl. step 1) are
+ *     excluded so a hop never repeats a programme.
+ *
+ * Pure & deterministic: no DB, no side effects. Feed it the target-university
+ * catalog and it returns the ranked candidate list (may be empty).
+ */
+export function generateProgramChain(
+  applied: { name: string; level: string | null },
+  catalog: CatalogEntry[],
+  opts: { excludeProgramIds?: Set<number>; synonyms?: string[][] } = {},
+): FallbackCandidate[] {
+  const appliedName = applied.name ?? "";
+  if (!appliedName.trim()) return [];
+
+  const exclude = opts.excludeProgramIds ?? new Set<number>();
+  const appliedLevel = levelGroup(applied.level);
+  const L = parseTrack(appliedName);
+  const opposite = L === "en" ? "tr" : L === "tr" ? "en" : null;
+
+  // LEVEL ALWAYS MATCHES: same-level pool minus already-tried programmes.
+  const sameLevel = catalog.filter(
+    (p) => !exclude.has(p.programId) && levelGroup(p.degree) === appliedLevel,
+  );
+
+  const chain: FallbackCandidate[] = [];
+  const used = new Set<number>(exclude);
+
+  // Step 2 — same-school, language L, nearest fuzzy to the applied programme.
+  const langLPool = sameLevel.filter(
+    (p) => !used.has(p.programId) && (L === null || parseTrack(p.name) === L),
+  );
+  const step2 = pickNearest(appliedName, langLPool, opts.synonyms);
+  if (step2) {
+    chain.push({ programId: step2.programId, name: step2.name, role: "same_lang_fuzzy" });
+    used.add(step2.programId);
+  }
+
+  // Step 3 — the applied programme in the OPPOSITE language ¬L. Skipped when the
+  // applied programme carries no language marker (opposite is null).
+  if (opposite) {
+    const oppositePool = sameLevel.filter(
+      (p) => !used.has(p.programId) && parseTrack(p.name) === opposite,
+    );
+    const step3 = pickNearest(stripTrackMarker(appliedName), oppositePool, opts.synonyms);
+    if (step3) {
+      chain.push({ programId: step3.programId, name: step3.name, role: "opposite_lang" });
+      used.add(step3.programId);
+    }
+  }
+
+  return chain;
+}
+
+// ---------------------------------------------------------------------------
 // Result type
 // ---------------------------------------------------------------------------
 
@@ -150,6 +286,8 @@ export type FallbackOutcome =
       newApplicationId: number;
       newSubmissionId: number;
       fallbackProgramId: number;
+      /** Ordered-chain step (e.g. "X2"/"Y3"); null for the admin-rule path. */
+      fallbackStep: string | null;
     };
 
 // ---------------------------------------------------------------------------
@@ -277,7 +415,20 @@ export async function handleNeedsFallback(
     return { status: "loop_guard" };
   }
 
-  // ----- Resolve the fallback rule ----------------------------------------
+  // ----- Resolve the applied programme + same/different-university (X/Y) ----
+  // The MAIN application carries the originally-applied programme: its name →
+  // language L (parseTrack) and its level (levelGroup) drive the chain. For a
+  // same-university (X) chain the main app IS the source; for a
+  // different-university (Y) chain it is the original app at the applied
+  // university, linked via main_application_id (legacy: superseded_from root).
+  const mainApp = await resolveMainApplication(srcApp);
+  const isSameUniversity = mainApp.universityId === srcApp.universityId;
+
+  // Panel-managed name mappings + synonyms (University > General) — shared by
+  // both the admin-rule and the automatic paths.
+  const mapping = await loadProgramMapping(sub.universityKey);
+
+  // ----- Resolve the fallback rule (admin rule WINS over automatic) --------
   const [rule] = await db
     .select({
       fallbackProgramIds: portalProgramFallbacksTable.fallbackProgramIds,
@@ -293,24 +444,57 @@ export async function handleNeedsFallback(
       ),
     );
 
-  if (!rule || !Array.isArray(rule.fallbackProgramIds) || rule.fallbackProgramIds.length === 0) {
-    console.log(
-      `[fallback] Submission #${submissionId}: no fallback rule for uni=${sub.universityKey} program=${srcApp.programId} — program_full kept`,
+  let candidates: FallbackCandidate[];
+  let programsById: Map<number, CatalogProgram>;
+  let matchSource: "rule" | "auto";
+  let ruleAutoSubmit = false;
+
+  if (rule && Array.isArray(rule.fallbackProgramIds) && rule.fallbackProgramIds.length > 0) {
+    // --- Admin rule path (PRECEDENCE): ordered explicit fallback programmes.
+    matchSource = "rule";
+    ruleAutoSubmit = rule.autoSubmit;
+    programsById = await loadProgramsOrdered(rule.fallbackProgramIds);
+    candidates = rule.fallbackProgramIds
+      .map((id) => {
+        const p = programsById.get(id);
+        return p ? { programId: id, name: p.name } : null;
+      })
+      .filter((c): c is FallbackCandidate => c !== null);
+  } else {
+    // --- Automatic ordered program+language chain (no admin rule). Only runs
+    //     because the kill-switch (fallback_enabled) is ON — that IS the
+    //     "Automatic program fallback" toggle. Steps 2 & 3 are generated from
+    //     the applied programme; step 1 (the existing submission) is excluded so
+    //     it is never re-attempted.
+    matchSource = "auto";
+    const catalog = await loadUniversityCatalog(srcApp.universityId);
+    programsById = new Map(catalog.map((p) => [p.id, p]));
+
+    // Programmes already tried at THIS university (walk superseded_from). The
+    // root's programme is step 1; the whole set is filtered out below.
+    const { tried, rootProgramId } = await collectTargetChain(srcApp);
+    const genExclude = new Set<number>();
+    if (rootProgramId != null) genExclude.add(rootProgramId);
+
+    const fullChain = generateProgramChain(
+      {
+        name:  mainApp.programName ?? srcApp.programName ?? "",
+        level: mainApp.level ?? srcApp.level ?? null,
+      },
+      catalog.map((p) => ({ programId: p.id, name: p.name, degree: p.degree })),
+      { excludeProgramIds: genExclude, synonyms: mapping.programSynonyms },
     );
-    return { status: "no_rule" };
+    // Never re-attempt a programme already tried anywhere in the chain.
+    candidates = fullChain.filter((c) => !tried.has(c.programId));
+
+    if (candidates.length === 0) {
+      console.log(
+        `[fallback] Submission #${submissionId}: automatic chain produced no untried candidate ` +
+          `for uni=${sub.universityKey} (applied="${mainApp.programName ?? ""}") — kept`,
+      );
+      return { status: "no_rule" };
+    }
   }
-
-  // ----- Load fallback catalog programmes (ordered) -----------------------
-  const fallbackPrograms = await loadProgramsOrdered(rule.fallbackProgramIds);
-  const candidates: FallbackCandidate[] = rule.fallbackProgramIds
-    .map((id) => {
-      const p = fallbackPrograms.get(id);
-      return p ? { programId: id, name: p.name } : null;
-    })
-    .filter((c): c is FallbackCandidate => c !== null);
-
-  // ----- Panel-managed name mappings + synonyms (University > General) -----
-  const mapping = await loadProgramMapping(sub.universityKey);
 
   const selected = selectFallbackCandidate(candidates, optionList, {
     nameMap:        mapping.programNameMap,
@@ -320,12 +504,18 @@ export async function handleNeedsFallback(
 
   if (!selected) {
     console.log(
-      `[fallback] Submission #${submissionId}: all fallbacks full/closed/unresolvable — program_full kept`,
+      `[fallback] Submission #${submissionId}: all ${matchSource} fallbacks full/closed/unresolvable — kept`,
     );
     return { status: "no_open_fallback" };
   }
 
-  const fallbackProgram = fallbackPrograms.get(selected.programId)!;
+  const fallbackProgram = programsById.get(selected.programId)!;
+
+  // Chain step label for surfacing on the board (X/Y = same/different university,
+  // 2/3 = same-language-fuzzy / opposite-language). Null for the admin-rule path.
+  const stepLabel = selected.role
+    ? `${isSameUniversity ? "X" : "Y"}${selected.role === "same_lang_fuzzy" ? "2" : "3"}`
+    : null;
 
   // ----- Supersession transaction -----------------------------------------
   // Idempotency + concurrency safety: a tx-scoped advisory lock keyed on the
@@ -333,7 +523,10 @@ export async function handleNeedsFallback(
   // the "already superseded" recheck runs INSIDE the lock so a second caller
   // observes the first caller's committed child and no-ops instead of creating
   // a duplicate supersession.
-  const newMode = rule.autoSubmit ? sub.mode : "dry";
+  // Admin rule: dry unless autoSubmit. Automatic chain: always follow the source
+  // mode (real) so each hop actually attempts submission — "stop on first fully-
+  // successful" requires live attempts, not staged dry runs.
+  const newMode = matchSource === "rule" ? (ruleAutoSubmit ? sub.mode : "dry") : sub.mode;
   const triggerReason =
     sub.status === "program_missing"
       ? "Program portalda bulunamadı"
@@ -406,6 +599,9 @@ export async function handleNeedsFallback(
         originStudentId:     srcApp.originStudentId,
         branchId:            srcApp.branchId,
         supersededFromApplicationId: srcApp.id,
+        // Keep every hop pointing at the true chain root so the next hop can
+        // recover the originally-applied programme/language/level and X-vs-Y.
+        mainApplicationId:   srcApp.mainApplicationId ?? srcApp.id,
         // Auto-created supersession (backup-programme) fallback = automation.
         createdSource:       "automation",
         createdAt:           now,
@@ -429,7 +625,14 @@ export async function handleNeedsFallback(
         universityName: sub.universityName,
         mode:           newMode,
         status:         "queued",
-        meta:           { note: `auto-fallback from #${srcApp.id}` },
+        meta:           {
+          note:          `auto-fallback from #${srcApp.id}`,
+          fallbackSource: matchSource,
+          // Ordered-chain surfacing (null for the admin-rule path).
+          fallbackStep:  stepLabel,
+          fallbackRole:  selected.role ?? null,
+          sameUniversity: matchSource === "auto" ? isSameUniversity : null,
+        },
       })
       .returning({ id: portalSubmissionsTable.id });
 
@@ -447,6 +650,11 @@ export async function handleNeedsFallback(
         portalValue:        selected.portalValue,
         newSubmissionId:    newSub.id,
         newSubmissionMode:  newMode,
+        fallbackSource:     matchSource,
+        fallbackStep:       stepLabel,
+        fallbackRole:       selected.role ?? null,
+        sameUniversity:     matchSource === "auto" ? isSameUniversity : null,
+        mainApplicationId:  srcApp.mainApplicationId ?? srcApp.id,
         reason,
       }),
     });
@@ -485,6 +693,7 @@ export async function handleNeedsFallback(
           fromApplicationId: srcApp.id,
           toApplicationId:   newAppId,
           fallbackProgram:   fallbackProgram.name,
+          fallbackStep:      stepLabel,
         },
       });
     } catch (err) {
@@ -498,6 +707,7 @@ export async function handleNeedsFallback(
     newApplicationId:    newAppId,
     newSubmissionId:     newSubId,
     fallbackProgramId:   selected.programId,
+    fallbackStep:        stepLabel,
   };
 }
 
@@ -527,6 +737,89 @@ async function loadProgramsOrdered(
     if (want.has(r.id)) out.set(r.id, r);
   }
   return out;
+}
+
+type CatalogApp = typeof applicationsTable.$inferSelect;
+
+/**
+ * Resolve the MAIN application of `srcApp`'s fallback chain — the row carrying
+ * the originally-applied programme (name → language L, level). The explicit
+ * `main_application_id` link wins (set on fan-out + supersession children);
+ * legacy rows without it fall back to walking `superseded_from` to the root.
+ * Never returns null (worst case: `srcApp` itself for a standalone app).
+ */
+async function resolveMainApplication(srcApp: CatalogApp): Promise<CatalogApp> {
+  if (srcApp.mainApplicationId != null && srcApp.mainApplicationId !== srcApp.id) {
+    const [m] = await db
+      .select()
+      .from(applicationsTable)
+      .where(eq(applicationsTable.id, srcApp.mainApplicationId));
+    if (m) return m;
+  }
+  // Legacy: walk superseded_from to the chain root.
+  let cursor: CatalogApp = srcApp;
+  const visited = new Set<number>([cursor.id]);
+  let steps = 0;
+  while (
+    cursor.supersededFromApplicationId != null &&
+    !visited.has(cursor.supersededFromApplicationId) &&
+    steps <= MAX_FALLBACK_DEPTH + 2
+  ) {
+    const [parent] = await db
+      .select()
+      .from(applicationsTable)
+      .where(eq(applicationsTable.id, cursor.supersededFromApplicationId));
+    if (!parent) break;
+    visited.add(parent.id);
+    cursor = parent;
+    steps += 1;
+  }
+  return cursor;
+}
+
+/** Active catalog programmes for one university (empty when id is null). */
+async function loadUniversityCatalog(
+  universityId: number | null,
+): Promise<CatalogProgram[]> {
+  if (universityId == null) return [];
+  return db
+    .select()
+    .from(programsTable)
+    .where(
+      and(
+        eq(programsTable.universityId, universityId),
+        eq(programsTable.isActive, true),
+      ),
+    );
+}
+
+/**
+ * Walk the `superseded_from` chain up from `srcApp` (within the SAME target
+ * university) and collect every programme id already attempted, plus the ROOT
+ * programme id (step 1 at this university). Cycle-safe & depth-capped.
+ */
+async function collectTargetChain(
+  srcApp: CatalogApp,
+): Promise<{ tried: Set<number>; rootProgramId: number | null }> {
+  const tried = new Set<number>();
+  const visited = new Set<number>();
+  let cursor: CatalogApp | null = srcApp;
+  let rootProgramId: number | null = srcApp.programId ?? null;
+  let steps = 0;
+  while (cursor && !visited.has(cursor.id) && steps <= MAX_FALLBACK_DEPTH + 2) {
+    visited.add(cursor.id);
+    if (cursor.programId != null) tried.add(cursor.programId);
+    rootProgramId = cursor.programId ?? rootProgramId;
+    if (cursor.supersededFromApplicationId == null) break;
+    const [parent]: CatalogApp[] = await db
+      .select()
+      .from(applicationsTable)
+      .where(eq(applicationsTable.id, cursor.supersededFromApplicationId));
+    if (!parent) break;
+    cursor = parent;
+    steps += 1;
+  }
+  return { tried, rootProgramId };
 }
 
 /**

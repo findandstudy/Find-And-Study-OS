@@ -1158,6 +1158,14 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS superseded_from_application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL`);
     await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS supersede_reason TEXT`);
 
+    // Root/main application link for automatic fallback chains. Set on
+    // portal-automation fan-out children AND supersession children so any hop can
+    // recover the originally-applied programme + language + level and detect
+    // same-university (X) vs different-university (Y). Additive & nullable —
+    // required in prod for the ordered program+language fallback chain.
+    await pool.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS main_application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS applications_main_application_id_idx ON applications(main_application_id)`);
+
     // created_source: WHO created the application (student self-service / staff
     // panel / portal-automation fan-out), for the 3-group split on the student
     // profile. Additive & nullable; distinct from origin_type (acquisition

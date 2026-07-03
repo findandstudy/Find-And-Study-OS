@@ -62,6 +62,15 @@ export const applicationsTable = pgTable("applications", {
     onDelete: "set null",
   }),
   supersedeReason: text("supersede_reason"),
+  // Root/main application of an automatic fallback chain. Set on portal-automation
+  // fan-out children AND supersession children so any hop can recover the
+  // originally-applied programme + language + level and detect same-uni (X) vs
+  // different-uni (Y). Nullable; null means THIS row is (or is treated as) the
+  // main application (legacy chains fall back to walking superseded_from).
+  mainApplicationId: integer("main_application_id").references(
+    (): AnyPgColumn => applicationsTable.id,
+    { onDelete: "set null" },
+  ),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   deletedBy: integer("deleted_by").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -75,6 +84,7 @@ export const applicationsTable = pgTable("applications", {
   index("applications_stage_idx").on(table.stage),
   index("applications_season_idx").on(table.season),
   index("applications_origin_type_idx").on(table.originType),
+  index("applications_main_application_id_idx").on(table.mainApplicationId),
 ]);
 
 export const insertApplicationSchema = createInsertSchema(applicationsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });

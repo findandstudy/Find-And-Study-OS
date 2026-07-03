@@ -79,6 +79,11 @@ interface PortalSubmission {
   updatedAt: string;
   supersededByApplicationId: number | null;
   supersededFromApplicationId: number | null;
+  meta: {
+    fallbackStep?: string | null;
+    fallbackSource?: string | null;
+    sameUniversity?: boolean | null;
+  } | null;
 }
 
 interface ListResponse {
@@ -220,6 +225,20 @@ function SubmissionRow({
                   ? t("portalAutomation.submissions.modeReal")
                   : t("portalAutomation.submissions.modeDry")}
               </Badge>
+              {sub.meta?.fallbackStep && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 text-xs py-0 border-purple-300 text-purple-700 dark:border-purple-800 dark:text-purple-300"
+                >
+                  <Layers className="w-3 h-3" />
+                  {t(
+                    sub.meta.fallbackSource === "rule"
+                      ? "portalFallback.fallbackStepRule"
+                      : "portalFallback.fallbackStepAuto",
+                    { step: sub.meta.fallbackStep },
+                  )}
+                </Badge>
+              )}
               <span className="text-xs text-muted-foreground font-medium">
                 {sub.universityName}
               </span>

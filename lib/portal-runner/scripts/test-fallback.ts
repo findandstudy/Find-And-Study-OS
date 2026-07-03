@@ -55,8 +55,11 @@ import {
   handleProgramFull,
   handleNeedsFallback,
   selectFallbackCandidate,
+  generateProgramChain,
+  stripTrackMarker,
   type OpenProgram,
   type FallbackCandidate,
+  type CatalogEntry,
 } from "@workspace/portal-runner";
 
 // ---------------------------------------------------------------------------
@@ -803,4 +806,357 @@ test("FB-I16: handleProgramFull alias still supersedes a program_full submission
   cleanupAppIds.push(outcome.newApplicationId);
   cleanupSubIds.push(outcome.newSubmissionId);
   assert.equal(outcome.fallbackProgramId, s.fallbackProgramId);
+});
+
+// ===========================================================================
+// Automatic ordered program+language chain (no admin rule)
+// ===========================================================================
+//
+// Pure generator (generateProgramChain / stripTrackMarker — no DB):
+//   FB-G1 X/Y chain = [same_lang_fuzzy (step 2), opposite_lang (step 3)], ordered
+//   FB-G2 applied has NO language marker → no opposite step (step 3 skipped)
+//   FB-G3 already-tried programmes (excludeProgramIds) are never re-attempted
+//   FB-G4 LEVEL always matches — a different-level programme is never chosen
+//   FB-G5 stripTrackMarker removes EN/TR markers so parseTrack(result) is null
+//
+// Integration (handleNeedsFallback automatic path — dry-safe seeds, real DB):
+//   FB-A1 no rule + kill-switch ON → auto chain supersedes to step 2 (X2)
+//   FB-A2 admin rule WINS over the automatic chain (precedence)
+//   FB-A3 different-university (Y) chain surfaces step label "Y2"
+
+// ---------------------------------------------------------------------------
+// FB-G — pure generator unit tests
+// ---------------------------------------------------------------------------
+
+const E = (programId: number, name: string, degree: string | null): CatalogEntry => ({ programId, name, degree });
+
+test("FB-G1: chain = [same_lang_fuzzy, opposite_lang] in order, step 1 excluded", () => {
+  const applied = { name: "Computer Engineering (English)", level: "bachelor" };
+  const catalog = [
+    E(1, "Computer Engineering (English)", "bachelor"),         // step 1 (excluded)
+    E(2, "Computer Engineering Program (English)", "bachelor"), // step 2 — nearest EN variant
+    E(3, "Computer Engineering (Turkish)", "bachelor"),         // step 3 — opposite ¬L
+    E(4, "Medicine (English)", "bachelor"),                     // distractor (too far to match)
+  ];
+  const chain = generateProgramChain(applied, catalog, { excludeProgramIds: new Set([1]) });
+  assert.equal(chain.length, 2, "exactly two ordered steps");
+  assert.equal(chain[0].programId, 2, "step 2 = nearest same-language fuzzy");
+  assert.equal(chain[0].role, "same_lang_fuzzy");
+  assert.equal(chain[1].programId, 3, "step 3 = applied programme in opposite language");
+  assert.equal(chain[1].role, "opposite_lang");
+});
+
+test("FB-G2: applied has no language marker → opposite step is skipped", () => {
+  const applied = { name: "Business Administration", level: "bachelor" };
+  const catalog = [
+    E(10, "Business Administration", "bachelor"), // step 1 (excluded)
+    E(11, "Business Management", "bachelor"),      // step 2 — nearest, language-agnostic
+  ];
+  const chain = generateProgramChain(applied, catalog, { excludeProgramIds: new Set([10]) });
+  assert.equal(chain.length, 1, "no opposite step when applied carries no language");
+  assert.equal(chain[0].programId, 11);
+  assert.equal(chain[0].role, "same_lang_fuzzy");
+  assert.ok(!chain.some((c) => c.role === "opposite_lang"), "no opposite_lang candidate produced");
+});
+
+test("FB-G3: already-tried programmes (excludeProgramIds) are never re-attempted", () => {
+  const applied = { name: "Computer Engineering (English)", level: "bachelor" };
+  const catalog = [
+    E(1, "Computer Engineering (English)", "bachelor"),            // step 1 (tried)
+    E(2, "Computer Engineering Program (English)", "bachelor"),    // step 2 (already tried too)
+    E(3, "Computer Engineering (Turkish)", "bachelor"),           // opposite ¬L
+    E(4, "Computer Engineering Department (English)", "bachelor"), // next nearest EN
+  ];
+  // Exclude step 1 AND the previous step-2 pick → step 2 must roll to the next EN.
+  const chain = generateProgramChain(applied, catalog, { excludeProgramIds: new Set([1, 2]) });
+  assert.ok(!chain.some((c) => c.programId === 1 || c.programId === 2), "tried programmes excluded");
+  assert.equal(chain[0].programId, 4, "step 2 rolls to the next-nearest untried EN programme");
+  assert.equal(chain[0].role, "same_lang_fuzzy");
+  assert.equal(chain[chain.length - 1].programId, 3, "opposite step still available");
+});
+
+test("FB-G4: LEVEL always matches — a different-level programme is never chosen", () => {
+  const applied = { name: "Computer Engineering (English)", level: "bachelor" };
+  const catalog = [
+    E(1, "Computer Engineering (English)", "bachelor"), // step 1 (excluded)
+    E(2, "Software Engineering (English)", "master"),   // wrong level
+    E(3, "Computer Engineering (Turkish)", "master"),   // wrong level
+  ];
+  const chain = generateProgramChain(applied, catalog, { excludeProgramIds: new Set([1]) });
+  assert.equal(chain.length, 0, "no same-level candidate → empty chain");
+});
+
+test("FB-G5: stripTrackMarker removes EN/TR markers", () => {
+  for (const name of [
+    "Computer Engineering (English)",
+    "Computer Engineering - Turkish",
+    "Computer Engineering English",
+    "Computer Engineering (Türkçe)",
+  ]) {
+    const stripped = stripTrackMarker(name);
+    assert.ok(/computer engineering/i.test(stripped), `core name kept: ${stripped}`);
+    assert.ok(!/(english|turkish|türkçe)/i.test(stripped), `marker removed: ${stripped}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Automatic-path integration helper
+// ---------------------------------------------------------------------------
+
+interface AutoScenario {
+  uniKey: string;
+  targetUniversityId: number;
+  step1ProgramId: number;
+  step2ProgramId: number;
+  step3ProgramId: number;
+  studentId: number;
+  assignedToId: number;
+  srcAppId: number;
+  subId: number;
+}
+
+/**
+ * Seed a NO-rule scenario that exercises the automatic ordered chain. The source
+ * application sits on a "Computer Engineering (English)" programme; the target
+ * university catalog carries a nearest same-language programme (step 2, OPEN in
+ * the portal option list) and the applied programme in the opposite language
+ * (step 3). No admin fallback rule exists, so the generator drives selection.
+ *
+ * When `differentUniversity` is set the source app is a fan-out child at a
+ * SECOND university linked to a main application at the applied university, so
+ * the chain resolves as Y (different-university) instead of X.
+ */
+async function seedAutoScenario(opts?: { differentUniversity?: boolean }): Promise<AutoScenario> {
+  const differentUniversity = opts?.differentUniversity ?? false;
+  const uniKey = `${RUN}_a_${Math.random().toString(36).slice(2, 6)}`;
+
+  const [user] = await db.insert(usersTable).values({
+    email: `fb_${uniKey}@test.local`,
+    role:  "consultant",
+  }).returning({ id: usersTable.id });
+  cleanupUserIds.push(user.id);
+
+  const [student] = await db.insert(studentsTable).values({
+    firstName: "FB",
+    lastName:  `Auto_${uniKey}`,
+    email:     `fb_auto_${uniKey}@test.local`,
+  }).returning({ id: studentsTable.id });
+  cleanupStudentIds.push(student.id);
+
+  // Target university (source app's university) — the chain catalog lives here.
+  const targetUniName = `FB Target Uni ${uniKey}`;
+  const [targetUni] = await db.insert(universitiesTable).values({
+    name: targetUniName, country: "Turkey",
+  }).returning({ id: universitiesTable.id });
+  cleanupUniversityIds.push(targetUni.id);
+
+  const mkProg = async (name: string, extra?: Record<string, unknown>) => {
+    const [p] = await db.insert(programsTable).values({
+      universityId: targetUni.id,
+      name,
+      degree:   "bachelor",
+      language: /turkish/i.test(name) ? "Turkish" : "English",
+      isActive: true,
+      ...extra,
+    }).returning({ id: programsTable.id, name: programsTable.name });
+    cleanupProgramIds.push(p.id);
+    return p;
+  };
+
+  const step1 = await mkProg("Computer Engineering (English)");                 // applied @ target (step 1)
+  const step2 = await mkProg("Computer Engineering Program (English)", {        // step 2 — same-lang fuzzy variant (OPEN)
+    tuitionFee: 5000, commissionRate: 12, currency: "USD",
+  });
+  const step3 = await mkProg("Computer Engineering (Turkish)");                 // step 3 — opposite language
+
+  // The MAIN application carries the originally-applied programme (name → L,
+  // level). For X it's the source app itself; for Y it lives at another uni.
+  let mainAppId: number | null = null;
+  if (differentUniversity) {
+    const [appliedUni] = await db.insert(universitiesTable).values({
+      name: `FB Applied Uni ${uniKey}`, country: "Turkey",
+    }).returning({ id: universitiesTable.id });
+    cleanupUniversityIds.push(appliedUni.id);
+
+    const [mainProg] = await db.insert(programsTable).values({
+      universityId: appliedUni.id,
+      name: "Computer Engineering (English)",
+      degree: "bachelor", language: "English", isActive: true,
+    }).returning({ id: programsTable.id, name: programsTable.name });
+    cleanupProgramIds.push(mainProg.id);
+
+    const [mainApp] = await db.insert(applicationsTable).values({
+      studentId: student.id, programId: mainProg.id, universityId: appliedUni.id,
+      assignedToId: user.id, stage: "inquiry", season: "2026", level: "bachelor",
+      programName: mainProg.name, universityName: `FB Applied Uni ${uniKey}`, country: "Turkey",
+    }).returning({ id: applicationsTable.id });
+    cleanupAppIds.push(mainApp.id);
+    mainAppId = mainApp.id;
+  }
+
+  // Source application on the applied programme at the TARGET university.
+  const [srcApp] = await db.insert(applicationsTable).values({
+    studentId:        student.id,
+    programId:        step1.id,
+    universityId:     targetUni.id,
+    assignedToId:     user.id,
+    stage:            "inquiry",
+    season:           "2026",
+    level:            "bachelor",
+    programName:      step1.name,
+    universityName:   targetUniName,
+    country:          "Turkey",
+    mainApplicationId: mainAppId, // null for X (same-university); set for Y
+  }).returning({ id: applicationsTable.id });
+  cleanupAppIds.push(srcApp.id);
+
+  // program_full meta: step 2 OPEN, step 3 present but closed (so step 2 wins).
+  const meta = {
+    requestedProgram: { name: step1.name },
+    openPrograms: [
+      { value: "step2", name: step2.name, enabled: true  },
+      { value: "step3", name: step3.name, enabled: false },
+    ],
+    reason: "Kontenjan dolu",
+    detectedAt: new Date().toISOString(),
+  };
+
+  const [sub] = await db.insert(portalSubmissionsTable).values({
+    applicationId:  srcApp.id,
+    studentId:      student.id,
+    universityKey:  uniKey,
+    universityName: targetUniName,
+    mode:           "real",
+    status:         "program_full",
+    meta,
+  }).returning({ id: portalSubmissionsTable.id });
+  cleanupSubIds.push(sub.id);
+
+  return {
+    uniKey,
+    targetUniversityId: targetUni.id,
+    step1ProgramId: step1.id,
+    step2ProgramId: step2.id,
+    step3ProgramId: step3.id,
+    studentId: student.id,
+    assignedToId: user.id,
+    srcAppId: srcApp.id,
+    subId: sub.id,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// FB-A1 — automatic chain supersedes to step 2 (same-university → X2)
+// ---------------------------------------------------------------------------
+
+test("FB-A1: no rule + kill-switch ON → automatic chain supersedes to step 2 (X2)", async () => {
+  await setKillSwitch(true);
+  const s = await seedAutoScenario();
+  const outcome = await handleNeedsFallback(s.subId);
+
+  assert.equal(outcome.status, "superseded", "automatic chain supersedes without an admin rule");
+  if (outcome.status !== "superseded") return;
+  cleanupAppIds.push(outcome.newApplicationId);
+  cleanupSubIds.push(outcome.newSubmissionId);
+
+  assert.equal(outcome.fallbackProgramId, s.step2ProgramId, "picked the same-language fuzzy step 2");
+  assert.equal(outcome.fallbackStep, "X2", "same-university step label");
+
+  const [newApp] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, outcome.newApplicationId));
+  assert.equal(newApp.programId, s.step2ProgramId, "new app on step-2 programme");
+  assert.equal(newApp.mainApplicationId, s.srcAppId, "chain root links back to the source app");
+  assert.equal(newApp.tuitionFee, 5000, "fees sourced from the step-2 catalog entry");
+
+  const [newSub] = await db.select().from(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, outcome.newSubmissionId));
+  assert.equal(newSub.mode, "real", "automatic chain follows the source mode (real) so hops actually attempt");
+  const nm = newSub.meta as { fallbackStep?: string; fallbackSource?: string; sameUniversity?: boolean };
+  assert.equal(nm.fallbackStep, "X2", "submission meta carries the chain step");
+  assert.equal(nm.fallbackSource, "auto", "submission meta flags the automatic source");
+  assert.equal(nm.sameUniversity, true, "submission meta flags same-university");
+
+  const audit = await db.select().from(auditLogsTable).where(
+    and(eq(auditLogsTable.action, "program_fallback_supersede"), eq(auditLogsTable.resourceId, s.srcAppId)),
+  );
+  audit.forEach((a) => cleanupAuditIds.push(a.id));
+});
+
+// ---------------------------------------------------------------------------
+// FB-A2 — an admin rule WINS over the automatic chain (precedence)
+// ---------------------------------------------------------------------------
+
+test("FB-A2: admin rule wins over the automatic chain (precedence)", async () => {
+  await setKillSwitch(true);
+  const s = await seedAutoScenario();
+
+  // Open BOTH options so the option list can never be the tie-breaker: the
+  // automatic chain would pick step 2 first, the admin rule points at step 3.
+  // Whichever programme the supersession lands on proves which path ran.
+  await db.update(portalSubmissionsTable)
+    .set({
+      meta: {
+        requestedProgram: { name: "Computer Engineering (English)" },
+        openPrograms: [
+          { value: "step2", name: "Computer Engineering Program (English)", enabled: true },
+          { value: "step3", name: "Computer Engineering (Turkish)", enabled: true },
+        ],
+        reason: "Kontenjan dolu",
+      },
+    })
+    .where(eq(portalSubmissionsTable.id, s.subId));
+
+  const [rule] = await db.insert(portalProgramFallbacksTable).values({
+    universityKey:      s.uniKey,
+    sourceProgramId:    s.step1ProgramId,
+    fallbackProgramIds: [s.step3ProgramId],
+    autoSubmit:         false,
+    enabled:            true,
+  }).returning({ id: portalProgramFallbacksTable.id });
+  cleanupFallbackIds.push(rule.id);
+
+  const outcome = await handleNeedsFallback(s.subId);
+  assert.equal(outcome.status, "superseded");
+  if (outcome.status !== "superseded") return;
+  cleanupAppIds.push(outcome.newApplicationId);
+  cleanupSubIds.push(outcome.newSubmissionId);
+
+  assert.equal(outcome.fallbackProgramId, s.step3ProgramId, "admin-rule programme wins over the generated chain");
+  assert.equal(outcome.fallbackStep, null, "admin-rule path carries no chain step label");
+
+  const [newSub] = await db.select().from(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, outcome.newSubmissionId));
+  const nm = newSub.meta as { fallbackSource?: string; fallbackStep?: string | null };
+  assert.equal(nm.fallbackSource, "rule", "submission meta flags the admin-rule source");
+  assert.equal(nm.fallbackStep ?? null, null, "no chain step on the admin-rule path");
+
+  const audit = await db.select().from(auditLogsTable).where(
+    and(eq(auditLogsTable.action, "program_fallback_supersede"), eq(auditLogsTable.resourceId, s.srcAppId)),
+  );
+  audit.forEach((a) => cleanupAuditIds.push(a.id));
+});
+
+// ---------------------------------------------------------------------------
+// FB-A3 — different-university (Y) chain surfaces the "Y2" step label
+// ---------------------------------------------------------------------------
+
+test("FB-A3: different-university chain surfaces step label Y2", async () => {
+  await setKillSwitch(true);
+  const s = await seedAutoScenario({ differentUniversity: true });
+  const outcome = await handleNeedsFallback(s.subId);
+
+  assert.equal(outcome.status, "superseded", "automatic Y chain supersedes");
+  if (outcome.status !== "superseded") return;
+  cleanupAppIds.push(outcome.newApplicationId);
+  cleanupSubIds.push(outcome.newSubmissionId);
+
+  assert.equal(outcome.fallbackProgramId, s.step2ProgramId, "picked the target-university step 2");
+  assert.equal(outcome.fallbackStep, "Y2", "different-university step label");
+
+  const [newSub] = await db.select().from(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, outcome.newSubmissionId));
+  const nm = newSub.meta as { fallbackStep?: string; sameUniversity?: boolean };
+  assert.equal(nm.fallbackStep, "Y2", "submission meta carries the Y chain step");
+  assert.equal(nm.sameUniversity, false, "submission meta flags different-university");
+
+  const audit = await db.select().from(auditLogsTable).where(
+    and(eq(auditLogsTable.action, "program_fallback_supersede"), eq(auditLogsTable.resourceId, s.srcAppId)),
+  );
+  audit.forEach((a) => cleanupAuditIds.push(a.id));
 });

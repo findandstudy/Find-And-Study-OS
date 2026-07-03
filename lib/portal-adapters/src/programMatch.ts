@@ -397,6 +397,30 @@ function normLang(s: string): string {
     .toLowerCase();
 }
 
+/**
+ * Normalise a degree/level string into a coarse comparison group so program
+ * candidates can be pre-filtered to the SAME level as the source application.
+ * Turkish-aware (folds ç/ğ/ı/İ/ö/ş/ü). Unknown values fall back to their folded
+ * form so equal strings still match; empty input returns "".
+ *
+ * Shared level helper — single source consumed by the fan-out (portalAutomation)
+ * AND the ordered fallback-chain generator, so "same level always matches" is
+ * applied identically everywhere.
+ */
+export function levelGroup(raw: string | null | undefined): string {
+  const s = (raw ?? "")
+    .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
+    .replace(/[Şş]/g, "s").replace(/[Çç]/g, "c").replace(/[Öö]/g, "o")
+    .replace(/[Üü]/g, "u").replace(/[Ğğ]/g, "g")
+    .toLowerCase().trim();
+  if (!s) return "";
+  if (/(phd|ph\.d|doctora|doktora|doctoral|doctorate)/.test(s)) return "phd";
+  if (/(master|yukseklisans|yuksek lisans|graduate|msc|m\.sc|mba|postgrad)/.test(s)) return "master";
+  if (/(associate|onlisans|on lisans|foundation|hazirlik|preparatory)/.test(s)) return "associate";
+  if (/(bachelor|lisans|undergrad|undergraduate|bsc|b\.sc|licence)/.test(s)) return "bachelor";
+  return s;
+}
+
 export function parseTrack(name: string): "en" | "tr" | null {
   const s = normLang(name);
   const en =

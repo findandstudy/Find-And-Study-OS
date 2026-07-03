@@ -30,6 +30,8 @@ export {
 export {
   fold,
   matchProgram,
+  parseTrack,
+  levelGroup,
   type ProgramCandidate,
   type MatchResult,
 } from "./programMatch.js";
