@@ -5076,7 +5076,18 @@
       "processAllConfirmTitle": "Process all queued submissions?",
       "processAllConfirmDescription": "In Real mode this sends live applications for every queued item.",
       "confirmProcess": "Process",
-      "statusExclusiveRegion": "Exclusive Region"
+      "statusExclusiveRegion": "Exclusive Region",
+      "filterUniversity": "विश्वविद्यालय",
+      "filterUniversitySearch": "विश्वविद्यालय खोजें…",
+      "filterUniversityEmpty": "कोई विश्वविद्यालय नहीं मिला",
+      "filterUniversityCount": "{count} चयनित",
+      "filterStudentName": "छात्र का नाम…",
+      "dateAll": "सभी तिथियाँ",
+      "dateToday": "आज",
+      "date7days": "पिछले 7 दिन",
+      "date30days": "पिछले 30 दिन",
+      "dateCustom": "कस्टम सीमा",
+      "clearFilters": "फ़िल्टर साफ़ करें"
     },
     "auditLog": {
       "title": "Audit Log",

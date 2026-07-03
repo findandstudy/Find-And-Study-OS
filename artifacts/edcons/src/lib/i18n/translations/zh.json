@@ -5076,7 +5076,18 @@
       "processAllConfirmTitle": "Process all queued submissions?",
       "processAllConfirmDescription": "In Real mode this sends live applications for every queued item.",
       "confirmProcess": "Process",
-      "statusExclusiveRegion": "Exclusive Region"
+      "statusExclusiveRegion": "Exclusive Region",
+      "filterUniversity": "大学",
+      "filterUniversitySearch": "搜索大学…",
+      "filterUniversityEmpty": "未找到大学",
+      "filterUniversityCount": "已选 {count} 个",
+      "filterStudentName": "学生姓名…",
+      "dateAll": "所有日期",
+      "dateToday": "今天",
+      "date7days": "最近 7 天",
+      "date30days": "最近 30 天",
+      "dateCustom": "自定义范围",
+      "clearFilters": "清除筛选"
     },
     "auditLog": {
       "title": "Audit Log",

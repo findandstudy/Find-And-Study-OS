@@ -9,17 +9,20 @@
  * POST /api/portal-submissions/process-queued    ← A4: drain all queued
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
+import { useDebouncedValue } from "@/hooks/use-countries";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { MultiSelectFilter, type MultiSelectOption } from "@/components/admin/MultiSelectFilter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -29,6 +32,7 @@ import {
   RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
   CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
   PlayCircle, ListStart, Eye, Plus, Inbox, Layers, ArrowRight, Globe, UserCheck,
+  User, GraduationCap, Search, FilterX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManualSubmitDialog } from "@/components/admin/ManualSubmitDialog";
@@ -79,11 +83,46 @@ interface PortalSubmission {
   updatedAt: string;
   supersededByApplicationId: number | null;
   supersededFromApplicationId: number | null;
+  studentName: string | null;
+  programName: string | null;
+  programLanguage: string | null;
+  programLevel: string | null;
   meta: {
     fallbackStep?: string | null;
     fallbackSource?: string | null;
     sameUniversity?: boolean | null;
   } | null;
+}
+
+interface UniversityOption { key: string; label: string }
+
+type DatePreset = "all" | "today" | "7days" | "30days" | "custom";
+
+/** Resolve a preset (or custom range) to inclusive ISO from/to bounds. */
+function resolveDateRange(
+  preset: DatePreset, customFrom: string, customTo: string,
+): { from?: string; to?: string } {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (preset) {
+    case "today":
+      return { from: todayStart.toISOString(), to: now.toISOString() };
+    case "7days": {
+      const d = new Date(todayStart); d.setDate(d.getDate() - 7);
+      return { from: d.toISOString(), to: now.toISOString() };
+    }
+    case "30days": {
+      const d = new Date(todayStart); d.setDate(d.getDate() - 30);
+      return { from: d.toISOString(), to: now.toISOString() };
+    }
+    case "custom": {
+      const from = customFrom ? new Date(`${customFrom}T00:00:00`).toISOString() : undefined;
+      const to = customTo ? new Date(`${customTo}T23:59:59.999`).toISOString() : undefined;
+      return { from, to };
+    }
+    default:
+      return {};
+  }
 }
 
 interface ListResponse {
@@ -243,6 +282,32 @@ function SubmissionRow({
                 {sub.universityName}
               </span>
             </div>
+            {(sub.studentName || sub.programName) && (
+              <div className="flex items-center gap-2 text-sm flex-wrap">
+                {sub.studentName && (
+                  <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                    <User className="w-3.5 h-3.5 text-muted-foreground" />
+                    {sub.studentName}
+                  </span>
+                )}
+                {sub.studentName && sub.programName && (
+                  <span className="text-muted-foreground">·</span>
+                )}
+                {sub.programName && (
+                  <span className="inline-flex items-center gap-1 text-muted-foreground">
+                    <GraduationCap className="w-3.5 h-3.5" />
+                    <span className="text-foreground">{sub.programName}</span>
+                    {(sub.programLevel || sub.programLanguage) && (
+                      <span className="text-muted-foreground">
+                        {" ("}
+                        {[sub.programLevel, sub.programLanguage].filter(Boolean).join(" · ")}
+                        {")"}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
               <span>#{sub.applicationId}</span>
               {sub.supersededByApplicationId != null && (
@@ -385,6 +450,14 @@ export default function PortalSubmissionsTab() {
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [modeFilter, setModeFilter]     = useState<string>("all");
+  const [universityKeys, setUniversityKeys] = useState<string[]>([]);
+  const [uniOptions, setUniOptions] = useState<UniversityOption[]>([]);
+  const [studentName, setStudentName] = useState<string>("");
+  const debouncedStudentName = useDebouncedValue(studentName.trim(), 300);
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [customFrom, setCustomFrom] = useState<string>("");
+  const [customTo, setCustomTo]     = useState<string>("");
+
   const [retryingId,   setRetryingId]   = useState<number | null>(null);
   const [cancelingId,  setCancelingId]  = useState<number | null>(null);
   const [processingId, setProcessingId] = useState<number | null>(null);
@@ -397,13 +470,31 @@ export default function PortalSubmissionsTab() {
   const [confirmProcessId, setConfirmProcessId] = useState<number | null>(null);
   const [confirmProcessAll, setConfirmProcessAll] = useState(false);
 
-  const load = useCallback(async (p: number, status: string, mode: string) => {
+  const dateRange = useMemo(
+    () => resolveDateRange(datePreset, customFrom, customTo),
+    [datePreset, customFrom, customTo],
+  );
+
+  const hasActiveFilters =
+    statusFilter !== "all" || modeFilter !== "all" || universityKeys.length > 0 ||
+    debouncedStudentName !== "" || datePreset !== "all";
+
+  const uniFilterOptions: MultiSelectOption[] = useMemo(
+    () => uniOptions.map((o) => ({ value: o.key, label: o.label })),
+    [uniOptions],
+  );
+
+  const load = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: String(limit) });
-      if (status !== "all") params.set("status", status);
-      if (mode   !== "all") params.set("mode",   mode);
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (modeFilter   !== "all") params.set("mode",   modeFilter);
+      if (universityKeys.length > 0) params.set("universityKeys", universityKeys.join(","));
+      if (debouncedStudentName)     params.set("studentName", debouncedStudentName);
+      if (dateRange.from)           params.set("dateFrom", dateRange.from);
+      if (dateRange.to)             params.set("dateTo", dateRange.to);
       const res = await customFetch<ListResponse>(`/api/portal-submissions?${params}`);
       setSubs(res.data ?? []);
       setTotal(res.total ?? 0);
@@ -413,9 +504,31 @@ export default function PortalSubmissionsTab() {
     } finally {
       setLoading(false);
     }
-  }, [t, toast]);
+  }, [page, statusFilter, modeFilter, universityKeys, debouncedStudentName, dateRange, t, toast]);
 
-  useEffect(() => { load(page, statusFilter, modeFilter); }, [load, page, statusFilter, modeFilter]);
+  useEffect(() => { load(); }, [load]);
+
+  // Reset to first page whenever a filter changes.
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, modeFilter, universityKeys, debouncedStudentName, datePreset, customFrom, customTo]);
+
+  // Load the university options for the multi-select filter once.
+  useEffect(() => {
+    customFetch<{ data: UniversityOption[] }>("/api/portal-submissions/universities")
+      .then((res) => setUniOptions(res.data ?? []))
+      .catch(() => setUniOptions([]));
+  }, []);
+
+  const clearFilters = () => {
+    setStatusFilter("all");
+    setModeFilter("all");
+    setUniversityKeys([]);
+    setStudentName("");
+    setDatePreset("all");
+    setCustomFrom("");
+    setCustomTo("");
+  };
 
   const handleRetry = async (id: number) => {
     setRetryingId(id);
@@ -467,7 +580,7 @@ export default function PortalSubmissionsTab() {
       } else {
         toast({ title: t("portalAutomation.submissions.processSuccess") });
       }
-      await load(page, statusFilter, modeFilter);
+      await load();
     } catch (err: unknown) {
       const body = err && typeof err === "object" && "error" in err
         ? (err as { error: string }).error
@@ -509,7 +622,7 @@ export default function PortalSubmissionsTab() {
           title: t("portalAutomation.submissions.processAllSuccess", { count: String(data.processed) }),
         });
       }
-      await load(page, statusFilter, modeFilter);
+      await load();
     } catch (err: unknown) {
       const body = err && typeof err === "object" && "error" in err
         ? (err as { error: string }).error
@@ -521,7 +634,7 @@ export default function PortalSubmissionsTab() {
       }
     } finally {
       setProcessingAll(false);
-      await load(page, statusFilter, modeFilter);
+      await load();
     }
   };
 
@@ -538,7 +651,7 @@ export default function PortalSubmissionsTab() {
       } else {
         toast({ title: t("portalAutomation.submissions.resetStuckNone") });
       }
-      await load(page, statusFilter, modeFilter);
+      await load();
     } catch {
       toast({ title: t("portalAutomation.submissions.resetStuckError"), variant: "destructive" });
     } finally {
@@ -554,8 +667,8 @@ export default function PortalSubmissionsTab() {
     <div className="space-y-4 py-2">
       {/* Filters + actions */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
-        <div className="flex gap-2 flex-wrap">
-          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+        <div className="flex gap-2 flex-wrap items-start">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40 h-9">
               <SelectValue />
             </SelectTrigger>
@@ -566,7 +679,7 @@ export default function PortalSubmissionsTab() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={modeFilter} onValueChange={(v) => { setModeFilter(v); setPage(1); }}>
+          <Select value={modeFilter} onValueChange={setModeFilter}>
             <SelectTrigger className="w-32 h-9">
               <SelectValue />
             </SelectTrigger>
@@ -576,6 +689,74 @@ export default function PortalSubmissionsTab() {
               <SelectItem value="real">{t("portalAutomation.submissions.modeReal")}</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* University multi-select (searchable, contained popover) */}
+          <MultiSelectFilter
+            options={uniFilterOptions}
+            value={universityKeys}
+            onChange={setUniversityKeys}
+            placeholder={t("portalAutomation.submissions.filterUniversity")}
+            searchPlaceholder={t("portalAutomation.submissions.filterUniversitySearch")}
+            emptyText={t("portalAutomation.submissions.filterUniversityEmpty")}
+            selectedText={(n) => t("portalAutomation.submissions.filterUniversityCount", { count: String(n) })}
+            className="w-52"
+          />
+
+          {/* Student name search */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+              placeholder={t("portalAutomation.submissions.filterStudentName")}
+              className="h-9 w-48 pl-8"
+            />
+          </div>
+
+          {/* Date range */}
+          <Select value={datePreset} onValueChange={(v) => setDatePreset(v as DatePreset)}>
+            <SelectTrigger className="w-36 h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("portalAutomation.submissions.dateAll")}</SelectItem>
+              <SelectItem value="today">{t("portalAutomation.submissions.dateToday")}</SelectItem>
+              <SelectItem value="7days">{t("portalAutomation.submissions.date7days")}</SelectItem>
+              <SelectItem value="30days">{t("portalAutomation.submissions.date30days")}</SelectItem>
+              <SelectItem value="custom">{t("portalAutomation.submissions.dateCustom")}</SelectItem>
+            </SelectContent>
+          </Select>
+          {datePreset === "custom" && (
+            <div className="flex items-center gap-1">
+              <Input
+                type="date"
+                value={customFrom}
+                max={customTo || undefined}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="h-9 w-[9.5rem]"
+              />
+              <span className="text-muted-foreground text-sm">–</span>
+              <Input
+                type="date"
+                value={customTo}
+                min={customFrom || undefined}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="h-9 w-[9.5rem]"
+              />
+            </div>
+          )}
+
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 gap-1.5 text-muted-foreground"
+              onClick={clearFilters}
+            >
+              <FilterX className="w-3.5 h-3.5" />
+              {t("portalAutomation.submissions.clearFilters")}
+            </Button>
+          )}
         </div>
         <div className="flex gap-2">
           <Button
@@ -617,7 +798,7 @@ export default function PortalSubmissionsTab() {
           )}
           <Button
             variant="outline" size="sm" className="h-9 gap-1.5"
-            onClick={() => load(page, statusFilter, modeFilter)}
+            onClick={() => load()}
             disabled={loading}
           >
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -632,7 +813,7 @@ export default function PortalSubmissionsTab() {
           {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>
       ) : loadError ? (
-        <PortalErrorState onRetry={() => load(page, statusFilter, modeFilter)} retrying={loading} />
+        <PortalErrorState onRetry={() => load()} retrying={loading} />
       ) : subs.length === 0 ? (
         <PortalEmptyState
           icon={Inbox}
@@ -689,7 +870,7 @@ export default function PortalSubmissionsTab() {
       <ManualSubmitDialog
         open={manualOpen}
         onOpenChange={setManualOpen}
-        onQueued={() => load(1, statusFilter, modeFilter)}
+        onQueued={() => { setPage(1); void load(); }}
       />
 
       {/* Cancel confirmation */}

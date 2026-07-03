@@ -5076,7 +5076,18 @@
       "processAllConfirmTitle": "Kuyruktaki tüm gönderimler işlensin mi?",
       "processAllConfirmDescription": "Gerçek modda bu işlem kuyruktaki her öğe için canlı başvuru gönderir.",
       "confirmProcess": "İşle",
-      "statusExclusiveRegion": "Exclusive Bölge"
+      "statusExclusiveRegion": "Exclusive Bölge",
+      "filterUniversity": "Üniversite",
+      "filterUniversitySearch": "Üniversite ara…",
+      "filterUniversityEmpty": "Üniversite bulunamadı",
+      "filterUniversityCount": "{count} seçili",
+      "filterStudentName": "Öğrenci adı…",
+      "dateAll": "Tüm tarihler",
+      "dateToday": "Bugün",
+      "date7days": "Son 7 gün",
+      "date30days": "Son 30 gün",
+      "dateCustom": "Özel aralık",
+      "clearFilters": "Filtreleri temizle"
     },
     "auditLog": {
       "title": "Denetim Günlüğü",

@@ -1,5 +1,5 @@
 import { Router, type IRouter, raw } from "express";
-import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gte, ilike, inArray, isNotNull, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
@@ -388,6 +388,13 @@ const listQuerySchema = z.object({
     ])
     .optional(),
   mode: z.enum(["dry", "real"]).optional(),
+  // Comma-separated portal university keys — multi-select filter.
+  universityKeys: z.string().trim().min(1).optional(),
+  // Case-insensitive student full-name search (matches applications' student).
+  studentName: z.string().trim().min(1).optional(),
+  // Inclusive date range on portal_submissions.updated_at (ISO datetimes).
+  dateFrom: z.coerce.date().optional(),
+  dateTo: z.coerce.date().optional(),
 });
 type ListSchemas = { query: typeof listQuerySchema };
 
@@ -397,8 +404,33 @@ router.get(
   validate({ query: listQuerySchema }),
   async (req, res): Promise<void> => {
     const user = req.user!;
-    const { applicationId, status, mode } = getValidated<ListSchemas>(req).query;
+    const { applicationId, status, mode, universityKeys, studentName, dateFrom, dateTo } =
+      getValidated<ListSchemas>(req).query;
     const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: "small" });
+
+    const universityKeyList = universityKeys
+      ? universityKeys.split(",").map((k) => k.trim()).filter(Boolean)
+      : [];
+
+    // Student-name filter as an EXISTS subquery so the count query needs no join.
+    // TR-fold both sides (İ/I/ı/i, dotted/dotless) for accent-insensitive match.
+    const nameFold = (col: string) =>
+      sql`lower(translate(${sql.raw(col)}, 'İIıçÇğĞöÖşŞüÜ', 'iiicCgGoOsSuU'))`;
+    const studentNameCond = studentName
+      ? sql`exists (
+          select 1 from ${applicationsTable} a
+          join ${studentsTable} s on s.id = a.student_id
+          where a.id = ${portalSubmissionsTable.applicationId}
+            and ${nameFold("concat_ws(' ', s.first_name, s.last_name)")}
+                like ${"%" + studentName.toLocaleLowerCase("tr-TR")
+                  .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
+                  .replace(/ç/g, "c").replace(/Ç/g, "c")
+                  .replace(/ğ/g, "g").replace(/Ğ/g, "g")
+                  .replace(/ö/g, "o").replace(/Ö/g, "o")
+                  .replace(/ş/g, "s").replace(/Ş/g, "s")
+                  .replace(/ü/g, "u").replace(/Ü/g, "u") + "%"}
+        )`
+      : undefined;
 
     // Agent isolation: restrict to applications visible to this user
     let visibleAppIds: number[] | null = null;
@@ -427,6 +459,10 @@ router.get(
       applicationId !== undefined ? eq(portalSubmissionsTable.applicationId, applicationId) : undefined,
       status !== undefined ? eq(portalSubmissionsTable.status, status) : undefined,
       mode !== undefined ? eq(portalSubmissionsTable.mode, mode) : undefined,
+      universityKeyList.length > 0 ? inArray(portalSubmissionsTable.universityKey, universityKeyList) : undefined,
+      dateFrom !== undefined ? gte(portalSubmissionsTable.updatedAt, dateFrom) : undefined,
+      dateTo !== undefined ? lte(portalSubmissionsTable.updatedAt, dateTo) : undefined,
+      studentNameCond,
       visibleAppIds !== null ? inArray(portalSubmissionsTable.applicationId, visibleAppIds) : undefined,
     );
 
@@ -440,11 +476,21 @@ router.get(
         ...getTableColumns(portalSubmissionsTable),
         supersededByApplicationId: applicationsTable.supersededByApplicationId,
         supersededFromApplicationId: applicationsTable.supersededFromApplicationId,
+        // Student full name + the program the automation actually targeted
+        // (application is already the superseded/fallback one when applicable).
+        studentName: sql<string | null>`nullif(trim(concat_ws(' ', ${studentsTable.firstName}, ${studentsTable.lastName})), '')`,
+        programName: applicationsTable.programName,
+        programLanguage: applicationsTable.instructionLanguage,
+        programLevel: applicationsTable.level,
       })
       .from(portalSubmissionsTable)
       .leftJoin(
         applicationsTable,
         eq(applicationsTable.id, portalSubmissionsTable.applicationId),
+      )
+      .leftJoin(
+        studentsTable,
+        eq(studentsTable.id, portalSubmissionsTable.studentId),
       )
       .where(where)
       .orderBy(desc(portalSubmissionsTable.createdAt))
@@ -452,6 +498,56 @@ router.get(
       .offset(pageParams.offset);
 
     res.json({ data: rows, ...buildPageMeta(total, pageParams) });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// GET /portal-submissions/universities — distinct universities that appear in
+// this user's submissions, for the multi-select filter. MUST be registered
+// before /portal-submissions/:id (static segment beats the :id param route).
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-submissions/universities",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const user = req.user!;
+
+    let visibleAppIds: number[] | null = null;
+    if (isAgentRole(user.role)) {
+      const visibleAgentIds = await getAgentVisibleIds(user.id, user.role);
+      if (visibleAgentIds.length > 0) {
+        const apps = await db
+          .select({ id: applicationsTable.id })
+          .from(applicationsTable)
+          .where(
+            and(
+              isNull(applicationsTable.deletedAt),
+              inArray(applicationsTable.agentId, visibleAgentIds),
+            ),
+          );
+        visibleAppIds = apps.map((a) => a.id);
+        if (visibleAppIds.length === 0) {
+          res.json({ data: [] });
+          return;
+        }
+      }
+    }
+
+    const rows = await db
+      .selectDistinct({
+        key: portalSubmissionsTable.universityKey,
+        label: portalSubmissionsTable.universityName,
+      })
+      .from(portalSubmissionsTable)
+      .where(
+        and(
+          isNull(portalSubmissionsTable.deletedAt),
+          visibleAppIds !== null ? inArray(portalSubmissionsTable.applicationId, visibleAppIds) : undefined,
+        ),
+      )
+      .orderBy(asc(portalSubmissionsTable.universityName));
+
+    res.json({ data: rows });
   },
 );
 
