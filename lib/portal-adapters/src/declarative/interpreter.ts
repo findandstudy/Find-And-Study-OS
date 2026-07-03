@@ -78,25 +78,21 @@ export function applyTransform(value: string, transform?: Transform): string {
 
 /**
  * Resolves the portal option value for the applicant's program. Priority:
- *   1. spec programSelection.overrides[programId]   (spec-authored, not DB)
- *   2. exact option match (by value, then by folded label)
- *   3. name mapping + fuzzy match via matchProgram() (fully name-based)
- * Returns null when nothing meets the threshold. The DB CRM-programId override
- * path has been removed — matching is name-based (programNameMap + fuzzy).
+ *   1. exact option match (by value, then by folded label)
+ *   2. name mapping + fuzzy match via matchProgram() (fully name-based)
+ * Returns null when nothing meets the threshold. Matching is fully NAME-based —
+ * CRM program IDs are never consulted (neither the removed DB override column
+ * nor a spec-authored programId override).
  */
 export function resolveProgramValue(
   options: ProgramOption[],
   profile: SubmitProfile,
   ps?: ProgramSelection,
 ): { value: string; conf: number } | null {
-  const programId = profile.programId ?? "";
   const programName = profile.programName ?? "";
 
-  const specOverride = ps?.overrides?.[programId];
-  if (specOverride) return { value: specOverride, conf: 1 };
-
   // Exact match on option value, then on folded label.
-  const byValue = options.find((o) => o.v === programName || o.v === programId);
+  const byValue = options.find((o) => o.v === programName);
   if (byValue) return { value: byValue.v, conf: 1 };
   const foldedName = fold(programName);
   const byLabel = options.find((o) => fold(o.t) === foldedName);

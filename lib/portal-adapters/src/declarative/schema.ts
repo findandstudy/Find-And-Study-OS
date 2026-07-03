@@ -218,8 +218,6 @@ export const programSelectionSchema = z.object({
   source: z.enum(["ajaxOptions", "static"]).default("ajaxOptions"),
   /** Selector of the <select> whose options hold the program list. */
   selector: z.string().min(1).optional(),
-  /** CRM programId → portal option value. Highest-priority match. */
-  overrides: z.record(z.string(), z.string()).optional(),
   /** Education-level → radio selector rules (thesis / non-thesis, etc.). */
   levelRules: z.array(levelRuleSchema).optional(),
   /** Fuzzy match acceptance threshold (0..1). */

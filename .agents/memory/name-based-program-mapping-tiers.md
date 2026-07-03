@@ -33,8 +33,20 @@ was caught in code review.
 - `matchProgram(name, candidates, {nameMap, nameMapGeneral, synonyms})`
   (`programMatch.ts`) step 1: `resolveByNameMap(uni) ?? resolveByNameMap(general)`
   before the exact/fuzzy path. Exact folded-name match still wins conf 1.0.
-- Every adapter call site must pass BOTH tiers: interpreter, sit, topkapi.
-  `fallback.ts` intentionally uses no name map.
+- Every runtime resolution path must be name-based — there is NO CRM-programId
+  match anywhere. Pass BOTH tiers at: interpreter, sit, topkapi, AND fallback.ts
+  (selectFallbackCandidate loads via loadProgramMapping, not the legacy
+  programOverrides column). The declarative spec's `programSelection.overrides`
+  (programId→value) was removed from schema+interpreter too.
+  **Why:** an ad-hoc review missed fallback.ts + interpreter overrides; the
+  stricter validation review REJECTED for leftover ID paths. Fallback ORDERING
+  (which candidate, in what order — Task #560) must NOT change, only the
+  per-candidate portal-option resolution method.
 - synonyms concat (general++uni); countryOverrides merge (uni key wins).
 - Regression: PM1b (same CRM name, different labels → uni wins) + PM1c (general
   applies when uni misses) in `scripts/test-program-match.ts`.
+- **Fixture gotcha:** now that matching folds portal-option NAMES, any fallback
+  test whose `meta.openPrograms`/`availablePrograms` options carry `undefined`
+  names crashes in `fold` (was masked when the CRM-ID override short-circuited
+  before `matchProgram`). Program inserts must `.returning({ id, name })` so the
+  option list supplies real names.

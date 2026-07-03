@@ -29,13 +29,13 @@ import {
   programsTable,
   portalSubmissionsTable,
   portalProgramFallbacksTable,
-  portalProgramMappingTable,
   portalAutomationSettingsTable,
   auditLogsTable,
   notificationsTable,
 } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { matchProgram, type ProgramCandidate } from "@workspace/portal-adapters";
+import { loadProgramMapping } from "./programMappingLoader.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -76,23 +76,21 @@ export const MAX_FALLBACK_DEPTH = 2;
  * portal value is OPEN (present + enabled) in `openPrograms`. Returns null when
  * none are open/closed-resolvable.
  *
- * Resolution per candidate:
- *   1. Manual override: programOverrides[candidateId] → portal value, IF that
- *      value exists in openPrograms.
- *   2. Fuzzy: matchProgram(candidate.name, openPrograms-as-candidates, ...).
- * The candidate is SELECTED only when the resolved value's openPrograms entry
- * has enabled=true. Order is preserved — the first eligible candidate wins.
+ * Resolution per candidate is fully NAME-based (CRM program IDs are never
+ * consulted): matchProgram applies University name map → General name map →
+ * fuzzy against the portal options. The candidate is SELECTED only when the
+ * resolved value's openPrograms entry has enabled=true. Order is preserved —
+ * the first eligible candidate wins.
  */
 export function selectFallbackCandidate(
   candidates: FallbackCandidate[],
   openPrograms: OpenProgram[],
   opts?: {
-    programOverrides?: Record<string, string>;
+    nameMap?: Record<string, string>;
+    nameMapGeneral?: Record<string, string>;
     synonyms?: string[][];
   },
 ): SelectedFallback | null {
-  const overrides = opts?.programOverrides ?? {};
-  const synonyms = opts?.synonyms;
   // Matcher candidates use the portal value as the id so a match resolves
   // straight to the <option> value.
   const matchCandidates: ProgramCandidate[] = openPrograms.map((o) => ({
@@ -101,13 +99,7 @@ export function selectFallbackCandidate(
   }));
 
   for (const cand of candidates) {
-    const portalValue = resolvePortalValue(
-      cand,
-      openPrograms,
-      matchCandidates,
-      overrides,
-      synonyms,
-    );
+    const portalValue = resolvePortalValue(cand, matchCandidates, opts);
     if (!portalValue) continue;
 
     const open = openPrograms.find((o) => o.value === portalValue);
@@ -121,27 +113,21 @@ export function selectFallbackCandidate(
 
 function resolvePortalValue(
   cand: FallbackCandidate,
-  openPrograms: OpenProgram[],
   matchCandidates: ProgramCandidate[],
-  overrides: Record<string, string>,
-  synonyms?: string[][],
+  opts?: {
+    nameMap?: Record<string, string>;
+    nameMapGeneral?: Record<string, string>;
+    synonyms?: string[][];
+  },
 ): string | null {
-  // 1. Manual override (CRM programId → portal value/text).
-  const override = overrides[String(cand.programId)];
-  if (override !== undefined) {
-    const byValue = openPrograms.find((o) => o.value === override);
-    if (byValue) return byValue.value;
-    // Override may carry the option TEXT instead of the value.
-    const byName = openPrograms.find(
-      (o) => o.name.trim().toLowerCase() === override.trim().toLowerCase(),
-    );
-    if (byName) return byName.value;
-  }
-
-  // 2. Fuzzy match the CRM catalog name against the portal options.
-  //    (The programId → override path lives in step 1 above; matchProgram itself
-  //    is now fully name-based.)
-  const m = matchProgram(cand.name, matchCandidates, { synonyms });
+  // Fully name-based: matchProgram resolves the CRM catalog name against the
+  // portal options via University name map → General name map → fuzzy. CRM
+  // program IDs are never used to pick a portal option.
+  const m = matchProgram(cand.name, matchCandidates, {
+    nameMap:        opts?.nameMap,
+    nameMapGeneral: opts?.nameMapGeneral,
+    synonyms:       opts?.synonyms,
+  });
   return m ? m.match.id : null;
 }
 
@@ -323,23 +309,13 @@ export async function handleNeedsFallback(
     })
     .filter((c): c is FallbackCandidate => c !== null);
 
-  // ----- Manual overrides / synonyms (panel-managed mapping) --------------
-  const [mapping] = await db
-    .select({
-      programOverrides: portalProgramMappingTable.programOverrides,
-      synonyms:         portalProgramMappingTable.synonyms,
-    })
-    .from(portalProgramMappingTable)
-    .where(
-      and(
-        eq(portalProgramMappingTable.universityKey, sub.universityKey),
-        isNull(portalProgramMappingTable.memberUniversityId),
-      ),
-    );
+  // ----- Panel-managed name mappings + synonyms (University > General) -----
+  const mapping = await loadProgramMapping(sub.universityKey);
 
   const selected = selectFallbackCandidate(candidates, optionList, {
-    programOverrides: mapping?.programOverrides ?? {},
-    synonyms:         mapping?.synonyms ?? [],
+    nameMap:        mapping.programNameMap,
+    nameMapGeneral: mapping.programNameMapGeneral,
+    synonyms:       mapping.programSynonyms,
   });
 
   if (!selected) {

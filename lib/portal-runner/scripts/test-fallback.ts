@@ -102,15 +102,29 @@ test("FB-U4: order preserved — first open wins even when both open", () => {
   assert.equal(sel!.programId, 1);
 });
 
-test("FB-U5: manual override resolves to a portal value", () => {
+test("FB-U5: name mapping resolves to a portal value", () => {
   const sel = selectFallbackCandidate(
     [C(99, "Totally Unrelated Catalog Name")],
     [O("x", "Bilgisayar Mühendisliği", true)],
-    { programOverrides: { "99": "x" } },
+    { nameMap: { "Bilgisayar Mühendisliği": "Totally Unrelated Catalog Name" } },
   );
   assert.ok(sel);
   assert.equal(sel!.programId, 99);
   assert.equal(sel!.portalValue, "x");
+});
+
+test("FB-U5b: University name map wins over General (same CRM, diff label)", () => {
+  const sel = selectFallbackCandidate(
+    [C(50, "Some CRM Name")],
+    [O("uni-opt", "Uni Label", true), O("gen-opt", "Gen Label", true)],
+    {
+      nameMap:        { "Uni Label": "Some CRM Name" },
+      nameMapGeneral: { "Gen Label": "Some CRM Name" },
+    },
+  );
+  assert.ok(sel);
+  assert.equal(sel!.programId, 50);
+  assert.equal(sel!.portalValue, "uni-opt");
 });
 
 test("FB-U6: unresolvable candidate (no match, no override) → null", () => {
@@ -245,7 +259,7 @@ async function seedScenario(opts?: {
     name:         `Source Full Program ${uniKey}`,
     degree:       "bachelor",
     language:     "English",
-  }).returning({ id: programsTable.id });
+  }).returning({ id: programsTable.id, name: programsTable.name });
   cleanupProgramIds.push(srcProg.id);
 
   const [fbProg] = await db.insert(programsTable).values({
@@ -256,7 +270,7 @@ async function seedScenario(opts?: {
     tuitionFee:     5000,
     commissionRate: 12,
     currency:       "USD",
-  }).returning({ id: programsTable.id });
+  }).returning({ id: programsTable.id, name: programsTable.name });
   cleanupProgramIds.push(fbProg.id);
 
   const [student] = await db.insert(studentsTable).values({
@@ -298,8 +312,8 @@ async function seedScenario(opts?: {
     cleanupFallbackIds.push(rule.id);
 
     const [map] = await db.insert(portalProgramMappingTable).values({
-      universityKey:    uniKey,
-      programOverrides: { [String(fbProg.id)]: fallbackPortalValue },
+      universityKey: uniKey,
+      mappings:      { [fbProg.name]: fbProg.name },
     }).returning({ id: portalProgramMappingTable.id });
     cleanupMappingIds.push(map.id);
   }
