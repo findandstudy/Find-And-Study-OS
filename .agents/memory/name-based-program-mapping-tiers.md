@@ -39,9 +39,10 @@ was caught in code review.
   programOverrides column). The declarative spec's `programSelection.overrides`
   (programId→value) was removed from schema+interpreter too.
   **Why:** an ad-hoc review missed fallback.ts + interpreter overrides; the
-  stricter validation review REJECTED for leftover ID paths. Fallback ORDERING
-  (which candidate, in what order — Task #560) must NOT change, only the
-  per-candidate portal-option resolution method.
+  stricter validation review REJECTED for leftover ID paths. The fallback
+  ORDERING (which candidate is tried, in what order) is owned by the separate
+  program-fallback orchestrator and must NOT change — only the per-candidate
+  portal-option resolution method (ID → name) changes here.
 - synonyms concat (general++uni); countryOverrides merge (uni key wins).
 - Regression: PM1b (same CRM name, different labels → uni wins) + PM1c (general
   applies when uni misses) in `scripts/test-program-match.ts`.
