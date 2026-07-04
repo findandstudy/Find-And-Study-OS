@@ -43,6 +43,10 @@ const GRAPHQL_PATH = "/api/graphql";
 // SIT email/password (the same portal_credentials used for the UI login).
 const SUPABASE_URL = "https://knqtjanxjwfjfrwoater.supabase.co";
 const SUPABASE_TOKEN_PATH = "/auth/v1/token?grant_type=password";
+// Supabase project ref (the subdomain). The SPA reads its session from the
+// localStorage key `sb-<ref>-auth-token`; we write it there in a probe page to
+// authenticate the SPA and observe its REAL /api/graphql requests.
+const SUPABASE_PROJECT_REF = "knqtjanxjwfjfrwoater";
 
 // A bare (unprefixed) JWT — used to validate a minted/captured access_token.
 const JWT_RE = /^ey[\w-]+\.[\w-]+\.[\w-]+$/;
@@ -68,6 +72,14 @@ const JWT_RE = /^ey[\w-]+\.[\w-]+\.[\w-]+$/;
 const capturedBearerByPage = new WeakMap<Page, string>();
 const capturedAnonKeyByPage = new WeakMap<Page, string>();
 const captureInstalledPages = new WeakSet<Page>();
+// The FULL Supabase session JSON from the password grant (access_token +
+// refresh_token + expires_at + user …). Retained ONLY to inject into a
+// throwaway probe page so the SPA authenticates and fires its REAL /api/graphql
+// requests, which we capture to learn the exact query this route expects. Held
+// in memory, keyed weakly by page; NEVER logged.
+const capturedSessionByPage = new WeakMap<Page, Record<string, unknown>>();
+// Guards the one-shot real-request capture (per page).
+const graphqlCaptureAttempted = new WeakSet<Page>();
 
 // Matches "Bearer <jwt>" and captures the bare JWT (group 1).
 const BEARER_JWT_RE = /^bearer\s+(ey[\w-]+\.[\w-]+\.[\w-]+)\s*$/i;
@@ -204,12 +216,15 @@ export async function mintSupabaseBearer(
       await logSitLoginDiagnostics(page);
       return false;
     }
-    const body = (await res.json().catch(() => null)) as {
-      access_token?: unknown;
-    } | null;
+    const body = (await res.json().catch(() => null)) as
+      | ({ access_token?: unknown } & Record<string, unknown>)
+      | null;
     const token = body?.access_token;
     if (typeof token === "string" && JWT_RE.test(token)) {
       capturedBearerByPage.set(page, token);
+      // Keep the FULL session so we can inject it into a probe page and learn
+      // the route's real GraphQL query shape. Never logged.
+      if (body) capturedSessionByPage.set(page, body);
       logger.info(
         `[sit:auth] Supabase access_token alındı (bearer=true, status=${status})`,
       );
@@ -228,6 +243,110 @@ export async function mintSupabaseBearer(
     );
     await logSitLoginDiagnostics(page);
     return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// One-shot diagnostic — learn the route's REAL GraphQL query shape.
+//
+// Our own /api/graphql calls return HTTP 200 `{"data":null}` even with a valid
+// Bearer + apikey: auth is fine, but the query/operationName/variables we send
+// don't match what this (Zoho-backed) route expects. To discover the exact
+// shape, inject the minted Supabase session into a THROWAWAY probe page so the
+// SPA authenticates, navigate it to a data page, and capture the SPA's own
+// /api/graphql POST bodies (query + variables + operationName). Bodies are
+// logged PII-masked (rawForLog). Runs at most once per page and only touches a
+// separate page, so it never disturbs the main submission flow. Best-effort.
+// ---------------------------------------------------------------------------
+function extractOperationName(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as {
+      operationName?: unknown;
+      query?: unknown;
+    };
+    if (typeof parsed.operationName === "string" && parsed.operationName) {
+      return parsed.operationName;
+    }
+    if (typeof parsed.query === "string") {
+      const m = parsed.query.match(/\b(?:query|mutation)\s+(\w+)/);
+      if (m) return m[1];
+    }
+  } catch {
+    /* not JSON — no operation name */
+  }
+  return null;
+}
+
+async function captureRealGraphqlOnce(page: Page): Promise<void> {
+  if (graphqlCaptureAttempted.has(page)) return;
+  graphqlCaptureAttempted.add(page);
+  const session = capturedSessionByPage.get(page);
+  if (!session) return; // no minted session → cannot authenticate the probe SPA
+
+  let probe: Page | null = null;
+  try {
+    probe = await page.context().newPage();
+    await probe.addInitScript(
+      ([key, value]) => {
+        try {
+          window.localStorage.setItem(key as string, value as string);
+        } catch {
+          /* storage blocked */
+        }
+      },
+      [`sb-${SUPABASE_PROJECT_REF}-auth-token`, JSON.stringify(session)] as [
+        string,
+        string,
+      ],
+    );
+
+    const captured: string[] = [];
+    probe.on("request", (req) => {
+      try {
+        if (req.url().includes(GRAPHQL_PATH) && req.method() === "POST") {
+          const b = req.postData();
+          if (b) captured.push(b);
+        }
+      } catch {
+        /* postData read failed — ignore */
+      }
+    });
+
+    await probe
+      .goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+        waitUntil: "networkidle",
+        timeout: 30_000,
+      })
+      .catch(() => {});
+    // Give any late XHRs a moment to fire.
+    await probe.waitForTimeout(2_500).catch(() => {});
+
+    if (captured.length === 0) {
+      logger.warn(
+        "[sit:graphql] capture: authed probe fired NO /api/graphql POST — session injection may not have authenticated the SPA",
+      );
+      return;
+    }
+    // Log each DISTINCT operation once (by operationName) so the real
+    // student-search / program-listing queries are visible for reuse.
+    const seen = new Set<string>();
+    for (const body of captured) {
+      const op = extractOperationName(body) ?? "?";
+      if (seen.has(op)) continue;
+      seen.add(op);
+      logger.info(
+        `[sit:graphql] capture: REAL request op=${op} body=${rawForLog(body, 900)}`,
+      );
+      if (seen.size >= 8) break;
+    }
+  } catch (e) {
+    logger.warn(
+      `[sit:graphql] capture: hata ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+  } finally {
+    if (probe) await probe.close().catch(() => {});
   }
 }
 
@@ -790,6 +909,16 @@ async function gqlRequest<S extends z.ZodTypeAny>(
   const absUrl = SIT_URLS.base + GRAPHQL_PATH;
   const auth = await collectAuth(page, SIT_URLS.base);
 
+  // Log OUR outgoing query (operation + PII-masked variables) so it can be
+  // compared against the SPA's REAL captured request in the same run.
+  const outOp = query.match(/\b(?:query|mutation)\s+(\w+)/)?.[1] ?? label;
+  logger.info(
+    `[sit:graphql] ${label}: sending op=${outOp} variables=${redactedStringify(
+      variables,
+      300,
+    )}`,
+  );
+
   // The SIT /api/graphql endpoint authenticates with the Supabase Bearer
   // access_token — without it the server returns HTTP 200 with data:null (never
   // an auth error). If no token was found, say so ONCE and clearly rather than
@@ -839,6 +968,12 @@ async function gqlRequest<S extends z.ZodTypeAny>(
     // Otherwise (auth/empty/error/network) fall through to the next transport.
   }
 
+  // We authenticated (a Bearer was present — no-bearer short-circuits earlier)
+  // but got no usable data, most likely because our query shape doesn't match
+  // this route. Learn the route's REAL query shape (once per page) by capturing
+  // the authenticated SPA's own /api/graphql requests. Best-effort; we still
+  // return null so THIS call falls back to scanning the UI.
+  await captureRealGraphqlOnce(page).catch(() => {});
   return null;
 }
 

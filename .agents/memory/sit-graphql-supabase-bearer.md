@@ -73,4 +73,18 @@ Supabase enforces MFA/captcha on the account (no MFA ⇒ works).
   rawForLog() (redactedStringify for JSON so student email/name/passport are
   key-stripped; JWT-masked slice for non-JSON). This is what disambiguates
   empty-vs-refused-vs-graphql-error in prod.
+- **AUTH solved but route still `{"data":null}` (no errors) = WRONG QUERY SHAPE,
+  not auth.** partners.sitconnect.net/api/graphql is a Zoho-CRM-backed custom
+  route (photos are `*_Contacts_photo.jpeg`); the adapter's guessed
+  query/operationName/variables aren't recognized. There is NO direct GraphQL to
+  *.supabase.co (only /auth/v1 + /storage/v1) — data comes only from this route.
+- **To learn the real query, inject the minted session into a THROWAWAY probe
+  page and capture the SPA's own requests.** Keep the FULL password-grant session
+  (not just access_token) in capturedSessionByPage; in captureRealGraphqlOnce
+  open page.context().newPage(), addInitScript localStorage
+  `sb-<projectRef>-auth-token` = JSON.stringify(session), goto studentsPath, and
+  capture /api/graphql POST bodies (query+variables+operationName). One-shot per
+  page, triggered from gqlRequest on the data:null path; runs on a separate page
+  so it never disturbs the main flow. Also log OUR outgoing op+variables to
+  compare. All bodies PII-masked via rawForLog (query text preserved).
 - Same Supabase-Bearer + apikey pattern likely applies to the United adapter too.
