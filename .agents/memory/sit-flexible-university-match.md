@@ -66,19 +66,22 @@ non-alphanumeric). **Country filters the University list** — it MUST run befor
 University (it does) and we sleep ~1.2s after picking; Country tries Turkey →
 Türkiye → Northern Cyprus in turn.
 
-**All 5 Add-Application dropdowns are SEARCHABLE cmdk menus → type-to-search then
-click row; anchor options to the SEARCH-BOX popover.** Manual working path for
-EVERY field (Student/Country/University/Degree/Program): open trigger → type term
-into the popover's `input[placeholder*="Search"]` (`SEARCH_INPUT_SEL`, also
-`[cmdk-input]`) → the filtered row renders → click it. Reading "all options"
-without typing yields nothing. Two selector traps, both real: (1) a bare
-`li`/whole-page scan read the LEFT SIDEBAR nav <li> (Dashboard/Applications/…);
-(2) over-narrowing to pure Radix/cmdk containers read 0 rows (real popover markup
-differs). Fix = `dropdownOptions()` combines page-wide `[role=option],[cmdk-item]`
-(dropdown-only roles, never in sidebar) OR-ed with generic rows
-(`li,[data-value],[role=menuitem]`) scoped to `openPopover()` = the container
-that HAS the search box (sidebar has none). Wait on `SEARCH_INPUT_SEL` visible
-(not the container), and after typing wait for a row to render.
+**All 5 Add-Application dropdowns are SEARCHABLE shadcn `Command` menus →
+type-to-search then click row; anchor options to the SEARCH-BOX popover.** Manual
+working path for EVERY field (Student/Country/University/Degree/Program): open
+trigger → type term into the popover's `input[placeholder*="Search"]`
+(`SEARCH_INPUT_SEL`, also `[cmdk-input]`) → the filtered row renders → click it.
+Reading "all options" without typing yields nothing. **CONFIRMED LIVE DOM: option
+rows are plain `div.cursor-pointer.select-none` — NOT `li`/`[role=option]`/
+`[data-value]`/`[cmdk-item]`; popover root is `.bg-popover` (NOT a Radix/cmdk
+container).** Two prior selector traps, both real: (1) a bare `li`/whole-page scan
+read the LEFT SIDEBAR nav <li>; (2) scoping to pure Radix/cmdk containers/rows
+read 0/0. Fix = `dropdownOptions()` combines page-wide `[role=option],[cmdk-item]`
+(dropdown-only roles, never in sidebar) OR-ed with `div.cursor-pointer`
+(+`[data-value]`,`[role=menuitem]` fallbacks) scoped to `openPopover()` =
+`POPOVER_ROOT_SEL` (`.bg-popover`+Radix/cmdk) filtered to the one HOLDING the
+search box (sidebar has none). Wait on `SEARCH_INPUT_SEL` visible (not the
+container), and after typing wait for a row to render.
 
 **On any dropdown miss, dump a SANITISED popover skeleton — NEVER outerHTML.**
 `dumpOpenPopover()` (called from `logOptionsOnMiss`) walks the popover in-page and

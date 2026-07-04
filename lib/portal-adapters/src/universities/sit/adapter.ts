@@ -321,21 +321,30 @@ const DROPDOWN_POPOVER_SELECTOR =
 
 /**
  * The Search textbox rendered inside every SIT "Add Application" dropdown
- * (Student/Country/University/Degree/Program are ALL searchable cmdk menus with
- * a `placeholder="Search zoho-…"` input). Its presence is what distinguishes a
- * real dropdown popover from the left sidebar nav (which has no search box).
+ * (Student/Country/University/Degree/Program are ALL searchable shadcn `Command`
+ * menus with a `placeholder="Search zoho-…"` input). Its presence is what
+ * distinguishes a real dropdown popover from the left sidebar nav (no search box).
  */
 const SEARCH_INPUT_SEL = 'input[placeholder*="Search" i], [cmdk-input]';
 
 /**
- * The currently-open searchable popover: a known popover container that also
- * HOLDS the Search textbox. Anchoring to "the container with the search box" is
- * what keeps the sidebar nav out (it has no search box) without being so narrow
- * that real option rows are missed.
+ * Containers that can be the root of an open dropdown popover. The SIT modal
+ * uses shadcn `Command` whose popover root is `.bg-popover` (NOT a Radix
+ * listbox/cmdk container), so `.bg-popover` is the primary signal; the Radix/cmdk
+ * containers are kept as fallbacks for any differently-rendered dropdown.
+ */
+const POPOVER_ROOT_SEL =
+  ".bg-popover, [role=listbox], [data-radix-popper-content-wrapper], [cmdk-list], [cmdk-root], [data-radix-select-viewport]";
+
+/**
+ * The currently-open searchable popover: a popover-root container that also HOLDS
+ * the Search textbox. Anchoring to "the container with the search box" is what
+ * keeps the sidebar nav out (it has no search box) without being so narrow that
+ * real option rows are missed.
  */
 function openPopover(page: Page): Locator {
   return page
-    .locator(DROPDOWN_POPOVER_SELECTOR)
+    .locator(POPOVER_ROOT_SEL)
     .filter({ has: page.locator(SEARCH_INPUT_SEL) })
     .last();
 }
@@ -343,20 +352,23 @@ function openPopover(page: Page): Locator {
 /**
  * Options of the CURRENTLY-OPEN dropdown.
  *
- * A bare `li` / whole-page scan wrongly captured the left sidebar navigation's
- * <li> menu items (Dashboard/Applications/Students/…) whenever a dropdown was
- * open — but scoping ONLY to Radix/cmdk containers went too far and read 0 rows
- * (the real popover markup differs). So we combine two SAFE sources:
- *   1. `[role=option]` / `[cmdk-item]` page-wide — these roles are dropdown-only
- *      and are never used by the sidebar nav.
- *   2. Generic clickable rows (`li` / `[data-value]` / `[role=menuitem]`) read
- *      ONLY inside the popover that holds the Search box — the sidebar has no
- *      search box, so it can never be mistaken for options.
+ * Live DOM (confirmed): SIT option rows are plain `div.cursor-pointer.select-none`
+ * divs — NOT `li` / `[role=option]` / `[data-value]` / `[cmdk-item]`, which is why
+ * the previous scoped selector read 0/0. We combine two SAFE sources:
+ *   1. `[role=option]` / `[cmdk-item]` page-wide — dropdown-only roles never used
+ *      by the sidebar nav (kept for any ARIA-correct dropdown).
+ *   2. The real clickable rows (`div.cursor-pointer` + `[data-value]` /
+ *      `[role=menuitem]` fallbacks) read ONLY inside the popover that holds the
+ *      Search box — the sidebar has no search box, so it can never leak in.
  */
 function dropdownOptions(page: Page): Locator {
   return page
     .locator("[role=option], [cmdk-item]")
-    .or(openPopover(page).locator("li, [data-value], [role=menuitem]"));
+    .or(
+      openPopover(page).locator(
+        "div.cursor-pointer, [data-value], [role=menuitem]",
+      ),
+    );
 }
 
 /**
