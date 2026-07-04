@@ -371,6 +371,42 @@ function dropdownOptions(page: Page): Locator {
     );
 }
 
+/** Real clickable option-row selector across SIT's popover variants. */
+const OPTION_ROW_SEL =
+  "div.cursor-pointer, [role=option], [cmdk-item], [role=menuitem]";
+
+/**
+ * Click the option row matching `matcher` DIRECTLY, using Playwright auto-wait +
+ * `:visible`, instead of the fragile "read all → count → match → click by index"
+ * approach. This fixes two confirmed live-DOM problems at once:
+ *   - The SIT modal renders TWO `.bg-popover` nodes (one open, one empty/hidden),
+ *     so an index-based read hit the wrong (empty) one → 0/0. `.filter({ visible:
+ *     true })` selects only the row in the OPEN popover.
+ *   - Option rows render async after the trigger opens / search filters, so an
+ *     immediate read saw nothing. `waitFor({ state: "visible" })` lets Playwright
+ *     auto-wait for the row to appear.
+ * `hasText` matches the visible row text (a plain string is a case-insensitive
+ * substring; pass a RegExp for tolerant matching). Returns true when clicked.
+ */
+async function clickVisibleOption(
+  page: Page,
+  matcher: RegExp | string,
+  timeout = 8000,
+): Promise<boolean> {
+  const opt = page
+    .locator(OPTION_ROW_SEL, { hasText: matcher })
+    .filter({ visible: true })
+    .first();
+  try {
+    await opt.waitFor({ state: "visible", timeout });
+  } catch {
+    return false;
+  }
+  await opt.click({ timeout: 3000 }).catch(() => {});
+  await sleep(page, 900);
+  return true;
+}
+
 /**
  * Open a SIT SEARCHABLE combobox (the "Add Application" dialog uses these:
  * Student / University / Program etc. render a role=button|combobox trigger
@@ -440,7 +476,7 @@ async function selectComboSearch(
   // are searchable cmdk menus, so the matching row only renders once filtered
   // (reading "all" options without typing yields nothing / the wrong DOM).
   if (opts.search) {
-    let box = page.locator(SEARCH_INPUT_SEL).last();
+    let box = page.locator(SEARCH_INPUT_SEL).filter({ visible: true }).first();
     if (!(await box.count())) {
       box = page
         .getByRole("textbox")
@@ -460,43 +496,46 @@ async function selectComboSearch(
     await sleep(page, 400);
   }
 
-  // Read options from the opened popover: dropdown-only roles page-wide plus
-  // generic rows scoped to the search-box popover — NEVER a bare page-wide `li`
-  // (that captured the left sidebar nav's <li> menu items).
-  const optionLoc = dropdownOptions(page);
+  // Option-row locator, scoped to VISIBLE rows only (the SIT modal renders a
+  // second empty/hidden `.bg-popover`; :visible + auto-wait avoid reading it).
+  const optionLoc = page.locator(OPTION_ROW_SEL).filter({ visible: true });
 
-  // pickFirst: no matching required — take the first rendered option.
+  // pickFirst (Student): after typing the search term, click the first VISIBLE
+  // option row — Playwright auto-waits for it to render (fixes the 0/0 timing).
   if (opts.pickFirst) {
-    let opt = page.getByRole("option").first();
-    if (!(await opt.count())) opt = optionLoc.first();
-    if (await opt.count()) {
-      await opt.click({ timeout: 3000 }).catch(() => {});
+    const first = optionLoc.first();
+    try {
+      await first.waitFor({ state: "visible", timeout: 8000 });
+      await first.click({ timeout: 3000 }).catch(() => {});
       await sleep(page, 900);
       return true;
-    }
-    await logOptionsOnMiss(page, optionLoc, opts.fieldLabel);
-    await page.keyboard.press("Escape").catch(() => {});
-    return false;
-  }
-
-  // 1) Regex match first (fast path; preserves prior behaviour).
-  if (opts.optionRe) {
-    let opt = page.getByRole("option", { name: opts.optionRe }).first();
-    if (!(await opt.count())) {
-      opt = optionLoc.filter({ hasText: opts.optionRe }).first();
-    }
-    if (await opt.count()) {
-      await opt.click({ timeout: 3000 }).catch(() => {});
-      await sleep(page, 900);
-      return true;
+    } catch {
+      await logOptionsOnMiss(page, optionLoc, opts.fieldLabel);
+      await page.keyboard.press("Escape").catch(() => {});
+      return false;
     }
   }
 
-  // 2) Tolerant folded matching against the visible option texts:
-  //    exact-fold → contains-fold → first-token.
+  // 1) Direct auto-waited click on the VISIBLE row whose text matches — no
+  //    read/count/index. Try the strict regex first, then the human target as a
+  //    case-insensitive substring.
+  if (opts.optionRe && (await clickVisibleOption(page, opts.optionRe))) {
+    return true;
+  }
+  if (opts.target && (await clickVisibleOption(page, opts.target, 4000))) {
+    return true;
+  }
+
+  // 2) Tolerant folded fallback (Turkish-folded exact → contains → first-token)
+  //    over the VISIBLE rows, for diacritic/spacing mismatches hasText can miss.
   if (opts.target) {
     const tgt = fold(opts.target);
     const tgtFirst = tgt.split(" ")[0] ?? "";
+    // Ensure at least one row rendered before reading (auto-wait).
+    await optionLoc
+      .first()
+      .waitFor({ state: "visible", timeout: 4000 })
+      .catch(() => {});
     const count = await optionLoc.count();
     const folded: string[] = [];
     for (let i = 0; i < count; i++) {
@@ -506,7 +545,7 @@ async function selectComboSearch(
     }
     const tiers: Array<(f: string) => boolean> = [
       (f) => f === tgt,
-      (f) => (f.length > 0 && (f.includes(tgt) || tgt.includes(f))),
+      (f) => f.length > 0 && (f.includes(tgt) || tgt.includes(f)),
       (f) => tgtFirst.length > 1 && f.split(" ")[0] === tgtFirst,
     ];
     for (const test of tiers) {
@@ -517,18 +556,10 @@ async function selectComboSearch(
         return true;
       }
     }
-  } else if (!opts.optionRe) {
-    // No regex and no target → legacy "take first option" behaviour.
-    const opt = page.getByRole("option").first();
-    if (await opt.count()) {
-      await opt.click({ timeout: 3000 }).catch(() => {});
-      await sleep(page, 900);
-      return true;
-    }
   }
 
-  // 3) Nothing matched — dump the current option texts so the next real run
-  //    reveals the exact mismatch (no blind guessing).
+  // 3) Nothing matched — dump the current option texts + sanitized popover
+  //    skeleton so the next real run reveals the exact mismatch.
   await logOptionsOnMiss(page, optionLoc, opts.fieldLabel);
   await page.keyboard.press("Escape").catch(() => {});
   return false;

@@ -83,6 +83,14 @@ read 0/0. Fix = `dropdownOptions()` combines page-wide `[role=option],[cmdk-item
 search box (sidebar has none). Wait on `SEARCH_INPUT_SEL` visible (not the
 container), and after typing wait for a row to render.
 
+**Click options via auto-wait `:visible`+`hasText`, NOT read-count-match.** The
+selector was right but two runtime traps caused a false 0/0: the modal renders TWO
+`.bg-popover` nodes (one OPEN, one empty/hidden) so index reads hit the empty one,
+and rows render async so an immediate read saw nothing. Rule: click the option
+directly with a visible-filtered `hasText` locator + `waitFor("visible")` so
+Playwright auto-waits for the row in the OPEN popover — never read/count/index.
+Same rule for the search input: target the VISIBLE one.
+
 **On any dropdown miss, dump a SANITISED popover skeleton — NEVER outerHTML.**
 `dumpOpenPopover()` (called from `logOptionsOnMiss`) walks the popover in-page and
 logs tag names + attribute NAMES only (values stripped; text nodes dropped;
