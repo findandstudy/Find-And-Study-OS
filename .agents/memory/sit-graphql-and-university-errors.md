@@ -3,6 +3,29 @@ name: SIT adapter GraphQL shape + university-error classification
 description: How the SIT read-only GraphQL connection parsing tolerates empty/edges shapes, and why a not-permitted / unselectable university must NOT be reported as programMissing.
 ---
 
+# SIT GraphQL authenticated session
+
+SIT's read-only GraphQL (POST /api/graphql) must be issued from INSIDE the
+authenticated page context (`page.evaluate` → `window.fetch` with
+`credentials:"include"`), NOT via `page.request.post`.
+
+**Why:** `page.request` carries only cookies. sitconnect.net is a Laravel/axios
+SPA whose API also requires the `X-XSRF-TOKEN` header (echoed from the
+`XSRF-TOKEN` cookie) and/or an `Authorization: Bearer` token the SPA reads from
+storage. Missing those → the server returns **HTTP 200 with `data: null` and NO
+`errors`** (not a 401), so the old code logged only "shape mismatch — null",
+findStudent returned null, and the create-wizard looped ~7× ("doğrulama hatası").
+
+**How to apply:** in-page fetch attaches `X-XSRF-TOKEN` from cookie +
+best-effort bearer (scan local/sessionStorage for a JWT-looking value or a
+token/auth/access key holding one) + `x-requested-with: XMLHttpRequest`; browser
+sets Origin/Referer automatically. `page.request` is a FALLBACK only if the
+in-page fetch throws (CSP). Diagnostics must log HTTP status + which creds were
+attached (xsrf/bearer) + GraphQL `errors` verbatim + an explicit `data:null`
+branch, so an auth failure is visible instead of hidden behind "null". A
+non-JSON body (login-page HTML) is the redirect symptom — log a bounded snippet
+but strip JWTs and csrf/token attribute values from it first.
+
 # SIT GraphQL connection shape
 
 SIT's read-only GraphQL (studentSearch / studentApplications) returns a
