@@ -80,8 +80,11 @@ interface SitAuth {
 // decoded) and a best-effort bearer token the SPA may keep in web storage.
 // The XSRF cookie is read from the BROWSER CONTEXT (page.context().cookies),
 // which is reliable even if it is HttpOnly — reading document.cookie in-page
-// would miss those. The bearer is discovered by scanning local/sessionStorage
-// for a JWT-looking value; failures are non-fatal.
+// would miss those. The bearer is the SUPABASE access_token: SIT authenticates
+// GraphQL with `Authorization: Bearer <access_token>`, and the SPA persists the
+// session in localStorage under a `sb-<project-ref>-auth-token` key. We read
+// that key's access_token first (authoritative), then fall back to a generic
+// JWT scan for resilience; failures are non-fatal.
 // ---------------------------------------------------------------------------
 async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
   const auth: SitAuth = {};
@@ -98,6 +101,65 @@ async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
     const bearer = await page.evaluate(() => {
       const looksLikeJwt = (v: unknown): v is string =>
         typeof v === "string" && /^ey[\w-]+\.[\w-]+\.[\w-]+$/.test(v);
+
+      // Decode a Supabase session value. gotrue-js v2 stores the session as a
+      // plain JSON object; @supabase/ssr may store it base64-encoded behind a
+      // "base64-" prefix. Handle both.
+      const parseSession = (raw: string | null): unknown => {
+        if (!raw) return null;
+        let text = raw;
+        if (text.startsWith("base64-")) {
+          try {
+            text = atob(text.slice("base64-".length));
+          } catch {
+            return null;
+          }
+        }
+        try {
+          return JSON.parse(text);
+        } catch {
+          return null;
+        }
+      };
+
+      // Pull the access_token out of a parsed Supabase session, tolerating the
+      // top-level shape, the legacy `currentSession` wrapper, and array form.
+      const extractAccessToken = (s: unknown): string | null => {
+        let cand: unknown;
+        if (Array.isArray(s)) {
+          cand = (s[0] as { access_token?: unknown } | undefined)?.access_token;
+        } else if (s && typeof s === "object") {
+          const o = s as {
+            access_token?: unknown;
+            currentSession?: { access_token?: unknown };
+          };
+          cand = o.access_token ?? o.currentSession?.access_token;
+        }
+        return looksLikeJwt(cand) ? cand : null;
+      };
+
+      // 1) Supabase-specific (authoritative): the SPA keeps the session under a
+      // key shaped like `sb-<project-ref>-auth-token`. Discover it dynamically
+      // (the project ref changes per deployment) and read its access_token.
+      // This is the token the /api/graphql endpoint expects as Bearer.
+      try {
+        if (window.localStorage) {
+          const sbKeys = Object.keys(window.localStorage).filter(
+            (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
+          );
+          for (const k of sbKeys) {
+            const tok = extractAccessToken(
+              parseSession(window.localStorage.getItem(k)),
+            );
+            if (tok) return tok;
+          }
+        }
+      } catch {
+        /* localStorage access denied — fall through to heuristic scan */
+      }
+
+      // 2) Fallback heuristic: scan local/sessionStorage for any JWT-looking
+      // value or a token-ish JSON field (covers non-Supabase / future changes).
       const stores: Storage[] = [];
       try {
         if (window.localStorage) stores.push(window.localStorage);
@@ -392,6 +454,19 @@ async function gqlRequest<S extends z.ZodTypeAny>(
   const absUrl = SIT_URLS.base + GRAPHQL_PATH;
   const auth = await collectAuth(page, SIT_URLS.base);
 
+  // The SIT /api/graphql endpoint authenticates with the Supabase Bearer
+  // access_token — without it the server returns HTTP 200 with data:null (never
+  // an auth error). If no token was found, say so ONCE and clearly rather than
+  // hammering both transports and logging opaque "data:null" twice.
+  if (!auth.bearer) {
+    logger.warn(
+      `[sit:graphql] ${label}: Supabase token bulunamadı — login akışı değişti mi? (Authorization: Bearer eklenemedi) — GraphQL atlanıyor, UI taramasına düşülecek`,
+    );
+    // Without the Bearer token the endpoint only ever returns data:null, so
+    // don't blindly hammer both transports — bail to the caller's UI fallback.
+    return null;
+  }
+
   const attempts: Array<() => Promise<RawGqlResponse>> = [
     () => postViaRequest(page, absUrl, SIT_URLS.base, query, variables, auth),
     () => postViaPageFetch(page, GRAPHQL_PATH, query, variables, auth),
@@ -402,7 +477,10 @@ async function gqlRequest<S extends z.ZodTypeAny>(
     const meta = `HTTP ${raw.status} via ${raw.via} xsrf=${raw.xsrfSent} bearer=${raw.authSent}`;
     const result = interpret(raw, dataSchema);
 
-    if (result.kind === "ok") return result.data;
+    if (result.kind === "ok") {
+      logger.info(`[sit:graphql] ${label}: OK — data received (${meta})`);
+      return result.data;
+    }
 
     logger.warn(`[sit:graphql] ${label}: ${result.message} (${meta})`);
 
