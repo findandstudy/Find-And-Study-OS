@@ -328,6 +328,18 @@ const DROPDOWN_POPOVER_SELECTOR =
 const SEARCH_INPUT_SEL = 'input[placeholder*="Search" i], [cmdk-input]';
 
 /**
+ * The DEFINITIVE signature of the modal's real dropdown popover: its search input
+ * placeholder always starts "Search zoho-…" (Search zoho-students /
+ * zoho-countries / zoho-programs …). Anchoring the popover to THIS input is
+ * portal-agnostic — it matches whether the popover renders inside `[role=dialog]`
+ * (static lists like Country) or is portalled to `<body>` (Student's async list) —
+ * and excludes every impostor: the sidebar search ("Search menu items", not
+ * zoho), the table's Asc/Desc/Hide column menu (no input at all), and table rows
+ * (not popovers).
+ */
+const SEARCH_ZOHO_INPUT_SEL = 'input[placeholder^="Search zoho-" i]';
+
+/**
  * Containers that can be the root of an open dropdown popover. The SIT modal
  * uses shadcn `Command` whose popover root is `.bg-popover` (NOT a Radix
  * listbox/cmdk container), so `.bg-popover` is the primary signal; the Radix/cmdk
@@ -348,14 +360,15 @@ function resolveDialog(page: Page): Locator {
 }
 
 /**
- * The currently-open searchable popover: a popover-root container that also HOLDS
- * the Search textbox, scoped to the modal dialog so table column menus / rows and
- * the sidebar can never leak in.
+ * The currently-open searchable popover: the visible popover-root container that
+ * HOLDS the "Search zoho-…" input. This is portal-agnostic — it finds the popover
+ * whether it renders inside the dialog or is portalled to `<body>` — and excludes
+ * the sidebar / table column menu / table rows.
  */
 function openPopover(page: Page): Locator {
-  return resolveDialog(page)
+  return page
     .locator(POPOVER_ROOT_SEL)
-    .filter({ has: page.locator(SEARCH_INPUT_SEL) })
+    .filter({ has: page.locator(SEARCH_ZOHO_INPUT_SEL) })
     .filter({ visible: true })
     .last();
 }
@@ -388,40 +401,35 @@ const OPTION_ROW_SEL =
 
 /**
  * Resolve the container to scope option searches to — the OPEN dropdown popover,
- * NEVER page-wide. This is critical: the applications table behind the modal
- * repeats option-like text (e.g. "Turkey" appears in ~277 rows, every uni name,
- * "Master"), so a page-wide `div.cursor-pointer` + hasText would match a TABLE
- * row instead of the dropdown option. (Student only worked by luck: an email is
- * unique to the dropdown.) Prefer the visible popover that HOLDS the Search box;
- * fall back to any visible popover root — but never to the whole page.
+ * identified PORTAL-AGNOSTICALLY by the "Search zoho-…" input it holds, NEVER
+ * page-wide. Two collisions drove this rule:
+ *   1) The applications table behind the modal repeats option-like text ("Turkey"
+ *      in ~277 rows, every uni name, "Master") and its column menu renders
+ *      "Asc/Desc/Hide" — a page-wide match grabbed those instead of the option.
+ *   2) A pure dialog-scoped fix eliminated (1) BUT lost Student, because Student's
+ *      async result popover is portalled to `<body>` (OUTSIDE the dialog) → 0/0.
+ * Anchoring to `input[placeholder^="Search zoho-"]` fixes both: it finds the
+ * popover whether it renders in the dialog (Country) or in `<body>` (Student), and
+ * every impostor is excluded structurally (sidebar = "Search menu items" not zoho;
+ * column menu = no input; table rows = not a popover).
  */
 async function resolvePopover(page: Page): Promise<Locator> {
-  // 1) Prefer the popover INSIDE the modal dialog that HOLDS the Search box.
-  //    Everything outside the dialog (table column menu Asc/Desc/Hide, the ~277
-  //    table rows, the sidebar) is excluded structurally.
-  const dialog = resolveDialog(page);
-  if (await dialog.count()) {
-    const inDialogWithSearch = dialog
-      .locator(POPOVER_ROOT_SEL)
-      .filter({ has: page.locator(SEARCH_INPUT_SEL) })
-      .filter({ visible: true })
-      .last();
-    if (await inDialogWithSearch.count()) return inDialogWithSearch;
-    const inDialogAny = dialog
-      .locator(POPOVER_ROOT_SEL)
-      .filter({ visible: true })
-      .last();
-    if (await inDialogAny.count()) return inDialogAny;
-  }
-  // 2) Fallback: a dropdown portalled to <body> OUTSIDE the dialog. Requiring the
-  //    Search box excludes the table's Asc/Desc/Hide column menu (it has none),
-  //    so we never fall back onto a table/sidebar widget.
-  const portalled = page
+  // 1) The real dropdown popover: a visible popover-root HOLDING the "Search zoho-"
+  //    input, wherever it renders (dialog or body-portalled).
+  const zoho = page
+    .locator(POPOVER_ROOT_SEL)
+    .filter({ has: page.locator(SEARCH_ZOHO_INPUT_SEL) })
+    .filter({ visible: true })
+    .last();
+  if (await zoho.count()) return zoho;
+  // 2) Fallback: any visible popover HOLDING a generic Search box. Still excludes
+  //    the input-less table column menu and non-popover table rows.
+  const withSearch = page
     .locator(POPOVER_ROOT_SEL)
     .filter({ has: page.locator(SEARCH_INPUT_SEL) })
     .filter({ visible: true })
     .last();
-  if (await portalled.count()) return portalled;
+  if (await withSearch.count()) return withSearch;
   // 3) Last resort: any visible popover root (never the whole page's table rows).
   return page.locator(POPOVER_ROOT_SEL).filter({ visible: true }).last();
 }
@@ -617,29 +625,36 @@ async function selectComboSearch(
     try {
       await trigger.click({ timeout: 6000 });
       await sleep(page, 500);
-      // The Search textbox is the reliable "popover is open" signal (dialog-scoped
-      // so we never wait on the page's global/table search input).
-      await fieldScope
-        .locator(SEARCH_INPUT_SEL)
+      // The "Search zoho-…" input is the reliable "the real dropdown popover is
+      // open" signal — PORTAL-AGNOSTIC, so we also catch Student's popover when it
+      // is portalled to <body> OUTSIDE the dialog (a dialog-scoped wait misses it).
+      await page
+        .locator(SEARCH_ZOHO_INPUT_SEL)
         .filter({ visible: true })
         .first()
         .waitFor({ state: "visible", timeout: 6000 })
         .catch(() => {});
+
+      // Resolve the real popover ONCE (by its "Search zoho-" input) and scope BOTH
+      // the search box and the option rows to it — never page-wide (the table
+      // behind the modal repeats option text like "Turkey" in ~277 rows) and never
+      // dialog-only (would miss Student's body-portalled popover).
+      const popoverScope = await resolvePopover(page);
 
       // Filter by typing — CLEAR first (fill("") then fill(term)) so repeated
       // attempts AND multi-candidate fields (Country tries Turkey → Türkiye →
       // Northern Cyprus in separate calls) never accumulate stale text like
       // "TurkeyTürkiye…". fill() replaces; keyboard.type() would append.
       if (opts.search) {
-        let box = fieldScope
-          .locator(SEARCH_INPUT_SEL)
+        let box = popoverScope
+          .locator(SEARCH_ZOHO_INPUT_SEL)
           .filter({ visible: true })
           .first();
         if (!(await box.count())) {
-          box = fieldScope
-            .getByRole("textbox")
-            .filter({ hasNot: page.locator("[readonly]") })
-            .last();
+          box = popoverScope
+            .locator(SEARCH_INPUT_SEL)
+            .filter({ visible: true })
+            .first();
         }
         if (await box.count()) {
           await box.fill("", { timeout: 3000 }).catch(() => {});
@@ -650,11 +665,6 @@ async function selectComboSearch(
         await sleep(page, 400);
       }
 
-      // Option-row locator, scoped to the OPEN popover (never page-wide — the
-      // applications table behind the modal repeats option text like "Turkey" in
-      // ~277 rows) and to VISIBLE rows only (a second empty/hidden `.bg-popover`
-      // may exist).
-      const popoverScope = await resolvePopover(page);
       const optionLoc = popoverScope
         .locator(OPTION_ROW_SEL)
         .filter({ visible: true });

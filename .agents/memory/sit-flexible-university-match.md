@@ -95,19 +95,21 @@ box, fallback any visible popover root — NEVER page-wide), then match options
 INSIDE it with a visible-filtered `hasText` locator + `waitFor("visible")`. Same
 for the search input: target the VISIBLE one.
 
-**SCOPE EVERYTHING to the modal `[role="dialog"]` — visible-popover alone is not
-enough.** A later run proved the killer: Student read options `["Asc","Desc",
-"Hide"]` — the data-TABLE's COLUMN SORT MENU behind the modal, not students. The
-page has MULTIPLE colliding `.bg-popover`/`div.cursor-pointer` widgets (modal
-dropdowns + table column menus + 277 table rows + sidebar); when the in-dialog
-search-box popover isn't matched, a `.last()` visible-popover fallback lands on
-the column menu. The modal's dropdown popovers ALL render INSIDE `[role="dialog"]`
-(confirmed live: `popoverInsideDialog=true`); table/menu/sidebar are OUTSIDE it.
-Rule: `resolveDialog(page)` = visible `[role="dialog"].last()`; resolve
-triggers, the Search box, and option popovers INSIDE the dialog first; only then
-fall back to a body-portalled popover that HOLDS a Search box (the column menu has
-none, so it's excluded) — never page-wide table rows. openPopover (miss-dump) is
-dialog-scoped too, so diagnostics reflect the real dropdown not a foreign menu.
+**Identify the OPEN popover PORTAL-AGNOSTICALLY by its `input[placeholder^="Search
+zoho-"]` — NOT by dialog vs page.** Evolution: (a) page-wide match grabbed the
+~277 table rows / column menu ("Turkey", "Asc/Desc/Hide"); (b) dialog-scoping
+killed (a) BUT lost Student — Student's ASYNC result popover PORTALS to `<body>`
+(OUTSIDE `[role="dialog"]`) → 0/0, while static lists (Country) stay in-dialog.
+Final rule: the real dropdown popover = visible `.bg-popover` (POPOVER_ROOT_SEL)
+that HOLDS `input[placeholder^="Search zoho-" i]` (Search zoho-students /
+zoho-countries / zoho-programs …). This finds it wherever it renders (dialog OR
+body) and excludes every impostor: sidebar ("Search menu items", not zoho), table
+column menu (no input), table rows (not a popover). resolvePopover + openPopover
+(miss-dump) + the retry loop's search-box wait/fill + option scope all key on this
+one rule. **BUT the field TRIGGER stays dialog-scoped** (fieldScope via
+resolveDialog): the table has same-named column-header buttons (e.g. "Country") a
+page-wide getByRole would click; triggers are never portalled, so dialog-scope is
+safe+correct there.
 
 **Every dropdown pick needs per-field RETRY + verify — the SIT backend randomly
 DB-times-out** ("canceling statement due to statement timeout"), so a dropdown
