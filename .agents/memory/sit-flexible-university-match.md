@@ -66,15 +66,26 @@ non-alphanumeric). **Country filters the University list** — it MUST run befor
 University (it does) and we sleep ~1.2s after picking; Country tries Turkey →
 Türkiye → Northern Cyprus in turn.
 
-**Option reads MUST be popover-scoped, never a bare `li`.** A bare
-`li`/whole-page option scan silently read the LEFT SIDEBAR nav's <li> items
-(Dashboard/Applications/Students/…) when a non-search dropdown (Country) opened —
-because Country has no search box to filter, unlike Student. `dropdownOptions()`
-scopes to real dropdown containers only (`[role=listbox]`,
-`[data-radix-popper-content-wrapper]`, `[cmdk-list]`, `[data-radix-select-viewport]`,
-`[role=option]`) so sidebar `nav`/`aside` <li> can never be an option; also wait
-for `DROPDOWN_POPOVER_SELECTOR` visible after clicking the trigger. `pickFirst`
-(Student) was unaffected because it uses role=option after typing.
+**All 5 Add-Application dropdowns are SEARCHABLE cmdk menus → type-to-search then
+click row; anchor options to the SEARCH-BOX popover.** Manual working path for
+EVERY field (Student/Country/University/Degree/Program): open trigger → type term
+into the popover's `input[placeholder*="Search"]` (`SEARCH_INPUT_SEL`, also
+`[cmdk-input]`) → the filtered row renders → click it. Reading "all options"
+without typing yields nothing. Two selector traps, both real: (1) a bare
+`li`/whole-page scan read the LEFT SIDEBAR nav <li> (Dashboard/Applications/…);
+(2) over-narrowing to pure Radix/cmdk containers read 0 rows (real popover markup
+differs). Fix = `dropdownOptions()` combines page-wide `[role=option],[cmdk-item]`
+(dropdown-only roles, never in sidebar) OR-ed with generic rows
+(`li,[data-value],[role=menuitem]`) scoped to `openPopover()` = the container
+that HAS the search box (sidebar has none). Wait on `SEARCH_INPUT_SEL` visible
+(not the container), and after typing wait for a row to render.
+
+**On any dropdown miss, dump a SANITISED popover skeleton — NEVER outerHTML.**
+`dumpOpenPopover()` (called from `logOptionsOnMiss`) walks the popover in-page and
+logs tag names + attribute NAMES only (values stripped; text nodes dropped;
+role/type/aria-selected + first class token whitelisted as selector signal),
+capped ~120 nodes/depth 6/1500 chars. Raw `outerHTML` leaks student/program PII —
+do NOT reintroduce it. Enough to reveal the option selector for a one-run fix.
 
 **"Add Application" open is hydration-flaky → `openAddApplication`** waits for the
 button visible (~15s), reloads once + retries, logs a 400-char body snapshot on

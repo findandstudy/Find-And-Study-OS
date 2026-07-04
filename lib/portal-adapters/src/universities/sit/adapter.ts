@@ -317,31 +317,46 @@ async function selectOrKeepDefault(
  * dropdown to render before reading options.
  */
 const DROPDOWN_POPOVER_SELECTOR =
-  "[role=listbox], [data-radix-popper-content-wrapper], [cmdk-list], [data-radix-select-viewport]";
+  "[role=listbox], [data-radix-popper-content-wrapper], [cmdk-list], [cmdk-root], [data-radix-select-viewport]";
 
 /**
- * Options of the CURRENTLY-OPEN dropdown, scoped to the popover/listbox only.
+ * The Search textbox rendered inside every SIT "Add Application" dropdown
+ * (Student/Country/University/Degree/Program are ALL searchable cmdk menus with
+ * a `placeholder="Search zoho-…"` input). Its presence is what distinguishes a
+ * real dropdown popover from the left sidebar nav (which has no search box).
+ */
+const SEARCH_INPUT_SEL = 'input[placeholder*="Search" i], [cmdk-input]';
+
+/**
+ * The currently-open searchable popover: a known popover container that also
+ * HOLDS the Search textbox. Anchoring to "the container with the search box" is
+ * what keeps the sidebar nav out (it has no search box) without being so narrow
+ * that real option rows are missed.
+ */
+function openPopover(page: Page): Locator {
+  return page
+    .locator(DROPDOWN_POPOVER_SELECTOR)
+    .filter({ has: page.locator(SEARCH_INPUT_SEL) })
+    .last();
+}
+
+/**
+ * Options of the CURRENTLY-OPEN dropdown.
  *
  * A bare `li` / whole-page scan wrongly captured the left sidebar navigation's
- * <li> menu items (Dashboard/Applications/Students/…) whenever a non-search
- * dropdown (e.g. Country) was open. Every selector here is scoped to a real
- * dropdown container (Radix listbox/popper/select viewport or cmdk list) or the
- * ARIA `option` role — none of which the sidebar nav uses — so options are read
- * from the dropdown and never from `nav`/`aside`.
+ * <li> menu items (Dashboard/Applications/Students/…) whenever a dropdown was
+ * open — but scoping ONLY to Radix/cmdk containers went too far and read 0 rows
+ * (the real popover markup differs). So we combine two SAFE sources:
+ *   1. `[role=option]` / `[cmdk-item]` page-wide — these roles are dropdown-only
+ *      and are never used by the sidebar nav.
+ *   2. Generic clickable rows (`li` / `[data-value]` / `[role=menuitem]`) read
+ *      ONLY inside the popover that holds the Search box — the sidebar has no
+ *      search box, so it can never be mistaken for options.
  */
 function dropdownOptions(page: Page): Locator {
-  return page.locator(
-    [
-      "[role=listbox] [role=option]",
-      "[role=listbox] li",
-      "[data-radix-popper-content-wrapper] [role=option]",
-      "[data-radix-popper-content-wrapper] [cmdk-item]",
-      "[data-radix-popper-content-wrapper] li",
-      "[cmdk-list] [cmdk-item]",
-      "[data-radix-select-viewport] [role=option]",
-      "[role=option]",
-    ].join(", "),
-  );
+  return page
+    .locator("[role=option], [cmdk-item]")
+    .or(openPopover(page).locator("li, [data-value], [role=menuitem]"));
 }
 
 /**
@@ -400,33 +415,42 @@ async function selectComboSearch(
 
   await trigger.click({ timeout: 6000 }).catch(() => {});
   await sleep(page, 700);
-  // Wait for the dropdown's popover/listbox to actually render before reading
-  // options — otherwise a slow-opening dropdown reads nothing (or the wrong DOM).
+  // Wait for the dropdown's Search textbox to render — it's the reliable signal
+  // that the searchable popover is open (more reliable than the container, whose
+  // markup varies), and typing into it is the manual path that actually works.
   await page
-    .locator(DROPDOWN_POPOVER_SELECTOR)
-    .first()
+    .locator(SEARCH_INPUT_SEL)
+    .last()
     .waitFor({ state: "visible", timeout: 4000 })
     .catch(() => {});
 
-  // Type into the search textbox (if the combobox exposes one) to filter the
-  // options — the searchable dropdowns can be virtualised so the target option
-  // may not render until filtered.
+  // Type the term into the popover's Search textbox to filter the options — these
+  // are searchable cmdk menus, so the matching row only renders once filtered
+  // (reading "all" options without typing yields nothing / the wrong DOM).
   if (opts.search) {
-    const box = page
-      .getByRole("textbox")
-      .filter({ hasNot: page.locator("[readonly]") })
-      .last();
+    let box = page.locator(SEARCH_INPUT_SEL).last();
+    if (!(await box.count())) {
+      box = page
+        .getByRole("textbox")
+        .filter({ hasNot: page.locator("[readonly]") })
+        .last();
+    }
     if (await box.count()) {
       await box.fill(opts.search, { timeout: 3000 }).catch(() => {});
     } else {
       await page.keyboard.type(opts.search, { delay: 20 }).catch(() => {});
     }
-    await sleep(page, 900);
+    // The filtered list arrives async — wait for a row to render (best-effort).
+    await dropdownOptions(page)
+      .first()
+      .waitFor({ state: "visible", timeout: 3000 })
+      .catch(() => {});
+    await sleep(page, 400);
   }
 
-  // CRITICAL: read options ONLY from the opened popover/listbox — NEVER a bare
-  // `li` (that captured the left sidebar nav's <li> menu items when a non-search
-  // dropdown like Country was open) or the whole page.
+  // Read options from the opened popover: dropdown-only roles page-wide plus
+  // generic rows scoped to the search-box popover — NEVER a bare page-wide `li`
+  // (that captured the left sidebar nav's <li> menu items).
   const optionLoc = dropdownOptions(page);
 
   // pickFirst: no matching required — take the first rendered option.
@@ -518,6 +542,65 @@ async function logOptionsOnMiss(
         texts,
       )}`,
     );
+  } catch {
+    /* diagnostic only — never throw */
+  }
+  // Also dump the open popover's structure so a single real run reveals the
+  // actual option selector when nothing matched (no values, just markup).
+  await dumpOpenPopover(page, fieldLabel);
+}
+
+/**
+ * Dump a SANITISED structural skeleton (≤1500 chars) of the currently-open
+ * searchable popover on a selection miss, so the next real run reveals the exact
+ * option selector (tag names + attribute NAMES only). Attribute VALUES and all
+ * text nodes are stripped, so no student/program identifiers (or any value) are
+ * ever logged — only markup structure. Prefers the search-box popover; falls
+ * back to any open dropdown container.
+ */
+async function dumpOpenPopover(page: Page, fieldLabel?: string): Promise<void> {
+  try {
+    let target = openPopover(page);
+    if (!(await target.count())) {
+      target = page.locator(DROPDOWN_POPOVER_SELECTOR).last();
+    }
+    if (!(await target.count())) return;
+    const skeleton =
+      (await target
+        .first()
+        .evaluate((root, maxNodes) => {
+          // Attribute names are safe (selectors); values may hold PII, so keep
+          // ONLY the attribute name, except for the structural role/type/kind
+          // whitelist whose value IS the selector signal we need.
+          const VALUE_WHITELIST = new Set(["role", "type", "aria-selected"]);
+          let count = 0;
+          const render = (el: Element, depth: number): string => {
+            if (count >= maxNodes || depth > 6) return "";
+            count++;
+            const attrs = Array.from(el.attributes)
+              .map((a) => {
+                const n = a.name;
+                if (n === "class") return `.${a.value.split(/\s+/)[0] ?? ""}`;
+                if (VALUE_WHITELIST.has(n)) return `${n}=${a.value}`;
+                return `[${n}]`; // name only — value stripped (may be PII)
+              })
+              .join("");
+            const kids = Array.from(el.children)
+              .map((c) => render(c, depth + 1))
+              .filter(Boolean)
+              .join("");
+            return `<${el.tagName.toLowerCase()}${attrs}>${kids}`;
+          };
+          return render(root as Element, 0);
+        }, 120)
+        .catch(() => "")) ?? "";
+    if (skeleton) {
+      logger.warn(
+        `[sit] ${fieldLabel ?? "alan"} popover skeleton: ${skeleton
+          .replace(/\s+/g, " ")
+          .slice(0, 1500)}`,
+      );
+    }
   } catch {
     /* diagnostic only — never throw */
   }
