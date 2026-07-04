@@ -49,6 +49,21 @@ durduruldu") — never a UI button error. `createApplicationRecord` returns `nul
 **Why:** SIT's SPA add-application dialog was unreliable headless; the pg_graphql
 insert is deterministic and matches the read path already used for idempotency.
 
+**RLS ownership (MANDATORY on INSERT):** the `zoho_applications` insert is gated
+by Supabase row-level security (`WITH CHECK user_id = auth.uid()` + agency
+scope). Omitting the ownership columns makes the insert affect ZERO rows and
+pg_graphql returns `data:null` with NO error (silent). So every insert object
+MUST carry `user_id` + `agency_id`, resolved at RUNTIME (never hardcode — the
+account/agency changes): `user_id` = the `sub` claim decoded from the Supabase
+access_token JWT (no query needed); `agency_id` = fetched from
+`user_profileCollection(filter:{id:{eq:$uid}})` (uses `$uid: UUID!`). See
+`fetchOwnerContext` (cached per page only on full success so a transient agency
+miss can retry). `user_id` alone is decodable offline, so even if the agency
+query fails the insert still carries auth.uid and any RLS refusal surfaces via
+the logged `errors`/`data:null` body. Student creation stays on the UI wizard
+(the authed session sets its ownership server-side), so only the APPLICATION
+insert needs these fields.
+
 ## Catalog field + spelling ≠ CRM name (GraphQL program lookup)
 
 **Field name (verified via live pg_graphql introspection):** the program

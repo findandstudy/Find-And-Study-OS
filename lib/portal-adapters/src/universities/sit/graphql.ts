@@ -1308,7 +1308,11 @@ export interface SitCreateApplicationInput {
   country: string;
   /** Optional human-readable application name. */
   applicationName?: string;
-  /** Optional agency/user ownership (from the adapter session when known). */
+  /**
+   * Optional ownership overrides. When omitted (the normal case) they are
+   * resolved at runtime from the session (user_id = token sub, agency_id from
+   * user_profile) — required by Supabase RLS on INSERT.
+   */
   agencyId?: string;
   userId?: string;
 }
@@ -1333,16 +1337,120 @@ const insertApplicationSchema = z.object({
     .nullable(),
 });
 
+// ---------------------------------------------------------------------------
+// Session ownership context (Supabase RLS) — user_id (auth.uid) + agency_id.
+//
+// zoho_applications INSERT is gated by a row-level-security policy whose
+// WITH CHECK compares the row's ownership columns against the session
+// (user_id = auth.uid(), agency_id = the caller's agency). If those columns are
+// absent the insert affects zero rows and pg_graphql returns `data:null` with
+// no error — exactly the symptom we saw. So we MUST attach them:
+//   • user_id  — the `sub` claim of the Supabase access_token (auth.uid).
+//   • agency_id — the caller's agency, read at runtime from user_profile
+//     (NEVER hardcoded; the account/agency can change).
+// ---------------------------------------------------------------------------
+const ownerContextByPage = new WeakMap<
+  Page,
+  { userId: string; agencyId: string | null }
+>();
+
+/** Decode the `sub` (auth.uid) claim from a Supabase access_token JWT. */
+function decodeJwtSub(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf8"),
+    ) as { sub?: unknown };
+    return typeof payload.sub === "string" && payload.sub ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+const OWNER_PROFILE_QUERY = /* GraphQL */ `
+  query GetSitOwnerProfile($uid: UUID!) {
+    user_profileCollection(filter: { id: { eq: $uid } }, first: 1) {
+      edges { node { id agency_id } }
+    }
+  }
+`;
+
+const ownerProfileSchema = z.object({
+  user_profileCollection: connection(
+    z.object({
+      id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+      agency_id: z.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * Resolve the session's ownership context (user_id = token sub; agency_id from
+ * user_profile) for RLS-gated inserts. Best-effort and cached per page. Returns
+ * userId=null when the token has no decodable sub (caller must not insert then).
+ */
+export async function fetchOwnerContext(
+  page: Page,
+): Promise<{ userId: string | null; agencyId: string | null }> {
+  const cached = ownerContextByPage.get(page);
+  if (cached) return cached;
+
+  const auth = await collectAuth(page, SIT_URLS.base);
+  const userId = auth.bearer ? decodeJwtSub(auth.bearer) : null;
+  if (!userId) {
+    logger.warn(
+      "[sit:graphql] ownerContext: token sub (auth.uid) çözümlenemedi — RLS sahiplik alanları eklenemeyecek",
+    );
+    return { userId: null, agencyId: null };
+  }
+
+  let agencyId: string | null = null;
+  const data = await gqlRequest(
+    page,
+    OWNER_PROFILE_QUERY,
+    { uid: userId },
+    ownerProfileSchema,
+    "ownerProfile",
+  );
+  const node = data?.user_profileCollection.nodes[0];
+  if (node?.agency_id) {
+    agencyId = node.agency_id;
+    // Cache only a fully-resolved context so a transient agency miss can retry.
+    ownerContextByPage.set(page, { userId, agencyId });
+  } else {
+    logger.warn(
+      "[sit:graphql] ownerContext: user_profile.agency_id bulunamadı (agency_id olmadan devam)",
+    );
+  }
+  return { userId, agencyId };
+}
+
 /**
  * Create a zoho_applications record via GraphQL (REAL mode). Returns the new
  * application id, or null when the mutation failed / returned no record (e.g.
- * the partner account lacks INSERT permission), so the caller reports a soft
- * failure rather than throwing. NEVER call this in DRY mode.
+ * the partner account lacks INSERT permission, or RLS ownership could not be
+ * resolved), so the caller reports a soft failure rather than throwing. NEVER
+ * call this in DRY mode.
  */
 export async function createApplicationRecord(
   page: Page,
   input: SitCreateApplicationInput,
 ): Promise<{ id: string } | null> {
+  // Supabase RLS on zoho_applications requires ownership columns on INSERT
+  // (WITH CHECK user_id = auth.uid()); without them the mutation returns
+  // data:null and creates nothing. Resolve them from the live session token
+  // (user_id = JWT sub) + the user's profile (agency_id) at runtime.
+  const owner = await fetchOwnerContext(page);
+  const userId = input.userId ?? owner.userId;
+  const agencyId = input.agencyId ?? owner.agencyId;
+  if (!userId) {
+    logger.warn(
+      "[sit:graphql] insertApplication: user_id (auth.uid) çözümlenemedi — RLS reddedecek, başvuru oluşturulmadı",
+    );
+    return null;
+  }
+
   // Map to the EXACT column names (note the `acdamic_year` typo is real).
   const object: Record<string, unknown> = {
     student: input.student,
@@ -1353,10 +1461,10 @@ export async function createApplicationRecord(
     acdamic_year: input.acdamicYear,
     semester: input.semester,
     country: input.country,
+    user_id: userId,
   };
+  if (agencyId) object.agency_id = agencyId;
   if (input.applicationName) object.application_name = input.applicationName;
-  if (input.agencyId) object.agency_id = input.agencyId;
-  if (input.userId) object.user_id = input.userId;
 
   const data = await gqlRequest(
     page,
