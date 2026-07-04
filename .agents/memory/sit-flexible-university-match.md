@@ -54,6 +54,18 @@ fails, fail fast with a field-specific detail (do NOT click Create → would
 submit default/no-op). University option matched by `distinctiveTokens`
 lookahead regex; program by `matched.name`.
 
+**`selectComboSearch` matching is tiered + diagnostic.** Pass `target` (human
+string) and `fieldLabel`. Order: (0) already-selected short-circuit — accept the
+trigger's visible value without opening if it folds-equal/contains the target or
+matches optionRe; (1) optionRe fast path; (2) folded tolerant tiers over the
+rendered option texts — exact-fold → contains-fold (either direction) →
+first-token; (3) MISS → `logOptionsOnMiss` dumps up to 30 visible option texts as
+a warn so the next real run reveals the exact mismatch (no blind guessing).
+`fold` is the shared programMatch Turkish-folder (İ/I/ı→i, ş→s, etc., strips
+non-alphanumeric). **Country filters the University list** — it MUST run before
+University (it does) and we sleep ~1.2s after picking; Country tries Turkey →
+Türkiye → Northern Cyprus in turn.
+
 **Academic Year + Semester are PRE-SELECTED defaults ("2026/2027", "Fall") →
 default-aware, NEVER block.** A pre-filled SIT combobox's ACCESSIBLE NAME becomes
 its VALUE (not the label), so the label-regex trigger lookup that works for empty

@@ -293,7 +293,21 @@ async function selectOrKeepDefault(
 async function selectComboSearch(
   page: Page,
   triggerRe: RegExp,
-  opts: { search?: string; optionRe?: RegExp; pickFirst?: boolean },
+  opts: {
+    search?: string;
+    optionRe?: RegExp;
+    pickFirst?: boolean;
+    /**
+     * Human target used for tolerant (Turkish-folded) matching AND for the
+     * "already selected?" short-circuit. When set, matching escalates
+     * exact-fold → contains-fold → first-token before giving up, and the
+     * currently-shown value is accepted without opening if it already folds
+     * equal to (or contains) the target.
+     */
+    target?: string;
+    /** Field label used only in the "options on mismatch" diagnostic log. */
+    fieldLabel?: string;
+  },
 ): Promise<boolean> {
   let trigger = page.getByRole("combobox", { name: triggerRe }).first();
   if (!(await trigger.count())) {
@@ -307,6 +321,21 @@ async function selectComboSearch(
       .first();
   }
   if (!(await trigger.count())) return false;
+
+  // Already selected? If the trigger's visible value already matches the target
+  // (folded equal / contains) or the optionRe, accept without opening.
+  const currentText = ((await trigger.textContent().catch(() => "")) ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (currentText) {
+    const tgt = opts.target ? fold(opts.target) : "";
+    const cur = fold(currentText);
+    const foldHit =
+      !!tgt && cur.length > 0 && (cur === tgt || cur.includes(tgt) || tgt.includes(cur));
+    const reHit = !!opts.optionRe && opts.optionRe.test(currentText);
+    if (foldHit || reHit) return true;
+  }
+
   await trigger.click({ timeout: 6000 }).catch(() => {});
   await sleep(page, 700);
 
@@ -326,31 +355,100 @@ async function selectComboSearch(
     await sleep(page, 900);
   }
 
-  let opt;
+  const optionLoc = page.locator("[role=option], li, [class*=option i]");
+
+  // pickFirst: no matching required — take the first rendered option.
   if (opts.pickFirst) {
-    opt = page.getByRole("option").first();
-    if (!(await opt.count())) {
-      opt = page.locator("[role=option], li, [class*=option i]").first();
+    let opt = page.getByRole("option").first();
+    if (!(await opt.count())) opt = optionLoc.first();
+    if (await opt.count()) {
+      await opt.click({ timeout: 3000 }).catch(() => {});
+      await sleep(page, 900);
+      return true;
     }
-  } else if (opts.optionRe) {
-    opt = page.getByRole("option", { name: opts.optionRe }).first();
-    if (!(await opt.count())) {
-      opt = page
-        .locator("[role=option], li, [class*=option i]")
-        .filter({ hasText: opts.optionRe })
-        .first();
-    }
-  } else {
-    opt = page.getByRole("option").first();
+    await logOptionsOnMiss(page, optionLoc, opts.fieldLabel);
+    await page.keyboard.press("Escape").catch(() => {});
+    return false;
   }
 
-  if (await opt.count()) {
-    await opt.click({ timeout: 3000 }).catch(() => {});
-    await sleep(page, 900);
-    return true;
+  // 1) Regex match first (fast path; preserves prior behaviour).
+  if (opts.optionRe) {
+    let opt = page.getByRole("option", { name: opts.optionRe }).first();
+    if (!(await opt.count())) {
+      opt = optionLoc.filter({ hasText: opts.optionRe }).first();
+    }
+    if (await opt.count()) {
+      await opt.click({ timeout: 3000 }).catch(() => {});
+      await sleep(page, 900);
+      return true;
+    }
   }
+
+  // 2) Tolerant folded matching against the visible option texts:
+  //    exact-fold → contains-fold → first-token.
+  if (opts.target) {
+    const tgt = fold(opts.target);
+    const tgtFirst = tgt.split(" ")[0] ?? "";
+    const count = await optionLoc.count();
+    const folded: string[] = [];
+    for (let i = 0; i < count; i++) {
+      folded.push(
+        fold((await optionLoc.nth(i).textContent().catch(() => "")) ?? ""),
+      );
+    }
+    const tiers: Array<(f: string) => boolean> = [
+      (f) => f === tgt,
+      (f) => (f.length > 0 && (f.includes(tgt) || tgt.includes(f))),
+      (f) => tgtFirst.length > 1 && f.split(" ")[0] === tgtFirst,
+    ];
+    for (const test of tiers) {
+      const idx = folded.findIndex((f) => f.length > 0 && test(f));
+      if (idx >= 0) {
+        await optionLoc.nth(idx).click({ timeout: 3000 }).catch(() => {});
+        await sleep(page, 900);
+        return true;
+      }
+    }
+  } else if (!opts.optionRe) {
+    // No regex and no target → legacy "take first option" behaviour.
+    const opt = page.getByRole("option").first();
+    if (await opt.count()) {
+      await opt.click({ timeout: 3000 }).catch(() => {});
+      await sleep(page, 900);
+      return true;
+    }
+  }
+
+  // 3) Nothing matched — dump the current option texts so the next real run
+  //    reveals the exact mismatch (no blind guessing).
+  await logOptionsOnMiss(page, optionLoc, opts.fieldLabel);
   await page.keyboard.press("Escape").catch(() => {});
   return false;
+}
+
+/** Log up to 30 visible option texts of a failed dropdown for diagnosis. */
+async function logOptionsOnMiss(
+  page: Page,
+  optionLoc: Locator,
+  fieldLabel?: string,
+): Promise<void> {
+  try {
+    const count = await optionLoc.count();
+    const texts: string[] = [];
+    for (let i = 0; i < Math.min(count, 30); i++) {
+      const t = ((await optionLoc.nth(i).textContent().catch(() => "")) ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (t) texts.push(t);
+    }
+    logger.warn(
+      `[sit] ${fieldLabel ?? "alan"} seçilemedi; mevcut options (${texts.length}/${count}): ${JSON.stringify(
+        texts,
+      )}`,
+    );
+  } catch {
+    /* diagnostic only — never throw */
+  }
 }
 
 /** Upload a file via the OS file chooser triggered by clicking `triggerRe`. */
@@ -862,6 +960,7 @@ export const sitAdapter: SitAdapter = {
       new RegExp(escapeRe(SIT_DEFAULT_SEMESTER), "i"),
     );
 
+    const degreeTarget = matched.degreeName ?? level;
     const fields: Array<{
       key: string;
       run: () => Promise<boolean>;
@@ -872,15 +971,36 @@ export const sitAdapter: SitAdapter = {
           selectComboSearch(page, SIT_APP_FIELDS.student, {
             search: `${profile.firstName} ${profile.lastName}`.trim(),
             pickFirst: true,
+            fieldLabel: "öğrenci (student)",
           }),
       },
       {
+        // SIT member universities are in Türkiye / Northern Cyprus. Selecting the
+        // Country filters the University list, so it MUST run before University
+        // (it already does). Try Turkey → Türkiye → Northern Cyprus in turn.
         key: "ülke (country)",
-        run: () =>
-          selectComboSearch(page, SIT_APP_FIELDS.country, {
-            search: "Turkey",
-            optionRe: /turkey|türkiye/i,
-          }),
+        run: async () => {
+          // Per-attempt STRICT regex (not a broad turkey|cyprus alternation):
+          // regex matching runs before the folded-target tiers, so a broad
+          // regex could let the "Turkey" attempt click a "Cyprus" option that
+          // rendered first. Scoping the regex to the current candidate keeps
+          // both the regex path and the folded-target tiers target-strict.
+          for (const c of ["Turkey", "Türkiye", "Northern Cyprus"]) {
+            if (
+              await selectComboSearch(page, SIT_APP_FIELDS.country, {
+                search: c,
+                target: c,
+                optionRe: new RegExp(escapeRe(c), "i"),
+                fieldLabel: "ülke (country)",
+              })
+            ) {
+              // University options may reload after the country changes.
+              await sleep(page, 1200);
+              return true;
+            }
+          }
+          return false;
+        },
       },
       {
         key: "üniversite (university)",
@@ -888,13 +1008,17 @@ export const sitAdapter: SitAdapter = {
           selectComboSearch(page, SIT_APP_FIELDS.university, {
             search: uniTokens[0] ?? uniName,
             optionRe: uniOptionRe,
+            target: uniName,
+            fieldLabel: "üniversite (university)",
           }),
       },
       {
         key: "derece (degree)",
         run: () =>
           selectComboSearch(page, SIT_APP_FIELDS.degree, {
-            optionRe: new RegExp(escapeRe(matched.degreeName ?? level), "i"),
+            optionRe: new RegExp(escapeRe(degreeTarget), "i"),
+            target: degreeTarget,
+            fieldLabel: "derece (degree)",
           }),
       },
       {
@@ -903,6 +1027,8 @@ export const sitAdapter: SitAdapter = {
           selectComboSearch(page, SIT_APP_FIELDS.program, {
             search: matched.name,
             optionRe: new RegExp(escapeRe(matched.name), "i"),
+            target: matched.name,
+            fieldLabel: "program",
           }),
       },
     ];
