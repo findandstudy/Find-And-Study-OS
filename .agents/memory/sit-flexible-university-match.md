@@ -64,6 +64,20 @@ the logged `errors`/`data:null` body. Student creation stays on the UI wizard
 (the authed session sets its ownership server-side), so only the APPLICATION
 insert needs these fields.
 
+**Proxy refuses WRITES — send mutations to the DIRECT Supabase endpoint:** the
+SIT `/api/graphql` proxy serves READS fine but SILENTLY refuses inserts — it
+returns `{"data":null}` with NO `errors` (indistinguishable from an empty read).
+So mutations MUST go straight to the Supabase pg_graphql endpoint
+`https://<project-ref>.supabase.co/graphql/v1` with the public anon `apikey`
+(captured from the SPA's own *.supabase.co requests via `resolveAnonKey`)
+ALONGSIDE the user `Authorization: Bearer` access_token. Use `page.request.post`
+(CORS-immune) — an in-page fetch to that cross-origin URL throws. The direct
+endpoint applies RLS, so a bad insert returns a REAL error ("permission denied"
+/ "violates row-level security policy" / "Unknown field") instead of a silent
+null. `gqlRequest(..., { direct:true })` does this (anon-apikey-required, no
+proxy fallback so no double-insert; always logs the full PII-masked body). Reads
+stay on the proxy — do NOT reroute them.
+
 ## Catalog field + spelling ≠ CRM name (GraphQL program lookup)
 
 **Field name (verified via live pg_graphql introspection):** the program

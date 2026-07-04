@@ -47,6 +47,13 @@ const GRAPHQL_PATH = "/api/graphql";
 // SIT email/password (the same portal_credentials used for the UI login).
 const SUPABASE_URL = "https://knqtjanxjwfjfrwoater.supabase.co";
 const SUPABASE_TOKEN_PATH = "/auth/v1/token?grant_type=password";
+// The Supabase pg_graphql endpoint. WRITES (mutations) are sent here directly
+// rather than through the SIT `/api/graphql` proxy: the proxy silently refuses
+// inserts (returns `data:null` with NO errors), whereas the direct endpoint is
+// subject only to Supabase RLS and returns the created record id — or a REAL
+// GraphQL error message. It requires the public anon `apikey` ALONGSIDE the
+// user `Authorization: Bearer` access_token.
+const SUPABASE_GRAPHQL_PATH = "/graphql/v1";
 // Supabase project ref (the subdomain). The SPA reads its session from the
 // localStorage key `sb-<ref>-auth-token`; we write it there in a probe page to
 // authenticate the SPA and observe its REAL /api/graphql requests.
@@ -446,7 +453,7 @@ interface RawGqlResponse {
   ok: boolean;
   bodyText: string;
   threw: string;
-  via: "page-fetch" | "request";
+  via: "page-fetch" | "request" | "direct";
   xsrfSent: boolean;
   authSent: boolean;
   apiKeySent: boolean;
@@ -844,6 +851,60 @@ async function postViaPageFetch(
 }
 
 // ---------------------------------------------------------------------------
+// Transport 3 — DIRECT Supabase pg_graphql endpoint (writes/mutations). The SIT
+// `/api/graphql` proxy silently refuses inserts (returns data:null with NO
+// errors), so mutations go straight to https://<ref>.supabase.co/graphql/v1
+// with the public anon `apikey` + the user `Authorization: Bearer` token. This
+// is the SAME transport (page.request, CORS-immune) proven to return live data
+// for reads/introspection against this endpoint; RLS still applies, so an
+// unauthorised insert surfaces a real GraphQL error instead of a silent null.
+// No X-XSRF-TOKEN / Origin / Referer — those are SIT-proxy concerns.
+// ---------------------------------------------------------------------------
+async function postDirectSupabase(
+  page: Page,
+  url: string,
+  query: string,
+  variables: Record<string, unknown>,
+  auth: SitAuth,
+): Promise<RawGqlResponse> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    accept: "application/json",
+  };
+  if (auth.apiKey) headers["apikey"] = auth.apiKey;
+  if (auth.bearer) headers["authorization"] = "Bearer " + auth.bearer;
+
+  try {
+    const res = await page.request.post(url, {
+      data: { query, variables },
+      headers,
+      timeout: 20_000,
+    });
+    return {
+      status: res.status(),
+      ok: res.ok(),
+      bodyText: await res.text(),
+      threw: "",
+      via: "direct",
+      xsrfSent: false,
+      authSent: !!auth.bearer,
+      apiKeySent: !!auth.apiKey,
+    };
+  } catch (e) {
+    return {
+      status: 0,
+      ok: false,
+      bodyText: "",
+      threw: e instanceof Error ? e.message : String(e),
+      via: "direct",
+      xsrfSent: false,
+      authSent: !!auth.bearer,
+      apiKeySent: !!auth.apiKey,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Interpret a raw transport response into either parsed data or a classified,
 // human-readable failure. Separated from transport so each attempt can be
 // logged and we can decide whether a second transport is worth trying.
@@ -954,6 +1015,7 @@ async function gqlRequest<S extends z.ZodTypeAny>(
   variables: Record<string, unknown>,
   dataSchema: S,
   label: string,
+  opts: { direct?: boolean } = {},
 ): Promise<z.infer<S> | null> {
   const absUrl = SIT_URLS.base + GRAPHQL_PATH;
   const auth = await collectAuth(page, SIT_URLS.base);
@@ -988,14 +1050,44 @@ async function gqlRequest<S extends z.ZodTypeAny>(
     return null;
   }
 
-  const attempts: Array<() => Promise<RawGqlResponse>> = [
-    () => postViaRequest(page, absUrl, SIT_URLS.base, query, variables, auth),
-    () => postViaPageFetch(page, GRAPHQL_PATH, query, variables, auth),
-  ];
+  let attempts: Array<() => Promise<RawGqlResponse>>;
+  if (opts.direct) {
+    // Writes go STRAIGHT to the Supabase pg_graphql endpoint — the SIT proxy
+    // silently refuses inserts (data:null, no errors). The direct endpoint
+    // needs the public anon apikey ALONGSIDE the user Bearer.
+    const apiKey = auth.apiKey ?? (await resolveAnonKey(page)) ?? undefined;
+    if (!apiKey) {
+      logger.warn(
+        `[sit:graphql] ${label}: Supabase anon apikey bulunamadı — direct pg_graphql endpoint apikey ister, mutation atlanıyor`,
+      );
+      return null;
+    }
+    const directAuth: SitAuth = { ...auth, apiKey };
+    const directUrl = SUPABASE_URL + SUPABASE_GRAPHQL_PATH;
+    attempts = [
+      () => postDirectSupabase(page, directUrl, query, variables, directAuth),
+    ];
+  } else {
+    attempts = [
+      () => postViaRequest(page, absUrl, SIT_URLS.base, query, variables, auth),
+      () => postViaPageFetch(page, GRAPHQL_PATH, query, variables, auth),
+    ];
+  }
 
   for (const run of attempts) {
     const raw = await run();
     const meta = `HTTP ${raw.status} via ${raw.via} xsrf=${raw.xsrfSent} bearer=${raw.authSent} apikey=${raw.apiKeySent}`;
+    // Mutations are rare and critical: ALWAYS log the FULL (PII-masked) body so
+    // the created record id — OR the real GraphQL error (permission denied /
+    // violates row-level security / unknown field) — is visible every time.
+    if (opts.direct) {
+      logger.info(
+        `[sit:graphql] ${label}: FULL response (${meta}): ${rawForLog(
+          raw.bodyText,
+          800,
+        )}`,
+      );
+    }
     const result = interpret(raw, dataSchema);
 
     if (result.kind === "ok") {
@@ -1022,8 +1114,10 @@ async function gqlRequest<S extends z.ZodTypeAny>(
   // this route. Learn the route's REAL query shape (once per page) by capturing
   // the authenticated SPA's own /api/graphql requests. Best-effort; we still
   // return null so THIS call falls back to scanning the UI. Skipped for the
-  // introspection probe (it has its own diagnostics and would waste a ~32s probe).
-  if (label !== "introspect") await captureRealGraphqlOnce(page).catch(() => {});
+  // introspection probe (it has its own diagnostics and would waste a ~32s
+  // probe) and for direct-endpoint mutations (they never use the proxy shape).
+  if (label !== "introspect" && !opts.direct)
+    await captureRealGraphqlOnce(page).catch(() => {});
   return null;
 }
 
@@ -1472,6 +1566,7 @@ export async function createApplicationRecord(
     { objects: [object] },
     insertApplicationSchema,
     "insertApplication",
+    { direct: true },
   );
 
   const id = data?.insertIntozoho_applicationsCollection?.records?.[0]?.id;
