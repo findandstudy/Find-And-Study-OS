@@ -6,15 +6,21 @@
 // through the portal UI (SIT's write mutations are non-functional for partner
 // accounts).
 //
-// AUTH: the POST is issued from INSIDE the authenticated page context
-// (page.evaluate → window.fetch with credentials:"include"). This is what makes
-// the request carry the SPA's full session — same-origin cookies AND the extra
-// bits a cookie-only client (page.request) silently drops: the Laravel/axios
-// `X-XSRF-TOKEN` header echoed from the XSRF-TOKEN cookie, a best-effort
-// `Authorization: Bearer` read from local/sessionStorage when the app keeps its
-// token there, and the correct Origin/Referer. The symptom of the missing
-// header/token was a 200 response with `data: null` (never surfaced as an auth
-// error), which used to be logged only as "shape mismatch — null".
+// AUTH: a session cookie alone is not enough — SIT (Laravel/axios SPA) also
+// wants the `X-XSRF-TOKEN` header echoed from the XSRF-TOKEN cookie and, when
+// present, an `Authorization: Bearer` token the app keeps in web storage. The
+// symptom of the missing header/token is a 200 response with `data: null`
+// (never surfaced as an auth error), which used to be logged as "shape
+// mismatch — null". `collectAuth` gathers both (XSRF from the browser context
+// cookie jar, bearer from local/sessionStorage) and we send them via TWO
+// transports, tried in order until one returns usable data:
+//   1) page.request.post + the auth headers + Origin/Referer — CORS-immune and
+//      the transport we KNOW reaches the server (it returned 200 in prod); the
+//      only thing it lacked before was the XSRF/bearer headers.
+//   2) an in-page window.fetch (credentials:"include") to a RELATIVE path so it
+//      is always same-origin — the SPA-faithful fallback if (1) is rejected. A
+//      cross-origin ABSOLUTE URL here is what made the earlier in-page fetch
+//      throw and silently fall back to a cookie-only request.
 //
 // Every response is validated with zod and narrowed to a typed shape; on any
 // network error, GraphQL error, or shape mismatch the helpers return null/[]
@@ -63,144 +69,115 @@ interface RawGqlResponse {
   authSent: boolean;
 }
 
+interface SitAuth {
+  xsrf?: string;
+  bearer?: string;
+}
+
 // ---------------------------------------------------------------------------
-// Issue the POST from inside the authenticated page context. window.fetch with
-// credentials:"include" carries the session cookies AND the Origin/Referer the
-// server may require; we additionally attach the Laravel/axios X-XSRF-TOKEN
-// header (echoed from the XSRF-TOKEN cookie) and a best-effort bearer token
-// discovered in local/sessionStorage. page.request (cookies only) is used ONLY
-// as a fallback if the in-page fetch itself throws (e.g. blocked by CSP).
+// Collect the authentication material the SIT API expects beyond the session
+// cookie: the Laravel/axios X-XSRF-TOKEN (the XSRF-TOKEN cookie value, URL-
+// decoded) and a best-effort bearer token the SPA may keep in web storage.
+// The XSRF cookie is read from the BROWSER CONTEXT (page.context().cookies),
+// which is reliable even if it is HttpOnly — reading document.cookie in-page
+// would miss those. The bearer is discovered by scanning local/sessionStorage
+// for a JWT-looking value; failures are non-fatal.
 // ---------------------------------------------------------------------------
-async function postGraphqlInPage(
-  page: Page,
-  url: string,
-  query: string,
-  variables: Record<string, unknown>,
-): Promise<RawGqlResponse> {
-  const result = await page.evaluate(
-    async (args: {
-      url: string;
-      query: string;
-      variables: Record<string, unknown>;
-    }) => {
-      const readCookie = (name: string): string | null => {
-        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const src = typeof document !== "undefined" ? document.cookie : "";
-        const m = src.match(new RegExp("(?:^|; )" + escaped + "=([^;]*)"));
-        return m ? decodeURIComponent(m[1]) : null;
-      };
+async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
+  const auth: SitAuth = {};
+
+  try {
+    const cookies = await page.context().cookies(baseUrl);
+    const xsrf = cookies.find((c) => c.name === "XSRF-TOKEN");
+    if (xsrf?.value) auth.xsrf = decodeURIComponent(xsrf.value);
+  } catch {
+    /* cookie read failed — proceed without XSRF */
+  }
+
+  try {
+    const bearer = await page.evaluate(() => {
       const looksLikeJwt = (v: unknown): v is string =>
         typeof v === "string" && /^ey[\w-]+\.[\w-]+\.[\w-]+$/.test(v);
-      const findBearer = (): string | null => {
-        const stores: Storage[] = [];
+      const stores: Storage[] = [];
+      try {
+        if (window.localStorage) stores.push(window.localStorage);
+      } catch {
+        /* access denied */
+      }
+      try {
+        if (window.sessionStorage) stores.push(window.sessionStorage);
+      } catch {
+        /* access denied */
+      }
+      for (const store of stores) {
+        let len = 0;
         try {
-          if (window.localStorage) stores.push(window.localStorage);
+          len = store.length;
         } catch {
-          /* access denied */
+          len = 0;
         }
-        try {
-          if (window.sessionStorage) stores.push(window.sessionStorage);
-        } catch {
-          /* access denied */
-        }
-        for (const store of stores) {
-          let len = 0;
-          try {
-            len = store.length;
-          } catch {
-            len = 0;
-          }
-          for (let i = 0; i < len; i++) {
-            const key = store.key(i);
-            if (!key) continue;
-            const val = store.getItem(key);
-            if (!val) continue;
-            if (looksLikeJwt(val)) return val;
-            if (/token|auth|access|bearer|jwt/i.test(key)) {
-              try {
-                const parsed = JSON.parse(val) as Record<string, unknown>;
-                const cand =
-                  parsed?.token ??
-                  parsed?.accessToken ??
-                  parsed?.access_token ??
-                  parsed?.authToken ??
-                  parsed?.jwt ??
-                  parsed?.value;
-                if (looksLikeJwt(cand)) return cand;
-              } catch {
-                /* not JSON */
-              }
+        for (let i = 0; i < len; i++) {
+          const key = store.key(i);
+          if (!key) continue;
+          const val = store.getItem(key);
+          if (!val) continue;
+          if (looksLikeJwt(val)) return val;
+          if (/token|auth|access|bearer|jwt/i.test(key)) {
+            try {
+              const parsed = JSON.parse(val) as Record<string, unknown>;
+              const cand =
+                parsed?.token ??
+                parsed?.accessToken ??
+                parsed?.access_token ??
+                parsed?.authToken ??
+                parsed?.jwt ??
+                parsed?.value;
+              if (looksLikeJwt(cand)) return cand;
+            } catch {
+              /* not JSON */
             }
           }
         }
-        return null;
-      };
-
-      const headers: Record<string, string> = {
-        "content-type": "application/json",
-        accept: "application/json",
-        "x-requested-with": "XMLHttpRequest",
-      };
-      const xsrf = readCookie("XSRF-TOKEN");
-      if (xsrf) headers["X-XSRF-TOKEN"] = xsrf;
-      const bearer = findBearer();
-      if (bearer) headers["authorization"] = "Bearer " + bearer;
-
-      let status = 0;
-      let ok = false;
-      let bodyText = "";
-      let threw = "";
-      try {
-        const resp = await fetch(args.url, {
-          method: "POST",
-          credentials: "include",
-          headers,
-          body: JSON.stringify({ query: args.query, variables: args.variables }),
-        });
-        status = resp.status;
-        ok = resp.ok;
-        bodyText = await resp.text();
-      } catch (e) {
-        threw = e instanceof Error ? e.message : String(e);
       }
-      return { status, ok, bodyText, threw, xsrfSent: !!xsrf, authSent: !!bearer };
-    },
-    { url, query, variables },
-  );
-  return { ...result, via: "page-fetch" };
+      return null;
+    });
+    if (bearer) auth.bearer = bearer;
+  } catch {
+    /* storage read failed — proceed without bearer */
+  }
+
+  return auth;
 }
 
-async function postGraphql(
+// ---------------------------------------------------------------------------
+// Transport 1 — page.request (Playwright's context request). It shares the
+// browser's cookie jar and is NOT subject to CORS, so it always reaches the
+// endpoint; we add the X-XSRF-TOKEN / bearer headers (and Origin/Referer) that
+// a cookie-only request was missing. This is the primary path because it is the
+// one we KNOW reaches the server (it returned HTTP 200 in production).
+// ---------------------------------------------------------------------------
+async function postViaRequest(
   page: Page,
   url: string,
+  baseUrl: string,
   query: string,
   variables: Record<string, unknown>,
+  auth: SitAuth,
 ): Promise<RawGqlResponse> {
-  let inPage: RawGqlResponse;
-  try {
-    inPage = await postGraphqlInPage(page, url, query, variables);
-  } catch (e) {
-    inPage = {
-      status: 0,
-      ok: false,
-      bodyText: "",
-      threw: e instanceof Error ? e.message : String(e),
-      via: "page-fetch",
-      xsrfSent: false,
-      authSent: false,
-    };
-  }
-  if (!inPage.threw) return inPage;
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    accept: "application/json",
+    "x-requested-with": "XMLHttpRequest",
+    origin: baseUrl,
+    referer: baseUrl + "/",
+  };
+  if (auth.xsrf) headers["X-XSRF-TOKEN"] = auth.xsrf;
+  if (auth.bearer) headers["authorization"] = "Bearer " + auth.bearer;
 
-  // Fallback: cookie-only request context (does not carry XSRF/bearer).
   try {
     const res = await page.request.post(url, {
       data: { query, variables },
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        "x-requested-with": "XMLHttpRequest",
-      },
+      headers,
       timeout: 20_000,
     });
     return {
@@ -209,45 +186,121 @@ async function postGraphql(
       bodyText: await res.text(),
       threw: "",
       via: "request",
-      xsrfSent: false,
-      authSent: false,
+      xsrfSent: !!auth.xsrf,
+      authSent: !!auth.bearer,
     };
   } catch (e) {
     return {
       status: 0,
       ok: false,
       bodyText: "",
-      threw: `${inPage.threw} | fallback: ${e instanceof Error ? e.message : String(e)}`,
+      threw: e instanceof Error ? e.message : String(e),
       via: "request",
-      xsrfSent: false,
-      authSent: false,
+      xsrfSent: !!auth.xsrf,
+      authSent: !!auth.bearer,
     };
   }
 }
 
 // ---------------------------------------------------------------------------
-// Low-level request — POST { query, variables }, validate envelope + data.
+// Transport 2 — in-page window.fetch (SPA-faithful). Uses a RELATIVE path so it
+// is always same-origin with the current page (an absolute cross-origin URL is
+// what makes the browser throw), credentials:"include" for cookies, plus the
+// XSRF/bearer headers. Secondary because it can be blocked by CSP or a
+// destroyed execution context; used when transport 1 does not yield data.
 // ---------------------------------------------------------------------------
-async function gqlRequest<S extends z.ZodTypeAny>(
+async function postViaPageFetch(
   page: Page,
+  path: string,
   query: string,
   variables: Record<string, unknown>,
-  dataSchema: S,
-  label: string,
-): Promise<z.infer<S> | null> {
-  const raw = await postGraphql(
-    page,
-    SIT_URLS.base + GRAPHQL_PATH,
-    query,
-    variables,
-  );
-  const meta =
-    `HTTP ${raw.status} via ${raw.via}` +
-    `${raw.xsrfSent ? " +xsrf" : ""}${raw.authSent ? " +bearer" : ""}`;
+  auth: SitAuth,
+): Promise<RawGqlResponse> {
+  try {
+    const result = await page.evaluate(
+      async (args: {
+        path: string;
+        query: string;
+        variables: Record<string, unknown>;
+        xsrf: string | null;
+        bearer: string | null;
+      }) => {
+        const headers: Record<string, string> = {
+          "content-type": "application/json",
+          accept: "application/json",
+          "x-requested-with": "XMLHttpRequest",
+        };
+        if (args.xsrf) headers["X-XSRF-TOKEN"] = args.xsrf;
+        if (args.bearer) headers["authorization"] = "Bearer " + args.bearer;
 
+        let status = 0;
+        let ok = false;
+        let bodyText = "";
+        let threw = "";
+        try {
+          const resp = await fetch(args.path, {
+            method: "POST",
+            credentials: "include",
+            headers,
+            body: JSON.stringify({
+              query: args.query,
+              variables: args.variables,
+            }),
+          });
+          status = resp.status;
+          ok = resp.ok;
+          bodyText = await resp.text();
+        } catch (e) {
+          threw = e instanceof Error ? e.message : String(e);
+        }
+        return { status, ok, bodyText, threw };
+      },
+      {
+        path,
+        query,
+        variables,
+        xsrf: auth.xsrf ?? null,
+        bearer: auth.bearer ?? null,
+      },
+    );
+    return {
+      ...result,
+      via: "page-fetch",
+      xsrfSent: !!auth.xsrf,
+      authSent: !!auth.bearer,
+    };
+  } catch (e) {
+    return {
+      status: 0,
+      ok: false,
+      bodyText: "",
+      threw: e instanceof Error ? e.message : String(e),
+      via: "page-fetch",
+      xsrfSent: !!auth.xsrf,
+      authSent: !!auth.bearer,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Interpret a raw transport response into either parsed data or a classified,
+// human-readable failure. Separated from transport so each attempt can be
+// logged and we can decide whether a second transport is worth trying.
+// ---------------------------------------------------------------------------
+type Interpretation<T> =
+  | { kind: "ok"; data: T }
+  // "gotData" means the API DID return non-null data (auth works); the shape
+  // just did not match — retrying another transport cannot change that.
+  | { kind: "gotData"; message: string }
+  // recoverable: another transport (or a re-auth) might succeed.
+  | { kind: "retry"; message: string };
+
+function interpret<S extends z.ZodTypeAny>(
+  raw: RawGqlResponse,
+  dataSchema: S,
+): Interpretation<z.infer<S>> {
   if (raw.threw) {
-    logger.warn(`[sit:graphql] ${label}: request failed (${meta}): ${raw.threw}`);
-    return null;
+    return { kind: "retry", message: `request failed: ${raw.threw}` };
   }
 
   let body: unknown;
@@ -255,9 +308,8 @@ async function gqlRequest<S extends z.ZodTypeAny>(
     body = JSON.parse(raw.bodyText);
   } catch {
     // A non-JSON body (typically an HTML login page) is the classic "session
-    // not accepted" symptom — surface the status + a bounded snippet. Strip
-    // JWTs and any CSRF/token attribute values first so a login page that
-    // embeds a token/meta tag cannot leak it into the logs.
+    // not accepted" symptom. Strip JWTs and CSRF/token attribute values so a
+    // login page embedding a token/meta tag cannot leak it into the logs.
     const snippet = raw.bodyText
       .replace(/\s+/g, " ")
       .replace(/ey[\w-]+\.[\w-]+\.[\w-]+/g, "[redacted-jwt]")
@@ -267,10 +319,10 @@ async function gqlRequest<S extends z.ZodTypeAny>(
       )
       .trim()
       .slice(0, 300);
-    logger.warn(
-      `[sit:graphql] ${label}: non-JSON response (${meta}) — likely an unauthenticated redirect. First 300 chars: ${snippet}`,
-    );
-    return null;
+    return {
+      kind: "retry",
+      message: `non-JSON response (likely an unauthenticated redirect). First 300 chars: ${snippet}`,
+    };
   }
 
   const envelope = z
@@ -281,56 +333,86 @@ async function gqlRequest<S extends z.ZodTypeAny>(
     .safeParse(body);
 
   if (!envelope.success) {
-    logger.warn(
-      `[sit:graphql] ${label}: malformed response envelope (${meta}) — top-level keys: [${
-        body && typeof body === "object" ? Object.keys(body).join(", ") : typeof body
-      }]`,
-    );
-    return null;
+    const keys =
+      body && typeof body === "object"
+        ? Object.keys(body).join(", ")
+        : typeof body;
+    return {
+      kind: "retry",
+      message: `malformed response envelope — top-level keys: [${keys}]`,
+    };
   }
 
   // Surface GraphQL errors verbatim (e.g. "Unauthenticated.", "Cannot query
-  // field X") — these are the actual cause the old code hid behind "null".
+  // field X") — the actual cause the old code hid behind "null".
   if (envelope.data.errors && envelope.data.errors.length > 0) {
-    logger.warn(
-      `[sit:graphql] ${label}: GraphQL errors (${meta}): ` +
-        envelope.data.errors.map((e) => e.message).join("; "),
-    );
-    return null;
+    return {
+      kind: "retry",
+      message: `GraphQL errors: ${envelope.data.errors
+        .map((e) => e.message)
+        .join("; ")}`,
+    };
   }
 
-  // `data: null` with NO errors is an ambiguous "empty/blocked" response. Most
-  // often it means the request was not authenticated at the API layer even
-  // though the browser page is logged in — log it explicitly (with whether the
-  // credentials were attached) instead of the useless "shape mismatch — null".
+  // `data: null` with NO errors ≈ request not accepted as authenticated.
   if (envelope.data.data == null) {
-    logger.warn(
-      `[sit:graphql] ${label}: server returned data:null with no errors (${meta}) — the GraphQL request was likely not accepted as authenticated (session/CSRF/token). Sent xsrf=${raw.xsrfSent} bearer=${raw.authSent}.`,
-    );
-    return null;
+    return {
+      kind: "retry",
+      message: `server returned data:null with no errors — request likely not accepted as authenticated (session/CSRF/token)`,
+    };
   }
 
   const parsed = dataSchema.safeParse(envelope.data.data);
   if (!parsed.success) {
-    // Shape mismatch is non-fatal: the caller falls back to scanning the UI.
-    // Logged (with the failing field path + query label) rather than thrown,
-    // and never retried, so a diverging live schema degrades gracefully
-    // instead of looping. The live schema may return a connection as
-    // `{ nodes: [...] }`, `{ edges: [{ node }] }`, a bare array, or null —
-    // all accepted by the schemas below, so this only fires on a genuinely
-    // unexpected shape. When it does, dump the ACTUAL response data (bounded,
-    // PII-redacted) so the true live shape can be read straight from the run
-    // logs and the parser adjusted, instead of guessing.
     const issue = parsed.error.issues[0];
     const at = issue?.path?.length ? ` at "${issue.path.join(".")}"` : "";
-    logger.warn(
-      `[sit:graphql] ${label}: data shape mismatch${at} (${meta}) — actual response shape: ${redactedStringify(
+    return {
+      kind: "gotData",
+      message: `data shape mismatch${at} — actual response shape: ${redactedStringify(
         envelope.data.data,
       )}`,
-    );
-    return null;
+    };
   }
-  return parsed.data;
+  return { kind: "ok", data: parsed.data };
+}
+
+// ---------------------------------------------------------------------------
+// Low-level request — POST { query, variables }, validate envelope + data.
+// Tries transport 1 (page.request + auth headers) then, if that does not yield
+// usable data, transport 2 (in-page fetch). Each failed attempt is logged with
+// the transport, HTTP status, and which credentials were attached.
+// ---------------------------------------------------------------------------
+async function gqlRequest<S extends z.ZodTypeAny>(
+  page: Page,
+  query: string,
+  variables: Record<string, unknown>,
+  dataSchema: S,
+  label: string,
+): Promise<z.infer<S> | null> {
+  const absUrl = SIT_URLS.base + GRAPHQL_PATH;
+  const auth = await collectAuth(page, SIT_URLS.base);
+
+  const attempts: Array<() => Promise<RawGqlResponse>> = [
+    () => postViaRequest(page, absUrl, SIT_URLS.base, query, variables, auth),
+    () => postViaPageFetch(page, GRAPHQL_PATH, query, variables, auth),
+  ];
+
+  for (const run of attempts) {
+    const raw = await run();
+    const meta = `HTTP ${raw.status} via ${raw.via} xsrf=${raw.xsrfSent} bearer=${raw.authSent}`;
+    const result = interpret(raw, dataSchema);
+
+    if (result.kind === "ok") return result.data;
+
+    logger.warn(`[sit:graphql] ${label}: ${result.message} (${meta})`);
+
+    // The API returned data but the shape didn't match — another transport
+    // would return the same shape, so stop and let the caller scan the UI.
+    if (result.kind === "gotData") return null;
+    // Otherwise (auth/empty/error/network) fall through to the next transport.
+  }
+
+  return null;
 }
 
 /**

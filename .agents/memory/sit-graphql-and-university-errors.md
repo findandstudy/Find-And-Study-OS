@@ -5,26 +5,38 @@ description: How the SIT read-only GraphQL connection parsing tolerates empty/ed
 
 # SIT GraphQL authenticated session
 
-SIT's read-only GraphQL (POST /api/graphql) must be issued from INSIDE the
-authenticated page context (`page.evaluate` → `window.fetch` with
-`credentials:"include"`), NOT via `page.request.post`.
+SIT's read-only GraphQL (POST /api/graphql) needs MORE than the session cookie:
+sitconnect.net is a Laravel/axios SPA that also wants the `X-XSRF-TOKEN` header
+(the `XSRF-TOKEN` cookie value, URL-decoded) and/or an `Authorization: Bearer`
+token the SPA keeps in web storage. Missing those → the server returns **HTTP
+200 with `data: null` and NO `errors`** (not a 401), so the old code logged only
+"shape mismatch — null", findStudent returned null, and the create-wizard looped
+~7× ("doğrulama hatası").
 
-**Why:** `page.request` carries only cookies. sitconnect.net is a Laravel/axios
-SPA whose API also requires the `X-XSRF-TOKEN` header (echoed from the
-`XSRF-TOKEN` cookie) and/or an `Authorization: Bearer` token the SPA reads from
-storage. Missing those → the server returns **HTTP 200 with `data: null` and NO
-`errors`** (not a 401), so the old code logged only "shape mismatch — null",
-findStudent returned null, and the create-wizard looped ~7× ("doğrulama hatası").
+**How to apply (current design):** `collectAuth()` reads XSRF from the browser
+CONTEXT cookie jar (`page.context().cookies(base)`, reliable even if HttpOnly —
+`document.cookie` in-page would miss it) and scans local/sessionStorage for a
+JWT-looking bearer. The POST is then sent via TWO transports, tried in order
+until one returns usable data:
+  1. **primary** `page.request.post` + `X-XSRF-TOKEN`/bearer + `x-requested-with`
+     + Origin/Referer. It is CORS-immune and is the transport we KNOW reaches
+     the server (200 in prod); it was only missing the auth headers.
+  2. **secondary** in-page `window.fetch` (`credentials:"include"`) to a
+     RELATIVE path (`/api/graphql`) so it is always same-origin.
 
-**How to apply:** in-page fetch attaches `X-XSRF-TOKEN` from cookie +
-best-effort bearer (scan local/sessionStorage for a JWT-looking value or a
-token/auth/access key holding one) + `x-requested-with: XMLHttpRequest`; browser
-sets Origin/Referer automatically. `page.request` is a FALLBACK only if the
-in-page fetch throws (CSP). Diagnostics must log HTTP status + which creds were
+**Why NOT an absolute-URL in-page fetch as primary:** an earlier version issued
+the in-page fetch to the ABSOLUTE `SIT_URLS.base` URL; when the page origin
+differs it is cross-origin → the browser throws → it silently fell back to a
+cookie-only `page.request` (`via request xsrf=false bearer=false`), which is why
+`data:null` persisted. Relative path + page.request-primary removes that trap.
+
+**Diagnostics:** each attempt logs transport + HTTP status + which creds were
 attached (xsrf/bearer) + GraphQL `errors` verbatim + an explicit `data:null`
-branch, so an auth failure is visible instead of hidden behind "null". A
-non-JSON body (login-page HTML) is the redirect symptom — log a bounded snippet
-but strip JWTs and csrf/token attribute values from it first.
+branch. `interpret()` classifies: `ok` (typed data), `gotData` (data present but
+shape mismatch → do NOT retry the other transport, shape won't change), `retry`
+(threw/nonjson/errors/data:null → try next transport). A non-JSON body
+(login-page HTML) is the redirect symptom — log a bounded snippet but strip JWTs
+and csrf/token attribute values first.
 
 # SIT GraphQL connection shape
 
