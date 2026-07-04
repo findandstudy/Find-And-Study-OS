@@ -66,6 +66,20 @@ non-alphanumeric). **Country filters the University list** — it MUST run befor
 University (it does) and we sleep ~1.2s after picking; Country tries Turkey →
 Türkiye → Northern Cyprus in turn.
 
+**Option reads MUST be popover-scoped, never a bare `li`.** A bare
+`li`/whole-page option scan silently read the LEFT SIDEBAR nav's <li> items
+(Dashboard/Applications/Students/…) when a non-search dropdown (Country) opened —
+because Country has no search box to filter, unlike Student. `dropdownOptions()`
+scopes to real dropdown containers only (`[role=listbox]`,
+`[data-radix-popper-content-wrapper]`, `[cmdk-list]`, `[data-radix-select-viewport]`,
+`[role=option]`) so sidebar `nav`/`aside` <li> can never be an option; also wait
+for `DROPDOWN_POPOVER_SELECTOR` visible after clicking the trigger. `pickFirst`
+(Student) was unaffected because it uses role=option after typing.
+
+**"Add Application" open is hydration-flaky → `openAddApplication`** waits for the
+button visible (~15s), reloads once + retries, logs a 400-char body snapshot on
+failure. A single immediate click after nav intermittently 404'd the button.
+
 **Academic Year + Semester are PRE-SELECTED defaults ("2026/2027", "Fall") →
 default-aware, NEVER block.** A pre-filled SIT combobox's ACCESSIBLE NAME becomes
 its VALUE (not the label), so the label-regex trigger lookup that works for empty

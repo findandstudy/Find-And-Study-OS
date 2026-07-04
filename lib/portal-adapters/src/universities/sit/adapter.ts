@@ -176,6 +176,36 @@ async function clickButton(page: Page, nameRe: RegExp): Promise<boolean> {
 }
 
 /**
+ * Open the "Add Application" modal, tolerating SPA-hydration lag on the
+ * /applications route: wait for the button to become visible (~15s), click it,
+ * and if it never appears reload the page once and retry. Returns true when the
+ * button was clicked.
+ */
+async function openAddApplication(page: Page): Promise<boolean> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const btn = page
+      .getByRole("button", { name: SIT_BUTTONS.addApplication })
+      .first();
+    const appeared = await btn
+      .waitFor({ state: "visible", timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (appeared) {
+      await btn.click({ timeout: 8000 }).catch(() => {});
+      return true;
+    }
+    if (attempt === 0) {
+      // Reload once and retry — the button sometimes lags first paint.
+      await page
+        .reload({ waitUntil: "domcontentloaded", timeout: 30_000 })
+        .catch(() => {});
+      await sleep(page, 1500);
+    }
+  }
+  return false;
+}
+
+/**
  * Open a SIT custom combobox (role=button trigger) and click the option whose
  * text matches `valueRe`. Returns true when an option was clicked.
  */
@@ -283,6 +313,38 @@ async function selectOrKeepDefault(
 }
 
 /**
+ * Root containers of an OPEN dropdown popover/listbox. Used to wait for the
+ * dropdown to render before reading options.
+ */
+const DROPDOWN_POPOVER_SELECTOR =
+  "[role=listbox], [data-radix-popper-content-wrapper], [cmdk-list], [data-radix-select-viewport]";
+
+/**
+ * Options of the CURRENTLY-OPEN dropdown, scoped to the popover/listbox only.
+ *
+ * A bare `li` / whole-page scan wrongly captured the left sidebar navigation's
+ * <li> menu items (Dashboard/Applications/Students/…) whenever a non-search
+ * dropdown (e.g. Country) was open. Every selector here is scoped to a real
+ * dropdown container (Radix listbox/popper/select viewport or cmdk list) or the
+ * ARIA `option` role — none of which the sidebar nav uses — so options are read
+ * from the dropdown and never from `nav`/`aside`.
+ */
+function dropdownOptions(page: Page): Locator {
+  return page.locator(
+    [
+      "[role=listbox] [role=option]",
+      "[role=listbox] li",
+      "[data-radix-popper-content-wrapper] [role=option]",
+      "[data-radix-popper-content-wrapper] [cmdk-item]",
+      "[data-radix-popper-content-wrapper] li",
+      "[cmdk-list] [cmdk-item]",
+      "[data-radix-select-viewport] [role=option]",
+      "[role=option]",
+    ].join(", "),
+  );
+}
+
+/**
  * Open a SIT SEARCHABLE combobox (the "Add Application" dialog uses these:
  * Student / University / Program etc. render a role=button|combobox trigger
  * that opens a search textbox filtering a role=listbox). Types `search` into
@@ -338,6 +400,13 @@ async function selectComboSearch(
 
   await trigger.click({ timeout: 6000 }).catch(() => {});
   await sleep(page, 700);
+  // Wait for the dropdown's popover/listbox to actually render before reading
+  // options — otherwise a slow-opening dropdown reads nothing (or the wrong DOM).
+  await page
+    .locator(DROPDOWN_POPOVER_SELECTOR)
+    .first()
+    .waitFor({ state: "visible", timeout: 4000 })
+    .catch(() => {});
 
   // Type into the search textbox (if the combobox exposes one) to filter the
   // options — the searchable dropdowns can be virtualised so the target option
@@ -355,7 +424,10 @@ async function selectComboSearch(
     await sleep(page, 900);
   }
 
-  const optionLoc = page.locator("[role=option], li, [class*=option i]");
+  // CRITICAL: read options ONLY from the opened popover/listbox — NEVER a bare
+  // `li` (that captured the left sidebar nav's <li> menu items when a non-search
+  // dropdown like Country was open) or the whole page.
+  const optionLoc = dropdownOptions(page);
 
   // pickFirst: no matching required — take the first rendered option.
   if (opts.pickFirst) {
@@ -929,7 +1001,12 @@ export const sitAdapter: SitAdapter = {
     });
     await sleep(page, 1200);
 
-    if (!(await clickButton(page, SIT_BUTTONS.addApplication))) {
+    // The "Add Application" button can lag the /applications route load (SPA
+    // hydration), so a single immediate click was flaky. Wait for it to become
+    // visible; if it never shows, reload once and retry before giving up.
+    if (!(await openAddApplication(page))) {
+      const snap = (await bodyText(page)).replace(/\s+/g, " ").slice(0, 400);
+      logger.warn(`[sit] "Add Application" düğmesi bulunamadı; DOM: ${snap}`);
       return {
         ...base,
         detail: '"Add Application" düğmesi bulunamadı',
