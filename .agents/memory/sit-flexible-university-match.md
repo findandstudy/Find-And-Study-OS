@@ -34,15 +34,22 @@ option text breaks on Turkish ı/İ/ş/ç/ö/ğ/ü.
 add a new normalizer. On combo failure return `{programMissing:true, detail}`
 and log `[sit] university not found in SIT list`.
 
-## Catalog spelling ≠ CRM name (GraphQL program lookup)
+## Catalog field + spelling ≠ CRM name (GraphQL program lookup)
 
-`zoho_programs.university` stores a DIFFERENT spelling than our CRM allowlist
-name — usually the English form ("Beykoz University") or bare ("Beykoz"), not
-the Turkish "Beykoz Üniversitesi". So a full-name `ilike '%Beykoz Üniversitesi%'`
-returns **0 rows**. Filter the GraphQL catalog by CORE DISTINCTIVE TOKENS: a
-typed `zoho_programsFilter` with an `and` of per-token `ilike` (`%beykoz%`), then
-confirm each returned row in code by folding `row.university` and requiring its
-token set to cover all wanted tokens (guards ilike over-match).
+**Field name (verified via live pg_graphql introspection):** the program
+university column is **`university_name`** — there is NO `university` field on
+`zoho_programs` (querying it errors "Unknown field 'university'"). (By contrast
+`zoho_applications` DOES have a bare `university` string field — don't confuse
+them.) Only `active: { eq: true }` programs are selectable.
+
+`zoho_programs.university_name` also stores a DIFFERENT spelling than our CRM
+allowlist name — usually the English form ("Beykoz University") or bare
+("Beykoz"), not the Turkish "Beykoz Üniversitesi". So a full-name
+`ilike '%Beykoz Üniversitesi%'` returns **0 rows**. Filter the GraphQL catalog
+by CORE DISTINCTIVE TOKENS: a typed `zoho_programsFilter` with an `and` of
+per-token `ilike` on `university_name` (`%beykoz%`) plus `active:{eq:true}`,
+then confirm each returned row in code by folding `row.university_name` and
+requiring its token set to cover all wanted tokens (guards ilike over-match).
 
 **Why:** English/Turkish + "University"/"Üniversitesi" suffix variance makes
 full-name matching brittle; core tokens survive it.
