@@ -33,3 +33,28 @@ option text breaks on Turkish ı/İ/ş/ç/ö/ğ/ü.
 **How to apply:** reuse `distinctiveTokens`/`fold` from these modules — do NOT
 add a new normalizer. On combo failure return `{programMissing:true, detail}`
 and log `[sit] university not found in SIT list`.
+
+## Catalog spelling ≠ CRM name (GraphQL program lookup)
+
+`zoho_programs.university` stores a DIFFERENT spelling than our CRM allowlist
+name — usually the English form ("Beykoz University") or bare ("Beykoz"), not
+the Turkish "Beykoz Üniversitesi". So a full-name `ilike '%Beykoz Üniversitesi%'`
+returns **0 rows**. Filter the GraphQL catalog by CORE DISTINCTIVE TOKENS: a
+typed `zoho_programsFilter` with an `and` of per-token `ilike` (`%beykoz%`), then
+confirm each returned row in code by folding `row.university` and requiring its
+token set to cover all wanted tokens (guards ilike over-match).
+
+**Why:** English/Turkish + "University"/"Üniversitesi" suffix variance makes
+full-name matching brittle; core tokens survive it.
+
+**Residual gotcha:** SQL `ilike` does NOT Turkish-fold, so a folded ASCII token
+(`aydin`) still won't match a DB row stored with diacritics (`Aydın`). We can't
+fold in-query, so on a zero-hit result we log a one-shot DISTINCT
+catalog-universities diagnostic (`PROGRAMS_UNIVERSITIES_QUERY`, near-match
+highlighted) to reveal the real spelling. If diacritic misses show up, add a
+broad no-filter fetch + in-code fold filter for the zero-hit case.
+
+**UI combo is a typeahead:** SIT's university combobox lazily renders options as
+you type — `selectComboByTokens` types the longest distinctive token into the
+focused search box, then re-reads options; on failure it dumps the available
+option texts so the real UI spelling is visible in the dry log.

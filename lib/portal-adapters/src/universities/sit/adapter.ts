@@ -202,21 +202,39 @@ async function selectComboByTokens(
   await sleep(page, 1000);
 
   const options = page.locator("[role=option], li[role=option]");
-  const n = await options.count().catch(() => 0);
+
   // Collect every option that covers ALL wanted tokens on a TOKEN-BOUNDARY
   // basis (exact folded-token membership, not substring) so a distinctive
   // token like "kent" never matches inside "beykent".
-  const fullMatches: number[] = [];
-  for (let i = 0; i < Math.min(n, 500); i++) {
-    const raw = ((await options.nth(i).innerText().catch(() => "")) || "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!raw) continue;
-    const optTokens = new Set(fold(raw).split(" ").filter(Boolean));
-    if (wantTokens.every((tok) => optTokens.has(tok))) {
-      fullMatches.push(i);
+  const collectMatches = async (): Promise<number[]> => {
+    const n = await options.count().catch(() => 0);
+    const matches: number[] = [];
+    for (let i = 0; i < Math.min(n, 500); i++) {
+      const raw = ((await options.nth(i).innerText().catch(() => "")) || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!raw) continue;
+      const optTokens = new Set(fold(raw).split(" ").filter(Boolean));
+      if (wantTokens.every((tok) => optTokens.has(tok))) {
+        matches.push(i);
+      }
     }
+    return matches;
+  };
+
+  let fullMatches = await collectMatches();
+
+  // Searchable-select support: SIT's university combo lazily renders its options
+  // as you type. When nothing matched up front, type the most distinctive
+  // (longest) token into the focused search box to load/filter the list, then
+  // re-read. Best-effort — harmless if the combo isn't a typeahead.
+  if (fullMatches.length === 0) {
+    const search = [...wantTokens].sort((a, b) => b.length - a.length)[0];
+    await page.keyboard.type(search, { delay: 25 }).catch(() => {});
+    await sleep(page, 1300);
+    fullMatches = await collectMatches();
   }
+
   // Exactly one option must cover every distinctive token. Zero = not in list;
   // more than one = genuinely ambiguous, so fail loud rather than risk picking
   // the wrong university.
@@ -228,6 +246,23 @@ async function selectComboByTokens(
   if (fullMatches.length > 1) {
     logger.warn(
       `[sit] ambiguous university options (${fullMatches.length}) for tokens: ${wantTokens.join(" ")}`,
+    );
+  } else {
+    // Diagnostic: dump the option texts the UI actually offers so a name/spelling
+    // mismatch (English vs Turkish, with/without "University") is visible in the
+    // dry log and directly actionable.
+    const n = await options.count().catch(() => 0);
+    const avail: string[] = [];
+    for (let i = 0; i < Math.min(n, 60); i++) {
+      const t = ((await options.nth(i).innerText().catch(() => "")) || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (t) avail.push(t);
+    }
+    logger.warn(
+      `[sit] university combo options (${avail.length}) for tokens [${wantTokens.join(
+        " ",
+      )}]: ${avail.join(" | ") || "(none)"}`,
     );
   }
   // Close the dropdown to avoid blocking later interactions.

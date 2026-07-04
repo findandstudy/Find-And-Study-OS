@@ -33,7 +33,9 @@
 import { z } from "zod";
 import type { Page } from "playwright-core";
 import { logger } from "../../browser.js";
+import { fold } from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
+import { distinctiveTokens } from "./helpers.js";
 import { SIT_URLS } from "./selectors.js";
 
 const GRAPHQL_PATH = "/api/graphql";
@@ -1283,18 +1285,30 @@ export async function listStudentApplications(
 const PROGRAMS_PAGE_SIZE = 200;
 
 // pg_graphql pagination is offset-based (first/offset), not Relay cursors.
-// Scope by university via `ilike` on the denormalised `university` name column;
-// degree/language/name matching is done in code (matchProgram + language gate)
-// so we don't over-filter here and miss rows to spelling/format differences.
+//
+// University matching is the fragile part: the CRM catalog name we search with
+// ("Beykoz Üniversitesi") frequently does NOT match how Zoho stores the
+// `university` column (often the English "Beykoz University" or bare "Beykoz").
+// A full-name `ilike "%Beykoz Üniversitesi%"` therefore returns 0 rows.
+//
+// So we filter by the CORE DISTINCTIVE TOKENS instead — an AND of `ilike`
+// per token ("%beykoz%") — which survives the Turkish/English spelling and
+// the "Üniversitesi"/"University" suffix difference. We then confirm each row
+// in code by Turkish-folding both sides (belt-and-suspenders against ilike
+// over-matching, e.g. a bare "%istanbul%" pulling in several universities).
+// Degree/language/name matching stays in code (matchProgram + language gate).
+//
+// NOTE: `zoho_programsFilter` is the pg_graphql-generated filter input type
+// (confirmed against the live SPA request); `and` takes a list of sub-filters.
 const PROGRAMS_QUERY = /* GraphQL */ `
-  query GetPrograms($uni: String!, $limit: Int!, $offset: Int!) {
+  query GetPrograms($filter: zoho_programsFilter, $limit: Int!, $offset: Int!) {
     zoho_programsCollection(
-      filter: { university: { ilike: $uni } }
+      filter: $filter
       first: $limit
       offset: $offset
       orderBy: [{ name: AscNullsLast }]
     ) {
-      edges { node { id name } }
+      edges { node { id name university } }
     }
   }
 `;
@@ -1304,13 +1318,90 @@ const programsSchema = z.object({
     z.object({
       id: z.union([z.string(), z.number()]).transform((v) => String(v)),
       name: z.string(),
+      university: z.string().nullish(),
     }),
   ),
 });
 
+// Diagnostic-only query: the DISTINCT `university` spellings actually stored in
+// the catalog, so a name mismatch reveals the exact string to match against
+// (English vs Turkish, with/without "University"). Run once per page, only when
+// the token filter comes up empty.
+const PROGRAMS_UNIVERSITIES_QUERY = /* GraphQL */ `
+  query GetProgramUniversities($limit: Int!, $offset: Int!) {
+    zoho_programsCollection(
+      first: $limit
+      offset: $offset
+      orderBy: [{ university: AscNullsLast }]
+    ) {
+      edges { node { university } }
+    }
+  }
+`;
+
+const programUniversitiesSchema = z.object({
+  zoho_programsCollection: connection(
+    z.object({ university: z.string().nullish() }),
+  ),
+});
+
+const distinctUniLogged = new WeakSet<Page>();
+
 /**
- * Fetch the full program catalog for a university (read-only), following
- * offset pagination. Returns [] on unavailability so the caller falls back to
+ * One-shot (per page) diagnostic: fetch and log the DISTINCT catalog university
+ * spellings. Called only when the token filter returns nothing, so the operator
+ * can see the exact string Zoho stores and confirm/adjust the match.
+ */
+async function logDistinctCatalogUniversitiesOnce(
+  page: Page,
+  wantTokens: readonly string[],
+): Promise<void> {
+  if (distinctUniLogged.has(page)) return;
+  distinctUniLogged.add(page);
+
+  const distinct = new Set<string>();
+  for (let pageNo = 0; pageNo < 5; pageNo++) {
+    const data = await gqlRequest(
+      page,
+      PROGRAMS_UNIVERSITIES_QUERY,
+      { limit: PROGRAMS_PAGE_SIZE, offset: pageNo * PROGRAMS_PAGE_SIZE },
+      programUniversitiesSchema,
+      "programs",
+    );
+    if (!data) break;
+    const nodes = data.zoho_programsCollection.nodes;
+    for (const n of nodes) if (n.university) distinct.add(n.university);
+    if (nodes.length < PROGRAMS_PAGE_SIZE) break;
+  }
+
+  const all = [...distinct].sort((a, b) => a.localeCompare(b));
+  // Surface entries that loosely resemble the target on a folded-token basis
+  // (either side contains the other) so the true spelling is easy to spot.
+  const near = all.filter((u) => {
+    const ut = fold(u).split(" ").filter(Boolean);
+    return wantTokens.some((t) =>
+      ut.some((x) => x.includes(t) || t.includes(x)),
+    );
+  });
+  logger.warn(
+    `[sit:graphql] DISTINCT catalog universities (${all.length}): ${
+      all.join(" | ") || "(none)"
+    }`,
+  );
+  if (near.length) {
+    logger.warn(
+      `[sit:graphql] near-match candidates for [${wantTokens.join(
+        " ",
+      )}]: ${near.join(" | ")}`,
+    );
+  }
+}
+
+/**
+ * Fetch the program catalog for a university (read-only), following offset
+ * pagination. Matches by CORE DISTINCTIVE TOKENS (Turkish-folded) rather than
+ * the full CRM name so English/Turkish spelling and the "University" suffix
+ * don't cause misses. Returns [] on unavailability so the caller falls back to
  * scanning the program combobox in the UI.
  */
 export async function fetchProgramCatalog(
@@ -1319,13 +1410,22 @@ export async function fetchProgramCatalog(
   _level?: string,
 ): Promise<ProgramCandidate[]> {
   const out: ProgramCandidate[] = [];
+  const wantTokens = distinctiveTokens(universityName);
+  if (wantTokens.length === 0) return out;
+
+  // AND of per-token `ilike` — narrows to the target university while tolerating
+  // spelling/suffix differences. `zoho_programsFilter` is the pg_graphql input.
+  const filter = {
+    and: wantTokens.map((t) => ({ university: { ilike: `%${t}%` } })),
+  };
+  const seenUniversities = new Set<string>();
 
   for (let pageNo = 0; pageNo < 25; pageNo++) {
     const data = await gqlRequest(
       page,
       PROGRAMS_QUERY,
       {
-        uni: `%${universityName}%`,
+        filter,
         limit: PROGRAMS_PAGE_SIZE,
         offset: pageNo * PROGRAMS_PAGE_SIZE,
       },
@@ -1336,11 +1436,37 @@ export async function fetchProgramCatalog(
 
     const nodes = data.zoho_programsCollection.nodes;
     for (const n of nodes) {
-      out.push({ id: n.id, name: n.name });
+      if (n.university) seenUniversities.add(n.university);
+      // Confirm in code: the row's university must token-cover the target on a
+      // folded basis (guards against ilike over-matching a look-alike name).
+      const uniTokens = new Set(
+        fold(n.university ?? "").split(" ").filter(Boolean),
+      );
+      if (wantTokens.every((t) => uniTokens.has(t))) {
+        out.push({ id: n.id, name: n.name });
+      }
     }
 
     // A short page means we've reached the end of the collection.
     if (nodes.length < PROGRAMS_PAGE_SIZE) break;
+  }
+
+  if (out.length === 0) {
+    logger.warn(
+      `[sit:graphql] catalog: no programs matched "${universityName}" (tokens: ${wantTokens.join(
+        " ",
+      )}); universities returned by filter: [${
+        [...seenUniversities].join(" | ") || "(none)"
+      }]`,
+    );
+    // Reveal the real catalog spellings so the mismatch is actionable.
+    await logDistinctCatalogUniversitiesOnce(page, wantTokens).catch(() => {});
+  } else {
+    logger.info(
+      `[sit:graphql] catalog: "${universityName}" → ${out.length} programs from [${[
+        ...seenUniversities,
+      ].join(" | ")}]`,
+    );
   }
 
   return out;
