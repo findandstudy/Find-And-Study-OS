@@ -78,13 +78,18 @@ Supabase enforces MFA/captcha on the account (no MFA ⇒ works).
   route (photos are `*_Contacts_photo.jpeg`); the adapter's guessed
   query/operationName/variables aren't recognized. There is NO direct GraphQL to
   *.supabase.co (only /auth/v1 + /storage/v1) — data comes only from this route.
-- **To learn the real query, inject the minted session into a THROWAWAY probe
-  page and capture the SPA's own requests.** Keep the FULL password-grant session
-  (not just access_token) in capturedSessionByPage; in captureRealGraphqlOnce
-  open page.context().newPage(), addInitScript localStorage
-  `sb-<projectRef>-auth-token` = JSON.stringify(session), goto studentsPath, and
-  capture /api/graphql POST bodies (query+variables+operationName). One-shot per
-  page, triggered from gqlRequest on the data:null path; runs on a separate page
-  so it never disturbs the main flow. Also log OUR outgoing op+variables to
-  compare. All bodies PII-masked via rawForLog (query text preserved).
+- **To learn the real query, PREFER passively capturing the SPA's own requests.**
+  installSpaAuthCapture already sees the SPA's /api/graphql requests (that's the
+  Bearer fallback source), so also retain their request BODY (postData) keyed by
+  op in capturedRealGqlByPage — this is the true query shape verbatim, no
+  injection needed. captureRealGraphqlOnce logs these first (`capture(passive)`).
+- **Fallback if the SPA fired nothing passively (headless login often fails to
+  establish a session): inject the minted session into a THROWAWAY probe page.**
+  Keep the FULL password-grant session (not just access_token) in
+  capturedSessionByPage; open page.context().newPage(), addInitScript localStorage
+  `sb-<projectRef>-auth-token` = JSON.stringify(session), goto studentsPath,
+  capture /api/graphql POST bodies (`capture(probe)`). One-shot per page,
+  triggered from gqlRequest on the data:null path; separate page so it never
+  disturbs the main flow. Also log OUR outgoing op+variables to compare. All
+  bodies PII-masked via rawForLog (query text preserved).
 - Same Supabase-Bearer + apikey pattern likely applies to the United adapter too.

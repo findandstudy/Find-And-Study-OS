@@ -78,6 +78,11 @@ const captureInstalledPages = new WeakSet<Page>();
 // requests, which we capture to learn the exact query this route expects. Held
 // in memory, keyed weakly by page; NEVER logged.
 const capturedSessionByPage = new WeakMap<Page, Record<string, unknown>>();
+// The SPA's OWN /api/graphql request bodies, captured PASSIVELY during natural
+// navigation (keyed by operationName so each distinct op is kept once). This is
+// the most reliable source of the route's real query shape — no session
+// injection needed — because the SPA fires these itself after login.
+const capturedRealGqlByPage = new WeakMap<Page, Map<string, string>>();
 // Guards the one-shot real-request capture (per page).
 const graphqlCaptureAttempted = new WeakSet<Page>();
 
@@ -102,11 +107,25 @@ export function installSpaAuthCapture(page: Page): void {
         const key = req.headers()["apikey"];
         if (typeof key === "string" && key) capturedAnonKeyByPage.set(page, key);
       }
-      // (a) Bearer from the SPA's own graphql calls (fallback source).
+      // (a) Bearer from the SPA's own graphql calls (fallback source) AND the
+      //     request BODY (query+variables+operationName) so we can learn the
+      //     exact shape this Zoho-backed route expects. Deduped by op.
       if (url.includes(GRAPHQL_PATH)) {
         const authz = req.headers()["authorization"];
         const m = typeof authz === "string" ? authz.match(BEARER_JWT_RE) : null;
         if (m) capturedBearerByPage.set(page, m[1]);
+        if (req.method() === "POST") {
+          const b = req.postData();
+          if (b) {
+            let store = capturedRealGqlByPage.get(page);
+            if (!store) {
+              store = new Map<string, string>();
+              capturedRealGqlByPage.set(page, store);
+            }
+            const op = extractOperationName(b) ?? `#${store.size}`;
+            if (!store.has(op)) store.set(op, b);
+          }
+        }
       }
     } catch {
       /* header read failed — ignore, other requests may still be captured */
@@ -277,11 +296,46 @@ function extractOperationName(body: string): string | null {
   return null;
 }
 
+// Log each DISTINCT captured /api/graphql body once (PII-masked), so the real
+// student-search / program-listing queries are visible for reuse.
+function logRealGqlBodies(source: string, bodies: Iterable<string>): void {
+  const seen = new Set<string>();
+  for (const body of bodies) {
+    const op = extractOperationName(body) ?? "?";
+    if (seen.has(op)) continue;
+    seen.add(op);
+    logger.info(
+      `[sit:graphql] capture(${source}): REAL request op=${op} body=${rawForLog(
+        body,
+        900,
+      )}`,
+    );
+    if (seen.size >= 8) break;
+  }
+}
+
 async function captureRealGraphqlOnce(page: Page): Promise<void> {
   if (graphqlCaptureAttempted.has(page)) return;
   graphqlCaptureAttempted.add(page);
+
+  // PRIMARY — the SPA's OWN /api/graphql requests observed passively during
+  // natural navigation (installSpaAuthCapture). No injection needed; if the SPA
+  // already fired requests after login, this is the true query shape verbatim.
+  const passive = capturedRealGqlByPage.get(page);
+  if (passive && passive.size > 0) {
+    logRealGqlBodies("passive", passive.values());
+    return;
+  }
+
+  // FALLBACK — inject the minted session into a throwaway probe page so the SPA
+  // authenticates, then capture the /api/graphql requests it fires.
   const session = capturedSessionByPage.get(page);
-  if (!session) return; // no minted session → cannot authenticate the probe SPA
+  if (!session) {
+    logger.warn(
+      "[sit:graphql] capture: no SPA request seen passively and no minted session to inject — cannot learn real query shape",
+    );
+    return;
+  }
 
   let probe: Page | null = null;
   try {
@@ -327,18 +381,7 @@ async function captureRealGraphqlOnce(page: Page): Promise<void> {
       );
       return;
     }
-    // Log each DISTINCT operation once (by operationName) so the real
-    // student-search / program-listing queries are visible for reuse.
-    const seen = new Set<string>();
-    for (const body of captured) {
-      const op = extractOperationName(body) ?? "?";
-      if (seen.has(op)) continue;
-      seen.add(op);
-      logger.info(
-        `[sit:graphql] capture: REAL request op=${op} body=${rawForLog(body, 900)}`,
-      );
-      if (seen.size >= 8) break;
-    }
+    logRealGqlBodies("probe", captured);
   } catch (e) {
     logger.warn(
       `[sit:graphql] capture: hata ${
