@@ -27,6 +27,7 @@ import {
 import { ImportValidationError } from "../lib/exportImport";
 import {
   findActivePortalUniversity,
+  resolvePortalRouting,
   scanAndEnqueueTriggerStageApplications,
 } from "../lib/portalAutoTrigger.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
@@ -224,14 +225,15 @@ router.post(
         continue;
       }
 
-      const portalUni = await findActivePortalUniversity({
+      const routing = await resolvePortalRouting({
         universityId:   app.universityId,
         universityName: app.universityName,
       });
-      if (!portalUni) {
+      if (!routing) {
         skipped.push({ applicationId: appId, reason: "NO_PORTAL" });
         continue;
       }
+      const { portalUni, target } = routing;
 
       // Duplicate guard: an active (queued/running) submission for this
       // application × university must not be re-queued.
@@ -259,10 +261,19 @@ router.post(
           applicationId:  appId,
           studentId:      app.studentId,
           universityKey:  portalUni.universityKey,
-          universityName: portalUni.universityName,
+          universityName: target ? target.universityName : portalUni.universityName,
           mode,
           status:         "queued",
           enqueuedBy:     user.id,
+          ...(target
+            ? {
+                meta: {
+                  targetCatalogUniversityId: target.catalogUniversityId,
+                  targetUniversityName:      target.universityName,
+                  routedViaAggregator:       portalUni.universityKey,
+                },
+              }
+            : {}),
         })
         .returning({ id: portalSubmissionsTable.id });
 
@@ -322,13 +333,22 @@ router.get(
     const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: "small" });
 
     // An application is submittable when an active portal_universities row
-    // matches its university by crmUniversityId (exact) OR name (case-insensitive).
+    // matches its university by crmUniversityId (exact) OR name (case-insensitive)
+    // OR when its catalog university is an enabled member of an aggregator
+    // account (portal_account_universities → aggregator portal row).
+    const membershipMatch = sql`${portalUniversitiesTable.universityKey} IN (
+      SELECT ${portalAccountUniversitiesTable.portalKey}
+      FROM ${portalAccountUniversitiesTable}
+      WHERE ${portalAccountUniversitiesTable.catalogUniversityId} = ${applicationsTable.universityId}
+        AND ${portalAccountUniversitiesTable.enabled} = TRUE
+    )`;
     const joinCondition = and(
       isNull(portalUniversitiesTable.deletedAt),
       eq(portalUniversitiesTable.isActive, true),
       or(
         eq(portalUniversitiesTable.crmUniversityId, applicationsTable.universityId),
         sql`LOWER(${portalUniversitiesTable.universityName}) = LOWER(${applicationsTable.universityName})`,
+        membershipMatch,
       ),
     );
 
@@ -368,7 +388,9 @@ router.get(
       .innerJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
       .innerJoin(portalUniversitiesTable, joinCondition)
       .where(filters)
-      .orderBy(desc(applicationsTable.id))
+      // When an application matches BOTH its standalone row and an aggregator
+      // membership, DISTINCT ON keeps the first per id — prefer the aggregator.
+      .orderBy(desc(applicationsTable.id), sql`CASE WHEN ${membershipMatch} THEN 0 ELSE 1 END`)
       .limit(pageParams.limit)
       .offset(pageParams.offset);
 
@@ -2983,14 +3005,15 @@ router.get(
       return;
     }
 
-    const portalUni = await findActivePortalUniversity({
+    const routing = await resolvePortalRouting({
       universityId: app.universityId,
       universityName: app.universityName,
     });
-    if (!portalUni) {
+    if (!routing) {
       res.json({ resolved: false });
       return;
     }
+    const { portalUni, target } = routing;
 
     const { adapterKey, routedVia, memberUniversityId } = await resolveAdapterKey(
       portalUni.universityKey,
@@ -2999,11 +3022,11 @@ router.get(
     res.json({
       resolved: true,
       ownUniversityKey: portalUni.universityKey,
-      ownUniversityName: portalUni.universityName,
+      ownUniversityName: target ? target.universityName : portalUni.universityName,
       portalKey: routedVia ?? portalUni.universityKey,
-      routed: routedVia != null,
+      routed: routedVia != null || target != null,
       adapterKey,
-      memberUniversityId,
+      memberUniversityId: memberUniversityId ?? target?.catalogUniversityId ?? null,
     });
   },
 );

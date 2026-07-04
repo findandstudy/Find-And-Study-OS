@@ -32,6 +32,8 @@ import {
   portalAutomationSettingsTable,
   portalUniversitiesTable,
   portalSubmissionsTable,
+  portalAccountUniversitiesTable,
+  universitiesTable,
 } from "@workspace/db";
 import { logAudit } from "./auth.js";
 import { checkHasPortalCredentials } from "./portalCreds.js";
@@ -114,6 +116,93 @@ export async function findActivePortalUniversity(args: {
 }
 
 // ---------------------------------------------------------------------------
+// resolvePortalRouting — membership-aware target resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * The submission target for an application's university, resolving aggregator
+ * membership FIRST (member → aggregator wins) and falling back to the
+ * standalone portal_universities row.
+ *
+ *   1. MEMBERSHIP (aggregator) — if the application's catalog university has an
+ *      ENABLED row in portal_account_universities pointing at an ACTIVE
+ *      aggregator portal_universities row (SIT/United), the submission is routed
+ *      to that aggregator: `portalUni` is the aggregator row and `target` names
+ *      the member (catalog) university. This wins even when the member ALSO has
+ *      its own standalone portal row (which lacks the aggregator's credentials).
+ *   2. STANDALONE — otherwise the application uses its own portal row, exactly
+ *      as before (`target` is null).
+ *
+ * Returns null when neither a membership nor a standalone row matches.
+ */
+export interface PortalRoutingResolution {
+  /** The portal_universities row driving universityKey / adapter / credentials. */
+  portalUni: typeof portalUniversitiesTable.$inferSelect;
+  /**
+   * When routed through an aggregator membership, the member (catalog)
+   * university whose school must be selected inside the aggregator portal.
+   * Null on the standalone path.
+   */
+  target: { catalogUniversityId: number; universityName: string } | null;
+}
+
+export async function resolvePortalRouting(args: {
+  universityId: number | null;
+  universityName: string | null;
+}): Promise<PortalRoutingResolution | null> {
+  const { universityId, universityName } = args;
+
+  // ----- Rule 1: aggregator membership (wins over a standalone row) ---------
+  if (universityId != null) {
+    const [member] = await db
+      .select({ portalKey: portalAccountUniversitiesTable.portalKey })
+      .from(portalAccountUniversitiesTable)
+      .where(
+        and(
+          eq(portalAccountUniversitiesTable.catalogUniversityId, universityId),
+          eq(portalAccountUniversitiesTable.enabled, true),
+        ),
+      )
+      .limit(1);
+
+    if (member) {
+      const [aggregator] = await db
+        .select()
+        .from(portalUniversitiesTable)
+        .where(
+          and(
+            eq(portalUniversitiesTable.universityKey, member.portalKey),
+            eq(portalUniversitiesTable.isActive, true),
+            isNull(portalUniversitiesTable.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (aggregator) {
+        // Prefer the canonical catalog name (what the aggregator portal lists);
+        // fall back to the application free-text, then the aggregator label.
+        const [cat] = await db
+          .select({ name: universitiesTable.name })
+          .from(universitiesTable)
+          .where(eq(universitiesTable.id, universityId))
+          .limit(1);
+        const memberName =
+          cat?.name ?? universityName ?? aggregator.universityName;
+        return {
+          portalUni: aggregator,
+          target: { catalogUniversityId: universityId, universityName: memberName },
+        };
+      }
+      // Aggregator row missing/inactive → fall through to the standalone match.
+    }
+  }
+
+  // ----- Rule 2: standalone portal row (legacy path, unchanged) ------------
+  const standalone = await findActivePortalUniversity({ universityId, universityName });
+  return standalone ? { portalUni: standalone, target: null } : null;
+}
+
+// ---------------------------------------------------------------------------
 // enqueueIfEligible — the shared eligibility gate (single source of truth)
 // ---------------------------------------------------------------------------
 
@@ -137,11 +226,12 @@ export async function enqueueIfEligible(
     return { status: "skipped", reason: "stage_not_trigger" };
   }
 
-  // ----- Gate 2: find matching portal_universities row ------------------
-  const portalUni = await findActivePortalUniversity({ universityId, universityName });
-  if (!portalUni) {
+  // ----- Gate 2: resolve routing (membership → aggregator wins) ---------
+  const routing = await resolvePortalRouting({ universityId, universityName });
+  if (!routing) {
     return { status: "skipped", reason: "no_active_portal_university" };
   }
+  const { portalUni, target } = routing;
 
   // ----- Gate 3: scope filter -------------------------------------------
   if (settings.scope === "selected") {
@@ -196,10 +286,19 @@ export async function enqueueIfEligible(
         applicationId,
         studentId,
         universityKey:  portalUni.universityKey,
-        universityName: portalUni.universityName,
+        universityName: target ? target.universityName : portalUni.universityName,
         mode:           settings.mode,
         status:         "queued",
         enqueuedBy:     actorUserId,
+        ...(target
+          ? {
+              meta: {
+                targetCatalogUniversityId: target.catalogUniversityId,
+                targetUniversityName:      target.universityName,
+                routedViaAggregator:       portalUni.universityKey,
+              },
+            }
+          : {}),
       })
       .returning({ id: portalSubmissionsTable.id });
 

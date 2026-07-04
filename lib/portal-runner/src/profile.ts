@@ -553,6 +553,17 @@ export async function buildStudentProfile(
 
   // ----- 4. Build profile + download documents -----------------------------
   const profile = buildSubmitProfileFromRecords(student, app);
+
+  // Aggregator (SIT/United) routing: the submission carries the member
+  // (catalog) university it must select inside the aggregator portal. Override
+  // the profile so the adapter's school-selection (matchAllowedUniversity /
+  // selById("selectuniversity", profile.universityName)) targets the member,
+  // not the aggregator or a drifted free-text name.
+  const meta = sub.meta as { targetUniversityName?: string } | null;
+  if (meta?.targetUniversityName) {
+    profile.universityName = meta.targetUniversityName;
+  }
+
   const dl = await downloadStudentDocuments(
     sub.studentId,
     `portal-sub-${submissionId}`,
