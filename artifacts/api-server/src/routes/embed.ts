@@ -3104,7 +3104,7 @@ function renderDetailContent(p){
 
 var EW_TR_MAP={'ç':'C','Ç':'C','ğ':'G','Ğ':'G','ı':'I','İ':'I','ö':'O','Ö':'O','ş':'S','Ş':'S','ü':'U','Ü':'U'};
 function ewToLatinUpper(v){return String(v==null?'':v).replace(/[çÇğĞıİöÖşŞüÜ]/g,function(c){return EW_TR_MAP[c]||c;}).toUpperCase();}
-function ewHasNonLatin(v){var s=String(v==null?'':v);for(var ci=0;ci<s.length;ci++){var ch=s[ci];if(/\p{L}/u.test(ch)&&!/\p{Script=Latin}/u.test(ch))return true;}return false;}
+function ewHasNonLatin(v){var s=String(v==null?'':v);for(var ci=0;ci<s.length;ci++){var ch=s[ci];if(/\\p{L}/u.test(ch)&&!/\\p{Script=Latin}/u.test(ch))return true;}return false;}
 function ewFirstNonLatinName(){var NLF=['firstName','lastName','motherName','fatherName','highSchool','address'];for(var i=0;i<NLF.length;i++){var val=savedFormData[NLF[i]];if(val&&ewHasNonLatin(val))return NLF[i];}return null;}
 function wireNameAndPhoneNormalizers(scope){
   var root=scope||document;
@@ -3126,14 +3126,14 @@ function wireNameAndPhoneNormalizers(scope){
     if(el.__ewPhoneBound)return; el.__ewPhoneBound=true;
     el.setAttribute('inputmode','tel');
     el.setAttribute('pattern','[0-9]*');
-    if(el.value)el.value=el.value.replace(/\D/g,'');
+    if(el.value)el.value=el.value.replace(/\\D/g,'');
     // beforeinput: yazılan/yapıştırılan metinden rakam dışı her şeyi at, yine de
     // izin verilen rakamları manuel yerleştir. silme/ok tuşları etkilenmez.
     el.addEventListener('beforeinput',function(e){
       var data=e.data; if(data==null)return;
-      if(/[^\d]/.test(data)){
+      if(/[^\\d]/.test(data)){
         e.preventDefault();
-        var cleaned=String(data).replace(/\D/g,'');
+        var cleaned=String(data).replace(/\\D/g,'');
         var start=el.selectionStart||0, end=el.selectionEnd||0;
         el.value=el.value.slice(0,start)+cleaned+el.value.slice(end);
         var np=start+cleaned.length;
@@ -3148,7 +3148,7 @@ function wireNameAndPhoneNormalizers(scope){
         var txt=cd.getData('text');
         if(txt==null)return;
         e.preventDefault();
-        var cleaned=String(txt).replace(/\D/g,'');
+        var cleaned=String(txt).replace(/\\D/g,'');
         var start=el.selectionStart||0, end=el.selectionEnd||0;
         el.value=el.value.slice(0,start)+cleaned+el.value.slice(end);
         var np=start+cleaned.length;
@@ -3157,11 +3157,11 @@ function wireNameAndPhoneNormalizers(scope){
     });
     el.addEventListener('input',function(){
       var pos=null; try{pos=el.selectionStart;}catch(e){}
-      var v=el.value; var nv=v.replace(/\D/g,'');
+      var v=el.value; var nv=v.replace(/\\D/g,'');
       if(v!==nv){el.value=nv; var delta=v.length-nv.length; if(pos!=null){var np=Math.max(0,pos-delta);try{el.setSelectionRange(np,np);}catch(e){}}}
     });
     el.addEventListener('blur',function(){
-      var v=el.value; var nv=v.replace(/\D/g,'');
+      var v=el.value; var nv=v.replace(/\\D/g,'');
       if(v!==nv)el.value=nv;
     });
   })(phones[k]);}
@@ -3380,7 +3380,7 @@ function wireCcDropdown(scope){
 
 function sanitizeSavedFormData(){
   // Belt-and-suspenders: telefonu her zaman digits-only, name benzerlerini TR→Latin UPPER yap.
-  if(savedFormData.phone){savedFormData.phone=String(savedFormData.phone).replace(/\D/g,'');}
+  if(savedFormData.phone){savedFormData.phone=String(savedFormData.phone).replace(/\\D/g,'');}
   var NLF=['firstName','lastName','motherName','fatherName','highSchool','address'];
   for(var ni=0;ni<NLF.length;ni++){
     var key=NLF[ni];
