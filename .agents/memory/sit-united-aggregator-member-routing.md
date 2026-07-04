@@ -17,9 +17,13 @@ An aggregator portal (e.g. `study_in_turkey`→adapter `sit`, `united_education`
 - `universityName` = MEMBER name (display + the runner's name-based adapter fallback).
 - `meta` (existing `portal_submissions.meta jsonb`) = `{targetCatalogUniversityId, targetUniversityName, routedViaAggregator}`.
 
-## Runtime resolution (fragile-but-works)
-`resolveAdapterKey(aggregatorKey)` returns `adapterKey='sit'/'united'` but `routedVia=null` (aggregator row has `crm_university_id=NULL`), so the worker passes `opts=undefined` → adapter is picked by `adapterForUniversity(submission.universityName)` name fallback. This works ONLY because the member is in the SIT/United allowlist AND `buildStudentProfile` overrides `profile.universityName` from `meta.targetUniversityName` (both adapters select the school from `profile.universityName`).
+## Runtime adapter resolution (adapter_key mapping)
+The shared runner (`lib/portal-runner/src/runner.ts` `runSubmission`) resolves the adapter in priority order: `opts.adapterKey` → `resolveAdapterKey(submission.universityKey).adapterKey` → raw `universityKey` → `adapterForUniversity(name)`. Consulting `resolveAdapterKey` (which reads `portal_universities.adapter_key`) is what maps an aggregator key to its registered adapter (`study_in_turkey`→`sit`, `united_education`→`united`).
 
-**Latent risk:** if a future member's name drifts or the allowlist lags, adapter resolution silently fails. Hardening = pass `adapterKey` from `resolveAdapterKey` into `runSubmission` even when `routedVia` is null — deliberately NOT done, since it changes the shared legacy worker path (topkapi etc.) which must stay byte-identical.
+**Why:** the aggregator's OWN row returns `routedVia=null` (its `crm_university_id=NULL`), and every caller only forwarded `adapterKey` to the runner when `routedVia` was truthy — so the runner fell to `adapterByKey(rawKey)=null` then name fallback → `NO_ADAPTER` (or wrong standalone `salesforce:atlas` for a member that also has a standalone row). Do NOT rely on the name fallback for aggregators; it silently drifts.
 
-**How to apply:** SIT/United are experimental families (excluded from drain/worker auto-run), so members are manual-submit only; that's expected, not a bug. No aggregator/membership/creds rows exist in dev or prod yet — validate by temporarily seeding then cleaning up.
+**How to apply:** any NEW adapter-resolution path must go through `resolveAdapterKey(universityKey).adapterKey` FIRST (the dry CLI `portal-dry.ts` mirrors this so it accepts an aggregator key + loads creds under the real adapter key). Standalone portals where `universityKey===adapter_key` (topkapi etc.) are byte-identical because `resolveAdapterKey` returns the same key. `adapterByKey` keys are literal: sit adapter `PORTAL_KEY="sit"`, united `key:"united"`. The worker (`portal-automation-worker/src/runner.ts`) still uses raw-key resolution but is intentionally NOT changed — SIT/United are experimental families excluded from drain/worker auto-run, so members are manual/dry-submit only.
+
+**Member→aggregator precedence at adapter level:** a member submission is encoded with `universityKey=study_in_turkey` (routing layer, `resolvePortalRouting`), so resolving `sit` before the name fallback guarantees the aggregator adapter wins over the member's standalone adapter.
+
+**Validation:** no aggregator/membership/creds rows exist in dev or prod yet — validate by temporarily seeding then cleaning up.

@@ -43,6 +43,7 @@ import {
 import type { ClaimedSubmission } from "./queue.js";
 import { loadProgramMapping } from "./programMappingLoader.js";
 import { resolveNationalityExclusion } from "./exclusions.js";
+import { resolveAdapterKey } from "./resolveAdapter.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -123,11 +124,24 @@ export async function runSubmission(
   }
 
   // ----- 1. Resolve adapter -----------------------------------------------
-  // When opts.adapterKey is provided (multi-portal routing) it takes priority.
-  // It is ONLY passed when a routes_via redirect actually applies, so the
-  // legacy NULL path resolves exactly as before (universityKey → name).
+  // Priority:
+  //   1. opts.adapterKey — explicit override from a routed caller (junction /
+  //      routes_via). Passed only when a redirect actually applies.
+  //   2. resolveAdapterKey(universityKey).adapterKey — maps the submission's
+  //      universityKey to its registered adapter via portal_universities.
+  //      adapter_key. This is what makes AGGREGATOR keys resolve to their
+  //      adapters (study_in_turkey → sit, united_education → united) and keeps
+  //      member→aggregator precedence at the adapter level: a member submission
+  //      arrives with universityKey=study_in_turkey and MUST pick "sit", never
+  //      the member's standalone adapter (e.g. salesforce:atlas).
+  //   3. raw universityKey — legacy fallback for standalone portals where
+  //      universityKey === adapter_key (e.g. topkapi); byte-for-byte unchanged.
+  //   4. universityName — last-resort name match.
+  const resolvedAdapterKey =
+    opts?.adapterKey ?? (await resolveAdapterKey(submission.universityKey)).adapterKey;
+
   const adapter =
-    (opts?.adapterKey ? adapterByKey(opts.adapterKey) : undefined) ??
+    adapterByKey(resolvedAdapterKey) ??
     adapterByKey(submission.universityKey) ??
     adapterForUniversity(submission.universityName);
 

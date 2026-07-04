@@ -24,7 +24,11 @@
  */
 
 import { adapterByKey, adapterForUniversity } from "@workspace/portal-adapters";
-import { runSubmission, buildProfileFromApplication } from "@workspace/portal-runner";
+import {
+  runSubmission,
+  buildProfileFromApplication,
+  resolveAdapterKey,
+} from "@workspace/portal-runner";
 import { resolvePortalCreds } from "../src/credResolver.js";
 
 // ---------------------------------------------------------------------------
@@ -56,11 +60,16 @@ async function main(): Promise<void> {
   );
 
   // ----- 1. Resolve adapter (mirrors the production runner semantics) -------
-  // runSubmission resolves via adapterByKey(...) ?? adapterForUniversity(...);
-  // we resolve the same way here so the CLI accepts exactly what the worker
-  // would (key-first, then name fallback) and can log + load creds for it.
+  // The runner resolves the adapter via portal_universities.adapter_key
+  // (resolveAdapterKey), so aggregator keys map to their registered adapters
+  // (study_in_turkey → sit, united_education → united). Mirror that here so the
+  // CLI accepts an aggregator key, logs the real adapter, and loads creds under
+  // it. Raw-key / name lookups remain as fallbacks for standalone portals.
+  const { adapterKey } = await resolveAdapterKey(universityKey);
   const adapter =
-    adapterByKey(universityKey) ?? adapterForUniversity(universityKey);
+    adapterByKey(adapterKey) ??
+    adapterByKey(universityKey) ??
+    adapterForUniversity(universityKey);
   if (!adapter) {
     console.error(
       `[portal:dry] No adapter found for "${universityKey}". ` +
