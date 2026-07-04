@@ -17,6 +17,8 @@ export const SIT_URLS = {
   loginPath: "/auth/login",
   /** Student list / search route. */
   studentsPath: "/students",
+  /** Application list route — hosts the "Add Application" modal. */
+  applicationsPath: "/applications",
 } as const;
 
 export const SIT_LOGIN = {
@@ -128,4 +130,17 @@ export const SIT_UPLOAD = {
 export const SIT_ERRORS = {
   validation: /validation (error|failed)|please (check|correct)|zoho|required field|geçersiz|zorunlu/i,
   duplicate:  /already exists|duplicate|zaten (var|kayıtlı|mevcut)/i,
+  /**
+   * SIT's "It looks like you've already submitted an application with the same
+   * details" toast — the portal's own dedup guard. Treated as an IDEMPOTENT
+   * SUCCESS (the application already exists), never a hard failure.
+   */
+  duplicateApplication:
+    /already submitted|same details|looks like you'?ve already|zaten (başvur|gönder)|mükerrer başvuru/i,
+  /**
+   * Server-side create failure (a 503 / generic backend error surfaced as a
+   * toast). Reported as a clear failure so the operator can retry.
+   */
+  serverError:
+    /503|service unavailable|server error|internal error|something went wrong|bir (hata|sorun) olu[şs]/i,
 } as const;

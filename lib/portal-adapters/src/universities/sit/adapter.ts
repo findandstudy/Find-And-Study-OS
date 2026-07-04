@@ -9,8 +9,14 @@
 //   - createApplication (idempotent dedup, exact program match per university)
 //
 // Student creation happens through the "Add Student" UI wizard; the APPLICATION
-// is created via the GraphQL `InsertApplication` mutation (program matched in
-// code from the read-only catalog). SIT GraphQL also backs idempotency lookups.
+// is created by driving the portal's REAL "Add Application" flow (Path A):
+// open /applications → "Add Application" → fill the searchable dropdowns
+// (Student, Academic Year, Semester, Country, University, Degree, Program) →
+// "Create Application". The SIT backend (Zoho CRM) creates the record and
+// assigns id + app_id + stage — the client cannot generate them, which is why a
+// raw GraphQL insert never worked. After the UI flow succeeds we read the
+// freshly-created record back (Supabase GraphQL) to obtain app_id for writeback.
+// SIT GraphQL also backs idempotency lookups + program matching (read-only).
 // The adapter satisfies the shared UniversityAdapter interface (login/submit)
 // and additionally exposes typed createStudent/createApplication methods.
 // Registered as experimental (never auto-submitted).
@@ -33,6 +39,7 @@ import {
   SIT_LOGIN,
   SIT_NAV,
   SIT_STUDENT_FIELDS,
+  SIT_APP_FIELDS,
   SIT_BUTTONS,
   SIT_UPLOAD,
   SIT_ERRORS,
@@ -45,12 +52,13 @@ import {
   matchAllowedUniversity,
   isAllowedUniversity,
   isLanguageCompatible,
+  distinctiveTokens,
 } from "./helpers.js";
 import {
   findStudent,
   listStudentApplications,
   fetchProgramCatalog,
-  createApplicationRecord,
+  findLatestApplication,
   installSpaAuthCapture,
   mintSupabaseBearer,
 } from "./graphql.js";
@@ -92,10 +100,9 @@ export interface SitAdapter extends UniversityAdapter {
 const PORTAL_KEY = "sit";
 const SIT_ALLOWLIST_FOLDED: readonly string[] = SIT_ALLOWLIST.map(fold);
 
-// Best-effort defaults for the InsertApplication payload fields that the CRM
-// intake wizard would otherwise pick (first option). Dr. Namazcı verifies these
-// against the first REAL submission and they can be tuned centrally here.
-const SIT_DEFAULT_APP_STAGE = "Application";
+// Dropdown defaults selected in the "Add Application" UI flow. The new-record
+// stage is assigned by the SIT backend ("Pending Review"), so it is NOT sent
+// here. Academic year rolls forward via defaultAcademicYear().
 const SIT_DEFAULT_SEMESTER = "Fall";
 
 /**
@@ -195,6 +202,82 @@ async function selectCombo(
     return true;
   }
   // Close the dropdown to avoid blocking later interactions.
+  await page.keyboard.press("Escape").catch(() => {});
+  return false;
+}
+
+/** Escape a raw string for safe embedding in a RegExp source. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Open a SIT SEARCHABLE combobox (the "Add Application" dialog uses these:
+ * Student / University / Program etc. render a role=button|combobox trigger
+ * that opens a search textbox filtering a role=listbox). Types `search` into
+ * the visible textbox to filter, then clicks the option matching `optionRe`
+ * (or the first option when `pickFirst`). Returns true when an option was
+ * clicked.
+ */
+async function selectComboSearch(
+  page: Page,
+  triggerRe: RegExp,
+  opts: { search?: string; optionRe?: RegExp; pickFirst?: boolean },
+): Promise<boolean> {
+  let trigger = page.getByRole("combobox", { name: triggerRe }).first();
+  if (!(await trigger.count())) {
+    trigger = page.getByRole("button", { name: triggerRe }).first();
+  }
+  if (!(await trigger.count())) {
+    // Last resort: a visible element whose text matches the field label.
+    trigger = page
+      .locator("[role=combobox], [role=button], button")
+      .filter({ hasText: triggerRe })
+      .first();
+  }
+  if (!(await trigger.count())) return false;
+  await trigger.click({ timeout: 6000 }).catch(() => {});
+  await sleep(page, 700);
+
+  // Type into the search textbox (if the combobox exposes one) to filter the
+  // options — the searchable dropdowns can be virtualised so the target option
+  // may not render until filtered.
+  if (opts.search) {
+    const box = page
+      .getByRole("textbox")
+      .filter({ hasNot: page.locator("[readonly]") })
+      .last();
+    if (await box.count()) {
+      await box.fill(opts.search, { timeout: 3000 }).catch(() => {});
+    } else {
+      await page.keyboard.type(opts.search, { delay: 20 }).catch(() => {});
+    }
+    await sleep(page, 900);
+  }
+
+  let opt;
+  if (opts.pickFirst) {
+    opt = page.getByRole("option").first();
+    if (!(await opt.count())) {
+      opt = page.locator("[role=option], li, [class*=option i]").first();
+    }
+  } else if (opts.optionRe) {
+    opt = page.getByRole("option", { name: opts.optionRe }).first();
+    if (!(await opt.count())) {
+      opt = page
+        .locator("[role=option], li, [class*=option i]")
+        .filter({ hasText: opts.optionRe })
+        .first();
+    }
+  } else {
+    opt = page.getByRole("option").first();
+  }
+
+  if (await opt.count()) {
+    await opt.click({ timeout: 3000 }).catch(() => {});
+    await sleep(page, 900);
+    return true;
+  }
   await page.keyboard.press("Escape").catch(() => {});
   return false;
 }
@@ -505,8 +588,10 @@ export const sitAdapter: SitAdapter = {
    * Create an application for a student at an allowed university + program.
    * Idempotent: skips when a matching (university, program) application already
    * exists. The program is matched in code against the read-only university-
-   * scoped catalog, then the record is inserted via the GraphQL
-   * `InsertApplication` mutation (REAL mode only; DRY stops after matching).
+   * scoped catalog, then the record is created by driving the portal's REAL
+   * "Add Application" UI flow (REAL mode only; DRY stops after matching). The
+   * SIT backend (Zoho) assigns id + app_id + stage; we read the new record back
+   * to obtain app_id for writeback.
    */
   async createApplication(
     session: AdapterSession,
@@ -556,9 +641,13 @@ export const sitAdapter: SitAdapter = {
       );
       if (dup) {
         logger.info(
-          `[sit] mevcut başvuru bulundu (id=${dup.id}) — mükerrer oluşturulmayacak`,
+          `[sit] mevcut başvuru bulundu (id=${dup.id}, app_id=${dup.appId ?? "-"}) — mükerrer oluşturulmayacak`,
         );
-        return { ...base, alreadyExists: true, externalRef: dup.id };
+        return {
+          ...base,
+          alreadyExists: true,
+          externalRef: dup.appId ?? dup.id,
+        };
       }
     }
 
@@ -625,7 +714,7 @@ export const sitAdapter: SitAdapter = {
     // --- DRY: student + program resolved → stop before any write ---
     if (!doSubmit) {
       logger.info(
-        "[sit] DRY: öğrenci+program bulundu — InsertApplication çalıştırılmadan durduruldu",
+        "[sit] DRY: öğrenci+program bulundu — Add Application akışı çalıştırılmadan durduruldu",
       );
       return {
         ...base,
@@ -633,35 +722,185 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    // --- REAL: create the application via the InsertApplication mutation ---
+    // --- REAL: create the application via the portal's "Add Application" UI ---
+    // The SIT backend (Zoho) — not the client — assigns id/app_id/stage, so we
+    // must drive the real dialog rather than inserting a row directly.
     if (!studentId) {
       return {
         ...base,
         detail: "başvuru oluşturulamadı: öğrenci id çözümlenemedi",
       };
     }
-    const created = await createApplicationRecord(page, {
-      student: studentId,
-      program: matched.id,
-      // Use the catalog's stored spelling (e.g. "Beykoz University") so the
-      // denormalised NAME column matches Zoho; fall back to the allowlist name.
-      university: matched.universityName ?? allowedUni,
-      degree: matched.degreeName ?? level,
-      stage: SIT_DEFAULT_APP_STAGE,
-      acdamicYear: defaultAcademicYear(),
-      semester: SIT_DEFAULT_SEMESTER,
-      country: "Turkey",
-      applicationName:
-        `${profile.firstName} ${profile.lastName} — ${matched.name}`.trim(),
+
+    const uniName = matched.universityName ?? allowedUni;
+    // Match the university option by its distinctive tokens (folded, generic
+    // words removed) so short/long spelling differences ("Aydin University" vs
+    // "İstanbul Aydın Üniversitesi") still resolve to the right option. The
+    // tokens must all appear (any order) in the option text.
+    const uniTokens = distinctiveTokens(uniName);
+    const uniOptionRe =
+      uniTokens.length > 0
+        ? new RegExp(
+            uniTokens.map((t) => `(?=.*${escapeRe(t)})`).join("") + ".+",
+            "i",
+          )
+        : new RegExp(escapeRe(uniName), "i");
+    // Academic year "2026-2027" → tolerate "2026/2027" or "2026 - 2027".
+    const [yStart, yEnd] = defaultAcademicYear().split("-");
+    const yearRe =
+      yStart && yEnd
+        ? new RegExp(`${yStart}\\s*[/\\-]\\s*${yEnd}`)
+        : new RegExp(escapeRe(defaultAcademicYear()));
+
+    logger.info('[sit] "Add Application" akışı başlatılıyor');
+    await page.goto(SIT_URLS.base + SIT_URLS.applicationsPath, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
     });
-    if (!created) {
+    await sleep(page, 1200);
+
+    if (!(await clickButton(page, SIT_BUTTONS.addApplication))) {
       return {
         ...base,
-        detail: `başvuru oluşturulamadı (InsertApplication): "${matched.name}"`,
+        detail: '"Add Application" düğmesi bulunamadı',
       };
     }
-    logger.info(`[sit] başvuru oluşturuldu (id=${created.id})`);
-    return { ...base, submitted: true, externalRef: created.id };
+    await sleep(page, 1200);
+
+    // Fill the 7 searchable dropdowns. Student/University/Program need a search
+    // filter; the rest pick a fixed option by label. EVERY selection is
+    // mandatory in REAL mode: if any dropdown fails to pick its option we must
+    // NOT click Create (that would submit wrong/default values or a no-op), so
+    // fail fast with a field-specific detail.
+    const fields: Array<{
+      key: string;
+      run: () => Promise<boolean>;
+    }> = [
+      {
+        key: "öğrenci (student)",
+        run: () =>
+          selectComboSearch(page, SIT_APP_FIELDS.student, {
+            search: `${profile.firstName} ${profile.lastName}`.trim(),
+            pickFirst: true,
+          }),
+      },
+      {
+        key: "akademik yıl (academic year)",
+        run: () =>
+          selectComboSearch(page, SIT_APP_FIELDS.academicYear, {
+            optionRe: yearRe,
+          }),
+      },
+      {
+        key: "dönem (semester)",
+        run: () =>
+          selectComboSearch(page, SIT_APP_FIELDS.semester, {
+            optionRe: new RegExp(escapeRe(SIT_DEFAULT_SEMESTER), "i"),
+          }),
+      },
+      {
+        key: "ülke (country)",
+        run: () =>
+          selectComboSearch(page, SIT_APP_FIELDS.country, {
+            search: "Turkey",
+            optionRe: /turkey|türkiye/i,
+          }),
+      },
+      {
+        key: "üniversite (university)",
+        run: () =>
+          selectComboSearch(page, SIT_APP_FIELDS.university, {
+            search: uniTokens[0] ?? uniName,
+            optionRe: uniOptionRe,
+          }),
+      },
+      {
+        key: "derece (degree)",
+        run: () =>
+          selectComboSearch(page, SIT_APP_FIELDS.degree, {
+            optionRe: new RegExp(escapeRe(matched.degreeName ?? level), "i"),
+          }),
+      },
+      {
+        key: "program",
+        run: () =>
+          selectComboSearch(page, SIT_APP_FIELDS.program, {
+            search: matched.name,
+            optionRe: new RegExp(escapeRe(matched.name), "i"),
+          }),
+      },
+    ];
+    for (const field of fields) {
+      if (!(await field.run())) {
+        logger.warn(
+          `[sit] "Add Application" alanı seçilemedi: ${field.key} — başvuru oluşturulmadı`,
+        );
+        return {
+          ...base,
+          detail: `başvuru oluşturulamadı: "${field.key}" seçilemedi ("${matched.name}")`,
+        };
+      }
+    }
+
+    if (!(await clickButton(page, SIT_BUTTONS.createApplication))) {
+      return {
+        ...base,
+        detail: '"Create Application" düğmesi bulunamadı',
+      };
+    }
+    await sleep(page, 2500);
+
+    // Classify the outcome from the resulting page/toast text.
+    const body = await bodyText(page);
+    if (
+      SIT_ERRORS.duplicateApplication.test(body) ||
+      SIT_ERRORS.duplicate.test(body)
+    ) {
+      // The portal's own dedup guard — the application already exists. Treat as
+      // an idempotent SUCCESS and read the existing record back for app_id.
+      logger.info(
+        "[sit] portal mükerrer uyarısı — başvuru zaten var (idempotent başarı)",
+      );
+      const existing = await findLatestApplication(page, studentId, matched.id);
+      return {
+        ...base,
+        alreadyExists: true,
+        externalRef: existing?.appId ?? existing?.id,
+      };
+    }
+    if (SIT_ERRORS.serverError.test(body)) {
+      logger.warn("[sit] sunucu hatası (503/backend) — başvuru oluşturulamadı");
+      return {
+        ...base,
+        detail: `başvuru oluşturulamadı (sunucu hatası): "${matched.name}"`,
+      };
+    }
+
+    // Success path: the backend created the record asynchronously. Poll the
+    // read model a few times for the freshly-created application (id + app_id).
+    let created: { id: string; appId?: string } | null = null;
+    for (let i = 0; i < 4; i++) {
+      created = await findLatestApplication(page, studentId, matched.id);
+      if (created) break;
+      await sleep(page, 2000);
+    }
+    if (!created) {
+      logger.warn(
+        `[sit] "Create Application" sonrası kayıt okunamadı: "${matched.name}"`,
+      );
+      return {
+        ...base,
+        detail: `başvuru oluşturuldu ancak doğrulanamadı: "${matched.name}"`,
+      };
+    }
+    logger.info(
+      `[sit] başvuru oluşturuldu (id=${created.id}, app_id=${created.appId ?? "-"})`,
+    );
+    return {
+      ...base,
+      submitted: true,
+      externalRef: created.appId ?? created.id,
+    };
   },
 
   /**

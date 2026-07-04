@@ -25,58 +25,45 @@ stripped):
 **How to apply:** reuse `distinctiveTokens`/`fold` from these modules — do NOT
 add a new normalizer. On a resolution miss return `{programMissing:true, detail}`.
 
-## Application create = GraphQL mutation, NOT the UI (current)
+## Application create = REAL "Add Application" UI flow, id from Zoho backend
 
-`createApplication` NO LONGER drives the SIT "Add Application" UI dialog
-(brittle: the "Add Application"/combobox selectors kept 404-ing). The whole UI
-block — `openStudentDetail`, `readComboOptions`, `selectComboByTokens` and the
-combobox `SIT_APP_FIELDS` — was **deleted**. Program is matched entirely in code
-against `fetchProgramCatalog(...)` (active-only, returns
-`{id,name,universityName,degreeName,languageName}`), then the record is written
-via `createApplicationRecord` → `INSERT_APPLICATION_MUTATION`
-(`insertIntozoho_applicationsCollection`), `records[0].id` = externalRef.
+**The client CANNOT create the application record itself.** sitconnect's "Add
+Application" button hits a Next.js Server Action → the SIT backend creates the
+record in **Zoho CRM**, which assigns `id` + `app_id` (SITP-xxxxx) + `stage`
+("Pending Review"). A raw Supabase `INSERT` NEVER worked (RLS + Zoho ownership
+generate the id server-side). So `createApplication` drives the REAL portal UI
+(Path A, Playwright): goto `/applications` → click Add Application → fill 7
+searchable dropdowns (Student, Academic Year, Semester=Fall, Country=Turkey,
+University, Degree, Program by NAME) → click Create Application.
 
-**Column mapping gotchas:** the real column is the misspelled **`acdamic_year`**;
-`student`/`program` are related-record REF ids (pass the zoho ids), while
-`university`/`degree`/`country` are plain STRING columns (use the catalog's
-`universityName` spelling, e.g. "Beykoz University", not the CRM Turkish name).
+**Outcome classification (from resulting page/toast body text):**
+- portal duplicate toast ("It looks like you've already submitted…" /
+  `SIT_ERRORS.duplicateApplication|duplicate`) = **idempotent SUCCESS** →
+  `alreadyExists:true`, read record back for app_id.
+- `SIT_ERRORS.serverError` (503/backend) = clear FAILURE.
+- else = success → poll the read model (`findLatestApplication`, ~4×/2s) for the
+  new record; if it never appears report `submitted:false` + "doğrulanamadı"
+  (NEVER a false success).
 
-**DRY vs REAL:** mutation runs ONLY when `doSubmit` is true. DRY stops right
-after matching with a clean detail ("öğrenci+program bulundu … kaydedilmeden
-durduruldu") — never a UI button error. `createApplicationRecord` returns `null`
-(never throws) on missing id so the caller reports a soft failure.
+**externalRef = `app_id` (SITP-…) ?? `id`** — both the create success path AND
+the pre-check dedup path use `appId ?? id`, so writeback carries the human app id.
 
-**Why:** SIT's SPA add-application dialog was unreliable headless; the pg_graphql
-insert is deterministic and matches the read path already used for idempotency.
+**Every dropdown selection is MANDATORY in REAL mode.** `selectComboSearch`
+returns a boolean; if any of the 7 fields fails to pick its option, fail fast
+with a field-specific detail — do NOT click Create (would submit default/no-op).
+University option matched by `distinctiveTokens` lookahead regex; program by
+`matched.name`; academic year tolerant regex (`2026\s*[/\-]\s*2027`).
 
-**RLS ownership (MANDATORY on INSERT):** the `zoho_applications` insert is gated
-by Supabase row-level security (`WITH CHECK user_id = auth.uid()` + agency
-scope). Omitting the ownership columns makes the insert affect ZERO rows and
-pg_graphql returns `data:null` with NO error (silent). So every insert object
-MUST carry `user_id` + `agency_id`, resolved at RUNTIME (never hardcode — the
-account/agency changes): `user_id` = the `sub` claim decoded from the Supabase
-access_token JWT (no query needed); `agency_id` = fetched from
-`user_profileCollection(filter:{id:{eq:$uid}})` (uses `$uid: UUID!`). See
-`fetchOwnerContext` (cached per page only on full success so a transient agency
-miss can retry). `user_id` alone is decodable offline, so even if the agency
-query fails the insert still carries auth.uid and any RLS refusal surfaces via
-the logged `errors`/`data:null` body. Student creation stays on the UI wizard
-(the authed session sets its ownership server-side), so only the APPLICATION
-insert needs these fields.
+**DRY vs REAL:** DRY stops right after program matching ("öğrenci+program
+bulundu … kaydedilmeden durduruldu") — never navigates/clicks. Only `doSubmit`
+true drives the UI.
 
-**Proxy refuses WRITES — send mutations to the DIRECT Supabase endpoint:** the
-SIT `/api/graphql` proxy serves READS fine but SILENTLY refuses inserts — it
-returns `{"data":null}` with NO `errors` (indistinguishable from an empty read).
-So mutations MUST go straight to the Supabase pg_graphql endpoint
-`https://<project-ref>.supabase.co/graphql/v1` with the public anon `apikey`
-(captured from the SPA's own *.supabase.co requests via `resolveAnonKey`)
-ALONGSIDE the user `Authorization: Bearer` access_token. Use `page.request.post`
-(CORS-immune) — an in-page fetch to that cross-origin URL throws. The direct
-endpoint applies RLS, so a bad insert returns a REAL error ("permission denied"
-/ "violates row-level security policy" / "Unknown field") instead of a silent
-null. `gqlRequest(..., { direct:true })` does this (anon-apikey-required, no
-proxy fallback so no double-insert; always logs the full PII-masked body). Reads
-stay on the proxy — do NOT reroute them.
+**Why:** the "Add Application" write path is the ONLY way to get Zoho to mint the
+id/app_id/stage; the raw `insertIntozoho_applicationsCollection` mutation +
+direct Supabase transport + RLS owner-context plumbing were all **deleted** (the
+proxy silently refused inserts and even the direct endpoint couldn't reproduce
+the server-action's Zoho record creation). READS still use the proxy GraphQL
+(`fetchProgramCatalog`, `listStudentApplications`, `findLatestApplication`).
 
 ## Catalog field + spelling ≠ CRM name (GraphQL program lookup)
 
@@ -105,7 +92,8 @@ catalog-universities diagnostic (`PROGRAMS_UNIVERSITIES_QUERY`, near-match
 highlighted) to reveal the real spelling. If diacritic misses show up, add a
 broad no-filter fetch + in-code fold filter for the zero-hit case.
 
-**Note:** the former UI university-combobox selection path (typeahead + option
-dumping) was removed when application-create moved to the GraphQL mutation (see
-"Application create = GraphQL mutation" above). University is now a plain string
-column sourced from the matched catalog row's `universityName`.
+**Note:** the university spelling from the matched catalog row's `universityName`
+is what the "Add Application" UI university dropdown is matched against (via
+`distinctiveTokens` lookahead regex), so English/Turkish suffix variance is
+tolerated at selection time. See "Application create = REAL 'Add Application' UI
+flow" above.

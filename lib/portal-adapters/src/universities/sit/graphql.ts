@@ -47,13 +47,6 @@ const GRAPHQL_PATH = "/api/graphql";
 // SIT email/password (the same portal_credentials used for the UI login).
 const SUPABASE_URL = "https://knqtjanxjwfjfrwoater.supabase.co";
 const SUPABASE_TOKEN_PATH = "/auth/v1/token?grant_type=password";
-// The Supabase pg_graphql endpoint. WRITES (mutations) are sent here directly
-// rather than through the SIT `/api/graphql` proxy: the proxy silently refuses
-// inserts (returns `data:null` with NO errors), whereas the direct endpoint is
-// subject only to Supabase RLS and returns the created record id — or a REAL
-// GraphQL error message. It requires the public anon `apikey` ALONGSIDE the
-// user `Authorization: Bearer` access_token.
-const SUPABASE_GRAPHQL_PATH = "/graphql/v1";
 // Supabase project ref (the subdomain). The SPA reads its session from the
 // localStorage key `sb-<ref>-auth-token`; we write it there in a probe page to
 // authenticate the SPA and observe its REAL /api/graphql requests.
@@ -851,60 +844,6 @@ async function postViaPageFetch(
 }
 
 // ---------------------------------------------------------------------------
-// Transport 3 — DIRECT Supabase pg_graphql endpoint (writes/mutations). The SIT
-// `/api/graphql` proxy silently refuses inserts (returns data:null with NO
-// errors), so mutations go straight to https://<ref>.supabase.co/graphql/v1
-// with the public anon `apikey` + the user `Authorization: Bearer` token. This
-// is the SAME transport (page.request, CORS-immune) proven to return live data
-// for reads/introspection against this endpoint; RLS still applies, so an
-// unauthorised insert surfaces a real GraphQL error instead of a silent null.
-// No X-XSRF-TOKEN / Origin / Referer — those are SIT-proxy concerns.
-// ---------------------------------------------------------------------------
-async function postDirectSupabase(
-  page: Page,
-  url: string,
-  query: string,
-  variables: Record<string, unknown>,
-  auth: SitAuth,
-): Promise<RawGqlResponse> {
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-    accept: "application/json",
-  };
-  if (auth.apiKey) headers["apikey"] = auth.apiKey;
-  if (auth.bearer) headers["authorization"] = "Bearer " + auth.bearer;
-
-  try {
-    const res = await page.request.post(url, {
-      data: { query, variables },
-      headers,
-      timeout: 20_000,
-    });
-    return {
-      status: res.status(),
-      ok: res.ok(),
-      bodyText: await res.text(),
-      threw: "",
-      via: "direct",
-      xsrfSent: false,
-      authSent: !!auth.bearer,
-      apiKeySent: !!auth.apiKey,
-    };
-  } catch (e) {
-    return {
-      status: 0,
-      ok: false,
-      bodyText: "",
-      threw: e instanceof Error ? e.message : String(e),
-      via: "direct",
-      xsrfSent: false,
-      authSent: !!auth.bearer,
-      apiKeySent: !!auth.apiKey,
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Interpret a raw transport response into either parsed data or a classified,
 // human-readable failure. Separated from transport so each attempt can be
 // logged and we can decide whether a second transport is worth trying.
@@ -1015,7 +954,6 @@ async function gqlRequest<S extends z.ZodTypeAny>(
   variables: Record<string, unknown>,
   dataSchema: S,
   label: string,
-  opts: { direct?: boolean } = {},
 ): Promise<z.infer<S> | null> {
   const absUrl = SIT_URLS.base + GRAPHQL_PATH;
   const auth = await collectAuth(page, SIT_URLS.base);
@@ -1050,44 +988,14 @@ async function gqlRequest<S extends z.ZodTypeAny>(
     return null;
   }
 
-  let attempts: Array<() => Promise<RawGqlResponse>>;
-  if (opts.direct) {
-    // Writes go STRAIGHT to the Supabase pg_graphql endpoint — the SIT proxy
-    // silently refuses inserts (data:null, no errors). The direct endpoint
-    // needs the public anon apikey ALONGSIDE the user Bearer.
-    const apiKey = auth.apiKey ?? (await resolveAnonKey(page)) ?? undefined;
-    if (!apiKey) {
-      logger.warn(
-        `[sit:graphql] ${label}: Supabase anon apikey bulunamadı — direct pg_graphql endpoint apikey ister, mutation atlanıyor`,
-      );
-      return null;
-    }
-    const directAuth: SitAuth = { ...auth, apiKey };
-    const directUrl = SUPABASE_URL + SUPABASE_GRAPHQL_PATH;
-    attempts = [
-      () => postDirectSupabase(page, directUrl, query, variables, directAuth),
-    ];
-  } else {
-    attempts = [
-      () => postViaRequest(page, absUrl, SIT_URLS.base, query, variables, auth),
-      () => postViaPageFetch(page, GRAPHQL_PATH, query, variables, auth),
-    ];
-  }
+  const attempts: Array<() => Promise<RawGqlResponse>> = [
+    () => postViaRequest(page, absUrl, SIT_URLS.base, query, variables, auth),
+    () => postViaPageFetch(page, GRAPHQL_PATH, query, variables, auth),
+  ];
 
   for (const run of attempts) {
     const raw = await run();
     const meta = `HTTP ${raw.status} via ${raw.via} xsrf=${raw.xsrfSent} bearer=${raw.authSent} apikey=${raw.apiKeySent}`;
-    // Mutations are rare and critical: ALWAYS log the FULL (PII-masked) body so
-    // the created record id — OR the real GraphQL error (permission denied /
-    // violates row-level security / unknown field) — is visible every time.
-    if (opts.direct) {
-      logger.info(
-        `[sit:graphql] ${label}: FULL response (${meta}): ${rawForLog(
-          raw.bodyText,
-          800,
-        )}`,
-      );
-    }
     const result = interpret(raw, dataSchema);
 
     if (result.kind === "ok") {
@@ -1115,8 +1023,8 @@ async function gqlRequest<S extends z.ZodTypeAny>(
   // the authenticated SPA's own /api/graphql requests. Best-effort; we still
   // return null so THIS call falls back to scanning the UI. Skipped for the
   // introspection probe (it has its own diagnostics and would waste a ~32s
-  // probe) and for direct-endpoint mutations (they never use the proxy shape).
-  if (label !== "introspect" && !opts.direct)
+  // probe).
+  if (label !== "introspect")
     await captureRealGraphqlOnce(page).catch(() => {});
   return null;
 }
@@ -1318,13 +1226,16 @@ export async function findStudent(
 // ---------------------------------------------------------------------------
 export interface SitApplicationRef {
   id: string;
+  /** Zoho-assigned human reference (e.g. "SITP-14505") — the writeback ref. */
+  appId?: string;
   universityName?: string;
   programName?: string;
   status?: string;
 }
 
 // zoho_applications columns (from the live schema): student, program,
-// university, stage, degree, acdamic_year (real typo), semester, country.
+// university, stage, degree, acdamic_year (real typo), semester, country,
+// app_id (Zoho ref "SITP-…"), online_application_id, created_at.
 // university/program are denormalised NAME strings (Zoho sync), not nested refs.
 const STUDENT_APPLICATIONS_QUERY = /* GraphQL */ `
   query GetZohoApplications($studentId: String!) {
@@ -1332,7 +1243,7 @@ const STUDENT_APPLICATIONS_QUERY = /* GraphQL */ `
       filter: { student: { eq: $studentId } }
       first: 100
     ) {
-      edges { node { id stage university program } }
+      edges { node { id app_id stage university program } }
     }
   }
 `;
@@ -1341,6 +1252,7 @@ const studentApplicationsSchema = z.object({
   zoho_applicationsCollection: connection(
     z.object({
       id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+      app_id: z.string().nullish(),
       stage: z.string().nullish(),
       university: z.string().nullish(),
       program: z.string().nullish(),
@@ -1367,6 +1279,7 @@ export async function listStudentApplications(
 
   return data.zoho_applicationsCollection.nodes.map((n) => ({
     id: n.id,
+    appId: n.app_id ?? undefined,
     status: n.stage ?? undefined,
     universityName: n.university ?? undefined,
     programName: n.program ?? undefined,
@@ -1374,210 +1287,76 @@ export async function listStudentApplications(
 }
 
 // ---------------------------------------------------------------------------
-// Application CREATE (REAL mode only) — pg_graphql insert mutation.
-//
-// zoho_applicationsInsertInput fields (verified via live introspection):
-//   student, program, acdamic_year (real typo), semester, country, university,
-//   stage, degree, application_name, online_application_id, app_id,
-//   agent_crm_id, user_id, agency_id.
-// `student`/`program` are related-record refs (ids); `university`/`degree` are
-// plain STRING columns. This replaces the brittle UI "Add Application" flow.
+// Newest-application lookup — the CREATE writeback path. After the portal's
+// "Add Application" UI flow succeeds, the record is created by the SIT backend
+// (Zoho CRM), which assigns id + app_id + stage (the client cannot generate
+// them). We read the freshly-created row back — filtered by (student, program),
+// newest first — to obtain app_id for the submission external reference.
 // ---------------------------------------------------------------------------
-export interface SitCreateApplicationInput {
-  /** zoho_students record id (existing or freshly created). */
-  student: string;
-  /** zoho_programs record id (the matched catalog program). */
-  program: string;
-  /** Denormalised university NAME string (catalog spelling, e.g. "Beykoz University"). */
-  university: string;
-  /** Degree/level string (matched program degree_name, else mapped level). */
-  degree: string;
-  /** Application stage. */
-  stage: string;
-  /** Academic year — maps to the real (mis-spelled) `acdamic_year` column. */
-  acdamicYear: string;
-  /** Intake semester. */
-  semester: string;
-  /** Country name string. */
-  country: string;
-  /** Optional human-readable application name. */
-  applicationName?: string;
-  /**
-   * Optional ownership overrides. When omitted (the normal case) they are
-   * resolved at runtime from the session (user_id = token sub, agency_id from
-   * user_profile) — required by Supabase RLS on INSERT.
-   */
-  agencyId?: string;
-  userId?: string;
+export interface SitLatestApplication {
+  /** pg_graphql record id (19-digit Zoho id). */
+  id: string;
+  /** Zoho-assigned human reference (e.g. "SITP-14505") — the writeback ref. */
+  appId?: string;
+  /** University application number, assigned later (often null at creation). */
+  onlineApplicationId?: string;
+  /** Application stage — "Pending Review" for a freshly created application. */
+  stage?: string;
+  createdAt?: string;
 }
 
-const INSERT_APPLICATION_MUTATION = /* GraphQL */ `
-  mutation InsertApplication($objects: [zoho_applicationsInsertInput!]!) {
-    insertIntozoho_applicationsCollection(objects: $objects) {
-      records { id }
+const LATEST_APPLICATION_QUERY = /* GraphQL */ `
+  query GetLatestSitApplication($studentId: String!, $programId: String!) {
+    zoho_applicationsCollection(
+      filter: { student: { eq: $studentId }, program: { eq: $programId } }
+      orderBy: [{ created_at: DescNullsLast }]
+      first: 1
+    ) {
+      edges {
+        node { id app_id online_application_id stage created_at }
+      }
     }
   }
 `;
 
-const insertApplicationSchema = z.object({
-  insertIntozoho_applicationsCollection: z
-    .object({
-      records: z.array(
-        z.object({
-          id: z.union([z.string(), z.number()]).transform((v) => String(v)),
-        }),
-      ),
-    })
-    .nullable(),
-});
-
-// ---------------------------------------------------------------------------
-// Session ownership context (Supabase RLS) — user_id (auth.uid) + agency_id.
-//
-// zoho_applications INSERT is gated by a row-level-security policy whose
-// WITH CHECK compares the row's ownership columns against the session
-// (user_id = auth.uid(), agency_id = the caller's agency). If those columns are
-// absent the insert affects zero rows and pg_graphql returns `data:null` with
-// no error — exactly the symptom we saw. So we MUST attach them:
-//   • user_id  — the `sub` claim of the Supabase access_token (auth.uid).
-//   • agency_id — the caller's agency, read at runtime from user_profile
-//     (NEVER hardcoded; the account/agency can change).
-// ---------------------------------------------------------------------------
-const ownerContextByPage = new WeakMap<
-  Page,
-  { userId: string; agencyId: string | null }
->();
-
-/** Decode the `sub` (auth.uid) claim from a Supabase access_token JWT. */
-function decodeJwtSub(token: string): string | null {
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  try {
-    const payload = JSON.parse(
-      Buffer.from(parts[1], "base64url").toString("utf8"),
-    ) as { sub?: unknown };
-    return typeof payload.sub === "string" && payload.sub ? payload.sub : null;
-  } catch {
-    return null;
-  }
-}
-
-const OWNER_PROFILE_QUERY = /* GraphQL */ `
-  query GetSitOwnerProfile($uid: UUID!) {
-    user_profileCollection(filter: { id: { eq: $uid } }, first: 1) {
-      edges { node { id agency_id } }
-    }
-  }
-`;
-
-const ownerProfileSchema = z.object({
-  user_profileCollection: connection(
+const latestApplicationSchema = z.object({
+  zoho_applicationsCollection: connection(
     z.object({
       id: z.union([z.string(), z.number()]).transform((v) => String(v)),
-      agency_id: z.string().nullish(),
+      app_id: z.string().nullish(),
+      online_application_id: z.string().nullish(),
+      stage: z.string().nullish(),
+      created_at: z.string().nullish(),
     }),
   ),
 });
 
 /**
- * Resolve the session's ownership context (user_id = token sub; agency_id from
- * user_profile) for RLS-gated inserts. Best-effort and cached per page. Returns
- * userId=null when the token has no decodable sub (caller must not insert then).
+ * Read the newest application for (student, program) — the CREATE writeback.
+ * Returns null when none is found yet (the caller retries a few times, since the
+ * Zoho-backed create is eventually consistent).
  */
-export async function fetchOwnerContext(
+export async function findLatestApplication(
   page: Page,
-): Promise<{ userId: string | null; agencyId: string | null }> {
-  const cached = ownerContextByPage.get(page);
-  if (cached) return cached;
-
-  const auth = await collectAuth(page, SIT_URLS.base);
-  const userId = auth.bearer ? decodeJwtSub(auth.bearer) : null;
-  if (!userId) {
-    logger.warn(
-      "[sit:graphql] ownerContext: token sub (auth.uid) çözümlenemedi — RLS sahiplik alanları eklenemeyecek",
-    );
-    return { userId: null, agencyId: null };
-  }
-
-  let agencyId: string | null = null;
+  studentId: string,
+  programId: string,
+): Promise<SitLatestApplication | null> {
   const data = await gqlRequest(
     page,
-    OWNER_PROFILE_QUERY,
-    { uid: userId },
-    ownerProfileSchema,
-    "ownerProfile",
+    LATEST_APPLICATION_QUERY,
+    { studentId, programId },
+    latestApplicationSchema,
+    "latestApplication",
   );
-  const node = data?.user_profileCollection.nodes[0];
-  if (node?.agency_id) {
-    agencyId = node.agency_id;
-    // Cache only a fully-resolved context so a transient agency miss can retry.
-    ownerContextByPage.set(page, { userId, agencyId });
-  } else {
-    logger.warn(
-      "[sit:graphql] ownerContext: user_profile.agency_id bulunamadı (agency_id olmadan devam)",
-    );
-  }
-  return { userId, agencyId };
-}
-
-/**
- * Create a zoho_applications record via GraphQL (REAL mode). Returns the new
- * application id, or null when the mutation failed / returned no record (e.g.
- * the partner account lacks INSERT permission, or RLS ownership could not be
- * resolved), so the caller reports a soft failure rather than throwing. NEVER
- * call this in DRY mode.
- */
-export async function createApplicationRecord(
-  page: Page,
-  input: SitCreateApplicationInput,
-): Promise<{ id: string } | null> {
-  // Supabase RLS on zoho_applications requires ownership columns on INSERT
-  // (WITH CHECK user_id = auth.uid()); without them the mutation returns
-  // data:null and creates nothing. Resolve them from the live session token
-  // (user_id = JWT sub) + the user's profile (agency_id) at runtime.
-  const owner = await fetchOwnerContext(page);
-  const userId = input.userId ?? owner.userId;
-  const agencyId = input.agencyId ?? owner.agencyId;
-  if (!userId) {
-    logger.warn(
-      "[sit:graphql] insertApplication: user_id (auth.uid) çözümlenemedi — RLS reddedecek, başvuru oluşturulmadı",
-    );
-    return null;
-  }
-
-  // Map to the EXACT column names (note the `acdamic_year` typo is real).
-  const object: Record<string, unknown> = {
-    student: input.student,
-    program: input.program,
-    university: input.university,
-    degree: input.degree,
-    stage: input.stage,
-    acdamic_year: input.acdamicYear,
-    semester: input.semester,
-    country: input.country,
-    user_id: userId,
+  const node = data?.zoho_applicationsCollection.nodes[0];
+  if (!node) return null;
+  return {
+    id: node.id,
+    appId: node.app_id ?? undefined,
+    onlineApplicationId: node.online_application_id ?? undefined,
+    stage: node.stage ?? undefined,
+    createdAt: node.created_at ?? undefined,
   };
-  if (agencyId) object.agency_id = agencyId;
-  if (input.applicationName) object.application_name = input.applicationName;
-
-  const data = await gqlRequest(
-    page,
-    INSERT_APPLICATION_MUTATION,
-    { objects: [object] },
-    insertApplicationSchema,
-    "insertApplication",
-    { direct: true },
-  );
-
-  const id = data?.insertIntozoho_applicationsCollection?.records?.[0]?.id;
-  if (!id) {
-    logger.warn(
-      "[sit:graphql] insertApplication: kayıt id dönmedi (izin/şema?) — başvuru oluşturulamadı",
-    );
-    return null;
-  }
-  logger.info(`[sit:graphql] insertApplication: OK — başvuru id=${id}`);
-  return { id };
 }
 
 // ---------------------------------------------------------------------------
