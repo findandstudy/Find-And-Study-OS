@@ -95,6 +95,16 @@ box, fallback any visible popover root — NEVER page-wide), then match options
 INSIDE it with a visible-filtered `hasText` locator + `waitFor("visible")`. Same
 for the search input: target the VISIBLE one.
 
+**Every dropdown pick needs per-field RETRY + verify — the SIT backend randomly
+DB-times-out** ("canceling statement due to statement timeout"), so a dropdown
+loads with 0 options on some attempts and a DIFFERENT field fails each run. Wrap
+open→search→click in a bounded 3× loop (Escape + pause between attempts) and
+VERIFY the trigger's visible value folded-matches target/optionRe (pickFirst:
+changed away from placeholder) — a click can land without the selection sticking.
+Between attempts CLEAR the search box (`fill("")` then `fill(term)`, never
+`type()` which appends): multi-candidate Country (Turkey→Türkiye→Northern Cyprus,
+separate calls) otherwise accumulates "TurkeyTürkiye…" and matches nothing.
+
 **On any dropdown miss, dump a SANITISED popover skeleton — NEVER outerHTML.**
 `dumpOpenPopover()` (called from `logOptionsOnMiss`) walks the popover in-page and
 logs tag names + attribute NAMES only (values stripped; text nodes dropped;

@@ -430,6 +430,46 @@ async function clickVisibleOption(
 }
 
 /**
+ * Tolerant folded fallback over the ALREADY-scoped visible option rows:
+ * Turkish-folded exact → contains → first-token, for diacritic/spacing
+ * mismatches that a plain `hasText` substring can miss. `optionLoc` MUST already
+ * be scoped to the open popover (never page-wide). Returns true when clicked.
+ */
+async function clickFoldedOption(
+  page: Page,
+  optionLoc: Locator,
+  target: string,
+): Promise<boolean> {
+  const tgt = fold(target);
+  const tgtFirst = tgt.split(" ")[0] ?? "";
+  await optionLoc
+    .first()
+    .waitFor({ state: "visible", timeout: 4000 })
+    .catch(() => {});
+  const count = await optionLoc.count();
+  const folded: string[] = [];
+  for (let i = 0; i < count; i++) {
+    folded.push(
+      fold((await optionLoc.nth(i).textContent().catch(() => "")) ?? ""),
+    );
+  }
+  const tiers: Array<(f: string) => boolean> = [
+    (f) => f === tgt,
+    (f) => f.length > 0 && (f.includes(tgt) || tgt.includes(f)),
+    (f) => tgtFirst.length > 1 && f.split(" ")[0] === tgtFirst,
+  ];
+  for (const test of tiers) {
+    const idx = folded.findIndex((f) => f.length > 0 && test(f));
+    if (idx >= 0) {
+      await optionLoc.nth(idx).click({ timeout: 3000 }).catch(() => {});
+      await sleep(page, 900);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Open a SIT SEARCHABLE combobox (the "Add Application" dialog uses these:
  * Student / University / Program etc. render a role=button|combobox trigger
  * that opens a search textbox filtering a role=listbox). Types `search` into
@@ -497,111 +537,131 @@ async function selectComboSearch(
     if (foldHit || reHit) return true;
   }
 
-  await trigger.click({ timeout: 6000 }).catch(() => {});
-  await sleep(page, 700);
-  // Wait for the dropdown's Search textbox to render — it's the reliable signal
-  // that the searchable popover is open (more reliable than the container, whose
-  // markup varies), and typing into it is the manual path that actually works.
-  await page
-    .locator(SEARCH_INPUT_SEL)
-    .last()
-    .waitFor({ state: "visible", timeout: 4000 })
-    .catch(() => {});
+  // Baseline (placeholder) value, folded — lets us verify a selection actually
+  // stuck (the trigger's visible value changed away from the placeholder).
+  const initialFolded = fold(currentText);
 
-  // Type the term into the popover's Search textbox to filter the options — these
-  // are searchable cmdk menus, so the matching row only renders once filtered
-  // (reading "all" options without typing yields nothing / the wrong DOM).
-  if (opts.search) {
-    let box = page.locator(SEARCH_INPUT_SEL).filter({ visible: true }).first();
-    if (!(await box.count())) {
-      box = page
-        .getByRole("textbox")
-        .filter({ hasNot: page.locator("[readonly]") })
-        .last();
-    }
-    if (await box.count()) {
-      await box.fill(opts.search, { timeout: 3000 }).catch(() => {});
-    } else {
-      await page.keyboard.type(opts.search, { delay: 20 }).catch(() => {});
-    }
-    // The filtered list arrives async — wait for a row to render (best-effort).
-    await dropdownOptions(page)
-      .first()
-      .waitFor({ state: "visible", timeout: 3000 })
-      .catch(() => {});
-    await sleep(page, 400);
-  }
-
-  // Option-row locator, scoped to the OPEN popover (never page-wide — the
-  // applications table behind the modal repeats option text like "Turkey" in
-  // ~277 rows) and to VISIBLE rows only (the modal renders a second empty/hidden
-  // `.bg-popover`; :visible + auto-wait avoid reading it).
-  const popoverScope = await resolvePopover(page);
-  const optionLoc = popoverScope
-    .locator(OPTION_ROW_SEL)
-    .filter({ visible: true });
-
-  // pickFirst (Student): after typing the search term, click the first VISIBLE
-  // option row — Playwright auto-waits for it to render (fixes the 0/0 timing).
-  if (opts.pickFirst) {
-    const first = optionLoc.first();
-    try {
-      await first.waitFor({ state: "visible", timeout: 8000 });
-      await first.click({ timeout: 3000 }).catch(() => {});
-      await sleep(page, 900);
-      return true;
-    } catch {
-      await logOptionsOnMiss(page, optionLoc, opts.fieldLabel);
-      await page.keyboard.press("Escape").catch(() => {});
-      return false;
-    }
-  }
-
-  // 1) Direct auto-waited click on the VISIBLE row whose text matches — no
-  //    read/count/index. Try the strict regex first, then the human target as a
-  //    case-insensitive substring.
-  if (opts.optionRe && (await clickVisibleOption(page, opts.optionRe))) {
-    return true;
-  }
-  if (opts.target && (await clickVisibleOption(page, opts.target, 4000))) {
-    return true;
-  }
-
-  // 2) Tolerant folded fallback (Turkish-folded exact → contains → first-token)
-  //    over the VISIBLE rows, for diacritic/spacing mismatches hasText can miss.
-  if (opts.target) {
-    const tgt = fold(opts.target);
-    const tgtFirst = tgt.split(" ")[0] ?? "";
-    // Ensure at least one row rendered before reading (auto-wait).
-    await optionLoc
-      .first()
-      .waitFor({ state: "visible", timeout: 4000 })
-      .catch(() => {});
-    const count = await optionLoc.count();
-    const folded: string[] = [];
-    for (let i = 0; i < count; i++) {
-      folded.push(
-        fold((await optionLoc.nth(i).textContent().catch(() => "")) ?? ""),
-      );
-    }
-    const tiers: Array<(f: string) => boolean> = [
-      (f) => f === tgt,
-      (f) => f.length > 0 && (f.includes(tgt) || tgt.includes(f)),
-      (f) => tgtFirst.length > 1 && f.split(" ")[0] === tgtFirst,
-    ];
-    for (const test of tiers) {
-      const idx = folded.findIndex((f) => f.length > 0 && test(f));
-      if (idx >= 0) {
-        await optionLoc.nth(idx).click({ timeout: 3000 }).catch(() => {});
-        await sleep(page, 900);
+  // Did the trigger's visible value become the target after a click? A click can
+  // land without the selection sticking (transient re-render), so we re-check.
+  const verifySelected = async (): Promise<boolean> => {
+    const cur = ((await trigger.textContent().catch(() => "")) ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!cur) return false;
+    const cf = fold(cur);
+    if (opts.target) {
+      const tgt = fold(opts.target);
+      if (cf.length > 0 && (cf === tgt || cf.includes(tgt) || tgt.includes(cf))) {
         return true;
       }
     }
+    if (opts.optionRe && opts.optionRe.test(cur)) return true;
+    // pickFirst (Student) has no fixed target: accept any non-placeholder value
+    // that differs from the pre-selection text.
+    if (opts.pickFirst) {
+      return (
+        cf.length > 0 &&
+        cf !== initialFolded &&
+        !/^(select|choose|se[cç]|ara|search|pick)/i.test(cur)
+      );
+    }
+    return false;
+  };
+
+  // Per-field RETRY (flakiness cure): the SIT backend intermittently DB-times-out
+  // ("canceling statement due to statement timeout"), so a dropdown can load with
+  // 0 options on any given attempt — each run fails on a DIFFERENT field. Reopen
+  // + re-search up to 3× to ride through transient empties, and VERIFY the value
+  // stuck before declaring success.
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      await trigger.click({ timeout: 6000 });
+      await sleep(page, 500);
+      // The Search textbox is the reliable "popover is open" signal.
+      await page
+        .locator(SEARCH_INPUT_SEL)
+        .filter({ visible: true })
+        .first()
+        .waitFor({ state: "visible", timeout: 6000 })
+        .catch(() => {});
+
+      // Filter by typing — CLEAR first (fill("") then fill(term)) so repeated
+      // attempts AND multi-candidate fields (Country tries Turkey → Türkiye →
+      // Northern Cyprus in separate calls) never accumulate stale text like
+      // "TurkeyTürkiye…". fill() replaces; keyboard.type() would append.
+      if (opts.search) {
+        let box = page
+          .locator(SEARCH_INPUT_SEL)
+          .filter({ visible: true })
+          .first();
+        if (!(await box.count())) {
+          box = page
+            .getByRole("textbox")
+            .filter({ hasNot: page.locator("[readonly]") })
+            .last();
+        }
+        if (await box.count()) {
+          await box.fill("", { timeout: 3000 }).catch(() => {});
+          await box.fill(opts.search, { timeout: 3000 }).catch(() => {});
+        } else {
+          await page.keyboard.type(opts.search, { delay: 20 }).catch(() => {});
+        }
+        await sleep(page, 400);
+      }
+
+      // Option-row locator, scoped to the OPEN popover (never page-wide — the
+      // applications table behind the modal repeats option text like "Turkey" in
+      // ~277 rows) and to VISIBLE rows only (a second empty/hidden `.bg-popover`
+      // may exist).
+      const popoverScope = await resolvePopover(page);
+      const optionLoc = popoverScope
+        .locator(OPTION_ROW_SEL)
+        .filter({ visible: true });
+
+      let clicked = false;
+      if (opts.pickFirst) {
+        // Student: click the first VISIBLE option (Playwright auto-waits render).
+        const first = optionLoc.first();
+        await first.waitFor({ state: "visible", timeout: 6000 });
+        await first.click({ timeout: 3000 }).catch(() => {});
+        clicked = true;
+      } else if (
+        opts.optionRe &&
+        (await clickVisibleOption(page, opts.optionRe, 6000))
+      ) {
+        clicked = true;
+      } else if (
+        opts.target &&
+        (await clickVisibleOption(page, opts.target, 4000))
+      ) {
+        clicked = true;
+      } else if (opts.target) {
+        clicked = await clickFoldedOption(page, optionLoc, opts.target);
+      }
+
+      if (clicked) {
+        await sleep(page, 600);
+        if (await verifySelected()) return true;
+      }
+    } catch {
+      /* transient (statement timeout / empty load) — fall through to retry */
+    }
+    // Close the popover and pause before the next attempt.
+    await page.keyboard.press("Escape").catch(() => {});
+    await sleep(page, 800);
   }
 
-  // 3) Nothing matched — dump the current option texts + sanitized popover
-  //    skeleton so the next real run reveals the exact mismatch.
-  await logOptionsOnMiss(page, optionLoc, opts.fieldLabel);
+  // All attempts failed — reopen once and dump options + sanitized popover so the
+  // next real run reveals the exact mismatch.
+  await trigger.click({ timeout: 4000 }).catch(() => {});
+  await sleep(page, 500);
+  const missScope = await resolvePopover(page);
+  await logOptionsOnMiss(
+    page,
+    missScope.locator(OPTION_ROW_SEL).filter({ visible: true }),
+    opts.fieldLabel,
+  );
   await page.keyboard.press("Escape").catch(() => {});
   return false;
 }
