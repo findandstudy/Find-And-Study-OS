@@ -252,6 +252,27 @@ function redactedStringify(value: unknown, max = 1000): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Produce a PII-masked, length-capped view of a RAW response body for logging.
+// Parses JSON and reuses redactedStringify (so student email/name/passport are
+// stripped by key) and, failing that, masks JWT-looking substrings from the
+// raw text. Used to surface the ACTUAL server body (e.g. `{"data":null}` vs
+// `{"data":{"students":null}}` vs `{"errors":[...]}`) when a call doesn't
+// return usable data, without ever leaking a token or student PII.
+// ---------------------------------------------------------------------------
+function rawForLog(bodyText: string, max = 500): string {
+  if (!bodyText) return "(empty)";
+  try {
+    return redactedStringify(JSON.parse(bodyText), max);
+  } catch {
+    return bodyText
+      .replace(/\s+/g, " ")
+      .replace(/ey[\w-]+\.[\w-]+\.[\w-]+/g, "[redacted-jwt]")
+      .trim()
+      .slice(0, max);
+  }
+}
+
 interface RawGqlResponse {
   status: number;
   ok: boolean;
@@ -260,6 +281,7 @@ interface RawGqlResponse {
   via: "page-fetch" | "request";
   xsrfSent: boolean;
   authSent: boolean;
+  apiKeySent: boolean;
 }
 
 interface SitAuth {
@@ -552,6 +574,7 @@ async function postViaRequest(
       via: "request",
       xsrfSent: !!auth.xsrf,
       authSent: !!auth.bearer,
+      apiKeySent: !!auth.apiKey,
     };
   } catch (e) {
     return {
@@ -562,6 +585,7 @@ async function postViaRequest(
       via: "request",
       xsrfSent: !!auth.xsrf,
       authSent: !!auth.bearer,
+      apiKeySent: !!auth.apiKey,
     };
   }
 }
@@ -635,6 +659,7 @@ async function postViaPageFetch(
       via: "page-fetch",
       xsrfSent: !!auth.xsrf,
       authSent: !!auth.bearer,
+      apiKeySent: !!auth.apiKey,
     };
   } catch (e) {
     return {
@@ -645,6 +670,7 @@ async function postViaPageFetch(
       via: "page-fetch",
       xsrfSent: !!auth.xsrf,
       authSent: !!auth.bearer,
+      apiKeySent: !!auth.apiKey,
     };
   }
 }
@@ -721,11 +747,16 @@ function interpret<S extends z.ZodTypeAny>(
     };
   }
 
-  // `data: null` with NO errors ≈ request not accepted as authenticated.
+  // Top-level `data: null` with NO errors: either an EMPTY result for this query
+  // or a request the gateway silently refused. Do NOT assert "auth failed" — the
+  // Bearer/apikey status (logged alongside) plus the raw body (logged by the
+  // caller) tell the real story. The caller degrades to null → the read-only
+  // caller (findStudent/listStudentApplications) treats that as "no record →
+  // create", never a fatal error. Retrying the other transport is harmless.
   if (envelope.data.data == null) {
     return {
       kind: "retry",
-      message: `server returned data:null with no errors — request likely not accepted as authenticated (session/CSRF/token)`,
+      message: `server returned top-level data:null with no errors — empty result or request refused (bearer=${raw.authSent} apikey=${raw.apiKeySent})`,
     };
   }
 
@@ -786,7 +817,7 @@ async function gqlRequest<S extends z.ZodTypeAny>(
 
   for (const run of attempts) {
     const raw = await run();
-    const meta = `HTTP ${raw.status} via ${raw.via} xsrf=${raw.xsrfSent} bearer=${raw.authSent}`;
+    const meta = `HTTP ${raw.status} via ${raw.via} xsrf=${raw.xsrfSent} bearer=${raw.authSent} apikey=${raw.apiKeySent}`;
     const result = interpret(raw, dataSchema);
 
     if (result.kind === "ok") {
@@ -795,6 +826,12 @@ async function gqlRequest<S extends z.ZodTypeAny>(
     }
 
     logger.warn(`[sit:graphql] ${label}: ${result.message} (${meta})`);
+    // Surface the ACTUAL server body (PII-masked, ≤500 chars) so we can tell an
+    // empty result (`{"data":{"students":null}}`) apart from a refused request
+    // (`{"data":null}`) or a GraphQL error, without leaking token/PII.
+    logger.warn(
+      `[sit:graphql] ${label}: raw: ${rawForLog(raw.bodyText)}`,
+    );
 
     // The API returned data but the shape didn't match — another transport
     // would return the same shape, so stop and let the caller scan the UI.

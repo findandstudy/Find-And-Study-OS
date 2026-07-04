@@ -53,9 +53,24 @@ Supabase enforces MFA/captcha on the account (no MFA ⇒ works).
 - NEVER log the token / password / anon key — only `bearer=true/false` + HTTP
   status.
 - Diagnostics: symptom is `data:null` with no `errors`. Log `bearer=true/false`
-  (booleans only) and, on success, "data received". **Never log the token
-  value** (PII/secret) — response logging must redact JWT-like strings.
+  AND `apikey=true/false` (booleans only) and, on success, "data received".
+  **Never log the token/apikey value** (PII/secret) — response logging must
+  redact JWT-like strings.
 - No bearer found ⇒ log ONE clear warning ("Supabase token bulunamadı — login
   akışı değişti mi?") and short-circuit (return null → UI-scan fallback); do
   NOT hammer both transports, they'd only return data:null.
-- Same Supabase-Bearer pattern likely applies to the United adapter too.
+- **`apikey` header is required in addition to the Bearer:** the Supabase-backed
+  gateway silently returns `data:null` if `apikey: <anonKey>` is missing. Send
+  BOTH `Authorization: Bearer <access_token>` and `apikey: <anonKey>` on every
+  /api/graphql call (auth.apiKey, set in collectAuth from the captured anon key).
+- **Distinguish top-level `{"data":null}` from field-level null.** Top-level
+  data:null = empty result OR gateway-refused (do NOT assert "auth failed" —
+  read bearer/apikey flags + the raw body). A field-level null connection
+  (`{"data":{"students":null}}`) is a VALID empty result; connection() normalizes
+  it to `{nodes:[]}` → findStudent/listStudentApplications return null →
+  create-new-student flow. Never a fatal error, never a retry storm.
+- **Always log the RAW body (PII-masked, ≤500 chars)** on any non-OK attempt via
+  rawForLog() (redactedStringify for JSON so student email/name/passport are
+  key-stripped; JWT-masked slice for non-JSON). This is what disambiguates
+  empty-vs-refused-vs-graphql-error in prod.
+- Same Supabase-Bearer + apikey pattern likely applies to the United adapter too.
