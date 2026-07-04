@@ -22,17 +22,32 @@ stripped):
   ("Istanbul" alone matches 3 entries → NULL) and keeps look-alikes out
   ({cyprus,aydin}⊄{istanbul,aydin}; {beykent}⊄{istanbul,kent}).
 
-**Combobox selection (`selectComboByTokens` in adapter.ts):** matching SIT's
-live option list must be **token-BOUNDARY membership** — build a `Set` of the
-option's folded tokens and require every wanted token to be an exact member.
-Never substring (`folded.includes("kent")` wrongly matches "beykent"). Require
-exactly one full-coverage option; **reject ties** (fail loud → programMissing)
-rather than risk picking the wrong university. Fold BOTH sides — raw regex on
-option text breaks on Turkish ı/İ/ş/ç/ö/ğ/ü.
-
 **How to apply:** reuse `distinctiveTokens`/`fold` from these modules — do NOT
-add a new normalizer. On combo failure return `{programMissing:true, detail}`
-and log `[sit] university not found in SIT list`.
+add a new normalizer. On a resolution miss return `{programMissing:true, detail}`.
+
+## Application create = GraphQL mutation, NOT the UI (current)
+
+`createApplication` NO LONGER drives the SIT "Add Application" UI dialog
+(brittle: the "Add Application"/combobox selectors kept 404-ing). The whole UI
+block — `openStudentDetail`, `readComboOptions`, `selectComboByTokens` and the
+combobox `SIT_APP_FIELDS` — was **deleted**. Program is matched entirely in code
+against `fetchProgramCatalog(...)` (active-only, returns
+`{id,name,universityName,degreeName,languageName}`), then the record is written
+via `createApplicationRecord` → `INSERT_APPLICATION_MUTATION`
+(`insertIntozoho_applicationsCollection`), `records[0].id` = externalRef.
+
+**Column mapping gotchas:** the real column is the misspelled **`acdamic_year`**;
+`student`/`program` are related-record REF ids (pass the zoho ids), while
+`university`/`degree`/`country` are plain STRING columns (use the catalog's
+`universityName` spelling, e.g. "Beykoz University", not the CRM Turkish name).
+
+**DRY vs REAL:** mutation runs ONLY when `doSubmit` is true. DRY stops right
+after matching with a clean detail ("öğrenci+program bulundu … kaydedilmeden
+durduruldu") — never a UI button error. `createApplicationRecord` returns `null`
+(never throws) on missing id so the caller reports a soft failure.
+
+**Why:** SIT's SPA add-application dialog was unreliable headless; the pg_graphql
+insert is deterministic and matches the read path already used for idempotency.
 
 ## Catalog field + spelling ≠ CRM name (GraphQL program lookup)
 
@@ -61,7 +76,7 @@ catalog-universities diagnostic (`PROGRAMS_UNIVERSITIES_QUERY`, near-match
 highlighted) to reveal the real spelling. If diacritic misses show up, add a
 broad no-filter fetch + in-code fold filter for the zero-hit case.
 
-**UI combo is a typeahead:** SIT's university combobox lazily renders options as
-you type — `selectComboByTokens` types the longest distinctive token into the
-focused search box, then re-reads options; on failure it dumps the available
-option texts so the real UI spelling is visible in the dry log.
+**Note:** the former UI university-combobox selection path (typeahead + option
+dumping) was removed when application-create moved to the GraphQL mutation (see
+"Application create = GraphQL mutation" above). University is now a plain string
+column sourced from the matched catalog row's `universityName`.

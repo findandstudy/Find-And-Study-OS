@@ -48,6 +48,14 @@ export function fold(s: string): string {
 export interface ProgramCandidate {
   id: string;
   name: string;
+  /**
+   * Optional catalog metadata (populated by the SIT GraphQL catalog) used to
+   * build the create-application payload. Other adapters leave these undefined;
+   * matching only ever relies on `id` + `name`.
+   */
+  universityName?: string;
+  degreeName?: string;
+  languageName?: string;
 }
 
 export interface MatchResult {

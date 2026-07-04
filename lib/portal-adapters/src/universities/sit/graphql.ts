@@ -1,10 +1,12 @@
 // ---------------------------------------------------------------------------
 // SIT portal — READ-ONLY GraphQL client
 //
-// SIT exposes a GraphQL endpoint at POST /api/graphql. We use it STRICTLY for
-// read-only lookups (idempotency + catalog), never for writes — all writes go
-// through the portal UI (SIT's write mutations are non-functional for partner
-// accounts).
+// SIT exposes a GraphQL endpoint at POST /api/graphql (Supabase pg_graphql over
+// Zoho-synced tables). We use it for read-only lookups (idempotency + catalog)
+// AND to CREATE the application record via the `InsertApplication` mutation
+// (insertIntozoho_applicationsCollection) — replacing the brittle UI "Add
+// Application" flow. Student creation still goes through the "Add Student" UI
+// wizard. Mutations run in REAL mode only; DRY never calls them.
 //
 // AUTH: a session cookie alone is not enough — SIT (Laravel/axios SPA) also
 // wants the `X-XSRF-TOKEN` header echoed from the XSRF-TOKEN cookie and, when
@@ -1278,6 +1280,104 @@ export async function listStudentApplications(
 }
 
 // ---------------------------------------------------------------------------
+// Application CREATE (REAL mode only) — pg_graphql insert mutation.
+//
+// zoho_applicationsInsertInput fields (verified via live introspection):
+//   student, program, acdamic_year (real typo), semester, country, university,
+//   stage, degree, application_name, online_application_id, app_id,
+//   agent_crm_id, user_id, agency_id.
+// `student`/`program` are related-record refs (ids); `university`/`degree` are
+// plain STRING columns. This replaces the brittle UI "Add Application" flow.
+// ---------------------------------------------------------------------------
+export interface SitCreateApplicationInput {
+  /** zoho_students record id (existing or freshly created). */
+  student: string;
+  /** zoho_programs record id (the matched catalog program). */
+  program: string;
+  /** Denormalised university NAME string (catalog spelling, e.g. "Beykoz University"). */
+  university: string;
+  /** Degree/level string (matched program degree_name, else mapped level). */
+  degree: string;
+  /** Application stage. */
+  stage: string;
+  /** Academic year — maps to the real (mis-spelled) `acdamic_year` column. */
+  acdamicYear: string;
+  /** Intake semester. */
+  semester: string;
+  /** Country name string. */
+  country: string;
+  /** Optional human-readable application name. */
+  applicationName?: string;
+  /** Optional agency/user ownership (from the adapter session when known). */
+  agencyId?: string;
+  userId?: string;
+}
+
+const INSERT_APPLICATION_MUTATION = /* GraphQL */ `
+  mutation InsertApplication($objects: [zoho_applicationsInsertInput!]!) {
+    insertIntozoho_applicationsCollection(objects: $objects) {
+      records { id }
+    }
+  }
+`;
+
+const insertApplicationSchema = z.object({
+  insertIntozoho_applicationsCollection: z
+    .object({
+      records: z.array(
+        z.object({
+          id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+        }),
+      ),
+    })
+    .nullable(),
+});
+
+/**
+ * Create a zoho_applications record via GraphQL (REAL mode). Returns the new
+ * application id, or null when the mutation failed / returned no record (e.g.
+ * the partner account lacks INSERT permission), so the caller reports a soft
+ * failure rather than throwing. NEVER call this in DRY mode.
+ */
+export async function createApplicationRecord(
+  page: Page,
+  input: SitCreateApplicationInput,
+): Promise<{ id: string } | null> {
+  // Map to the EXACT column names (note the `acdamic_year` typo is real).
+  const object: Record<string, unknown> = {
+    student: input.student,
+    program: input.program,
+    university: input.university,
+    degree: input.degree,
+    stage: input.stage,
+    acdamic_year: input.acdamicYear,
+    semester: input.semester,
+    country: input.country,
+  };
+  if (input.applicationName) object.application_name = input.applicationName;
+  if (input.agencyId) object.agency_id = input.agencyId;
+  if (input.userId) object.user_id = input.userId;
+
+  const data = await gqlRequest(
+    page,
+    INSERT_APPLICATION_MUTATION,
+    { objects: [object] },
+    insertApplicationSchema,
+    "insertApplication",
+  );
+
+  const id = data?.insertIntozoho_applicationsCollection?.records?.[0]?.id;
+  if (!id) {
+    logger.warn(
+      "[sit:graphql] insertApplication: kayıt id dönmedi (izin/şema?) — başvuru oluşturulamadı",
+    );
+    return null;
+  }
+  logger.info(`[sit:graphql] insertApplication: OK — başvuru id=${id}`);
+  return { id };
+}
+
+// ---------------------------------------------------------------------------
 // Program catalog (paginated, active programs only) for a given university.
 // Scoping the catalog to ONE university is what makes program matching exact
 // even when many universities share a program name.
@@ -1322,6 +1422,8 @@ const programsSchema = z.object({
       id: z.union([z.string(), z.number()]).transform((v) => String(v)),
       name: z.string(),
       university_name: z.string().nullish(),
+      degree_name: z.string().nullish(),
+      language_name: z.string().nullish(),
     }),
   ),
 });
@@ -1451,7 +1553,13 @@ export async function fetchProgramCatalog(
         fold(n.university_name ?? "").split(" ").filter(Boolean),
       );
       if (wantTokens.every((t) => uniTokens.has(t))) {
-        out.push({ id: n.id, name: n.name });
+        out.push({
+          id: n.id,
+          name: n.name,
+          universityName: n.university_name ?? undefined,
+          degreeName: n.degree_name ?? undefined,
+          languageName: n.language_name ?? undefined,
+        });
       }
     }
 

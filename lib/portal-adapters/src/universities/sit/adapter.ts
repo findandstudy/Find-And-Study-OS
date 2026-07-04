@@ -8,10 +8,12 @@
 //     uploads, GPA normalization, Zoho validation recovery)
 //   - createApplication (idempotent dedup, exact program match per university)
 //
-// Writes happen ONLY through the UI; SIT GraphQL is read-only (idempotency +
-// catalog). The adapter satisfies the shared UniversityAdapter interface
-// (login/submit) and additionally exposes typed createStudent/createApplication
-// methods. Registered as experimental (never auto-submitted).
+// Student creation happens through the "Add Student" UI wizard; the APPLICATION
+// is created via the GraphQL `InsertApplication` mutation (program matched in
+// code from the read-only catalog). SIT GraphQL also backs idempotency lookups.
+// The adapter satisfies the shared UniversityAdapter interface (login/submit)
+// and additionally exposes typed createStudent/createApplication methods.
+// Registered as experimental (never auto-submitted).
 // ---------------------------------------------------------------------------
 
 import type { Page, Locator } from "playwright-core";
@@ -31,7 +33,6 @@ import {
   SIT_LOGIN,
   SIT_NAV,
   SIT_STUDENT_FIELDS,
-  SIT_APP_FIELDS,
   SIT_BUTTONS,
   SIT_UPLOAD,
   SIT_ERRORS,
@@ -44,12 +45,12 @@ import {
   matchAllowedUniversity,
   isAllowedUniversity,
   isLanguageCompatible,
-  distinctiveTokens,
 } from "./helpers.js";
 import {
   findStudent,
   listStudentApplications,
   fetchProgramCatalog,
+  createApplicationRecord,
   installSpaAuthCapture,
   mintSupabaseBearer,
 } from "./graphql.js";
@@ -90,6 +91,22 @@ export interface SitAdapter extends UniversityAdapter {
 
 const PORTAL_KEY = "sit";
 const SIT_ALLOWLIST_FOLDED: readonly string[] = SIT_ALLOWLIST.map(fold);
+
+// Best-effort defaults for the InsertApplication payload fields that the CRM
+// intake wizard would otherwise pick (first option). Dr. Namazcı verifies these
+// against the first REAL submission and they can be tuned centrally here.
+const SIT_DEFAULT_APP_STAGE = "Application";
+const SIT_DEFAULT_SEMESTER = "Fall";
+
+/**
+ * Upcoming Turkish academic year as "YYYY-YYYY". From June onward we target the
+ * autumn intake of the coming academic year; before that, the current one.
+ */
+function defaultAcademicYear(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const start = now.getMonth() >= 5 ? y : y - 1;
+  return `${start}-${start + 1}`;
+}
 
 // ---------------------------------------------------------------------------
 // Small typed locator utilities (no `any`).
@@ -182,117 +199,6 @@ async function selectCombo(
   return false;
 }
 
-/**
- * Open a SIT custom combobox and click the option whose Turkish-FOLDED text
- * contains ALL of `wantTokens`. Unlike selectCombo (raw regex against raw
- * option text), this folds both sides so Turkish characters (İ/ı/ş/ç/ö/ğ/ü)
- * match reliably — e.g. target tokens [istanbul, aydin] pick the SIT option
- * "İstanbul Aydın Üniversitesi". Requiring FULL token coverage avoids
- * selecting a look-alike university. Returns true when an option was clicked.
- */
-async function selectComboByTokens(
-  page: Page,
-  triggerRe: RegExp,
-  wantTokens: readonly string[],
-): Promise<boolean> {
-  if (wantTokens.length === 0) return false;
-  const trigger = page.getByRole("button", { name: triggerRe }).first();
-  if (!(await trigger.count())) return false;
-  await trigger.click({ timeout: 6000 }).catch(() => {});
-  await sleep(page, 1000);
-
-  const options = page.locator("[role=option], li[role=option]");
-
-  // Collect every option that covers ALL wanted tokens on a TOKEN-BOUNDARY
-  // basis (exact folded-token membership, not substring) so a distinctive
-  // token like "kent" never matches inside "beykent".
-  const collectMatches = async (): Promise<number[]> => {
-    const n = await options.count().catch(() => 0);
-    const matches: number[] = [];
-    for (let i = 0; i < Math.min(n, 500); i++) {
-      const raw = ((await options.nth(i).innerText().catch(() => "")) || "")
-        .replace(/\s+/g, " ")
-        .trim();
-      if (!raw) continue;
-      const optTokens = new Set(fold(raw).split(" ").filter(Boolean));
-      if (wantTokens.every((tok) => optTokens.has(tok))) {
-        matches.push(i);
-      }
-    }
-    return matches;
-  };
-
-  let fullMatches = await collectMatches();
-
-  // Searchable-select support: SIT's university combo lazily renders its options
-  // as you type. When nothing matched up front, type the most distinctive
-  // (longest) token into the focused search box to load/filter the list, then
-  // re-read. Best-effort — harmless if the combo isn't a typeahead.
-  if (fullMatches.length === 0) {
-    const search = [...wantTokens].sort((a, b) => b.length - a.length)[0];
-    await page.keyboard.type(search, { delay: 25 }).catch(() => {});
-    await sleep(page, 1300);
-    fullMatches = await collectMatches();
-  }
-
-  // Exactly one option must cover every distinctive token. Zero = not in list;
-  // more than one = genuinely ambiguous, so fail loud rather than risk picking
-  // the wrong university.
-  if (fullMatches.length === 1) {
-    await options.nth(fullMatches[0]).click({ timeout: 3000 }).catch(() => {});
-    await sleep(page, 1100);
-    return true;
-  }
-  if (fullMatches.length > 1) {
-    logger.warn(
-      `[sit] ambiguous university options (${fullMatches.length}) for tokens: ${wantTokens.join(" ")}`,
-    );
-  } else {
-    // Diagnostic: dump the option texts the UI actually offers so a name/spelling
-    // mismatch (English vs Turkish, with/without "University") is visible in the
-    // dry log and directly actionable.
-    const n = await options.count().catch(() => 0);
-    const avail: string[] = [];
-    for (let i = 0; i < Math.min(n, 60); i++) {
-      const t = ((await options.nth(i).innerText().catch(() => "")) || "")
-        .replace(/\s+/g, " ")
-        .trim();
-      if (t) avail.push(t);
-    }
-    logger.warn(
-      `[sit] university combo options (${avail.length}) for tokens [${wantTokens.join(
-        " ",
-      )}]: ${avail.join(" | ") || "(none)"}`,
-    );
-  }
-  // Close the dropdown to avoid blocking later interactions.
-  await page.keyboard.press("Escape").catch(() => {});
-  return false;
-}
-
-/** Read all visible option texts from an open combobox. */
-async function readComboOptions(
-  page: Page,
-  triggerRe: RegExp,
-): Promise<ProgramCandidate[]> {
-  const trigger = page.getByRole("button", { name: triggerRe }).first();
-  if (!(await trigger.count())) return [];
-  await trigger.click({ timeout: 6000 }).catch(() => {});
-  await sleep(page, 1000);
-
-  const options = page.locator("[role=option], li[role=option]");
-  const n = await options.count().catch(() => 0);
-  const out: ProgramCandidate[] = [];
-  for (let i = 0; i < Math.min(n, 500); i++) {
-    const text = ((await options.nth(i).innerText().catch(() => "")) || "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (text) out.push({ id: text, name: text });
-  }
-  await page.keyboard.press("Escape").catch(() => {});
-  return out;
-}
-
 /** Upload a file via the OS file chooser triggered by clicking `triggerRe`. */
 async function uploadViaChooser(
   page: Page,
@@ -363,74 +269,6 @@ async function performLogin(page: Page, creds: ResolvedCreds): Promise<void> {
     );
   }
   logger.info("[sit] login successful -> " + page.url());
-}
-
-// ---------------------------------------------------------------------------
-// Navigate to the student detail page for a known/looked-up student, or null.
-// ---------------------------------------------------------------------------
-async function openStudentDetail(
-  page: Page,
-  profile: SubmitProfile,
-  studentId: string | null,
-): Promise<boolean> {
-  // --- Preferred path: direct navigation by the SIT student id. ---
-  // This is the only way to GUARANTEE we operate on the intended student
-  // (search + first-row click can land on the wrong record when the panel
-  // returns multiple/stale matches).
-  if (studentId) {
-    await page.goto(
-      `${SIT_URLS.base}${SIT_URLS.studentsPath}/${encodeURIComponent(studentId)}`,
-      { waitUntil: "domcontentloaded", timeout: 60_000 },
-    );
-    await sleep(page, 3000);
-    if (SIT_NAV.studentDetailUrl.test(page.url())) return true;
-    // Direct nav failed (id stale / route changed) — fall through to search,
-    // but identity is then verified below before any click.
-  }
-
-  await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
-    waitUntil: "domcontentloaded",
-    timeout: 60_000,
-  });
-  await sleep(page, 4000);
-
-  const email = (profile.email ?? "").trim();
-  const passport = (profile.passportNumber ?? "").trim();
-  const query = (
-    email || `${profile.firstName ?? ""} ${profile.lastName ?? ""}`
-  ).trim();
-  const search = page.getByPlaceholder(SIT_NAV.searchPlaceholder).first();
-  if ((await search.count()) && query) {
-    await search.fill(query).catch(() => {});
-    await sleep(page, 3000);
-  }
-
-  const row = page.locator("table tbody tr, [role=row]").first();
-  if (!(await row.count())) return false;
-
-  // Identity guard: only click when the row demonstrably belongs to this
-  // student (its text contains the email or passport). Without a verifiable
-  // identifier we refuse to click rather than risk the wrong student.
-  const rowText = ((await row.innerText().catch(() => "")) || "").toLowerCase();
-  const identifiable = Boolean(email) || Boolean(passport);
-  const rowMatches =
-    (email !== "" && rowText.includes(email.toLowerCase())) ||
-    (passport !== "" && rowText.includes(passport.toLowerCase()));
-  if (identifiable && !rowMatches) {
-    logger.warn(
-      "[sit] öğrenci satırı kimlik doğrulaması başarısız — yanlış öğrenci riskine karşı atlanıyor",
-    );
-    return false;
-  }
-
-  const info = row.locator(SIT_NAV.rowInfoSelector).first();
-  if (await info.count()) {
-    await info.click({ timeout: 5000 }).catch(() => {});
-  } else {
-    await row.click({ timeout: 3000 }).catch(() => {});
-  }
-  await sleep(page, 3000);
-  return SIT_NAV.studentDetailUrl.test(page.url());
 }
 
 // ---------------------------------------------------------------------------
@@ -666,7 +504,9 @@ export const sitAdapter: SitAdapter = {
   /**
    * Create an application for a student at an allowed university + program.
    * Idempotent: skips when a matching (university, program) application already
-   * exists. Program is matched exactly against the university-scoped catalog.
+   * exists. The program is matched in code against the read-only university-
+   * scoped catalog, then the record is inserted via the GraphQL
+   * `InsertApplication` mutation (REAL mode only; DRY stops after matching).
    */
   async createApplication(
     session: AdapterSession,
@@ -723,57 +563,20 @@ export const sitAdapter: SitAdapter = {
     }
 
     // --- Resolve the exact program from the university-scoped catalog ---
+    // Read-only GraphQL: the catalog now returns the university's active
+    // programs (with degree/language metadata) so program matching happens
+    // entirely in code — no UI "Add Application" dialog is involved.
     const level = mapEducationLevel(profile.level);
-    let catalog = await fetchProgramCatalog(page, allowedUni, level);
-
-    // --- Open the student detail + Add Application dialog ---
-    if (!(await openStudentDetail(page, profile, studentId))) {
-      return { ...base, detail: "öğrenci detay sayfası açılamadı" };
-    }
-    if (!(await clickButton(page, SIT_NAV.addApplicationName))) {
-      return { ...base, detail: "Add Application düğmesi bulunamadı" };
-    }
-    await sleep(page, 2500);
-
-    // Year / semester (best-effort first option).
-    for (const re of [SIT_APP_FIELDS.academicYear, SIT_APP_FIELDS.semester]) {
-      const trigger = page.getByRole("button", { name: re }).first();
-      if (await trigger.count()) {
-        await trigger.click({ timeout: 4000 }).catch(() => {});
-        await sleep(page, 800);
-        const opt = page.getByRole("option").first();
-        if (await opt.count()) await opt.click({ timeout: 3000 }).catch(() => {});
-        await sleep(page, 900);
-      }
-    }
-
-    // Country + university (university constrained to the allowlist entry).
-    // Match SIT's live option list Turkish-aware (folded token coverage) so the
-    // canonical name "İstanbul Aydın Üniversitesi" selects the right option even
-    // when its text carries Turkish characters.
-    await selectCombo(page, SIT_APP_FIELDS.country, /turk/i);
-    const uniTokens = distinctiveTokens(allowedUni);
-    const uniSelected = await selectComboByTokens(
-      page,
-      SIT_APP_FIELDS.university,
-      uniTokens,
-    );
-    if (!uniSelected) {
+    const catalog = await fetchProgramCatalog(page, allowedUni, level);
+    if (catalog.length === 0) {
       logger.warn(
-        `[sit] university not found in SIT list: "${allowedUni}" (tried: ${uniTokens.join(" ")})`,
+        `[sit] katalog boş: "${allowedUni}" için aktif program bulunamadı`,
       );
-      // Failing to select the university in the live combobox is a university
-      // error, not a missing program — keep programMissing=false (from `base`).
       return {
         ...base,
-        detail: `SIT üniversite listesinde bulunamadı: ${allowedUni}`,
+        programMissing: true,
+        detail: `Program bulunamadı: "${allowedUni}" kataloğunda aktif program yok`,
       };
-    }
-    await selectCombo(page, SIT_APP_FIELDS.degree, new RegExp(level, "i"));
-
-    // If GraphQL catalog was empty, scan the program combobox options instead.
-    if (catalog.length === 0) {
-      catalog = await readComboOptions(page, SIT_APP_FIELDS.program);
     }
 
     // Exact program match (language-compatible, confidence-gated).
@@ -787,7 +590,7 @@ export const sitAdapter: SitAdapter = {
     // when BOTH the desired and candidate languages are detected AND differ, so
     // a non-empty catalog with an empty compatible set means no safe match
     // exists — report programMissing instead of guessing.
-    if (catalog.length > 0 && langFiltered.length === 0) {
+    if (langFiltered.length === 0) {
       logger.warn(
         `[sit] program dil uyumsuz: "${profile.programName}" — ${catalog.length} adayın hiçbiri dil uyumlu değil`,
       );
@@ -814,41 +617,51 @@ export const sitAdapter: SitAdapter = {
         detail: `Program bulunamadı: "${profile.programName}" — ${pool.length} aday arasında güvenli eşleşme yok`,
       };
     }
+    const matched = match.match;
     logger.info(
-      `[sit] program eşleşti: "${match.match.name}" (güven=${match.conf.toFixed(2)})`,
+      `[sit] program eşleşti: "${matched.name}" (id=${matched.id}, güven=${match.conf.toFixed(2)})`,
     );
 
-    const picked = await selectCombo(
-      page,
-      SIT_APP_FIELDS.program,
-      new RegExp(
-        match.match.name.slice(0, 30).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-        "i",
-      ),
-    );
-    if (!picked) {
+    // --- DRY: student + program resolved → stop before any write ---
+    if (!doSubmit) {
+      logger.info(
+        "[sit] DRY: öğrenci+program bulundu — InsertApplication çalıştırılmadan durduruldu",
+      );
       return {
         ...base,
-        programMissing: true,
-        detail: `Program seçilemedi: "${match.match.name}"`,
+        detail: `öğrenci+program bulundu ("${matched.name}"), kaydedilmeden durduruldu`,
       };
     }
 
-    if (!doSubmit) {
-      logger.info("[sit] DRY: Create Application öncesi durduruldu");
-      return { ...base, detail: "dry-run: başvuru oluşturulmadı" };
+    // --- REAL: create the application via the InsertApplication mutation ---
+    if (!studentId) {
+      return {
+        ...base,
+        detail: "başvuru oluşturulamadı: öğrenci id çözümlenemedi",
+      };
     }
-
-    if (!(await clickButton(page, SIT_BUTTONS.createApplication))) {
-      return { ...base, detail: "Create Application düğmesi bulunamadı" };
+    const created = await createApplicationRecord(page, {
+      student: studentId,
+      program: matched.id,
+      // Use the catalog's stored spelling (e.g. "Beykoz University") so the
+      // denormalised NAME column matches Zoho; fall back to the allowlist name.
+      university: matched.universityName ?? allowedUni,
+      degree: matched.degreeName ?? level,
+      stage: SIT_DEFAULT_APP_STAGE,
+      acdamicYear: defaultAcademicYear(),
+      semester: SIT_DEFAULT_SEMESTER,
+      country: "Turkey",
+      applicationName:
+        `${profile.firstName} ${profile.lastName} — ${matched.name}`.trim(),
+    });
+    if (!created) {
+      return {
+        ...base,
+        detail: `başvuru oluşturulamadı (InsertApplication): "${matched.name}"`,
+      };
     }
-    await sleep(page, 6000);
-
-    const after = await bodyText(page);
-    if (SIT_ERRORS.duplicate.test(after)) {
-      return { ...base, alreadyExists: true };
-    }
-    return { ...base, submitted: true };
+    logger.info(`[sit] başvuru oluşturuldu (id=${created.id})`);
+    return { ...base, submitted: true, externalRef: created.id };
   },
 
   /**
