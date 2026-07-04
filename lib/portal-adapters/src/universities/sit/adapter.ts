@@ -337,15 +337,26 @@ const POPOVER_ROOT_SEL =
   ".bg-popover, [role=listbox], [data-radix-popper-content-wrapper], [cmdk-list], [cmdk-root], [data-radix-select-viewport]";
 
 /**
+ * The Add Application MODAL root. Every dropdown popover renders INSIDE
+ * [role="dialog"] (confirmed live: popoverInsideDialog=true); the data-table's
+ * column menus (Asc/Desc/Hide), its ~277 rows, and the sidebar all live OUTSIDE
+ * it. Scoping trigger/popover/option lookups here removes the cross-widget
+ * collisions that made Student read "Asc/Desc/Hide" and Country match table rows.
+ */
+function resolveDialog(page: Page): Locator {
+  return page.locator('[role="dialog"]').filter({ visible: true }).last();
+}
+
+/**
  * The currently-open searchable popover: a popover-root container that also HOLDS
- * the Search textbox. Anchoring to "the container with the search box" is what
- * keeps the sidebar nav out (it has no search box) without being so narrow that
- * real option rows are missed.
+ * the Search textbox, scoped to the modal dialog so table column menus / rows and
+ * the sidebar can never leak in.
  */
 function openPopover(page: Page): Locator {
-  return page
+  return resolveDialog(page)
     .locator(POPOVER_ROOT_SEL)
     .filter({ has: page.locator(SEARCH_INPUT_SEL) })
+    .filter({ visible: true })
     .last();
 }
 
@@ -385,12 +396,33 @@ const OPTION_ROW_SEL =
  * fall back to any visible popover root — but never to the whole page.
  */
 async function resolvePopover(page: Page): Promise<Locator> {
-  const withSearch = page
+  // 1) Prefer the popover INSIDE the modal dialog that HOLDS the Search box.
+  //    Everything outside the dialog (table column menu Asc/Desc/Hide, the ~277
+  //    table rows, the sidebar) is excluded structurally.
+  const dialog = resolveDialog(page);
+  if (await dialog.count()) {
+    const inDialogWithSearch = dialog
+      .locator(POPOVER_ROOT_SEL)
+      .filter({ has: page.locator(SEARCH_INPUT_SEL) })
+      .filter({ visible: true })
+      .last();
+    if (await inDialogWithSearch.count()) return inDialogWithSearch;
+    const inDialogAny = dialog
+      .locator(POPOVER_ROOT_SEL)
+      .filter({ visible: true })
+      .last();
+    if (await inDialogAny.count()) return inDialogAny;
+  }
+  // 2) Fallback: a dropdown portalled to <body> OUTSIDE the dialog. Requiring the
+  //    Search box excludes the table's Asc/Desc/Hide column menu (it has none),
+  //    so we never fall back onto a table/sidebar widget.
+  const portalled = page
     .locator(POPOVER_ROOT_SEL)
     .filter({ has: page.locator(SEARCH_INPUT_SEL) })
     .filter({ visible: true })
     .last();
-  if (await withSearch.count()) return withSearch;
+  if (await portalled.count()) return portalled;
+  // 3) Last resort: any visible popover root (never the whole page's table rows).
   return page.locator(POPOVER_ROOT_SEL).filter({ visible: true }).last();
 }
 
@@ -510,13 +542,20 @@ async function selectComboSearch(
     `[sit] ${opts.fieldLabel ?? "alan"} için aranan: ${searchedFor}`,
   );
 
-  let trigger = page.getByRole("combobox", { name: triggerRe }).first();
+  // Scope trigger lookup to the Add Application modal so the data-table's column
+  // headers / sort buttons (Asc/Desc/Hide) and the sidebar are never targeted.
+  // Every dropdown popover also renders INSIDE this dialog (confirmed live).
+  const dialog = resolveDialog(page);
+  const hasDialog = (await dialog.count()) > 0;
+  const fieldScope: Locator = hasDialog ? dialog : page.locator("body");
+
+  let trigger = fieldScope.getByRole("combobox", { name: triggerRe }).first();
   if (!(await trigger.count())) {
-    trigger = page.getByRole("button", { name: triggerRe }).first();
+    trigger = fieldScope.getByRole("button", { name: triggerRe }).first();
   }
   if (!(await trigger.count())) {
     // Last resort: a visible element whose text matches the field label.
-    trigger = page
+    trigger = fieldScope
       .locator("[role=combobox], [role=button], button")
       .filter({ hasText: triggerRe })
       .first();
@@ -578,8 +617,9 @@ async function selectComboSearch(
     try {
       await trigger.click({ timeout: 6000 });
       await sleep(page, 500);
-      // The Search textbox is the reliable "popover is open" signal.
-      await page
+      // The Search textbox is the reliable "popover is open" signal (dialog-scoped
+      // so we never wait on the page's global/table search input).
+      await fieldScope
         .locator(SEARCH_INPUT_SEL)
         .filter({ visible: true })
         .first()
@@ -591,12 +631,12 @@ async function selectComboSearch(
       // Northern Cyprus in separate calls) never accumulate stale text like
       // "TurkeyTürkiye…". fill() replaces; keyboard.type() would append.
       if (opts.search) {
-        let box = page
+        let box = fieldScope
           .locator(SEARCH_INPUT_SEL)
           .filter({ visible: true })
           .first();
         if (!(await box.count())) {
-          box = page
+          box = fieldScope
             .getByRole("textbox")
             .filter({ hasNot: page.locator("[readonly]") })
             .last();

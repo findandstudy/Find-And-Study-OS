@@ -95,6 +95,20 @@ box, fallback any visible popover root — NEVER page-wide), then match options
 INSIDE it with a visible-filtered `hasText` locator + `waitFor("visible")`. Same
 for the search input: target the VISIBLE one.
 
+**SCOPE EVERYTHING to the modal `[role="dialog"]` — visible-popover alone is not
+enough.** A later run proved the killer: Student read options `["Asc","Desc",
+"Hide"]` — the data-TABLE's COLUMN SORT MENU behind the modal, not students. The
+page has MULTIPLE colliding `.bg-popover`/`div.cursor-pointer` widgets (modal
+dropdowns + table column menus + 277 table rows + sidebar); when the in-dialog
+search-box popover isn't matched, a `.last()` visible-popover fallback lands on
+the column menu. The modal's dropdown popovers ALL render INSIDE `[role="dialog"]`
+(confirmed live: `popoverInsideDialog=true`); table/menu/sidebar are OUTSIDE it.
+Rule: `resolveDialog(page)` = visible `[role="dialog"].last()`; resolve
+triggers, the Search box, and option popovers INSIDE the dialog first; only then
+fall back to a body-portalled popover that HOLDS a Search box (the column menu has
+none, so it's excluded) — never page-wide table rows. openPopover (miss-dump) is
+dialog-scoped too, so diagnostics reflect the real dropdown not a foreign menu.
+
 **Every dropdown pick needs per-field RETRY + verify — the SIT backend randomly
 DB-times-out** ("canceling statement due to statement timeout"), so a dropdown
 loads with 0 options on some attempts and a DIFFERENT field fails each run. Wrap
