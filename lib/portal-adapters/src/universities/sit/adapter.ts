@@ -211,6 +211,77 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Digits-only of a string (for separator-agnostic academic-year matching). */
+function yearDigits(s: string): string {
+  return (s.match(/\d/g) ?? []).join("");
+}
+
+/**
+ * Academic-year equality ignoring separators/format: "2026-2027", "2026/2027",
+ * "2026 2027", "20262027" and even a bare "2026" all match one another (one
+ * side being a prefix of the other suffices).
+ */
+function academicYearMatches(optionText: string, target: string): boolean {
+  const o = yearDigits(optionText);
+  const t = yearDigits(target);
+  if (!o || !t) return false;
+  return o === t || o.startsWith(t) || t.startsWith(o);
+}
+
+/** Canonical semester key (case-insensitive, TR/EN): Fall/Spring/Summer. */
+function semesterKey(s: string): string {
+  const f = s.toLowerCase();
+  if (/fall|g[üu]z|autumn/.test(f)) return "fall";
+  if (/spring|bahar/.test(f)) return "spring";
+  if (/summer|yaz/.test(f)) return "summer";
+  return f.trim();
+}
+
+/**
+ * Default-aware, tolerant selection for the "Add Application" fields that arrive
+ * PRE-SELECTED with a sensible default (Academic Year → "2026/2027", Semester →
+ * "Fall"). Because a pre-filled SIT combobox's accessible name becomes the
+ * VALUE (not the label), the label-based trigger lookup used for empty fields
+ * fails — so we first scan the dialog's comboboxes/buttons for one whose current
+ * text already satisfies the target (via `isMatch`) and, if found, accept it
+ * WITHOUT opening the dropdown. Only when no matching value is already shown do
+ * we actively try to pick `optionRe`. This NEVER fails the flow: if nothing
+ * matches we keep the portal's default and continue (these two fields always
+ * carry a reasonable default and must not block create).
+ */
+async function selectOrKeepDefault(
+  page: Page,
+  triggerRe: RegExp,
+  fieldLabel: string,
+  isMatch: (text: string) => boolean,
+  optionRe: RegExp,
+): Promise<void> {
+  const scope = (await page.getByRole("dialog").count())
+    ? page.getByRole("dialog").first()
+    : page;
+  const candidates = scope.locator("[role=combobox], [role=button], button");
+  const n = await candidates.count();
+  for (let i = 0; i < n; i++) {
+    const txt = ((await candidates.nth(i).textContent().catch(() => "")) ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (txt && isMatch(txt)) {
+      logger.info(
+        `[sit] ${fieldLabel}: mevcut değer zaten uygun ("${txt}") — dropdown atlanıyor`,
+      );
+      return;
+    }
+  }
+  // No pre-selected default matched — try to actively pick it (best-effort).
+  if (await selectComboSearch(page, triggerRe, { optionRe })) {
+    logger.info(`[sit] ${fieldLabel}: seçildi`);
+  } else {
+    logger.warn(
+      `[sit] ${fieldLabel}: eşleşen seçenek bulunamadı — modal default'u korunuyor (bloklanmıyor)`,
+    );
+  }
+}
+
 /**
  * Open a SIT SEARCHABLE combobox (the "Add Application" dialog uses these:
  * Student / University / Program etc. render a role=button|combobox trigger
@@ -745,11 +816,12 @@ export const sitAdapter: SitAdapter = {
             "i",
           )
         : new RegExp(escapeRe(uniName), "i");
-    // Academic year "2026-2027" → tolerate "2026/2027" or "2026 - 2027".
+    // Academic year "2026-2027" → tolerate "2026/2027", "2026 - 2027",
+    // "2026 2027" or "20262027" (separator optional, any of / - space).
     const [yStart, yEnd] = defaultAcademicYear().split("-");
     const yearRe =
       yStart && yEnd
-        ? new RegExp(`${yStart}\\s*[/\\-]\\s*${yEnd}`)
+        ? new RegExp(`${yStart}\\s*[/\\-\\s]?\\s*${yEnd}`)
         : new RegExp(escapeRe(defaultAcademicYear()));
 
     logger.info('[sit] "Add Application" akışı başlatılıyor');
@@ -767,11 +839,29 @@ export const sitAdapter: SitAdapter = {
     }
     await sleep(page, 1200);
 
-    // Fill the 7 searchable dropdowns. Student/University/Program need a search
-    // filter; the rest pick a fixed option by label. EVERY selection is
-    // mandatory in REAL mode: if any dropdown fails to pick its option we must
-    // NOT click Create (that would submit wrong/default values or a no-op), so
-    // fail fast with a field-specific detail.
+    // Academic Year + Semester arrive PRE-SELECTED with a sensible default
+    // ("2026/2027" and "Fall"), and a pre-filled combobox's accessible name
+    // becomes the VALUE (not the label) — so these two are handled default-aware
+    // and tolerantly (accept the shown default, normalize value matching, never
+    // block create). The other 5 (Student, Country, University, Degree, Program)
+    // stay MANDATORY: if any fails to pick its option we must NOT click Create
+    // (that would submit wrong/default values or a no-op), so fail fast with a
+    // field-specific detail.
+    await selectOrKeepDefault(
+      page,
+      SIT_APP_FIELDS.academicYear,
+      "akademik yıl (academic year)",
+      (t) => academicYearMatches(t, defaultAcademicYear()),
+      yearRe,
+    );
+    await selectOrKeepDefault(
+      page,
+      SIT_APP_FIELDS.semester,
+      "dönem (semester)",
+      (t) => semesterKey(t) === semesterKey(SIT_DEFAULT_SEMESTER),
+      new RegExp(escapeRe(SIT_DEFAULT_SEMESTER), "i"),
+    );
+
     const fields: Array<{
       key: string;
       run: () => Promise<boolean>;
@@ -782,20 +872,6 @@ export const sitAdapter: SitAdapter = {
           selectComboSearch(page, SIT_APP_FIELDS.student, {
             search: `${profile.firstName} ${profile.lastName}`.trim(),
             pickFirst: true,
-          }),
-      },
-      {
-        key: "akademik yıl (academic year)",
-        run: () =>
-          selectComboSearch(page, SIT_APP_FIELDS.academicYear, {
-            optionRe: yearRe,
-          }),
-      },
-      {
-        key: "dönem (semester)",
-        run: () =>
-          selectComboSearch(page, SIT_APP_FIELDS.semester, {
-            optionRe: new RegExp(escapeRe(SIT_DEFAULT_SEMESTER), "i"),
           }),
       },
       {

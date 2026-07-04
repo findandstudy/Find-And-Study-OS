@@ -48,11 +48,24 @@ University, Degree, Program by NAME) → click Create Application.
 **externalRef = `app_id` (SITP-…) ?? `id`** — both the create success path AND
 the pre-check dedup path use `appId ?? id`, so writeback carries the human app id.
 
-**Every dropdown selection is MANDATORY in REAL mode.** `selectComboSearch`
-returns a boolean; if any of the 7 fields fails to pick its option, fail fast
-with a field-specific detail — do NOT click Create (would submit default/no-op).
-University option matched by `distinctiveTokens` lookahead regex; program by
-`matched.name`; academic year tolerant regex (`2026\s*[/\-]\s*2027`).
+**Field selection: 5 MANDATORY, 2 default-aware.** Student/Country/University/
+Degree/Program are mandatory — `selectComboSearch` returns a boolean; if any
+fails, fail fast with a field-specific detail (do NOT click Create → would
+submit default/no-op). University option matched by `distinctiveTokens`
+lookahead regex; program by `matched.name`.
+
+**Academic Year + Semester are PRE-SELECTED defaults ("2026/2027", "Fall") →
+default-aware, NEVER block.** A pre-filled SIT combobox's ACCESSIBLE NAME becomes
+its VALUE (not the label), so the label-regex trigger lookup that works for empty
+fields FAILS on these two — that's the trap that made the old mandatory loop
+fail-fast on Academic Year even though the default was already correct.
+`selectOrKeepDefault` first scans the dialog's comboboxes/buttons for one whose
+current text already satisfies the target (academicYearMatches = digits-only,
+prefix-ok; semesterKey = TR/EN fall|güz|autumn→fall) and accepts it WITHOUT
+opening; only if none matches does it try to pick, and it NEVER fails the flow
+(keeps the portal default). Academic-year option regex must be separator-optional
+(`2026\s*[/\-\s]?\s*2027`) — the option renders "2026/2027" (slash) while the
+target is "2026-2027" (dash).
 
 **DRY vs REAL:** DRY stops right after program matching ("öğrenci+program
 bulundu … kaydedilmeden durduruldu") — never navigates/clicks. Only `doSubmit`
