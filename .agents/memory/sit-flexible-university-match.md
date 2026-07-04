@@ -83,13 +83,17 @@ read 0/0. Fix = `dropdownOptions()` combines page-wide `[role=option],[cmdk-item
 search box (sidebar has none). Wait on `SEARCH_INPUT_SEL` visible (not the
 container), and after typing wait for a row to render.
 
-**Click options via auto-wait `:visible`+`hasText`, NOT read-count-match.** The
-selector was right but two runtime traps caused a false 0/0: the modal renders TWO
-`.bg-popover` nodes (one OPEN, one empty/hidden) so index reads hit the empty one,
-and rows render async so an immediate read saw nothing. Rule: click the option
-directly with a visible-filtered `hasText` locator + `waitFor("visible")` so
-Playwright auto-waits for the row in the OPEN popover — never read/count/index.
-Same rule for the search input: target the VISIBLE one.
+**Click options via auto-wait `:visible`+`hasText`, SCOPED to the open popover.**
+Three traps caused a false 0/0 / wrong click: the modal renders TWO `.bg-popover`
+nodes (one OPEN, one empty/hidden) so index reads hit the empty one; rows render
+async so an immediate read saw nothing; and — the killer — a PAGE-WIDE
+`div.cursor-pointer`+hasText matches the applications TABLE behind the modal
+(option text like "Turkey" repeats in ~277 rows, every uni name, "Master"), so it
+grabbed a table row not the option (Student only worked by luck: email is unique).
+Rule: resolve the OPEN popover first (visible `.bg-popover` that HOLDS the Search
+box, fallback any visible popover root — NEVER page-wide), then match options
+INSIDE it with a visible-filtered `hasText` locator + `waitFor("visible")`. Same
+for the search input: target the VISIBLE one.
 
 **On any dropdown miss, dump a SANITISED popover skeleton — NEVER outerHTML.**
 `dumpOpenPopover()` (called from `logOptionsOnMiss`) walks the popover in-page and

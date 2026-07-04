@@ -376,9 +376,30 @@ const OPTION_ROW_SEL =
   "div.cursor-pointer, [role=option], [cmdk-item], [role=menuitem]";
 
 /**
+ * Resolve the container to scope option searches to — the OPEN dropdown popover,
+ * NEVER page-wide. This is critical: the applications table behind the modal
+ * repeats option-like text (e.g. "Turkey" appears in ~277 rows, every uni name,
+ * "Master"), so a page-wide `div.cursor-pointer` + hasText would match a TABLE
+ * row instead of the dropdown option. (Student only worked by luck: an email is
+ * unique to the dropdown.) Prefer the visible popover that HOLDS the Search box;
+ * fall back to any visible popover root — but never to the whole page.
+ */
+async function resolvePopover(page: Page): Promise<Locator> {
+  const withSearch = page
+    .locator(POPOVER_ROOT_SEL)
+    .filter({ has: page.locator(SEARCH_INPUT_SEL) })
+    .filter({ visible: true })
+    .last();
+  if (await withSearch.count()) return withSearch;
+  return page.locator(POPOVER_ROOT_SEL).filter({ visible: true }).last();
+}
+
+/**
  * Click the option row matching `matcher` DIRECTLY, using Playwright auto-wait +
  * `:visible`, instead of the fragile "read all → count → match → click by index"
- * approach. This fixes two confirmed live-DOM problems at once:
+ * approach. This fixes three confirmed live-DOM problems at once:
+ *   - Search is SCOPED to the open popover (`resolvePopover`) so `hasText` can't
+ *     match the applications table behind the modal (277 "Turkey" rows etc.).
  *   - The SIT modal renders TWO `.bg-popover` nodes (one open, one empty/hidden),
  *     so an index-based read hit the wrong (empty) one → 0/0. `.filter({ visible:
  *     true })` selects only the row in the OPEN popover.
@@ -393,7 +414,8 @@ async function clickVisibleOption(
   matcher: RegExp | string,
   timeout = 8000,
 ): Promise<boolean> {
-  const opt = page
+  const scope = await resolvePopover(page);
+  const opt = scope
     .locator(OPTION_ROW_SEL, { hasText: matcher })
     .filter({ visible: true })
     .first();
@@ -510,9 +532,14 @@ async function selectComboSearch(
     await sleep(page, 400);
   }
 
-  // Option-row locator, scoped to VISIBLE rows only (the SIT modal renders a
-  // second empty/hidden `.bg-popover`; :visible + auto-wait avoid reading it).
-  const optionLoc = page.locator(OPTION_ROW_SEL).filter({ visible: true });
+  // Option-row locator, scoped to the OPEN popover (never page-wide — the
+  // applications table behind the modal repeats option text like "Turkey" in
+  // ~277 rows) and to VISIBLE rows only (the modal renders a second empty/hidden
+  // `.bg-popover`; :visible + auto-wait avoid reading it).
+  const popoverScope = await resolvePopover(page);
+  const optionLoc = popoverScope
+    .locator(OPTION_ROW_SEL)
+    .filter({ visible: true });
 
   // pickFirst (Student): after typing the search term, click the first VISIBLE
   // option row — Playwright auto-waits for it to render (fixes the 0/0 timing).
