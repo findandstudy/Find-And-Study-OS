@@ -92,4 +92,21 @@ Supabase enforces MFA/captcha on the account (no MFA ⇒ works).
   triggered from gqlRequest on the data:null path; separate page so it never
   disturbs the main flow. Also log OUR outgoing op+variables to compare. All
   bodies PII-masked via rawForLog (query text preserved).
+- **DEFINITIVE query shape: `/api/graphql` is a Supabase pg_graphql proxy over
+  Zoho-synced tables `zoho_students` / `zoho_programs` / `zoho_applications`.** The
+  earlier bespoke `students(search:)` / `student(id).applications` /
+  `programs(universityName:)` fields DO NOT EXIST in this schema → that is the real
+  cause of `{"data":null}` (not auth). Use pg_graphql conventions:
+  `<table>Collection`, `edges { node }` (connection() already normalizes edges),
+  `filter`, `first`, `offset` (offset pagination — NOT Relay cursors/`after`),
+  `orderBy: [{ col: AscNullsLast }]`, filter ops `eq`/`ilike`/`or`.
+  - Student search: `zoho_studentsCollection(filter:{or:[{email:{ilike:$s}},{passport_number:{ilike:$s}}]}, first:25)`; wrap term as `%q%`; node fields snake_case (`first_name last_name email passport_number`).
+  - Applications: `zoho_applicationsCollection(filter:{student:{eq:$id}}, first:100)`; node `{id stage university program}` — `university`/`program` are denormalized NAME strings (not nested refs), `stage` is the status.
+  - Programs: `zoho_programsCollection(filter:{university:{ilike:$uni}}, first:$limit, offset:$offset, orderBy:[{name:AscNullsLast}])`; scope by university only, do degree/language/name matching in code (over-filtering on degree/language empties the page).
+  - **Insert mutations use pg_graphql joined names verbatim:** `insertIntozoho_studentsCollection` / `...programsCollection` / `...applicationsCollection` with `objects:[<Table>InsertInput!]!` → `{ records { id } }`. Application insert fields: `student program acdamic_year semester country university stage degree` — note the field is **`acdamic_year`** (a REAL schema typo, NOT `academic_year`; use exactly).
+- **Confirm insert/filter field names with pg_graphql introspection before wiring
+  mutations:** `logPgGraphqlIntrospectionOnce(page)` (graphql.ts, one-shot, called
+  from findStudent) queries `__type(name:"zoho_studentsInsertInput"){inputFields{name}}`
+  etc. and logs the field-name lists (schema metadata, not PII). Skip the SPA-capture
+  fallback for label `"introspect"` so a null introspection doesn't waste a ~32s probe.
 - Same Supabase-Bearer + apikey pattern likely applies to the United adapter too.

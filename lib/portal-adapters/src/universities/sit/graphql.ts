@@ -85,6 +85,8 @@ const capturedSessionByPage = new WeakMap<Page, Record<string, unknown>>();
 const capturedRealGqlByPage = new WeakMap<Page, Map<string, string>>();
 // Guards the one-shot real-request capture (per page).
 const graphqlCaptureAttempted = new WeakSet<Page>();
+// Guards the one-shot pg_graphql introspection log (per page).
+const introspectionLogged = new WeakSet<Page>();
 
 // Matches "Bearer <jwt>" and captures the bare JWT (group 1).
 const BEARER_JWT_RE = /^bearer\s+(ey[\w-]+\.[\w-]+\.[\w-]+)\s*$/i;
@@ -1015,8 +1017,9 @@ async function gqlRequest<S extends z.ZodTypeAny>(
   // but got no usable data, most likely because our query shape doesn't match
   // this route. Learn the route's REAL query shape (once per page) by capturing
   // the authenticated SPA's own /api/graphql requests. Best-effort; we still
-  // return null so THIS call falls back to scanning the UI.
-  await captureRealGraphqlOnce(page).catch(() => {});
+  // return null so THIS call falls back to scanning the UI. Skipped for the
+  // introspection probe (it has its own diagnostics and would waste a ~32s probe).
+  if (label !== "introspect") await captureRealGraphqlOnce(page).catch(() => {});
   return null;
 }
 
@@ -1052,6 +1055,85 @@ function connection<T extends z.ZodTypeAny>(
 }
 
 // ---------------------------------------------------------------------------
+// pg_graphql introspection (diagnostic) — confirm the EXACT insert/filter field
+// names for the create mutations before we wire them up in a later turn. Logged
+// once per page, best-effort; introspection may be disabled on the endpoint (→
+// null, harmless). Field names are schema metadata, not PII/secrets.
+// ---------------------------------------------------------------------------
+const INTROSPECTION_QUERY = /* GraphQL */ `
+  query IntrospectSitSchema {
+    studentInsert: __type(name: "zoho_studentsInsertInput") { inputFields { name } }
+    applicationInsert: __type(name: "zoho_applicationsInsertInput") { inputFields { name } }
+    programsFilter: __type(name: "zoho_programsFilter") { inputFields { name } }
+    studentNode: __type(name: "zoho_students") { fields { name } }
+    programNode: __type(name: "zoho_programs") { fields { name } }
+    applicationNode: __type(name: "zoho_applications") { fields { name } }
+  }
+`;
+
+const introspectInputType = z
+  .object({ inputFields: z.array(z.object({ name: z.string() })).nullish() })
+  .nullish();
+const introspectObjectType = z
+  .object({ fields: z.array(z.object({ name: z.string() })).nullish() })
+  .nullish();
+const introspectionSchema = z.object({
+  studentInsert: introspectInputType,
+  applicationInsert: introspectInputType,
+  programsFilter: introspectInputType,
+  studentNode: introspectObjectType,
+  programNode: introspectObjectType,
+  applicationNode: introspectObjectType,
+});
+
+async function logPgGraphqlIntrospectionOnce(page: Page): Promise<void> {
+  if (introspectionLogged.has(page)) return;
+  introspectionLogged.add(page);
+
+  const data = await gqlRequest(
+    page,
+    INTROSPECTION_QUERY,
+    {},
+    introspectionSchema,
+    "introspect",
+  );
+  if (!data) {
+    logger.info(
+      "[sit:graphql] introspect: no data (introspection disabled or unsupported)",
+    );
+    return;
+  }
+
+  const names = (
+    t?: {
+      inputFields?: { name: string }[] | null;
+      fields?: { name: string }[] | null;
+    } | null,
+  ): string =>
+    (t?.inputFields ?? t?.fields ?? []).map((f) => f.name).join(", ") ||
+    "(none)";
+
+  logger.info(
+    `[sit:graphql] introspect zoho_studentsInsertInput: [${names(data.studentInsert)}]`,
+  );
+  logger.info(
+    `[sit:graphql] introspect zoho_applicationsInsertInput: [${names(data.applicationInsert)}]`,
+  );
+  logger.info(
+    `[sit:graphql] introspect zoho_programsFilter: [${names(data.programsFilter)}]`,
+  );
+  logger.info(
+    `[sit:graphql] introspect zoho_students fields: [${names(data.studentNode)}]`,
+  );
+  logger.info(
+    `[sit:graphql] introspect zoho_programs fields: [${names(data.programNode)}]`,
+  );
+  logger.info(
+    `[sit:graphql] introspect zoho_applications fields: [${names(data.applicationNode)}]`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Student lookup (idempotency) — match by email or passport.
 // ---------------------------------------------------------------------------
 export interface SitStudentRef {
@@ -1060,20 +1142,32 @@ export interface SitStudentRef {
   passportNumber?: string;
 }
 
+// sitconnect's /api/graphql is a Supabase pg_graphql proxy over Zoho-synced
+// tables (zoho_students / zoho_programs / zoho_applications). pg_graphql exposes
+// `<table>Collection` fields returning Relay `edges { node }` connections and
+// `filter` / `first` / `offset` / `orderBy` arguments — NOT the bespoke
+// students(search:)/programs(universityName:) shape guessed earlier (which
+// returned {"data":null} because those fields don't exist in this schema).
 const STUDENT_SEARCH_QUERY = /* GraphQL */ `
-  query StudentSearch($q: String!) {
-    students(search: $q, first: 25) {
-      nodes { id email passportNumber }
+  query GetZohoStudentsSearch($search: String!) {
+    zoho_studentsCollection(
+      filter: { or: [
+        { email: { ilike: $search } },
+        { passport_number: { ilike: $search } }
+      ] }
+      first: 25
+    ) {
+      edges { node { id first_name last_name email passport_number } }
     }
   }
 `;
 
 const studentSearchSchema = z.object({
-  students: connection(
+  zoho_studentsCollection: connection(
     z.object({
       id: z.union([z.string(), z.number()]).transform((v) => String(v)),
       email: z.string().nullish(),
-      passportNumber: z.string().nullish(),
+      passport_number: z.string().nullish(),
     }),
   ),
 });
@@ -1087,13 +1181,19 @@ export async function findStudent(
   page: Page,
   by: { email?: string; passportNumber?: string },
 ): Promise<SitStudentRef | null> {
+  // One-shot pg_graphql introspection (insert/filter field names) to de-risk the
+  // create mutations in a later turn — logged once per page, best-effort.
+  await logPgGraphqlIntrospectionOnce(page).catch(() => {});
+
   const q = (by.email || by.passportNumber || "").trim();
   if (!q) return null;
 
   const data = await gqlRequest(
     page,
     STUDENT_SEARCH_QUERY,
-    { q },
+    // pg_graphql `ilike` is a SQL ILIKE — wrap the term so it matches
+    // case-insensitively even with surrounding whitespace/format differences.
+    { search: `%${q}%` },
     studentSearchSchema,
     "studentSearch",
   );
@@ -1102,14 +1202,14 @@ export async function findStudent(
   const email = by.email?.trim().toLowerCase();
   const passport = by.passportNumber?.trim().toLowerCase();
 
-  for (const node of data.students.nodes) {
+  for (const node of data.zoho_studentsCollection.nodes) {
     const nodeEmail = node.email?.trim().toLowerCase();
-    const nodePassport = node.passportNumber?.trim().toLowerCase();
+    const nodePassport = node.passport_number?.trim().toLowerCase();
     if (email && nodeEmail && nodeEmail === email) {
-      return { id: node.id, email: node.email ?? undefined, passportNumber: node.passportNumber ?? undefined };
+      return { id: node.id, email: node.email ?? undefined, passportNumber: node.passport_number ?? undefined };
     }
     if (passport && nodePassport && nodePassport === passport) {
-      return { id: node.id, email: node.email ?? undefined, passportNumber: node.passportNumber ?? undefined };
+      return { id: node.id, email: node.email ?? undefined, passportNumber: node.passport_number ?? undefined };
     }
   }
   return null;
@@ -1125,29 +1225,29 @@ export interface SitApplicationRef {
   status?: string;
 }
 
+// zoho_applications columns (from the live schema): student, program,
+// university, stage, degree, acdamic_year (real typo), semester, country.
+// university/program are denormalised NAME strings (Zoho sync), not nested refs.
 const STUDENT_APPLICATIONS_QUERY = /* GraphQL */ `
-  query StudentApplications($studentId: ID!) {
-    student(id: $studentId) {
-      applications(first: 100) {
-        nodes { id status university { name } program { name } }
-      }
+  query GetZohoApplications($studentId: String!) {
+    zoho_applicationsCollection(
+      filter: { student: { eq: $studentId } }
+      first: 100
+    ) {
+      edges { node { id stage university program } }
     }
   }
 `;
 
 const studentApplicationsSchema = z.object({
-  student: z
-    .object({
-      applications: connection(
-        z.object({
-          id: z.union([z.string(), z.number()]).transform((v) => String(v)),
-          status: z.string().nullish(),
-          university: z.object({ name: z.string().nullish() }).nullish(),
-          program: z.object({ name: z.string().nullish() }).nullish(),
-        }),
-      ),
-    })
-    .nullish(),
+  zoho_applicationsCollection: connection(
+    z.object({
+      id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+      stage: z.string().nullish(),
+      university: z.string().nullish(),
+      program: z.string().nullish(),
+    }),
+  ),
 });
 
 /**
@@ -1165,13 +1265,13 @@ export async function listStudentApplications(
     studentApplicationsSchema,
     "studentApplications",
   );
-  if (!data || !data.student) return [];
+  if (!data) return [];
 
-  return data.student.applications.nodes.map((n) => ({
+  return data.zoho_applicationsCollection.nodes.map((n) => ({
     id: n.id,
-    status: n.status ?? undefined,
-    universityName: n.university?.name ?? undefined,
-    programName: n.program?.name ?? undefined,
+    status: n.stage ?? undefined,
+    universityName: n.university ?? undefined,
+    programName: n.program ?? undefined,
   }));
 }
 
@@ -1180,92 +1280,67 @@ export async function listStudentApplications(
 // Scoping the catalog to ONE university is what makes program matching exact
 // even when many universities share a program name.
 // ---------------------------------------------------------------------------
+const PROGRAMS_PAGE_SIZE = 200;
+
+// pg_graphql pagination is offset-based (first/offset), not Relay cursors.
+// Scope by university via `ilike` on the denormalised `university` name column;
+// degree/language/name matching is done in code (matchProgram + language gate)
+// so we don't over-filter here and miss rows to spelling/format differences.
 const PROGRAMS_QUERY = /* GraphQL */ `
-  query Programs($universityName: String!, $level: String, $after: String) {
-    programs(universityName: $universityName, level: $level, active: true, first: 100, after: $after) {
-      nodes { id name }
-      pageInfo { hasNextPage endCursor }
+  query GetPrograms($uni: String!, $limit: Int!, $offset: Int!) {
+    zoho_programsCollection(
+      filter: { university: { ilike: $uni } }
+      first: $limit
+      offset: $offset
+      orderBy: [{ name: AscNullsLast }]
+    ) {
+      edges { node { id name } }
     }
   }
 `;
 
 const programsSchema = z.object({
-  programs: z.union([
+  zoho_programsCollection: connection(
     z.object({
-      nodes: z.array(
-        z.object({
-          id: z.union([z.string(), z.number()]).transform((v) => String(v)),
-          name: z.string(),
-        }),
-      ),
-      // pageInfo is optional: a non-paginated live schema simply omits it, in
-      // which case we treat the single page as complete.
-      pageInfo: z
-        .object({
-          hasNextPage: z.boolean().nullish(),
-          endCursor: z.string().nullish(),
-        })
-        .nullish(),
+      id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+      name: z.string(),
     }),
-    z.array(
-      z.object({
-        id: z.union([z.string(), z.number()]).transform((v) => String(v)),
-        name: z.string(),
-      }),
-    ),
-  ]),
+  ),
 });
 
 /**
- * Fetch the full active-program catalog for a university (read-only), following
- * pagination. Returns [] on unavailability so the caller falls back to scanning
- * the program combobox in the UI.
+ * Fetch the full program catalog for a university (read-only), following
+ * offset pagination. Returns [] on unavailability so the caller falls back to
+ * scanning the program combobox in the UI.
  */
 export async function fetchProgramCatalog(
   page: Page,
   universityName: string,
-  level?: string,
+  _level?: string,
 ): Promise<ProgramCandidate[]> {
   const out: ProgramCandidate[] = [];
-  let after: string | null = null;
 
   for (let pageNo = 0; pageNo < 25; pageNo++) {
-    const data: z.infer<typeof programsSchema> | null = await gqlRequest(
+    const data = await gqlRequest(
       page,
       PROGRAMS_QUERY,
-      { universityName, level: level ?? null, after },
+      {
+        uni: `%${universityName}%`,
+        limit: PROGRAMS_PAGE_SIZE,
+        offset: pageNo * PROGRAMS_PAGE_SIZE,
+      },
       programsSchema,
       "programs",
     );
     if (!data) break;
 
-    // Normalise `{ nodes, pageInfo }` vs bare-array shapes.
-    type ProgramNode = { id: string; name: string };
-    type ProgramsPageInfo = {
-      hasNextPage?: boolean | null;
-      endCursor?: string | null;
-    };
-    const programsField = data.programs as
-      | { nodes: ProgramNode[]; pageInfo?: ProgramsPageInfo | null }
-      | ProgramNode[];
-    let nodes: ProgramNode[];
-    let pageInfo: ProgramsPageInfo | undefined;
-    if (Array.isArray(programsField)) {
-      nodes = programsField;
-      pageInfo = undefined;
-    } else {
-      nodes = programsField.nodes;
-      pageInfo = programsField.pageInfo ?? undefined;
-    }
-
+    const nodes = data.zoho_programsCollection.nodes;
     for (const n of nodes) {
       out.push({ id: n.id, name: n.name });
     }
 
-    if (!pageInfo?.hasNextPage || !pageInfo.endCursor) {
-      break;
-    }
-    after = pageInfo.endCursor;
+    // A short page means we've reached the end of the collection.
+    if (nodes.length < PROGRAMS_PAGE_SIZE) break;
   }
 
   return out;
