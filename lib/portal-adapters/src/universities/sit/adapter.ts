@@ -434,6 +434,20 @@ async function selectComboSearch(
     fieldLabel?: string;
   },
 ): Promise<boolean> {
+  // Log the DISPLAY text we're about to search/match for this field, so a miss is
+  // immediately diagnosable ("aranan: X" vs. the option texts dumped on miss).
+  // REDACT the Student field: its search term is the applicant's name/email (PII).
+  const isStudentField = /student|öğrenci/i.test(opts.fieldLabel ?? "");
+  const searchedFor = isStudentField
+    ? "<redacted:student>"
+    : (opts.search ??
+      opts.target ??
+      opts.optionRe?.source ??
+      (opts.pickFirst ? "<ilk görünür seçenek>" : ""));
+  logger.info(
+    `[sit] ${opts.fieldLabel ?? "alan"} için aranan: ${searchedFor}`,
+  );
+
   let trigger = page.getByRole("combobox", { name: triggerRe }).first();
   if (!(await trigger.count())) {
     trigger = page.getByRole("button", { name: triggerRe }).first();
@@ -587,6 +601,27 @@ async function logOptionsOnMiss(
     );
   } catch {
     /* diagnostic only — never throw */
+  }
+  // When our option selector read 0 rows, the option-text log above is empty and
+  // tells us nothing — so also log the VISIBLE popover's innerText to reveal what
+  // actually rendered. EXCLUDE the Student field: its rows contain applicant
+  // names/emails (PII); for it we keep only the sanitized structural skeleton.
+  const isStudent = /student|öğrenci/i.test(fieldLabel ?? "");
+  if (!isStudent) {
+    try {
+      const vis = page.locator(".bg-popover").filter({ visible: true }).first();
+      if (await vis.count()) {
+        const raw = ((await vis.innerText().catch(() => "")) ?? "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 1500);
+        if (raw) {
+          logger.warn(`[sit] ${fieldLabel ?? "alan"} popover innerText: ${raw}`);
+        }
+      }
+    } catch {
+      /* diagnostic only — never throw */
+    }
   }
   // Also dump the open popover's structure so a single real run reveals the
   // actual option selector when nothing matched (no values, just markup).
