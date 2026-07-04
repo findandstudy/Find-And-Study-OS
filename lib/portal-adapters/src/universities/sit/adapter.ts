@@ -640,9 +640,16 @@ export const sitAdapter: SitAdapter = {
       logger.warn(
         `[sit] üniversite izin listesinde değil: "${profile.universityName ?? ""}" — atlanıyor`,
       );
+      // Diagnostic: log the permitted universities so the operator can see which
+      // members this SIT account actually accepts (and whether the CRM name just
+      // differs in spelling vs. genuinely not being on the list).
+      logger.warn(`[sit] izinli üniversiteler: ${SIT_ALLOWLIST.join(" | ")}`);
+      // A university that is not permitted is NOT a "program not found" problem —
+      // keep programMissing=false (inherited from `base`) so the failure is
+      // reported as a university error via `detail`, not misclassified as a
+      // program_missing result that could trigger program fallback.
       return {
         ...base,
-        programMissing: true,
         detail: `İzin verilmeyen üniversite: ${profile.universityName ?? "(boş)"}`,
       };
     }
@@ -705,9 +712,10 @@ export const sitAdapter: SitAdapter = {
       logger.warn(
         `[sit] university not found in SIT list: "${allowedUni}" (tried: ${uniTokens.join(" ")})`,
       );
+      // Failing to select the university in the live combobox is a university
+      // error, not a missing program — keep programMissing=false (from `base`).
       return {
         ...base,
-        programMissing: true,
         detail: `SIT üniversite listesinde bulunamadı: ${allowedUni}`,
       };
     }

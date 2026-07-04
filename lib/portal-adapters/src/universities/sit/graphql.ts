@@ -68,12 +68,31 @@ async function gqlRequest<S extends z.ZodTypeAny>(
       // Shape mismatch is non-fatal: the caller falls back to scanning the UI.
       // Logged (with the failing field path + query label) rather than thrown,
       // and never retried, so a diverging live schema degrades gracefully
-      // instead of looping. The live schema may return a connection either as
-      // `{ nodes: [...] }` or a bare array — both are accepted by the schemas
-      // below, so this only fires on a genuinely unexpected shape.
+      // instead of looping. The live schema may return a connection as
+      // `{ nodes: [...] }`, `{ edges: [{ node }] }`, a bare array, or null —
+      // all accepted by the schemas below, so this only fires on a genuinely
+      // unexpected shape. When it does, dump the ACTUAL response data (bounded)
+      // so the true live shape can be read straight from the run logs and the
+      // parser adjusted, instead of guessing.
       const issue = parsed.error.issues[0];
       const at = issue?.path?.length ? ` at "${issue.path.join(".")}"` : "";
-      logger.warn(`[sit:graphql] ${label}: data shape mismatch${at}`);
+      let shape: string;
+      try {
+        // Redact PII value keys (email/passport/phone) so the STRUCTURE of the
+        // live response is visible in logs without leaking student data.
+        const raw = JSON.stringify(envelope.data.data, (k, v) =>
+          /email|passport|phone|password|token|address|tckn|national/i.test(k)
+            ? "[redacted]"
+            : v,
+        );
+        shape =
+          raw && raw.length > 1000 ? `${raw.slice(0, 1000)}…(truncated)` : raw;
+      } catch {
+        shape = "(unserializable)";
+      }
+      logger.warn(
+        `[sit:graphql] ${label}: data shape mismatch${at} — actual response shape: ${shape}`,
+      );
       return null;
     }
     return parsed.data;
@@ -87,18 +106,34 @@ async function gqlRequest<S extends z.ZodTypeAny>(
 }
 
 /**
- * A GraphQL connection that may arrive either as `{ nodes: [...] }` (Relay-ish)
- * or as a bare array `[...]`. Returns a schema that normalises both to
- * `{ nodes: T[] }` so downstream code has one shape to consume.
+ * A GraphQL connection that may arrive in any of the common shapes:
+ *   - `{ nodes: [...] }`            (nodes-style connection)
+ *   - `{ edges: [{ node: ... }] }` (Relay edges/node connection)
+ *   - `[...]`                       (bare array)
+ *   - `null`                        (empty result — no rows)
+ * Returns a schema that normalises ALL of them to `{ nodes: T[] }` so
+ * downstream code has one shape to consume. Accepting an explicit `null` is
+ * important: SIT returns a null connection when a search yields no rows, which
+ * must be read as "no records" (→ create flow) rather than logged as a shape
+ * mismatch and retried. A genuinely ABSENT field (undefined) is intentionally
+ * NOT accepted so real schema drift still surfaces via the mismatch diagnostic.
  */
 function connection<T extends z.ZodTypeAny>(
   node: T,
 ): z.ZodType<{ nodes: z.infer<T>[] }> {
   return z
-    .union([z.object({ nodes: z.array(node) }), z.array(node)])
-    .transform((v) => (Array.isArray(v) ? { nodes: v } : v)) as z.ZodType<{
-    nodes: z.infer<T>[];
-  }>;
+    .union([
+      z.object({ nodes: z.array(node) }),
+      z.object({ edges: z.array(z.object({ node })) }),
+      z.array(node),
+      z.null(),
+    ])
+    .transform((v) => {
+      if (v == null) return { nodes: [] as z.infer<T>[] };
+      if (Array.isArray(v)) return { nodes: v };
+      if ("edges" in v) return { nodes: v.edges.map((e) => e.node) };
+      return v;
+    }) as z.ZodType<{ nodes: z.infer<T>[] }>;
 }
 
 // ---------------------------------------------------------------------------
