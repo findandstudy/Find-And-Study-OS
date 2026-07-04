@@ -56,11 +56,15 @@ import {
 } from "./helpers.js";
 import {
   findStudent,
-  listStudentApplications,
   fetchProgramCatalog,
-  findLatestApplication,
   installSpaAuthCapture,
   mintSupabaseBearer,
+  fetchProgramIds,
+  resolveAcademicYearId,
+  resolveSemesterId,
+  resolveSitIdentity,
+  dedupApplication,
+  createApplicationViaWebhook,
 } from "./graphql.js";
 
 export { SIT_ALLOWLIST } from "./helpers.js";
@@ -176,36 +180,6 @@ async function clickButton(page: Page, nameRe: RegExp): Promise<boolean> {
 }
 
 /**
- * Open the "Add Application" modal, tolerating SPA-hydration lag on the
- * /applications route: wait for the button to become visible (~15s), click it,
- * and if it never appears reload the page once and retry. Returns true when the
- * button was clicked.
- */
-async function openAddApplication(page: Page): Promise<boolean> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const btn = page
-      .getByRole("button", { name: SIT_BUTTONS.addApplication })
-      .first();
-    const appeared = await btn
-      .waitFor({ state: "visible", timeout: 15_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (appeared) {
-      await btn.click({ timeout: 8000 }).catch(() => {});
-      return true;
-    }
-    if (attempt === 0) {
-      // Reload once and retry — the button sometimes lags first paint.
-      await page
-        .reload({ waitUntil: "domcontentloaded", timeout: 30_000 })
-        .catch(() => {});
-      await sleep(page, 1500);
-    }
-  }
-  return false;
-}
-
-/**
  * Open a SIT custom combobox (role=button trigger) and click the option whose
  * text matches `valueRe`. Returns true when an option was clicked.
  */
@@ -241,585 +215,6 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Digits-only of a string (for separator-agnostic academic-year matching). */
-function yearDigits(s: string): string {
-  return (s.match(/\d/g) ?? []).join("");
-}
-
-/**
- * Academic-year equality ignoring separators/format: "2026-2027", "2026/2027",
- * "2026 2027", "20262027" and even a bare "2026" all match one another (one
- * side being a prefix of the other suffices).
- */
-function academicYearMatches(optionText: string, target: string): boolean {
-  const o = yearDigits(optionText);
-  const t = yearDigits(target);
-  if (!o || !t) return false;
-  return o === t || o.startsWith(t) || t.startsWith(o);
-}
-
-/** Canonical semester key (case-insensitive, TR/EN): Fall/Spring/Summer. */
-function semesterKey(s: string): string {
-  const f = s.toLowerCase();
-  if (/fall|g[üu]z|autumn/.test(f)) return "fall";
-  if (/spring|bahar/.test(f)) return "spring";
-  if (/summer|yaz/.test(f)) return "summer";
-  return f.trim();
-}
-
-/**
- * Default-aware, tolerant selection for the "Add Application" fields that arrive
- * PRE-SELECTED with a sensible default (Academic Year → "2026/2027", Semester →
- * "Fall"). Because a pre-filled SIT combobox's accessible name becomes the
- * VALUE (not the label), the label-based trigger lookup used for empty fields
- * fails — so we first scan the dialog's comboboxes/buttons for one whose current
- * text already satisfies the target (via `isMatch`) and, if found, accept it
- * WITHOUT opening the dropdown. Only when no matching value is already shown do
- * we actively try to pick `optionRe`. This NEVER fails the flow: if nothing
- * matches we keep the portal's default and continue (these two fields always
- * carry a reasonable default and must not block create).
- */
-async function selectOrKeepDefault(
-  page: Page,
-  triggerRe: RegExp,
-  fieldLabel: string,
-  isMatch: (text: string) => boolean,
-  optionRe: RegExp,
-): Promise<void> {
-  const scope = (await page.getByRole("dialog").count())
-    ? page.getByRole("dialog").first()
-    : page;
-  const candidates = scope.locator("[role=combobox], [role=button], button");
-  const n = await candidates.count();
-  for (let i = 0; i < n; i++) {
-    const txt = ((await candidates.nth(i).textContent().catch(() => "")) ?? "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (txt && isMatch(txt)) {
-      logger.info(
-        `[sit] ${fieldLabel}: mevcut değer zaten uygun ("${txt}") — dropdown atlanıyor`,
-      );
-      return;
-    }
-  }
-  // No pre-selected default matched — try to actively pick it (best-effort).
-  if (await selectComboSearch(page, triggerRe, { optionRe })) {
-    logger.info(`[sit] ${fieldLabel}: seçildi`);
-  } else {
-    logger.warn(
-      `[sit] ${fieldLabel}: eşleşen seçenek bulunamadı — modal default'u korunuyor (bloklanmıyor)`,
-    );
-  }
-}
-
-/**
- * Root containers of an OPEN dropdown popover/listbox. Used to wait for the
- * dropdown to render before reading options.
- */
-const DROPDOWN_POPOVER_SELECTOR =
-  "[role=listbox], [data-radix-popper-content-wrapper], [cmdk-list], [cmdk-root], [data-radix-select-viewport]";
-
-/**
- * The Search textbox rendered inside every SIT "Add Application" dropdown
- * (Student/Country/University/Degree/Program are ALL searchable shadcn `Command`
- * menus with a `placeholder="Search zoho-…"` input). Its presence is what
- * distinguishes a real dropdown popover from the left sidebar nav (no search box).
- */
-const SEARCH_INPUT_SEL = 'input[placeholder*="Search" i], [cmdk-input]';
-
-/**
- * The DEFINITIVE signature of the modal's real dropdown popover: its search input
- * placeholder always starts "Search zoho-…" (Search zoho-students /
- * zoho-countries / zoho-programs …). Anchoring the popover to THIS input is
- * portal-agnostic — it matches whether the popover renders inside `[role=dialog]`
- * (static lists like Country) or is portalled to `<body>` (Student's async list) —
- * and excludes every impostor: the sidebar search ("Search menu items", not
- * zoho), the table's Asc/Desc/Hide column menu (no input at all), and table rows
- * (not popovers).
- */
-const SEARCH_ZOHO_INPUT_SEL = 'input[placeholder^="Search zoho-" i]';
-
-/**
- * Containers that can be the root of an open dropdown popover. The SIT modal
- * uses shadcn `Command` whose popover root is `.bg-popover` (NOT a Radix
- * listbox/cmdk container), so `.bg-popover` is the primary signal; the Radix/cmdk
- * containers are kept as fallbacks for any differently-rendered dropdown.
- */
-const POPOVER_ROOT_SEL =
-  ".bg-popover, [role=listbox], [data-radix-popper-content-wrapper], [cmdk-list], [cmdk-root], [data-radix-select-viewport]";
-
-/**
- * The Add Application MODAL root. Every dropdown popover renders INSIDE
- * [role="dialog"] (confirmed live: popoverInsideDialog=true); the data-table's
- * column menus (Asc/Desc/Hide), its ~277 rows, and the sidebar all live OUTSIDE
- * it. Scoping trigger/popover/option lookups here removes the cross-widget
- * collisions that made Student read "Asc/Desc/Hide" and Country match table rows.
- */
-function resolveDialog(page: Page): Locator {
-  return page.locator('[role="dialog"]').filter({ visible: true }).last();
-}
-
-/**
- * The currently-open searchable popover: the visible popover-root container that
- * HOLDS the "Search zoho-…" input. This is portal-agnostic — it finds the popover
- * whether it renders inside the dialog or is portalled to `<body>` — and excludes
- * the sidebar / table column menu / table rows.
- */
-function openPopover(page: Page): Locator {
-  return page
-    .locator(POPOVER_ROOT_SEL)
-    .filter({ has: page.locator(SEARCH_ZOHO_INPUT_SEL) })
-    .filter({ visible: true })
-    .last();
-}
-
-/**
- * Options of the CURRENTLY-OPEN dropdown.
- *
- * Live DOM (confirmed): SIT option rows are plain `div.cursor-pointer.select-none`
- * divs — NOT `li` / `[role=option]` / `[data-value]` / `[cmdk-item]`, which is why
- * the previous scoped selector read 0/0. We combine two SAFE sources:
- *   1. `[role=option]` / `[cmdk-item]` page-wide — dropdown-only roles never used
- *      by the sidebar nav (kept for any ARIA-correct dropdown).
- *   2. The real clickable rows (`div.cursor-pointer` + `[data-value]` /
- *      `[role=menuitem]` fallbacks) read ONLY inside the popover that holds the
- *      Search box — the sidebar has no search box, so it can never leak in.
- */
-function dropdownOptions(page: Page): Locator {
-  return page
-    .locator("[role=option], [cmdk-item]")
-    .or(
-      openPopover(page).locator(
-        "div.cursor-pointer, [data-value], [role=menuitem]",
-      ),
-    );
-}
-
-/** Real clickable option-row selector across SIT's popover variants. */
-const OPTION_ROW_SEL =
-  "div.cursor-pointer, [role=option], [cmdk-item], [role=menuitem]";
-
-/**
- * Resolve the container to scope option searches to — the OPEN dropdown popover,
- * identified PORTAL-AGNOSTICALLY by the "Search zoho-…" input it holds, NEVER
- * page-wide. Two collisions drove this rule:
- *   1) The applications table behind the modal repeats option-like text ("Turkey"
- *      in ~277 rows, every uni name, "Master") and its column menu renders
- *      "Asc/Desc/Hide" — a page-wide match grabbed those instead of the option.
- *   2) A pure dialog-scoped fix eliminated (1) BUT lost Student, because Student's
- *      async result popover is portalled to `<body>` (OUTSIDE the dialog) → 0/0.
- * Anchoring to `input[placeholder^="Search zoho-"]` fixes both: it finds the
- * popover whether it renders in the dialog (Country) or in `<body>` (Student), and
- * every impostor is excluded structurally (sidebar = "Search menu items" not zoho;
- * column menu = no input; table rows = not a popover).
- */
-async function resolvePopover(page: Page): Promise<Locator> {
-  // 1) The real dropdown popover: a visible popover-root HOLDING the "Search zoho-"
-  //    input, wherever it renders (dialog or body-portalled).
-  const zoho = page
-    .locator(POPOVER_ROOT_SEL)
-    .filter({ has: page.locator(SEARCH_ZOHO_INPUT_SEL) })
-    .filter({ visible: true })
-    .last();
-  if (await zoho.count()) return zoho;
-  // 2) Fallback: any visible popover HOLDING a generic Search box. Still excludes
-  //    the input-less table column menu and non-popover table rows.
-  const withSearch = page
-    .locator(POPOVER_ROOT_SEL)
-    .filter({ has: page.locator(SEARCH_INPUT_SEL) })
-    .filter({ visible: true })
-    .last();
-  if (await withSearch.count()) return withSearch;
-  // 3) Last resort: any visible popover root (never the whole page's table rows).
-  return page.locator(POPOVER_ROOT_SEL).filter({ visible: true }).last();
-}
-
-/**
- * Click the option row matching `matcher` DIRECTLY, using Playwright auto-wait +
- * `:visible`, instead of the fragile "read all → count → match → click by index"
- * approach. This fixes three confirmed live-DOM problems at once:
- *   - Search is SCOPED to the open popover (`resolvePopover`) so `hasText` can't
- *     match the applications table behind the modal (277 "Turkey" rows etc.).
- *   - The SIT modal renders TWO `.bg-popover` nodes (one open, one empty/hidden),
- *     so an index-based read hit the wrong (empty) one → 0/0. `.filter({ visible:
- *     true })` selects only the row in the OPEN popover.
- *   - Option rows render async after the trigger opens / search filters, so an
- *     immediate read saw nothing. `waitFor({ state: "visible" })` lets Playwright
- *     auto-wait for the row to appear.
- * `hasText` matches the visible row text (a plain string is a case-insensitive
- * substring; pass a RegExp for tolerant matching). Returns true when clicked.
- */
-async function clickVisibleOption(
-  page: Page,
-  matcher: RegExp | string,
-  timeout = 8000,
-): Promise<boolean> {
-  const scope = await resolvePopover(page);
-  const opt = scope
-    .locator(OPTION_ROW_SEL, { hasText: matcher })
-    .filter({ visible: true })
-    .first();
-  try {
-    await opt.waitFor({ state: "visible", timeout });
-  } catch {
-    return false;
-  }
-  await opt.click({ timeout: 3000 }).catch(() => {});
-  await sleep(page, 900);
-  return true;
-}
-
-/**
- * Tolerant folded fallback over the ALREADY-scoped visible option rows:
- * Turkish-folded exact → contains → first-token, for diacritic/spacing
- * mismatches that a plain `hasText` substring can miss. `optionLoc` MUST already
- * be scoped to the open popover (never page-wide). Returns true when clicked.
- */
-async function clickFoldedOption(
-  page: Page,
-  optionLoc: Locator,
-  target: string,
-): Promise<boolean> {
-  const tgt = fold(target);
-  const tgtFirst = tgt.split(" ")[0] ?? "";
-  await optionLoc
-    .first()
-    .waitFor({ state: "visible", timeout: 4000 })
-    .catch(() => {});
-  const count = await optionLoc.count();
-  const folded: string[] = [];
-  for (let i = 0; i < count; i++) {
-    folded.push(
-      fold((await optionLoc.nth(i).textContent().catch(() => "")) ?? ""),
-    );
-  }
-  const tiers: Array<(f: string) => boolean> = [
-    (f) => f === tgt,
-    (f) => f.length > 0 && (f.includes(tgt) || tgt.includes(f)),
-    (f) => tgtFirst.length > 1 && f.split(" ")[0] === tgtFirst,
-  ];
-  for (const test of tiers) {
-    const idx = folded.findIndex((f) => f.length > 0 && test(f));
-    if (idx >= 0) {
-      await optionLoc.nth(idx).click({ timeout: 3000 }).catch(() => {});
-      await sleep(page, 900);
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Open a SIT SEARCHABLE combobox (the "Add Application" dialog uses these:
- * Student / University / Program etc. render a role=button|combobox trigger
- * that opens a search textbox filtering a role=listbox). Types `search` into
- * the visible textbox to filter, then clicks the option matching `optionRe`
- * (or the first option when `pickFirst`). Returns true when an option was
- * clicked.
- */
-async function selectComboSearch(
-  page: Page,
-  triggerRe: RegExp,
-  opts: {
-    search?: string;
-    optionRe?: RegExp;
-    pickFirst?: boolean;
-    /**
-     * Human target used for tolerant (Turkish-folded) matching AND for the
-     * "already selected?" short-circuit. When set, matching escalates
-     * exact-fold → contains-fold → first-token before giving up, and the
-     * currently-shown value is accepted without opening if it already folds
-     * equal to (or contains) the target.
-     */
-    target?: string;
-    /** Field label used only in the "options on mismatch" diagnostic log. */
-    fieldLabel?: string;
-  },
-): Promise<boolean> {
-  // Log the DISPLAY text we're about to search/match for this field, so a miss is
-  // immediately diagnosable ("aranan: X" vs. the option texts dumped on miss).
-  // REDACT the Student field: its search term is the applicant's name/email (PII).
-  const isStudentField = /student|öğrenci/i.test(opts.fieldLabel ?? "");
-  const searchedFor = isStudentField
-    ? "<redacted:student>"
-    : (opts.search ??
-      opts.target ??
-      opts.optionRe?.source ??
-      (opts.pickFirst ? "<ilk görünür seçenek>" : ""));
-  logger.info(
-    `[sit] ${opts.fieldLabel ?? "alan"} için aranan: ${searchedFor}`,
-  );
-
-  // Scope trigger lookup to the Add Application modal so the data-table's column
-  // headers / sort buttons (Asc/Desc/Hide) and the sidebar are never targeted.
-  // Every dropdown popover also renders INSIDE this dialog (confirmed live).
-  const dialog = resolveDialog(page);
-  const hasDialog = (await dialog.count()) > 0;
-  const fieldScope: Locator = hasDialog ? dialog : page.locator("body");
-
-  let trigger = fieldScope.getByRole("combobox", { name: triggerRe }).first();
-  if (!(await trigger.count())) {
-    trigger = fieldScope.getByRole("button", { name: triggerRe }).first();
-  }
-  if (!(await trigger.count())) {
-    // Last resort: a visible element whose text matches the field label.
-    trigger = fieldScope
-      .locator("[role=combobox], [role=button], button")
-      .filter({ hasText: triggerRe })
-      .first();
-  }
-  if (!(await trigger.count())) return false;
-
-  // Already selected? If the trigger's visible value already matches the target
-  // (folded equal / contains) or the optionRe, accept without opening.
-  const currentText = ((await trigger.textContent().catch(() => "")) ?? "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (currentText) {
-    const tgt = opts.target ? fold(opts.target) : "";
-    const cur = fold(currentText);
-    const foldHit =
-      !!tgt && cur.length > 0 && (cur === tgt || cur.includes(tgt) || tgt.includes(cur));
-    const reHit = !!opts.optionRe && opts.optionRe.test(currentText);
-    if (foldHit || reHit) return true;
-  }
-
-  // Baseline (placeholder) value, folded — lets us verify a selection actually
-  // stuck (the trigger's visible value changed away from the placeholder).
-  const initialFolded = fold(currentText);
-
-  // Did the trigger's visible value become the target after a click? A click can
-  // land without the selection sticking (transient re-render), so we re-check.
-  const verifySelected = async (): Promise<boolean> => {
-    const cur = ((await trigger.textContent().catch(() => "")) ?? "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!cur) return false;
-    const cf = fold(cur);
-    if (opts.target) {
-      const tgt = fold(opts.target);
-      if (cf.length > 0 && (cf === tgt || cf.includes(tgt) || tgt.includes(cf))) {
-        return true;
-      }
-    }
-    if (opts.optionRe && opts.optionRe.test(cur)) return true;
-    // pickFirst (Student) has no fixed target: accept any non-placeholder value
-    // that differs from the pre-selection text.
-    if (opts.pickFirst) {
-      return (
-        cf.length > 0 &&
-        cf !== initialFolded &&
-        !/^(select|choose|se[cç]|ara|search|pick)/i.test(cur)
-      );
-    }
-    return false;
-  };
-
-  // Per-field RETRY (flakiness cure): the SIT backend intermittently DB-times-out
-  // ("canceling statement due to statement timeout"), so a dropdown can load with
-  // 0 options on any given attempt — each run fails on a DIFFERENT field. Reopen
-  // + re-search up to 3× to ride through transient empties, and VERIFY the value
-  // stuck before declaring success.
-  const MAX_ATTEMPTS = 3;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      await trigger.click({ timeout: 6000 });
-      await sleep(page, 500);
-      // The "Search zoho-…" input is the reliable "the real dropdown popover is
-      // open" signal — PORTAL-AGNOSTIC, so we also catch Student's popover when it
-      // is portalled to <body> OUTSIDE the dialog (a dialog-scoped wait misses it).
-      await page
-        .locator(SEARCH_ZOHO_INPUT_SEL)
-        .filter({ visible: true })
-        .first()
-        .waitFor({ state: "visible", timeout: 6000 })
-        .catch(() => {});
-
-      // Resolve the real popover ONCE (by its "Search zoho-" input) and scope BOTH
-      // the search box and the option rows to it — never page-wide (the table
-      // behind the modal repeats option text like "Turkey" in ~277 rows) and never
-      // dialog-only (would miss Student's body-portalled popover).
-      const popoverScope = await resolvePopover(page);
-
-      // Filter by typing — CLEAR first (fill("") then fill(term)) so repeated
-      // attempts AND multi-candidate fields (Country tries Turkey → Türkiye →
-      // Northern Cyprus in separate calls) never accumulate stale text like
-      // "TurkeyTürkiye…". fill() replaces; keyboard.type() would append.
-      if (opts.search) {
-        let box = popoverScope
-          .locator(SEARCH_ZOHO_INPUT_SEL)
-          .filter({ visible: true })
-          .first();
-        if (!(await box.count())) {
-          box = popoverScope
-            .locator(SEARCH_INPUT_SEL)
-            .filter({ visible: true })
-            .first();
-        }
-        if (await box.count()) {
-          await box.fill("", { timeout: 3000 }).catch(() => {});
-          await box.fill(opts.search, { timeout: 3000 }).catch(() => {});
-        } else {
-          await page.keyboard.type(opts.search, { delay: 20 }).catch(() => {});
-        }
-        await sleep(page, 400);
-      }
-
-      const optionLoc = popoverScope
-        .locator(OPTION_ROW_SEL)
-        .filter({ visible: true });
-
-      let clicked = false;
-      if (opts.pickFirst) {
-        // Student: click the first VISIBLE option (Playwright auto-waits render).
-        const first = optionLoc.first();
-        await first.waitFor({ state: "visible", timeout: 6000 });
-        await first.click({ timeout: 3000 }).catch(() => {});
-        clicked = true;
-      } else if (
-        opts.optionRe &&
-        (await clickVisibleOption(page, opts.optionRe, 6000))
-      ) {
-        clicked = true;
-      } else if (
-        opts.target &&
-        (await clickVisibleOption(page, opts.target, 4000))
-      ) {
-        clicked = true;
-      } else if (opts.target) {
-        clicked = await clickFoldedOption(page, optionLoc, opts.target);
-      }
-
-      if (clicked) {
-        await sleep(page, 600);
-        if (await verifySelected()) return true;
-      }
-    } catch {
-      /* transient (statement timeout / empty load) — fall through to retry */
-    }
-    // Close the popover and pause before the next attempt.
-    await page.keyboard.press("Escape").catch(() => {});
-    await sleep(page, 800);
-  }
-
-  // All attempts failed — reopen once and dump options + sanitized popover so the
-  // next real run reveals the exact mismatch.
-  await trigger.click({ timeout: 4000 }).catch(() => {});
-  await sleep(page, 500);
-  const missScope = await resolvePopover(page);
-  await logOptionsOnMiss(
-    page,
-    missScope.locator(OPTION_ROW_SEL).filter({ visible: true }),
-    opts.fieldLabel,
-  );
-  await page.keyboard.press("Escape").catch(() => {});
-  return false;
-}
-
-/** Log up to 30 visible option texts of a failed dropdown for diagnosis. */
-async function logOptionsOnMiss(
-  page: Page,
-  optionLoc: Locator,
-  fieldLabel?: string,
-): Promise<void> {
-  try {
-    const count = await optionLoc.count();
-    const texts: string[] = [];
-    for (let i = 0; i < Math.min(count, 30); i++) {
-      const t = ((await optionLoc.nth(i).textContent().catch(() => "")) ?? "")
-        .replace(/\s+/g, " ")
-        .trim();
-      if (t) texts.push(t);
-    }
-    logger.warn(
-      `[sit] ${fieldLabel ?? "alan"} seçilemedi; mevcut options (${texts.length}/${count}): ${JSON.stringify(
-        texts,
-      )}`,
-    );
-  } catch {
-    /* diagnostic only — never throw */
-  }
-  // When our option selector read 0 rows, the option-text log above is empty and
-  // tells us nothing — so also log the VISIBLE popover's innerText to reveal what
-  // actually rendered. EXCLUDE the Student field: its rows contain applicant
-  // names/emails (PII); for it we keep only the sanitized structural skeleton.
-  const isStudent = /student|öğrenci/i.test(fieldLabel ?? "");
-  if (!isStudent) {
-    try {
-      const vis = page.locator(".bg-popover").filter({ visible: true }).first();
-      if (await vis.count()) {
-        const raw = ((await vis.innerText().catch(() => "")) ?? "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 1500);
-        if (raw) {
-          logger.warn(`[sit] ${fieldLabel ?? "alan"} popover innerText: ${raw}`);
-        }
-      }
-    } catch {
-      /* diagnostic only — never throw */
-    }
-  }
-  // Also dump the open popover's structure so a single real run reveals the
-  // actual option selector when nothing matched (no values, just markup).
-  await dumpOpenPopover(page, fieldLabel);
-}
-
-/**
- * Dump a SANITISED structural skeleton (≤1500 chars) of the currently-open
- * searchable popover on a selection miss, so the next real run reveals the exact
- * option selector (tag names + attribute NAMES only). Attribute VALUES and all
- * text nodes are stripped, so no student/program identifiers (or any value) are
- * ever logged — only markup structure. Prefers the search-box popover; falls
- * back to any open dropdown container.
- */
-async function dumpOpenPopover(page: Page, fieldLabel?: string): Promise<void> {
-  try {
-    let target = openPopover(page);
-    if (!(await target.count())) {
-      target = page.locator(DROPDOWN_POPOVER_SELECTOR).last();
-    }
-    if (!(await target.count())) return;
-    const skeleton =
-      (await target
-        .first()
-        .evaluate((root, maxNodes) => {
-          // Attribute names are safe (selectors); values may hold PII, so keep
-          // ONLY the attribute name, except for the structural role/type/kind
-          // whitelist whose value IS the selector signal we need.
-          const VALUE_WHITELIST = new Set(["role", "type", "aria-selected"]);
-          let count = 0;
-          const render = (el: Element, depth: number): string => {
-            if (count >= maxNodes || depth > 6) return "";
-            count++;
-            const attrs = Array.from(el.attributes)
-              .map((a) => {
-                const n = a.name;
-                if (n === "class") return `.${a.value.split(/\s+/)[0] ?? ""}`;
-                if (VALUE_WHITELIST.has(n)) return `${n}=${a.value}`;
-                return `[${n}]`; // name only — value stripped (may be PII)
-              })
-              .join("");
-            const kids = Array.from(el.children)
-              .map((c) => render(c, depth + 1))
-              .filter(Boolean)
-              .join("");
-            return `<${el.tagName.toLowerCase()}${attrs}>${kids}`;
-          };
-          return render(root as Element, 0);
-        }, 120)
-        .catch(() => "")) ?? "";
-    if (skeleton) {
-      logger.warn(
-        `[sit] ${fieldLabel ?? "alan"} popover skeleton: ${skeleton
-          .replace(/\s+/g, " ")
-          .slice(0, 1500)}`,
-      );
-    }
-  } catch {
-    /* diagnostic only — never throw */
-  }
-}
 
 /** Upload a file via the OS file chooser triggered by clicking `triggerRe`. */
 async function uploadViaChooser(
@@ -1168,28 +563,6 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    // --- Dedup via read-only GraphQL ---
-    if (studentId) {
-      const apps = await listStudentApplications(page, studentId);
-      const dup = apps.find(
-        (a) =>
-          a.universityName &&
-          matchAllowedUniversity(a.universityName) === allowedUni &&
-          a.programName &&
-          fold(a.programName) === fold(profile.programName),
-      );
-      if (dup) {
-        logger.info(
-          `[sit] mevcut başvuru bulundu (id=${dup.id}, app_id=${dup.appId ?? "-"}) — mükerrer oluşturulmayacak`,
-        );
-        return {
-          ...base,
-          alreadyExists: true,
-          externalRef: dup.appId ?? dup.id,
-        };
-      }
-    }
-
     // --- Resolve the exact program from the university-scoped catalog ---
     // Read-only GraphQL: the catalog now returns the university's active
     // programs (with degree/language metadata) so program matching happens
@@ -1261,9 +634,12 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    // --- REAL: create the application via the portal's "Add Application" UI ---
-    // The SIT backend (Zoho) — not the client — assigns id/app_id/stage, so we
-    // must drive the real dialog rather than inserting a row directly.
+    // --- REAL: create the application via the panel's true mechanism ---
+    // The SIT "Add Application" modal's dropdown UI is automation-hostile; the
+    // panel's real create is a pg_graphql dedup precheck + a JSON POST to an
+    // n8n webhook that returns the Zoho-assigned id. We derive every id from
+    // GraphQL (never hardcoded), run the same dedup the panel does, and POST
+    // only when no duplicate exists.
     if (!studentId) {
       return {
         ...base,
@@ -1271,212 +647,112 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    const uniName = matched.universityName ?? allowedUni;
-    // Match the university option by its distinctive tokens (folded, generic
-    // words removed) so short/long spelling differences ("Aydin University" vs
-    // "İstanbul Aydın Üniversitesi") still resolve to the right option. The
-    // tokens must all appear (any order) in the option text.
-    const uniTokens = distinctiveTokens(uniName);
-    const uniOptionRe =
-      uniTokens.length > 0
-        ? new RegExp(
-            uniTokens.map((t) => `(?=.*${escapeRe(t)})`).join("") + ".+",
-            "i",
-          )
-        : new RegExp(escapeRe(uniName), "i");
-    // Academic year "2026-2027" → tolerate "2026/2027", "2026 - 2027",
-    // "2026 2027" or "20262027" (separator optional, any of / - space).
-    const [yStart, yEnd] = defaultAcademicYear().split("-");
-    const yearRe =
-      yStart && yEnd
-        ? new RegExp(`${yStart}\\s*[/\\-\\s]?\\s*${yEnd}`)
-        : new RegExp(escapeRe(defaultAcademicYear()));
-
-    logger.info('[sit] "Add Application" akışı başlatılıyor');
-    await page.goto(SIT_URLS.base + SIT_URLS.applicationsPath, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
-    await sleep(page, 1200);
-
-    // The "Add Application" button can lag the /applications route load (SPA
-    // hydration), so a single immediate click was flaky. Wait for it to become
-    // visible; if it never shows, reload once and retry before giving up.
-    if (!(await openAddApplication(page))) {
-      const snap = (await bodyText(page)).replace(/\s+/g, " ").slice(0, 400);
-      logger.warn(`[sit] "Add Application" düğmesi bulunamadı; DOM: ${snap}`);
-      return {
-        ...base,
-        detail: '"Add Application" düğmesi bulunamadı',
-      };
-    }
-    await sleep(page, 1200);
-
-    // Academic Year + Semester arrive PRE-SELECTED with a sensible default
-    // ("2026/2027" and "Fall"), and a pre-filled combobox's accessible name
-    // becomes the VALUE (not the label) — so these two are handled default-aware
-    // and tolerantly (accept the shown default, normalize value matching, never
-    // block create). The other 5 (Student, Country, University, Degree, Program)
-    // stay MANDATORY: if any fails to pick its option we must NOT click Create
-    // (that would submit wrong/default values or a no-op), so fail fast with a
-    // field-specific detail.
-    await selectOrKeepDefault(
-      page,
-      SIT_APP_FIELDS.academicYear,
-      "akademik yıl (academic year)",
-      (t) => academicYearMatches(t, defaultAcademicYear()),
-      yearRe,
-    );
-    await selectOrKeepDefault(
-      page,
-      SIT_APP_FIELDS.semester,
-      "dönem (semester)",
-      (t) => semesterKey(t) === semesterKey(SIT_DEFAULT_SEMESTER),
-      new RegExp(escapeRe(SIT_DEFAULT_SEMESTER), "i"),
-    );
-
-    const degreeTarget = matched.degreeName ?? level;
-    const fields: Array<{
-      key: string;
-      run: () => Promise<boolean>;
-    }> = [
-      {
-        key: "öğrenci (student)",
-        run: () =>
-          selectComboSearch(page, SIT_APP_FIELDS.student, {
-            search: `${profile.firstName} ${profile.lastName}`.trim(),
-            pickFirst: true,
-            fieldLabel: "öğrenci (student)",
-          }),
-      },
-      {
-        // SIT member universities are in Türkiye / Northern Cyprus. Selecting the
-        // Country filters the University list, so it MUST run before University
-        // (it already does). Try Turkey → Türkiye → Northern Cyprus in turn.
-        key: "ülke (country)",
-        run: async () => {
-          // Per-attempt STRICT regex (not a broad turkey|cyprus alternation):
-          // regex matching runs before the folded-target tiers, so a broad
-          // regex could let the "Turkey" attempt click a "Cyprus" option that
-          // rendered first. Scoping the regex to the current candidate keeps
-          // both the regex path and the folded-target tiers target-strict.
-          for (const c of ["Turkey", "Türkiye", "Northern Cyprus"]) {
-            if (
-              await selectComboSearch(page, SIT_APP_FIELDS.country, {
-                search: c,
-                target: c,
-                optionRe: new RegExp(escapeRe(c), "i"),
-                fieldLabel: "ülke (country)",
-              })
-            ) {
-              // University options may reload after the country changes.
-              await sleep(page, 1200);
-              return true;
-            }
-          }
-          return false;
-        },
-      },
-      {
-        key: "üniversite (university)",
-        run: () =>
-          selectComboSearch(page, SIT_APP_FIELDS.university, {
-            search: uniTokens[0] ?? uniName,
-            optionRe: uniOptionRe,
-            target: uniName,
-            fieldLabel: "üniversite (university)",
-          }),
-      },
-      {
-        key: "derece (degree)",
-        run: () =>
-          selectComboSearch(page, SIT_APP_FIELDS.degree, {
-            optionRe: new RegExp(escapeRe(degreeTarget), "i"),
-            target: degreeTarget,
-            fieldLabel: "derece (degree)",
-          }),
-      },
-      {
-        key: "program",
-        run: () =>
-          selectComboSearch(page, SIT_APP_FIELDS.program, {
-            search: matched.name,
-            optionRe: new RegExp(escapeRe(matched.name), "i"),
-            target: matched.name,
-            fieldLabel: "program",
-          }),
-      },
-    ];
-    for (const field of fields) {
-      if (!(await field.run())) {
-        logger.warn(
-          `[sit] "Add Application" alanı seçilemedi: ${field.key} — başvuru oluşturulmadı`,
-        );
-        return {
-          ...base,
-          detail: `başvuru oluşturulamadı: "${field.key}" seçilemedi ("${matched.name}")`,
-        };
-      }
-    }
-
-    if (!(await clickButton(page, SIT_BUTTONS.createApplication))) {
-      return {
-        ...base,
-        detail: '"Create Application" düğmesi bulunamadı',
-      };
-    }
-    await sleep(page, 2500);
-
-    // Classify the outcome from the resulting page/toast text.
-    const body = await bodyText(page);
+    // Program ids (university/degree/country + canonical name) — required by
+    // both the dedup key and the webhook body.
+    const progIds = await fetchProgramIds(page, matched.id);
     if (
-      SIT_ERRORS.duplicateApplication.test(body) ||
-      SIT_ERRORS.duplicate.test(body)
+      !progIds ||
+      !progIds.universityId ||
+      !progIds.degreeId ||
+      !progIds.countryId
     ) {
-      // The portal's own dedup guard — the application already exists. Treat as
-      // an idempotent SUCCESS and read the existing record back for app_id.
-      logger.info(
-        "[sit] portal mükerrer uyarısı — başvuru zaten var (idempotent başarı)",
+      logger.warn(
+        `[sit] program alanları (university/degree/country) çözülemedi (program=${matched.id})`,
       );
-      const existing = await findLatestApplication(page, studentId, matched.id);
+      return {
+        ...base,
+        detail: `başvuru oluşturulamadı: program alanları (university/degree/country) çözülemedi ("${matched.name}")`,
+      };
+    }
+
+    // Academic year + semester ids (defaults "2026/2027" / "Fall"), resolved by
+    // name from the read model — never hardcoded.
+    const ay = await resolveAcademicYearId(page, defaultAcademicYear());
+    if (!ay) {
+      return {
+        ...base,
+        detail: `başvuru oluşturulamadı: akademik yıl id çözülemedi (${defaultAcademicYear()})`,
+      };
+    }
+    const sem = await resolveSemesterId(page, SIT_DEFAULT_SEMESTER);
+    if (!sem) {
+      return {
+        ...base,
+        detail: `başvuru oluşturulamadı: dönem (semester) id çözülemedi (${SIT_DEFAULT_SEMESTER})`,
+      };
+    }
+
+    // Agency identity — user_id (= auth uid), agency_id, crm_id (dynamic).
+    const identity = await resolveSitIdentity(page);
+    if (!identity || !identity.agencyId || !identity.crmId) {
+      logger.warn("[sit] acente kimliği (user_id/agency_id/crm_id) çözülemedi");
+      return {
+        ...base,
+        detail:
+          "başvuru oluşturulamadı: acente kimliği (user_id/agency_id/crm_id) çözülemedi",
+      };
+    }
+
+    // --- DEDUP precheck (student + university + degree + AY + semester) ---
+    // Program/country are intentionally NOT part of the dedup key (matches the
+    // panel). A hit is an idempotent success — do NOT POST the webhook.
+    const dedup = await dedupApplication(page, {
+      student: studentId,
+      university: progIds.universityId,
+      degree: progIds.degreeId,
+      academicYear: ay.id,
+      semester: sem.id,
+    });
+    if (dedup.status === "unknown") {
+      // Fail closed: we could not confirm whether a duplicate exists, so we must
+      // NOT POST the webhook (that would risk creating a duplicate application).
+      logger.warn(
+        "[sit] mükerrer kontrolü (dedup) doğrulanamadı — mükerrer riski nedeniyle webhook atlanıyor",
+      );
+      return {
+        ...base,
+        detail: `başvuru oluşturulamadı: mükerrer kontrolü (dedup) doğrulanamadı ("${matched.name}")`,
+      };
+    }
+    if (dedup.status === "found") {
+      logger.info(
+        `[sit] mevcut başvuru bulundu (dedup, id=${dedup.id}) — webhook atlanıyor (idempotent başarı)`,
+      );
       return {
         ...base,
         alreadyExists: true,
-        externalRef: existing?.appId ?? existing?.id,
-      };
-    }
-    if (SIT_ERRORS.serverError.test(body)) {
-      logger.warn("[sit] sunucu hatası (503/backend) — başvuru oluşturulamadı");
-      return {
-        ...base,
-        detail: `başvuru oluşturulamadı (sunucu hatası): "${matched.name}"`,
+        externalRef: dedup.id,
       };
     }
 
-    // Success path: the backend created the record asynchronously. Poll the
-    // read model a few times for the freshly-created application (id + app_id).
-    let created: { id: string; appId?: string } | null = null;
-    for (let i = 0; i < 4; i++) {
-      created = await findLatestApplication(page, studentId, matched.id);
-      if (created) break;
-      await sleep(page, 2000);
-    }
-    if (!created) {
-      logger.warn(
-        `[sit] "Create Application" sonrası kayıt okunamadı: "${matched.name}"`,
-      );
+    // --- CREATE via the n8n webhook (Zoho assigns the id) ---
+    const studentName = `${profile.firstName} ${profile.lastName}`.trim();
+    logger.info(`[sit] webhook create başlatılıyor (program="${matched.name}")`);
+    const webhookResult = await createApplicationViaWebhook(page, {
+      student: studentId,
+      program: matched.id,
+      acdamic_year: ay.id,
+      semester: sem.id,
+      country: progIds.countryId,
+      university: progIds.universityId,
+      degree: progIds.degreeId,
+      student_name: studentName,
+      program_name: progIds.name ?? matched.name,
+      user_id: identity.userId,
+      agency_id: identity.agencyId,
+      crm_id: identity.crmId,
+    });
+    if (!webhookResult) {
       return {
         ...base,
-        detail: `başvuru oluşturuldu ancak doğrulanamadı: "${matched.name}"`,
+        detail: `başvuru oluşturulamadı: webhook create başarısız ("${matched.name}")`,
       };
     }
-    logger.info(
-      `[sit] başvuru oluşturuldu (id=${created.id}, app_id=${created.appId ?? "-"})`,
-    );
+    logger.info(`[sit] başvuru webhook ile oluşturuldu (id=${webhookResult.id})`);
     return {
       ...base,
       submitted: true,
-      externalRef: created.appId ?? created.id,
+      externalRef: webhookResult.id,
     };
   },
 

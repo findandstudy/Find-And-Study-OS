@@ -1569,3 +1569,423 @@ export async function fetchProgramCatalog(
 
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// CREATE flow — id derivation + dedup precheck + n8n webhook (LIVE-CAPTURED).
+//
+// The SIT "Add Application" modal's dropdown UI is automation-hostile. The
+// panel's REAL create mechanism, captured live from the running SPA, is:
+//   1) a pg_graphql dedup precheck (GetApplicationsByFilter), then
+//   2) a JSON POST to an OPEN n8n webhook that returns the Zoho-assigned id.
+// We derive every id from GraphQL (never hardcoded), run the same dedup the
+// panel does, and POST only when no duplicate exists.
+// ---------------------------------------------------------------------------
+
+/** A required id field that may arrive as string or number → always string. */
+const idString = z.union([z.string(), z.number()]).transform((v) => String(v));
+/** An optional id field → string | undefined (null/absent become undefined). */
+const optIdString = z
+  .union([z.string(), z.number()])
+  .nullish()
+  .transform((v) => (v == null ? undefined : String(v)));
+
+// Digits-only of a string (separator-agnostic academic-year comparison).
+function yearDigits(s: string): string {
+  return (s.match(/\d/g) ?? []).join("");
+}
+
+// Canonical semester key (case-insensitive, TR/EN): fall/spring/summer.
+function semesterFold(s: string): string {
+  const f = s.toLowerCase();
+  if (/fall|g[üu]z|autumn/.test(f)) return "fall";
+  if (/spring|bahar/.test(f)) return "spring";
+  if (/summer|yaz/.test(f)) return "summer";
+  return f.trim();
+}
+
+// ---------------------------------------------------------------------------
+// Agency identity — user_id (= Supabase auth uid), agency_id, crm_id.
+//
+// The webhook create body carries the agency's identity. user_id is the auth
+// uid (the `sub` claim of the Supabase access_token the SPA authenticates
+// with); agency_id + crm_id come from the user_profile row keyed by that uid.
+// All three are resolved DYNAMICALLY (never hardcoded) and cached per page.
+// Values are treated as ids (not secrets), but we log PRESENCE only.
+// ---------------------------------------------------------------------------
+export interface SitIdentity {
+  /** Supabase auth uid — the webhook `user_id`. */
+  userId: string;
+  agencyId?: string;
+  crmId?: string;
+}
+
+const identityByPage = new WeakMap<Page, SitIdentity>();
+
+/** Decode the `sub` claim from a bare JWT (no verification — id read only). */
+function decodeJwtSub(jwt: string): string | null {
+  try {
+    const payload = jwt.split(".")[1];
+    if (!payload) return null;
+    const json = Buffer.from(payload, "base64url").toString("utf8");
+    const obj = JSON.parse(json) as { sub?: unknown };
+    return typeof obj.sub === "string" && obj.sub ? obj.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+const USER_PROFILE_QUERY = /* GraphQL */ `
+  query GetSitUserProfile($filter: user_profileFilter) {
+    user_profileCollection(filter: $filter, first: 1) {
+      edges { node { id email full_name crm_id agency_id } }
+    }
+  }
+`;
+
+const userProfileSchema = z.object({
+  user_profileCollection: connection(
+    z.object({
+      id: idString,
+      crm_id: optIdString,
+      agency_id: optIdString,
+    }),
+  ),
+});
+
+/**
+ * Resolve the agency identity (user_id = auth uid, agency_id, crm_id). Cached
+ * per page. Returns null when no Supabase bearer is available or the auth uid
+ * cannot be decoded; agency_id/crm_id may be undefined if the profile row is
+ * missing (the caller decides whether that is fatal). Never logs a secret.
+ */
+export async function resolveSitIdentity(page: Page): Promise<SitIdentity | null> {
+  const cached = identityByPage.get(page);
+  if (cached) return cached;
+
+  const auth = await collectAuth(page, SIT_URLS.base);
+  if (!auth.bearer) {
+    logger.warn(
+      "[sit:graphql] identity: Supabase bearer yok — kimlik (user_id/agency_id/crm_id) çözülemedi",
+    );
+    return null;
+  }
+  const uid = decodeJwtSub(auth.bearer);
+  if (!uid) {
+    logger.warn(
+      "[sit:graphql] identity: auth uid (sub) access_token'dan çözülemedi",
+    );
+    return null;
+  }
+
+  const data = await gqlRequest(
+    page,
+    USER_PROFILE_QUERY,
+    { filter: { id: { eq: uid } } },
+    userProfileSchema,
+    "userProfile",
+  );
+  const node = data?.user_profileCollection.nodes[0];
+  const identity: SitIdentity = {
+    userId: uid,
+    agencyId: node?.agency_id,
+    crmId: node?.crm_id,
+  };
+  identityByPage.set(page, identity);
+  logger.info(
+    `[sit:graphql] identity çözüldü (user_id=var, agency_id=${
+      identity.agencyId ? "var" : "yok"
+    }, crm_id=${identity.crmId ? "var" : "yok"})`,
+  );
+  return identity;
+}
+
+// ---------------------------------------------------------------------------
+// Program id fields — university_id / degree_id / country_id (+ canonical name)
+// for a matched program. These are the ids the dedup filter and webhook body
+// require (the catalog match only gives us the program id + display name).
+// ---------------------------------------------------------------------------
+export interface SitProgramIds {
+  name?: string;
+  universityId?: string;
+  degreeId?: string;
+  countryId?: string;
+}
+
+const PROGRAM_IDS_QUERY = /* GraphQL */ `
+  query GetSitProgramIds($filter: zoho_programsFilter) {
+    zoho_programsCollection(filter: $filter, first: 1) {
+      edges { node { id name university_id degree_id country_id } }
+    }
+  }
+`;
+
+const programIdsSchema = z.object({
+  zoho_programsCollection: connection(
+    z.object({
+      id: idString,
+      name: z.string().nullish(),
+      university_id: optIdString,
+      degree_id: optIdString,
+      country_id: optIdString,
+    }),
+  ),
+});
+
+/**
+ * Fetch the university/degree/country ids (and canonical name) for a program.
+ * Returns null when the program row is not found or GraphQL is unavailable.
+ */
+export async function fetchProgramIds(
+  page: Page,
+  programId: string,
+): Promise<SitProgramIds | null> {
+  const data = await gqlRequest(
+    page,
+    PROGRAM_IDS_QUERY,
+    { filter: { id: { eq: programId } } },
+    programIdsSchema,
+    "programIds",
+  );
+  const node = data?.zoho_programsCollection.nodes[0];
+  if (!node) return null;
+  return {
+    name: node.name ?? undefined,
+    universityId: node.university_id,
+    degreeId: node.degree_id,
+    countryId: node.country_id,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Academic-year + semester id resolution (defaults: "2026/2027" / "Fall").
+// The application stores these as ids; we resolve the id whose name matches the
+// default (year compared digit-only so "2026-2027" matches "2026/2027").
+// ---------------------------------------------------------------------------
+const namedRowSchema = z.object({ id: idString, name: z.string().nullish() });
+
+const ACADEMIC_YEARS_QUERY = /* GraphQL */ `
+  query GetSitAcademicYears {
+    zoho_academic_yearsCollection(first: 100) {
+      edges { node { id name } }
+    }
+  }
+`;
+const academicYearsSchema = z.object({
+  zoho_academic_yearsCollection: connection(namedRowSchema),
+});
+
+/** Resolve the academic-year id whose name matches `target` (digit-only). */
+export async function resolveAcademicYearId(
+  page: Page,
+  target: string,
+): Promise<{ id: string; name?: string } | null> {
+  const data = await gqlRequest(
+    page,
+    ACADEMIC_YEARS_QUERY,
+    {},
+    academicYearsSchema,
+    "academicYears",
+  );
+  if (!data) return null;
+  const t = yearDigits(target);
+  for (const n of data.zoho_academic_yearsCollection.nodes) {
+    const o = yearDigits(n.name ?? "");
+    if (o && t && (o === t || o.startsWith(t) || t.startsWith(o))) {
+      return { id: n.id, name: n.name ?? undefined };
+    }
+  }
+  logger.warn(
+    `[sit:graphql] academicYears: "${target}" eşleşen akademik yıl bulunamadı`,
+  );
+  return null;
+}
+
+const SEMESTERS_QUERY = /* GraphQL */ `
+  query GetSitSemesters {
+    zoho_semestersCollection(first: 100) {
+      edges { node { id name } }
+    }
+  }
+`;
+const semestersSchema = z.object({
+  zoho_semestersCollection: connection(namedRowSchema),
+});
+
+/** Resolve the semester id whose name matches `target` (fall/spring/summer). */
+export async function resolveSemesterId(
+  page: Page,
+  target: string,
+): Promise<{ id: string; name?: string } | null> {
+  const data = await gqlRequest(
+    page,
+    SEMESTERS_QUERY,
+    {},
+    semestersSchema,
+    "semesters",
+  );
+  if (!data) return null;
+  const key = semesterFold(target);
+  for (const n of data.zoho_semestersCollection.nodes) {
+    if (semesterFold(n.name ?? "") === key) {
+      return { id: n.id, name: n.name ?? undefined };
+    }
+  }
+  logger.warn(`[sit:graphql] semesters: "${target}" eşleşen dönem bulunamadı`);
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Dedup precheck — the exact filter the panel runs before create. The dedup
+// KEY is student + university + degree + acdamic_year + semester (program and
+// country are intentionally NOT part of the key). Returns the existing
+// application id when a duplicate exists, else null.
+// ---------------------------------------------------------------------------
+const DEDUP_QUERY = /* GraphQL */ `
+  query GetApplicationsByFilter($filter: zoho_applicationsFilter) {
+    zoho_applicationsCollection(filter: $filter, first: 1) {
+      edges { node { id } }
+    }
+  }
+`;
+const dedupSchema = z.object({
+  zoho_applicationsCollection: connection(z.object({ id: idString })),
+});
+
+export interface SitDedupKeys {
+  student: string;
+  university: string;
+  degree: string;
+  academicYear: string;
+  semester: string;
+}
+
+/**
+ * Tri-state dedup outcome. `unknown` means the precheck could not be confirmed
+ * (GraphQL unavailable / shape drift) — the caller MUST fail closed and NOT
+ * create, since proceeding would risk a duplicate application.
+ */
+export type SitDedupResult =
+  | { status: "found"; id: string }
+  | { status: "not_found" }
+  | { status: "unknown" };
+
+/**
+ * Run the panel's dedup precheck. Returns `found` (with the existing id) when a
+ * matching application already exists, `not_found` when the query confirms none
+ * exists, and `unknown` when the query itself fails — the caller treats
+ * `unknown` as fail-closed (abort create) to protect idempotency.
+ */
+export async function dedupApplication(
+  page: Page,
+  keys: SitDedupKeys,
+): Promise<SitDedupResult> {
+  const filter = {
+    student: { eq: keys.student },
+    university: { eq: keys.university },
+    degree: { eq: keys.degree },
+    // NOTE: the column name is the panel's typo `acdamic_year` — keep verbatim.
+    acdamic_year: { eq: keys.academicYear },
+    semester: { eq: keys.semester },
+  };
+  const data = await gqlRequest(
+    page,
+    DEDUP_QUERY,
+    { filter },
+    dedupSchema,
+    "dedup",
+  );
+  if (!data) {
+    // Could not confirm — fail closed so the caller does not create a possible
+    // duplicate on a transient GraphQL outage / response-shape drift.
+    logger.warn(
+      "[sit:graphql] dedup: sorgu başarısız — mükerrer durumu doğrulanamadı (fail-closed)",
+    );
+    return { status: "unknown" };
+  }
+  const node = data.zoho_applicationsCollection.nodes[0];
+  return node ? { status: "found", id: node.id } : { status: "not_found" };
+}
+
+// ---------------------------------------------------------------------------
+// CREATE via the n8n webhook. Open endpoint (Content-Type only), but we POST
+// from the authenticated browser context anyway (harmless). The webhook URL is
+// env-overridable (SIT_CREATE_WEBHOOK_URL) with the live-captured default. The
+// request BODY (which carries student PII) is NEVER logged; only the response
+// (PII-masked via rawForLog) and HTTP status are.
+// ---------------------------------------------------------------------------
+const DEFAULT_CREATE_WEBHOOK_URL =
+  "https://automation.sitconnect.net/webhook/4615d5ae-b3ba-413f-980e-a30a48be3c00";
+
+function createWebhookUrl(): string {
+  const env = process.env.SIT_CREATE_WEBHOOK_URL?.trim();
+  return env && /^https?:\/\//i.test(env) ? env : DEFAULT_CREATE_WEBHOOK_URL;
+}
+
+export interface SitWebhookPayload {
+  student: string;
+  program: string;
+  /** Panel's typo field name — keep verbatim. */
+  acdamic_year: string;
+  semester: string;
+  country: string;
+  university: string;
+  degree: string;
+  student_name: string;
+  program_name: string;
+  user_id: string;
+  agency_id: string;
+  crm_id: string;
+}
+
+/**
+ * POST the create payload to the n8n webhook. On `{ status: true, id }` returns
+ * { id } (the Zoho-assigned application id); on any non-200, non-true status,
+ * unparseable body, or network error returns null (the caller reports failure).
+ */
+export async function createApplicationViaWebhook(
+  page: Page,
+  payload: SitWebhookPayload,
+): Promise<{ id: string } | null> {
+  const url = createWebhookUrl();
+  try {
+    const res = await page.request.post(url, {
+      headers: { "content-type": "application/json" },
+      data: payload,
+      timeout: 30_000,
+    });
+    const status = res.status();
+    const bodyText = await res.text().catch(() => "");
+    if (!res.ok()) {
+      logger.warn(
+        `[sit:webhook] create başarısız (status=${status}) body=${rawForLog(bodyText)}`,
+      );
+      return null;
+    }
+    let json: { status?: unknown; id?: unknown } | null = null;
+    try {
+      json = JSON.parse(bodyText) as { status?: unknown; id?: unknown };
+    } catch {
+      json = null;
+    }
+    const id = json?.id;
+    if (
+      json?.status === true &&
+      (typeof id === "string" || typeof id === "number") &&
+      String(id)
+    ) {
+      logger.info(
+        `[sit:webhook] create OK (status=${status}, id=${String(id)})`,
+      );
+      return { id: String(id) };
+    }
+    logger.warn(
+      `[sit:webhook] create beklenmeyen yanıt (status=${status}) body=${rawForLog(bodyText)}`,
+    );
+    return null;
+  } catch (e) {
+    logger.warn(
+      `[sit:webhook] create hata: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return null;
+  }
+}
