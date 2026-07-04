@@ -18,18 +18,30 @@ legacy `currentSession.access_token`, and array form (`[0].access_token`).
 scan logged `bearer=false`. The Supabase-specific key read is authoritative and
 should be tried FIRST, with the heuristic kept only as a resilience fallback.
 
-**Timing + two sources (critical):** the Supabase session is written to web
-storage right AFTER login completes, so a single early read misses it — and it
-lives in TWO places on an authenticated session: localStorage `sb-*-auth-token`
-(plain JSON) AND cookie `sb-*-auth-token` (`base64-<b64(JSON)>`, decode via
-`atob(slice(7))`). `collectAuth` must POLL (≤15s, 500ms) and check BOTH each
-pass, returning on the first JWT (happy path returns on pass 0, no delay).
-Reading localStorage once (as the first commit did) logs "token bulunamadı".
+**DEFINITIVE (what actually works): capture the SPA's own header from the
+network — do NOT read web storage.** In the headless adapter context the
+Supabase session does NOT materialize where the adapter can read it after its
+own login: BOTH localStorage `sb-*-auth-token` and the `base64-` cookie came
+back empty in prod (two commits of storage-reading + polling failed). The
+robust source is the SPA itself — once logged in, the portal frontend attaches
+`Authorization: Bearer <access_token>` to EVERY `/api/graphql` request. Arm a
+`page.on("request")` listener that grabs that header and store the bare JWT in
+a per-page WeakMap; reuse it verbatim on our read-only calls. Storage reading
+is kept only as a last-resort fallback.
+**Why:** headless login doesn't persist the gotrue session to a readable
+localStorage/cookie in Playwright's context; the live SPA request header is the
+only reliable carrier.
 
-**How to apply (lib/portal-adapters/src/universities/sit/graphql.ts):**
-- `collectAuth()` extracts the bearer (poll localStorage + base64 cookie +
-  generic scan); both transports (page.request + in-page fetch) already send
-  `Authorization: Bearer` when it's present.
+**How to apply (lib/portal-adapters/src/universities/sit/):**
+- `installSpaAuthCapture(page)` (graphql.ts) — idempotent (WeakSet) request
+  listener → WeakMap<Page,string>. Call in adapter `login()` right after
+  launchPortal (before performLogin) AND in `ensureLoggedIn` so the header is
+  captured during the natural post-login students-list load.
+- `collectAuth()` PRIMARY = the captured header; if not yet seen, ONE bounded
+  `page.waitForRequest(/api/graphql + bearer, 12s)`, then re-check the map;
+  only then fall back to the storage poll (localStorage + base64 cookie).
+- Both transports (page.request + in-page fetch) already send
+  `Authorization: Bearer` when `auth.bearer` is present.
 - Diagnostics: symptom is `data:null` with no `errors`. Log `bearer=true/false`
   (booleans only) and, on success, "data received". **Never log the token
   value** (PII/secret) — response logging must redact JWT-like strings.

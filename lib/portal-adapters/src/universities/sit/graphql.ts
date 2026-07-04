@@ -39,6 +39,45 @@ import { SIT_URLS } from "./selectors.js";
 const GRAPHQL_PATH = "/api/graphql";
 
 // ---------------------------------------------------------------------------
+// SPA Authorization capture (PRIMARY auth source).
+//
+// Reading the Supabase access_token out of web storage proved unreliable in the
+// headless adapter context (after the adapter's own login the session did not
+// materialise anywhere we could read it — not localStorage, not the cookie).
+// The most robust source is the SPA itself: once logged in, the portal frontend
+// attaches `Authorization: Bearer <access_token>` to EVERY /api/graphql request
+// it makes. We passively observe those requests and reuse the exact header on
+// our own read-only calls. The token is held in memory only (keyed weakly by
+// page) and is NEVER logged.
+// ---------------------------------------------------------------------------
+const capturedBearerByPage = new WeakMap<Page, string>();
+const captureInstalledPages = new WeakSet<Page>();
+
+// Matches "Bearer <jwt>" and captures the bare JWT (group 1).
+const BEARER_JWT_RE = /^bearer\s+(ey[\w-]+\.[\w-]+\.[\w-]+)\s*$/i;
+
+/**
+ * Attach a one-time network listener that captures the Bearer token the SPA
+ * sends on its own /api/graphql requests. Idempotent per page. Call as early as
+ * possible after login so the token is captured during natural navigation
+ * (e.g. the students-list load) before we make our first GraphQL call.
+ */
+export function installSpaAuthCapture(page: Page): void {
+  if (captureInstalledPages.has(page)) return;
+  captureInstalledPages.add(page);
+  page.on("request", (req) => {
+    try {
+      if (!req.url().includes(GRAPHQL_PATH)) return;
+      const authz = req.headers()["authorization"];
+      const m = typeof authz === "string" ? authz.match(BEARER_JWT_RE) : null;
+      if (m) capturedBearerByPage.set(page, m[1]);
+    } catch {
+      /* header read failed — ignore, other requests may still be captured */
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Redact PII value-keys so the STRUCTURE of a response is safe to log. Program
 // / university names are deliberately NOT redacted (they are catalog data, not
 // PII, and are needed to debug shape/matching), but any student identifier is.
@@ -72,10 +111,10 @@ interface RawGqlResponse {
 interface SitAuth {
   xsrf?: string;
   bearer?: string;
-  // Diagnostics (KEY NAMES only, never values) captured when no bearer was
-  // found, so the caller can tell "token truly absent" from "key renamed /
-  // login flow changed" without ever logging a secret.
-  bearerDiag?: { lsKeys: string[]; cookieKeys: string[] };
+  // Diagnostics (page URL + KEY NAMES only, never values) captured when no
+  // bearer was found, so the caller can tell "token truly absent" from "wrong
+  // page / key renamed / login flow changed" without ever logging a secret.
+  bearerDiag?: { url: string; lsKeys: string[]; cookieKeys: string[] };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +145,38 @@ async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
     if (xsrf?.value) auth.xsrf = decodeURIComponent(xsrf.value);
   } catch {
     /* cookie read failed — proceed without XSRF */
+  }
+
+  // PRIMARY bearer source — the Authorization header the SPA attaches to its
+  // OWN /api/graphql requests, captured from the network. This is the live
+  // token verbatim and far more reliable than reading web storage in the
+  // headless context. installSpaAuthCapture is idempotent; the token is usually
+  // already captured from the students-list load that preceded this call.
+  installSpaAuthCapture(page);
+  let captured = capturedBearerByPage.get(page);
+  if (!captured) {
+    // Nothing captured yet — wait ONCE (bounded) for the SPA to fire an
+    // authenticated graphql request we can observe. No blind retries.
+    try {
+      const req = await page.waitForRequest(
+        (r) =>
+          r.url().includes(GRAPHQL_PATH) &&
+          BEARER_JWT_RE.test(r.headers()["authorization"] ?? ""),
+        { timeout: 12_000 },
+      );
+      const m = (req.headers()["authorization"] ?? "").match(BEARER_JWT_RE);
+      if (m) {
+        capturedBearerByPage.set(page, m[1]);
+        captured = m[1];
+      }
+    } catch {
+      /* no SPA graphql request observed — fall back to storage read below */
+    }
+    captured = captured ?? capturedBearerByPage.get(page);
+  }
+  if (captured) {
+    auth.bearer = captured;
+    return auth;
   }
 
   try {
@@ -270,6 +341,7 @@ async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
       auth.bearer = res.bearer;
     } else {
       auth.bearerDiag = {
+        url: page.url(),
         lsKeys: res?.lsKeys ?? [],
         cookieKeys: res?.cookieKeys ?? [],
       };
@@ -532,9 +604,9 @@ async function gqlRequest<S extends z.ZodTypeAny>(
     // KEY NAMES ONLY (no values) so we can tell "truly absent" from "renamed".
     const diag = auth.bearerDiag;
     const keyInfo = diag
-      ? ` — localStorage anahtarları: [${diag.lsKeys.join(", ") || "yok"}]; cookie anahtarları: [${
-          diag.cookieKeys.join(", ") || "yok"
-        }]`
+      ? ` — sayfa: ${diag.url}; localStorage anahtarları: [${
+          diag.lsKeys.join(", ") || "yok"
+        }]; cookie anahtarları: [${diag.cookieKeys.join(", ") || "yok"}]`
       : "";
     logger.warn(
       `[sit:graphql] ${label}: Supabase token bulunamadı — login akışı değişti mi? (Authorization: Bearer eklenemedi) — GraphQL atlanıyor, UI taramasına düşülecek${keyInfo}`,

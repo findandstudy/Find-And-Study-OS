@@ -50,6 +50,7 @@ import {
   findStudent,
   listStudentApplications,
   fetchProgramCatalog,
+  installSpaAuthCapture,
 } from "./graphql.js";
 
 export { SIT_ALLOWLIST } from "./helpers.js";
@@ -418,6 +419,10 @@ export const sitAdapter: SitAdapter = {
   async login(opts?: LoginOpts): Promise<AdapterSession> {
     const creds = resolveCreds(opts);
     const session = await launchPortal({ headless: opts?.headless ?? true });
+    // Start capturing the SPA's own Authorization header BEFORE login so it is
+    // observed during the natural post-login navigation (used as the primary
+    // GraphQL auth source — headless storage reads proved unreliable).
+    installSpaAuthCapture(session.page);
     logger.info("[sit] login — navigating to portal");
     try {
       await performLogin(session.page, creds);
@@ -435,6 +440,7 @@ export const sitAdapter: SitAdapter = {
    */
   async ensureLoggedIn(session: AdapterSession): Promise<void> {
     const page = session.page;
+    installSpaAuthCapture(page); // idempotent — safe if login() already armed it
     if (!SIT_LOGIN.loginUrlMarker.test(page.url())) {
       // Probe the students route — a redirect back to login means expired.
       await page
