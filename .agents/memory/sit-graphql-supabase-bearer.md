@@ -18,30 +18,40 @@ legacy `currentSession.access_token`, and array form (`[0].access_token`).
 scan logged `bearer=false`. The Supabase-specific key read is authoritative and
 should be tried FIRST, with the heuristic kept only as a resilience fallback.
 
-**DEFINITIVE (what actually works): capture the SPA's own header from the
-network — do NOT read web storage.** In the headless adapter context the
-Supabase session does NOT materialize where the adapter can read it after its
-own login: BOTH localStorage `sb-*-auth-token` and the `base64-` cookie came
-back empty in prod (two commits of storage-reading + polling failed). The
-robust source is the SPA itself — once logged in, the portal frontend attaches
-`Authorization: Bearer <access_token>` to EVERY `/api/graphql` request. Arm a
-`page.on("request")` listener that grabs that header and store the bare JWT in
-a per-page WeakMap; reuse it verbatim on our read-only calls. Storage reading
-is kept only as a last-resort fallback.
-**Why:** headless login doesn't persist the gotrue session to a readable
-localStorage/cookie in Playwright's context; the live SPA request header is the
-only reliable carrier.
+**DEFINITIVE (what actually works): MINT the token via Supabase password grant —
+do NOT rely on the SPA login at all.** The adapter's headless SPA login never
+establishes a real Supabase session (it reaches the app but the heavy SPA login
+page never authenticates), so NOTHING is ever written to storage AND no
+authenticated `/api/graphql` request is fired to intercept. THREE approaches
+failed in prod for this reason: (1) storage read, (2) poll+base64 cookie,
+(3) passive SPA `Authorization` header capture. The reliable path is to bypass
+SPA login and mint an access_token directly from Supabase Auth:
+1. Capture the PUBLIC anon `apikey` from the SPA's own `*.supabase.co` requests
+   (`req.headers()["apikey"]` in the same `page.on("request")` listener).
+2. `POST https://knqtjanxjwfjfrwoater.supabase.co/auth/v1/token?grant_type=password`
+   with headers `{ apikey, content-type }` and body `{ email, password }` (the
+   SIT `portal_credentials`). The response `access_token` is the Bearer.
+3. Send `Authorization: Bearer <access_token>` (+ `apikey: <anonKey>`) on every
+   `/api/graphql` call.
+**Why:** the gotrue session is never persisted in the adapter's headless
+context, but the credentials are the same email/password used for the UI login,
+so a direct password grant is deterministic and SPA-independent. Fails only if
+Supabase enforces MFA/captcha on the account (no MFA ⇒ works).
 
 **How to apply (lib/portal-adapters/src/universities/sit/):**
-- `installSpaAuthCapture(page)` (graphql.ts) — idempotent (WeakSet) request
-  listener → WeakMap<Page,string>. Call in adapter `login()` right after
-  launchPortal (before performLogin) AND in `ensureLoggedIn` so the header is
-  captured during the natural post-login students-list load.
-- `collectAuth()` PRIMARY = the captured header; if not yet seen, ONE bounded
-  `page.waitForRequest(/api/graphql + bearer, 12s)`, then re-check the map;
-  only then fall back to the storage poll (localStorage + base64 cookie).
-- Both transports (page.request + in-page fetch) already send
-  `Authorization: Bearer` when `auth.bearer` is present.
+- `mintSupabaseBearer(page,{user,password})` (graphql.ts) — idempotent (skips if
+  a bearer is already held), non-fatal. Called in adapter `login()` after
+  performLogin (resolveCreds) AND at end of `ensureLoggedIn` (portalCreds).
+  Stores the token in the SAME `capturedBearerByPage` WeakMap that `collectAuth`
+  reads FIRST, so the minted token is the primary Bearer.
+- `resolveAnonKey(page)` — read WeakMap, else ONE bounded
+  `page.waitForRequest(*.supabase.co + apikey, 12s)`.
+- Passive SPA-header capture (`installSpaAuthCapture`) + storage poll are kept
+  ONLY as fallbacks. Both transports send `apikey` (from `auth.apiKey`) too.
+- Diagnostics on failure: `logSitLoginDiagnostics` logs `page.url()` + storage/
+  cookie KEY NAMES + a `/tmp/sit-login-state.png` screenshot — NEVER values.
+- NEVER log the token / password / anon key — only `bearer=true/false` + HTTP
+  status.
 - Diagnostics: symptom is `data:null` with no `errors`. Log `bearer=true/false`
   (booleans only) and, on success, "data received". **Never log the token
   value** (PII/secret) — response logging must redact JWT-like strings.

@@ -51,6 +51,7 @@ import {
   listStudentApplications,
   fetchProgramCatalog,
   installSpaAuthCapture,
+  mintSupabaseBearer,
 } from "./graphql.js";
 
 export { SIT_ALLOWLIST } from "./helpers.js";
@@ -430,6 +431,11 @@ export const sitAdapter: SitAdapter = {
       await session.close().catch(() => {});
       throw err;
     }
+    // The headless SPA login does not reliably establish a Supabase session, so
+    // mint an access_token directly from the SIT credentials (password grant).
+    // This is the primary GraphQL auth source; non-fatal (falls back to passive
+    // capture / storage read / UI scan on failure).
+    await mintSupabaseBearer(session.page, creds).catch(() => false);
     return session;
   },
 
@@ -455,6 +461,9 @@ export const sitAdapter: SitAdapter = {
       logger.warn("[sit] session expired — re-authenticating");
       await performLogin(page, portalCreds(PORTAL_KEY));
     }
+    // Guarantee a Supabase Bearer for GraphQL before the first read-only call.
+    // Idempotent (skips if already held) + non-fatal.
+    await mintSupabaseBearer(page, portalCreds(PORTAL_KEY)).catch(() => false);
   },
 
   /**

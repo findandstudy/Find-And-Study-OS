@@ -38,43 +38,197 @@ import { SIT_URLS } from "./selectors.js";
 
 const GRAPHQL_PATH = "/api/graphql";
 
+// SIT authenticates GraphQL with a Supabase access_token. The Supabase project
+// (auth + rest) lives here; the token endpoint mints an access_token from the
+// SIT email/password (the same portal_credentials used for the UI login).
+const SUPABASE_URL = "https://knqtjanxjwfjfrwoater.supabase.co";
+const SUPABASE_TOKEN_PATH = "/auth/v1/token?grant_type=password";
+
+// A bare (unprefixed) JWT — used to validate a minted/captured access_token.
+const JWT_RE = /^ey[\w-]+\.[\w-]+\.[\w-]+$/;
+
 // ---------------------------------------------------------------------------
-// SPA Authorization capture (PRIMARY auth source).
+// Supabase auth for GraphQL.
 //
-// Reading the Supabase access_token out of web storage proved unreliable in the
-// headless adapter context (after the adapter's own login the session did not
-// materialise anywhere we could read it — not localStorage, not the cookie).
-// The most robust source is the SPA itself: once logged in, the portal frontend
-// attaches `Authorization: Bearer <access_token>` to EVERY /api/graphql request
-// it makes. We passively observe those requests and reuse the exact header on
-// our own read-only calls. The token is held in memory only (keyed weakly by
-// page) and is NEVER logged.
+// DEFINITIVE approach (mintSupabaseBearer): the adapter's headless SPA login
+// does NOT produce a real Supabase session — it reaches the app but the heavy
+// SPA login never authenticates, so no access_token is ever written to storage
+// and no authenticated /api/graphql request is fired to intercept. Three prior
+// approaches (storage read, poll+cookie, SPA header capture) all failed for
+// this reason. Instead we BYPASS the SPA login and mint an access_token
+// directly from Supabase Auth: capture the public anon `apikey` the SPA sends
+// on its own *.supabase.co requests, then POST it with the SIT email/password
+// to /auth/v1/token?grant_type=password. The returned access_token is the
+// Bearer the GraphQL endpoint needs.
+//
+// The passive SPA-header capture and web-storage reads are retained only as
+// best-effort fallbacks. All tokens/keys are held in memory only (keyed weakly
+// by page) and are NEVER logged (only bearer=true/false + HTTP status).
 // ---------------------------------------------------------------------------
 const capturedBearerByPage = new WeakMap<Page, string>();
+const capturedAnonKeyByPage = new WeakMap<Page, string>();
 const captureInstalledPages = new WeakSet<Page>();
 
 // Matches "Bearer <jwt>" and captures the bare JWT (group 1).
 const BEARER_JWT_RE = /^bearer\s+(ey[\w-]+\.[\w-]+\.[\w-]+)\s*$/i;
 
 /**
- * Attach a one-time network listener that captures the Bearer token the SPA
- * sends on its own /api/graphql requests. Idempotent per page. Call as early as
- * possible after login so the token is captured during natural navigation
- * (e.g. the students-list load) before we make our first GraphQL call.
+ * Attach a one-time network listener that captures (a) the Bearer token the SPA
+ * sends on its own /api/graphql requests and (b) the public anon `apikey`
+ * header the SPA sends on its *.supabase.co requests (needed to mint a token).
+ * Idempotent per page. Call as early as possible after opening the portal so
+ * both are captured during natural navigation before our first GraphQL call.
  */
 export function installSpaAuthCapture(page: Page): void {
   if (captureInstalledPages.has(page)) return;
   captureInstalledPages.add(page);
   page.on("request", (req) => {
     try {
-      if (!req.url().includes(GRAPHQL_PATH)) return;
-      const authz = req.headers()["authorization"];
-      const m = typeof authz === "string" ? authz.match(BEARER_JWT_RE) : null;
-      if (m) capturedBearerByPage.set(page, m[1]);
+      const url = req.url();
+      // (b) public anon apikey from any Supabase request (never logged).
+      if (url.includes(".supabase.co") && !capturedAnonKeyByPage.has(page)) {
+        const key = req.headers()["apikey"];
+        if (typeof key === "string" && key) capturedAnonKeyByPage.set(page, key);
+      }
+      // (a) Bearer from the SPA's own graphql calls (fallback source).
+      if (url.includes(GRAPHQL_PATH)) {
+        const authz = req.headers()["authorization"];
+        const m = typeof authz === "string" ? authz.match(BEARER_JWT_RE) : null;
+        if (m) capturedBearerByPage.set(page, m[1]);
+      }
     } catch {
       /* header read failed — ignore, other requests may still be captured */
     }
   });
+}
+
+/**
+ * Resolve the public anon apikey — from the passive capture, or by waiting once
+ * (bounded) for the SPA to fire a *.supabase.co request carrying it. Returns
+ * null if none is observed. The key value is NEVER logged.
+ */
+async function resolveAnonKey(page: Page): Promise<string | null> {
+  let key = capturedAnonKeyByPage.get(page);
+  if (key) return key;
+  try {
+    const req = await page.waitForRequest(
+      (r) => r.url().includes(".supabase.co") && !!r.headers()["apikey"],
+      { timeout: 12_000 },
+    );
+    const k = req.headers()["apikey"];
+    if (typeof k === "string" && k) {
+      capturedAnonKeyByPage.set(page, k);
+      key = k;
+    }
+  } catch {
+    /* no supabase request observed */
+  }
+  return key ?? capturedAnonKeyByPage.get(page) ?? null;
+}
+
+/**
+ * Log the login-page state (URL + storage/cookie KEY NAMES only, plus a
+ * screenshot to /tmp) when auth fails, so we can see WHERE the adapter is and
+ * whether it is authenticated — WITHOUT ever logging any secret value.
+ */
+async function logSitLoginDiagnostics(page: Page): Promise<void> {
+  try {
+    const info = await page
+      .evaluate(() => {
+        let lsKeys: string[] = [];
+        try {
+          lsKeys = Object.keys(window.localStorage);
+        } catch {
+          /* access denied */
+        }
+        let cookieKeys: string[] = [];
+        try {
+          cookieKeys = document.cookie
+            .split(";")
+            .map((x) => x.trim().split("=")[0])
+            .filter(Boolean);
+        } catch {
+          /* access denied */
+        }
+        return { lsKeys, cookieKeys };
+      })
+      .catch(() => ({ lsKeys: [] as string[], cookieKeys: [] as string[] }));
+    logger.warn(
+      `[sit:auth] tanı — sayfa: ${page.url()}; localStorage anahtarları: [${
+        info.lsKeys.join(", ") || "yok"
+      }]; cookie anahtarları: [${info.cookieKeys.join(", ") || "yok"}]`,
+    );
+    await page
+      .screenshot({ path: "/tmp/sit-login-state.png" })
+      .catch(() => {});
+  } catch {
+    /* diagnostics are best-effort */
+  }
+}
+
+/**
+ * PRIMARY auth path — mint a Supabase access_token via the password grant,
+ * bypassing the unreliable SPA login. Stores the token in capturedBearerByPage
+ * (so collectAuth picks it up as the primary Bearer). Idempotent: returns early
+ * if a Bearer is already held for the page. Non-fatal — on any failure it logs
+ * (status + bearer=false only, never a secret) and returns false so the caller
+ * falls back to the passive capture / storage read / UI scan.
+ */
+export async function mintSupabaseBearer(
+  page: Page,
+  creds: { user: string; password: string },
+): Promise<boolean> {
+  if (capturedBearerByPage.has(page)) return true;
+  installSpaAuthCapture(page);
+
+  const anonKey = await resolveAnonKey(page);
+  if (!anonKey) {
+    logger.warn(
+      "[sit:auth] Supabase anon apikey yakalanamadı — password grant atlanıyor (bearer=false)",
+    );
+    await logSitLoginDiagnostics(page);
+    return false;
+  }
+
+  try {
+    const res = await page.request.post(SUPABASE_URL + SUPABASE_TOKEN_PATH, {
+      headers: { apikey: anonKey, "content-type": "application/json" },
+      data: { email: creds.user, password: creds.password },
+      timeout: 20_000,
+    });
+    const status = res.status();
+    if (!res.ok()) {
+      logger.warn(
+        `[sit:auth] Supabase password grant başarısız (status=${status}, bearer=false)`,
+      );
+      await logSitLoginDiagnostics(page);
+      return false;
+    }
+    const body = (await res.json().catch(() => null)) as {
+      access_token?: unknown;
+    } | null;
+    const token = body?.access_token;
+    if (typeof token === "string" && JWT_RE.test(token)) {
+      capturedBearerByPage.set(page, token);
+      logger.info(
+        `[sit:auth] Supabase access_token alındı (bearer=true, status=${status})`,
+      );
+      return true;
+    }
+    logger.warn(
+      `[sit:auth] Supabase password grant yanıtında access_token yok (status=${status}, bearer=false)`,
+    );
+    await logSitLoginDiagnostics(page);
+    return false;
+  } catch (e) {
+    logger.warn(
+      `[sit:auth] Supabase password grant hata: ${
+        e instanceof Error ? e.message : String(e)
+      } (bearer=false)`,
+    );
+    await logSitLoginDiagnostics(page);
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +265,9 @@ interface RawGqlResponse {
 interface SitAuth {
   xsrf?: string;
   bearer?: string;
+  // The public anon apikey the SPA sends alongside the Bearer (harmless to
+  // include on our own calls; some Supabase-fronted routes expect both).
+  apiKey?: string;
   // Diagnostics (page URL + KEY NAMES only, never values) captured when no
   // bearer was found, so the caller can tell "token truly absent" from "wrong
   // page / key renamed / login flow changed" without ever logging a secret.
@@ -153,6 +310,8 @@ async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
   // headless context. installSpaAuthCapture is idempotent; the token is usually
   // already captured from the students-list load that preceded this call.
   installSpaAuthCapture(page);
+  const anon = capturedAnonKeyByPage.get(page);
+  if (anon) auth.apiKey = anon;
   let captured = capturedBearerByPage.get(page);
   if (!captured) {
     // Nothing captured yet — wait ONCE (bounded) for the SPA to fire an
@@ -377,6 +536,7 @@ async function postViaRequest(
   };
   if (auth.xsrf) headers["X-XSRF-TOKEN"] = auth.xsrf;
   if (auth.bearer) headers["authorization"] = "Bearer " + auth.bearer;
+  if (auth.apiKey) headers["apikey"] = auth.apiKey;
 
   try {
     const res = await page.request.post(url, {
@@ -428,6 +588,7 @@ async function postViaPageFetch(
         variables: Record<string, unknown>;
         xsrf: string | null;
         bearer: string | null;
+        apiKey: string | null;
       }) => {
         const headers: Record<string, string> = {
           "content-type": "application/json",
@@ -436,6 +597,7 @@ async function postViaPageFetch(
         };
         if (args.xsrf) headers["X-XSRF-TOKEN"] = args.xsrf;
         if (args.bearer) headers["authorization"] = "Bearer " + args.bearer;
+        if (args.apiKey) headers["apikey"] = args.apiKey;
 
         let status = 0;
         let ok = false;
@@ -465,6 +627,7 @@ async function postViaPageFetch(
         variables,
         xsrf: auth.xsrf ?? null,
         bearer: auth.bearer ?? null,
+        apiKey: auth.apiKey ?? null,
       },
     );
     return {
