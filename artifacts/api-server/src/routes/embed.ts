@@ -1550,6 +1550,9 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
     .map(r => [r.dialCode as string, r.code, r.name]);
   const html = generateWidgetHTML(slug, baseUrl, widget, docMeta, dialCodes);
   res.setHeader("Content-Type", "text/html");
+  // No-cache so widget fixes propagate instantly (no stale/broken version served
+  // from browser or CDN cache for up to an hour).
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.send(html);
 });
 
@@ -1565,7 +1568,8 @@ router.get("/public/embed/embed.js", async (_req, res): Promise<void> => {
   const baseUrl = getBaseUrl(_req);
   const js = generateEmbedScript(baseUrl);
   res.setHeader("Content-Type", "application/javascript");
-  res.setHeader("Cache-Control", "public, max-age=3600");
+  // No-cache so embed loader fixes propagate instantly.
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.send(js);
 });
 
