@@ -72,6 +72,10 @@ interface RawGqlResponse {
 interface SitAuth {
   xsrf?: string;
   bearer?: string;
+  // Diagnostics (KEY NAMES only, never values) captured when no bearer was
+  // found, so the caller can tell "token truly absent" from "key renamed /
+  // login flow changed" without ever logging a secret.
+  bearerDiag?: { lsKeys: string[]; cookieKeys: string[] };
 }
 
 // ---------------------------------------------------------------------------
@@ -81,10 +85,17 @@ interface SitAuth {
 // The XSRF cookie is read from the BROWSER CONTEXT (page.context().cookies),
 // which is reliable even if it is HttpOnly — reading document.cookie in-page
 // would miss those. The bearer is the SUPABASE access_token: SIT authenticates
-// GraphQL with `Authorization: Bearer <access_token>`, and the SPA persists the
-// session in localStorage under a `sb-<project-ref>-auth-token` key. We read
-// that key's access_token first (authoritative), then fall back to a generic
-// JWT scan for resilience; failures are non-fatal.
+// GraphQL with `Authorization: Bearer <access_token>`.
+//
+// The session is written to web storage right AFTER login completes, so a
+// single early read can miss it. We POLL (≤15s, 500ms interval) and check TWO
+// sources each pass, returning the moment either yields a JWT:
+//   1) localStorage `sb-<project-ref>-auth-token` — gotrue-js plain JSON.
+//   2) cookie `sb-<project-ref>-auth-token` — @supabase/ssr `base64-<b64(JSON)>`
+//      (decode via atob of the value after the "base64-" prefix).
+// A generic JWT scan is kept as a last-resort fallback. When nothing is found
+// we capture the storage/cookie KEY NAMES ONLY (never values) so the caller can
+// distinguish "token truly absent" from "key renamed". Failures are non-fatal.
 // ---------------------------------------------------------------------------
 async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
   const auth: SitAuth = {};
@@ -98,13 +109,13 @@ async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
   }
 
   try {
-    const bearer = await page.evaluate(() => {
+    const res = await page.evaluate(async () => {
       const looksLikeJwt = (v: unknown): v is string =>
         typeof v === "string" && /^ey[\w-]+\.[\w-]+\.[\w-]+$/.test(v);
 
       // Decode a Supabase session value. gotrue-js v2 stores the session as a
-      // plain JSON object; @supabase/ssr may store it base64-encoded behind a
-      // "base64-" prefix. Handle both.
+      // plain JSON object; @supabase/ssr stores it base64-encoded behind a
+      // "base64-" prefix (used for the cookie form). Handle both.
       const parseSession = (raw: string | null): unknown => {
         if (!raw) return null;
         let text = raw;
@@ -138,74 +149,133 @@ async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
         return looksLikeJwt(cand) ? cand : null;
       };
 
-      // 1) Supabase-specific (authoritative): the SPA keeps the session under a
-      // key shaped like `sb-<project-ref>-auth-token`. Discover it dynamically
-      // (the project ref changes per deployment) and read its access_token.
-      // This is the token the /api/graphql endpoint expects as Bearer.
-      try {
-        if (window.localStorage) {
-          const sbKeys = Object.keys(window.localStorage).filter(
+      // Source 1 (authoritative) — localStorage `sb-<project-ref>-auth-token`.
+      // The project ref changes per deployment, so discover the key dynamically.
+      const readLocalStorage = (): string | null => {
+        try {
+          if (!window.localStorage) return null;
+          const keys = Object.keys(window.localStorage).filter(
             (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
           );
-          for (const k of sbKeys) {
+          for (const k of keys) {
             const tok = extractAccessToken(
               parseSession(window.localStorage.getItem(k)),
             );
             if (tok) return tok;
           }
-        }
-      } catch {
-        /* localStorage access denied — fall through to heuristic scan */
-      }
-
-      // 2) Fallback heuristic: scan local/sessionStorage for any JWT-looking
-      // value or a token-ish JSON field (covers non-Supabase / future changes).
-      const stores: Storage[] = [];
-      try {
-        if (window.localStorage) stores.push(window.localStorage);
-      } catch {
-        /* access denied */
-      }
-      try {
-        if (window.sessionStorage) stores.push(window.sessionStorage);
-      } catch {
-        /* access denied */
-      }
-      for (const store of stores) {
-        let len = 0;
-        try {
-          len = store.length;
         } catch {
-          len = 0;
+          /* access denied */
         }
-        for (let i = 0; i < len; i++) {
-          const key = store.key(i);
-          if (!key) continue;
-          const val = store.getItem(key);
-          if (!val) continue;
-          if (looksLikeJwt(val)) return val;
-          if (/token|auth|access|bearer|jwt/i.test(key)) {
-            try {
-              const parsed = JSON.parse(val) as Record<string, unknown>;
-              const cand =
-                parsed?.token ??
-                parsed?.accessToken ??
-                parsed?.access_token ??
-                parsed?.authToken ??
-                parsed?.jwt ??
-                parsed?.value;
-              if (looksLikeJwt(cand)) return cand;
-            } catch {
-              /* not JSON */
+        return null;
+      };
+
+      // Source 2 — cookie `sb-<project-ref>-auth-token` = `base64-<b64(JSON)>`
+      // (the @supabase/ssr format). parseSession's base64- branch decodes it.
+      const readCookie = (): string | null => {
+        try {
+          const c = document.cookie
+            .split(";")
+            .map((x) => x.trim())
+            .find((x) => x.startsWith("sb-") && x.includes("-auth-token="));
+          if (!c) return null;
+          const value = decodeURIComponent(c.split("=").slice(1).join("="));
+          return extractAccessToken(parseSession(value));
+        } catch {
+          return null;
+        }
+      };
+
+      // Source 3 (last resort) — generic scan of web storage for any JWT-looking
+      // value or token-ish JSON field (covers non-Supabase / future changes).
+      const readHeuristic = (): string | null => {
+        const stores: Storage[] = [];
+        try {
+          if (window.localStorage) stores.push(window.localStorage);
+        } catch {
+          /* access denied */
+        }
+        try {
+          if (window.sessionStorage) stores.push(window.sessionStorage);
+        } catch {
+          /* access denied */
+        }
+        for (const store of stores) {
+          let len = 0;
+          try {
+            len = store.length;
+          } catch {
+            len = 0;
+          }
+          for (let i = 0; i < len; i++) {
+            const key = store.key(i);
+            if (!key) continue;
+            const val = store.getItem(key);
+            if (!val) continue;
+            if (looksLikeJwt(val)) return val;
+            if (/token|auth|access|bearer|jwt/i.test(key)) {
+              try {
+                const parsed = JSON.parse(val) as Record<string, unknown>;
+                const cand =
+                  parsed?.token ??
+                  parsed?.accessToken ??
+                  parsed?.access_token ??
+                  parsed?.authToken ??
+                  parsed?.jwt ??
+                  parsed?.value;
+                if (looksLikeJwt(cand)) return cand;
+              } catch {
+                /* not JSON */
+              }
             }
           }
         }
+        return null;
+      };
+
+      // Poll ≤15s (30 × 500ms). The session appears right after login; return
+      // the instant any source yields a JWT (happy path returns on pass 0 with
+      // no delay). No blind retries — this is the ONLY wait.
+      for (let i = 0; i < 30; i++) {
+        const tok = readLocalStorage() || readCookie() || readHeuristic();
+        if (tok) {
+          return {
+            bearer: tok,
+            lsKeys: [] as string[],
+            cookieKeys: [] as string[],
+          };
+        }
+        await new Promise((r) => setTimeout(r, 500));
       }
-      return null;
+
+      // Not found — capture KEY NAMES ONLY (never values) for diagnostics.
+      let lsKeys: string[] = [];
+      try {
+        lsKeys = Object.keys(window.localStorage);
+      } catch {
+        /* access denied */
+      }
+      let cookieKeys: string[] = [];
+      try {
+        cookieKeys = document.cookie
+          .split(";")
+          .map((x) => x.trim().split("=")[0])
+          .filter(Boolean);
+      } catch {
+        /* access denied */
+      }
+      return { bearer: null as string | null, lsKeys, cookieKeys };
     });
-    if (bearer) auth.bearer = bearer;
+
+    if (res?.bearer) {
+      auth.bearer = res.bearer;
+    } else {
+      auth.bearerDiag = {
+        lsKeys: res?.lsKeys ?? [],
+        cookieKeys: res?.cookieKeys ?? [],
+      };
+    }
   } catch {
-    /* storage read failed — proceed without bearer */
+    /* storage/cookie read failed — proceed without bearer */
   }
 
   return auth;
@@ -459,8 +529,15 @@ async function gqlRequest<S extends z.ZodTypeAny>(
   // an auth error). If no token was found, say so ONCE and clearly rather than
   // hammering both transports and logging opaque "data:null" twice.
   if (!auth.bearer) {
+    // KEY NAMES ONLY (no values) so we can tell "truly absent" from "renamed".
+    const diag = auth.bearerDiag;
+    const keyInfo = diag
+      ? ` — localStorage anahtarları: [${diag.lsKeys.join(", ") || "yok"}]; cookie anahtarları: [${
+          diag.cookieKeys.join(", ") || "yok"
+        }]`
+      : "";
     logger.warn(
-      `[sit:graphql] ${label}: Supabase token bulunamadı — login akışı değişti mi? (Authorization: Bearer eklenemedi) — GraphQL atlanıyor, UI taramasına düşülecek`,
+      `[sit:graphql] ${label}: Supabase token bulunamadı — login akışı değişti mi? (Authorization: Bearer eklenemedi) — GraphQL atlanıyor, UI taramasına düşülecek${keyInfo}`,
     );
     // Without the Bearer token the endpoint only ever returns data:null, so
     // don't blindly hammer both transports — bail to the caller's UI fallback.
