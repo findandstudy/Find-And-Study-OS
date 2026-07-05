@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { db, portalSubmissionsTable, applicationsTable, studentsTable, documentsTable } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 
 // ---------------------------------------------------------------------------
@@ -107,7 +107,11 @@ export async function buildStudentProfile(
     programName:    app.programName        ?? "",
     programId:      app.programId          != null ? String(app.programId) : "",
     universityName: app.universityName       ?? undefined,
-    schoolName:     student.highSchool       ?? undefined,
+    schoolName:     selectPriorSchoolName(app.level, {
+      highSchool:         student.highSchool,
+      universityBachelor: student.universityBachelor,
+      universityMaster:   student.universityMaster,
+    }),
     gpa:            student.gpa             ?? undefined,
     graduationYear: student.graduationYear  != null ? Number(student.graduationYear) : undefined,
     languageScore:  student.languageScore   != null ? Number(student.languageScore)  : undefined,

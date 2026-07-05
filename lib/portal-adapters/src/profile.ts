@@ -49,6 +49,30 @@ function isPhotoType(type: string): boolean {
   return /^(photo|photograph)$/i.test(type.trim());
 }
 
+/**
+ * The "prior education" institution to report, keyed by the APPLIED level: a
+ * Master applicant's completed education is their Bachelor school, a PhD
+ * applicant's is their Master school, and everyone else (Bachelor/Associate)
+ * reports a high school. Falls back down the chain when the level-specific field
+ * is empty so we never report an empty prior school when SOME school is known.
+ */
+export function selectPriorSchoolName(
+  level: string | null | undefined,
+  schools: {
+    highSchool?: string | null;
+    universityBachelor?: string | null;
+    universityMaster?: string | null;
+  },
+): string | undefined {
+  const f = fold(level ?? "");
+  const hs = schools.highSchool?.trim() || undefined;
+  const ba = schools.universityBachelor?.trim() || undefined;
+  const ma = schools.universityMaster?.trim() || undefined;
+  if (/doktora|phd|doctora|doctoral/.test(f)) return ma || ba || hs;
+  if (/yukseklisans|yuksek lisans|master|graduate/.test(f)) return ba || hs;
+  return hs;
+}
+
 /** A row's fetchable URL: fileUrl preferred, fileKey fallback, else undefined. */
 function docUrl(r: RawDocumentRow): string | undefined {
   const u = (r.fileUrl && r.fileUrl.trim()) || (r.fileKey && r.fileKey.trim());

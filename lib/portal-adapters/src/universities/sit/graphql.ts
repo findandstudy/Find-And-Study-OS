@@ -1847,6 +1847,81 @@ export async function resolveCountryId(
 }
 
 // ---------------------------------------------------------------------------
+// Applied degree label → zoho_degrees id resolution.
+//
+// The student-create webhook's `education_level` is a Zoho DROPDOWN — it expects
+// the zoho_degrees ROW ID of the APPLIED-FOR degree, NOT the plain label. Sending
+// a name ("Bachelor") makes the webhook reject the create with
+// `INVALID_DATA: Student_will_apply_for`. There is no directly-queryable degrees
+// collection, but every `zoho_programs` row carries BOTH `degree_name` and
+// `degree_id`, so we resolve the id from a program of that degree — reliable and
+// schema-safe (both fields are already used elsewhere). Cached per run; NEVER
+// throws (an unresolved degree returns null so the caller can log a diagnostic).
+// ---------------------------------------------------------------------------
+const DEGREE_ID_QUERY = /* GraphQL */ `
+  query GetSitDegreeId($filter: zoho_programsFilter) {
+    zoho_programsCollection(filter: $filter, first: 20) {
+      edges { node { degree_id degree_name } }
+    }
+  }
+`;
+
+const degreeIdSchema = z.object({
+  zoho_programsCollection: connection(
+    z.object({
+      degree_id: optIdString,
+      degree_name: z.string().nullish(),
+    }),
+  ),
+});
+
+// label-fold → id | null (null = looked up, not found). Per-process cache.
+const degreeIdCache = new Map<string, string | null>();
+
+/**
+ * Resolve a canonical degree LABEL (e.g. "Bachelor"/"Master"/"PhD"/"Associate",
+ * as produced by mapEducationLevel) to its zoho_degrees row id. Fetches programs
+ * whose `degree_name` ilike-matches and prefers a folded-EXACT degree_name; falls
+ * back to the sole candidate when unambiguous. Returns null (never throws) when
+ * the label is empty, GraphQL is unavailable, or no row matches.
+ */
+export async function resolveDegreeId(
+  page: Page,
+  label?: string | null,
+): Promise<string | null> {
+  if (label == null) return null;
+  const raw = String(label).trim();
+  if (raw === "") return null;
+
+  const key = fold(raw);
+  const cached = degreeIdCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const data = await gqlRequest(
+    page,
+    DEGREE_ID_QUERY,
+    { filter: { degree_name: { ilike: `%${raw}%` } } },
+    degreeIdSchema,
+    "degreeId",
+  );
+  const nodes = data?.zoho_programsCollection.nodes ?? [];
+  // A degree_name is a controlled vocabulary shared by many programs, so the
+  // ilike can return several rows that all point at the SAME degree_id. Prefer a
+  // folded-EXACT degree_name match; otherwise accept the id only when every
+  // candidate agrees on it (unambiguous), else fail safe with null.
+  const exactId = nodes.find(
+    (n) => n.degree_name != null && fold(n.degree_name) === key,
+  )?.degree_id;
+  const distinctIds = Array.from(
+    new Set(nodes.map((n) => n.degree_id).filter((v): v is string => !!v)),
+  );
+  const picked: string | null =
+    exactId ?? (distinctIds.length === 1 ? distinctIds[0] : null);
+  degreeIdCache.set(key, picked);
+  return picked;
+}
+
+// ---------------------------------------------------------------------------
 // Academic-year + semester id resolution (defaults: "2026/2027" / "Fall").
 // The application stores these as ids; we resolve the id whose name matches the
 // default (year compared digit-only so "2026-2027" matches "2026/2027").
@@ -2124,15 +2199,22 @@ export interface SitStudentWebhookPayload {
   have_tc: boolean;
   tc_number: string;
   blue_card: boolean;
-  // academic (previous education, keyed by applied level)
+  // academic (previous education, keyed by applied level).
+  // education_level is the zoho_degrees ROW ID of the APPLIED-FOR degree (the
+  // webhook rejects a plain name with `INVALID_DATA: Student_will_apply_for`);
+  // education_level_name is the human label. The *_country fields are
+  // zoho_countries ROW IDs (same dropdown contract as `nationality`).
   education_level?: string;
   education_level_name?: string;
   high_school_name?: string;
   high_school_gpa_percent?: string;
+  high_school_country?: string;
   bachelor_school_name?: string;
   bachelor_gpa_percent?: string;
+  bachelor_country?: string;
   master_school_name?: string;
   master_gpa_percent?: string;
+  master_country?: string;
   // documents (optional — create works with an empty list)
   photo_url: string;
   documents: unknown[];

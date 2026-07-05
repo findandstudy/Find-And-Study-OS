@@ -65,10 +65,64 @@ import {
   createApplicationViaWebhook,
   createStudentViaWebhook,
   resolveCountryId,
+  resolveDegreeId,
   type SitStudentWebhookPayload,
 } from "./graphql.js";
 
 export { SIT_ALLOWLIST } from "./helpers.js";
+
+// ---------------------------------------------------------------------------
+// Public asset base for absolutizing photo/document URLs.
+//
+// The SIT create webhook (n8n, external) fetches photo_url + documents[].url by
+// URL, so those must be ABSOLUTE and reachable from the public internet. CRM
+// document URLs are commonly stored relative (e.g. "/objects/uploads/…"), which
+// an external fetcher cannot resolve. We prefix relative URLs with a configured
+// public base (SIT_PUBLIC_ASSET_BASE → PUBLIC_APP_BASE → OBJECT_BASE_URL). If no
+// public https base is configured (or it points at localhost), we still send the
+// best URL we have but WARN loudly — the fix is env config, not code.
+// ---------------------------------------------------------------------------
+function sitPublicAssetBase(): string | null {
+  for (const cand of [
+    process.env.SIT_PUBLIC_ASSET_BASE,
+    process.env.PUBLIC_APP_BASE,
+    process.env.OBJECT_BASE_URL,
+  ]) {
+    const v = cand?.trim();
+    if (v && /^https?:\/\//i.test(v)) return v.replace(/\/+$/, "");
+  }
+  return null;
+}
+
+/** True when the URL's host is a loopback/unspecified address (not public). */
+function isLocalHostUrl(u: string): boolean {
+  try {
+    const h = new URL(u).hostname.toLowerCase();
+    return (
+      h === "localhost" ||
+      h === "127.0.0.1" ||
+      h === "0.0.0.0" ||
+      h === "::1" ||
+      h.endsWith(".localhost")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Absolutize a possibly-relative asset URL for the external create webhook.
+ * Already-absolute http(s) URLs pass through unchanged. Relative "/path" URLs are
+ * prefixed with the configured public base. Returns the input unchanged when it
+ * cannot be absolutized (no base) so the caller can log the miss. Never throws.
+ */
+function absolutizeAssetUrl(url: string): string {
+  const u = url.trim();
+  if (u === "" || /^https?:\/\//i.test(u)) return u;
+  const base = sitPublicAssetBase();
+  if (!base) return u; // no base → leave relative; caller logs the warning
+  return u.startsWith("/") ? `${base}${u}` : `${base}/${u}`;
+}
 
 // ---------------------------------------------------------------------------
 // Result shapes for the extra typed methods.
@@ -327,31 +381,9 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    // Previous-education fields are keyed by the APPLIED level: an applicant for
-    // a Bachelor lists a high school, a Master applicant lists a bachelor, etc.
     const appliedLevel = mapEducationLevel(profile.level);
     const gpa = normalizeGpa(profile.gpa);
     const gpaStr = gpa !== undefined ? String(gpa) : undefined;
-    const priorSchool: Pick<
-      SitStudentWebhookPayload,
-      | "high_school_name"
-      | "high_school_gpa_percent"
-      | "bachelor_school_name"
-      | "bachelor_gpa_percent"
-      | "master_school_name"
-      | "master_gpa_percent"
-    > = {};
-    if (appliedLevel === "Master") {
-      priorSchool.bachelor_school_name = profile.schoolName;
-      priorSchool.bachelor_gpa_percent = gpaStr;
-    } else if (appliedLevel === "PhD") {
-      priorSchool.master_school_name = profile.schoolName;
-      priorSchool.master_gpa_percent = gpaStr;
-    } else {
-      // Bachelor / Associate → the prior institution is a high school.
-      priorSchool.high_school_name = profile.schoolName;
-      priorSchool.high_school_gpa_percent = gpaStr;
-    }
 
     // Nationality is a Zoho dropdown → the webhook expects the zoho_countries
     // ROW ID, not the plain name ("Pakistan" alone → INVALID_DATA: Nationality1).
@@ -364,9 +396,51 @@ export const sitAdapter: SitAdapter = {
       } → ${nationalityId ?? "NOT_FOUND"}`,
     );
 
+    // education_level is the zoho_degrees ROW ID of the APPLIED-FOR degree — a
+    // plain label makes the webhook reject the create with
+    // `INVALID_DATA: Student_will_apply_for`. Resolve the id from the degree
+    // label; on a miss we send it empty (never throw) and log clearly.
+    const degreeId = await resolveDegreeId(page, appliedLevel);
+    logger.info(
+      `[sit] apply-for degree: "${appliedLevel}" → ${degreeId ?? "NOT_FOUND"}`,
+    );
+
+    // Previous-education fields are keyed by the APPLIED level: an applicant for
+    // a Bachelor lists a high school, a Master applicant lists a bachelor, etc.
+    // The prior-school *_country is a zoho_countries ROW ID; the CRM does not
+    // capture where the prior school was, so we fall back to the student's
+    // nationality country (best available signal), else leave it empty.
+    const eduCountryId = nationalityId ?? undefined;
+    const priorSchool: Pick<
+      SitStudentWebhookPayload,
+      | "high_school_name"
+      | "high_school_gpa_percent"
+      | "high_school_country"
+      | "bachelor_school_name"
+      | "bachelor_gpa_percent"
+      | "bachelor_country"
+      | "master_school_name"
+      | "master_gpa_percent"
+      | "master_country"
+    > = {};
+    if (appliedLevel === "Master") {
+      priorSchool.bachelor_school_name = profile.schoolName;
+      priorSchool.bachelor_gpa_percent = gpaStr;
+      priorSchool.bachelor_country = eduCountryId;
+    } else if (appliedLevel === "PhD") {
+      priorSchool.master_school_name = profile.schoolName;
+      priorSchool.master_gpa_percent = gpaStr;
+      priorSchool.master_country = eduCountryId;
+    } else {
+      // Bachelor / Associate → the prior institution is a high school.
+      priorSchool.high_school_name = profile.schoolName;
+      priorSchool.high_school_gpa_percent = gpaStr;
+      priorSchool.high_school_country = eduCountryId;
+    }
+
     logger.info(
       `[sit] eğitim: level="${appliedLevel}" okul="${profile.schoolName ?? ""}"` +
-      ` gpa=${gpaStr ?? "(yok)"}`,
+      ` gpa=${gpaStr ?? "(yok)"} ülke=${eduCountryId ?? "(yok)"}`,
     );
 
     // Photo + documents: the SIT create webhook fetches these by URL, so we send
@@ -382,43 +456,66 @@ export const sitAdapter: SitAdapter = {
         return u.split("?")[0];
       }
     };
-    const photoUrl = profile.photoUrl?.trim() ?? "";
-    if (photoUrl) {
-      logger.info(
-        `[sit] photo_url: ${redactUrl(photoUrl)}` +
-        (/^https?:\/\//i.test(photoUrl)
-          ? ""
-          : " (UYARI: http(s) değil — webhook çekemeyebilir)"),
-      );
-    } else {
-      logger.info("[sit] photo_url: (yok)");
-    }
+    // Absolutize + validate a URL for the external fetcher, logging one clear
+    // diagnostic (redacted). Warns when the result is still non-http(s) (no
+    // public base configured) or points at localhost (not reachable externally).
+    const prepareAssetUrl = (label: string, raw: string): string => {
+      const abs = absolutizeAssetUrl(raw);
+      let warn = "";
+      if (!/^https?:\/\//i.test(abs)) {
+        warn =
+          " (UYARI: mutlak http(s) URL yapılamadı — SIT_PUBLIC_ASSET_BASE ayarlayın; webhook çekemez)";
+      } else if (isLocalHostUrl(abs)) {
+        warn =
+          " (UYARI: localhost adresi — harici webhook erişemez; public base ayarlayın)";
+      }
+      logger.info(`[sit] ${label}: ${redactUrl(abs)}${warn}`);
+      return abs;
+    };
+
+    const photoUrl = profile.photoUrl?.trim()
+      ? prepareAssetUrl("photo_url", profile.photoUrl.trim())
+      : "";
+    if (!photoUrl) logger.info("[sit] photo_url: (yok)");
+
     const sitDocuments = (profile.studentDocuments ?? [])
       .filter((d) => !!d.url)
       .map((d) => {
+        const url = prepareAssetUrl(`belge type=${d.type}`, d.url);
         const entry: Record<string, unknown> = {
           attachment_type: d.type,
-          url: d.url,
+          url,
           size: d.size ?? 0,
         };
         if (d.name) entry.name = d.name;
         if (d.mime) entry.mime_type = d.mime;
         return entry;
       });
+    // Both the wizard and the create webhook require at least one Passport and at
+    // least one HighSchool transcript. We cannot fabricate documents, so we log a
+    // clear warning when either is absent (never block the create).
+    const docTypesFolded = (profile.studentDocuments ?? []).map((d) =>
+      fold(d.type),
+    );
+    const hasPassport = docTypesFolded.some((t) => /passport|pasaport/.test(t));
+    const hasTranscript = docTypesFolded.some((t) =>
+      /transcript|marks|marksheet|result|grade|hsc/.test(t),
+    );
     logger.info(
       `[sit] documents: ${sitDocuments.length} adet` +
       (sitDocuments.length
         ? ` [${(profile.studentDocuments ?? []).map((d) => d.type).join(", ")}]`
-        : ""),
+        : "") +
+      ` (passport=${hasPassport ? "var" : "YOK"}, transcript=${hasTranscript ? "var" : "YOK"})`,
     );
-    for (const d of profile.studentDocuments ?? []) {
-      logger.info(
-        `[sit] belge → type=${d.type} url=${redactUrl(d.url)}` +
-        (/^https?:\/\//i.test(d.url)
-          ? ""
-          : " (UYARI: http(s) değil — webhook çekemeyebilir)"),
+    if (!hasPassport)
+      logger.warn(
+        "[sit] UYARI: Passport belgesi yok — SIT create için gerekli (yine de denenecek)",
       );
-    }
+    if (!hasTranscript)
+      logger.warn(
+        "[sit] UYARI: HighSchool transcript belgesi yok — SIT create için gerekli (yine de denenecek)",
+      );
 
     const payload: SitStudentWebhookPayload = {
       user_id: identity.userId,
@@ -440,7 +537,7 @@ export const sitAdapter: SitAdapter = {
       have_tc: false,
       tc_number: "",
       blue_card: false,
-      education_level: appliedLevel,
+      education_level: degreeId ?? undefined,
       education_level_name: appliedLevel,
       ...priorSchool,
       // Photo + documents are fetched by URL by the create webhook. When the

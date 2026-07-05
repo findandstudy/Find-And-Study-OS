@@ -28,7 +28,7 @@ import {
   documentsTable,
 } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 
 const execFileP = promisify(execFile);
@@ -84,7 +84,11 @@ function buildSubmitProfileFromRecords(
     programName:    app.programName         ?? "",
     programId:      app.programId           != null ? String(app.programId) : "",
     universityName: app.universityName      ?? undefined,
-    schoolName:     student.highSchool      ?? undefined,
+    schoolName:     selectPriorSchoolName(app.level, {
+      highSchool:         student.highSchool,
+      universityBachelor: student.universityBachelor,
+      universityMaster:   student.universityMaster,
+    }),
     gpa:            student.gpa             ?? undefined,
     graduationYear: student.graduationYear  ?? undefined,
   });

@@ -44,6 +44,7 @@ export {
   normalizeGpaRange,
   REQUIRED_DOCS,
   extractStudentDocumentRefs,
+  selectPriorSchoolName,
   type DocType,
   type RawDocumentRow,
 } from "./profile.js";
