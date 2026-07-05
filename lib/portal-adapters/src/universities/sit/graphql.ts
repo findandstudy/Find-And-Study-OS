@@ -2194,11 +2194,16 @@ export interface SitStudentWebhookPayload {
   // family
   father_name?: string;
   mother_name?: string;
-  // flags (safe defaults)
-  transfer_student: boolean;
-  have_tc: boolean;
+  // flags (safe defaults). The webhook mutation types these as String, and the
+  // wizard sends lowercase "no"/"yes" — sending a JSON boolean makes the panel
+  // read them as truthy ("Yes"), so these MUST be the string forms.
+  transfer_student: "no" | "yes";
+  have_tc: "no" | "yes";
   tc_number: string;
-  blue_card: boolean;
+  blue_card: "no" | "yes";
+  // zoho_countries ROW ID of the residence country (same dropdown contract as
+  // `nationality`); falls back to nationality when apply has no residence.
+  country_of_residence?: string;
   // academic (previous education, keyed by applied level).
   // education_level is the zoho_degrees ROW ID of the APPLIED-FOR degree (the
   // webhook rejects a plain name with `INVALID_DATA: Student_will_apply_for`);
@@ -2215,9 +2220,11 @@ export interface SitStudentWebhookPayload {
   master_school_name?: string;
   master_gpa_percent?: string;
   master_country?: string;
-  // documents (optional — create works with an empty list)
+  // documents: the webhook mutation types `$documents` as String, and the wizard
+  // JSON.stringify()s the array before submitting — so this is a JSON STRING, not
+  // a raw array (a raw array can't be parsed by the webhook → 0 documents shown).
   photo_url: string;
-  documents: unknown[];
+  documents: string;
 }
 
 /**

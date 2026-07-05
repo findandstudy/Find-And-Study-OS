@@ -533,18 +533,24 @@ export const sitAdapter: SitAdapter = {
       passport_expiry_date: isoDateOnly(profile.passportExpiryDate),
       father_name: profile.fatherName || undefined,
       mother_name: profile.motherName || undefined,
-      transfer_student: false,
-      have_tc: false,
+      // Webhook types these as String — send lowercase "no"/"yes" (a boolean
+      // makes the panel read them as truthy "Yes"). apply has no such data → "no".
+      transfer_student: "no",
+      have_tc: "no",
       tc_number: "",
-      blue_card: false,
+      blue_card: "no",
+      // Residence country is a zoho_countries ROW ID (same dropdown contract as
+      // nationality); apply has no explicit residence, so fall back to nationality.
+      country_of_residence: nationalityId ?? undefined,
       education_level: degreeId ?? undefined,
       education_level_name: appliedLevel,
       ...priorSchool,
       // Photo + documents are fetched by URL by the create webhook. When the
-      // student has no URL-bearing documents these are "" / [] and the create
-      // still succeeds (files can be attached later).
+      // student has no URL-bearing documents these are "" / "[]" and the create
+      // still succeeds (files can be attached later). `documents` is a JSON STRING
+      // ($documents: String) — a raw array can't be parsed by the webhook.
       photo_url: photoUrl,
-      documents: sitDocuments,
+      documents: JSON.stringify(sitDocuments),
     };
 
     logger.info("[sit] öğrenci webhook create başlatılıyor");

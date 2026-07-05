@@ -23,8 +23,19 @@ JSON to their dedicated webhook → `{status:true,id}`; the Zoho id is backend-a
   The webhook has no client idempotency guard, so the precheck is the only defense.
 - Previous-education fields keyed by APPLIED level via `mapEducationLevel`:
   Master→`bachelor_*`, PhD→`master_*`, else `high_school_*`. Dates via `isoDateOnly`
-  (YYYY-MM-DD). `documents:[]` + `photo_url:""` — the storage-upload path is NOT part
-  of the captured student webhook contract (deviation, acceptable).
+  (YYYY-MM-DD). `*_country` + `country_of_residence` + `nationality` are all
+  zoho_countries ROW IDs (resolveCountryId); prior-school country + residence fall
+  back to nationality since apply has no explicit value.
+- `education_level` is the zoho_degrees ROW ID of the APPLIED-FOR degree (resolve
+  via `resolveDegreeId`); a plain label → `INVALID_DATA: Student_will_apply_for`.
+- **Webhook mutation types are ALL String** — `have_tc`/`transfer_student`/`blue_card`
+  must be lowercase `"no"`/`"yes"` strings (NOT JSON booleans — a boolean makes the
+  panel read them as truthy "Yes"), and `documents` must be `JSON.stringify(array)`
+  (NOT a raw array — the String var can't parse an array → panel shows Documents(0)).
+  **Why:** confirmed from the wizard's own localStorage `student_form_draft`.
+- `photo_url` + each `documents[].url` must be ABSOLUTE public URLs (absolutize via
+  SIT_PUBLIC_ASSET_BASE→PUBLIC_APP_BASE→OBJECT_BASE_URL) so the external n8n fetcher
+  can retrieve them; localhost/relative → not fetchable. Need ≥1 Passport + ≥1 Transcript.
 - Body carries `first_name`/`last_name`/`email` — NEVER log the body; log only the
   masked response (`rawForLog`) + HTTP status.
 
