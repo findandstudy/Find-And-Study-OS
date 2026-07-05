@@ -21,6 +21,20 @@ Acquisition order in `getSitAccessToken`: fresh cached token → env
 grant. Optional env `SIT_SUPABASE_URL` / `SIT_SUPABASE_ANON_KEY` override the
 hardcoded URL + page-captured anon key.
 
+**Chicken-and-egg (the anon apikey):** the password grant itself NEEDS the
+public Supabase anon apikey, but the SPA only fires its `*.supabase.co` request
+(carrying the key) AFTER a successful login — which trips captcha. So the anon
+key must be obtained WITHOUT logging in. Anon-key resolution order:
+env `SIT_SUPABASE_ANON_KEY` → process cache → passive SPA-boot capture (page) →
+**JS-bundle regex fallback** (no page). The bundle fallback fetches the SPA root
+HTML and its **same-origin** JS assets and regexes the embedded anon JWT out —
+prefer role=`anon` with matching project ref, else any anon-role JWT.
+**Why (live gotcha):** the anon-key chunk is a deep vendor bundle (observed at
+the ~19th `<script>` tag), so the ref scan must NOT cap low (cap 48, not 12) or
+it silently misses the key and falls back to captcha login. Only fetch
+same-origin refs (SSRF / supply-chain guard); never a third-party URL in the
+markup.
+
 **Why (two easy-to-miss traps):**
 - **Always GET the origin even when a token is cached.** GraphQL reads need the
   Laravel **XSRF-TOKEN cookie** (+ Bearer + apikey). Each submission gets a

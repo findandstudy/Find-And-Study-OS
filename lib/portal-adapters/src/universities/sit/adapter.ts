@@ -286,13 +286,15 @@ export const sitAdapter: SitAdapter = {
     // is what tripped SIT's captcha / rate-limit). The token is minted at most
     // once per process and REUSED across every submission (single-session).
     //
-    // We ALWAYS load the app origin (a plain GET, never a login attempt) so the
+    // We ALWAYS load the SPA ROOT (a plain GET, never a login attempt) so the
     // Laravel XSRF-TOKEN cookie is set on this fresh page — GraphQL reads need
-    // XSRF + Bearer + apikey, and each submission gets a brand-new page. When the
-    // anon apikey isn't already known (env/cache), we additionally wait for the
-    // SPA to boot and fire the *.supabase.co request that carries it.
+    // XSRF + Bearer + apikey, and each submission gets a brand-new page. Loading
+    // the root (not /auth/login) also lets the SPA fire its boot *.supabase.co
+    // session check, which carries the public anon apikey we capture passively.
+    // If capture still misses, getSitAccessToken has a deterministic JS-bundle
+    // fallback, so login is never required to obtain the anon key.
     await session.page
-      .goto(SIT_URLS.base + SIT_URLS.loginPath, {
+      .goto(SIT_URLS.base + "/", {
         waitUntil: "domcontentloaded",
         timeout: 60_000,
       })

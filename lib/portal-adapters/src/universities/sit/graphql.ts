@@ -253,6 +253,113 @@ function envAnonKey(): string | null {
   return v && v.length > 0 ? v : null;
 }
 
+/**
+ * Pick the public anon Supabase apikey out of arbitrary text (HTML or a JS
+ * bundle). The anon key is a JWT whose payload carries `role:"anon"` and the
+ * project `ref`; we prefer an exact project-ref match and fall back to any
+ * anon-role JWT. The VALUE is never logged (public, but treated as sensitive).
+ */
+export function extractAnonJwt(text: string): string | null {
+  const matches = text.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g);
+  if (!matches) return null;
+  let anonFallback: string | null = null;
+  for (const jwt of matches) {
+    try {
+      const seg = jwt.split(".")[1];
+      const json = JSON.parse(
+        Buffer.from(seg.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString(
+          "utf8",
+        ),
+      ) as { role?: unknown; ref?: unknown };
+      if (json && json.role === "anon") {
+        if (json.ref === SUPABASE_PROJECT_REF) return jwt;
+        anonFallback = anonFallback ?? jwt;
+      }
+    } catch {
+      /* not a decodable JWT payload — skip */
+    }
+  }
+  return anonFallback;
+}
+
+/**
+ * Collect the JS assets referenced by the SPA root HTML — <script src> and
+ * <link href> (modulepreload) — as absolute URLs, deduped and capped. Only
+ * SAME-ORIGIN assets are kept (SSRF / supply-chain guard): the SPA serves its
+ * own bundles from its origin, and we must never fetch a third-party URL that
+ * happens to appear in the markup. Order is preserved so the scan is stable.
+ */
+export function selectBundleUrls(html: string, limit = 48): string[] {
+  const base = SIT_URLS.base;
+  let baseOrigin: string;
+  try {
+    baseOrigin = new URL(base).origin;
+  } catch {
+    baseOrigin = base;
+  }
+  const refs = [
+    ...html.matchAll(/<script[^>]+src=["']([^"']+\.js[^"']*)["']/gi),
+    ...html.matchAll(/<link[^>]+href=["']([^"']+\.js[^"']*)["']/gi),
+  ].map((m) => m[1]);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of refs) {
+    let abs: string;
+    try {
+      abs = new URL(raw, base + "/").toString();
+    } catch {
+      continue;
+    }
+    try {
+      if (new URL(abs).origin !== baseOrigin) continue;
+    } catch {
+      continue;
+    }
+    if (seen.has(abs)) continue;
+    seen.add(abs);
+    out.push(abs);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
+ * Deterministically obtain the public anon apikey WITHOUT logging in: fetch the
+ * SPA root HTML and its referenced JS bundles (public, same-origin static
+ * assets) and regex the embedded anon JWT out of them. Bounded (few requests);
+ * returns null if the key can't be found. No browser page required. The
+ * anon-key chunk is often deep in the list (a vendor chunk), so we scan the
+ * whole capped set and stop at the first match. Only runs once per process
+ * (the result is cached in `cachedAnonKey`).
+ */
+async function anonKeyFromBundle(): Promise<string | null> {
+  const base = SIT_URLS.base;
+  const get = async (u: string): Promise<string | null> => {
+    try {
+      const res = await fetch(u, {
+        headers: { accept: "text/html,application/javascript,*/*" },
+        signal: AbortSignal.timeout(12_000),
+      });
+      return res.ok ? await res.text() : null;
+    } catch {
+      return null;
+    }
+  };
+  const html = await get(base + "/");
+  if (!html) return null;
+  // 1) The key may sit inline in the HTML (bootstrapped config).
+  const inline = extractAnonJwt(html);
+  if (inline) return inline;
+  // 2) Otherwise scan the same-origin JS assets the page references.
+  for (const abs of selectBundleUrls(html)) {
+    const js = await get(abs);
+    if (!js) continue;
+    const key = extractAnonJwt(js);
+    if (key) return key;
+  }
+  return null;
+}
+
 function isFreshSitSession(s: CachedSitSession): boolean {
   return (
     JWT_RE.test(s.accessToken) &&
@@ -354,9 +461,19 @@ export async function getSitAccessToken(
   const cached = sitSessionByAccount.get(email);
   if (cached && isFreshSitSession(cached)) return cached.accessToken;
 
-  // Resolve the anon apikey (env > cached > page capture) once; reuse thereafter.
+  // Resolve the public anon apikey deterministically, WITHOUT logging in:
+  //   env > process cache > SPA-boot capture (page) > JS-bundle regex.
+  // The bundle path needs no page and is the reliable fallback when the SPA
+  // only fires its *.supabase.co request after login (chicken-and-egg).
   let anonKey = envAnonKey() ?? cachedAnonKey;
-  if (!anonKey && page) anonKey = await resolveAnonKey(page);
+  if (!anonKey && page) {
+    anonKey = await resolveAnonKey(page);
+    if (anonKey) logger.info("[sit:auth] anon key captured via SPA-boot");
+  }
+  if (!anonKey) {
+    anonKey = await anonKeyFromBundle();
+    if (anonKey) logger.info("[sit:auth] anon key captured via JS bundle");
+  }
   if (anonKey) cachedAnonKey = anonKey;
 
   // 2) Refresh the cached session without re-login.
@@ -413,7 +530,7 @@ export async function getSitAccessToken(
   });
   const s = body ? storeSitSession(email, body) : null;
   if (s) {
-    logger.info("[sit:auth] Supabase access_token alındı (password grant)");
+    logger.info("[sit:auth] token acquired via password grant");
     return s.accessToken;
   }
   return null;

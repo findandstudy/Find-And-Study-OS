@@ -37,7 +37,11 @@ import {
   SIT_BUTTONS,
   SIT_UPLOAD,
 } from "../src/universities/sit/selectors.js";
-import { sitCanAuthWithoutPage } from "../src/universities/sit/graphql.js";
+import {
+  sitCanAuthWithoutPage,
+  extractAnonJwt,
+  selectBundleUrls,
+} from "../src/universities/sit/graphql.js";
 import {
   buildSignedStudentPhotoPath,
   verifyStudentPhotoSignature,
@@ -460,4 +464,85 @@ test("AUTH3 — injected access token → no page needed", () => {
       assert.equal(sitCanAuthWithoutPage({ user: "auth3@example.com" }), true);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// Public anon apikey extraction — extractAnonJwt (ANON1..ANON3).
+//
+// Deterministically pull the Supabase anon JWT out of arbitrary text (SPA HTML
+// or a JS bundle) without logging in. Prefer an anon-role JWT whose payload ref
+// matches the SIT project; fall back to any anon-role JWT; ignore non-anon and
+// non-JWT noise.
+// ---------------------------------------------------------------------------
+const SIT_PROJECT_REF = "knqtjanxjwfjfrwoater";
+function makeJwt(payload: Record<string, unknown>): string {
+  const seg = (o: Record<string, unknown>) =>
+    Buffer.from(JSON.stringify(o)).toString("base64url");
+  return `${seg({ alg: "HS256", typ: "JWT" })}.${seg(payload)}.sigsig`;
+}
+
+test("ANON1 — prefers anon JWT with matching project ref", () => {
+  const service = makeJwt({ role: "service_role", ref: SIT_PROJECT_REF });
+  const otherAnon = makeJwt({ role: "anon", ref: "someotherproject" });
+  const target = makeJwt({ role: "anon", ref: SIT_PROJECT_REF });
+  const blob = `var a="${service}";var b="${otherAnon}";var c="${target}";`;
+  assert.equal(extractAnonJwt(blob), target);
+});
+
+test("ANON2 — falls back to any anon JWT when ref does not match", () => {
+  const service = makeJwt({ role: "service_role", ref: SIT_PROJECT_REF });
+  const otherAnon = makeJwt({ role: "anon", ref: "someotherproject" });
+  const blob = `${service} ... ${otherAnon}`;
+  assert.equal(extractAnonJwt(blob), otherAnon);
+});
+
+test("ANON3 — returns null when no anon-role JWT is present", () => {
+  const service = makeJwt({ role: "service_role", ref: SIT_PROJECT_REF });
+  assert.equal(extractAnonJwt(`only service ${service} here`), null);
+  assert.equal(extractAnonJwt("no tokens here at all"), null);
+});
+
+// ---------------------------------------------------------------------------
+// SPA bundle URL selection — selectBundleUrls (BUNDLE1..BUNDLE3).
+//
+// The anon-key chunk can sit deep in the script list (observed at position 19
+// live), so the scan must NOT cap too low. Cross-origin refs must be dropped
+// (SSRF / supply-chain guard) and duplicates deduped while preserving order.
+// ---------------------------------------------------------------------------
+test("BUNDLE1 — same-origin refs, relative resolved (scripts then links)", () => {
+  const html = `
+    <script src="/exp1-static/a.js"></script>
+    <link rel="modulepreload" href="/exp1-static/b.js"/>
+    <script src="c.js"></script>`;
+  // <script src> refs are collected before <link href> refs.
+  const urls = selectBundleUrls(html);
+  assert.deepEqual(urls, [
+    "https://partners.sitconnect.net/exp1-static/a.js",
+    "https://partners.sitconnect.net/c.js",
+    "https://partners.sitconnect.net/exp1-static/b.js",
+  ]);
+});
+
+test("BUNDLE2 — drops cross-origin refs and dedups", () => {
+  const html = `
+    <script src="https://evil.example.com/x.js"></script>
+    <script src="/keep.js"></script>
+    <script src="/keep.js"></script>`;
+  const urls = selectBundleUrls(html);
+  assert.deepEqual(urls, ["https://partners.sitconnect.net/keep.js"]);
+});
+
+test("BUNDLE3 — a deep chunk (19th) is included; low cap would drop it", () => {
+  const tags = Array.from(
+    { length: 20 },
+    (_, i) => `<script src="/chunk-${i}.js"></script>`,
+  ).join("\n");
+  // Default cap (48) keeps all 20, so the 19th (index 18) is present.
+  const all = selectBundleUrls(tags);
+  assert.equal(all.length, 20);
+  assert.ok(all.includes("https://partners.sitconnect.net/chunk-18.js"));
+  // A too-low cap of 12 would have missed it — this is the live bug we fixed.
+  const capped = selectBundleUrls(tags, 12);
+  assert.equal(capped.length, 12);
+  assert.equal(capped.includes("https://partners.sitconnect.net/chunk-18.js"), false);
 });
