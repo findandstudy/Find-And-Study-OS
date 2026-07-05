@@ -49,9 +49,16 @@ test("normalizeGpaRange — empty / nullish → undefined", () => {
   assert.equal(normalizeGpaRange(NaN), undefined);
 });
 
-test("normalizeGpaRange — unparseable throws a clear error", () => {
-  assert.throws(() => normalizeGpaRange("abc"), /unparseable GPA/);
-  assert.throws(() => normalizeGpaRange("good-student"), /unparseable GPA/);
+test("normalizeGpaRange — noisy values parse to their first numeric token", () => {
+  assert.equal(normalizeGpaRange("91%"), 91);
+  assert.equal(normalizeGpaRange("%91"), 91);
+  assert.equal(normalizeGpaRange("3.5/4"), 3.5);
+  assert.equal(normalizeGpaRange("GPA 3.2"), 3.2);
+});
+
+test("normalizeGpaRange — no numeric content → undefined (never throws)", () => {
+  assert.equal(normalizeGpaRange("abc"), undefined);
+  assert.equal(normalizeGpaRange("good-student"), undefined);
 });
 
 test("formatGraduationForInput — expands by widget type", () => {

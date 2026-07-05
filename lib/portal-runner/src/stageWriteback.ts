@@ -65,6 +65,14 @@ function resolveTarget(
   if (result.exclusiveRegion) {
     return { submissionStatus: "exclusive_region", stageKey: null };
   }
+  // Non-member (routeTo:'direct') is, like exclusive_region, a permanent "handle
+  // this via another channel" finding surfaced ahead of EVERYTHING. NO new enum
+  // value is introduced (no migration allowed) — we reuse the nearest existing
+  // terminal status ('exclusive_region') and carry the true reason in
+  // result_json / meta so it stays distinguishable. Application stage unchanged.
+  if (result.skippedNotMember) {
+    return { submissionStatus: "exclusive_region", stageKey: null };
+  }
   // Quota-full ("Kontenjan Dolu") is a structural finding regardless of dry/real
   // mode — surface it (ahead of dry_run) so the orchestrator can supersede the
   // full programme. The application stage is left unchanged.
@@ -193,13 +201,28 @@ export async function writebackResult(
             },
           }
         : {}),
-      error:          submissionStatus === "exclusive_region"
-                        ? (result?.exclusiveAgency
-                            ? `Exclusive bölge — ${result.exclusiveAgency} üzerinden başvurulmalı`
-                            : "Exclusive bölge — acenta üzerinden başvurulmalı")
-                        : submissionStatus === "failed"
-                          ? (errorMessage ?? "submission failed")
-                          : null,
+      // Non-SIT-member skip context → meta jsonb. Reuses the exclusive_region
+      // status (no migration) but records the true reason so it is not confused
+      // with a nationality exclusion. Only set on skippedNotMember.
+      ...(result?.skippedNotMember
+        ? {
+            meta: {
+              reason:     "SIT üyesi değil",
+              routeTo:    result.routeTo ?? "direct",
+              detectedAt: new Date().toISOString(),
+            },
+          }
+        : {}),
+      error:          result?.skippedNotMember
+                        ? (result.detail ??
+                            "SIT üyesi değil — doğrudan üniversite panelinden başvurulmalı")
+                        : submissionStatus === "exclusive_region"
+                          ? (result?.exclusiveAgency
+                              ? `Exclusive bölge — ${result.exclusiveAgency} üzerinden başvurulmalı`
+                              : "Exclusive bölge — acenta üzerinden başvurulmalı")
+                          : submissionStatus === "failed"
+                            ? (errorMessage ?? "submission failed")
+                            : null,
       lockedAt:       null,
       lockedBy:       null,
       updatedAt:      new Date(),

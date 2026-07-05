@@ -34,6 +34,7 @@ import {
   adapterForUniversity,
   setCredsOverride,
   clearCredsOverride,
+  isSitMember,
 } from "@workspace/portal-adapters";
 import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 import {
@@ -150,6 +151,36 @@ export async function runSubmission(
     throw new Error(
       `NO_ADAPTER: no adapter found for key="${submission.universityKey}" / name="${submission.universityName}"`,
     );
+  }
+
+  // ----- 1.5 SIT membership enforcement -----------------------------------
+  // Being in the SIT CATALOG is NOT the same as being a real SIT member for
+  // FAS. Non-member universities (applied to DIRECTLY via their own panels,
+  // e.g. Altınbaş / İstanbul Okan / Üsküdar) must NEVER have anything created
+  // in SIT. Skip the portal ENTIRELY (no login, no student, no application) and
+  // route them to the direct channel. Gated by SIT_ENFORCE_MEMBERSHIP (default
+  // ON); set it to "false" for a one-off test run that processes every uni.
+  if (adapter.key === "sit" && process.env.SIT_ENFORCE_MEMBERSHIP !== "false") {
+    const targetName = profile.universityName ?? submission.universityName ?? "";
+    const member = isSitMember(targetName);
+    console.log(
+      `[sit] membership: ${targetName || "(unknown)"} → member=${member} (route=${member ? "sit" : "direct"})`,
+    );
+    if (!member) {
+      await cleanup(tempDir);
+      return {
+        result: {
+          submitted: false,
+          alreadyExists: false,
+          programMissing: false,
+          skippedNotMember: true,
+          routeTo: "direct",
+          detail: `SIT üyesi değil — doğrudan üniversite panelinden başvurulmalı ("${targetName}")`,
+        },
+        screenshotUrls: [],
+        meta: { sitMembershipSkipped: true },
+      };
+    }
   }
 
   // ----- 2. Creds required for real mode; optional for dry (browser dry run) --

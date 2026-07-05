@@ -189,6 +189,56 @@ export function isAllowedUniversity(name: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// SIT membership (FAS) — authoritative "should this go through SIT?" check.
+//
+// Being present in the SIT CATALOG (zoho_universities / zoho_programs) is NOT
+// membership. Membership = the universities FAS actually applies to VIA the SIT
+// channel — the agreed SIT_ALLOWLIST above (derived from FAS's routing matrix).
+// Direct-access universities that FAS applies to through their OWN panels
+// (e.g. Altınbaş / İstanbul Okan / Üsküdar) are intentionally ABSENT and must
+// never be pushed into SIT.
+//
+// An optional env var SIT_MEMBER_UNIVERSITIES (comma / semicolon / newline
+// separated university names) EXTENDS — never shrinks — this set without a code
+// change.
+//
+// TODO(Dr. Namazcı): confirm the definitive SIT member university list.
+// ---------------------------------------------------------------------------
+export function isSitMember(
+  universityNameOrId: string | null | undefined,
+): boolean {
+  if (universityNameOrId == null) return false;
+  const name = String(universityNameOrId).trim();
+  if (name === "") return false;
+
+  // Authoritative agreed list (token-set matched, IDOR-safe).
+  if (isAllowedUniversity(name)) return true;
+
+  // Optional env extension — kept a UNION with the agreed list so it can only
+  // ADD members, never remove one.
+  const extra = (process.env.SIT_MEMBER_UNIVERSITIES ?? "")
+    .split(/[,;\n]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (extra.length === 0) return false;
+
+  const folded = fold(name);
+  const queryTokens = new Set(distinctiveTokens(name));
+  for (const entry of extra) {
+    if (fold(entry) === folded) return true;
+    const entryTokens = distinctiveTokens(entry);
+    if (
+      entryTokens.length > 0 &&
+      entryTokens.length === queryTokens.size &&
+      entryTokens.every((t) => queryTokens.has(t))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Program language-of-instruction compatibility.
 //
 // SIT program names commonly carry the language ("... (English)" / "İngilizce"

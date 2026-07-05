@@ -48,12 +48,13 @@ type RequiredField = (typeof REQUIRED_FIELDS)[number];
  *   - a range:        "2.8-3.0", "2,8 – 3,0", "3 to 3.5" → resolved to the
  *                     UPPER bound (the portal accepts a single number only)
  *   - decimal comma:  "2,8"                         → converted to "2.8"
+ *   - noisy / suffixed: "91%", "%91", "3.5/4", "GPA 3.2" → FIRST numeric token
  *
  * Empty / null / undefined → undefined (legitimately missing; the adapter's
- * fail-visible Step-3 gate reports it). A non-empty value that cannot be parsed
- * throws a clear error instead of silently coercing to NaN — historically
- * `Number("2.8-3.0")` produced NaN → "NaN"/"-" was filled and the portal
- * rejected it with a misleading "empty after retry".
+ * fail-visible Step-3 gate reports it). A non-empty value with NO numeric
+ * content ("abc") also returns undefined — GPA is OPTIONAL and must NEVER block
+ * a submission. (This used to throw "unparseable GPA", which dropped the whole
+ * run for a harmless value like "91%".) NaN is never returned.
  */
 export function normalizeGpaRange(raw: unknown): number | undefined {
   if (raw == null) return undefined;
@@ -72,12 +73,33 @@ export function normalizeGpaRange(raw: unknown): number | undefined {
   if (range) {
     const upper = Number(range[2]);
     if (Number.isFinite(upper)) return upper;
-  } else {
-    const single = Number(norm);
-    if (Number.isFinite(single)) return single;
   }
 
-  throw new Error(`buildProfile: unparseable GPA "${trimmed}"`);
+  // Otherwise take the FIRST numeric token so noisy CRM entries still parse:
+  //   "91%" → 91 · "%91" → 91 · "3.5/4" → 3.5 · "GPA 3.2" → 3.2
+  const token = norm.match(/\d+(?:\.\d+)?/);
+  if (token) {
+    const n = Number(token[0]);
+    if (Number.isFinite(n)) return n;
+  }
+
+  // No numeric content at all → undefined (never throw; GPA is optional).
+  return undefined;
+}
+
+/**
+ * Parse the first finite number from a free-form value, returning undefined
+ * instead of NaN/throwing. Used for optional numeric profile fields
+ * (graduationYear, languageScore) so a noisy CRM value ("2025-06", "IELTS 6.5")
+ * degrades gracefully to "missing" rather than crashing the whole profile build.
+ */
+function firstFiniteNumber(raw: unknown): number | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : undefined;
+  const m = String(raw).replace(/,/g, ".").match(/-?\d+(?:\.\d+)?/);
+  if (!m) return undefined;
+  const n = Number(m[0]);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 export function buildProfile(data: Record<string, unknown>): SubmitProfile {
@@ -108,8 +130,8 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
     universityName:  data.universityName  != null ? String(data.universityName)  : undefined,
     schoolName:      data.schoolName      != null ? String(data.schoolName)      : undefined,
     gpa:             normalizeGpaRange(data.gpa),
-    graduationYear:  data.graduationYear  != null ? Number(data.graduationYear)  : undefined,
-    languageScore:   data.languageScore   != null ? Number(data.languageScore)   : undefined,
+    graduationYear:  firstFiniteNumber(data.graduationYear),
+    languageScore:   firstFiniteNumber(data.languageScore),
     passportIssueDate:  data.passportIssueDate  != null ? String(data.passportIssueDate)  : undefined,
     passportExpiryDate: data.passportExpiryDate != null ? String(data.passportExpiryDate) : undefined,
   };

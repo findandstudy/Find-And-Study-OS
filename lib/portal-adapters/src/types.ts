@@ -93,6 +93,16 @@ export interface SubmitResult {
   exclusiveRegion?: boolean;
   /** The agency the application must go through, when known. */
   exclusiveAgency?: string;
+  /**
+   * True when the target university is NOT a real SIT member for FAS (see
+   * isSitMember). The SIT portal was skipped ENTIRELY (no login, no student, no
+   * application created) and the application should be handled through the
+   * DIRECT channel (its own university panel). Permanent skip — no retry. Set
+   * preventively by the runner when SIT_ENFORCE_MEMBERSHIP is on.
+   */
+  skippedNotMember?: boolean;
+  /** Where a skipped submission should be routed instead (e.g. "direct"). */
+  routeTo?: "direct";
 }
 
 // ---------------------------------------------------------------------------

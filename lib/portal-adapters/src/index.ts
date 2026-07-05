@@ -45,6 +45,9 @@ export {
   type DocType,
 } from "./profile.js";
 
+// SIT membership guard (used by the runner to skip non-member universities)
+export { isSitMember } from "./universities/sit/helpers.js";
+
 // Registry
 export {
   adapters,

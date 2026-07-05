@@ -26,6 +26,7 @@ import {
   formatSitDate,
   matchAllowedUniversity,
   isAllowedUniversity,
+  isSitMember,
   isLanguageCompatible,
 } from "../src/universities/sit/helpers.js";
 import {
@@ -202,4 +203,41 @@ test("SEL1 — selector constants are present and well-formed", () => {
   }
   assert.ok(SIT_UPLOAD.photoTrigger instanceof RegExp, "photo trigger");
   assert.ok(SIT_UPLOAD.attachmentTrigger instanceof RegExp, "attachment trigger");
+});
+
+// ---------------------------------------------------------------------------
+// SIT membership (FAS) — isSitMember
+// ---------------------------------------------------------------------------
+
+test("MEMBER1 — agreed SIT universities are members", () => {
+  assert.equal(isSitMember("İstanbul Aydın Üniversitesi"), true);
+  assert.equal(isSitMember("Atlas Üniversitesi"), true);
+  assert.equal(isSitMember("Aydin University"), true); // short portal name resolves
+});
+
+test("MEMBER2 — direct-access universities are NOT SIT members", () => {
+  assert.equal(isSitMember("Altınbaş Üniversitesi"), false);
+  assert.equal(isSitMember("İstanbul Okan Üniversitesi"), false);
+  assert.equal(isSitMember("Üsküdar Üniversitesi"), false);
+});
+
+test("MEMBER3 — empty / nullish → not a member", () => {
+  assert.equal(isSitMember(""), false);
+  assert.equal(isSitMember("   "), false);
+  assert.equal(isSitMember(null), false);
+  assert.equal(isSitMember(undefined), false);
+});
+
+test("MEMBER4 — SIT_MEMBER_UNIVERSITIES env EXTENDS (never shrinks) the list", () => {
+  const prev = process.env.SIT_MEMBER_UNIVERSITIES;
+  try {
+    assert.equal(isSitMember("Üsküdar Üniversitesi"), false);
+    process.env.SIT_MEMBER_UNIVERSITIES = "Üsküdar Üniversitesi";
+    assert.equal(isSitMember("Üsküdar Üniversitesi"), true);
+    // agreed members are still recognised alongside the extension
+    assert.equal(isSitMember("Atlas Üniversitesi"), true);
+  } finally {
+    if (prev === undefined) delete process.env.SIT_MEMBER_UNIVERSITIES;
+    else process.env.SIT_MEMBER_UNIVERSITIES = prev;
+  }
 });
