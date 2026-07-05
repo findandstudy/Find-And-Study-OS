@@ -5,10 +5,11 @@ description: SIT student AND application create are n8n webhook POSTs, not the p
 
 # BOTH SIT creates are webhook replays, not UI automation
 
-There are THREE distinct SIT n8n webhooks — do not confuse them:
-- **student** = `da599eaf-7f5e-45aa-9d53-33d1f185515a` (env `SIT_CREATE_STUDENT_WEBHOOK_URL`)
-- **application** = `4615d5ae-…` (env `SIT_CREATE_WEBHOOK_URL`)
-- **users/invite** = `03ed1ba0-…` (NOT used by create flows)
+There are THREE distinct SIT n8n webhooks — do not confuse them. The concrete
+webhook URLs/UUIDs are secrets: resolve them ONLY from env, never hardcode/log:
+- **student** — env `SIT_CREATE_STUDENT_WEBHOOK_URL`
+- **application** — env `SIT_CREATE_WEBHOOK_URL`
+- **users/invite** — a separate invite webhook, NOT used by the create flows
 
 Both `createStudent` and `createApplication` bypass the automation-hostile UI
 (the 6-step "Add Student" wizard / the "Add Application" dropdown modal) and POST

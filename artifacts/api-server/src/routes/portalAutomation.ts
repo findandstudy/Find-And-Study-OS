@@ -42,6 +42,7 @@ import {
   listSpecVersions,
   matchProgram,
   levelGroup,
+  isSitMember,
   type ProgramCandidate,
 } from "@workspace/portal-adapters";
 import { isAgentRole } from "@workspace/roles";
@@ -63,7 +64,7 @@ import {
   resolveNationalityExclusion,
   type ClaimedSubmission,
 } from "@workspace/portal-runner";
-import { batchPortalCredentialKeys, resolvePortalCreds } from "../lib/portalCreds.js";
+import { batchPortalCredentialKeys, resolvePortalCreds, checkHasPortalCredentials } from "../lib/portalCreds.js";
 import { reconcilePortalUniversityCrmLinks } from "../lib/portalUniversityLinker.js";
 
 const router: IRouter = Router();
@@ -1289,6 +1290,15 @@ async function fanOutApplicationToUniversities(
   unis: CredentialReadyUniversity[],
   mode: "dry" | "real",
   userId: number,
+  /**
+   * Aggregator routing (SIT/United). When set, every submission is enqueued on
+   * the aggregator's universityKey (its adapter + credentials) while the
+   * candidate's own name/CRM id name the MEMBER school to select inside the
+   * portal — written to submission.meta exactly as enqueueIfEligible does. The
+   * application row (and its dedup) still keys on the member CRM university.
+   * Omitted → identical legacy behavior (apply-to-all / bulk are unchanged).
+   */
+  routeVia?: { universityKey: string },
 ): Promise<ApplyToAllItem[]> {
   const [student] = await db
     .select({ nationality: studentsTable.nationality })
@@ -1304,9 +1314,24 @@ async function fanOutApplicationToUniversities(
 
   for (const uni of unis) {
     const crmUniversityId = uni.crmUniversityId;
+    // When routing via an aggregator, the submission is keyed on the aggregator
+    // key (so dedup/adapter/credentials all resolve to it); otherwise the
+    // candidate's own key. Each member still gets its own application row, so
+    // (applicationId, submissionKey) stays unique per member.
+    const submissionKey = routeVia?.universityKey ?? uni.universityKey;
+    // Dedup scope: the legacy manual path treats only in-flight rows
+    // (queued/running) as duplicates so a completed run can be retried from the
+    // button. The aggregator-routed AUTO path additionally treats a prior
+    // "submitted" row as a duplicate, so re-triggering on later stage changes is
+    // idempotent (gap-filling only) and never double-submits a member. Failed
+    // rows stay retryable in both paths.
+    const submissionDedupStatuses: ("queued" | "running" | "submitted")[] =
+      routeVia ? ["queued", "running", "submitted"] : ["queued", "running"];
     try {
       // --- Exclusion (nationality / exclusive region) ---
-      const excl = await resolveNationalityExclusion(uni.universityKey, nationality);
+      // Check the SAME key the runner will use at submit time (the submission
+      // key), so the preventive pre-filter and the reactive runner agree.
+      const excl = await resolveNationalityExclusion(submissionKey, nationality);
       if (excl.excluded) {
         results.push({
           universityKey:  uni.universityKey,
@@ -1455,7 +1480,7 @@ async function fanOutApplicationToUniversities(
           }
 
           await tx.execute(
-            sql`SELECT pg_advisory_xact_lock(${appId}, hashtext(${uni.universityKey}))`,
+            sql`SELECT pg_advisory_xact_lock(${appId}, hashtext(${submissionKey}))`,
           );
 
           const [existingSub] = await tx
@@ -1464,8 +1489,8 @@ async function fanOutApplicationToUniversities(
             .where(
               and(
                 eq(portalSubmissionsTable.applicationId, appId),
-                eq(portalSubmissionsTable.universityKey, uni.universityKey),
-                inArray(portalSubmissionsTable.status, ["queued", "running"]),
+                eq(portalSubmissionsTable.universityKey, submissionKey),
+                inArray(portalSubmissionsTable.status, submissionDedupStatuses),
                 isNull(portalSubmissionsTable.deletedAt),
               ),
             )
@@ -1480,11 +1505,22 @@ async function fanOutApplicationToUniversities(
             .values({
               applicationId:  appId,
               studentId:      srcApp.studentId,
-              universityKey:  uni.universityKey,
+              universityKey:  submissionKey,
               universityName: uni.universityName,
               mode,
               status:         "queued",
               enqueuedBy:     userId,
+              // Aggregator routing (SIT): name the member school for the runner
+              // to select inside the portal — mirrors enqueueIfEligible exactly.
+              ...(routeVia
+                ? {
+                    meta: {
+                      targetCatalogUniversityId: crmUniversityId,
+                      targetUniversityName:      uni.universityName,
+                      routedViaAggregator:       routeVia.universityKey,
+                    },
+                  }
+                : {}),
             })
             .returning({ id: portalSubmissionsTable.id });
 
@@ -1546,6 +1582,173 @@ function triggerBackgroundDrain(label: string): void {
       _processMutex = false;
     }
   })();
+}
+
+// ---------------------------------------------------------------------------
+// SIT automatic multi-university fan-out
+//
+// When a student is routed to the SIT (study_in_turkey) aggregator, fan the
+// application out to ALL permitted SIT MEMBER universities using the SAME shared
+// core (matchProgram X1/Y1 → advisory-locked app dedup/create with
+// mainApplicationId set → submission dedup/enqueue routed via the aggregator).
+// The X2/X3 · Y2/Y3 program+language fallback steps are then applied REACTIVELY
+// by the worker's orchestrator when a member returns program_missing/full — so
+// no parallel matcher is introduced here.
+//
+// Env-gated by SIT_AUTO_FANOUT (default OFF); when off, only the manual
+// "Apply to All Universities" button fans out. Submission Mode (settings.mode)
+// decides dry vs real, exactly like the manual path.
+// ---------------------------------------------------------------------------
+
+/** The SIT aggregator's portal key / adapter key. */
+const SIT_AGGREGATOR_KEY = "sit";
+
+/** True only when SIT_AUTO_FANOUT is explicitly enabled (default OFF). */
+function isSitAutoFanOutEnabled(): boolean {
+  const v = (process.env.SIT_AUTO_FANOUT ?? "").trim().toLowerCase();
+  return v === "true" || v === "1" || v === "yes" || v === "on";
+}
+
+/**
+ * The permitted SIT member universities to fan out to, as fan-out candidates
+ * routed through the aggregator. Authoritative membership = the enabled rows in
+ * portal_account_universities under the active SIT aggregator, further filtered
+ * by isSitMember (the agreed allowlist ∪ SIT_MEMBER_UNIVERSITIES) so a stray
+ * junction row can never push a non-member into SIT. Each candidate carries the
+ * MEMBER's CRM university id + name (for program match + application creation);
+ * routing to the aggregator key is applied by the caller via routeVia.
+ * Returns [] when the aggregator is missing/inactive.
+ */
+async function loadSitMemberUniversities(): Promise<CredentialReadyUniversity[]> {
+  const [aggregator] = await db
+    .select({
+      universityKey: portalUniversitiesTable.universityKey,
+      adapterKey:    portalUniversitiesTable.adapterKey,
+    })
+    .from(portalUniversitiesTable)
+    .where(
+      and(
+        eq(portalUniversitiesTable.universityKey, SIT_AGGREGATOR_KEY),
+        eq(portalUniversitiesTable.isActive, true),
+        isNull(portalUniversitiesTable.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!aggregator) return [];
+
+  const members = await db
+    .select({
+      catalogUniversityId: portalAccountUniversitiesTable.catalogUniversityId,
+      name:                universitiesTable.name,
+    })
+    .from(portalAccountUniversitiesTable)
+    .innerJoin(
+      universitiesTable,
+      eq(universitiesTable.id, portalAccountUniversitiesTable.catalogUniversityId),
+    )
+    .where(
+      and(
+        eq(portalAccountUniversitiesTable.portalKey, aggregator.universityKey),
+        eq(portalAccountUniversitiesTable.enabled, true),
+      ),
+    );
+
+  return members
+    .filter((m) => isSitMember(m.name))
+    .map((m) => ({
+      // universityKey reported per candidate is the aggregator (the portal
+      // actually used); the member is identified by name + crmUniversityId.
+      universityKey:   aggregator.universityKey,
+      universityName:  m.name,
+      adapterKey:      aggregator.adapterKey,
+      crmUniversityId: m.catalogUniversityId,
+    }));
+}
+
+/**
+ * Fire-and-forget: if SIT_AUTO_FANOUT is enabled and the given application is
+ * routed to the SIT aggregator, fan the student out to all permitted SIT member
+ * universities. Idempotent — re-invocation only fills gaps (dedup). Honors the
+ * global kill-switch (settings.isEnabled) and Submission Mode. Never throws.
+ */
+export async function maybeFanOutSitStudentForApplication(
+  applicationId: number,
+  actorUserId: number,
+): Promise<void> {
+  try {
+    if (!isSitAutoFanOutEnabled()) return;
+
+    const [settings] = await db
+      .select()
+      .from(portalAutomationSettingsTable)
+      .limit(1);
+    if (!settings?.isEnabled) return;
+
+    const [srcApp] = await db
+      .select()
+      .from(applicationsTable)
+      .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)))
+      .limit(1);
+    if (!srcApp) return;
+
+    // Gate on trigger stage — fan out only when the app is at a stage that would
+    // itself be auto-submitted, so auto fan-out and the per-app enqueue agree.
+    const triggerStages = Array.isArray(settings.triggerStages)
+      ? (settings.triggerStages as string[])
+      : [];
+    if (!triggerStages.includes(String(srcApp.stage))) return;
+
+    // Only fan out when THIS application is actually routed to SIT.
+    const routing = await resolvePortalRouting({
+      universityId:   srcApp.universityId ?? null,
+      universityName: srcApp.universityName ?? null,
+    });
+    if (!routing || routing.portalUni.universityKey !== SIT_AGGREGATOR_KEY) return;
+
+    // Credentials live on the aggregator (one set); gate once — mirrors the
+    // per-application enqueue gate so we never enqueue unrunnable rows.
+    if (!await checkHasPortalCredentials(SIT_AGGREGATOR_KEY, routing.portalUni.adapterKey)) {
+      console.warn(`[sit-fanout] skipped app=${applicationId}: aggregator credentials missing`);
+      return;
+    }
+
+    const members = await loadSitMemberUniversities();
+    if (members.length === 0) return;
+
+    const mode = settings.mode === "real" ? "real" : "dry";
+    const results = await fanOutApplicationToUniversities(
+      srcApp,
+      members,
+      mode,
+      actorUserId,
+      { universityKey: SIT_AGGREGATOR_KEY },
+    );
+    const counts = computeApplyToAllCounts(results);
+
+    if (counts.queued > 0) triggerBackgroundDrain(`sitfanout-${actorUserId}`);
+
+    await logAudit(
+      actorUserId,
+      "portal.sitAutoFanOut",
+      "student",
+      srcApp.studentId,
+      {
+        applicationId,
+        mode,
+        members: members.length,
+        ...counts,
+        total: results.length,
+      },
+    );
+
+    console.log(
+      `[sit-fanout] app=${applicationId} student=${srcApp.studentId} mode=${mode}` +
+      ` members=${members.length} queued=${counts.queued} excluded=${counts.excluded}` +
+      ` noProgram=${counts.noProgram} duplicate=${counts.duplicate} failed=${counts.failed}`,
+    );
+  } catch (err) {
+    console.error(`[sit-fanout] failed for app=${applicationId}:`, err);
+  }
 }
 
 router.post(

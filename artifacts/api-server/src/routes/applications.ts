@@ -21,6 +21,7 @@ import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 import { getCurrentSeason } from "../lib/season";
 import { maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
+import { maybeFanOutSitStudentForApplication } from "./portalAutomation.js";
 
 const router: IRouter = Router();
 
@@ -745,6 +746,11 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     console.error("[portal-auto] Trigger failed for new app", app.id, ":", err),
   );
 
+  // SIT automatic multi-university fan-out (env-gated by SIT_AUTO_FANOUT; the
+  // orchestrator internally verifies SIT routing / trigger stage / mode / creds
+  // and dedups). Fire-and-forget — never blocks the response.
+  void maybeFanOutSitStudentForApplication(app.id, req.user!.id);
+
   res.status(201).json(app);
 });
 
@@ -1376,6 +1382,10 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }).catch((err) =>
       console.error("[portal-auto] Trigger failed for app", app.id, ":", err),
     );
+
+    // SIT automatic multi-university fan-out on stage change into a trigger
+    // stage (env-gated; orchestrator re-verifies routing/stage/mode/creds/dedup).
+    void maybeFanOutSitStudentForApplication(app.id, req.user!.id);
   }
 
   res.json(app);
