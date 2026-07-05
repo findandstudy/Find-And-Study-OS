@@ -11,8 +11,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { db, portalSubmissionsTable, applicationsTable, studentsTable, documentsTable } from "@workspace/db";
-import { eq, and, isNull } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS } from "@workspace/portal-adapters";
+import { eq, and, isNull, desc } from "drizzle-orm";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 
 // ---------------------------------------------------------------------------
@@ -122,11 +122,13 @@ export async function buildStudentProfile(
 
   const docs = await db
     .select({
-      type:     documentsTable.type,
-      fileUrl:  documentsTable.fileUrl,
-      fileKey:  documentsTable.fileKey,
-      fileData: documentsTable.fileData,
-      name:     documentsTable.name,
+      type:      documentsTable.type,
+      fileUrl:   documentsTable.fileUrl,
+      fileKey:   documentsTable.fileKey,
+      fileData:  documentsTable.fileData,
+      name:      documentsTable.name,
+      sizeBytes: documentsTable.sizeBytes,
+      mimeType:  documentsTable.mimeType,
     })
     .from(documentsTable)
     .where(
@@ -134,7 +136,20 @@ export async function buildStudentProfile(
         eq(documentsTable.studentId, sub.studentId!),
         isNull(documentsTable.deletedAt),
       ),
-    );
+    )
+    .orderBy(desc(documentsTable.createdAt));
+
+  // Carry document/photo URLs on the profile for URL-fetching create webhooks
+  // (e.g. SIT). Derived directly from the CRM document rows; independent of the
+  // local-file download below.
+  const { photoUrl: docPhotoUrl, documents: docRefs } = extractStudentDocumentRefs(docs);
+  if (docPhotoUrl) profile.photoUrl = docPhotoUrl;
+  if (docRefs.length) profile.studentDocuments = docRefs;
+  console.log(
+    `[portal-profile] #${submissionId} doc urls — photo: ${docPhotoUrl ? "yes" : "no"}` +
+    ` | documents: ${docRefs.length}` +
+    (docRefs.length ? ` [${docRefs.map((d) => d.type).join(", ")}]` : ""),
+  );
 
   // Sort: content-bearing records first so they win the first-wins slot race
   // when an empty stub also exists for the same type.

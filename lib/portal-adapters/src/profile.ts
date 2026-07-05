@@ -1,5 +1,5 @@
 import { fold } from "./programMatch.js";
-import type { SubmitProfile, SubmitFiles } from "./types.js";
+import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Document-type mapping
@@ -27,6 +27,74 @@ export function mapDocType(raw: string): DocType | null {
 // Required document types — used by workers to validate files before submit
 // ---------------------------------------------------------------------------
 export const REQUIRED_DOCS: DocType[] = ["photo", "passport", "transcript", "diploma"];
+
+// ---------------------------------------------------------------------------
+// Document URL extraction — for portals whose CREATE step is a URL-fetching
+// webhook (e.g. SIT). Kept here (shared by both profile builders) so the two
+// builders never drift on how photo_url / documents[] are derived.
+// ---------------------------------------------------------------------------
+
+/** A raw CRM `documents` row as read by the profile builders. */
+export interface RawDocumentRow {
+  type: string | null;
+  name?: string | null;
+  fileUrl?: string | null;
+  fileKey?: string | null;
+  sizeBytes?: number | null;
+  mimeType?: string | null;
+}
+
+/** True for the CRM photo document types (mirrors the /students/:id/photo query). */
+function isPhotoType(type: string): boolean {
+  return /^(photo|photograph)$/i.test(type.trim());
+}
+
+/** A row's fetchable URL: fileUrl preferred, fileKey fallback, else undefined. */
+function docUrl(r: RawDocumentRow): string | undefined {
+  const u = (r.fileUrl && r.fileUrl.trim()) || (r.fileKey && r.fileKey.trim());
+  return u ? u : undefined;
+}
+
+/**
+ * Extracts a student's photo URL + document URLs from their raw CRM `documents`
+ * rows, for portals whose create webhook fetches files by URL (e.g. SIT).
+ *
+ * - `photoUrl`: the FIRST content-bearing photo/photograph row (callers pass
+ *   rows newest-first). The photo is excluded from `documents`.
+ * - `documents`: every other non-deleted row that has a fetchable URL.
+ *
+ * Rows with no URL (base64 `fileData`-only, or empty stubs) are skipped — a blob
+ * is not a URL. URLs are passed through as stored (not validated here); the
+ * consuming adapter logs any non-http(s) URL. Never throws.
+ */
+export function extractStudentDocumentRefs(rows: RawDocumentRow[]): {
+  photoUrl?: string;
+  documents: StudentDocumentRef[];
+} {
+  let photoUrl: string | undefined;
+  const documents: StudentDocumentRef[] = [];
+
+  for (const r of rows) {
+    const type = (r.type ?? "").trim();
+    if (!type) continue;
+    const url = docUrl(r);
+    if (!url) continue;
+
+    if (isPhotoType(type)) {
+      if (!photoUrl) photoUrl = url; // first content-bearing photo wins
+      continue;
+    }
+    documents.push({
+      type,
+      name: r.name ?? undefined,
+      url,
+      size: r.sizeBytes ?? undefined,
+      mime: r.mimeType ?? undefined,
+    });
+  }
+
+  return { photoUrl, documents };
+}
 
 // ---------------------------------------------------------------------------
 // buildProfile — construct a SubmitProfile from a plain CRM-agnostic record

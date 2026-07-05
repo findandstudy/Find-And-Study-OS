@@ -8,6 +8,7 @@ export type {
   SubmitResult,
   SubmitProfile,
   SubmitFiles,
+  StudentDocumentRef,
   UniversityAdapter,
 } from "./types.js";
 
@@ -42,7 +43,9 @@ export {
   buildProfile,
   normalizeGpaRange,
   REQUIRED_DOCS,
+  extractStudentDocumentRefs,
   type DocType,
+  type RawDocumentRow,
 } from "./profile.js";
 
 // SIT membership guard (used by the runner to skip non-member universities)

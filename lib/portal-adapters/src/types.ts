@@ -154,6 +154,41 @@ export interface SubmitProfile {
   programSynonyms?: string[][];
   /** Country name/adjective (lowercase) → portal label. Merged over country maps. */
   countryOverrides?: Record<string, string>;
+  // ---------------------------------------------------------------------------
+  // Document URLs — for portals whose CREATE step is a webhook that fetches
+  // files by URL (e.g. SIT), rather than uploading local files. Populated by
+  // the profile builder (which has DB access) from the CRM `documents` rows.
+  // File-upload portals ignore these and use SubmitFiles local paths instead.
+  // ---------------------------------------------------------------------------
+  /**
+   * Fetchable URL of the student's photo (CRM `documents` row of type
+   * photo/photograph — fileUrl, else fileKey). Absent when there is no photo or
+   * only a non-fetchable object-storage key.
+   */
+  photoUrl?: string;
+  /**
+   * The student's non-deleted CRM documents as fetchable URLs (fileUrl, else
+   * fileKey) with their raw type/name/size/mime. The photo is excluded (carried
+   * by `photoUrl`). Empty/absent when the student has no URL-bearing documents.
+   */
+  studentDocuments?: StudentDocumentRef[];
+}
+
+/**
+ * A single student document exposed to URL-fetching create webhooks (e.g. SIT).
+ * `url` is the CRM `documents.fileUrl` (preferred) or `fileKey` fallback.
+ */
+export interface StudentDocumentRef {
+  /** Raw CRM document type/label (e.g. "passport", "transcript", "diploma"). */
+  type: string;
+  /** Original document / file name, when known. */
+  name?: string;
+  /** Fetchable URL (documents.fileUrl, else fileKey). */
+  url: string;
+  /** File size in bytes, when known. */
+  size?: number;
+  /** MIME type, when known. */
+  mime?: string;
 }
 
 // ---------------------------------------------------------------------------

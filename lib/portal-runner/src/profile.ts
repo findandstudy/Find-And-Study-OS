@@ -27,9 +27,9 @@ import {
   studentsTable,
   documentsTable,
 } from "@workspace/db";
-import { eq, and, isNull } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS } from "@workspace/portal-adapters";
-import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
+import { eq, and, isNull, desc } from "drizzle-orm";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs } from "@workspace/portal-adapters";
+import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 
 const execFileP = promisify(execFile);
 
@@ -100,6 +100,10 @@ interface DownloadedDocs {
   filledSlots: string[];
   missingSlots: string[];
   downloadErrors: Record<string, string>;
+  /** Photo URL for URL-fetching create webhooks (e.g. SIT). */
+  photoUrl?: string;
+  /** Document URLs for URL-fetching create webhooks (e.g. SIT). */
+  documentRefs: StudentDocumentRef[];
 }
 
 /**
@@ -421,11 +425,13 @@ async function downloadStudentDocuments(
 
   const docs = await db
     .select({
-      type:     documentsTable.type,
-      fileUrl:  documentsTable.fileUrl,
-      fileKey:  documentsTable.fileKey,
-      fileData: documentsTable.fileData,
-      name:     documentsTable.name,
+      type:      documentsTable.type,
+      fileUrl:   documentsTable.fileUrl,
+      fileKey:   documentsTable.fileKey,
+      fileData:  documentsTable.fileData,
+      name:      documentsTable.name,
+      sizeBytes: documentsTable.sizeBytes,
+      mimeType:  documentsTable.mimeType,
     })
     .from(documentsTable)
     .where(
@@ -433,7 +439,8 @@ async function downloadStudentDocuments(
         eq(documentsTable.studentId, studentId),
         isNull(documentsTable.deletedAt),
       ),
-    );
+    )
+    .orderBy(desc(documentsTable.createdAt));
 
   // Sort: content-bearing records first so they win the first-wins slot race
   // when an empty stub also exists for the same type.
@@ -503,7 +510,16 @@ async function downloadStudentDocuments(
     (missingSlots.length > 0 ? ` | missing: [${missingDetail}]` : " | all 4 filled"),
   );
 
-  return { files, tempDir, filledSlots, missingSlots, downloadErrors };
+  // URL refs for URL-fetching create webhooks (e.g. SIT). Independent of the
+  // local-file download above — derived directly from the CRM document rows.
+  const { photoUrl, documents: documentRefs } = extractStudentDocumentRefs(docs);
+  console.log(
+    `[portal-profile] ${logLabel} doc urls — photo: ${photoUrl ? "yes" : "no"}` +
+    ` | documents: ${documentRefs.length}` +
+    (documentRefs.length ? ` [${documentRefs.map((d) => d.type).join(", ")}]` : ""),
+  );
+
+  return { files, tempDir, filledSlots, missingSlots, downloadErrors, photoUrl, documentRefs };
 }
 
 // ---------------------------------------------------------------------------
@@ -570,6 +586,10 @@ export async function buildStudentProfile(
     `#${submissionId}`,
   );
 
+  // Carry document/photo URLs on the profile for URL-fetching create webhooks.
+  if (dl.photoUrl) profile.photoUrl = dl.photoUrl;
+  if (dl.documentRefs.length) profile.studentDocuments = dl.documentRefs;
+
   return { profile, ...dl };
 }
 
@@ -614,6 +634,10 @@ export async function buildProfileFromApplication(
     `portal-app-${applicationId}`,
     `app#${applicationId}`,
   );
+
+  // Carry document/photo URLs on the profile for URL-fetching create webhooks.
+  if (dl.photoUrl) profile.photoUrl = dl.photoUrl;
+  if (dl.documentRefs.length) profile.studentDocuments = dl.documentRefs;
 
   return { profile, ...dl };
 }

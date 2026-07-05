@@ -2125,6 +2125,7 @@ export interface SitStudentWebhookPayload {
   tc_number: string;
   blue_card: boolean;
   // academic (previous education, keyed by applied level)
+  education_level?: string;
   education_level_name?: string;
   high_school_name?: string;
   high_school_gpa_percent?: string;

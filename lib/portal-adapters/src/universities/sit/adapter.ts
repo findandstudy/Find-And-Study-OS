@@ -364,6 +364,62 @@ export const sitAdapter: SitAdapter = {
       } → ${nationalityId ?? "NOT_FOUND"}`,
     );
 
+    logger.info(
+      `[sit] eğitim: level="${appliedLevel}" okul="${profile.schoolName ?? ""}"` +
+      ` gpa=${gpaStr ?? "(yok)"}`,
+    );
+
+    // Photo + documents: the SIT create webhook fetches these by URL, so we send
+    // the student's CRM document URLs (carried on the profile by the profile
+    // builder, which has DB access). Local SubmitFiles paths are NOT usable here.
+    // Every source is logged (query string dropped so signed-URL tokens are never
+    // logged); missing/unfetchable data is logged but never blocks the create.
+    const redactUrl = (u: string): string => {
+      try {
+        const parsed = new URL(u);
+        return `${parsed.origin}${parsed.pathname}`;
+      } catch {
+        return u.split("?")[0];
+      }
+    };
+    const photoUrl = profile.photoUrl?.trim() ?? "";
+    if (photoUrl) {
+      logger.info(
+        `[sit] photo_url: ${redactUrl(photoUrl)}` +
+        (/^https?:\/\//i.test(photoUrl)
+          ? ""
+          : " (UYARI: http(s) değil — webhook çekemeyebilir)"),
+      );
+    } else {
+      logger.info("[sit] photo_url: (yok)");
+    }
+    const sitDocuments = (profile.studentDocuments ?? [])
+      .filter((d) => !!d.url)
+      .map((d) => {
+        const entry: Record<string, unknown> = {
+          attachment_type: d.type,
+          url: d.url,
+          size: d.size ?? 0,
+        };
+        if (d.name) entry.name = d.name;
+        if (d.mime) entry.mime_type = d.mime;
+        return entry;
+      });
+    logger.info(
+      `[sit] documents: ${sitDocuments.length} adet` +
+      (sitDocuments.length
+        ? ` [${(profile.studentDocuments ?? []).map((d) => d.type).join(", ")}]`
+        : ""),
+    );
+    for (const d of profile.studentDocuments ?? []) {
+      logger.info(
+        `[sit] belge → type=${d.type} url=${redactUrl(d.url)}` +
+        (/^https?:\/\//i.test(d.url)
+          ? ""
+          : " (UYARI: http(s) değil — webhook çekemeyebilir)"),
+      );
+    }
+
     const payload: SitStudentWebhookPayload = {
       user_id: identity.userId,
       agency_id: identity.agencyId,
@@ -384,13 +440,14 @@ export const sitAdapter: SitAdapter = {
       have_tc: false,
       tc_number: "",
       blue_card: false,
+      education_level: appliedLevel,
       education_level_name: appliedLevel,
       ...priorSchool,
-      // Documents/photo are optional — the webhook create succeeds with an empty
-      // list. The wizard used to upload files to storage; that path is not part
-      // of the captured webhook contract, so we send an empty documents list.
-      photo_url: "",
-      documents: [],
+      // Photo + documents are fetched by URL by the create webhook. When the
+      // student has no URL-bearing documents these are "" / [] and the create
+      // still succeeds (files can be attached later).
+      photo_url: photoUrl,
+      documents: sitDocuments,
     };
 
     logger.info("[sit] öğrenci webhook create başlatılıyor");

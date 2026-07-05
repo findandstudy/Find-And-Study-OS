@@ -32,3 +32,16 @@ expand via `formatGraduationForInput` / `formatGraduationForDatepicker`
 **Why:** Step 3 failed "empty after retry" because the runner builder never mapped
 schoolName/graduationYear and both builders NaN-coerced GPA ranges. Keep the
 fail-visible gate; fix the data flow + normalization underneath it.
+
+**Photo/documents for URL-fetching create webhooks (e.g. SIT):** these adapters
+POST document URLs, not local files, so the URLs must ride on the profile:
+`SubmitProfile.photoUrl` + `SubmitProfile.studentDocuments` (`StudentDocumentRef[]`).
+Both builders must set them from the CRM `documents` rows via the shared
+`extractStudentDocumentRefs` (in `@workspace/portal-adapters`): first content-bearing
+photo/photograph row = photoUrl (excluded from documents); rows with no
+`fileUrl`/`fileKey` skipped. Select rows with `sizeBytes`/`mimeType` and
+`orderBy(desc(createdAt))`. There are THREE builder entry points to keep in sync:
+runner `buildSubmitProfileFromRecords` + `buildProfileFromApplication`, and worker
+`buildStudentProfile`. Prefer `fileUrl` (public, fetchable) over `fileKey` (object
+storage, may need auth); adapter logs each URL with query string stripped (token
+safety) and never throws on missing data.
