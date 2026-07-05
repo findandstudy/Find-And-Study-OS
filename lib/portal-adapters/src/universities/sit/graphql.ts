@@ -1782,6 +1782,71 @@ export async function fetchProgramIds(
 }
 
 // ---------------------------------------------------------------------------
+// Country name → zoho_countries id resolution.
+//
+// The student-create webhook (like the application webhook's `country`) stores
+// nationality/country as a Zoho DROPDOWN — it expects the zoho_countries ROW ID,
+// not the plain name. Sending a raw name ("Pakistan") makes the webhook reject
+// the create with `INVALID_DATA: Nationality1`. We resolve name→id via the same
+// read-only pg_graphql endpoint used everywhere else, cache the result per run,
+// and NEVER throw (an unresolved country returns null so the caller can still
+// attempt the create and log a clear diagnostic).
+// ---------------------------------------------------------------------------
+const COUNTRY_ID_QUERY = /* GraphQL */ `
+  query GetSitCountryId($filter: zoho_countriesFilter) {
+    zoho_countriesCollection(filter: $filter, first: 20) {
+      edges { node { id name } }
+    }
+  }
+`;
+
+const countriesSchema = z.object({
+  zoho_countriesCollection: connection(
+    z.object({ id: idString, name: z.string().nullish() }),
+  ),
+});
+
+// name-fold → id | null (null = looked up, not found). Per-process cache.
+const countryIdCache = new Map<string, string | null>();
+
+/**
+ * Resolve a country NAME (e.g. "Pakistan") to its zoho_countries row id.
+ * Case/Turkish-fold insensitive: fetches `ilike '%name%'` candidates and prefers
+ * a folded-exact name match, else the first contains-match. Returns null (never
+ * throws) when the name is empty, GraphQL is unavailable, or no row matches.
+ */
+export async function resolveCountryId(
+  page: Page,
+  name?: string | null,
+): Promise<string | null> {
+  if (name == null) return null;
+  const raw = String(name).trim();
+  if (raw === "") return null;
+
+  const key = fold(raw);
+  const cached = countryIdCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const data = await gqlRequest(
+    page,
+    COUNTRY_ID_QUERY,
+    { filter: { name: { ilike: `%${raw}%` } } },
+    countriesSchema,
+    "countryId",
+  );
+  const nodes = data?.zoho_countriesCollection.nodes ?? [];
+  // Prefer a folded-EXACT name match. The ilike is a substring match, so a
+  // short/ambiguous input ("Guinea") can return several rows; guessing nodes[0]
+  // would silently map to the WRONG country. Fail safe: accept a contains-match
+  // ONLY when it is unambiguous (exactly one candidate), otherwise return null.
+  const exact = nodes.find((n) => n.name != null && fold(n.name) === key);
+  const picked: string | null =
+    exact?.id ?? (nodes.length === 1 ? nodes[0].id : null);
+  countryIdCache.set(key, picked);
+  return picked;
+}
+
+// ---------------------------------------------------------------------------
 // Academic-year + semester id resolution (defaults: "2026/2027" / "Fall").
 // The application stores these as ids; we resolve the id whose name matches the
 // default (year compared digit-only so "2026-2027" matches "2026/2027").

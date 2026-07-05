@@ -64,6 +64,7 @@ import {
   dedupApplication,
   createApplicationViaWebhook,
   createStudentViaWebhook,
+  resolveCountryId,
   type SitStudentWebhookPayload,
 } from "./graphql.js";
 
@@ -352,6 +353,17 @@ export const sitAdapter: SitAdapter = {
       priorSchool.high_school_gpa_percent = gpaStr;
     }
 
+    // Nationality is a Zoho dropdown → the webhook expects the zoho_countries
+    // ROW ID, not the plain name ("Pakistan" alone → INVALID_DATA: Nationality1).
+    // Resolve name→id; if it can't be resolved we send it empty (undefined) and
+    // still attempt the create, logging the miss clearly so it isn't silent.
+    const nationalityId = await resolveCountryId(page, profile.nationality);
+    logger.info(
+      `[sit] nationality: ${
+        profile.nationality ? `"${profile.nationality}"` : "(boş)"
+      } → ${nationalityId ?? "NOT_FOUND"}`,
+    );
+
     const payload: SitStudentWebhookPayload = {
       user_id: identity.userId,
       agency_id: identity.agencyId,
@@ -360,7 +372,7 @@ export const sitAdapter: SitAdapter = {
       last_name: profile.lastName,
       gender: profile.gender || undefined,
       date_of_birth: isoDateOnly(profile.dateOfBirth),
-      nationality: profile.nationality || undefined,
+      nationality: nationalityId ?? undefined,
       email: profile.email,
       mobile: profile.phone || undefined,
       passport_number: profile.passportNumber || undefined,
