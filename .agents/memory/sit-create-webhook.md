@@ -1,7 +1,31 @@
 ---
 name: SIT create = graphql-derive + dedup + n8n webhook (not UI)
-description: SIT application create is an n8n webhook POST, not the panel's dropdown modal; how ids are derived and why dedup must fail closed.
+description: SIT student AND application create are n8n webhook POSTs, not the panel's dropdown modal/wizard; how ids are derived and why dedup must fail closed.
 ---
+
+# BOTH SIT creates are webhook replays, not UI automation
+
+There are THREE distinct SIT n8n webhooks — do not confuse them:
+- **student** = `da599eaf-7f5e-45aa-9d53-33d1f185515a` (env `SIT_CREATE_STUDENT_WEBHOOK_URL`)
+- **application** = `4615d5ae-…` (env `SIT_CREATE_WEBHOOK_URL`)
+- **users/invite** = `03ed1ba0-…` (NOT used by create flows)
+
+Both `createStudent` and `createApplication` bypass the automation-hostile UI
+(the 6-step "Add Student" wizard / the "Add Application" dropdown modal) and POST
+JSON to their dedicated webhook → `{status:true,id}`; the Zoho id is backend-assigned.
+
+## createStudent specifics
+- Keeps `ensureLoggedIn` + `findStudent` email/passport precheck + DRY stop, then
+  `resolveSitIdentity` (fail-closed if `!agencyId || !crmId`), builds payload, POSTs.
+- `findStudent` is TRI-STATE (`found`/`not_found`/`unknown`); `unknown` (GraphQL
+  outage / shape drift) → caller aborts create (no POST) to avoid duplicate students.
+  The webhook has no client idempotency guard, so the precheck is the only defense.
+- Previous-education fields keyed by APPLIED level via `mapEducationLevel`:
+  Master→`bachelor_*`, PhD→`master_*`, else `high_school_*`. Dates via `isoDateOnly`
+  (YYYY-MM-DD). `documents:[]` + `photo_url:""` — the storage-upload path is NOT part
+  of the captured student webhook contract (deviation, acceptable).
+- Body carries `first_name`/`last_name`/`email` — NEVER log the body; log only the
+  masked response (`rawForLog`) + HTTP status.
 
 # SIT createApplication is a webhook replay, not UI automation
 

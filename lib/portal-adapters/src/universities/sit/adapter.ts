@@ -4,22 +4,20 @@
 // Production-grade Playwright adapter covering the 11 agreed universities.
 // Capabilities:
 //   - login + ensureLoggedIn (re-auth on /auth/login redirect)
-//   - createStudent via the 6-step "Add Student" wizard (idempotent, filechooser
-//     uploads, GPA normalization, Zoho validation recovery)
+//   - createStudent (idempotent; GraphQL email/passport precheck, then create)
 //   - createApplication (idempotent dedup, exact program match per university)
 //
-// Student creation happens through the "Add Student" UI wizard; the APPLICATION
-// is created by driving the portal's REAL "Add Application" flow (Path A):
-// open /applications → "Add Application" → fill the searchable dropdowns
-// (Student, Academic Year, Semester, Country, University, Degree, Program) →
-// "Create Application". The SIT backend (Zoho CRM) creates the record and
-// assigns id + app_id + stage — the client cannot generate them, which is why a
-// raw GraphQL insert never worked. After the UI flow succeeds we read the
-// freshly-created record back (Supabase GraphQL) to obtain app_id for writeback.
-// SIT GraphQL also backs idempotency lookups + program matching (read-only).
-// The adapter satisfies the shared UniversityAdapter interface (login/submit)
-// and additionally exposes typed createStudent/createApplication methods.
-// Registered as experimental (never auto-submitted).
+// Both STUDENT and APPLICATION creation bypass the automation-hostile SIT UI
+// (the "Add Student" 6-step wizard and the "Add Application" searchable-dropdown
+// modal). The panel's REAL create for each is a JSON POST to a dedicated n8n
+// webhook (student = da599eaf-…, application = 4615d5ae-…); the SIT backend
+// (Zoho CRM) creates the record and assigns id + app_id + stage. The adapter
+// derives every id from Supabase GraphQL (read-only), runs the same dedup the
+// panel does (fail-closed on an unconfirmed precheck), then POSTs. GraphQL also
+// backs idempotency lookups + program matching. The adapter satisfies the shared
+// UniversityAdapter interface (login/submit) and additionally exposes typed
+// createStudent/createApplication methods. Registered as experimental (never
+// auto-submitted).
 // ---------------------------------------------------------------------------
 
 import type { Page, Locator } from "playwright-core";
@@ -65,6 +63,8 @@ import {
   resolveSitIdentity,
   dedupApplication,
   createApplicationViaWebhook,
+  createStudentViaWebhook,
+  type SitStudentWebhookPayload,
 } from "./graphql.js";
 
 export { SIT_ALLOWLIST } from "./helpers.js";
@@ -124,15 +124,10 @@ function defaultAcademicYear(now: Date = new Date()): string {
 // ---------------------------------------------------------------------------
 const sleep = (page: Page, ms: number): Promise<void> => page.waitForTimeout(ms);
 
-async function bodyText(page: Page): Promise<string> {
-  try {
-    const txt = (await page.evaluate(
-      "(() => document.body ? document.body.innerText : '')()",
-    )) as string;
-    return txt;
-  } catch {
-    return "";
-  }
+/** Extract a YYYY-MM-DD date from an ISO-8601 string; undefined if unparseable. */
+function isoDateOnly(v: string | undefined | null): string | undefined {
+  const m = String(v ?? "").match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : undefined;
 }
 
 async function firstVisible(
@@ -148,27 +143,6 @@ async function firstVisible(
   return null;
 }
 
-/** Fill a field located by accessible label, placeholder, or name fallback. */
-async function fillField(
-  page: Page,
-  labelRe: RegExp,
-  value: string | undefined,
-): Promise<boolean> {
-  if (!value) return false;
-  const candidates: Locator[] = [
-    page.getByLabel(labelRe).first(),
-    page.getByPlaceholder(labelRe).first(),
-  ];
-  for (const loc of candidates) {
-    if ((await loc.count()) && (await loc.isVisible().catch(() => false))) {
-      await loc.fill(value).catch(() => {});
-      await loc.press("Tab").catch(() => {});
-      return true;
-    }
-  }
-  return false;
-}
-
 /** Click a button by accessible name. Returns true when a click was issued. */
 async function clickButton(page: Page, nameRe: RegExp): Promise<boolean> {
   const btn = page.getByRole("button", { name: nameRe }).first();
@@ -177,77 +151,6 @@ async function clickButton(page: Page, nameRe: RegExp): Promise<boolean> {
     return true;
   }
   return false;
-}
-
-/**
- * Open a SIT custom combobox (role=button trigger) and click the option whose
- * text matches `valueRe`. Returns true when an option was clicked.
- */
-async function selectCombo(
-  page: Page,
-  triggerRe: RegExp,
-  valueRe: RegExp,
-): Promise<boolean> {
-  const trigger = page.getByRole("button", { name: triggerRe }).first();
-  if (!(await trigger.count())) return false;
-  await trigger.click({ timeout: 6000 }).catch(() => {});
-  await sleep(page, 900);
-
-  let opt = page.getByRole("option", { name: valueRe }).first();
-  if (!(await opt.count())) {
-    opt = page
-      .locator("[role=option], li, [class*=option i]")
-      .filter({ hasText: valueRe })
-      .first();
-  }
-  if (await opt.count()) {
-    await opt.click({ timeout: 3000 }).catch(() => {});
-    await sleep(page, 1100);
-    return true;
-  }
-  // Close the dropdown to avoid blocking later interactions.
-  await page.keyboard.press("Escape").catch(() => {});
-  return false;
-}
-
-/** Escape a raw string for safe embedding in a RegExp source. */
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-
-/** Upload a file via the OS file chooser triggered by clicking `triggerRe`. */
-async function uploadViaChooser(
-  page: Page,
-  triggerRe: RegExp,
-  filePath: string,
-): Promise<boolean> {
-  const trigger = page.getByRole("button", { name: triggerRe }).first();
-  if (!(await trigger.count())) {
-    // Fallback: a hidden <input type=file>, set directly.
-    const input = page.locator(SIT_UPLOAD.fileInput).first();
-    if (await input.count()) {
-      await input.setInputFiles(filePath).catch(() => {});
-      return true;
-    }
-    return false;
-  }
-  try {
-    const [chooser] = await Promise.all([
-      page.waitForEvent("filechooser", { timeout: 8000 }),
-      trigger.click({ timeout: 6000 }),
-    ]);
-    await chooser.setFiles(filePath);
-    await sleep(page, 1500);
-    return true;
-  } catch {
-    const input = page.locator(SIT_UPLOAD.fileInput).first();
-    if (await input.count()) {
-      await input.setInputFiles(filePath).catch(() => {});
-      return true;
-    }
-    return false;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -369,153 +272,127 @@ export const sitAdapter: SitAdapter = {
     const page = session.page;
     await this.ensureLoggedIn(session);
 
-    // --- Idempotency: read-only GraphQL lookup ---
+    // --- Idempotency: read-only GraphQL lookup (tri-state, fail-closed) ---
     const existing = await findStudent(page, {
       email: profile.email,
       passportNumber: profile.passportNumber,
     });
-    if (existing) {
-      logger.info(`[sit] mevcut öğrenci bulundu (id=${existing.id}) — yeniden kullanılıyor`);
-      return { studentId: existing.id, created: false, alreadyExists: true };
-    }
-
-    // --- Open the Add Student wizard ---
-    await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
-      waitUntil: "domcontentloaded",
-      timeout: 60_000,
-    });
-    await sleep(page, 3500);
-    if (!(await clickButton(page, SIT_NAV.addStudentName))) {
+    if (existing.status === "unknown") {
+      // Fail closed: we could not confirm whether the student already exists, so
+      // we must NOT POST the webhook (that would risk creating a duplicate).
+      logger.warn(
+        "[sit] öğrenci mükerrer kontrolü doğrulanamadı — mükerrer riski nedeniyle webhook atlanıyor",
+      );
       return {
         studentId: null,
         created: false,
         alreadyExists: false,
-        detail: "Add Student düğmesi bulunamadı",
+        detail: "öğrenci oluşturulamadı: mükerrer kontrolü doğrulanamadı",
       };
     }
-    await sleep(page, 2000);
-
-    const gpa = normalizeGpa(profile.gpa);
-    const dob = formatSitDate(profile.dateOfBirth);
-    const genderLabel = /^f|kad|woman|kız|kiz/i.test(profile.gender || "")
-      ? /female|kad/i
-      : /male|erkek/i;
-
-    // --- Walk up to 6 wizard steps, filling whatever is on screen ---
-    for (let step = 0; step < 6; step++) {
-      await sleep(page, 1500);
-
-      // Step 1 — Personal
-      await fillField(page, SIT_STUDENT_FIELDS.firstName, profile.firstName);
-      await fillField(page, SIT_STUDENT_FIELDS.lastName, profile.lastName);
-      if (dob) await fillField(page, SIT_STUDENT_FIELDS.dateOfBirth, dob);
-      await selectCombo(page, SIT_STUDENT_FIELDS.gender, genderLabel).catch(() => {});
-
-      // Step 2 — Contact
-      await fillField(page, SIT_STUDENT_FIELDS.email, profile.email);
-      await fillField(page, SIT_STUDENT_FIELDS.phone, profile.phone);
-      await fillField(page, SIT_STUDENT_FIELDS.address, profile.address);
-
-      // Step 3 — Family
-      await fillField(page, SIT_STUDENT_FIELDS.fatherName, profile.fatherName);
-      await fillField(page, SIT_STUDENT_FIELDS.motherName, profile.motherName);
-
-      // Step 4 — Identity
-      if (profile.nationality) {
-        await selectCombo(
-          page,
-          SIT_STUDENT_FIELDS.nationality,
-          new RegExp(fold(profile.nationality).slice(0, 12), "i"),
-        ).catch(() => {});
-      }
-      await fillField(page, SIT_STUDENT_FIELDS.nationality, profile.nationality);
-      await fillField(page, SIT_STUDENT_FIELDS.passportNumber, profile.passportNumber);
-
-      // Step 5 — Academics
-      await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName);
-      if (gpa !== undefined) {
-        await fillField(page, SIT_STUDENT_FIELDS.gpa, String(gpa));
-      }
-      if (profile.graduationYear !== undefined) {
-        await fillField(
-          page,
-          SIT_STUDENT_FIELDS.graduationYear,
-          String(profile.graduationYear),
-        );
-      }
-
-      // Step 6 — Documents (filechooser uploads)
-      if (files.photo) {
-        await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo);
-      }
-      for (const doc of [files.passport, files.transcript, files.diploma]) {
-        if (doc) await uploadViaChooser(page, SIT_UPLOAD.attachmentTrigger, doc);
-      }
-
-      // Advance — try Next first; on the last step the Save button appears.
-      const hasNext = await page
-        .getByRole("button", { name: SIT_BUTTONS.next })
-        .first()
-        .count();
-      if (hasNext) {
-        await clickButton(page, SIT_BUTTONS.next);
-        await sleep(page, 1800);
-        // Zoho validation recovery: if a validation banner appears, the step did
-        // not advance — re-fill happens on the next loop iteration.
-        if (SIT_ERRORS.validation.test(await bodyText(page))) {
-          logger.warn("[sit] doğrulama hatası — adım yeniden denenecek");
-        }
-        continue;
-      }
-      break;
+    if (existing.status === "found") {
+      logger.info(
+        `[sit] mevcut öğrenci bulundu (id=${existing.ref.id}) — yeniden kullanılıyor`,
+      );
+      return { studentId: existing.ref.id, created: false, alreadyExists: true };
     }
 
+    // --- DRY: student does not exist → stop before any write ---
     if (!doSubmit) {
-      logger.info("[sit] DRY: öğrenci kaydedilmeden önce durduruldu");
+      logger.info("[sit] DRY: öğrenci webhook create öncesi durduruldu");
       return {
         studentId: null,
         created: false,
         alreadyExists: false,
-        detail: "dry-run: öğrenci kaydedilmedi",
+        detail: "dry-run: öğrenci oluşturulmadı",
       };
     }
 
-    // --- Final save (with one Zoho-validation retry) ---
-    let saved = false;
-    for (let attempt = 0; attempt < 2 && !saved; attempt++) {
-      await clickButton(page, SIT_BUTTONS.saveStudent);
-      await sleep(page, 5000);
-      const txt = await bodyText(page);
-      if (SIT_ERRORS.duplicate.test(txt)) {
-        logger.info("[sit] kayıt sırasında mükerrer tespit edildi");
-        break;
-      }
-      if (SIT_ERRORS.validation.test(txt)) {
-        logger.warn(`[sit] kayıt doğrulama hatası (deneme ${attempt + 1})`);
-        continue;
-      }
-      saved = true;
+    // --- REAL: create the student via the panel's true mechanism ---
+    // The SIT "Add Student" 6-step wizard (dropdowns/date-picker/filechooser) is
+    // automation-hostile; the panel's real student-create is a JSON POST to a
+    // dedicated n8n webhook that returns the Zoho-assigned id. We resolve the
+    // agency identity dynamically (never hardcoded) and POST the same fields the
+    // wizard used to fill.
+    const identity = await resolveSitIdentity(page);
+    if (!identity || !identity.agencyId || !identity.crmId) {
+      logger.warn("[sit] acente kimliği (user_id/agency_id/crm_id) çözülemedi");
+      return {
+        studentId: null,
+        created: false,
+        alreadyExists: false,
+        detail:
+          "öğrenci oluşturulamadı: acente kimliği (user_id/agency_id/crm_id) çözülemedi",
+      };
     }
 
-    // --- Resolve the new student id via read-only lookup ---
-    const created = await findStudent(page, {
-      email: profile.email,
-      passportNumber: profile.passportNumber,
-    });
-    if (created) {
-      logger.info(`[sit] öğrenci oluşturuldu (id=${created.id})`);
-      return { studentId: created.id, created: saved, alreadyExists: !saved };
+    // Previous-education fields are keyed by the APPLIED level: an applicant for
+    // a Bachelor lists a high school, a Master applicant lists a bachelor, etc.
+    const appliedLevel = mapEducationLevel(profile.level);
+    const gpa = normalizeGpa(profile.gpa);
+    const gpaStr = gpa !== undefined ? String(gpa) : undefined;
+    const priorSchool: Pick<
+      SitStudentWebhookPayload,
+      | "high_school_name"
+      | "high_school_gpa_percent"
+      | "bachelor_school_name"
+      | "bachelor_gpa_percent"
+      | "master_school_name"
+      | "master_gpa_percent"
+    > = {};
+    if (appliedLevel === "Master") {
+      priorSchool.bachelor_school_name = profile.schoolName;
+      priorSchool.bachelor_gpa_percent = gpaStr;
+    } else if (appliedLevel === "PhD") {
+      priorSchool.master_school_name = profile.schoolName;
+      priorSchool.master_gpa_percent = gpaStr;
+    } else {
+      // Bachelor / Associate → the prior institution is a high school.
+      priorSchool.high_school_name = profile.schoolName;
+      priorSchool.high_school_gpa_percent = gpaStr;
     }
-    // Could not confirm via GraphQL — surface a soft result.
-    const onDetail = SIT_NAV.studentDetailUrl.test(page.url());
-    return {
-      studentId: null,
-      created: saved && onDetail,
-      alreadyExists: false,
-      detail: saved
-        ? "öğrenci kaydedildi ancak id doğrulanamadı"
-        : "öğrenci kaydedilemedi",
+
+    const payload: SitStudentWebhookPayload = {
+      user_id: identity.userId,
+      agency_id: identity.agencyId,
+      crm_id: identity.crmId,
+      first_name: profile.firstName,
+      last_name: profile.lastName,
+      gender: profile.gender || undefined,
+      date_of_birth: isoDateOnly(profile.dateOfBirth),
+      nationality: profile.nationality || undefined,
+      email: profile.email,
+      mobile: profile.phone || undefined,
+      passport_number: profile.passportNumber || undefined,
+      passport_issue_date: isoDateOnly(profile.passportIssueDate),
+      passport_expiry_date: isoDateOnly(profile.passportExpiryDate),
+      father_name: profile.fatherName || undefined,
+      mother_name: profile.motherName || undefined,
+      transfer_student: false,
+      have_tc: false,
+      tc_number: "",
+      blue_card: false,
+      education_level_name: appliedLevel,
+      ...priorSchool,
+      // Documents/photo are optional — the webhook create succeeds with an empty
+      // list. The wizard used to upload files to storage; that path is not part
+      // of the captured webhook contract, so we send an empty documents list.
+      photo_url: "",
+      documents: [],
     };
+
+    logger.info("[sit] öğrenci webhook create başlatılıyor");
+    const result = await createStudentViaWebhook(page, payload);
+    if (!result) {
+      return {
+        studentId: null,
+        created: false,
+        alreadyExists: false,
+        detail: "öğrenci oluşturulamadı: webhook create başarısız",
+      };
+    }
+    logger.info(`[sit] öğrenci webhook ile oluşturuldu (id=${result.id})`);
+    return { studentId: result.id, created: true, alreadyExists: false };
   },
 
   /**

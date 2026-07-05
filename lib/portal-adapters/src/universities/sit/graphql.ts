@@ -1179,20 +1179,32 @@ const studentSearchSchema = z.object({
 });
 
 /**
- * Find an existing SIT student by email or passport (read-only, for
- * idempotency). Returns the first record whose email or passport matches
- * case-insensitively, or null when none / GraphQL unavailable.
+ * Tri-state student lookup outcome. `unknown` means the search query itself
+ * could not be confirmed (GraphQL unavailable / shape drift) — the caller MUST
+ * fail closed (abort create) since proceeding would risk a duplicate student.
  */
+export type SitStudentLookup =
+  | { status: "found"; ref: SitStudentRef }
+  | { status: "not_found" }
+  | { status: "unknown" };
+
 export async function findStudent(
   page: Page,
   by: { email?: string; passportNumber?: string },
-): Promise<SitStudentRef | null> {
+): Promise<SitStudentLookup> {
   // One-shot pg_graphql introspection (insert/filter field names) to de-risk the
   // create mutations in a later turn — logged once per page, best-effort.
   await logPgGraphqlIntrospectionOnce(page).catch(() => {});
 
   const q = (by.email || by.passportNumber || "").trim();
-  if (!q) return null;
+  // No search key → nothing to dedup on. Treat as unknown (fail-closed) so the
+  // caller never creates without having actually checked for an existing record.
+  if (!q) {
+    logger.warn(
+      "[sit:graphql] findStudent: arama anahtarı yok — mükerrer durumu doğrulanamadı (fail-closed)",
+    );
+    return { status: "unknown" };
+  }
 
   const data = await gqlRequest(
     page,
@@ -1203,7 +1215,14 @@ export async function findStudent(
     studentSearchSchema,
     "studentSearch",
   );
-  if (!data) return null;
+  if (!data) {
+    // Could not confirm — fail closed so the caller does not create a possible
+    // duplicate on a transient GraphQL outage / response-shape drift.
+    logger.warn(
+      "[sit:graphql] findStudent: sorgu başarısız — mükerrer durumu doğrulanamadı (fail-closed)",
+    );
+    return { status: "unknown" };
+  }
 
   const email = by.email?.trim().toLowerCase();
   const passport = by.passportNumber?.trim().toLowerCase();
@@ -1212,13 +1231,19 @@ export async function findStudent(
     const nodeEmail = node.email?.trim().toLowerCase();
     const nodePassport = node.passport_number?.trim().toLowerCase();
     if (email && nodeEmail && nodeEmail === email) {
-      return { id: node.id, email: node.email ?? undefined, passportNumber: node.passport_number ?? undefined };
+      return {
+        status: "found",
+        ref: { id: node.id, email: node.email ?? undefined, passportNumber: node.passport_number ?? undefined },
+      };
     }
     if (passport && nodePassport && nodePassport === passport) {
-      return { id: node.id, email: node.email ?? undefined, passportNumber: node.passport_number ?? undefined };
+      return {
+        status: "found",
+        ref: { id: node.id, email: node.email ?? undefined, passportNumber: node.passport_number ?? undefined },
+      };
     }
   }
-  return null;
+  return { status: "not_found" };
 }
 
 // ---------------------------------------------------------------------------
@@ -1985,6 +2010,116 @@ export async function createApplicationViaWebhook(
   } catch (e) {
     logger.warn(
       `[sit:webhook] create hata: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CREATE STUDENT via the n8n webhook. Mirrors createApplicationViaWebhook: the
+// SIT "Add Student" 6-step wizard is automation-hostile, but the panel's real
+// student-create is a JSON POST to a SEPARATE n8n webhook (da599eaf-…, NOT the
+// application webhook 4615d5ae-… and NOT the users/invite webhook 03ed1ba0-…).
+// URL is env-overridable (SIT_CREATE_STUDENT_WEBHOOK_URL) with the live-captured
+// default. The request BODY (which carries student PII) is NEVER logged; only
+// the response (PII-masked via rawForLog) and HTTP status are.
+// ---------------------------------------------------------------------------
+const DEFAULT_CREATE_STUDENT_WEBHOOK_URL =
+  "https://automation.sitconnect.net/webhook/da599eaf-7f5e-45aa-9d53-33d1f185515a";
+
+function createStudentWebhookUrl(): string {
+  const env = process.env.SIT_CREATE_STUDENT_WEBHOOK_URL?.trim();
+  return env && /^https?:\/\//i.test(env)
+    ? env
+    : DEFAULT_CREATE_STUDENT_WEBHOOK_URL;
+}
+
+export interface SitStudentWebhookPayload {
+  // identity (dynamic — auth uid + user_profile), same as the application webhook
+  user_id: string;
+  agency_id: string;
+  crm_id: string;
+  // basics
+  first_name: string;
+  last_name: string;
+  gender?: string;
+  date_of_birth?: string; // YYYY-MM-DD
+  nationality?: string;
+  email: string;
+  mobile?: string;
+  // passport
+  passport_number?: string;
+  passport_issue_date?: string; // YYYY-MM-DD
+  passport_expiry_date?: string; // YYYY-MM-DD
+  // family
+  father_name?: string;
+  mother_name?: string;
+  // flags (safe defaults)
+  transfer_student: boolean;
+  have_tc: boolean;
+  tc_number: string;
+  blue_card: boolean;
+  // academic (previous education, keyed by applied level)
+  education_level_name?: string;
+  high_school_name?: string;
+  high_school_gpa_percent?: string;
+  bachelor_school_name?: string;
+  bachelor_gpa_percent?: string;
+  master_school_name?: string;
+  master_gpa_percent?: string;
+  // documents (optional — create works with an empty list)
+  photo_url: string;
+  documents: unknown[];
+}
+
+/**
+ * POST the student-create payload to the n8n webhook. On `{ status: true, id }`
+ * returns { id } (the Zoho-assigned student id); on any non-200, non-true
+ * status, unparseable body, or network error returns null (caller reports fail).
+ */
+export async function createStudentViaWebhook(
+  page: Page,
+  payload: SitStudentWebhookPayload,
+): Promise<{ id: string } | null> {
+  const url = createStudentWebhookUrl();
+  try {
+    const res = await page.request.post(url, {
+      headers: { "content-type": "application/json" },
+      data: payload,
+      timeout: 30_000,
+    });
+    const status = res.status();
+    const bodyText = await res.text().catch(() => "");
+    if (!res.ok()) {
+      logger.warn(
+        `[sit:webhook] student create başarısız (status=${status}) body=${rawForLog(bodyText)}`,
+      );
+      return null;
+    }
+    let json: { status?: unknown; id?: unknown } | null = null;
+    try {
+      json = JSON.parse(bodyText) as { status?: unknown; id?: unknown };
+    } catch {
+      json = null;
+    }
+    const id = json?.id;
+    if (
+      json?.status === true &&
+      (typeof id === "string" || typeof id === "number") &&
+      String(id)
+    ) {
+      logger.info(
+        `[sit:webhook] student create OK (status=${status}, id=${String(id)})`,
+      );
+      return { id: String(id) };
+    }
+    logger.warn(
+      `[sit:webhook] student create beklenmeyen yanıt (status=${status}) body=${rawForLog(bodyText)}`,
+    );
+    return null;
+  } catch (e) {
+    logger.warn(
+      `[sit:webhook] student create hata: ${e instanceof Error ? e.message : String(e)}`,
     );
     return null;
   }
