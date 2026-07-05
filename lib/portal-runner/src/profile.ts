@@ -28,7 +28,7 @@ import {
   documentsTable,
 } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 
 const execFileP = promisify(execFile);
@@ -516,7 +516,14 @@ async function downloadStudentDocuments(
 
   // URL refs for URL-fetching create webhooks (e.g. SIT). Independent of the
   // local-file download above — derived directly from the CRM document rows.
-  const { photoUrl, documents: documentRefs } = extractStudentDocumentRefs(docs);
+  const { photoUrl: docPhotoUrl, hasPhotoDoc, documents: documentRefs } = extractStudentDocumentRefs(docs);
+  let photoUrl = docPhotoUrl;
+  if (!photoUrl && hasPhotoDoc) {
+    // Photo exists but only as base64/DB content (no public object URL). Fall
+    // back to a signed, auth-free photo-endpoint URL the webhook can fetch.
+    const signed = buildSignedStudentPhotoPath(studentId);
+    if (signed) photoUrl = signed;
+  }
   console.log(
     `[portal-profile] ${logLabel} doc urls — photo: ${photoUrl ? "yes" : "no"}` +
     ` | documents: ${documentRefs.length}` +

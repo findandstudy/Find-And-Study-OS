@@ -37,6 +37,10 @@ import {
   SIT_BUTTONS,
   SIT_UPLOAD,
 } from "../src/universities/sit/selectors.js";
+import {
+  buildSignedStudentPhotoPath,
+  verifyStudentPhotoSignature,
+} from "../src/studentPhotoSigning.js";
 
 // ---------------------------------------------------------------------------
 // GPA normalization
@@ -239,5 +243,84 @@ test("MEMBER4 — SIT_MEMBER_UNIVERSITIES env EXTENDS (never shrinks) the list",
   } finally {
     if (prev === undefined) delete process.env.SIT_MEMBER_UNIVERSITIES;
     else process.env.SIT_MEMBER_UNIVERSITIES = prev;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Signed, auth-free student-photo URLs (PHOTO1..PHOTO5)
+// ---------------------------------------------------------------------------
+function withPhotoSecret<T>(fn: () => T): T {
+  const prevSession = process.env.SESSION_SECRET;
+  const prevEmbed = process.env.EMBED_TOKEN_SECRET;
+  process.env.SESSION_SECRET = "test-photo-secret";
+  delete process.env.EMBED_TOKEN_SECRET;
+  try {
+    return fn();
+  } finally {
+    if (prevSession === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = prevSession;
+    if (prevEmbed === undefined) delete process.env.EMBED_TOKEN_SECRET;
+    else process.env.EMBED_TOKEN_SECRET = prevEmbed;
+  }
+}
+
+test("PHOTO1 — sign → verify round-trips for the same student", () => {
+  withPhotoSecret(() => {
+    const path = buildSignedStudentPhotoPath(123);
+    assert.ok(path, "expected a signed path when a secret is configured");
+    const m = path!.match(/^\/api\/students\/123\/photo\?exp=(\d+)&sig=([0-9a-f]+)$/);
+    assert.ok(m, `unexpected path shape: ${path}`);
+    const exp = Number(m![1]);
+    const sig = m![2];
+    assert.equal(verifyStudentPhotoSignature(123, exp, sig), true);
+  });
+});
+
+test("PHOTO2 — signature is bound to the student id (cannot be reused)", () => {
+  withPhotoSecret(() => {
+    const path = buildSignedStudentPhotoPath(123)!;
+    const m = path.match(/exp=(\d+)&sig=([0-9a-f]+)/)!;
+    const exp = Number(m[1]);
+    const sig = m[2];
+    assert.equal(verifyStudentPhotoSignature(456, exp, sig), false);
+  });
+});
+
+test("PHOTO3 — tampered signature / expiry is rejected", () => {
+  withPhotoSecret(() => {
+    const path = buildSignedStudentPhotoPath(123)!;
+    const m = path.match(/exp=(\d+)&sig=([0-9a-f]+)/)!;
+    const exp = Number(m[1]);
+    const sig = m[2];
+    assert.equal(verifyStudentPhotoSignature(123, exp, sig.replace(/.$/, (c) => (c === "0" ? "1" : "0"))), false);
+    assert.equal(verifyStudentPhotoSignature(123, exp + 999, sig), false);
+    assert.equal(verifyStudentPhotoSignature(123, exp, ""), false);
+  });
+});
+
+test("PHOTO4 — expired signature is rejected", () => {
+  withPhotoSecret(() => {
+    const pastExp = Math.floor(Date.now() / 1000) - 10;
+    // recompute a valid-but-expired signature by signing then checking rejection
+    const path = buildSignedStudentPhotoPath(123, -1000); // ttl in the past
+    if (path) {
+      const m = path.match(/exp=(\d+)&sig=([0-9a-f]+)/)!;
+      assert.equal(verifyStudentPhotoSignature(123, Number(m[1]), m[2]), false);
+    }
+    assert.equal(verifyStudentPhotoSignature(123, pastExp, "deadbeef"), false);
+  });
+});
+
+test("PHOTO5 — no secret configured → signing returns null, verify false", () => {
+  const prevSession = process.env.SESSION_SECRET;
+  const prevEmbed = process.env.EMBED_TOKEN_SECRET;
+  delete process.env.SESSION_SECRET;
+  delete process.env.EMBED_TOKEN_SECRET;
+  try {
+    assert.equal(buildSignedStudentPhotoPath(123), null);
+    assert.equal(verifyStudentPhotoSignature(123, Math.floor(Date.now() / 1000) + 100, "abc"), false);
+  } finally {
+    if (prevSession !== undefined) process.env.SESSION_SECRET = prevSession;
+    if (prevEmbed !== undefined) process.env.EMBED_TOKEN_SECRET = prevEmbed;
   }
 });

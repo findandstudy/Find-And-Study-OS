@@ -91,6 +91,10 @@ function sitPublicAssetBase(): string | null {
     const v = cand?.trim();
     if (v && /^https?:\/\//i.test(v)) return v.replace(/\/+$/, "");
   }
+  // Durable production fallback: the canonical public app origin. Keeps external
+  // create webhooks working even if PUBLIC_APP_BASE is ever unset in prod. In
+  // non-production we return null so localhost/dev never leaks a prod URL.
+  if (process.env.NODE_ENV === "production") return "https://apply.findandstudy.com";
   return null;
 }
 

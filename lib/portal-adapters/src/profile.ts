@@ -40,6 +40,7 @@ export interface RawDocumentRow {
   name?: string | null;
   fileUrl?: string | null;
   fileKey?: string | null;
+  fileData?: string | null;
   sizeBytes?: number | null;
   mimeType?: string | null;
 }
@@ -93,21 +94,29 @@ function docUrl(r: RawDocumentRow): string | undefined {
  */
 export function extractStudentDocumentRefs(rows: RawDocumentRow[]): {
   photoUrl?: string;
+  hasPhotoDoc: boolean;
   documents: StudentDocumentRef[];
 } {
   let photoUrl: string | undefined;
+  let hasPhotoDoc = false;
   const documents: StudentDocumentRef[] = [];
 
   for (const r of rows) {
     const type = (r.type ?? "").trim();
     if (!type) continue;
-    const url = docUrl(r);
-    if (!url) continue;
 
     if (isPhotoType(type)) {
-      if (!photoUrl) photoUrl = url; // first content-bearing photo wins
+      // A photo row exists even when it has no fetchable URL (base64 fileData
+      // only). Callers use hasPhotoDoc to fall back to a signed photo-endpoint
+      // URL. Empty stubs (no content in any field) don't count.
+      if (r.fileData || r.fileKey || r.fileUrl) hasPhotoDoc = true;
+      const purl = docUrl(r);
+      if (purl && !photoUrl) photoUrl = purl; // first content-bearing photo wins
       continue;
     }
+
+    const url = docUrl(r);
+    if (!url) continue;
     documents.push({
       type,
       name: r.name ?? undefined,
@@ -117,7 +126,7 @@ export function extractStudentDocumentRefs(rows: RawDocumentRow[]): {
     });
   }
 
-  return { photoUrl, documents };
+  return { photoUrl, hasPhotoDoc, documents };
 }
 
 // ---------------------------------------------------------------------------

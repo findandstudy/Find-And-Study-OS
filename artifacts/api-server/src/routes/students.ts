@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -17,6 +17,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
+import { verifyStudentPhotoSignature } from "@workspace/portal-adapters";
 import bcrypt from "bcryptjs";
 import { deleteSessionsForUser } from "../lib/replitAuth";
 import { getCurrentSeason } from "../lib/season";
@@ -161,10 +162,28 @@ router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.get("/students/:id/photo", requireAuth, async (req, res): Promise<void> => {
+// Photo access guard: allow either a normal authenticated session OR a valid
+// HMAC-signed, short-lived query signature (`?exp=&sig=`). The signed variant
+// lets external create webhooks (e.g. SIT n8n) fetch a student's photo without a
+// session cookie — most photos are base64 in the DB with no public object URL.
+function photoAccessGuard(req: Request, res: Response, next: NextFunction): void {
   const studentId = parseInt(String(req.params.id), 10);
-  const access = await assertCanAccessStudent(req, studentId);
-  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  const exp = Number(req.query.exp);
+  const sig = typeof req.query.sig === "string" ? req.query.sig : "";
+  if (sig && verifyStudentPhotoSignature(studentId, exp, sig)) {
+    (req as Request & { __photoSignedAccess?: boolean }).__photoSignedAccess = true;
+    next();
+    return;
+  }
+  requireAuth(req, res, next);
+}
+
+router.get("/students/:id/photo", photoAccessGuard, async (req, res): Promise<void> => {
+  const studentId = parseInt(String(req.params.id), 10);
+  if (!(req as Request & { __photoSignedAccess?: boolean }).__photoSignedAccess) {
+    const access = await assertCanAccessStudent(req, studentId);
+    if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  }
   const [photoDoc] = await db.select({
       fileKey: documentsTable.fileKey,
       fileData: documentsTable.fileData,

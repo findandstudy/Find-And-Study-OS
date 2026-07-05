@@ -37,6 +37,12 @@ export {
   type MatchResult,
 } from "./programMatch.js";
 
+// Signed, auth-free student-photo URLs (external create webhooks)
+export {
+  buildSignedStudentPhotoPath,
+  verifyStudentPhotoSignature,
+} from "./studentPhotoSigning.js";
+
 // Profile helpers
 export {
   mapDocType,
