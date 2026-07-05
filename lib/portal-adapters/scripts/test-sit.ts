@@ -37,6 +37,7 @@ import {
   SIT_BUTTONS,
   SIT_UPLOAD,
 } from "../src/universities/sit/selectors.js";
+import { sitCanAuthWithoutPage } from "../src/universities/sit/graphql.js";
 import {
   buildSignedStudentPhotoPath,
   verifyStudentPhotoSignature,
@@ -399,4 +400,64 @@ test("DOC4 — extractStudentDocumentRefs signs base64-only rows; base64 photo �
     // photo is never included in documents[]
     assert.equal(out.documents.some((d) => d.type === "photo"), false);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Auth decision logic — sitCanAuthWithoutPage (AUTH1..AUTH3).
+//
+// Pure, deterministic checks of whether a Supabase token can be obtained WITHOUT
+// loading a browser page. The token cache starts empty in a fresh process, so
+// the decision here is driven entirely by env presence. Each test snapshots and
+// restores the relevant env vars so it is order-independent.
+// ---------------------------------------------------------------------------
+function withSitAuthEnv(
+  overrides: Record<string, string | undefined>,
+  fn: () => void,
+): void {
+  const keys = [
+    "SIT_SUPABASE_ANON_KEY",
+    "SIT_ACCESS_TOKEN",
+    "SIT_REFRESH_TOKEN",
+    "SIT_SUPABASE_URL",
+  ];
+  const prev: Record<string, string | undefined> = {};
+  for (const k of keys) {
+    prev[k] = process.env[k];
+    if (k in overrides) {
+      const v = overrides[k];
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    } else {
+      delete process.env[k];
+    }
+  }
+  try {
+    fn();
+  } finally {
+    for (const k of keys) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+  }
+}
+
+test("AUTH1 — no env + empty cache → a page is required", () => {
+  withSitAuthEnv({}, () => {
+    assert.equal(sitCanAuthWithoutPage({ user: "auth1@example.com" }), false);
+  });
+});
+
+test("AUTH2 — anon key in env → password grant needs no page", () => {
+  withSitAuthEnv({ SIT_SUPABASE_ANON_KEY: "anon-public-key" }, () => {
+    assert.equal(sitCanAuthWithoutPage({ user: "auth2@example.com" }), true);
+  });
+});
+
+test("AUTH3 — injected access token → no page needed", () => {
+  withSitAuthEnv(
+    { SIT_ACCESS_TOKEN: "ey" + "AAAA.BBBB.CCCC" },
+    () => {
+      assert.equal(sitCanAuthWithoutPage({ user: "auth3@example.com" }), true);
+    },
+  );
 });

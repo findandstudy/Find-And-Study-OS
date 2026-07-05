@@ -203,13 +203,231 @@ async function logSitLoginDiagnostics(page: Page): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Process-level Supabase session cache — SINGLE-SESSION REUSE.
+//
+// The submission pipeline opens a FRESH browser page per application, so a
+// per-page token (capturedBearerByPage) was minted again for EVERY submission.
+// In a batch that means many /auth/token calls in a short window — exactly what
+// tripped SIT's bot-protection / rate-limit. We now cache the minted Supabase
+// session at MODULE scope, keyed by the (lowercased) account email, and reuse it
+// across every page/submission in this worker process. The password grant runs
+// at most ONCE per process (until expiry); afterwards we reuse the cached
+// access_token or refresh it with the refresh_token — never re-login.
+//
+// Token acquisition order (first that succeeds wins):
+//   1) fresh cached session (reuse)               — no network
+//   2) refresh_token grant on the cached session  — no re-login
+//   3) operator-injected env token (SIT_ACCESS_TOKEN / SIT_REFRESH_TOKEN)
+//   4) password grant (email/password)            — the primary mint
+// The UI login FORM is NEVER submitted here (that is the adapter's last resort).
+//
+// Nothing here is ever logged as a value — only "acquired / refreshed / reused /
+// expired" state + HTTP status. Everything is held in memory only.
+// ---------------------------------------------------------------------------
+interface CachedSitSession {
+  accessToken: string;
+  refreshToken?: string;
+  /** Absolute expiry (ms since epoch); 0 when the grant did not report one. */
+  expiresAtMs: number;
+  /** Raw grant body — kept ONLY for probe-page injection; never logged. */
+  raw?: Record<string, unknown>;
+}
+const sitSessionByAccount = new Map<string, CachedSitSession>();
+// The public anon apikey, cached once observed (from env or a page capture) so
+// later pages/submissions can mint without re-capturing. Public value; not a
+// secret, but still never logged.
+let cachedAnonKey: string | null = null;
+// Refresh a token this many ms BEFORE its reported expiry (clock-skew guard).
+const SIT_TOKEN_SKEW_MS = 60_000;
+
+/** The Supabase auth origin — env override or the hard-coded project URL. */
+function sitSupabaseUrl(): string {
+  const v = process.env.SIT_SUPABASE_URL?.trim();
+  return v && /^https?:\/\//i.test(v) ? v.replace(/\/+$/, "") : SUPABASE_URL;
+}
+
+/** The public anon apikey from env (SIT_SUPABASE_ANON_KEY), if configured. */
+function envAnonKey(): string | null {
+  const v = process.env.SIT_SUPABASE_ANON_KEY?.trim();
+  return v && v.length > 0 ? v : null;
+}
+
+function isFreshSitSession(s: CachedSitSession): boolean {
+  return (
+    JWT_RE.test(s.accessToken) &&
+    (s.expiresAtMs === 0 || s.expiresAtMs - Date.now() > SIT_TOKEN_SKEW_MS)
+  );
+}
+
+/** Persist a grant/refresh body as the cached session. Returns it, or null. */
+function storeSitSession(
+  email: string,
+  body: Record<string, unknown>,
+): CachedSitSession | null {
+  const access = body.access_token;
+  if (typeof access !== "string" || !JWT_RE.test(access)) return null;
+  const refresh =
+    typeof body.refresh_token === "string" ? body.refresh_token : undefined;
+  let expiresAtMs = 0;
+  if (typeof body.expires_at === "number") expiresAtMs = body.expires_at * 1000;
+  else if (typeof body.expires_in === "number")
+    expiresAtMs = Date.now() + body.expires_in * 1000;
+  const s: CachedSitSession = {
+    accessToken: access,
+    refreshToken: refresh,
+    expiresAtMs,
+    raw: body,
+  };
+  sitSessionByAccount.set(email.toLowerCase(), s);
+  return s;
+}
+
 /**
- * PRIMARY auth path — mint a Supabase access_token via the password grant,
- * bypassing the unreliable SPA login. Stores the token in capturedBearerByPage
- * (so collectAuth picks it up as the primary Bearer). Idempotent: returns early
- * if a Bearer is already held for the page. Non-fatal — on any failure it logs
- * (status + bearer=false only, never a secret) and returns false so the caller
- * falls back to the passive capture / storage read / UI scan.
+ * POST to the Supabase token endpoint (password | refresh_token grant) using the
+ * process-global fetch — decoupled from any browser page so it can run once and
+ * be reused across submissions. Returns the parsed body on 2xx, else null. Never
+ * logs the apikey, the credentials, or the returned tokens (only grant + status).
+ */
+async function sitTokenGrant(
+  anonKey: string,
+  grant: "password" | "refresh_token",
+  payload: Record<string, string>,
+): Promise<Record<string, unknown> | null> {
+  const url = `${sitSupabaseUrl()}/auth/v1/token?grant_type=${grant}`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { apikey: anonKey, "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const status = res.status;
+    if (!res.ok) {
+      logger.warn(
+        `[sit:auth] Supabase ${grant} grant başarısız (status=${status})`,
+      );
+      return null;
+    }
+    return (await res.json().catch(() => null)) as
+      | Record<string, unknown>
+      | null;
+  } catch (e) {
+    logger.warn(
+      `[sit:auth] Supabase ${grant} grant hata: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+    return null;
+  }
+}
+
+/**
+ * True when a token can be minted/reused WITHOUT a browser page (i.e. no anon-key
+ * capture is required): a fresh cached session, a refreshable session with a
+ * known anon key, an injected env token, or a known anon key for a password
+ * grant. Lets the adapter decide whether it still needs to load a page.
+ */
+export function sitCanAuthWithoutPage(creds: { user: string }): boolean {
+  const cached = sitSessionByAccount.get(creds.user.toLowerCase());
+  if (cached && isFreshSitSession(cached)) return true;
+  const anon = envAnonKey() ?? cachedAnonKey;
+  if (cached?.refreshToken && anon) return true;
+  const injected = process.env.SIT_ACCESS_TOKEN?.trim();
+  if (injected && JWT_RE.test(injected)) return true;
+  return !!anon;
+}
+
+/**
+ * Resolve a usable Supabase access_token for the SIT account, minting/refreshing
+ * at most once per process (single-session reuse). See the acquisition order in
+ * the section header. `page` is optional and used ONLY to capture the public anon
+ * apikey when it is not provided via env. Returns null when no token could be
+ * obtained (the caller may fall back to the UI login as a last resort).
+ */
+export async function getSitAccessToken(
+  creds: { user: string; password: string },
+  page?: Page,
+): Promise<string | null> {
+  const email = creds.user.toLowerCase();
+
+  // 1) Reuse a still-fresh cached session — no network, no re-login.
+  const cached = sitSessionByAccount.get(email);
+  if (cached && isFreshSitSession(cached)) return cached.accessToken;
+
+  // Resolve the anon apikey (env > cached > page capture) once; reuse thereafter.
+  let anonKey = envAnonKey() ?? cachedAnonKey;
+  if (!anonKey && page) anonKey = await resolveAnonKey(page);
+  if (anonKey) cachedAnonKey = anonKey;
+
+  // 2) Refresh the cached session without re-login.
+  if (cached?.refreshToken && anonKey) {
+    const body = await sitTokenGrant(anonKey, "refresh_token", {
+      refresh_token: cached.refreshToken,
+    });
+    const s = body ? storeSitSession(email, body) : null;
+    if (s) {
+      logger.info("[sit:auth] token yenilendi (refresh_token, re-login yok)");
+      return s.accessToken;
+    }
+  }
+
+  // 3) Operator-injected env token (recovery path if the grant is ever blocked).
+  const injected = process.env.SIT_ACCESS_TOKEN?.trim();
+  const injectedValid = !!injected && JWT_RE.test(injected);
+  if (injectedValid) {
+    const s = storeSitSession(email, {
+      access_token: injected,
+      refresh_token: process.env.SIT_REFRESH_TOKEN?.trim() || undefined,
+    });
+    if (s) {
+      logger.info("[sit:auth] enjekte edilen SIT_ACCESS_TOKEN kullanılıyor");
+      return s.accessToken;
+    }
+  }
+  // Refresh via env refresh token whenever the injected access token is absent
+  // OR invalid (a non-JWT SIT_ACCESS_TOKEN must not block this fallback).
+  const injectedRefresh = process.env.SIT_REFRESH_TOKEN?.trim();
+  if (!injectedValid && injectedRefresh && anonKey) {
+    const body = await sitTokenGrant(anonKey, "refresh_token", {
+      refresh_token: injectedRefresh,
+    });
+    const s = body ? storeSitSession(email, body) : null;
+    if (s) {
+      logger.info(
+        "[sit:auth] enjekte edilen SIT_REFRESH_TOKEN ile token alındı",
+      );
+      return s.accessToken;
+    }
+  }
+
+  // 4) Password grant — the primary mint. Runs at most once per process/expiry.
+  if (!anonKey) {
+    logger.warn(
+      "[sit:auth] anon apikey yok (SIT_SUPABASE_ANON_KEY veya sayfa capture gerekli) — password grant atlanıyor",
+    );
+    return null;
+  }
+  const body = await sitTokenGrant(anonKey, "password", {
+    email: creds.user,
+    password: creds.password,
+  });
+  const s = body ? storeSitSession(email, body) : null;
+  if (s) {
+    logger.info("[sit:auth] Supabase access_token alındı (password grant)");
+    return s.accessToken;
+  }
+  return null;
+}
+
+/**
+ * PRIMARY auth path — ensure a Supabase Bearer is available for the given page,
+ * delegating to the process-level token manager (getSitAccessToken). Stores the
+ * token in capturedBearerByPage (so collectAuth picks it up as the primary
+ * Bearer) plus the full grant body in capturedSessionByPage (for the throwaway
+ * probe page that learns the route's real query shape). Idempotent: returns
+ * early if a Bearer is already held for the page. Non-fatal — on any failure it
+ * logs diagnostics (never a secret) and returns false so the caller falls back
+ * to the passive capture / storage read / UI scan.
  */
 export async function mintSupabaseBearer(
   page: Page,
@@ -218,57 +436,17 @@ export async function mintSupabaseBearer(
   if (capturedBearerByPage.has(page)) return true;
   installSpaAuthCapture(page);
 
-  const anonKey = await resolveAnonKey(page);
-  if (!anonKey) {
-    logger.warn(
-      "[sit:auth] Supabase anon apikey yakalanamadı — password grant atlanıyor (bearer=false)",
-    );
+  const token = await getSitAccessToken(creds, page);
+  if (!token) {
     await logSitLoginDiagnostics(page);
     return false;
   }
-
-  try {
-    const res = await page.request.post(SUPABASE_URL + SUPABASE_TOKEN_PATH, {
-      headers: { apikey: anonKey, "content-type": "application/json" },
-      data: { email: creds.user, password: creds.password },
-      timeout: 20_000,
-    });
-    const status = res.status();
-    if (!res.ok()) {
-      logger.warn(
-        `[sit:auth] Supabase password grant başarısız (status=${status}, bearer=false)`,
-      );
-      await logSitLoginDiagnostics(page);
-      return false;
-    }
-    const body = (await res.json().catch(() => null)) as
-      | ({ access_token?: unknown } & Record<string, unknown>)
-      | null;
-    const token = body?.access_token;
-    if (typeof token === "string" && JWT_RE.test(token)) {
-      capturedBearerByPage.set(page, token);
-      // Keep the FULL session so we can inject it into a probe page and learn
-      // the route's real GraphQL query shape. Never logged.
-      if (body) capturedSessionByPage.set(page, body);
-      logger.info(
-        `[sit:auth] Supabase access_token alındı (bearer=true, status=${status})`,
-      );
-      return true;
-    }
-    logger.warn(
-      `[sit:auth] Supabase password grant yanıtında access_token yok (status=${status}, bearer=false)`,
-    );
-    await logSitLoginDiagnostics(page);
-    return false;
-  } catch (e) {
-    logger.warn(
-      `[sit:auth] Supabase password grant hata: ${
-        e instanceof Error ? e.message : String(e)
-      } (bearer=false)`,
-    );
-    await logSitLoginDiagnostics(page);
-    return false;
-  }
+  capturedBearerByPage.set(page, token);
+  // Keep the FULL session so we can inject it into a probe page and learn the
+  // route's real GraphQL query shape. Never logged.
+  const cached = sitSessionByAccount.get(creds.user.toLowerCase());
+  if (cached?.raw) capturedSessionByPage.set(page, cached.raw);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -500,7 +678,7 @@ async function collectAuth(page: Page, baseUrl: string): Promise<SitAuth> {
   // headless context. installSpaAuthCapture is idempotent; the token is usually
   // already captured from the students-list load that preceded this call.
   installSpaAuthCapture(page);
-  const anon = capturedAnonKeyByPage.get(page);
+  const anon = capturedAnonKeyByPage.get(page) ?? envAnonKey() ?? cachedAnonKey;
   if (anon) auth.apiKey = anon;
   let captured = capturedBearerByPage.get(page);
   if (!captured) {

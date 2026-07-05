@@ -57,6 +57,7 @@ import {
   fetchProgramCatalog,
   installSpaAuthCapture,
   mintSupabaseBearer,
+  sitCanAuthWithoutPage,
   fetchProgramIds,
   resolveAcademicYearId,
   resolveSemesterId,
@@ -162,6 +163,13 @@ export interface SitAdapter extends UniversityAdapter {
 
 const PORTAL_KEY = "sit";
 const SIT_ALLOWLIST_FOLDED: readonly string[] = SIT_ALLOWLIST.map(fold);
+
+// Backoff for the UI-login LAST RESORT: once a UI login fails (typically
+// captcha / rate-limit), skip further UI-login attempts for this window so a
+// batch does not repeatedly hammer the login form. The token path is unaffected
+// — only the (rare) UI fallback is gated. Process-scoped, in-memory.
+const SIT_UI_LOGIN_COOLDOWN_MS = 10 * 60_000;
+let sitUiLoginCooldownUntil = 0;
 
 // Dropdown defaults selected in the "Add Application" UI flow. The new-record
 // stage is assigned by the SIT backend ("Pending Review"), so it is NOT sent
@@ -272,35 +280,76 @@ export const sitAdapter: SitAdapter = {
   async login(opts?: LoginOpts): Promise<AdapterSession> {
     const creds = resolveCreds(opts);
     const session = await launchPortal({ headless: opts?.headless ?? true });
-    // Start capturing the SPA's own Authorization header BEFORE login so it is
-    // observed during the natural post-login navigation (used as the primary
-    // GraphQL auth source — headless storage reads proved unreliable).
     installSpaAuthCapture(session.page);
-    logger.info("[sit] login — navigating to portal");
+
+    // PRIMARY: obtain a Supabase token WITHOUT submitting the login form (which
+    // is what tripped SIT's captcha / rate-limit). The token is minted at most
+    // once per process and REUSED across every submission (single-session).
+    //
+    // We ALWAYS load the app origin (a plain GET, never a login attempt) so the
+    // Laravel XSRF-TOKEN cookie is set on this fresh page — GraphQL reads need
+    // XSRF + Bearer + apikey, and each submission gets a brand-new page. When the
+    // anon apikey isn't already known (env/cache), we additionally wait for the
+    // SPA to boot and fire the *.supabase.co request that carries it.
+    await session.page
+      .goto(SIT_URLS.base + SIT_URLS.loginPath, {
+        waitUntil: "domcontentloaded",
+        timeout: 60_000,
+      })
+      .catch(() => {});
+    if (!sitCanAuthWithoutPage(creds)) {
+      await sleep(session.page, 2500);
+    }
+    if (await mintSupabaseBearer(session.page, creds).catch(() => false)) {
+      logger.info("[sit] auth: token hazır (UI login yok)");
+      return session;
+    }
+
+    // LAST RESORT: no token could be obtained (e.g. anon apikey unobtainable).
+    // Attempt the UI login ONCE — fail-fast on captcha, honoring a short cooldown
+    // so a captcha'd batch does not hammer the login form (no tight-loop retry).
+    if (Date.now() < sitUiLoginCooldownUntil) {
+      await session.close().catch(() => {});
+      throw new Error(
+        "[sit] token alınamadı ve UI login cooldown aktif (captcha/rate-limit) — atlanıyor",
+      );
+    }
+    logger.warn("[sit] token alınamadı — son çare UI login deneniyor");
     try {
       await performLogin(session.page, creds);
     } catch (err) {
+      sitUiLoginCooldownUntil = Date.now() + SIT_UI_LOGIN_COOLDOWN_MS;
       await session.close().catch(() => {});
       throw err;
     }
-    // The headless SPA login does not reliably establish a Supabase session, so
-    // mint an access_token directly from the SIT credentials (password grant).
-    // This is the primary GraphQL auth source; non-fatal (falls back to passive
-    // capture / storage read / UI scan on failure).
     await mintSupabaseBearer(session.page, creds).catch(() => false);
     return session;
   },
 
   /**
-   * Re-authenticate if the session dropped (redirected to /auth/login). Safe to
-   * call before every operation. Uses portalCreds(PORTAL_KEY), which returns the
-   * runner-injected override during a submission.
+   * Ensure a usable Supabase Bearer before an operation. Token-first: reuses or
+   * refreshes the process-cached session (no UI login, no captcha). Uses
+   * portalCreds(PORTAL_KEY), which returns the runner-injected override during a
+   * submission. Falls back to the UI login only as a last resort.
    */
   async ensureLoggedIn(session: AdapterSession): Promise<void> {
     const page = session.page;
     installSpaAuthCapture(page); // idempotent — safe if login() already armed it
+    const creds = portalCreds(PORTAL_KEY);
+
+    // Token-first — reuse/refresh the cached session. Cache hit = no network.
+    if (await mintSupabaseBearer(page, creds).catch(() => false)) return;
+
+    // LAST RESORT — could not obtain a token; fall back to the UI login ONCE
+    // (honoring the captcha cooldown), then re-mint.
+    if (Date.now() < sitUiLoginCooldownUntil) {
+      logger.warn(
+        "[sit] ensureLoggedIn: token yok ve UI login cooldown aktif — atlanıyor",
+      );
+      return;
+    }
+    logger.warn("[sit] ensureLoggedIn: token alınamadı — son çare UI login");
     if (!SIT_LOGIN.loginUrlMarker.test(page.url())) {
-      // Probe the students route — a redirect back to login means expired.
       await page
         .goto(SIT_URLS.base + SIT_URLS.studentsPath, {
           waitUntil: "domcontentloaded",
@@ -310,12 +359,14 @@ export const sitAdapter: SitAdapter = {
       await sleep(page, 2000);
     }
     if (SIT_LOGIN.loginUrlMarker.test(page.url())) {
-      logger.warn("[sit] session expired — re-authenticating");
-      await performLogin(page, portalCreds(PORTAL_KEY));
+      try {
+        await performLogin(page, creds);
+      } catch (err) {
+        sitUiLoginCooldownUntil = Date.now() + SIT_UI_LOGIN_COOLDOWN_MS;
+        throw err;
+      }
     }
-    // Guarantee a Supabase Bearer for GraphQL before the first read-only call.
-    // Idempotent (skips if already held) + non-fatal.
-    await mintSupabaseBearer(page, portalCreds(PORTAL_KEY)).catch(() => false);
+    await mintSupabaseBearer(page, creds).catch(() => false);
   },
 
   /**
