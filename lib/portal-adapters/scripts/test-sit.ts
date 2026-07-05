@@ -41,6 +41,11 @@ import {
   buildSignedStudentPhotoPath,
   verifyStudentPhotoSignature,
 } from "../src/studentPhotoSigning.js";
+import {
+  buildSignedDocumentPath,
+  verifyDocumentSignature,
+} from "../src/documentSigning.js";
+import { extractStudentDocumentRefs } from "../src/profile.js";
 
 // ---------------------------------------------------------------------------
 // GPA normalization
@@ -323,4 +328,75 @@ test("PHOTO5 — no secret configured → signing returns null, verify false", (
     if (prevSession !== undefined) process.env.SESSION_SECRET = prevSession;
     if (prevEmbed !== undefined) process.env.EMBED_TOKEN_SECRET = prevEmbed;
   }
+});
+
+// ---------------------------------------------------------------------------
+// Signed, auth-free document URLs (DOC1..DOC4)
+// ---------------------------------------------------------------------------
+test("DOC1 — document sign → verify round-trips; bound to id & rejects tamper/expiry", () => {
+  withPhotoSecret(() => {
+    const path = buildSignedDocumentPath(6008);
+    assert.ok(path, "expected a signed doc path when a secret is configured");
+    const m = path!.match(/^\/api\/documents\/6008\/file\?exp=(\d+)&sig=([0-9a-f]+)$/);
+    assert.ok(m, `unexpected doc path shape: ${path}`);
+    const exp = Number(m![1]);
+    const sig = m![2];
+    assert.equal(verifyDocumentSignature(6008, exp, sig), true);
+    // bound to id
+    assert.equal(verifyDocumentSignature(9999, exp, sig), false);
+    // tampered sig / expiry / empty
+    assert.equal(verifyDocumentSignature(6008, exp, sig.replace(/.$/, (c) => (c === "0" ? "1" : "0"))), false);
+    assert.equal(verifyDocumentSignature(6008, exp + 999, sig), false);
+    assert.equal(verifyDocumentSignature(6008, exp, ""), false);
+  });
+});
+
+test("DOC2 — a document signature does NOT verify as a photo signature (domain separation)", () => {
+  withPhotoSecret(() => {
+    const path = buildSignedDocumentPath(123)!;
+    const m = path.match(/exp=(\d+)&sig=([0-9a-f]+)/)!;
+    // same id + exp, but the photo verifier uses a different HMAC payload
+    assert.equal(verifyStudentPhotoSignature(123, Number(m[1]), m[2]), false);
+  });
+});
+
+test("DOC3 — no secret configured → signing null, verify false", () => {
+  const prevSession = process.env.SESSION_SECRET;
+  const prevEmbed = process.env.EMBED_TOKEN_SECRET;
+  delete process.env.SESSION_SECRET;
+  delete process.env.EMBED_TOKEN_SECRET;
+  try {
+    assert.equal(buildSignedDocumentPath(6008), null);
+    assert.equal(verifyDocumentSignature(6008, Math.floor(Date.now() / 1000) + 100, "abc"), false);
+  } finally {
+    if (prevSession !== undefined) process.env.SESSION_SECRET = prevSession;
+    if (prevEmbed !== undefined) process.env.EMBED_TOKEN_SECRET = prevEmbed;
+  }
+});
+
+test("DOC4 — extractStudentDocumentRefs signs base64-only rows; base64 photo → hasPhotoDoc, no public photoUrl", () => {
+  withPhotoSecret(() => {
+    const out = extractStudentDocumentRefs([
+      { id: 1, type: "passport", fileData: "QkFTRTY0", mimeType: "application/pdf", sizeBytes: 8 },
+      { id: 2, type: "transcript", fileUrl: "https://cdn.example.com/t.pdf" },
+      { id: 3, type: "photo", fileData: "Zm90bw==", mimeType: "image/jpeg" },
+      { id: 4, type: "diploma", fileData: "" }, // empty stub → skipped
+      { id: null, type: "certificate", fileData: "QUJD" }, // base64 but no id → cannot sign → skipped
+    ]);
+    // base64 passport now produces a signed document ref (no longer skipped)
+    const passport = out.documents.find((d) => d.type === "passport");
+    assert.ok(passport, "base64 passport should produce a ref");
+    assert.match(passport!.url, /^\/api\/documents\/1\/file\?exp=\d+&sig=[0-9a-f]+$/);
+    // public transcript passes through unchanged
+    const transcript = out.documents.find((d) => d.type === "transcript");
+    assert.equal(transcript!.url, "https://cdn.example.com/t.pdf");
+    // empty stub and unsignable (no id) rows are skipped
+    assert.equal(out.documents.some((d) => d.type === "diploma"), false);
+    assert.equal(out.documents.some((d) => d.type === "certificate"), false);
+    // base64 photo: no public photoUrl but hasPhotoDoc flags the signed-photo fallback
+    assert.equal(out.photoUrl, undefined);
+    assert.equal(out.hasPhotoDoc, true);
+    // photo is never included in documents[]
+    assert.equal(out.documents.some((d) => d.type === "photo"), false);
+  });
 });

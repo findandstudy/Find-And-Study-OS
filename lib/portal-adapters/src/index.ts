@@ -43,6 +43,11 @@ export {
   verifyStudentPhotoSignature,
 } from "./studentPhotoSigning.js";
 
+export {
+  buildSignedDocumentPath,
+  verifyDocumentSignature,
+} from "./documentSigning.js";
+
 // Profile helpers
 export {
   mapDocType,

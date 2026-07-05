@@ -9,6 +9,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { loadDocumentBytes, streamDocumentToResponse } from "../lib/documentBytes";
+import { verifyDocumentSignature } from "@workspace/portal-adapters";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
@@ -450,6 +451,51 @@ router.get("/documents/:id/download", requireAuth, requireAgentStaffPermission("
   } catch (err) {
     console.error(`[DOCUMENTS] download #${id} failed:`, err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to download document" });
+  }
+});
+
+// GET /documents/:id/file — signed, AUTH-FREE document fetch for external create
+// webhooks (e.g. SIT n8n). Most CRM documents live as base64 in `file_data` with
+// no public object-storage key, so an external system with no session cookie
+// cannot fetch them. A short-lived HMAC signature (?exp=&sig=), issued by the
+// portal profile builders via buildSignedDocumentPath, authorises the fetch.
+// Invalid/expired/missing signatures → 403. Never logs the signature.
+router.get("/documents/:id/file", async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
+  const exp = Number(req.query.exp);
+  const sig = typeof req.query.sig === "string" ? req.query.sig : "";
+  if (!verifyDocumentSignature(id, exp, sig)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  const [doc] = await db
+    .select({
+      fileKey: documentsTable.fileKey,
+      fileData: documentsTable.fileData,
+      fileUrl: documentsTable.fileUrl,
+      mimeType: documentsTable.mimeType,
+      name: documentsTable.name,
+    })
+    .from(documentsTable)
+    .where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
+  if (!doc || (!doc.fileKey && !doc.fileData && !doc.fileUrl)) {
+    res.status(404).json({ error: "Document not found" }); return;
+  }
+  // fileUrl-only rows (no object key / base64): redirect, but only to http(s)
+  // to prevent SSRF via data:/file: URIs.
+  if (!doc.fileKey && !doc.fileData) {
+    const url = doc.fileUrl!;
+    if (!isValidHttpUrl(url)) { res.status(422).json({ error: "Invalid document URL" }); return; }
+    res.redirect(302, url);
+    return;
+  }
+  res.setHeader("Cache-Control", "private, max-age=300");
+  try {
+    const sent = await streamDocumentToResponse(doc, res);
+    if (!sent && !res.headersSent) res.status(404).json({ error: "No file content available" });
+  } catch (err) {
+    console.error(`[DOCUMENTS] signed file #${id} failed:`, err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to load document" });
   }
 });
 

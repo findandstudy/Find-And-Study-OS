@@ -429,6 +429,7 @@ async function downloadStudentDocuments(
 
   const docs = await db
     .select({
+      id:        documentsTable.id,
       type:      documentsTable.type,
       fileUrl:   documentsTable.fileUrl,
       fileKey:   documentsTable.fileKey,
