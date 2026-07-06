@@ -32,6 +32,22 @@ const STATUS_TONE: Record<string, any> = {
   revoked: "destructive",
 };
 
+// The server builds signUrl from its own resolved base URL, which can fall back
+// to http://localhost:5000 when the deployment/domain env vars are not yet
+// available at request time. For the link the admin copies/shares, always
+// rebuild it against the domain the admin is actually browsing so it is never a
+// non-working localhost link. Only the origin is swapped; the /sign/<token>
+// path and query are preserved verbatim.
+function toBrowserSignUrl(serverUrl?: string | null): string {
+  if (!serverUrl) return "";
+  try {
+    const u = new URL(serverUrl);
+    return `${window.location.origin}${u.pathname}${u.search}`;
+  } catch {
+    return serverUrl;
+  }
+}
+
 export default function SelfFillLinksPage() {
   const { toast } = useToast();
   const { t, lang } = useI18n();
@@ -75,7 +91,7 @@ export default function SelfFillLinksPage() {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ signerEmail: form.signerEmail, signerName: form.signerName, templateId: parseInt(form.templateId, 10) }),
       });
-      setLastUrl(res.data?.signUrl || "");
+      setLastUrl(toBrowserSignUrl(res.data?.signUrl));
       toast({ title: t("selfFill.toast.linkCreated") });
       setForm({ signerEmail: "", signerName: "", templateId: "" });
       await load();
@@ -89,7 +105,7 @@ export default function SelfFillLinksPage() {
     catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
   }
   async function resend(id: number) {
-    try { const res: any = await customFetch(`/api/contracts/sessions/${id}/resend`, { method: "POST" }); toast({ title: t("selfFill.toast.resent"), description: res.data?.signUrl }); await load(); }
+    try { const res: any = await customFetch(`/api/contracts/sessions/${id}/resend`, { method: "POST" }); toast({ title: t("selfFill.toast.resent"), description: toBrowserSignUrl(res.data?.signUrl) }); await load(); }
     catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
   }
 
