@@ -476,7 +476,10 @@ export const unitedAdapter: UniversityAdapter = {
         const cards = [...document.querySelectorAll("div.single-table")] as HTMLElement[];
         let best: HTMLElement | null = null, bestScore = 0, bestTitle = "";
         for (const c of cards) {
-          if (!c.offsetParent) continue;
+          // Do NOT skip hidden cards: filterData() renders the grid into the
+          // (now-inactive) Step-3 container, so cards can be offscreen/hidden by
+          // the time we read them. A programmatic .click() still fires on hidden
+          // span.plan-submit and increments "Selected Majors".
           const title = (c.textContent || "").replace(/\s+/g, " ").trim();
           const t = nrm(title);
           if (w && t.includes(w)) { best = c; bestScore = 1; bestTitle = title; break; }
@@ -491,12 +494,12 @@ export const unitedAdapter: UniversityAdapter = {
         // "Civil Engineering"; single-token targets accept via containment only.
         const accept = bestScore >= 1 || (wt.size >= 2 && bestScore >= 0.67);
         const readCount = () => Number(document.body.innerText.match(/Selected Majors\s*\((\d+)\)/)?.[1] || "0");
-        if (!best || !accept) return { matched: false, bestScore, bestTitle: bestTitle.slice(0, 80), selectedBefore: readCount(), clicked: false };
+        if (!best || !accept) return { matched: false, bestScore, bestTitle: bestTitle.slice(0, 80), selectedBefore: readCount(), clicked: false, cardCount: cards.length };
         const selectedBefore = readCount();
         const btn = best.querySelector("span.plan-submit") as HTMLElement | null;
         const clicked = !!btn;
         if (btn) btn.click();
-        return { matched: true, bestScore, bestTitle: bestTitle.slice(0, 80), selectedBefore, clicked };
+        return { matched: true, bestScore, bestTitle: bestTitle.slice(0, 80), selectedBefore, clicked, cardCount: cards.length };
       }, profile.programName);
       // Hard confirmation gate: only treat the program as selected once the
       // "Selected Majors (N)" counter actually increments after the click.
