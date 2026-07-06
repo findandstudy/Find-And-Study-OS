@@ -1,0 +1,14 @@
+---
+name: United portal adapter — live-submit hardening & create-POST instrumentation
+description: How United's multi-step ASP.NET/Salesforce create differs from SIT, and the redaction rule for capturing its create contract
+---
+
+United (partner.unitededucation.com/Manage/newapplication) is a Salesforce-backed **ASP.NET MVC + KT Stepper multi-step wizard**, NOT a single webhook like SIT — so it cannot be collapsed to one HTTP call. The adapter drives the UI and, on the first LIVE run, instruments `page.on("requestfinished")` to capture the real create contract for a future Phase-2 HTTP replay.
+
+**Redaction rule (critical):** capturing the create POST body must reveal the CONTRACT (every field NAME + structural Salesforce ids: contactid/programid/appid + the cascade select ids) but NEVER applicant PII values. Rule = **default-deny on values**: log all keys, redact every value except a narrow structural allowlist (`*_id`/`id$`, `select{university,program,degree,lang,campus}`, regtype/country/destination/degree/program/lang/campus, `university*`), and always redact keys matching a PII regex (name|passport|kimlik|phone|mail|address|birth|dob|dateinput|school|father|mother|national|tckn). Handle form-urlencoded (the real create) AND JSON; unknown format → suppress entirely. Anti-forgery `__RequestVerificationToken` always redacted. Also strip URL query strings before logging (`url.split("?")[0]`) so `/Account/searchapp?word=<email>` doesn't leak. This mirrors SIT's "never log the request body (PII)" convention while still exposing the field names we need.
+
+**Dry boundary:** `dryRun = doSubmit===false || PORTAL_DRYRUN==="1"`. Dry walks the KT-Stepper steps (term→degree→program cascade) and STOPS at the Program→Personal boundary — before personal-info fills and before the final submit. The Salesforce application record is created ONLY at the final submit, so no student is created in dry. This existing behavior is spec-locked ("Değiştirme") — do NOT add an aborting guard on step-transition POSTs; KT-Stepper "Continue" may POST to /Manage/newapplication per step and a guard would false-trip.
+
+**Member gate:** submit() hard-skips any `profile.universityName` not in UNITED_ALLOWLIST (Biruni / Nişantaşı / Ankara Bilim — exactly 3, folded fuzzy) → `{skippedNotMember:true, routeTo:"direct"}`, same philosophy as SIT membership. Dedup via `GET /Account/searchapp?word=email|name` → parse `{totalSize,records}`, log count+Id only, seed `#contactid` when found.
+
+**Program step reuses `matchProgram`** against the LIVE select2 options (panel nameMap/general + synonyms), captures `availablePrograms` + `resolution:"not_in_dropdown"` on miss. select2 is driven programmatically: set `el.value` + dispatch `change` + `jQuery(el).trigger("change")`, then wait for cascade AJAX.
