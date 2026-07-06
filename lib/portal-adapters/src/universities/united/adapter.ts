@@ -426,6 +426,23 @@ export const unitedAdapter: UniversityAdapter = {
       await page.waitForTimeout(1500);
 
       // --- Step 3: Program Selection (filter #selectuniversity + program CARD grid) ---
+      // The Continue flow sometimes skips Program (Step 3) straight to Personal
+      // (Step 4). Selecting a program in the HIDDEN Step-3 container doesn't work
+      // (alert9 doesn't register on inactive step). If we overshot to Personal,
+      // click "Back" (up to 3x) until the Program step is active again.
+      for (let i = 0; i < 3; i++) {
+        const onPersonal = await page.locator("#firstname").isVisible().catch(() => false);
+        const gridVisible = await page.locator("div.single-table").first().isVisible().catch(() => false);
+        if (!onPersonal || gridVisible) break; // already on Program (or grid visible)
+        await page.evaluate(() => {
+          const b = [...document.querySelectorAll("button,a,input")].find(
+            (x: any) => /^\s*back\s*$/i.test((x.textContent || x.value || "")) && x.offsetParent
+          ) as HTMLElement | undefined;
+          if (b) b.click();
+        });
+        await page.waitForTimeout(1500);
+      }
+      logger.info("[united] step3 ensure-program-step done");
       // 3a) set the university filter to the member university (select2). Option
       // values are English/accent-free ("Nisantasi University" / "Biruni University").
       await page.waitForSelector('#selectuniversity', { timeout: 20000 }).catch(() => {});
