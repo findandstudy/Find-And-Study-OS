@@ -63,8 +63,20 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
       const spaceBelow = window.innerHeight - rect.bottom;
       const up = dropDirection === "up" || (dropDirection === "auto" && spaceBelow < 300);
       setOpenUp(prev => (prev === up ? prev : up));
-      const top = up ? rect.top : rect.bottom;
-      const left = rect.left;
+      // We portal INTO the Radix dialog content when inside a dialog. That
+      // element uses translate(-50%,-50%) for centering, and a transformed
+      // ancestor becomes the containing block for our position:fixed dropdown —
+      // so fixed coords resolve relative to the dialog's box, not the viewport.
+      // Subtract the host's origin so the dropdown lands under the trigger.
+      // For document.body there is no transform → origin (0,0).
+      const host =
+        portalTarget && portalTarget !== document.body
+          ? (portalTarget as HTMLElement).getBoundingClientRect()
+          : null;
+      const originTop = host ? host.top : 0;
+      const originLeft = host ? host.left : 0;
+      const top = (up ? rect.top : rect.bottom) - originTop;
+      const left = rect.left - originLeft;
       const width = rect.width;
       setPos(prev =>
         prev && prev.top === top && prev.left === left && prev.width === width
@@ -79,7 +91,7 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, [open, dropDirection]);
+  }, [open, dropDirection, portalTarget]);
 
   // Reset search when closed.
   useEffect(() => {

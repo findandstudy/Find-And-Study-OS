@@ -89,10 +89,20 @@ export function SearchableSelect({
       const rect = ref.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const up = spaceBelow < 320;
-      // Viewport-relative coords — do NOT add scrollY/scrollX; position:fixed
-      // is already relative to the viewport.
-      const top = up ? rect.top : rect.bottom;
-      const left = rect.left;
+      // We portal INTO the Radix dialog content when inside a dialog. That
+      // element uses translate(-50%,-50%) for centering, and a transformed
+      // ancestor becomes the containing block for our position:fixed dropdown —
+      // so fixed coords resolve relative to the dialog's box, not the viewport.
+      // Subtract the host's origin so the dropdown lands under the trigger.
+      // For document.body there is no transform → origin (0,0).
+      const host =
+        portalTarget && portalTarget !== document.body
+          ? (portalTarget as HTMLElement).getBoundingClientRect()
+          : null;
+      const originTop = host ? host.top : 0;
+      const originLeft = host ? host.left : 0;
+      const top = (up ? rect.top : rect.bottom) - originTop;
+      const left = rect.left - originLeft;
       const width = rect.width;
       setOpenUp(prev => (prev === up ? prev : up));
       setPos(prev =>
@@ -108,7 +118,7 @@ export function SearchableSelect({
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, [open]);
+  }, [open, portalTarget]);
 
   // Reset search when dropdown closes.
   useEffect(() => {
