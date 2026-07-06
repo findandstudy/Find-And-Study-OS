@@ -592,10 +592,10 @@ export const sitAdapter: SitAdapter = {
       mother_name: profile.motherName || undefined,
       // Webhook types these as String — send lowercase "no"/"yes" (a boolean
       // makes the panel read them as truthy "Yes"). apply has no such data → "no".
-      transfer_student: "no",
-      have_tc: "no",
+      transfer_student: "",
+      have_tc: "",
       tc_number: "",
-      blue_card: "no",
+      blue_card: "",
       // Residence country is a zoho_countries ROW ID (same dropdown contract as
       // nationality); apply has no explicit residence, so fall back to nationality.
       country_of_residence: nationalityId ?? undefined,
