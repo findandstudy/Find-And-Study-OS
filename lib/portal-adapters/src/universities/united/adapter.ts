@@ -443,12 +443,15 @@ export const unitedAdapter: UniversityAdapter = {
       for (let i = 0; i < 8 && !programSelected; i++) {
         await ensureNameShim();
         const state = await page.evaluate(() => {
+          const vis = (el: Element | null) => !!(el && (el as HTMLElement).offsetParent);
           const uni = document.getElementById("selectuniversity") as HTMLSelectElement | null;
           const degreeRadios = [...document.querySelectorAll('label.form-check-image input[type=radio]')] as HTMLInputElement[];
           const fn = document.getElementById("firstname") as HTMLElement | null;
           return {
             onPersonal: !!(fn && fn.offsetParent),
             uniOpts: uni ? uni.options.length : 0,
+            uniVisible: vis(uni), // #selectuniversity VISIBLE = Step 3 is the active step
+            termVisible: vis(document.querySelector('input[name="radio_buttons_2"]')), // Step 1 (Term) active
             hasDegreeCards: degreeRadios.some(r => !!r.offsetParent),
             gridCount: document.querySelectorAll("div.single-table").length,
           };
@@ -471,14 +474,28 @@ export const unitedAdapter: UniversityAdapter = {
           await clickContinue(); await page.waitForTimeout(1500); continue;
         }
 
-        // 2) On Step 3 but the university list is EMPTY (degree never picked) → Back to Degree.
-        if (state.uniOpts === 0 && !state.onPersonal) { await clickBack(); continue; }
+        // 2) Step 1 (Term) is active → make sure the term is picked, then CONTINUE
+        //    (never Back here — Step 1 has no Back; the old empty-state Back rule
+        //    fired here and stuck the loop for all 8 turns, dry-run proven).
+        if (state.termVisible && !state.uniVisible) {
+          await page.evaluate(() => {
+            const r = document.querySelector('input[name="radio_buttons_2"]') as HTMLInputElement | null;
+            if (r && !r.checked) {
+              r.checked = true; r.click(); r.dispatchEvent(new Event("change", { bubbles: true }));
+              try { (window as any).clickradio && (window as any).clickradio(); } catch {}
+            }
+          });
+          await clickContinue(); await page.waitForTimeout(1500); continue;
+        }
 
         // 3) Overshot to Personal while filters are populated → Back to the active Step 3.
         if (state.onPersonal && state.uniOpts > 0) { await clickBack(); continue; }
 
-        // 4) ACTIVE Step 3 with a populated university list → filter + filterData + alert9-select.
-        if (state.uniOpts > 0 && !state.onPersonal) {
+        // 4) Step 3 VISIBLE but the university list is EMPTY (degree never picked) → Back to Degree.
+        if (state.uniVisible && state.uniOpts === 0) { await clickBack(); continue; }
+
+        // 5) ACTIVE Step 3 with a populated university list → filter + filterData + alert9-select.
+        if (state.uniVisible && state.uniOpts > 0) {
           const pick = await page.evaluate((wantUni) => {
             const nrmU = (s: string) => (s || "").toLowerCase()
               .replace(/[ışğüöçİ]/g, m => (({ "ı":"i","ş":"s","ğ":"g","ü":"u","ö":"o","ç":"c","İ":"i" } as any)[m] || m))
@@ -564,7 +581,7 @@ export const unitedAdapter: UniversityAdapter = {
           await page.waitForTimeout(1000); continue;
         }
 
-        // 5) Unrecognized state → advance and re-measure.
+        // 6) Unrecognized state → advance and re-measure.
         await clickContinue(); await page.waitForTimeout(1200);
       }
       logger.info(`[united] wizard nav done programSelected=${programSelected}`);
