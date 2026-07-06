@@ -591,42 +591,128 @@ export const unitedAdapter: UniversityAdapter = {
 
       // We should now be at Personal Information.
       const atPersonal = await page.locator("#firstname, #lastname").first().count().catch(() => 0);
+      if (dryRun && !atPersonal) {
+        result.dryReachedFinal = false;
+        result.stuckStep = 3; result.stuckBody = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")).replace(/\s+/g, " ").slice(0, 220);
+        logger.warn("[united] DRY: Personal step NOT reached (atPersonal=0) — stopping; no student created");
+        logger.info("[united] netlog summary: " + JSON.stringify(netlog.map((n) => ({ u: n.url, m: n.method, s: n.status }))));
+        return result;
+      }
+      // Fail-closed (REAL mode only): never fill/submit a real application without
+      // a confirmed program. Dry mode continues — client-side fill creates nothing
+      // server-side and validates the field mapping even on a program miss.
+      if (!dryRun && result.programMissing) {
+        logger.warn("[united] program not confirmed — aborting before Personal fill (fail-closed)");
+        return result;
+      }
+
+      // ---- §4 Personal information (LIVE-mapped field ids, Step 4) ----------
+      // All plain <input>/<select> (no select2). THREE distinct 233-option
+      // country dropdowns: DropDownList4 = Country of Residence,
+      // DropDownList5 = Citizenship, school = Secondary School Country.
+      // Hidden Salesforce linkage (#contactid/#accountid/#appid) auto-fills as
+      // the wizard progresses — do not touch it.
+      const setText = async (id: string, val: any) => {
+        if (val == null) return;
+        await page.evaluate(({ id, val }: { id: string; val: string }) => {
+          const el = document.getElementById(id) as HTMLInputElement | null;
+          if (el) {
+            el.value = val;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }, { id, val: String(val) });
+      };
+      const selText = async (id: string, want: string): Promise<string | null> => {
+        if (!want) return null;
+        return page.evaluate(({ id, want }: { id: string; want: string }) => {
+          const el = document.getElementById(id) as HTMLSelectElement | null;
+          if (!el) return null;
+          const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+          const w = nrm(want);
+          const opt = [...el.options].find(o => o.value && nrm(o.text) === w)
+            || [...el.options].find(o => o.value && (nrm(o.text).includes(w) || w.includes(nrm(o.text))));
+          if (opt) { el.value = opt.value; el.dispatchEvent(new Event("change", { bubbles: true })); return opt.text; }
+          return null;
+        }, { id, want });
+      };
+      // DOB → GG.AA.YYYY (portal hint: "5.5.1986 or 05/05/1986"); ISO passthrough otherwise.
+      const fmtDob = (d: any) => {
+        if (!d) return "";
+        const s = String(d);
+        const m = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]}.${m[2]}.${m[1]}` : s;
+      };
+      // DRY safety: synthetic change events could trigger WebForms postbacks if
+      // any control has __doPostBack wired to onchange. Neutralize the postback
+      // entry points for the remainder of the dry session (the page is abandoned
+      // right after the snapshot) so the fill is provably client-side only.
       if (dryRun) {
-        result.dryReachedFinal = !!atPersonal;
-        if (!atPersonal) { result.stuckStep = 3; result.stuckBody = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")).replace(/\s+/g, " ").slice(0, 220); }
-        logger.warn("[united] DRY: reached Program→Personal boundary (atPersonal=" + atPersonal + "); stopping before Personal Information — no student created");
+        await page.evaluate(() => {
+          try { (window as any).__doPostBack = () => {}; } catch {}
+          try { (window as any).WebForm_DoPostBackWithOptions = () => {}; } catch {}
+          try { const f = document.forms[0] as HTMLFormElement | undefined; if (f) f.onsubmit = () => false; } catch {}
+        });
+      }
+      const netlogBeforeFill = netlog.length;
+      const p: any = profile;
+      await setText("firstname", p.firstName);
+      await setText("lastname", p.lastName);
+      await setText("passport", p.passportNumber || p.passport || "");
+      await setText("dateInput", fmtDob(p.dateOfBirth || p.dob));
+      await setText("kimlik", p.tcNumber || p.nationalId || ""); // foreigners: blank
+      await setText("fathername", p.fatherName || "");
+      await setText("mothername", p.motherName || "");
+      await setText("SecondarySchoolName", p.secondarySchoolName || p.highSchoolName || p.schoolName || p.lastSchool || "");
+      await setText("phone11", p.phone || p.mobile || "");
+      await setText("emailaddress", p.email || "");
+      const gRes = await selText("gender", String(p.gender || ""));
+      const corRes = await selText("ContentPlaceHolder1_DropDownList4", p.countryOfResidence || p.country || p.nationality || "");
+      const citRes = await selText("ContentPlaceHolder1_DropDownList5", p.citizenship || p.nationality || p.country || "");
+      // isTransfer may arrive as a string ("false" is truthy!) — only explicit
+      // boolean true or "true"/"1"/"yes" counts as a transfer student.
+      const isTransfer = /transfer/i.test(String(p.studentType || p.registrationType || ""))
+        || p.isTransfer === true || /^(true|1|yes)$/i.test(String(p.isTransfer ?? ""));
+      const regRes = await selText("regtype", isTransfer ? "Transfer Student" : "New Student");
+      const schCtry = await selText("school", p.schoolCountry || p.schoolCountryName || p.country || p.nationality || "");
+      logger.info(`[united] personal filled: gender=${JSON.stringify(gRes)} cor=${JSON.stringify(corRes)} cit=${JSON.stringify(citRes)} reg=${JSON.stringify(regRes)} schCtry=${JSON.stringify(schCtry)}`);
+
+      // DRY mode: fill but DO NOT advance — a client-side fill creates nothing
+      // server-side, so the mapping is validated without creating an application.
+      if (dryRun) {
+        const snap = await page.evaluate(() => {
+          const g = (id: string) => {
+            const e = document.getElementById(id) as any;
+            return e ? (e.tagName === "SELECT" ? e.options[e.selectedIndex]?.text : e.value) : null;
+          };
+          return {
+            firstname: g("firstname"), lastname: g("lastname"), passport: g("passport"),
+            dob: g("dateInput"), kimlik: g("kimlik") ? "SET" : "", father: g("fathername"), mother: g("mothername"),
+            gender: g("gender"), cor: g("ContentPlaceHolder1_DropDownList4"), cit: g("ContentPlaceHolder1_DropDownList5"),
+            reg: g("regtype"), schCtry: g("school"), school: g("SecondarySchoolName"),
+            // PII-light: prove filled without logging the full value
+            phone: g("phone11") ? String(g("phone11")).slice(0, 4) + "***" : "",
+            email: g("emailaddress") ? String(g("emailaddress")).slice(0, 3) + "***" : "",
+          };
+        });
+        logger.info(`[united] DRY personal snapshot: ` + JSON.stringify(snap));
+        // Dry-safety telemetry: the fill must not have produced any POST. If it
+        // did (postback slipped past the neutralizer), surface it loudly.
+        const fillPosts = netlog.slice(netlogBeforeFill).filter((n) => n.method === "POST");
+        if (fillPosts.length) {
+          logger.warn("[united] DRY SAFETY: POST(s) observed DURING personal fill (should be none): " +
+            JSON.stringify(fillPosts.map((n) => ({ u: n.url, s: n.status }))));
+        } else {
+          logger.info("[united] DRY safety: no POST during personal fill (client-side only, confirmed)");
+        }
+        result.dryReachedFinal = true;
+        logger.warn("[united] DRY: Personal filled — stopping before Documents/Submit (no application created)");
         logger.info("[united] netlog summary: " + JSON.stringify(netlog.map((n) => ({ u: n.url, m: n.method, s: n.status }))));
         return result;
       }
 
       // ===== REAL submission (requires explicit approval; first-real gating handled by worker) =====
-      // Fail-closed: never fill/submit a real application without a confirmed program.
-      if (result.programMissing) {
-        logger.warn("[united] program not confirmed — aborting before Personal fill (fail-closed)");
-        return result;
-      }
-      // ---- §4 Personal information (validated field ids) -------------------
-      const fill = async (id: string, v?: string) => { const l = page.locator("#" + id); if ((await l.count()) && v) await l.fill(String(v)).catch(() => {}); };
-      // Registration Type now lives on the Personal step (moved out of the old
-      // pre-wizard first page). Hidden Salesforce linkage (#contactid/#accountid/
-      // #appid) auto-fills as the wizard progresses — do not touch it.
-      const isTransfer = /transfer/i.test(String((profile as any).studentType || (profile as any).registrationType || ""));
-      const regMatched = await selById("regtype", isTransfer ? "Transfer" : "New Student");
-      if (!regMatched) await selByOpt(/new student/i);
-      await fill("firstname", profile.firstName);
-      await fill("lastname", profile.lastName);
-      await fill("fathername", (profile as any).fatherName);
-      await fill("mothername", (profile as any).motherName);
-      await fill("passport", profile.passportNumber);
-      await fill("kimlik", (profile as any).nationalId); // foreigners: blank / passport
-      await fill("phone11", String((profile as any).phone || "").replace(/^\+?90/, "")); // intl-tel-input strips +90
-      await fill("SecondarySchoolName", (profile as any).lastSchool || profile.schoolName);
-      await fill("dateInput", (profile as any).dob || profile.dateOfBirth); // DOB — format confirmed via first-run logs
-      await selById("gender", (profile as any).gender || profile.gender || "Male");
-      // Country dropdowns (233 countries): nationality + secondary-school country.
-      await selById("ContentPlaceHolder1_DropDownList4", (profile as any).nationalityName || profile.nationality);
-      await selById("ContentPlaceHolder1_DropDownList5", (profile as any).schoolCountryName);
-      await clickContinue();
+      await clickCont();
 
       // ---- §5 Documents — /Manage/uploadfilesone --------------------------
       // Order: passport → diploma/transcript → photo. Skip missing inputs; a
