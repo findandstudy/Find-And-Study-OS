@@ -396,7 +396,69 @@ export const unitedAdapter: UniversityAdapter = {
         fold(String(s || "")).replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
       void norm;
 
-      // --- Step 1: Term Selection (radio "Fall ...") ---
+      // --- PROVEN wizard recipe (driven live end-to-end → "Selected Majors (1)"):
+      // Continue overshoots forward UNPREDICTABLY (1–3 steps); Back (#btnback) is a
+      // reliable SINGLE step back. So: Continue forward, then backUntil(<marker>) to
+      // land exactly on the wanted step. Step detection is visibility-based:
+      //   Step1 = term radio visible; Step2 = visible label.form-check-image (the
+      //   degree radio INPUTs are CSS-hidden, offsetParent=null — input-based
+      //   detection always read "no cards"); Step3 = visible div.single-table card
+      //   (or visible "Reset Filter"); Step4 = #firstname visible.
+      const wantDegree = (profile.level || "Master");
+      if (!profile.level) logger.warn(`[united] profile.level missing — degree fallback "${wantDegree}" in use`);
+      const readStep = async () => {
+        await ensureNameShim();
+        return (await page.evaluate(() => {
+          const vis = (el: Element | null) => !!(el && (el as HTMLElement).offsetParent);
+          const uni = document.getElementById("selectuniversity") as HTMLSelectElement | null;
+          return {
+            term: vis(document.querySelector('input[name="radio_buttons_2"]')),
+            degree: [...document.querySelectorAll("label.form-check-image")].some(l => !!(l as HTMLElement).offsetParent),
+            step3: [...document.querySelectorAll("div.single-table")].some(c => !!(c as HTMLElement).offsetParent)
+              || [...document.querySelectorAll("button,a")].some(b => /reset filter/i.test(b.textContent || "") && !!(b as HTMLElement).offsetParent),
+            uniOpts: uni ? uni.options.length : 0,
+            firstname: vis(document.querySelector("#firstname")),
+          };
+        })) as { term: boolean; degree: boolean; step3: boolean; uniOpts: number; firstname: boolean };
+      };
+      const clickBack = async () => {
+        await page.evaluate(() => {
+          const b = document.getElementById("btnback") as HTMLElement | null;
+          if (b && b.offsetParent) b.click();
+        });
+        await page.waitForTimeout(1800);
+      };
+      const clickCont = async () => {
+        await page.evaluate(() => {
+          const b = [...document.querySelectorAll("button,a,input[type=button]")].find(
+            (x: any) => /continue/i.test((x.textContent || x.value || "")) && (x as HTMLElement).offsetParent
+          ) as HTMLElement | undefined;
+          if (b) b.click();
+        });
+        await page.waitForTimeout(1800);
+        await ensureNameShim();
+      };
+      // Continue overshoots; walk BACK one reliable step at a time until the
+      // target step's marker is visible. Bounded — returns false if not reached.
+      const backUntil = async (key: "term" | "degree" | "step3" | "firstname", max = 8) => {
+        for (let i = 0; i < max; i++) {
+          const s = await readStep();
+          logger.info(`[united] backUntil ${key} i=${i} ` + JSON.stringify(s));
+          if ((s as any)[key]) return true;
+          await clickBack();
+        }
+        logger.warn(`[united] backUntil ${key} did NOT converge after ${max} steps`);
+        return false;
+      };
+
+      // Baseline for increment-based confirmation: a stale draft can already show
+      // "Selected Majors (1)", so an absolute >0 check could false-positive. Only
+      // a counter INCREASE above this baseline confirms OUR selection.
+      const selectedBaseline = await page.evaluate(() =>
+        Number((document.body.innerText.match(/Selected Majors\s*\((\d+)\)/) || [])[1] || "0")).catch(() => 0);
+      logger.info(`[united] selected-majors baseline=${selectedBaseline}`);
+
+      // --- Step 1: pick term + Continue (may overshoot; backUntil corrects) ---
       await page.waitForSelector('input[name="radio_buttons_2"]', { timeout: 20000 }).catch(() => {});
       const termOk = await page.evaluate(() => {
         const r = document.querySelector('input[name="radio_buttons_2"]') as HTMLInputElement | null;
@@ -406,190 +468,125 @@ export const unitedAdapter: UniversityAdapter = {
         return true;
       });
       logger.info(`[united] step1 term selected=${termOk}`);
-      await clickContinue();
-      await page.waitForTimeout(1500);
+      await clickCont();
 
-      // --- Steps 2→3 as a STATE MACHINE (stepper is non-deterministic & stateful) ---
-      // Live-proven quirks: Continue after term sometimes lands on Degree, sometimes
-      // skips straight to Step 3; #selectuniversity stays EMPTY (0 options) until a
-      // degree is picked; alert9 only registers on the ACTIVE, visible Step 3 —
-      // overshooting to Personal leaves the cards hidden and the selection is NOT
-      // recorded. A fixed click order breaks, so each turn measures the current
-      // state and takes the single right action.
-      const wantDegree = (profile.level || "Master");
+      // --- Step 2: land on Degree, pick via HIDDEN input + clickradio1 + label ---
+      await backUntil("degree");
+      const degOk = await page.evaluate((want) => {
+        const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
+        const w = nrm(want);
+        const r = [...document.querySelectorAll('input[type=radio]')].find(
+          (x: any) => x.value && (nrm(x.value) === w || nrm(x.value).includes(w) || w.includes(nrm(x.value)))
+        ) as HTMLInputElement | undefined;
+        if (!r) return null;
+        r.checked = true; try { r.click(); } catch {}
+        r.dispatchEvent(new Event("change", { bubbles: true }));
+        try { (window as any).clickradio1 && (window as any).clickradio1(); } catch {}
+        const l = r.closest("label"); if (l) { try { (l as HTMLElement).click(); } catch {} }
+        return r.value;
+      }, wantDegree);
+      logger.info(`[united] step2 degree want="${wantDegree}" selected=${JSON.stringify(degOk)}`);
+      await clickCont();
+
+      // --- Step 3: land on Program step; if uni list still empty → one retry via Degree ---
+      await backUntil("step3");
+      let st = await readStep();
+      if (st.uniOpts === 0) {
+        await backUntil("degree");
+        await clickCont();
+        await backUntil("step3");
+        st = await readStep();
+      }
+
+      // 3a) university filter + the page's own grid loader (headless change doesn't fire it)
+      const filterRes = await page.evaluate((wantUni) => {
+        const nrmU = (s: string) => (s || "").toLowerCase()
+          .replace(/[ışğüöçİ]/g, m => (({ "ı":"i","ş":"s","ğ":"g","ü":"u","ö":"o","ç":"c","İ":"i" } as any)[m] || m))
+          .replace(/\b(university|universitesi|universite|istanbul|the|of)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+        const u = document.getElementById("selectuniversity") as HTMLSelectElement | null;
+        if (!u) return null;
+        const w = nrmU(wantUni);
+        const opts = [...u.options];
+        const opt = opts.find(o => o.value && nrmU(o.text) === w)
+          || opts.find(o => o.value && (nrmU(o.text).includes(w) || w.includes(nrmU(o.text))));
+        if (opt) {
+          u.value = opt.value; u.dispatchEvent(new Event("change", { bubbles: true }));
+          try { const jq = (window as any).jQuery; if (jq) jq(u).val(opt.value).trigger("change"); } catch {}
+        }
+        try { if (typeof (window as any).filterData === "function") (window as any).filterData(); } catch {}
+        try { if (typeof (window as any).updateProgramsAndCampuses === "function") (window as any).updateProgramsAndCampuses(); } catch {}
+        return opt ? opt.text : null;
+      }, profile.universityName);
+      logger.info(`[united] step3 filter -> ${JSON.stringify(filterRes)}`);
+      // Wait until the university's cards are VISIBLY rendered.
       const uniCore = fold(String(profile.universityName || ""))
         .replace(/[^a-z0-9]+/g, " ")
         .replace(/\b(university|universitesi|universite|istanbul|the|of)\b/g, " ")
         .trim().split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length)[0] || "";
-      const clickBack = async () => {
-        await page.evaluate(() => {
-          const b = [...document.querySelectorAll("button,a,input")].find(
-            (x: any) => /^\s*back\s*$/i.test((x.textContent || x.value || "")) && x.offsetParent
-          ) as HTMLElement | undefined;
-          if (b) b.click();
-        });
-        await page.waitForTimeout(1500);
-      };
+      await page.waitForFunction((core) => {
+        const cs = [...document.querySelectorAll("div.single-table")] as HTMLElement[];
+        return cs.some(x => !!x.offsetParent
+          && (!core || (x.textContent || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").includes(core)));
+      }, uniCore, { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(1200);
 
-      // Baseline for increment-based confirmation: a stale draft can already show
-      // "Selected Majors (1)", so an absolute >0 check could false-positive. Only
-      // a counter INCREASE above this baseline confirms OUR selection.
-      const selectedBaseline = await page.evaluate(() =>
-        Number((document.body.innerText.match(/Selected Majors\s*\((\d+)\)/) || [])[1] || "0")).catch(() => 0);
-      logger.info(`[united] selected-majors baseline=${selectedBaseline}`);
-      if (!profile.level) logger.warn(`[united] profile.level missing — degree fallback "${wantDegree}" in use`);
-
+      // 3b) pick the program among VISIBLE cards, then cb.checked=true → alert9.
+      const pick = await page.evaluate((wantProg) => {
+        // Keep parenthetical tokens (Thesis / Non-Thesis / language) so
+        // "(Non-Thesis)" out-scores "(Thesis)" — punctuation→space only.
+        const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        const w = nrm(wantProg);
+        const wt = new Set(w.split(" ").filter(x => x.length > 2));
+        const cards = ([...document.querySelectorAll("div.single-table")] as HTMLElement[]).filter(c => !!c.offsetParent);
+        let best: HTMLElement | null = null, bestScore = 0, bestTitle = "";
+        for (const c of cards) {
+          const title = (c.textContent || "").replace(/\s+/g, " ").trim();
+          const t = nrm(title);
+          if (w && t.includes(w)) { best = c; bestScore = 1; bestTitle = title; break; }
+          const ot = t.split(" ").filter(x => x.length > 2);
+          const hit = ot.filter(x => wt.has(x)).length;
+          const sc = hit / Math.max(wt.size, 1);
+          if (sc > bestScore) { bestScore = sc; best = c; bestTitle = title; }
+        }
+        // Acceptance: exact/near-exact containment (score 1) OR — multi-token
+        // targets only — strong overlap (>=0.67). A lone shared token must
+        // NEVER pick a sibling program.
+        const accept = bestScore >= 1 || (wt.size >= 2 && bestScore >= 0.67);
+        if (!best || !accept) return { matched: false, bestScore, bestTitle: bestTitle.slice(0, 90), visibleCards: cards.length, clicked: false, selectedCount: "0" };
+        let clicked = false;
+        const cb = best.querySelector("input.plan-submit-checkbox") as HTMLInputElement | null;
+        if (cb) {
+          try {
+            // ORDER MATTERS (live-proven): set checked=true BEFORE alert9 —
+            // alert9 reads the checkbox state and treats an unchecked box as a
+            // REMOVAL, so calling it first never adds the program.
+            cb.checked = true;
+            if (typeof (window as any).alert9 === "function") { (window as any).alert9(cb.value); clicked = true; }
+            else { cb.click(); clicked = true; }
+          } catch {}
+        }
+        const cnt = (document.body.innerText.match(/Selected Majors\s*\((\d+)\)/) || [])[1] || "0";
+        return { matched: true, bestScore, bestTitle: bestTitle.slice(0, 90), visibleCards: cards.length, clicked, selectedCount: cnt };
+      }, profile.programName);
+      logger.info(`[united] step3 program pick: ` + JSON.stringify(pick));
+      // Increment-based confirmation: the counter must RISE above the baseline —
+      // an absolute >0 could false-positive on a stale draft.
       let programSelected = false;
-      for (let i = 0; i < 8 && !programSelected; i++) {
-        await ensureNameShim();
-        const state = await page.evaluate(() => {
-          const vis = (el: Element | null) => !!(el && (el as HTMLElement).offsetParent);
-          const uni = document.getElementById("selectuniversity") as HTMLSelectElement | null;
-          const degreeRadios = [...document.querySelectorAll('label.form-check-image input[type=radio]')] as HTMLInputElement[];
-          const fn = document.getElementById("firstname") as HTMLElement | null;
-          return {
-            onPersonal: !!(fn && fn.offsetParent),
-            uniOpts: uni ? uni.options.length : 0,
-            uniVisible: vis(uni), // #selectuniversity VISIBLE = Step 3 is the active step
-            termVisible: vis(document.querySelector('input[name="radio_buttons_2"]')), // Step 1 (Term) active
-            hasDegreeCards: degreeRadios.some(r => !!r.offsetParent),
-            gridCount: document.querySelectorAll("div.single-table").length,
-          };
-        });
-        logger.info(`[united] nav i=${i} ` + JSON.stringify(state));
-
-        // 1) Degree CARD step is active → pick the wanted degree, Continue.
-        if (state.hasDegreeCards) {
-          const degOk = await page.evaluate((want) => {
-            const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
-            const w = nrm(want);
-            const rs = [...document.querySelectorAll('label.form-check-image input[type=radio]')] as HTMLInputElement[];
-            const hit = rs.find(r => nrm(r.value) === w) || rs.find(r => r.value && (nrm(r.value).includes(w) || w.includes(nrm(r.value))));
-            if (!hit) return null;
-            hit.checked = true; hit.click(); hit.dispatchEvent(new Event("change", { bubbles: true }));
-            try { (window as any).clickradio1 && (window as any).clickradio1(); } catch {}
-            return hit.value;
-          }, wantDegree);
-          logger.info(`[united] nav degree want="${wantDegree}" selected=${JSON.stringify(degOk)}`);
-          await clickContinue(); await page.waitForTimeout(1500); continue;
-        }
-
-        // 2) Step 1 (Term) is active → make sure the term is picked, then CONTINUE
-        //    (never Back here — Step 1 has no Back; the old empty-state Back rule
-        //    fired here and stuck the loop for all 8 turns, dry-run proven).
-        if (state.termVisible && !state.uniVisible) {
-          await page.evaluate(() => {
-            const r = document.querySelector('input[name="radio_buttons_2"]') as HTMLInputElement | null;
-            if (r && !r.checked) {
-              r.checked = true; r.click(); r.dispatchEvent(new Event("change", { bubbles: true }));
-              try { (window as any).clickradio && (window as any).clickradio(); } catch {}
-            }
-          });
-          await clickContinue(); await page.waitForTimeout(1500); continue;
-        }
-
-        // 3) Overshot to Personal while filters are populated → Back to the active Step 3.
-        if (state.onPersonal && state.uniOpts > 0) { await clickBack(); continue; }
-
-        // 4) Step 3 VISIBLE but the university list is EMPTY (degree never picked) → Back to Degree.
-        if (state.uniVisible && state.uniOpts === 0) { await clickBack(); continue; }
-
-        // 5) ACTIVE Step 3 with a populated university list → filter + filterData + alert9-select.
-        if (state.uniVisible && state.uniOpts > 0) {
-          const pick = await page.evaluate((wantUni) => {
-            const nrmU = (s: string) => (s || "").toLowerCase()
-              .replace(/[ışğüöçİ]/g, m => (({ "ı":"i","ş":"s","ğ":"g","ü":"u","ö":"o","ç":"c","İ":"i" } as any)[m] || m))
-              .replace(/\b(university|universitesi|universite|istanbul|the|of)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
-            const u = document.getElementById("selectuniversity") as HTMLSelectElement | null;
-            if (!u) return { uniPicked: null };
-            const w = nrmU(wantUni);
-            const opts = [...u.options];
-            const opt = opts.find(o => o.value && nrmU(o.text) === w)
-              || opts.find(o => o.value && (nrmU(o.text).includes(w) || w.includes(nrmU(o.text))));
-            if (opt) {
-              u.value = opt.value; u.dispatchEvent(new Event("change", { bubbles: true }));
-              try { const jq = (window as any).jQuery; if (jq) jq(u).val(opt.value).trigger("change"); } catch {}
-            }
-            // The page's own grid loader — headless doesn't fire it off the change event.
-            try { if (typeof (window as any).filterData === "function") (window as any).filterData(); } catch {}
-            try { if (typeof (window as any).updateProgramsAndCampuses === "function") (window as any).updateProgramsAndCampuses(); } catch {}
-            return { uniPicked: opt ? opt.text : null };
-          }, profile.universityName);
-          logger.info(`[united] step3 filter -> ` + JSON.stringify(pick));
-          // Wait until the university's cards are VISIBLY rendered on the active step.
-          await page.waitForFunction((core) => {
-            const cs = [...document.querySelectorAll("div.single-table")] as HTMLElement[];
-            return cs.some(x => !!x.offsetParent
-              && (!core || (x.textContent || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").includes(core)));
-          }, uniCore, { timeout: 15000 }).catch(() => {});
-          await page.waitForTimeout(800);
-          const res = await page.evaluate((wantProg) => {
-            // Keep parenthetical tokens (Thesis / Non-Thesis / language) so
-            // "(Non-Thesis)" out-scores "(Thesis)" — punctuation→space only.
-            const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-            const w = nrm(wantProg);
-            const wt = new Set(w.split(" ").filter(x => x.length > 2));
-            const cards = [...document.querySelectorAll("div.single-table")] as HTMLElement[];
-            let best: HTMLElement | null = null, bestScore = 0, bestTitle = "";
-            for (const c of cards) {
-              if (!c.offsetParent) continue; // selection only registers on the ACTIVE step → visible cards only
-              const title = (c.textContent || "").replace(/\s+/g, " ").trim();
-              const t = nrm(title);
-              if (w && t.includes(w)) { best = c; bestScore = 1; bestTitle = title; break; }
-              const ot = t.split(" ").filter(x => x.length > 2);
-              const hit = ot.filter(x => wt.has(x)).length;
-              const sc = hit / Math.max(wt.size, 1);
-              if (sc > bestScore) { bestScore = sc; best = c; bestTitle = title; }
-            }
-            // Acceptance: exact/near-exact containment (score 1) OR — multi-token
-            // targets only — strong overlap (>=0.67). A lone shared token must
-            // NEVER pick a sibling program.
-            const accept = bestScore >= 1 || (wt.size >= 2 && bestScore >= 0.67);
-            if (!best || !accept) return { matched: false, bestScore, bestTitle: bestTitle.slice(0, 90), cardCount: cards.length, clicked: false, selectedCount: "0" };
-            // Real selection: hidden input.plan-submit-checkbox (value = program's
-            // Salesforce id) with onclick="alert9('<id>')" — the visible
-            // span.plan-submit has NO handler.
-            let clicked = false;
-            const cb = best.querySelector("input.plan-submit-checkbox") as HTMLInputElement | null;
-            if (cb) {
-              if (cb.checked) {
-                clicked = true; // already selected
-              } else {
-                try {
-                  if (typeof (window as any).alert9 === "function") { (window as any).alert9(cb.value); clicked = true; }
-                  else { cb.click(); clicked = true; }
-                } catch {}
-              }
-            }
-            const cnt = (document.body.innerText.match(/Selected Majors\s*\((\d+)\)/) || [])[1] || "0";
-            return { matched: true, bestScore, bestTitle: bestTitle.slice(0, 90), cardCount: cards.length, clicked, selectedCount: cnt };
-          }, profile.programName);
-          logger.info(`[united] step3 program pick: ` + JSON.stringify(res));
-          // Increment-based confirmation: the counter must RISE above the pre-loop
-          // baseline — an absolute >0 could false-positive on a stale draft that
-          // already had a selection (cb.checked also satisfies clicked).
-          if ((res as any).matched && (res as any).clicked) {
-            const confirmed = await page
-              .waitForFunction(
-                (b: number) => Number((document.body.innerText.match(/Selected Majors\s*\((\d+)\)/) || [])[1] || "0") > b,
-                selectedBaseline, { timeout: 5000 })
-              .then(() => true)
-              .catch(() => false);
-            if (confirmed) { programSelected = true; break; }
-          }
-          // Matched but counter didn't rise (step may not have been fully active) → retry next turn.
-          await page.waitForTimeout(1000); continue;
-        }
-
-        // 6) Unrecognized state → advance and re-measure.
-        await clickContinue(); await page.waitForTimeout(1200);
+      if ((pick as any).matched && (pick as any).clicked) {
+        programSelected = await page
+          .waitForFunction(
+            (b: number) => Number((document.body.innerText.match(/Selected Majors\s*\((\d+)\)/) || [])[1] || "0") > b,
+            selectedBaseline, { timeout: 8000 })
+          .then(() => true)
+          .catch(() => false);
       }
       logger.info(`[united] wizard nav done programSelected=${programSelected}`);
       // Fail-closed: only a counter-confirmed selection clears programMissing —
       // a false negative is safe; a false positive submits the wrong program.
       result.programMissing = !programSelected;
-      // Program selected → Continue from the active Step 3 to Personal.
-      if (programSelected) { await clickContinue(); await page.waitForTimeout(1500); }
+      // Toward Personal (Continue may overshoot), then land exactly on it.
+      await clickCont();
+      await backUntil("firstname");
       // ===== end wizard steps 1–3; Step 4 Personal starts below (unchanged) =====
 
       // We should now be at Personal Information.
@@ -603,6 +600,11 @@ export const unitedAdapter: UniversityAdapter = {
       }
 
       // ===== REAL submission (requires explicit approval; first-real gating handled by worker) =====
+      // Fail-closed: never fill/submit a real application without a confirmed program.
+      if (result.programMissing) {
+        logger.warn("[united] program not confirmed — aborting before Personal fill (fail-closed)");
+        return result;
+      }
       // ---- §4 Personal information (validated field ids) -------------------
       const fill = async (id: string, v?: string) => { const l = page.locator("#" + id); if ((await l.count()) && v) await l.fill(String(v)).catch(() => {}); };
       // Registration Type now lives on the Personal step (moved out of the old
