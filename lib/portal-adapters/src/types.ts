@@ -172,6 +172,14 @@ export interface SubmitProfile {
    * by `photoUrl`). Empty/absent when the student has no URL-bearing documents.
    */
   studentDocuments?: StudentDocumentRef[];
+  // ---------------------------------------------------------------------------
+  // Aggregator dynamic membership (multi-portal accounts: United/SIT). Sourced
+  // by the runner from portal_account_universities (DB "Members" list) for the
+  // routed aggregator, keyed by the account's own university_key. Optional —
+  // when the runner didn't route through an aggregator (or the query failed),
+  // this is undefined and the adapter falls back to its static allowlist.
+  // ---------------------------------------------------------------------------
+  memberUniversities?: string[];
 }
 
 /**

@@ -13,7 +13,6 @@
 import os from "node:os";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
-import { isExperimentalAdapterKey } from "@workspace/portal-adapters";
 import {
   claimNext,
   releaseStale,
@@ -43,10 +42,20 @@ console.log(`[portal-worker] Starting — id=${WORKER_ID} poll=${POLL_MS}ms stal
  * Loads the allowlist of university keys eligible for auto-processing:
  * autoProcess=true AND isActive=true AND not soft-deleted.
  *
- * Experimental adapter families (salesforce/sit/united/emu) are EXCLUDED here
- * as a hard runtime guard — even if a row somehow has autoProcess=true, the
- * worker will never auto-submit it. Manual single-submission via the API still
- * works. This mirrors the same guard in api-server/scripts/drain-once.ts.
+ * Aggregator families (salesforce/sit/united/emu) are NO LONGER hard-excluded
+ * here — each aggregator now opts in/out through its OWN portal_universities
+ * row's `autoProcess` toggle (panel-managed), same as any standalone portal.
+ * That toggle is condition 1 of the 3-condition gate for aggregator auto-drain
+ * (see worker.ts module doc / tick()): (1) this toggle, (2) the application's
+ * university is an active DB member (portal_account_universities — already
+ * enforced upstream at enqueue time by enqueueIfEligible/resolvePortalRouting,
+ * which only ever queues a member submission under the AGGREGATOR's own
+ * universityKey), (3) trigger stage (loadTriggerStages() below). Today the
+ * United row's autoProcess is OFF in production, so removing this exclusion
+ * changes nothing until an operator explicitly flips that toggle — and even
+ * then the existing one-claim-per-tick cadence drains the queue gradually,
+ * never in a burst. This mirrors the identical fix in
+ * api-server/scripts/drain-once.ts.
  */
 async function loadAutoProcessKeys(): Promise<string[]> {
   const unis = await db
@@ -61,18 +70,7 @@ async function loadAutoProcessKeys(): Promise<string[]> {
       isNull(portalUniversitiesTable.deletedAt),
     ));
 
-  const experimentalSkipped = unis
-    .filter((u) => isExperimentalAdapterKey(u.adapterKey))
-    .map((u) => u.universityKey);
-  if (experimentalSkipped.length > 0) {
-    console.log(
-      `[portal-worker] Experimental adapters excluded from auto-process: ${experimentalSkipped.join(", ")}`,
-    );
-  }
-
-  return unis
-    .filter((u) => !isExperimentalAdapterKey(u.adapterKey))
-    .map((u) => u.universityKey);
+  return unis.map((u) => u.universityKey);
 }
 
 /**

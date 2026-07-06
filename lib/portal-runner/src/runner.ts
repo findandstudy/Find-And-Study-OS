@@ -44,7 +44,7 @@ import {
 import type { ClaimedSubmission } from "./queue.js";
 import { loadProgramMapping } from "./programMappingLoader.js";
 import { resolveNationalityExclusion } from "./exclusions.js";
-import { resolveAdapterKey } from "./resolveAdapter.js";
+import { resolveAdapterKey, loadAggregatorMemberNames } from "./resolveAdapter.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -138,8 +138,13 @@ export async function runSubmission(
   //   3. raw universityKey — legacy fallback for standalone portals where
   //      universityKey === adapter_key (e.g. topkapi); byte-for-byte unchanged.
   //   4. universityName — last-resort name match.
-  const resolvedAdapterKey =
-    opts?.adapterKey ?? (await resolveAdapterKey(submission.universityKey)).adapterKey;
+  // Always resolve via DB (cheap, try/catched) — even when opts.adapterKey is
+  // supplied by a caller that already routed — so `resolved.routedVia` is
+  // available below for the aggregator dynamic-membership lookup regardless
+  // of caller. This does not change adapter SELECTION (still opts.adapterKey
+  // first) — it only widens what we know about the routing that occurred.
+  const resolved = await resolveAdapterKey(submission.universityKey);
+  const resolvedAdapterKey = opts?.adapterKey ?? resolved.adapterKey;
 
   const adapter =
     adapterByKey(resolvedAdapterKey) ??
@@ -160,9 +165,25 @@ export async function runSubmission(
   // in SIT. Skip the portal ENTIRELY (no login, no student, no application) and
   // route them to the direct channel. Gated by SIT_ENFORCE_MEMBERSHIP (default
   // ON); set it to "false" for a one-off test run that processes every uni.
+  // Dynamic DB "Members" list for aggregator adapters (united/sit). Sourced
+  // from portal_account_universities under the aggregator's OWN key so the
+  // panel's Members tab is the live source of truth: adding a university
+  // there makes it recognized as a member immediately, no code deploy needed.
+  // UNION'd with each adapter's static allowlist (never shrinks it) — a
+  // transient DB failure (loadAggregatorMemberNames fails safe to []) degrades
+  // to the pre-existing static behaviour instead of blocking known members.
+  // Note: removing a university from the panel already stops routing to this
+  // adapter upstream (resolveAdapterKey no longer returns "united"/"sit" for
+  // it), independent of this list.
+  let memberUniversities: string[] | undefined;
+  if (adapter.key === "united" || adapter.key === "sit") {
+    const aggregatorPortalKey = resolved.routedVia ?? submission.universityKey;
+    memberUniversities = await loadAggregatorMemberNames(aggregatorPortalKey);
+  }
+
   if (adapter.key === "sit" && process.env.SIT_ENFORCE_MEMBERSHIP !== "false") {
     const targetName = profile.universityName ?? submission.universityName ?? "";
-    const member = isSitMember(targetName);
+    const member = isSitMember(targetName, memberUniversities);
     console.log(
       `[sit] membership: ${targetName || "(unknown)"} → member=${member} (route=${member ? "sit" : "direct"})`,
     );
@@ -213,7 +234,11 @@ export async function runSubmission(
       opts?.programMappingKey ?? submission.universityKey,
       opts?.memberUniversityId ?? null,
     );
-    const enrichedProfile: SubmitProfile = { ...profile, ...mapping };
+    const enrichedProfile: SubmitProfile = {
+      ...profile,
+      ...mapping,
+      ...(memberUniversities !== undefined ? { memberUniversities } : {}),
+    };
 
     const result = await adapter.submit(session, enrichedProfile, files, !isDry);
 

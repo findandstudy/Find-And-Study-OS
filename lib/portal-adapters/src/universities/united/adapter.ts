@@ -36,8 +36,17 @@ const UNITED_ALLOWLIST_FOLDED: readonly string[] = UNITED_ALLOWLIST.map(fold);
  * EN↔TR naming: `fold` only does Turkish→ASCII + lowercase, so English
  * "Istanbul Nisantasi University" never substring-matched Turkish "Nişantaşı
  * Üniversitesi" (word diff + extra "istanbul"). We additionally strip
- * institution/city stopwords and compare on the distinctive core tokens. */
-function isUnitedMember(name: string | undefined | null): boolean {
+ * institution/city stopwords and compare on the distinctive core tokens.
+ * @param dynamicList  Live DB "Members" list (portal_account_universities,
+ *   panel-managed) supplied by the runner for this submission. UNION'd with
+ *   UNITED_ALLOWLIST — never removes a member the static list already grants.
+ *   Undefined (e.g. direct adapter calls outside runSubmission, or dev CLI
+ *   `matches()`) falls back to checking the static list alone.
+ */
+function isUnitedMember(
+  name: string | undefined | null,
+  dynamicList?: readonly string[],
+): boolean {
   const strip = (s: string) =>
     fold(String(s || ""))
       .replace(/\b(university|universitesi|universite|univ|istanbul|the|of)\b/g, " ")
@@ -46,17 +55,20 @@ function isUnitedMember(name: string | undefined | null): boolean {
   const f = strip(name);
   if (!f) return false;
   const fTokens = new Set(f.split(" ").filter((t) => t.length > 1));
-  return UNITED_ALLOWLIST.some((entry) => {
-    const e = strip(entry);
-    if (!e) return false;
-    // Only name-contains-entry (NOT the reverse): the reverse would let a single
-    // token like "ankara" (from non-member "Ankara University") match the entry
-    // "ankara bilim" — a false positive. Multi-token entries need ALL tokens.
-    if (f.includes(e)) return true;
-    // token-subset: member if ALL distinctive tokens of the entry appear in the name
-    const eTokens = e.split(" ").filter((t) => t.length > 1);
-    return eTokens.length > 0 && eTokens.every((t) => fTokens.has(t));
-  });
+  const matches = (list: readonly string[]) =>
+    list.some((entry) => {
+      const e = strip(entry);
+      if (!e) return false;
+      // Only name-contains-entry (NOT the reverse): the reverse would let a single
+      // token like "ankara" (from non-member "Ankara University") match the entry
+      // "ankara bilim" — a false positive. Multi-token entries need ALL tokens.
+      if (f.includes(e)) return true;
+      // token-subset: member if ALL distinctive tokens of the entry appear in the name
+      const eTokens = e.split(" ").filter((t) => t.length > 1);
+      return eTokens.length > 0 && eTokens.every((t) => fTokens.has(t));
+    });
+  if (matches(UNITED_ALLOWLIST)) return true;
+  return dynamicList !== undefined && dynamicList.length > 0 && matches(dynamicList);
 }
 
 const PORTAL_URL = "https://partner.unitededucation.com";
@@ -236,10 +248,17 @@ export const unitedAdapter: UniversityAdapter = {
     const wait = (ms: number) => page.waitForTimeout(ms);
 
     // ---- §0 Member gate: never push a non-member university into United ------
-    if (!isUnitedMember(profile.universityName)) {
+    // profile.memberUniversities is the LIVE DB "Members" list (panel-managed,
+    // portal_account_universities) loaded by the runner for this submission's
+    // routed aggregator — a university added there is recognized immediately,
+    // no code change needed. UNION'd with the static UNITED_ALLOWLIST inside
+    // isUnitedMember for resilience to a transient DB read failure.
+    if (!isUnitedMember(profile.universityName, profile.memberUniversities)) {
       logger.warn(
         `[united] SKIP — "${profile.universityName || "(none)"}" is not a United member ` +
-        `(allowlist: ${UNITED_ALLOWLIST.join(" / ")}); routing to direct`,
+        `(allowlist: ${UNITED_ALLOWLIST.join(" / ")}` +
+        (profile.memberUniversities?.length ? ` + DB members: ${profile.memberUniversities.join(" / ")}` : "") +
+        `); routing to direct`,
       );
       result.skippedNotMember = true;
       result.routeTo = "direct";
@@ -628,6 +647,48 @@ export const unitedAdapter: UniversityAdapter = {
           }
         }, { id, val: String(val) });
       };
+      // Normalizes a raw phone value to a single, non-duplicated E.164 string
+      // before handing it to intlTelInputGlobals.setNumber(). "phone11" is an
+      // intl-tel-input widget: filling it via a plain setText() (raw .value
+      // assignment, bypassing the widget's own state) combined with the
+      // widget re-deriving/prepending the selected country's dial code
+      // produced a DOUBLED country code (e.g. "+90+905XXXXXXXXX"). normPhone
+      // strips all non-digits, collapses an already-doubled Turkish code
+      // ("90905..." / "0090..."), and re-adds exactly one "+"+country code so
+      // setNumber sees ONE valid international number and never re-prepends
+      // on top of an existing one.
+      const normPhone = (raw: any): string => {
+        let digits = String(raw ?? "").replace(/[^\d]/g, "");
+        if (!digits) return "";
+        if (digits.startsWith("9090")) digits = digits.slice(2);       // doubled "90"
+        else if (digits.startsWith("00")) digits = digits.slice(2);    // "00" intl prefix
+        if (digits.startsWith("0") && digits.length > 10) digits = digits.slice(1); // domestic trunk "0"
+        if (digits.length === 10 && digits.startsWith("5")) digits = `90${digits}`; // bare TR mobile
+        return `+${digits}`;
+      };
+      // Fills an intl-tel-input phone field via the widget's own setNumber()
+      // API (handles country-flag + dial-code state internally) instead of a
+      // raw .value assignment, so the country code is applied exactly once.
+      const setPhone = async (id: string, raw: any) => {
+        const normalized = normPhone(raw);
+        if (!normalized) return;
+        const viaWidget = await page.evaluate(({ id, normalized }: { id: string; normalized: string }) => {
+          const el = document.getElementById(id) as HTMLInputElement | null;
+          if (!el) return false;
+          const iti = (window as any).intlTelInputGlobals?.getInstance?.(el);
+          if (iti && typeof iti.setNumber === "function") {
+            iti.setNumber(normalized);
+            return true;
+          }
+          // No intl-tel-input instance found (unexpected DOM) — fall back to a
+          // plain assignment so the field is never silently left empty.
+          el.value = normalized;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          return false;
+        }, { id, normalized });
+        logger.info(`[united] ${id} filled via ${viaWidget ? "intlTelInputGlobals.setNumber" : "fallback setText"}`);
+      };
       const selText = async (id: string, want: string): Promise<string | null> => {
         if (!want) return null;
         return page.evaluate(({ id, want }: { id: string; want: string }) => {
@@ -669,7 +730,7 @@ export const unitedAdapter: UniversityAdapter = {
       await setText("fathername", p.fatherName || "");
       await setText("mothername", p.motherName || "");
       await setText("SecondarySchoolName", p.secondarySchoolName || p.highSchoolName || p.schoolName || p.lastSchool || "");
-      await setText("phone11", p.phone || p.mobile || "");
+      await setPhone("phone11", p.phone || p.mobile || "");
       await setText("emailaddress", p.email || "");
       const gRes = await selText("gender", String(p.gender || ""));
       const corRes = await selText("ContentPlaceHolder1_DropDownList4", p.countryOfResidence || p.country || p.nationality || "");

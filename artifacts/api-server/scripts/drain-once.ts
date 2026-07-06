@@ -45,7 +45,6 @@ import {
   runSubmission,
   writebackResult,
 } from "@workspace/portal-runner";
-import { isExperimentalAdapterKey } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "../src/lib/portalCreds.js";
 import { db, pool, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
 import { and, eq, isNull } from "drizzle-orm";
@@ -157,9 +156,19 @@ async function drain(): Promise<void> {
   }
 
   // Step 4: Fetch autoProcess-enabled university keys
-  // Experimental adapter families (salesforce/sit/united/emu) are EXCLUDED here
-  // as a hard runtime guard: even if a row somehow has autoProcess=true, the
-  // worker will never auto-submit it. Manual single-submission still works.
+  // Aggregator families (salesforce/sit/united/emu) are NO LONGER hard-excluded
+  // here — each aggregator opts in/out through its OWN portal_universities
+  // row's `autoProcess` toggle (panel-managed), same as any standalone portal.
+  // That toggle is condition 1 of the 3-condition gate for aggregator
+  // auto-drain: (1) this toggle, (2) the application's university is an
+  // active DB member (portal_account_universities — already enforced upstream
+  // at enqueue time by enqueueIfEligible/resolvePortalRouting, which only
+  // ever queues a member submission under the AGGREGATOR's own
+  // universityKey), (3) trigger stage. Today the United row's autoProcess is
+  // OFF in production, so removing this exclusion changes nothing until an
+  // operator explicitly flips that toggle — and even then submissions are
+  // still claimed and processed one at a time (no burst). This mirrors the
+  // identical fix in portal-automation-worker/src/worker.ts.
   let autoProcessKeys: string[] = [];
   try {
     const unis = await db
@@ -173,17 +182,7 @@ async function drain(): Promise<void> {
         eq(portalUniversitiesTable.isActive, true),
         isNull(portalUniversitiesTable.deletedAt),
       ));
-    const experimentalSkipped = unis
-      .filter((u) => isExperimentalAdapterKey(u.adapterKey))
-      .map((u) => u.universityKey);
-    if (experimentalSkipped.length > 0) {
-      console.log(
-        `[drain-once] Experimental adapters excluded from auto-process: ${experimentalSkipped.join(", ")}`,
-      );
-    }
-    autoProcessKeys = unis
-      .filter((u) => !isExperimentalAdapterKey(u.adapterKey))
-      .map((u) => u.universityKey);
+    autoProcessKeys = unis.map((u) => u.universityKey);
   } catch (err) {
     console.error("[drain-once] Fatal: failed to load auto-process universities:", err instanceof Error ? err.message : err);
     process.exit(1);

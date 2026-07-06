@@ -129,3 +129,30 @@ export async function resolveAdapterKey(
     return { adapterKey: universityKey, routedVia: null, memberUniversityId: null };
   }
 }
+
+/**
+ * Loads the live "Members" list for a multi-portal account (aggregator),
+ * keyed by the account's OWN university_key (portal_account_universities.portal_key)
+ * — the same key resolveAdapterKey returns as `routedVia`.
+ *
+ * This is the DB source of truth the panel's Members tab edits directly: adding
+ * or removing a row here takes effect on the very next submission, no code
+ * change needed. Returns catalog `universities.name` values (the canonical
+ * name adapters already fuzzy-match against). Fails safe to [] on any DB error
+ * so a transient failure degrades to the adapter's static fallback list rather
+ * than throwing mid-submission.
+ */
+export async function loadAggregatorMemberNames(portalKey: string): Promise<string[]> {
+  try {
+    const res = await pool.query<{ name: string }>(
+      `SELECT u.name
+         FROM portal_account_universities pau
+         JOIN universities u ON u.id = pau.catalog_university_id
+        WHERE pau.portal_key = $1 AND pau.enabled = true`,
+      [portalKey],
+    );
+    return res.rows.map((r) => r.name).filter((n): n is string => !!n && n.trim().length > 0);
+  } catch {
+    return [];
+  }
+}

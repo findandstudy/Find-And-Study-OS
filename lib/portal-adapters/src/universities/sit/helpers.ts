@@ -206,6 +206,7 @@ export function isAllowedUniversity(name: string): boolean {
 // ---------------------------------------------------------------------------
 export function isSitMember(
   universityNameOrId: string | null | undefined,
+  dynamicMembers?: readonly string[],
 ): boolean {
   if (universityNameOrId == null) return false;
   const name = String(universityNameOrId).trim();
@@ -213,6 +214,25 @@ export function isSitMember(
 
   // Authoritative agreed list (token-set matched, IDOR-safe).
   if (isAllowedUniversity(name)) return true;
+
+  // Dynamic DB "Members" list (portal_account_universities, panel-managed) —
+  // matched the same token-set way so a university added via the panel is
+  // recognized without a code change. UNION with the agreed list — never
+  // removes a member the agreed list already grants (see module doc).
+  if (dynamicMembers && dynamicMembers.length > 0) {
+    const queryTokens = new Set(distinctiveTokens(name));
+    for (const entry of dynamicMembers) {
+      if (fold(entry) === fold(name)) return true;
+      const entryTokens = distinctiveTokens(entry);
+      if (
+        entryTokens.length > 0 &&
+        entryTokens.length === queryTokens.size &&
+        entryTokens.every((t) => queryTokens.has(t))
+      ) {
+        return true;
+      }
+    }
+  }
 
   // Optional env extension — kept a UNION with the agreed list so it can only
   // ADD members, never remove one.
