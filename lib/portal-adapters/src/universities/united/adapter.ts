@@ -444,6 +444,9 @@ export const unitedAdapter: UniversityAdapter = {
         if (!opt) return null;
         u.value = opt.value; u.dispatchEvent(new Event("change", { bubbles: true }));
         try { const jq = (window as any).jQuery; if (jq) jq(u).val(opt.value).trigger("change"); } catch {}
+        // The page's own grid loader — headless doesn't fire it off the change event, call it directly.
+        try { if (typeof (window as any).filterData === "function") (window as any).filterData(); } catch {}
+        try { if (typeof (window as any).updateProgramsAndCampuses === "function") (window as any).updateProgramsAndCampuses(); } catch {}
         return opt.text;
       }, profile.universityName);
       logger.info(`[united] step3 university filter="${profile.universityName}" -> ${JSON.stringify(uniPick)}`);
