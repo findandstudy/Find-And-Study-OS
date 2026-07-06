@@ -496,9 +496,23 @@ export const unitedAdapter: UniversityAdapter = {
         const readCount = () => Number(document.body.innerText.match(/Selected Majors\s*\((\d+)\)/)?.[1] || "0");
         if (!best || !accept) return { matched: false, bestScore, bestTitle: bestTitle.slice(0, 80), selectedBefore: readCount(), clicked: false, cardCount: cards.length };
         const selectedBefore = readCount();
-        const btn = best.querySelector("span.plan-submit") as HTMLElement | null;
-        const clicked = !!btn;
-        if (btn) btn.click();
+        // Real selection: each card has a hidden input.plan-submit-checkbox whose
+        // value is the program's Salesforce id; onclick="alert9('<id>')" records the
+        // pick. The visible span.plan-submit has NO handler, so clicking it never
+        // increments "Selected Majors". alert9 is a global → works even when the
+        // card is hidden in the inactive step container.
+        let clicked = false;
+        const cb = best.querySelector("input.plan-submit-checkbox") as HTMLInputElement | null;
+        if (cb) {
+          if (cb.checked) {
+            clicked = true; // already selected
+          } else {
+            try {
+              if (typeof (window as any).alert9 === "function") { (window as any).alert9(cb.value); clicked = true; }
+              else { cb.click(); clicked = true; }
+            } catch (e) {}
+          }
+        }
         return { matched: true, bestScore, bestTitle: bestTitle.slice(0, 80), selectedBefore, clicked, cardCount: cards.length };
       }, profile.programName);
       // Hard confirmation gate: only treat the program as selected once the
