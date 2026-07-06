@@ -31,7 +31,17 @@ const args = process.argv.slice(2);
 const idArg = args.findIndex((a) => a === "--id");
 const submissionId = idArg !== -1 ? parseInt(args[idArg + 1] ?? "", 10) : null;
 const useNext = args.includes("--next");
-const forceDry = args.includes("--dry");
+// Honor BOTH the --dry flag and the PORTAL_DRYRUN=1 env var. The adapters'
+// internal dry boundary already reads PORTAL_DRYRUN, so without this the env
+// var produced a mismatched run: the adapter stopped at the dry boundary
+// (submitted=false) while the runner believed mode=real (meta.dryRun unset)
+// and the writeback fell through to "failed" — a cosmetic-but-confusing
+// terminal status for a perfectly clean dry run. Now both signals map the run
+// to mode=dry and the writeback lands on "dry_run".
+const forceDry = args.includes("--dry") || process.env.PORTAL_DRYRUN === "1";
+if (forceDry && !args.includes("--dry")) {
+  console.log("[run-once] PORTAL_DRYRUN=1 detected — forcing mode=dry (status will be 'dry_run')");
+}
 
 if (!submissionId && !useNext) {
   console.error("Usage: run-once -- --id <submission_id> | --next [--dry]");
