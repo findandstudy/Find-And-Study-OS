@@ -341,17 +341,26 @@ export const unitedAdapter: UniversityAdapter = {
         )) as Array<{ value: string; text: string }>;
       } catch { return []; }
     };
+    // esbuild/tsx wraps named functions passed to page.evaluate with __name(fn, "…");
+    // that helper is NOT defined in the browser context, so any evaluate containing a
+    // named inner arrow throws "__name is not defined". Shim it in the page context.
+    // The KT-Stepper swaps steps client-side (no reload), so once is usually enough,
+    // but we re-assert after each Continue in case a step remount clears globals.
+    const ensureNameShim = async () => {
+      try { await page.evaluate(() => { (globalThis as any).__name = (globalThis as any).__name || ((f: any) => f); }); } catch {}
+    };
     const clickContinue = async (): Promise<boolean> => {
       let b = page.getByRole("button", { name: /continue|next|ileri|devam/i }).first();
-      if (await b.count()) { await b.click({ timeout: 8000 }).catch(() => {}); await wait(2800); return true; }
+      if (await b.count()) { await b.click({ timeout: 8000 }).catch(() => {}); await wait(2800); await ensureNameShim(); return true; }
       b = page.locator("button:has-text('Continue'), a:has-text('Continue'), input[value*='Continue' i]").first();
-      if (await b.count()) { await b.click({ timeout: 8000 }).catch(() => {}); await wait(2800); return true; }
+      if (await b.count()) { await b.click({ timeout: 8000 }).catch(() => {}); await wait(2800); await ensureNameShim(); return true; }
       return false;
     };
 
     try {
       await page.goto(PORTAL_URL + "/Manage/newapplication", { waitUntil: "domcontentloaded", timeout: 60000 });
       await wait(5000);
+      await ensureNameShim();
       const txt0 = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")) as string;
       if (/already.*application|zaten.*basvuru/i.test(txt0)) { result.alreadyExists = true; logger.warn("[united] already has application"); return result; }
 
