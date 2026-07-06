@@ -4903,7 +4903,28 @@
         "unlinked": "Bağlı değil",
         "stale": "Geçersiz bağ",
         "staleHint": "Bu portal üniversitesi artık var olmayan veya programı olmayan bir CRM üniversitesine işaret ediyor."
-      }
+      },
+      "selectRow": "Satırı seç",
+      "selectAllOnPage": "Tümünü seç",
+      "selectedCount": "{{count}} seçildi",
+      "clearSelection": "Seçimi temizle",
+      "sortByName": "Ada göre sırala",
+      "sortByKey": "Anahtara göre sırala",
+      "sortByCreatedAt": "Eklenme tarihine göre sırala",
+      "bulkActivateButton": "Seçilenleri Etkinleştir",
+      "bulkDeactivateButton": "Seçilenleri Devre Dışı Bırak",
+      "bulkEnableAutoProcessButton": "Otomatik İşlemi Aç",
+      "bulkDisableAutoProcessButton": "Otomatik İşlemi Kapat",
+      "bulkDeleteButton": "Seçilenleri Sil",
+      "bulkActiveSuccess": "{{count}} üniversite güncellendi.",
+      "bulkActiveError": "Seçilen üniversiteler güncellenemedi.",
+      "bulkAutoProcessSuccess": "{{count}} üniversite güncellendi.",
+      "bulkAutoProcessError": "Seçilen üniversiteler güncellenemedi.",
+      "bulkDeleteSuccess": "{{count}} üniversite silindi.",
+      "bulkDeleteError": "Seçilen üniversiteler silinemedi.",
+      "bulkDeleteConfirmTitle": "Seçilen üniversiteler silinsin mi?",
+      "bulkDeleteConfirmDescription": "{{count}} üniversite portal otomasyonundan kaldırılacak. Mevcut gönderimler korunur. Bu işlem geri alınamaz.",
+      "bulkDeleteConfirmButton": "Seçilenleri Sil"
     },
     "programMapping": {
       "title": "Program Haritalama",
@@ -5009,7 +5030,10 @@
       "loadError": "Adapter'lar yüklenemedi.",
       "experimental": "Deneysel",
       "emptyTitle": "Özel adaptör yok",
-      "inactiveBadge": "Pasif"
+      "inactiveBadge": "Pasif",
+      "sortByLabel": "Etikete göre sırala",
+      "sortByKey": "Anahtara göre sırala",
+      "sortByCreatedAt": "Eklenme tarihine göre sırala"
     },
     "submissions": {
       "title": "Başvuru Panosu",
@@ -5088,7 +5112,29 @@
       "date7days": "Son 7 gün",
       "date30days": "Son 30 gün",
       "dateCustom": "Özel aralık",
-      "clearFilters": "Filtreleri temizle"
+      "clearFilters": "Filtreleri temizle",
+      "selectRow": "Satırı seç",
+      "selectAllOnPage": "Sayfadaki tümünü seç",
+      "selectedCount": "{{count}} seçildi",
+      "clearSelection": "Seçimi temizle",
+      "sortByCreatedAt": "Oluşturma tarihine göre sırala",
+      "sortByUpdatedAt": "Son güncellemeye göre sırala",
+      "sortByStatus": "Duruma göre sırala",
+      "sortByUniversity": "Üniversiteye göre sırala",
+      "bulkRetryButton": "Seçilenleri Yeniden Dene",
+      "bulkRetryError": "Seçilen gönderimler yeniden denenemedi.",
+      "bulkRetrySuccess": "{{count}} gönderim yeniden denendi.",
+      "bulkCancelButton": "Seçilenleri İptal Et",
+      "bulkCancelConfirmTitle": "Seçilen gönderimler iptal edilsin mi?",
+      "bulkCancelConfirmDescription": "{{count}} seçilen gönderim iptal edilecek. Bu işlem geri alınamaz.",
+      "bulkCancelError": "Seçilen gönderimler iptal edilemedi.",
+      "bulkCancelSuccess": "{{count}} gönderim iptal edildi.",
+      "bulkProcessButton": "Seçilenleri İşle",
+      "bulkProcessConfirmTitle": "Seçilen gönderimler şimdi işlensin mi?",
+      "bulkProcessConfirmDescription": "{{count}} seçilen gönderim canlı portalda hemen işlenecek. Bu işlem geri alınamaz.",
+      "bulkProcessError": "Seçilen gönderimler işlenemedi.",
+      "bulkProcessSuccess": "{{count}} gönderim işlendi.",
+      "bulkProcessPartial": "{{count}} gönderimden {{success}} tanesi işlendi; {{failed}} tanesi başarısız oldu."
     },
     "auditLog": {
       "title": "Denetim Günlüğü",
@@ -5305,6 +5351,11 @@
       "statNoProgram": "Program yok",
       "statExcluded": "Hariç",
       "statFailed": "Başarısız"
+    },
+    "sort": {
+      "toggleDir": "Sıralama yönünü değiştir",
+      "asc": "Artan",
+      "desc": "Azalan"
     }
   },
   "activityFeed": {

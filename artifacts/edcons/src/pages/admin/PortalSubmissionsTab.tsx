@@ -23,6 +23,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { MultiSelectFilter, type MultiSelectOption } from "@/components/admin/MultiSelectFilter";
+import { Checkbox } from "@/components/ui/checkbox";
+import { PortalSortControl, type PortalSortDir } from "@/components/admin/PortalSortControl";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -39,6 +41,8 @@ import { ManualSubmitDialog } from "@/components/admin/ManualSubmitDialog";
 import {
   PortalEmptyState, PortalErrorState,
 } from "@/components/admin/PortalTabStates";
+
+type SubmissionSortField = "createdAt" | "updatedAt" | "status" | "universityKey";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -234,11 +238,15 @@ interface RowProps {
   cancelingId: number | null;
   processingId: number | null;
   processingAll: boolean;
+  selected: boolean;
+  onToggleSelect: (id: number) => void;
+  bulkBusy: boolean;
 }
 
 function SubmissionRow({
   sub, onRetry, onCancel, onProcess,
   retryingId, cancelingId, processingId, processingAll,
+  selected, onToggleSelect, bulkBusy,
 }: RowProps) {
   const { t } = useI18n();
   const cfg = STATUS_CONFIG[sub.status];
@@ -252,9 +260,16 @@ function SubmissionRow({
   const canProcess = sub.status === "queued";
 
   return (
-    <Card className="rounded-xl">
+    <Card className={cn("rounded-xl", selected && "ring-1 ring-primary")}>
       <CardContent className="p-4">
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleSelect(sub.id)}
+            disabled={bulkBusy}
+            aria-label={t("portalAutomation.submissions.selectRow")}
+            className="mt-1 sm:mt-0 shrink-0"
+          />
           {/* Status + meta */}
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -473,6 +488,40 @@ export default function PortalSubmissionsTab() {
   const [confirmProcessId, setConfirmProcessId] = useState<number | null>(null);
   const [confirmProcessAll, setConfirmProcessAll] = useState(false);
 
+  const [sortField, setSortField] = useState<SubmissionSortField>("createdAt");
+  const [sortDir, setSortDir]     = useState<PortalSortDir>("desc");
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmBulkCancel, setConfirmBulkCancel] = useState(false);
+  const [confirmBulkProcess, setConfirmBulkProcess] = useState(false);
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedOnPage = subs.filter((s) => selectedIds.has(s.id));
+  const allOnPageSelected = subs.length > 0 && selectedOnPage.length === subs.length;
+  const someOnPageSelected = selectedOnPage.length > 0 && !allOnPageSelected;
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) {
+        subs.forEach((s) => next.delete(s.id));
+      } else {
+        subs.forEach((s) => next.add(s.id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
   const dateRange = useMemo(
     () => resolveDateRange(datePreset, customFrom, customTo),
     [datePreset, customFrom, customTo],
@@ -491,7 +540,10 @@ export default function PortalSubmissionsTab() {
     setLoading(true);
     setLoadError(false);
     try {
-      const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+      const params = new URLSearchParams({
+        page: String(page), limit: String(limit),
+        sortField, sortDir,
+      });
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (modeFilter   !== "all") params.set("mode",   modeFilter);
       if (universityKeys.length > 0) params.set("universityKeys", universityKeys.join(","));
@@ -507,13 +559,14 @@ export default function PortalSubmissionsTab() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, modeFilter, universityKeys, debouncedStudentName, dateRange, t, toast]);
+  }, [page, statusFilter, modeFilter, universityKeys, debouncedStudentName, dateRange, sortField, sortDir, t, toast]);
 
   useEffect(() => { load(); }, [load]);
 
   // Reset to first page whenever a filter changes.
   useEffect(() => {
     setPage(1);
+    setSelectedIds(new Set());
   }, [statusFilter, modeFilter, universityKeys, debouncedStudentName, datePreset, customFrom, customTo]);
 
   // Load the university options for the multi-select filter once.
@@ -659,6 +712,85 @@ export default function PortalSubmissionsTab() {
       toast({ title: t("portalAutomation.submissions.resetStuckError"), variant: "destructive" });
     } finally {
       setResetingStuck(false);
+    }
+  };
+
+  const bulkRetryableIds  = selectedOnPage.filter((s) => s.status === "failed" || s.status === "canceled" || s.status === "dry_run").map((s) => s.id);
+  const bulkCancelableIds = selectedOnPage.filter((s) => s.status === "queued" || s.status === "running").map((s) => s.id);
+  const bulkProcessableIds = selectedOnPage.filter((s) => s.status === "queued").map((s) => s.id);
+
+  const handleBulkRetry = async () => {
+    if (bulkRetryableIds.length === 0) return;
+    setBulkBusy(true);
+    try {
+      interface BulkResult { updated: number; ids: number[] }
+      const data = await customFetch<BulkResult>("/api/portal-submissions/bulk-retry", {
+        method: "POST",
+        body: JSON.stringify({ ids: bulkRetryableIds }),
+      });
+      toast({ title: t("portalAutomation.submissions.bulkRetrySuccess", { count: String(data.updated) }) });
+      clearSelection();
+      await load();
+    } catch {
+      toast({ title: t("portalAutomation.submissions.bulkRetryError"), variant: "destructive" });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkCancel = async () => {
+    if (bulkCancelableIds.length === 0) return;
+    setBulkBusy(true);
+    try {
+      interface BulkResult { updated: number; ids: number[] }
+      const data = await customFetch<BulkResult>("/api/portal-submissions/bulk-cancel", {
+        method: "POST",
+        body: JSON.stringify({ ids: bulkCancelableIds }),
+      });
+      toast({ title: t("portalAutomation.submissions.bulkCancelSuccess", { count: String(data.updated) }) });
+      clearSelection();
+      await load();
+    } catch {
+      toast({ title: t("portalAutomation.submissions.bulkCancelError"), variant: "destructive" });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkProcess = async () => {
+    if (bulkProcessableIds.length === 0) return;
+    setBulkBusy(true);
+    try {
+      interface BulkProcessResult {
+        processed: number;
+        results: { id: number; status: string; error?: string }[];
+      }
+      const data = await customFetch<BulkProcessResult>("/api/portal-submissions/bulk-process", {
+        method: "POST",
+        body: JSON.stringify({ ids: bulkProcessableIds }),
+      });
+      const failedCount = data.results.filter((r) => r.status === "failed").length;
+      if (failedCount > 0) {
+        toast({
+          title: t("portalAutomation.submissions.bulkProcessPartial", { count: String(data.processed - failedCount), failed: String(failedCount) }),
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: t("portalAutomation.submissions.bulkProcessSuccess", { count: String(data.processed) }) });
+      }
+      clearSelection();
+      await load();
+    } catch (err: unknown) {
+      const body = err && typeof err === "object" && "error" in err
+        ? (err as { error: string }).error
+        : null;
+      if (body === "ALREADY_RUNNING") {
+        toast({ title: t("portalAutomation.submissions.alreadyRunning"), variant: "destructive" });
+      } else {
+        toast({ title: t("portalAutomation.submissions.bulkProcessError"), variant: "destructive" });
+      }
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -810,6 +942,77 @@ export default function PortalSubmissionsTab() {
         </div>
       </div>
 
+      {/* Sort + selection toolbar */}
+      {subs.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={allOnPageSelected ? true : someOnPageSelected ? "indeterminate" : false}
+              onCheckedChange={toggleSelectAllOnPage}
+              disabled={bulkBusy}
+              aria-label={t("portalAutomation.submissions.selectAllOnPage")}
+            />
+            <span className="text-xs text-muted-foreground">
+              {selectedIds.size > 0
+                ? t("portalAutomation.submissions.selectedCount", { count: String(selectedIds.size) })
+                : t("portalAutomation.submissions.selectAllOnPage")}
+            </span>
+          </div>
+          <PortalSortControl<SubmissionSortField>
+            field={sortField}
+            dir={sortDir}
+            onFieldChange={setSortField}
+            onToggleDir={() => setSortDir((d) => d === "asc" ? "desc" : "asc")}
+            options={[
+              { value: "createdAt", label: t("portalAutomation.submissions.sortByCreatedAt") },
+              { value: "updatedAt", label: t("portalAutomation.submissions.sortByUpdatedAt") },
+              { value: "status", label: t("portalAutomation.submissions.sortByStatus") },
+              { value: "universityKey", label: t("portalAutomation.submissions.sortByUniversity") },
+            ]}
+          />
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+          <span className="text-sm font-medium mr-1">
+            {t("portalAutomation.submissions.selectedCount", { count: String(selectedIds.size) })}
+          </span>
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5"
+            onClick={handleBulkRetry}
+            disabled={bulkBusy || bulkRetryableIds.length === 0}
+          >
+            {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+            {t("portalAutomation.submissions.bulkRetryButton", { count: String(bulkRetryableIds.length) })}
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5"
+            onClick={() => setConfirmBulkProcess(true)}
+            disabled={bulkBusy || bulkProcessableIds.length === 0}
+          >
+            {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
+            {t("portalAutomation.submissions.bulkProcessButton", { count: String(bulkProcessableIds.length) })}
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5 text-destructive hover:text-destructive"
+            onClick={() => setConfirmBulkCancel(true)}
+            disabled={bulkBusy || bulkCancelableIds.length === 0}
+          >
+            {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+            {t("portalAutomation.submissions.bulkCancelButton", { count: String(bulkCancelableIds.length) })}
+          </Button>
+          <Button
+            variant="ghost" size="sm" className="h-8 text-muted-foreground"
+            onClick={clearSelection}
+            disabled={bulkBusy}
+          >
+            {t("portalAutomation.submissions.clearSelection")}
+          </Button>
+        </div>
+      )}
+
       {/* List */}
       {loading ? (
         <div className="space-y-3">
@@ -842,6 +1045,9 @@ export default function PortalSubmissionsTab() {
               cancelingId={cancelingId}
               processingId={processingId}
               processingAll={processingAll}
+              selected={selectedIds.has(sub.id)}
+              onToggleSelect={toggleSelect}
+              bulkBusy={bulkBusy}
             />
           ))}
         </div>
@@ -940,6 +1146,53 @@ export default function PortalSubmissionsTab() {
               onClick={() => {
                 setConfirmProcessAll(false);
                 void handleProcessAll();
+              }}
+            >
+              {t("portalAutomation.submissions.confirmProcess")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk cancel confirmation */}
+      <AlertDialog open={confirmBulkCancel} onOpenChange={setConfirmBulkCancel}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("portalAutomation.submissions.bulkCancelConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("portalAutomation.submissions.bulkCancelConfirmDescription", { count: String(bulkCancelableIds.length) })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setConfirmBulkCancel(false);
+                void handleBulkCancel();
+              }}
+            >
+              {t("portalAutomation.submissions.bulkCancelButton", { count: String(bulkCancelableIds.length) })}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk process confirmation */}
+      <AlertDialog open={confirmBulkProcess} onOpenChange={setConfirmBulkProcess}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("portalAutomation.submissions.bulkProcessConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("portalAutomation.submissions.bulkProcessConfirmDescription", { count: String(bulkProcessableIds.length) })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmBulkProcess(false);
+                void handleBulkProcess();
               }}
             >
               {t("portalAutomation.submissions.confirmProcess")}

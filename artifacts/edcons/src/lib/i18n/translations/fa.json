@@ -4903,7 +4903,28 @@
         "unlinked": "بدون پیوند",
         "stale": "پیوند منسوخ",
         "staleHint": "این دانشگاه پورتال به یک دانشگاه CRM اشاره می‌کند که دیگر وجود ندارد یا برنامه‌ای ندارد."
-      }
+      },
+      "selectRow": "انتخاب ردیف",
+      "selectAllOnPage": "انتخاب همه",
+      "selectedCount": "{{count}} مورد انتخاب شد",
+      "clearSelection": "پاک کردن انتخاب",
+      "sortByName": "مرتب‌سازی بر اساس نام",
+      "sortByKey": "مرتب‌سازی بر اساس کلید",
+      "sortByCreatedAt": "مرتب‌سازی بر اساس تاریخ افزودن",
+      "bulkActivateButton": "فعال‌سازی موارد انتخابی",
+      "bulkDeactivateButton": "غیرفعال‌سازی موارد انتخابی",
+      "bulkEnableAutoProcessButton": "فعال‌سازی پردازش خودکار",
+      "bulkDisableAutoProcessButton": "غیرفعال‌سازی پردازش خودکار",
+      "bulkDeleteButton": "حذف موارد انتخابی",
+      "bulkActiveSuccess": "{{count}} دانشگاه به‌روزرسانی شد.",
+      "bulkActiveError": "به‌روزرسانی دانشگاه‌های انتخابی ناموفق بود.",
+      "bulkAutoProcessSuccess": "{{count}} دانشگاه به‌روزرسانی شد.",
+      "bulkAutoProcessError": "به‌روزرسانی دانشگاه‌های انتخابی ناموفق بود.",
+      "bulkDeleteSuccess": "{{count}} دانشگاه حذف شد.",
+      "bulkDeleteError": "حذف دانشگاه‌های انتخابی ناموفق بود.",
+      "bulkDeleteConfirmTitle": "دانشگاه‌های انتخابی حذف شوند؟",
+      "bulkDeleteConfirmDescription": "{{count}} دانشگاه از اتوماسیون پورتال حذف خواهد شد. ارسال‌های موجود حفظ می‌شوند. این عملیات قابل بازگشت نیست.",
+      "bulkDeleteConfirmButton": "حذف موارد انتخابی"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5009,7 +5030,10 @@
       "loadError": "Failed to load adapters.",
       "experimental": "Experimental",
       "emptyTitle": "No custom adapters",
-      "inactiveBadge": "Inactive"
+      "inactiveBadge": "Inactive",
+      "sortByLabel": "مرتب‌سازی بر اساس برچسب",
+      "sortByKey": "مرتب‌سازی بر اساس کلید",
+      "sortByCreatedAt": "مرتب‌سازی بر اساس تاریخ افزودن"
     },
     "submissions": {
       "title": "Submission Board",
@@ -5088,7 +5112,29 @@
       "date7days": "۷ روز اخیر",
       "date30days": "۳۰ روز اخیر",
       "dateCustom": "بازه دلخواه",
-      "clearFilters": "پاک کردن فیلترها"
+      "clearFilters": "پاک کردن فیلترها",
+      "selectRow": "انتخاب ردیف",
+      "selectAllOnPage": "انتخاب همه در این صفحه",
+      "selectedCount": "{{count}} مورد انتخاب شد",
+      "clearSelection": "پاک کردن انتخاب",
+      "sortByCreatedAt": "مرتب‌سازی بر اساس تاریخ ایجاد",
+      "sortByUpdatedAt": "مرتب‌سازی بر اساس آخرین به‌روزرسانی",
+      "sortByStatus": "مرتب‌سازی بر اساس وضعیت",
+      "sortByUniversity": "مرتب‌سازی بر اساس دانشگاه",
+      "bulkRetryButton": "تلاش مجدد موارد انتخابی",
+      "bulkRetryError": "تلاش مجدد برای ارسال‌های انتخابی ناموفق بود.",
+      "bulkRetrySuccess": "{{count}} ارسال دوباره تلاش شد.",
+      "bulkCancelButton": "لغو موارد انتخابی",
+      "bulkCancelConfirmTitle": "ارسال‌های انتخابی لغو شوند؟",
+      "bulkCancelConfirmDescription": "{{count}} ارسال انتخابی لغو خواهد شد. این عملیات قابل بازگشت نیست.",
+      "bulkCancelError": "لغو ارسال‌های انتخابی ناموفق بود.",
+      "bulkCancelSuccess": "{{count}} ارسال لغو شد.",
+      "bulkProcessButton": "پردازش موارد انتخابی",
+      "bulkProcessConfirmTitle": "ارسال‌های انتخابی اکنون پردازش شوند؟",
+      "bulkProcessConfirmDescription": "{{count}} ارسال انتخابی بلافاصله در پورتال زنده پردازش خواهد شد. این عملیات قابل بازگشت نیست.",
+      "bulkProcessError": "پردازش ارسال‌های انتخابی ناموفق بود.",
+      "bulkProcessSuccess": "{{count}} ارسال پردازش شد.",
+      "bulkProcessPartial": "{{success}} از {{count}} ارسال پردازش شد؛ {{failed}} مورد ناموفق بود."
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5305,6 +5351,11 @@
       "statNoProgram": "بدون برنامه",
       "statExcluded": "مستثنی",
       "statFailed": "ناموفق"
+    },
+    "sort": {
+      "toggleDir": "تغییر جهت مرتب‌سازی",
+      "asc": "صعودی",
+      "desc": "نزولی"
     }
   },
   "activityFeed": {

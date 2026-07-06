@@ -4903,7 +4903,28 @@
         "unlinked": "Tidak tertaut",
         "stale": "Tautan usang",
         "staleHint": "Universitas portal ini menunjuk ke universitas CRM yang sudah tidak ada atau tidak memiliki program."
-      }
+      },
+      "selectRow": "Pilih baris",
+      "selectAllOnPage": "Pilih semua",
+      "selectedCount": "{{count}} dipilih",
+      "clearSelection": "Hapus pilihan",
+      "sortByName": "Urutkan berdasarkan nama",
+      "sortByKey": "Urutkan berdasarkan kunci",
+      "sortByCreatedAt": "Urutkan berdasarkan tanggal ditambahkan",
+      "bulkActivateButton": "Aktifkan yang Dipilih",
+      "bulkDeactivateButton": "Nonaktifkan yang Dipilih",
+      "bulkEnableAutoProcessButton": "Aktifkan Proses Otomatis",
+      "bulkDisableAutoProcessButton": "Nonaktifkan Proses Otomatis",
+      "bulkDeleteButton": "Hapus yang Dipilih",
+      "bulkActiveSuccess": "{{count}} universitas diperbarui.",
+      "bulkActiveError": "Gagal memperbarui universitas yang dipilih.",
+      "bulkAutoProcessSuccess": "{{count}} universitas diperbarui.",
+      "bulkAutoProcessError": "Gagal memperbarui universitas yang dipilih.",
+      "bulkDeleteSuccess": "{{count}} universitas dihapus.",
+      "bulkDeleteError": "Gagal menghapus universitas yang dipilih.",
+      "bulkDeleteConfirmTitle": "Hapus universitas yang dipilih?",
+      "bulkDeleteConfirmDescription": "{{count}} universitas akan dihapus dari otomatisasi portal. Pengiriman yang ada akan tetap disimpan. Tindakan ini tidak dapat dibatalkan.",
+      "bulkDeleteConfirmButton": "Hapus yang Dipilih"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5009,7 +5030,10 @@
       "loadError": "Failed to load adapters.",
       "experimental": "Experimental",
       "emptyTitle": "No custom adapters",
-      "inactiveBadge": "Inactive"
+      "inactiveBadge": "Inactive",
+      "sortByLabel": "Urutkan berdasarkan label",
+      "sortByKey": "Urutkan berdasarkan kunci",
+      "sortByCreatedAt": "Urutkan berdasarkan tanggal ditambahkan"
     },
     "submissions": {
       "title": "Submission Board",
@@ -5088,7 +5112,29 @@
       "date7days": "7 hari terakhir",
       "date30days": "30 hari terakhir",
       "dateCustom": "Rentang khusus",
-      "clearFilters": "Hapus filter"
+      "clearFilters": "Hapus filter",
+      "selectRow": "Pilih baris",
+      "selectAllOnPage": "Pilih semua di halaman",
+      "selectedCount": "{{count}} dipilih",
+      "clearSelection": "Hapus pilihan",
+      "sortByCreatedAt": "Urutkan berdasarkan tanggal dibuat",
+      "sortByUpdatedAt": "Urutkan berdasarkan pembaruan terakhir",
+      "sortByStatus": "Urutkan berdasarkan status",
+      "sortByUniversity": "Urutkan berdasarkan universitas",
+      "bulkRetryButton": "Coba Lagi yang Dipilih",
+      "bulkRetryError": "Gagal mencoba lagi pengiriman yang dipilih.",
+      "bulkRetrySuccess": "{{count}} pengiriman dicoba lagi.",
+      "bulkCancelButton": "Batalkan yang Dipilih",
+      "bulkCancelConfirmTitle": "Batalkan pengiriman yang dipilih?",
+      "bulkCancelConfirmDescription": "{{count}} pengiriman yang dipilih akan dibatalkan. Tindakan ini tidak dapat dibatalkan.",
+      "bulkCancelError": "Gagal membatalkan pengiriman yang dipilih.",
+      "bulkCancelSuccess": "{{count}} pengiriman dibatalkan.",
+      "bulkProcessButton": "Proses yang Dipilih",
+      "bulkProcessConfirmTitle": "Proses pengiriman yang dipilih sekarang?",
+      "bulkProcessConfirmDescription": "{{count}} pengiriman yang dipilih akan segera diproses di portal langsung. Tindakan ini tidak dapat dibatalkan.",
+      "bulkProcessError": "Gagal memproses pengiriman yang dipilih.",
+      "bulkProcessSuccess": "{{count}} pengiriman diproses.",
+      "bulkProcessPartial": "{{success}} dari {{count}} pengiriman diproses; {{failed}} gagal."
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5305,6 +5351,11 @@
       "statNoProgram": "Tanpa program",
       "statExcluded": "Dikecualikan",
       "statFailed": "Gagal"
+    },
+    "sort": {
+      "toggleDir": "Ubah arah urutan",
+      "asc": "Naik",
+      "desc": "Turun"
     }
   },
   "activityFeed": {

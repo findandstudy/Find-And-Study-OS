@@ -4903,7 +4903,28 @@
         "unlinked": "Sin vincular",
         "stale": "Vínculo obsoleto",
         "staleHint": "Esta universidad del portal apunta a una universidad del CRM que ya no existe o no tiene programas."
-      }
+      },
+      "selectRow": "Seleccionar fila",
+      "selectAllOnPage": "Seleccionar todo",
+      "selectedCount": "{{count}} seleccionadas",
+      "clearSelection": "Borrar selección",
+      "sortByName": "Ordenar por nombre",
+      "sortByKey": "Ordenar por clave",
+      "sortByCreatedAt": "Ordenar por fecha de creación",
+      "bulkActivateButton": "Activar seleccionadas",
+      "bulkDeactivateButton": "Desactivar seleccionadas",
+      "bulkEnableAutoProcessButton": "Activar auto-procesamiento",
+      "bulkDisableAutoProcessButton": "Desactivar auto-procesamiento",
+      "bulkDeleteButton": "Eliminar seleccionadas",
+      "bulkActiveSuccess": "Se actualizaron {{count}} universidades.",
+      "bulkActiveError": "No se pudieron actualizar las universidades seleccionadas.",
+      "bulkAutoProcessSuccess": "Se actualizaron {{count}} universidades.",
+      "bulkAutoProcessError": "No se pudieron actualizar las universidades seleccionadas.",
+      "bulkDeleteSuccess": "Se eliminaron {{count}} universidades.",
+      "bulkDeleteError": "No se pudieron eliminar las universidades seleccionadas.",
+      "bulkDeleteConfirmTitle": "¿Eliminar las universidades seleccionadas?",
+      "bulkDeleteConfirmDescription": "Se eliminarán {{count}} universidades de la automatización del portal. Los envíos existentes se conservan. Esta acción no se puede deshacer.",
+      "bulkDeleteConfirmButton": "Eliminar seleccionadas"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5009,7 +5030,10 @@
       "loadError": "Failed to load adapters.",
       "experimental": "Experimental",
       "emptyTitle": "No custom adapters",
-      "inactiveBadge": "Inactive"
+      "inactiveBadge": "Inactive",
+      "sortByLabel": "Ordenar por etiqueta",
+      "sortByKey": "Ordenar por clave",
+      "sortByCreatedAt": "Ordenar por fecha de creación"
     },
     "submissions": {
       "title": "Submission Board",
@@ -5088,7 +5112,29 @@
       "date7days": "Últimos 7 días",
       "date30days": "Últimos 30 días",
       "dateCustom": "Rango personalizado",
-      "clearFilters": "Borrar filtros"
+      "clearFilters": "Borrar filtros",
+      "selectRow": "Seleccionar fila",
+      "selectAllOnPage": "Seleccionar todo en la página",
+      "selectedCount": "{{count}} seleccionados",
+      "clearSelection": "Borrar selección",
+      "sortByCreatedAt": "Ordenar por fecha de creación",
+      "sortByUpdatedAt": "Ordenar por última actualización",
+      "sortByStatus": "Ordenar por estado",
+      "sortByUniversity": "Ordenar por universidad",
+      "bulkRetryButton": "Reintentar seleccionados",
+      "bulkRetryError": "No se pudieron reintentar los envíos seleccionados.",
+      "bulkRetrySuccess": "Se reintentaron {{count}} envíos.",
+      "bulkCancelButton": "Cancelar seleccionados",
+      "bulkCancelConfirmTitle": "¿Cancelar los envíos seleccionados?",
+      "bulkCancelConfirmDescription": "Se cancelarán {{count}} envíos seleccionados. Esta acción no se puede deshacer.",
+      "bulkCancelError": "No se pudieron cancelar los envíos seleccionados.",
+      "bulkCancelSuccess": "Se cancelaron {{count}} envíos.",
+      "bulkProcessButton": "Procesar seleccionados",
+      "bulkProcessConfirmTitle": "¿Procesar ahora los envíos seleccionados?",
+      "bulkProcessConfirmDescription": "Se procesarán de inmediato {{count}} envíos seleccionados en el portal en vivo. Esta acción no se puede deshacer.",
+      "bulkProcessError": "No se pudieron procesar los envíos seleccionados.",
+      "bulkProcessSuccess": "Se procesaron {{count}} envíos.",
+      "bulkProcessPartial": "Se procesaron {{success}} de {{count}} envíos; {{failed}} fallaron."
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5305,6 +5351,11 @@
       "statNoProgram": "Sin programa",
       "statExcluded": "Excluidas",
       "statFailed": "Fallidas"
+    },
+    "sort": {
+      "toggleDir": "Cambiar dirección de orden",
+      "asc": "Ascendente",
+      "desc": "Descendente"
     }
   },
   "activityFeed": {

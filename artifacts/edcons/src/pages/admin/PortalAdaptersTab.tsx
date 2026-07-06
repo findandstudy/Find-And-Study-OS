@@ -6,10 +6,13 @@
  *            Edit dialog includes configJson textarea = Declarative Builder (SUB-STEP H)
  */
 
-import { useState, useEffect, useCallback, useRef, type ChangeEvent } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from "react";
 import { customFetch } from "@workspace/api-client-react";
+import { ADMIN_ROLES } from "@workspace/roles";
 import { useI18n } from "@/hooks/use-i18n";
+import { PortalSortControl, type PortalSortDir } from "@/components/admin/PortalSortControl";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from "@/components/ui/card";
@@ -41,6 +44,7 @@ import {
   PortalEmptyState, PortalErrorState,
 } from "@/components/admin/PortalTabStates";
 import AdapterSpecsSection from "./AdapterSpecsSection";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -366,14 +370,25 @@ function AdapterFormDialog({ open, editing, onClose, onSaved }: FormDialogProps)
 // Main
 // ---------------------------------------------------------------------------
 
+type RegistrySortField = "label" | "key";
+type DbSortField = "label" | "key" | "createdAt";
+type SortDir = PortalSortDir;
+
 export default function PortalAdaptersTab() {
   const { t } = useI18n();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = !!user && (ADMIN_ROLES as readonly string[]).includes(user.role);
 
   const [registry, setRegistry] = useState<RegistryAdapter[]>([]);
   const [dbAdapters, setDbAdapters] = useState<DbAdapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+
+  const [registrySortField, setRegistrySortField] = useState<RegistrySortField>("label");
+  const [registrySortDir, setRegistrySortDir] = useState<SortDir>("asc");
+  const [dbSortField, setDbSortField] = useState<DbSortField>("createdAt");
+  const [dbSortDir, setDbSortDir] = useState<SortDir>("desc");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<DbAdapter | null>(null);
@@ -396,6 +411,23 @@ export default function PortalAdaptersTab() {
   }, [t, toast]);
 
   useEffect(() => { load(); }, [load]);
+
+  const sortedRegistry = useMemo(() => {
+    const dir = registrySortDir === "asc" ? 1 : -1;
+    return [...registry].sort(
+      (a, b) => dir * a[registrySortField].localeCompare(b[registrySortField]),
+    );
+  }, [registry, registrySortField, registrySortDir]);
+
+  const sortedDbAdapters = useMemo(() => {
+    const dir = dbSortDir === "asc" ? 1 : -1;
+    return [...dbAdapters].sort((a, b) => {
+      if (dbSortField === "createdAt") {
+        return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      }
+      return dir * a[dbSortField].localeCompare(b[dbSortField]);
+    });
+  }, [dbAdapters, dbSortField, dbSortDir]);
 
   const handleSaved = (adapter: DbAdapter) => {
     setDbAdapters((prev) => {
@@ -463,8 +495,24 @@ export default function PortalAdaptersTab() {
       {/* === Registry (read-only) === */}
       <Card className="rounded-xl">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">{t("portalAutomation.adapters.registrySection")}</CardTitle>
-          <CardDescription>{t("portalAutomation.adapters.registryDescription")}</CardDescription>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-base">{t("portalAutomation.adapters.registrySection")}</CardTitle>
+              <CardDescription className="mt-1">{t("portalAutomation.adapters.registryDescription")}</CardDescription>
+            </div>
+            {registry.length > 1 && (
+              <PortalSortControl<RegistrySortField>
+                field={registrySortField}
+                dir={registrySortDir}
+                onFieldChange={setRegistrySortField}
+                onToggleDir={() => setRegistrySortDir((d) => d === "asc" ? "desc" : "asc")}
+                options={[
+                  { value: "label", label: t("portalAutomation.adapters.sortByLabel") },
+                  { value: "key", label: t("portalAutomation.adapters.sortByKey") },
+                ]}
+              />
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -475,7 +523,7 @@ export default function PortalAdaptersTab() {
             <p className="text-sm text-muted-foreground">{t("portalAutomation.adapters.noDbAdapters")}</p>
           ) : (
             <div className="divide-y divide-border rounded-lg border overflow-hidden">
-              {registry.map((a) => (
+              {sortedRegistry.map((a) => (
                 <div key={a.key} className="flex items-center gap-3 px-4 py-3 bg-card flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -501,19 +549,34 @@ export default function PortalAdaptersTab() {
       {/* === DB Adapters (CRUD) === */}
       <Card className="rounded-xl">
         <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
               <CardTitle className="text-base">{t("portalAutomation.adapters.dbSection")}</CardTitle>
               <CardDescription className="mt-1">{t("portalAutomation.adapters.dbDescription")}</CardDescription>
             </div>
-            <Button
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={() => { setEditing(null); setFormOpen(true); }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              {t("portalAutomation.adapters.addButton")}
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {dbAdapters.length > 1 && (
+                <PortalSortControl<DbSortField>
+                  field={dbSortField}
+                  dir={dbSortDir}
+                  onFieldChange={setDbSortField}
+                  onToggleDir={() => setDbSortDir((d) => d === "asc" ? "desc" : "asc")}
+                  options={[
+                    { value: "createdAt", label: t("portalAutomation.adapters.sortByCreatedAt") },
+                    { value: "label", label: t("portalAutomation.adapters.sortByLabel") },
+                    { value: "key", label: t("portalAutomation.adapters.sortByKey") },
+                  ]}
+                />
+              )}
+              <Button
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={() => { setEditing(null); setFormOpen(true); }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {t("portalAutomation.adapters.addButton")}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -539,7 +602,7 @@ export default function PortalAdaptersTab() {
             />
           ) : (
             <div className="divide-y divide-border rounded-lg border overflow-hidden">
-              {dbAdapters.map((a) => (
+              {sortedDbAdapters.map((a) => (
                 <div key={a.id} className="flex items-center gap-3 px-4 py-3 bg-card flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -601,7 +664,10 @@ export default function PortalAdaptersTab() {
       </Card>
 
       {/* === Declarative adapter SPECs (opt-in versioned engine) === */}
-      <AdapterSpecsSection />
+      {/* Admin-only: backend GET /adapter-specs is ADMIN_ROLES-gated while this
+          tab is reachable by broader STAFF_ROLES; rendering it unconditionally
+          caused a 403 → "Failed to load adapter specs" toast for staff users. */}
+      {isAdmin && <AdapterSpecsSection />}
 
       {/* Form dialog */}
       <AdapterFormDialog

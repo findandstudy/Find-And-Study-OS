@@ -4903,7 +4903,28 @@
         "unlinked": "Unlinked",
         "stale": "Stale link",
         "staleHint": "This portal university points to a CRM university that no longer exists or has no programs."
-      }
+      },
+      "selectRow": "Select row",
+      "selectAllOnPage": "Select all",
+      "selectedCount": "{{count}} selected",
+      "clearSelection": "Clear selection",
+      "sortByName": "Sort by name",
+      "sortByKey": "Sort by key",
+      "sortByCreatedAt": "Sort by date added",
+      "bulkActivateButton": "Activate Selected",
+      "bulkDeactivateButton": "Deactivate Selected",
+      "bulkEnableAutoProcessButton": "Enable Auto-process",
+      "bulkDisableAutoProcessButton": "Disable Auto-process",
+      "bulkDeleteButton": "Delete Selected",
+      "bulkActiveSuccess": "Updated {{count}} universities.",
+      "bulkActiveError": "Failed to update selected universities.",
+      "bulkAutoProcessSuccess": "Updated {{count}} universities.",
+      "bulkAutoProcessError": "Failed to update selected universities.",
+      "bulkDeleteSuccess": "Deleted {{count}} universities.",
+      "bulkDeleteError": "Failed to delete selected universities.",
+      "bulkDeleteConfirmTitle": "Delete selected universities?",
+      "bulkDeleteConfirmDescription": "This will remove {{count}} universities from portal automation. Existing submissions are kept. This action cannot be undone.",
+      "bulkDeleteConfirmButton": "Delete Selected"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5009,7 +5030,10 @@
       "loadError": "Failed to load adapters.",
       "experimental": "Experimental",
       "emptyTitle": "No custom adapters",
-      "inactiveBadge": "Inactive"
+      "inactiveBadge": "Inactive",
+      "sortByLabel": "Sort by label",
+      "sortByKey": "Sort by key",
+      "sortByCreatedAt": "Sort by date added"
     },
     "submissions": {
       "title": "Submission Board",
@@ -5088,7 +5112,29 @@
       "date7days": "Last 7 days",
       "date30days": "Last 30 days",
       "dateCustom": "Custom range",
-      "clearFilters": "Clear filters"
+      "clearFilters": "Clear filters",
+      "selectRow": "Select row",
+      "selectAllOnPage": "Select all on page",
+      "selectedCount": "{{count}} selected",
+      "clearSelection": "Clear selection",
+      "sortByCreatedAt": "Sort by date created",
+      "sortByUpdatedAt": "Sort by last updated",
+      "sortByStatus": "Sort by status",
+      "sortByUniversity": "Sort by university",
+      "bulkRetryButton": "Retry Selected",
+      "bulkRetryError": "Failed to retry selected submissions.",
+      "bulkRetrySuccess": "Retried {{count}} submissions.",
+      "bulkCancelButton": "Cancel Selected",
+      "bulkCancelConfirmTitle": "Cancel selected submissions?",
+      "bulkCancelConfirmDescription": "This will cancel {{count}} selected submissions. This action cannot be undone.",
+      "bulkCancelError": "Failed to cancel selected submissions.",
+      "bulkCancelSuccess": "Canceled {{count}} submissions.",
+      "bulkProcessButton": "Process Selected",
+      "bulkProcessConfirmTitle": "Process selected submissions now?",
+      "bulkProcessConfirmDescription": "This will immediately process {{count}} selected submissions on the live portal. This action cannot be undone.",
+      "bulkProcessError": "Failed to process selected submissions.",
+      "bulkProcessSuccess": "Processed {{count}} submissions.",
+      "bulkProcessPartial": "Processed {{success}} of {{count}} submissions; {{failed}} failed."
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5305,6 +5351,11 @@
       "statNoProgram": "No program",
       "statExcluded": "Excluded",
       "statFailed": "Failed"
+    },
+    "sort": {
+      "toggleDir": "Toggle sort direction",
+      "asc": "Ascending",
+      "desc": "Descending"
     }
   },
   "activityFeed": {

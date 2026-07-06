@@ -92,6 +92,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { PortalSortControl, type PortalSortDir } from "@/components/admin/PortalSortControl";
+import { cn } from "@/lib/utils";
+
+type UniversitySortField = "universityName" | "universityKey" | "createdAt";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -803,9 +808,12 @@ interface RowProps {
   togglingId:             number | null;
   togglingAutoProcessId:  number | null;
   testingId:              number | null;
+  selected: boolean;
+  onToggleSelect: (id: number) => void;
+  bulkBusy: boolean;
 }
 
-function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, onManageMembers, onDelete, experimental, togglingId, togglingAutoProcessId, testingId }: RowProps) {
+function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, onManageMembers, onDelete, experimental, togglingId, togglingAutoProcessId, testingId, selected, onToggleSelect, bulkBusy }: RowProps) {
   const { t } = useI18n();
   const isToggling            = togglingId            === uni.id;
   const isTogglingAutoProcess = togglingAutoProcessId === uni.id;
@@ -814,9 +822,16 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEdit
   const hasDefaults = !!(defaults.intakeType || defaults.semester || defaults.degreeLevel);
 
   return (
-    <Card className="rounded-xl overflow-hidden">
+    <Card className={cn("rounded-xl overflow-hidden", selected && "ring-1 ring-primary")}>
       <CardContent className="p-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleSelect(uni.id)}
+            disabled={bulkBusy}
+            aria-label={t("portalAutomation.unis.selectRow")}
+            className="mt-1 sm:mt-0 shrink-0"
+          />
 
           {/* Info */}
           <div className="flex-1 min-w-0">
@@ -1074,6 +1089,38 @@ export default function PortalUniversitiesTab() {
   const [deletingId, setDeletingId]   = useState<number | null>(null);
   const [registryAdapters, setRegistryAdapters] = useState<RegistryAdapter[]>([]);
 
+  const [sortField, setSortField] = useState<UniversitySortField>("universityName");
+  const [sortDir, setSortDir]     = useState<PortalSortDir>("asc");
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = unis.length > 0 && unis.every((u) => selectedIds.has(u.id));
+  const someSelected = unis.some((u) => selectedIds.has(u.id)) && !allSelected;
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        unis.forEach((u) => next.delete(u.id));
+      } else {
+        unis.forEach((u) => next.add(u.id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
   const experimentalKeys = useMemo(
     () => new Set(registryAdapters.filter((a) => a.experimental).map((a) => a.key)),
     [registryAdapters],
@@ -1084,7 +1131,7 @@ export default function PortalUniversitiesTab() {
     setLoading(true);
     setLoadError(false);
     try {
-      const params = new URLSearchParams({ limit: "100" });
+      const params = new URLSearchParams({ limit: "100", sortField, sortDir });
       if (q.trim()) params.set("search", q.trim());
       const res = await customFetch<UniversityListResponse>(
         `/api/portal-universities?${params}`,
@@ -1097,7 +1144,7 @@ export default function PortalUniversitiesTab() {
     } finally {
       setLoading(false);
     }
-  }, [t, toast]);
+  }, [t, toast, sortField, sortDir]);
 
   // Load registry adapters (for Add dialog)
   const loadAdapters = useCallback(async () => {
@@ -1111,7 +1158,8 @@ export default function PortalUniversitiesTab() {
     }
   }, []);
 
-  useEffect(() => { load(""); loadAdapters(); }, [load, loadAdapters]);
+  useEffect(() => { loadAdapters(); }, [loadAdapters]);
+  useEffect(() => { load(search); }, [load]);
 
   // Debounced search
   const handleSearch = (q: string) => {
@@ -1257,6 +1305,69 @@ export default function PortalUniversitiesTab() {
     }
   };
 
+  const handleBulkActive = async (isActive: boolean) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    try {
+      interface BulkResult { updated: number; ids: number[] }
+      const data = await customFetch<BulkResult>("/api/portal-universities/bulk-active", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids, isActive }),
+      });
+      toast({ title: t("portalAutomation.unis.bulkActiveSuccess", { count: String(data.updated) }) });
+      clearSelection();
+      await load(search);
+    } catch {
+      toast({ title: t("portalAutomation.unis.bulkActiveError"), variant: "destructive" });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkAutoProcess = async (autoProcess: boolean) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    try {
+      interface BulkResult { updated: number; ids: number[] }
+      const data = await customFetch<BulkResult>("/api/portal-universities/bulk-auto-process", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids, autoProcess }),
+      });
+      toast({ title: t("portalAutomation.unis.bulkAutoProcessSuccess", { count: String(data.updated) }) });
+      clearSelection();
+      await load(search);
+    } catch {
+      toast({ title: t("portalAutomation.unis.bulkAutoProcessError"), variant: "destructive" });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    try {
+      interface BulkResult { deleted: number; ids: number[] }
+      const data = await customFetch<BulkResult>("/api/portal-universities/bulk-delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      toast({ title: t("portalAutomation.unis.bulkDeleteSuccess", { count: String(data.deleted) }) });
+      clearSelection();
+      await load(search);
+    } catch {
+      toast({ title: t("portalAutomation.unis.bulkDeleteError"), variant: "destructive" });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4 py-2">
       {/* Toolbar */}
@@ -1303,6 +1414,92 @@ export default function PortalUniversitiesTab() {
         </div>
       </div>
 
+      {/* Sort + selection toolbar */}
+      {!loading && !loadError && unis.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={allSelected ? true : someSelected ? "indeterminate" : false}
+              onCheckedChange={toggleSelectAll}
+              disabled={bulkBusy}
+              aria-label={t("portalAutomation.unis.selectAllOnPage")}
+            />
+            <span className="text-xs text-muted-foreground">
+              {selectedIds.size > 0
+                ? t("portalAutomation.unis.selectedCount", { count: String(selectedIds.size) })
+                : t("portalAutomation.unis.selectAllOnPage")}
+            </span>
+          </div>
+          <PortalSortControl<UniversitySortField>
+            field={sortField}
+            dir={sortDir}
+            onFieldChange={setSortField}
+            onToggleDir={() => setSortDir((d) => d === "asc" ? "desc" : "asc")}
+            options={[
+              { value: "universityName", label: t("portalAutomation.unis.sortByName") },
+              { value: "universityKey", label: t("portalAutomation.unis.sortByKey") },
+              { value: "createdAt", label: t("portalAutomation.unis.sortByCreatedAt") },
+            ]}
+          />
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+          <span className="text-sm font-medium mr-1">
+            {t("portalAutomation.unis.selectedCount", { count: String(selectedIds.size) })}
+          </span>
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5"
+            onClick={() => void handleBulkActive(true)}
+            disabled={bulkBusy}
+          >
+            {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+            {t("portalAutomation.unis.bulkActivateButton")}
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5"
+            onClick={() => void handleBulkActive(false)}
+            disabled={bulkBusy}
+          >
+            {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+            {t("portalAutomation.unis.bulkDeactivateButton")}
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5"
+            onClick={() => void handleBulkAutoProcess(true)}
+            disabled={bulkBusy}
+          >
+            {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Network className="w-3.5 h-3.5" />}
+            {t("portalAutomation.unis.bulkEnableAutoProcessButton")}
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5"
+            onClick={() => void handleBulkAutoProcess(false)}
+            disabled={bulkBusy}
+          >
+            {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Network className="w-3.5 h-3.5" />}
+            {t("portalAutomation.unis.bulkDisableAutoProcessButton")}
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-8 gap-1.5 text-destructive hover:text-destructive"
+            onClick={() => setConfirmBulkDelete(true)}
+            disabled={bulkBusy}
+          >
+            {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+            {t("portalAutomation.unis.bulkDeleteButton")}
+          </Button>
+          <Button
+            variant="ghost" size="sm" className="h-8 text-muted-foreground"
+            onClick={clearSelection}
+            disabled={bulkBusy}
+          >
+            {t("portalAutomation.unis.clearSelection")}
+          </Button>
+        </div>
+      )}
+
       {/* List */}
       {loading ? (
         <div className="space-y-3">
@@ -1339,6 +1536,9 @@ export default function PortalUniversitiesTab() {
               togglingId={togglingId}
               togglingAutoProcessId={togglingAutoProcessId}
               testingId={testingId}
+              selected={selectedIds.has(uni.id)}
+              onToggleSelect={toggleSelect}
+              bulkBusy={bulkBusy}
             />
           ))}
           {total > unis.length && (
@@ -1403,6 +1603,28 @@ export default function PortalUniversitiesTab() {
               {deletingId !== null
                 ? t("portalAutomation.unis.deleting")
                 : t("portalAutomation.unis.deleteConfirmButton")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmBulkDelete} onOpenChange={(o) => { if (!o && !bulkBusy) setConfirmBulkDelete(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("portalAutomation.unis.bulkDeleteConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("portalAutomation.unis.bulkDeleteConfirmDescription", { count: String(selectedIds.size) })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkBusy}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); setConfirmBulkDelete(false); void handleBulkDelete(); }}
+              disabled={bulkBusy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkBusy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {t("portalAutomation.unis.bulkDeleteConfirmButton")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

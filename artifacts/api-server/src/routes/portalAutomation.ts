@@ -418,6 +418,8 @@ const listQuerySchema = z.object({
   // Inclusive date range on portal_submissions.updated_at (ISO datetimes).
   dateFrom: z.coerce.date().optional(),
   dateTo: z.coerce.date().optional(),
+  sortField: z.enum(["createdAt", "updatedAt", "status", "universityKey"]).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
 });
 type ListSchemas = { query: typeof listQuerySchema };
 
@@ -427,9 +429,18 @@ router.get(
   validate({ query: listQuerySchema }),
   async (req, res): Promise<void> => {
     const user = req.user!;
-    const { applicationId, status, mode, universityKeys, studentName, dateFrom, dateTo } =
+    const { applicationId, status, mode, universityKeys, studentName, dateFrom, dateTo, sortField, sortDir } =
       getValidated<ListSchemas>(req).query;
     const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: "small" });
+
+    const sortColumnMap = {
+      createdAt: portalSubmissionsTable.createdAt,
+      updatedAt: portalSubmissionsTable.updatedAt,
+      status: portalSubmissionsTable.status,
+      universityKey: portalSubmissionsTable.universityKey,
+    } as const;
+    const sortColumn = sortColumnMap[sortField ?? "createdAt"];
+    const sortDirFn = sortDir === "asc" ? asc : desc;
 
     const universityKeyList = universityKeys
       ? universityKeys.split(",").map((k) => k.trim()).filter(Boolean)
@@ -517,7 +528,7 @@ router.get(
         eq(studentsTable.id, portalSubmissionsTable.studentId),
       )
       .where(where)
-      .orderBy(desc(portalSubmissionsTable.createdAt))
+      .orderBy(sortDirFn(sortColumn), desc(portalSubmissionsTable.id))
       .limit(pageParams.limit)
       .offset(pageParams.offset);
 
@@ -1169,6 +1180,166 @@ router.post(
     );
 
     res.json({ reset: ids.length, ids });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-submissions/bulk-retry — mirrors :id/retry for many rows in
+// one UPDATE. Only rows whose current status is retryable are touched;
+// everything else is reported back as skipped (no partial-row errors).
+// ---------------------------------------------------------------------------
+const bulkIdsBodySchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(200),
+});
+type BulkIdsSchemas = { body: typeof bulkIdsBodySchema };
+
+router.post(
+  "/portal-submissions/bulk-retry",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ body: bulkIdsBodySchema }),
+  async (req, res): Promise<void> => {
+    const user = req.user!;
+    const { ids } = getValidated<BulkIdsSchemas>(req).body;
+
+    const eligible = await db
+      .select({ id: portalSubmissionsTable.id })
+      .from(portalSubmissionsTable)
+      .where(and(
+        inArray(portalSubmissionsTable.id, ids),
+        isNull(portalSubmissionsTable.deletedAt),
+        or(
+          eq(portalSubmissionsTable.status, "failed"),
+          eq(portalSubmissionsTable.status, "canceled"),
+          eq(portalSubmissionsTable.status, "dry_run"),
+        ),
+      ));
+    const eligibleIds = eligible.map((r) => r.id);
+
+    if (eligibleIds.length > 0) {
+      await db
+        .update(portalSubmissionsTable)
+        .set({ status: "queued", lockedAt: null, lockedBy: null, error: null, attempts: 0 })
+        .where(inArray(portalSubmissionsTable.id, eligibleIds));
+    }
+
+    await logAudit(
+      user.id,
+      "bulk_retry_portal_submissions",
+      "portal_submission",
+      undefined,
+      { requested: ids, retried: eligibleIds },
+      req.ip,
+    );
+
+    res.json({
+      retried: eligibleIds.length,
+      ids: eligibleIds,
+      skipped: ids.filter((id) => !eligibleIds.includes(id)),
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-submissions/bulk-cancel — mirrors :id/cancel for many rows.
+// ---------------------------------------------------------------------------
+router.post(
+  "/portal-submissions/bulk-cancel",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ body: bulkIdsBodySchema }),
+  async (req, res): Promise<void> => {
+    const user = req.user!;
+    const { ids } = getValidated<BulkIdsSchemas>(req).body;
+
+    const eligible = await db
+      .select({ id: portalSubmissionsTable.id })
+      .from(portalSubmissionsTable)
+      .where(and(
+        inArray(portalSubmissionsTable.id, ids),
+        isNull(portalSubmissionsTable.deletedAt),
+        or(
+          eq(portalSubmissionsTable.status, "queued"),
+          eq(portalSubmissionsTable.status, "running"),
+        ),
+      ));
+    const eligibleIds = eligible.map((r) => r.id);
+
+    if (eligibleIds.length > 0) {
+      await db
+        .update(portalSubmissionsTable)
+        .set({ status: "canceled" })
+        .where(inArray(portalSubmissionsTable.id, eligibleIds));
+    }
+
+    await logAudit(
+      user.id,
+      "bulk_cancel_portal_submissions",
+      "portal_submission",
+      undefined,
+      { requested: ids, canceled: eligibleIds },
+      req.ip,
+    );
+
+    res.json({
+      canceled: eligibleIds.length,
+      ids: eligibleIds,
+      skipped: ids.filter((id) => !eligibleIds.includes(id)),
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-submissions/bulk-process — processes only the given (queued)
+// ids sequentially, reusing the same eşzaman-1 pipeline as process-queued /
+// the single :id/process route. Guarded by the same module-level mutex.
+// ---------------------------------------------------------------------------
+router.post(
+  "/portal-submissions/bulk-process",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ body: bulkIdsBodySchema }),
+  async (req, res): Promise<void> => {
+    if (_processMutex) {
+      res.status(409).json({
+        error: "ALREADY_RUNNING",
+        message: "A portal process run is already in progress on this instance",
+      });
+      return;
+    }
+
+    const user = req.user!;
+    const { ids } = getValidated<BulkIdsSchemas>(req).body;
+    const workerId = `api-bulk-${user.id}-${Date.now()}`;
+
+    _processMutex = true;
+    const results: ProcessSingleResult[] = [];
+    try {
+      for (const id of ids) {
+        results.push(await processSingle(id, workerId));
+      }
+    } finally {
+      _processMutex = false;
+    }
+
+    const processedCount = results.filter(
+      (r) => r.status !== "skipped" && r.status !== "requeued",
+    ).length;
+
+    await logAudit(
+      user.id,
+      "bulk_process_portal_submissions",
+      "portal_submission",
+      undefined,
+      {
+        requested: ids,
+        processed: processedCount,
+        results: results.map((r) => ({ id: r.id, status: r.status })),
+      },
+      req.ip,
+    );
+
+    res.json({ processed: processedCount, results });
   },
 );
 

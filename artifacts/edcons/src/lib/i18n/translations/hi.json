@@ -4903,7 +4903,28 @@
         "unlinked": "अजुड़ा",
         "stale": "पुराना लिंक",
         "staleHint": "यह पोर्टल विश्वविद्यालय एक ऐसे CRM विश्वविद्यालय की ओर इशारा करता है जो अब मौजूद नहीं है या जिसमें कोई प्रोग्राम नहीं है।"
-      }
+      },
+      "selectRow": "पंक्ति चुनें",
+      "selectAllOnPage": "सभी चुनें",
+      "selectedCount": "{{count}} चयनित",
+      "clearSelection": "चयन साफ़ करें",
+      "sortByName": "नाम के अनुसार क्रमबद्ध करें",
+      "sortByKey": "कुंजी के अनुसार क्रमबद्ध करें",
+      "sortByCreatedAt": "जोड़ी गई तारीख के अनुसार क्रमबद्ध करें",
+      "bulkActivateButton": "चयनित सक्रिय करें",
+      "bulkDeactivateButton": "चयनित निष्क्रिय करें",
+      "bulkEnableAutoProcessButton": "ऑटो-प्रोसेस सक्षम करें",
+      "bulkDisableAutoProcessButton": "ऑटो-प्रोसेस अक्षम करें",
+      "bulkDeleteButton": "चयनित हटाएं",
+      "bulkActiveSuccess": "{{count}} विश्वविद्यालय अपडेट किए गए।",
+      "bulkActiveError": "चयनित विश्वविद्यालयों को अपडेट करने में विफल।",
+      "bulkAutoProcessSuccess": "{{count}} विश्वविद्यालय अपडेट किए गए।",
+      "bulkAutoProcessError": "चयनित विश्वविद्यालयों को अपडेट करने में विफल।",
+      "bulkDeleteSuccess": "{{count}} विश्वविद्यालय हटाए गए।",
+      "bulkDeleteError": "चयनित विश्वविद्यालयों को हटाने में विफल।",
+      "bulkDeleteConfirmTitle": "क्या चयनित विश्वविद्यालय हटाएं?",
+      "bulkDeleteConfirmDescription": "{{count}} विश्वविद्यालय पोर्टल ऑटोमेशन से हटा दिए जाएंगे। मौजूदा सबमिशन बनाए रखे जाएंगे। यह कार्रवाई पूर्ववत नहीं की जा सकती।",
+      "bulkDeleteConfirmButton": "चयनित हटाएं"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5009,7 +5030,10 @@
       "loadError": "Failed to load adapters.",
       "experimental": "Experimental",
       "emptyTitle": "No custom adapters",
-      "inactiveBadge": "Inactive"
+      "inactiveBadge": "Inactive",
+      "sortByLabel": "लेबल के अनुसार क्रमबद्ध करें",
+      "sortByKey": "कुंजी के अनुसार क्रमबद्ध करें",
+      "sortByCreatedAt": "जोड़ी गई तारीख के अनुसार क्रमबद्ध करें"
     },
     "submissions": {
       "title": "Submission Board",
@@ -5088,7 +5112,29 @@
       "date7days": "पिछले 7 दिन",
       "date30days": "पिछले 30 दिन",
       "dateCustom": "कस्टम सीमा",
-      "clearFilters": "फ़िल्टर साफ़ करें"
+      "clearFilters": "फ़िल्टर साफ़ करें",
+      "selectRow": "पंक्ति चुनें",
+      "selectAllOnPage": "पृष्ठ पर सभी चुनें",
+      "selectedCount": "{{count}} चयनित",
+      "clearSelection": "चयन साफ़ करें",
+      "sortByCreatedAt": "बनाई गई तारीख के अनुसार क्रमबद्ध करें",
+      "sortByUpdatedAt": "अंतिम अपडेट के अनुसार क्रमबद्ध करें",
+      "sortByStatus": "स्थिति के अनुसार क्रमबद्ध करें",
+      "sortByUniversity": "विश्वविद्यालय के अनुसार क्रमबद्ध करें",
+      "bulkRetryButton": "चयनित पुनः प्रयास करें",
+      "bulkRetryError": "चयनित सबमिशन पुनः प्रयास करने में विफल।",
+      "bulkRetrySuccess": "{{count}} सबमिशन पुनः प्रयास किए गए।",
+      "bulkCancelButton": "चयनित रद्द करें",
+      "bulkCancelConfirmTitle": "क्या चयनित सबमिशन रद्द करें?",
+      "bulkCancelConfirmDescription": "{{count}} चयनित सबमिशन रद्द कर दिए जाएंगे। यह कार्रवाई पूर्ववत नहीं की जा सकती।",
+      "bulkCancelError": "चयनित सबमिशन रद्द करने में विफल।",
+      "bulkCancelSuccess": "{{count}} सबमिशन रद्द किए गए।",
+      "bulkProcessButton": "चयनित संसाधित करें",
+      "bulkProcessConfirmTitle": "क्या चयनित सबमिशन अभी संसाधित करें?",
+      "bulkProcessConfirmDescription": "{{count}} चयनित सबमिशन लाइव पोर्टल पर तुरंत संसाधित किए जाएंगे। यह कार्रवाई पूर्ववत नहीं की जा सकती।",
+      "bulkProcessError": "चयनित सबमिशन संसाधित करने में विफल।",
+      "bulkProcessSuccess": "{{count}} सबमिशन संसाधित किए गए।",
+      "bulkProcessPartial": "{{count}} में से {{success}} सबमिशन संसाधित किए गए; {{failed}} विफल रहे।"
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5305,6 +5351,11 @@
       "statNoProgram": "कोई प्रोग्राम नहीं",
       "statExcluded": "बाहर",
       "statFailed": "विफल"
+    },
+    "sort": {
+      "toggleDir": "क्रम दिशा बदलें",
+      "asc": "आरोही",
+      "desc": "अवरोही"
     }
   },
   "activityFeed": {

@@ -4903,7 +4903,28 @@
         "unlinked": "Non reliée",
         "stale": "Lien obsolète",
         "staleHint": "Cette université du portail pointe vers une université CRM qui n’existe plus ou n’a aucun programme."
-      }
+      },
+      "selectRow": "Sélectionner la ligne",
+      "selectAllOnPage": "Tout sélectionner",
+      "selectedCount": "{{count}} sélectionnée(s)",
+      "clearSelection": "Effacer la sélection",
+      "sortByName": "Trier par nom",
+      "sortByKey": "Trier par clé",
+      "sortByCreatedAt": "Trier par date d'ajout",
+      "bulkActivateButton": "Activer la sélection",
+      "bulkDeactivateButton": "Désactiver la sélection",
+      "bulkEnableAutoProcessButton": "Activer le traitement auto",
+      "bulkDisableAutoProcessButton": "Désactiver le traitement auto",
+      "bulkDeleteButton": "Supprimer la sélection",
+      "bulkActiveSuccess": "{{count}} universités mises à jour.",
+      "bulkActiveError": "Échec de la mise à jour des universités sélectionnées.",
+      "bulkAutoProcessSuccess": "{{count}} universités mises à jour.",
+      "bulkAutoProcessError": "Échec de la mise à jour des universités sélectionnées.",
+      "bulkDeleteSuccess": "{{count}} universités supprimées.",
+      "bulkDeleteError": "Échec de la suppression des universités sélectionnées.",
+      "bulkDeleteConfirmTitle": "Supprimer les universités sélectionnées ?",
+      "bulkDeleteConfirmDescription": "{{count}} universités seront retirées de l'automatisation du portail. Les soumissions existantes sont conservées. Cette action est irréversible.",
+      "bulkDeleteConfirmButton": "Supprimer la sélection"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5009,7 +5030,10 @@
       "loadError": "Failed to load adapters.",
       "experimental": "Experimental",
       "emptyTitle": "No custom adapters",
-      "inactiveBadge": "Inactive"
+      "inactiveBadge": "Inactive",
+      "sortByLabel": "Trier par libellé",
+      "sortByKey": "Trier par clé",
+      "sortByCreatedAt": "Trier par date d'ajout"
     },
     "submissions": {
       "title": "Submission Board",
@@ -5088,7 +5112,29 @@
       "date7days": "7 derniers jours",
       "date30days": "30 derniers jours",
       "dateCustom": "Plage personnalisée",
-      "clearFilters": "Effacer les filtres"
+      "clearFilters": "Effacer les filtres",
+      "selectRow": "Sélectionner la ligne",
+      "selectAllOnPage": "Tout sélectionner sur la page",
+      "selectedCount": "{{count}} sélectionné(s)",
+      "clearSelection": "Effacer la sélection",
+      "sortByCreatedAt": "Trier par date de création",
+      "sortByUpdatedAt": "Trier par dernière mise à jour",
+      "sortByStatus": "Trier par statut",
+      "sortByUniversity": "Trier par université",
+      "bulkRetryButton": "Réessayer la sélection",
+      "bulkRetryError": "Échec de la nouvelle tentative pour les soumissions sélectionnées.",
+      "bulkRetrySuccess": "{{count}} soumissions relancées.",
+      "bulkCancelButton": "Annuler la sélection",
+      "bulkCancelConfirmTitle": "Annuler les soumissions sélectionnées ?",
+      "bulkCancelConfirmDescription": "{{count}} soumissions sélectionnées seront annulées. Cette action est irréversible.",
+      "bulkCancelError": "Échec de l'annulation des soumissions sélectionnées.",
+      "bulkCancelSuccess": "{{count}} soumissions annulées.",
+      "bulkProcessButton": "Traiter la sélection",
+      "bulkProcessConfirmTitle": "Traiter maintenant les soumissions sélectionnées ?",
+      "bulkProcessConfirmDescription": "{{count}} soumissions sélectionnées seront traitées immédiatement sur le portail en direct. Cette action est irréversible.",
+      "bulkProcessError": "Échec du traitement des soumissions sélectionnées.",
+      "bulkProcessSuccess": "{{count}} soumissions traitées.",
+      "bulkProcessPartial": "{{success}} sur {{count}} soumissions traitées ; {{failed}} en échec."
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5305,6 +5351,11 @@
       "statNoProgram": "Sans programme",
       "statExcluded": "Exclues",
       "statFailed": "Échouées"
+    },
+    "sort": {
+      "toggleDir": "Inverser le sens du tri",
+      "asc": "Croissant",
+      "desc": "Décroissant"
     }
   },
   "activityFeed": {

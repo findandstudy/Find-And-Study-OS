@@ -4903,7 +4903,28 @@
         "unlinked": "غير مرتبط",
         "stale": "رابط قديم",
         "staleHint": "تشير جامعة البوابة هذه إلى جامعة CRM لم تعد موجودة أو ليس لها برامج."
-      }
+      },
+      "selectRow": "تحديد الصف",
+      "selectAllOnPage": "تحديد الكل",
+      "selectedCount": "تم تحديد {{count}}",
+      "clearSelection": "مسح التحديد",
+      "sortByName": "الفرز حسب الاسم",
+      "sortByKey": "الفرز حسب المفتاح",
+      "sortByCreatedAt": "الفرز حسب تاريخ الإضافة",
+      "bulkActivateButton": "تفعيل المحدد",
+      "bulkDeactivateButton": "تعطيل المحدد",
+      "bulkEnableAutoProcessButton": "تفعيل المعالجة التلقائية",
+      "bulkDisableAutoProcessButton": "تعطيل المعالجة التلقائية",
+      "bulkDeleteButton": "حذف المحدد",
+      "bulkActiveSuccess": "تم تحديث {{count}} جامعة.",
+      "bulkActiveError": "فشل تحديث الجامعات المحددة.",
+      "bulkAutoProcessSuccess": "تم تحديث {{count}} جامعة.",
+      "bulkAutoProcessError": "فشل تحديث الجامعات المحددة.",
+      "bulkDeleteSuccess": "تم حذف {{count}} جامعة.",
+      "bulkDeleteError": "فشل حذف الجامعات المحددة.",
+      "bulkDeleteConfirmTitle": "هل تريد حذف الجامعات المحددة؟",
+      "bulkDeleteConfirmDescription": "ستتم إزالة {{count}} جامعة من أتمتة البوابة. سيتم الاحتفاظ بالطلبات الحالية. لا يمكن التراجع عن هذا الإجراء.",
+      "bulkDeleteConfirmButton": "حذف المحدد"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5009,7 +5030,10 @@
       "loadError": "Failed to load adapters.",
       "experimental": "Experimental",
       "emptyTitle": "No custom adapters",
-      "inactiveBadge": "Inactive"
+      "inactiveBadge": "Inactive",
+      "sortByLabel": "الفرز حسب التسمية",
+      "sortByKey": "الفرز حسب المفتاح",
+      "sortByCreatedAt": "الفرز حسب تاريخ الإضافة"
     },
     "submissions": {
       "title": "Submission Board",
@@ -5088,7 +5112,29 @@
       "date7days": "آخر 7 أيام",
       "date30days": "آخر 30 يومًا",
       "dateCustom": "نطاق مخصص",
-      "clearFilters": "مسح عوامل التصفية"
+      "clearFilters": "مسح عوامل التصفية",
+      "selectRow": "تحديد الصف",
+      "selectAllOnPage": "تحديد الكل في الصفحة",
+      "selectedCount": "تم تحديد {{count}}",
+      "clearSelection": "مسح التحديد",
+      "sortByCreatedAt": "الفرز حسب تاريخ الإنشاء",
+      "sortByUpdatedAt": "الفرز حسب آخر تحديث",
+      "sortByStatus": "الفرز حسب الحالة",
+      "sortByUniversity": "الفرز حسب الجامعة",
+      "bulkRetryButton": "إعادة محاولة المحدد",
+      "bulkRetryError": "فشلت إعادة محاولة الطلبات المحددة.",
+      "bulkRetrySuccess": "تمت إعادة محاولة {{count}} طلب.",
+      "bulkCancelButton": "إلغاء المحدد",
+      "bulkCancelConfirmTitle": "هل تريد إلغاء الطلبات المحددة؟",
+      "bulkCancelConfirmDescription": "سيتم إلغاء {{count}} طلب محدد. لا يمكن التراجع عن هذا الإجراء.",
+      "bulkCancelError": "فشل إلغاء الطلبات المحددة.",
+      "bulkCancelSuccess": "تم إلغاء {{count}} طلب.",
+      "bulkProcessButton": "معالجة المحدد",
+      "bulkProcessConfirmTitle": "هل تريد معالجة الطلبات المحددة الآن؟",
+      "bulkProcessConfirmDescription": "سيتم معالجة {{count}} طلب محدد فورًا على البوابة الفعلية. لا يمكن التراجع عن هذا الإجراء.",
+      "bulkProcessError": "فشلت معالجة الطلبات المحددة.",
+      "bulkProcessSuccess": "تمت معالجة {{count}} طلب.",
+      "bulkProcessPartial": "تمت معالجة {{success}} من {{count}} طلب؛ فشل {{failed}}."
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5305,6 +5351,11 @@
       "statNoProgram": "بلا برنامج",
       "statExcluded": "مستبعد",
       "statFailed": "فشل"
+    },
+    "sort": {
+      "toggleDir": "تبديل اتجاه الفرز",
+      "asc": "تصاعدي",
+      "desc": "تنازلي"
     }
   },
   "activityFeed": {

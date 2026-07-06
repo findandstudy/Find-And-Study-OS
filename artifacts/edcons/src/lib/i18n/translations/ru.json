@@ -4903,7 +4903,28 @@
         "unlinked": "Не связано",
         "stale": "Устаревшая связь",
         "staleHint": "Этот университет портала указывает на университет CRM, который больше не существует или не имеет программ."
-      }
+      },
+      "selectRow": "Выбрать строку",
+      "selectAllOnPage": "Выбрать все",
+      "selectedCount": "Выбрано: {{count}}",
+      "clearSelection": "Очистить выбор",
+      "sortByName": "Сортировать по названию",
+      "sortByKey": "Сортировать по ключу",
+      "sortByCreatedAt": "Сортировать по дате добавления",
+      "bulkActivateButton": "Активировать выбранные",
+      "bulkDeactivateButton": "Деактивировать выбранные",
+      "bulkEnableAutoProcessButton": "Включить автообработку",
+      "bulkDisableAutoProcessButton": "Выключить автообработку",
+      "bulkDeleteButton": "Удалить выбранные",
+      "bulkActiveSuccess": "Обновлено университетов: {{count}}.",
+      "bulkActiveError": "Не удалось обновить выбранные университеты.",
+      "bulkAutoProcessSuccess": "Обновлено университетов: {{count}}.",
+      "bulkAutoProcessError": "Не удалось обновить выбранные университеты.",
+      "bulkDeleteSuccess": "Удалено университетов: {{count}}.",
+      "bulkDeleteError": "Не удалось удалить выбранные университеты.",
+      "bulkDeleteConfirmTitle": "Удалить выбранные университеты?",
+      "bulkDeleteConfirmDescription": "{{count}} университетов будут удалены из автоматизации портала. Существующие отправки будут сохранены. Это действие нельзя отменить.",
+      "bulkDeleteConfirmButton": "Удалить выбранные"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5009,7 +5030,10 @@
       "loadError": "Failed to load adapters.",
       "experimental": "Experimental",
       "emptyTitle": "No custom adapters",
-      "inactiveBadge": "Inactive"
+      "inactiveBadge": "Inactive",
+      "sortByLabel": "Сортировать по названию",
+      "sortByKey": "Сортировать по ключу",
+      "sortByCreatedAt": "Сортировать по дате добавления"
     },
     "submissions": {
       "title": "Submission Board",
@@ -5088,7 +5112,29 @@
       "date7days": "Последние 7 дней",
       "date30days": "Последние 30 дней",
       "dateCustom": "Произвольный период",
-      "clearFilters": "Сбросить фильтры"
+      "clearFilters": "Сбросить фильтры",
+      "selectRow": "Выбрать строку",
+      "selectAllOnPage": "Выбрать все на странице",
+      "selectedCount": "Выбрано: {{count}}",
+      "clearSelection": "Очистить выбор",
+      "sortByCreatedAt": "Сортировать по дате создания",
+      "sortByUpdatedAt": "Сортировать по дате обновления",
+      "sortByStatus": "Сортировать по статусу",
+      "sortByUniversity": "Сортировать по университету",
+      "bulkRetryButton": "Повторить выбранные",
+      "bulkRetryError": "Не удалось повторить выбранные отправки.",
+      "bulkRetrySuccess": "Повторено отправок: {{count}}.",
+      "bulkCancelButton": "Отменить выбранные",
+      "bulkCancelConfirmTitle": "Отменить выбранные отправки?",
+      "bulkCancelConfirmDescription": "Будет отменено {{count}} выбранных отправок. Это действие нельзя отменить.",
+      "bulkCancelError": "Не удалось отменить выбранные отправки.",
+      "bulkCancelSuccess": "Отменено отправок: {{count}}.",
+      "bulkProcessButton": "Обработать выбранные",
+      "bulkProcessConfirmTitle": "Обработать выбранные отправки сейчас?",
+      "bulkProcessConfirmDescription": "{{count}} выбранных отправок будут немедленно обработаны на действующем портале. Это действие нельзя отменить.",
+      "bulkProcessError": "Не удалось обработать выбранные отправки.",
+      "bulkProcessSuccess": "Обработано отправок: {{count}}.",
+      "bulkProcessPartial": "Обработано {{success}} из {{count}} отправок; {{failed}} с ошибкой."
     },
     "auditLog": {
       "title": "Audit Log",
@@ -5305,6 +5351,11 @@
       "statNoProgram": "Без программы",
       "statExcluded": "Исключено",
       "statFailed": "С ошибкой"
+    },
+    "sort": {
+      "toggleDir": "Изменить направление сортировки",
+      "asc": "По возрастанию",
+      "desc": "По убыванию"
     }
   },
   "activityFeed": {

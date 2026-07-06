@@ -17,7 +17,7 @@
  */
 
 import { Router, type IRouter } from "express";
-import { and, asc, count, eq, ilike, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
@@ -187,6 +187,8 @@ const listUniversitiesQuerySchema = z.object({
     .string()
     .transform((v) => v === "true" ? true : v === "false" ? false : undefined)
     .optional(),
+  sortField: z.enum(["universityName", "universityKey", "adapterKey", "createdAt"]).optional(),
+  sortDir: z.enum(["asc", "desc"]).optional(),
 });
 type ListUnisSchemas = { query: typeof listUniversitiesQuerySchema };
 
@@ -196,8 +198,17 @@ router.get(
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   validate({ query: listUniversitiesQuerySchema }),
   async (req, res): Promise<void> => {
-    const { search, isActive } = getValidated<ListUnisSchemas>(req).query;
+    const { search, isActive, sortField, sortDir } = getValidated<ListUnisSchemas>(req).query;
     const pageParams = parsePaginationParams(req, { defaultLimit: 50, maxLimit: "large" });
+
+    const uniSortColumnMap = {
+      universityName: portalUniversitiesTable.universityName,
+      universityKey: portalUniversitiesTable.universityKey,
+      adapterKey: portalUniversitiesTable.adapterKey,
+      createdAt: portalUniversitiesTable.createdAt,
+    } as const;
+    const uniSortColumn = uniSortColumnMap[sortField ?? "universityName"];
+    const uniSortDirFn = sortDir === "desc" ? desc : asc;
 
     const conditions: (SQL | undefined)[] = [isNull(portalUniversitiesTable.deletedAt)];
 
@@ -227,7 +238,7 @@ router.get(
       .select()
       .from(portalUniversitiesTable)
       .where(where)
-      .orderBy(asc(portalUniversitiesTable.universityName))
+      .orderBy(uniSortDirFn(uniSortColumn), asc(portalUniversitiesTable.id))
       .limit(pageParams.limit)
       .offset(pageParams.offset);
 
@@ -609,6 +620,148 @@ router.delete(
     );
 
     res.json({ ok: true });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-universities/bulk-active — activate/deactivate many rows at once.
+// ---------------------------------------------------------------------------
+const bulkUniIdsBodySchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(200),
+});
+
+const bulkActiveBodySchema = bulkUniIdsBodySchema.extend({
+  isActive: z.boolean(),
+});
+type BulkActiveSchemas = { body: typeof bulkActiveBodySchema };
+
+router.post(
+  "/portal-universities/bulk-active",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ body: bulkActiveBodySchema }),
+  async (req, res): Promise<void> => {
+    const { ids, isActive } = getValidated<BulkActiveSchemas>(req).body;
+    const user = req.user!;
+
+    const eligible = await db
+      .select({ id: portalUniversitiesTable.id })
+      .from(portalUniversitiesTable)
+      .where(and(inArray(portalUniversitiesTable.id, ids), isNull(portalUniversitiesTable.deletedAt)));
+    const eligibleIds = eligible.map((r) => r.id);
+
+    if (eligibleIds.length > 0) {
+      await db
+        .update(portalUniversitiesTable)
+        .set({ isActive, updatedAt: new Date() })
+        .where(inArray(portalUniversitiesTable.id, eligibleIds));
+    }
+
+    logAudit(
+      user.id,
+      isActive ? "bulk_activate_portal_university" : "bulk_deactivate_portal_university",
+      "portal_university",
+      undefined,
+      { requested: ids, updated: eligibleIds },
+      req.ip,
+    );
+
+    res.json({
+      updated: eligibleIds.length,
+      ids: eligibleIds,
+      skipped: ids.filter((id) => !eligibleIds.includes(id)),
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-universities/bulk-auto-process — toggle autoProcess for many.
+// ---------------------------------------------------------------------------
+const bulkAutoProcessBodySchema = bulkUniIdsBodySchema.extend({
+  autoProcess: z.boolean(),
+});
+type BulkAutoProcessSchemas = { body: typeof bulkAutoProcessBodySchema };
+
+router.post(
+  "/portal-universities/bulk-auto-process",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ body: bulkAutoProcessBodySchema }),
+  async (req, res): Promise<void> => {
+    const { ids, autoProcess } = getValidated<BulkAutoProcessSchemas>(req).body;
+    const user = req.user!;
+
+    const eligible = await db
+      .select({ id: portalUniversitiesTable.id })
+      .from(portalUniversitiesTable)
+      .where(and(inArray(portalUniversitiesTable.id, ids), isNull(portalUniversitiesTable.deletedAt)));
+    const eligibleIds = eligible.map((r) => r.id);
+
+    if (eligibleIds.length > 0) {
+      await db
+        .update(portalUniversitiesTable)
+        .set({ autoProcess, updatedAt: new Date() })
+        .where(inArray(portalUniversitiesTable.id, eligibleIds));
+    }
+
+    logAudit(
+      user.id,
+      autoProcess ? "bulk_enable_portal_auto_process" : "bulk_disable_portal_auto_process",
+      "portal_university",
+      undefined,
+      { requested: ids, updated: eligibleIds },
+      req.ip,
+    );
+
+    res.json({
+      updated: eligibleIds.length,
+      ids: eligibleIds,
+      skipped: ids.filter((id) => !eligibleIds.includes(id)),
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// POST /portal-universities/bulk-delete — soft-delete many rows at once.
+// ---------------------------------------------------------------------------
+type BulkUniIdsSchemas = { body: typeof bulkUniIdsBodySchema };
+
+router.post(
+  "/portal-universities/bulk-delete",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ body: bulkUniIdsBodySchema }),
+  async (req, res): Promise<void> => {
+    const { ids } = getValidated<BulkUniIdsSchemas>(req).body;
+    const user = req.user!;
+
+    const eligible = await db
+      .select({ id: portalUniversitiesTable.id })
+      .from(portalUniversitiesTable)
+      .where(and(inArray(portalUniversitiesTable.id, ids), isNull(portalUniversitiesTable.deletedAt)));
+    const eligibleIds = eligible.map((r) => r.id);
+
+    if (eligibleIds.length > 0) {
+      await db
+        .update(portalUniversitiesTable)
+        .set({ deletedAt: new Date() })
+        .where(inArray(portalUniversitiesTable.id, eligibleIds));
+    }
+
+    logAudit(
+      user.id,
+      "bulk_delete_portal_university",
+      "portal_university",
+      undefined,
+      { requested: ids, deleted: eligibleIds },
+      req.ip,
+    );
+
+    res.json({
+      deleted: eligibleIds.length,
+      ids: eligibleIds,
+      skipped: ids.filter((id) => !eligibleIds.includes(id)),
+    });
   },
 );
 
