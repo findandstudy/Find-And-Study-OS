@@ -171,11 +171,18 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
   // contract always links to an actual destination row (rather than a
   // synthetic "country" value that would silently persist as NULL).
   const destinationOptions = useMemo(() => {
-    return destinations.map(d => ({
-      value: String(d.id),
-      country: d.country,
-      label: `${d.name} — ${d.country}`,
-    }));
+    return destinations.map(d => {
+      // Most destination rows carry name === country (e.g. "Turkey"/"Turkey"),
+      // which rendered as a redundant "Turkey — Turkey". Collapse those to a
+      // single label and prefix the flag so options stay clean and readable.
+      const dedup = normCountry(d.name) === normCountry(d.country);
+      const base = dedup ? d.name : `${d.name} — ${d.country}`;
+      return {
+        value: String(d.id),
+        country: d.country,
+        label: d.flagEmoji ? `${d.flagEmoji} ${base}` : base,
+      };
+    });
   }, [destinations]);
 
   // Auto-fill resolves to the destination whose country matches the
@@ -691,7 +698,9 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
                 // blank and the user could silently overwrite the value.
                 if (form.destinationId && !selectOptions.some(o => o.value === form.destinationId)) {
                   const fallbackLabel = editing?.destinationName
-                    ? `${editing.destinationName}${editing.destinationCountry ? ` — ${editing.destinationCountry}` : ""}`
+                    ? (normCountry(editing.destinationName) === normCountry(editing.destinationCountry) || !editing.destinationCountry
+                        ? editing.destinationName
+                        : `${editing.destinationName} — ${editing.destinationCountry}`)
                     : (editing?.destinationCountry || editing?.country || form.destinationId);
                   selectOptions.unshift({
                     value: form.destinationId,

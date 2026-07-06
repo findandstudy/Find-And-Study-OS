@@ -17,9 +17,30 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
   const [search, setSearch] = useState("");
   const [openUp, setOpenUp] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  // The element we portal into: the Radix dialog content (keeps FocusScope
+  // happy and pointer-events working) or document.body for standalone usage.
+  const [portalTarget, setPortalTarget] = useState<Element | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
+  // Resolve portal target once on mount. Inside a Radix Dialog we MUST portal
+  // into the dialog content (role="dialog") — not document.body. Radix sets
+  // pointer-events:none on the body while a modal is open, so a menu portaled
+  // to body swallows nothing and lets clicks fall THROUGH to whatever sits
+  // behind it (e.g. the "Upload file" button), and its FocusScope steals focus
+  // from the search input. Portaling into the dialog subtree fixes both.
+  useEffect(() => {
+    if (ref.current) {
+      const dialogContent =
+        ref.current.closest('[role="dialog"]') ??
+        ref.current.closest("[data-radix-dialog-content]");
+      setPortalTarget(dialogContent ?? document.body);
+    }
+  }, []);
+
+  // Outside-click: use "click" (not "mousedown") so dragging a scrollbar inside
+  // the dropdown doesn't close it prematurely.
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       const target = e.target as Node;
@@ -27,10 +48,13 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
       if (popRef.current && popRef.current.contains(target)) return;
       setOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
   }, []);
 
+  // Track trigger position in viewport coordinates (for position:fixed portal).
+  // Fixed coords mean the dropdown is never clipped by any overflow ancestor
+  // (dialog body or scroll container) and never mispositioned by scroll offsets.
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
     function update() {
@@ -38,12 +62,15 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
       const rect = ref.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const up = dropDirection === "up" || (dropDirection === "auto" && spaceBelow < 300);
-      setOpenUp(up);
-      setPos({
-        top: up ? rect.top + window.scrollY : rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      });
+      setOpenUp(prev => (prev === up ? prev : up));
+      const top = up ? rect.top : rect.bottom;
+      const left = rect.left;
+      const width = rect.width;
+      setPos(prev =>
+        prev && prev.top === top && prev.left === left && prev.width === width
+          ? prev
+          : { top, left, width },
+      );
     }
     update();
     window.addEventListener("scroll", update, true);
@@ -53,6 +80,21 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
       window.removeEventListener("resize", update);
     };
   }, [open, dropDirection]);
+
+  // Reset search when closed.
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
+
+  // Focus the search input each time the dropdown opens (ref + setTimeout so it
+  // fires on every re-open, not just first mount).
+  useEffect(() => {
+    if (open && searchable && options.length > 6) {
+      const id = setTimeout(() => searchRef.current?.focus(), 0);
+      return () => clearTimeout(id);
+    }
+    return undefined;
+  }, [open, searchable, options.length]);
 
   const filtered = search
     ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
@@ -96,27 +138,33 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
         </div>
       </button>
 
-      {open && pos && createPortal(
+      {/* Portal dropdown: position:fixed + viewport coords so it escapes every
+          overflow ancestor; pointerEvents:auto overrides Radix Dialog's
+          body-level pointer-events:none so clicks register inside the menu
+          instead of falling through to controls behind it. */}
+      {open && pos && portalTarget && createPortal(
         <div
           ref={popRef}
           style={{
-            position: "absolute",
-            top: pos.top,
+            position: "fixed",
+            top: openUp ? pos.top - 4 : pos.top + 4,
             left: pos.left,
             width: Math.max(pos.width, 180),
-            transform: openUp ? "translateY(calc(-100% - 4px))" : "translateY(4px)",
+            transform: openUp ? "translateY(-100%)" : "translateY(0)",
+            pointerEvents: "auto",
+            zIndex: 9999,
           }}
-          className="z-[1000] bg-popover border border-border rounded-lg shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+          className="bg-popover border border-border rounded-lg shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
         >
           {searchable && options.length > 6 && (
             <div className="p-2 border-b border-border">
               <input
+                ref={searchRef}
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search..."
                 className="w-full h-7 px-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                autoFocus
               />
             </div>
           )}
@@ -158,7 +206,7 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
             </div>
           )}
         </div>,
-        document.body
+        portalTarget,
       )}
     </div>
   );

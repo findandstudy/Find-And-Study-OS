@@ -54,7 +54,14 @@ export function SearchableSelect({
   // means the dropdown still escapes the dialog's overflow:auto clipping.
   useEffect(() => {
     if (ref.current) {
-      const dialogContent = ref.current.closest("[data-radix-dialog-content]");
+      // Radix Dialog.Content renders with role="dialog" (NOT a
+      // data-radix-dialog-content attribute), so match on the role. Falling
+      // back to document.body would put the search input OUTSIDE the dialog
+      // subtree, and Radix's FocusScope would then yank focus back on every
+      // keystroke — making the search box impossible to type into.
+      const dialogContent =
+        ref.current.closest('[role="dialog"]') ??
+        ref.current.closest("[data-radix-dialog-content]");
       setPortalTarget(dialogContent ?? document.body);
     }
   }, []);
@@ -116,6 +123,7 @@ export function SearchableSelect({
       const id = setTimeout(() => searchRef.current?.focus(), 0);
       return () => clearTimeout(id);
     }
+    return undefined;
   }, [open, searchable, options.length]);
 
   const filtered = search
