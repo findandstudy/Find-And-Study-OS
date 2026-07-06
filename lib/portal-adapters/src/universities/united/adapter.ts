@@ -110,6 +110,45 @@ function sanitizeBody(raw: string): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Flexible option matching (fixes programMissing false-positives)
+//
+// United's select2 <option> labels carry parenthetical qualifiers the CRM name
+// omits, e.g. "Computer Engineering (Non-Thesis) (Turkish)". A strict
+// text.includes(programName) then never matches. normLabel() drops the
+// parentheticals and Turkish-folds; looseMatchIndex() then tries, in order:
+// (a) normalized substring (either direction for longer strings), then
+// (b) token overlap ≥ 60%. It NEVER guesses when nothing clears the bar.
+// ---------------------------------------------------------------------------
+function normLabel(s: string): string {
+  return fold(String(s || "").replace(/\([^)]*\)/g, " "));
+}
+
+function looseMatchIndex(optTexts: string[], want: string): number {
+  const w = normLabel(want);
+  if (!w) return -1;
+  const N = optTexts.map(normLabel);
+  // (a) normalized substring — direct, and reverse for longer strings.
+  let idx = N.findIndex((o) => o && (o.includes(w) || (w.length > 4 && o.length > 4 && w.includes(o))));
+  if (idx >= 0) return idx;
+  // (b) token overlap ≥ 60% of the wanted tokens.
+  const wt = new Set(w.split(" ").filter((x) => x.length > 2));
+  if (wt.size === 0) return -1;
+  let best = -1, bestScore = 0;
+  N.forEach((o, i) => {
+    const ot = o.split(" ").filter((x) => x.length > 2);
+    const hit = ot.filter((x) => wt.has(x)).length;
+    const sc = hit / wt.size;
+    if (sc > bestScore) { bestScore = sc; best = i; }
+  });
+  return bestScore >= 0.6 ? best : -1;
+}
+
+// Selects whose value MUST be an intentional match — never auto-pick the first
+// option (would submit the wrong university/program/degree/language). A critical
+// select with exactly one real option is still auto-selected (forced, unambiguous).
+const CRITICAL_SELECT_IDS = new Set(["selectuniversity", "selectprogram", "selectdegree", "selectlang"]);
+
 export const unitedAdapter: UniversityAdapter = {
   key:       "united",
   label:     "United Portal",
@@ -207,17 +246,56 @@ export const unitedAdapter: UniversityAdapter = {
     };
     page.on("requestfinished", onFinished);
 
-    // Select a native <select> by id, choosing the option whose text contains `want` (else first real option). Returns true if `want` matched.
+    // Select a native/select2 <select> by id. Waits for the option list to
+    // populate (AJAX cascade), LOGS the option texts (first-run reality check),
+    // and flexibly matches `want` (see looseMatchIndex). Fires change + select2
+    // jQuery trigger so the next cascade step fetches. Returns true only when
+    // `want` matched. For CRITICAL_SELECT_IDS it never auto-picks the first
+    // option on a miss (would submit the wrong value) — only a lone real option.
     const selById = async (id: string, want?: string): Promise<boolean> => {
       try {
         const loc = page.locator("#" + id);
         if (!(await loc.count())) return false;
+        // Wait for AJAX-populated options before matching (cascade).
+        await page
+          .waitForFunction((sid: string) => {
+            const el = document.getElementById(sid) as any;
+            return !!el && el.options && el.options.length > 0;
+          }, id, { timeout: 12000 })
+          .catch(() => {});
         const opts = (await loc.locator("option").allInnerTexts().catch(() => [])) as string[];
-        const w = String(want || "").toLowerCase().trim();
+        logger.info(`[united] ${id} options(${opts.length}): ` + JSON.stringify(opts.slice(0, 40)));
+        const isReal = (o: string) => !!o.trim() && !/^(please\s+)?(select|se\u00e7)/i.test(o.trim());
+        const w = String(want || "").trim();
         let idx = -1, matched = false;
-        if (w) { idx = opts.findIndex((o) => o.toLowerCase().includes(w)); if (idx >= 0) matched = true; }
-        if (idx < 0) idx = opts.findIndex((o) => o.trim() && !/^(please\s+)?select/i.test(o.trim()));
-        if (idx >= 0) { await loc.selectOption({ index: idx }).catch(() => {}); await wait(800); }
+        if (w) { idx = looseMatchIndex(opts, w); if (idx >= 0) matched = true; }
+        // No explicit target (e.g. selectlang/selectcampus): the cascade usually
+        // pre-selects the program-derived value — respect it rather than guess or
+        // stall. Keeps critical selectlang from blocking the Program→Personal step.
+        if (idx < 0 && !w) {
+          const sel = (await loc.evaluate((el: any) => el.selectedIndex).catch(() => -1)) as number;
+          if (typeof sel === "number" && sel >= 0 && isReal(opts[sel] || "")) idx = sel;
+        }
+        if (idx < 0) {
+          const realIdx = opts.map((o, i) => (isReal(o) ? i : -1)).filter((i) => i >= 0);
+          if (!CRITICAL_SELECT_IDS.has(id)) idx = realIdx.length ? realIdx[0] : -1; // optional: first real
+          else if (realIdx.length === 1) idx = realIdx[0];                          // critical + lone real: forced
+          // critical + multiple options + no target/match → leave unselected
+        }
+        if (idx >= 0) {
+          await page.evaluate(([sid, i]: [string, number]) => {
+            const el: any = document.getElementById(sid);
+            if (!el) return;
+            el.selectedIndex = i;
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            const jq = (window as any).jQuery;
+            if (jq) jq(el).trigger("change"); // select2
+          }, [id, idx]);
+          await wait(1200); // cascade AJAX
+          logger.info(`[united] select ${id} -> index ${idx} "${opts[idx]}"${matched ? " (matched)" : " (fallback)"}`);
+        } else {
+          logger.warn(`[united] select ${id}: no match for "${w}" (left unselected)`);
+        }
         return matched;
       } catch (e) { return false; }
     };
@@ -242,42 +320,6 @@ export const unitedAdapter: UniversityAdapter = {
           opts.map((o) => ({ value: String(o.value || ""), text: String(o.textContent || "").replace(/\s+/g, " ").trim() })),
         )) as Array<{ value: string; text: string }>;
       } catch { return []; }
-    };
-    // Drive a select2-backed <select> programmatically: set value + fire change
-    // (+ jQuery.trigger for select2) and wait for its cascade AJAX. Fuzzy text
-    // match, else exact. Logs the option texts so the first run reveals reality.
-    const pickSelect2 = async (id: string, wantText?: string): Promise<boolean> => {
-      await page
-        .waitForFunction((sid: string) => ((document.getElementById(sid) as any)?.options?.length ?? 0) > 0, id, { timeout: 15000 })
-        .catch(() => {});
-      const options = await readOptions(id);
-      logger.info(`[united] ${id} options: ` + JSON.stringify(options.map((o) => o.text).slice(0, 50)));
-      const want = String(wantText || "").trim();
-      let val = "";
-      if (want) {
-        const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-        const w = norm(want);
-        const hit =
-          options.find((o) => o.value && norm(o.text).includes(w)) ||
-          options.find((o) => o.value && norm(o.text) === w);
-        val = hit ? hit.value : "";
-      } else {
-        // No target text — pick the first real (non-placeholder) option.
-        const hit = options.find((o) => o.value && !/^(please\s+)?(select|se\u00e7)/i.test(o.text));
-        val = hit ? hit.value : "";
-      }
-      if (!val) { logger.warn(`[united] select ${id}: no match for "${wantText || ""}"`); return false; }
-      await page.evaluate(([sid, v]: [string, string]) => {
-        const el: any = document.getElementById(sid);
-        if (!el) return;
-        el.value = v;
-        el.dispatchEvent(new Event("change", { bubbles: true }));
-        const jq = (window as any).jQuery;
-        if (jq) jq(el).trigger("change"); // select2
-      }, [id, val]);
-      await wait(1200); // cascade AJAX
-      logger.info(`[united] select ${id} = "${wantText || "(first)"}" (value set)`);
-      return true;
     };
     const clickContinue = async (): Promise<boolean> => {
       let b = page.getByRole("button", { name: /continue|next|ileri|devam/i }).first();
@@ -336,7 +378,7 @@ export const unitedAdapter: UniversityAdapter = {
       //   #selectuniversity → /Manage/selectprogram → #selectprogram
       //   → /Manage/Degreelist → #selectdegree → #selectlang
       //   → /Manage/test1 → #selectcampus
-      await pickSelect2("selectuniversity", profile.universityName);
+      await selById("selectuniversity", profile.universityName);
 
       // Program: reuse programMatch (panel mappings + EN/TR synonyms) against the
       // LIVE dropdown so the fallback rule matches SIT's X/Y logic. Capture the
@@ -368,8 +410,23 @@ export const unitedAdapter: UniversityAdapter = {
           progMatched = true;
           logger.info(`[united] selectprogram = "${m.match.name}" (conf ${m.conf.toFixed(2)})`);
         } else {
-          // Fuzzy fallback via the generic select2 helper before giving up.
-          progMatched = await pickSelect2("selectprogram", profile.programName);
+          // Flexible fallback: strip parenthetical qualifiers + token overlap
+          // over the LIVE option TEXT (matchProgram's Jaccard is diluted by
+          // United's "(Non-Thesis) (Turkish)" suffixes). Never auto-picks.
+          const li = looseMatchIndex(progOptions.map((o) => o.text), profile.programName);
+          const hit = li >= 0 ? progOptions[li] : undefined;
+          if (hit?.value) {
+            await page.evaluate(([v]: [string]) => {
+              const el: any = document.getElementById("selectprogram");
+              if (!el) return;
+              el.value = v;
+              el.dispatchEvent(new Event("change", { bubbles: true }));
+              const jq = (window as any).jQuery; if (jq) jq(el).trigger("change");
+            }, [hit.value]);
+            await wait(1200);
+            progMatched = true;
+            logger.info(`[united] selectprogram = "${hit.text}" (loose match)`);
+          }
         }
       }
       if (profile.programName && !progMatched) {
@@ -381,10 +438,11 @@ export const unitedAdapter: UniversityAdapter = {
         logger.warn(`[united] program not matched in dropdown: "${profile.programName}"`);
       }
 
-      // Degree / language / campus cascade (each AJAX-driven).
-      await pickSelect2("selectdegree", profile.level);
-      await pickSelect2("selectlang");
-      await pickSelect2("selectcampus");
+      // Degree / language / campus cascade (each AJAX-driven). degree & lang are
+      // critical (no wrong auto-pick); campus may default to its lone/first option.
+      await selById("selectdegree", profile.level);
+      await selById("selectlang");
+      await selById("selectcampus");
       await clickContinue();
       await wait(2500);
 
