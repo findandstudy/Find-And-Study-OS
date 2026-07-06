@@ -447,11 +447,27 @@ export const unitedAdapter: UniversityAdapter = {
         return opt.text;
       }, profile.universityName);
       logger.info(`[united] step3 university filter="${profile.universityName}" -> ${JSON.stringify(uniPick)}`);
-      await page.waitForTimeout(2500); // grid AJAX
+      // Wait for the program CARDS to actually render (grid loads via AJAX and is
+      // slower headless) instead of a fixed sleep — read too early = 0 cards. Gate
+      // on the university's distinctive core token appearing in a card.
+      const uniCore = fold(String(profile.universityName || ""))
+        .replace(/[^a-z0-9]+/g, " ")
+        .replace(/\b(university|universitesi|universite|istanbul|the|of)\b/g, " ")
+        .trim().split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length)[0] || "";
+      await page.waitForFunction((core) => {
+        const cards = document.querySelectorAll("div.single-table");
+        if (!cards.length) return false;
+        if (!core) return cards.length > 0;
+        const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ");
+        return [...cards].some((c) => nrm((c as HTMLElement).textContent || "").includes(core));
+      }, uniCore, { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(1000); // small settle margin
 
       // 3b) find the program card matching programName, click span.plan-submit, verify "Selected Majors"
       const progPick = await page.evaluate((wantProg) => {
-        const nrm = (s: string) => (s || "").toLowerCase().replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+        // Keep parenthetical tokens (Thesis / Non-Thesis / language) so "(Non-Thesis)"
+        // scores higher than "(Thesis)" — only punctuation → space, no content drop.
+        const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
         const w = nrm(wantProg);
         const wt = new Set(w.split(" ").filter(x => x.length > 2));
         const cards = [...document.querySelectorAll("div.single-table")] as HTMLElement[];
