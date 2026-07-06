@@ -32,11 +32,31 @@ export const UNITED_ALLOWLIST: readonly string[] = [
 /** Pre-folded entries for fast matches() lookup. */
 const UNITED_ALLOWLIST_FOLDED: readonly string[] = UNITED_ALLOWLIST.map(fold);
 
-/** True when `name` is one of the 3 United member universities (folded, fuzzy). */
+/** True when `name` is one of the 3 United member universities. Resilient to
+ * EN↔TR naming: `fold` only does Turkish→ASCII + lowercase, so English
+ * "Istanbul Nisantasi University" never substring-matched Turkish "Nişantaşı
+ * Üniversitesi" (word diff + extra "istanbul"). We additionally strip
+ * institution/city stopwords and compare on the distinctive core tokens. */
 function isUnitedMember(name: string | undefined | null): boolean {
-  const f = fold(String(name || ""));
+  const strip = (s: string) =>
+    fold(String(s || ""))
+      .replace(/\b(university|universitesi|universite|univ|istanbul|the|of)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const f = strip(name);
   if (!f) return false;
-  return UNITED_ALLOWLIST_FOLDED.some((entry) => f.includes(entry) || entry.includes(f));
+  const fTokens = new Set(f.split(" ").filter((t) => t.length > 1));
+  return UNITED_ALLOWLIST.some((entry) => {
+    const e = strip(entry);
+    if (!e) return false;
+    // Only name-contains-entry (NOT the reverse): the reverse would let a single
+    // token like "ankara" (from non-member "Ankara University") match the entry
+    // "ankara bilim" — a false positive. Multi-token entries need ALL tokens.
+    if (f.includes(e)) return true;
+    // token-subset: member if ALL distinctive tokens of the entry appear in the name
+    const eTokens = e.split(" ").filter((t) => t.length > 1);
+    return eTokens.length > 0 && eTokens.every((t) => fTokens.has(t));
+  });
 }
 
 const PORTAL_URL = "https://partner.unitededucation.com";
