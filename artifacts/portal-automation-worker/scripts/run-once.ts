@@ -19,7 +19,7 @@
 import os from "node:os";
 import { db, portalSubmissionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { claimNext, claimById, writebackResult, runSubmission } from "@workspace/portal-runner";
+import { claimNext, claimById, writebackResult, runSubmission, resolveAdapterKey } from "@workspace/portal-runner";
 import { buildStudentProfile } from "../src/profile.js";
 import { resolvePortalCreds } from "../src/credResolver.js";
 
@@ -107,7 +107,15 @@ async function main(): Promise<void> {
   // only the final submit click is skipped (doSubmit=false).
   let runResult: Awaited<ReturnType<typeof runSubmission>>;
   try {
-    const creds = await resolvePortalCreds(sub.universityKey, sub.universityKey);
+    // Multi-portal / aggregator routing: a member university (e.g. "aydin")
+    // routed to an aggregator (SIT=study_in_turkey→adapter "sit") must log in
+    // with the AGGREGATOR's credentials, not its own. resolveAdapterKey returns
+    // routedVia (the aggregator's portal key) when a redirect applies; passing
+    // it + the adapter key lets resolvePortalCreds find the aggregator's row
+    // instead of the member's own credentials. For direct portals routedVia is
+    // null and adapterKey === universityKey, so behaviour is unchanged.
+    const { adapterKey, routedVia } = await resolveAdapterKey(sub.universityKey);
+    const creds = await resolvePortalCreds(routedVia ?? sub.universityKey, adapterKey);
     runResult = await runSubmission(
       { ...sub, mode: effectiveMode },
       profileResult.profile,
