@@ -367,24 +367,29 @@ export const unitedAdapter: UniversityAdapter = {
       // ---- §3 Dedup: GET /Account/searchapp?word=<email|name> --------------
       // Salesforce-backed search. Log ONLY the count + Id (never PII values).
       const searchWord = (profile.email || `${profile.firstName || ""} ${profile.lastName || ""}`).trim();
-      let existingContactId = "";
-      if (searchWord) {
-        try {
-          const res = await page.request.get(
-            `${PORTAL_URL}/Account/searchapp?word=${encodeURIComponent(searchWord)}`,
-            { timeout: 20000 },
-          );
-          const status = res.status();
-          let json: any = null;
-          try { json = await res.json(); } catch {}
-          const total = typeof json?.totalSize === "number" ? json.totalSize : (Array.isArray(json?.records) ? json.records.length : 0);
-          const rec0 = Array.isArray(json?.records) ? json.records[0] : null;
-          existingContactId = String(rec0?.ContactId || rec0?.Id || "");
-          logger.info(`[united] dedup searchapp -> status=${status} count=${total}` + (existingContactId ? ` id=${existingContactId}` : ""));
-          if (total > 0) result.alreadyExists = true;
-        } catch (e: any) {
-          logger.warn("[united] dedup searchapp failed (continuing): " + (e?.message || e));
-        }
+      // Reusable: returns {count, id} from /Account/searchapp (logs count+Id only, never PII).
+      const searchApp = async (tag: string): Promise<{ count: number; id: string }> => {
+        if (!searchWord) return { count: 0, id: "" };
+        const res = await page.request.get(
+          `${PORTAL_URL}/Account/searchapp?word=${encodeURIComponent(searchWord)}`,
+          { timeout: 20000 },
+        );
+        const status = res.status();
+        let json: any = null;
+        try { json = await res.json(); } catch {}
+        const count = typeof json?.totalSize === "number" ? json.totalSize : (Array.isArray(json?.records) ? json.records.length : 0);
+        const rec0 = Array.isArray(json?.records) ? json.records[0] : null;
+        const id = String(rec0?.ContactId || rec0?.Id || "");
+        logger.info(`[united] ${tag} searchapp -> status=${status} count=${count}` + (id ? ` id=${id}` : ""));
+        return { count, id };
+      };
+      let dedupCountBefore = -1; // -1 = search failed/skipped (recheck can't compare)
+      try {
+        const s = await searchApp("dedup");
+        dedupCountBefore = s.count;
+        if (s.count > 0) result.alreadyExists = true;
+      } catch (e: any) {
+        logger.warn("[united] dedup searchapp failed (continuing): " + (e?.message || e));
       }
 
       // ===== United 6-step wizard (Term → Degree card → Program grid → Personal) =====
@@ -712,32 +717,94 @@ export const unitedAdapter: UniversityAdapter = {
       }
 
       // ===== REAL submission (requires explicit approval; first-real gating handled by worker) =====
+      // ---- §5 Personal → Continue: THE APPLICATION IS CREATED HERE ----------
+      // Live-mapped: there is NO separate final Submit — the Personal→Documents
+      // transition creates the Salesforce application and shows an
+      // "Application created successfully" popup with an OK button.
       await clickCont();
-
-      // ---- §5 Documents — /Manage/uploadfilesone --------------------------
-      // Order: passport → diploma/transcript → photo. Skip missing inputs; a
-      // missing document must NOT drop the create.
-      const fi = page.locator("input[type=file]"); const fn = await fi.count();
-      const order = [(_files as any).passport, (_files as any).diploma, (_files as any).transcript, (_files as any).photo].filter(Boolean) as string[];
-      for (let i = 0; i < fn; i++) { const fp = order[i] || (_files as any).passport; if (fp) await fi.nth(i).setInputFiles(fp).catch(() => {}); }
-      await clickContinue();
       await wait(2500);
-
-      // ---- §6 Final submit -------------------------------------------------
-      const finalBtn = page.getByRole("button", { name: /submit|finish|complete application|tamamla|g\u00f6nder|onayla/i }).first();
-      if (await finalBtn.count()) {
-        await finalBtn.click({ timeout: 8000 }).catch(() => {});
-        await wait(6000);
-        const done = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")) as string;
-        if (/successfully|application (submitted|created|completed)|ba\u015fvurunuz al\u0131nm/i.test(done)) {
-          result.submitted = true;
-          // Salesforce app id from #appid or the URL (e.g. a0v...).
-          let appId = "";
-          try { const a = page.locator("#appid"); if (await a.count()) appId = String(await a.inputValue().catch(() => "")); } catch {}
-          if (!appId) { const mUrl = /[?&](appid|id)=([a-z0-9]+)/i.exec(String(page.url())); if (mUrl) appId = mUrl[2]; }
-          if (appId) { result.externalRef = appId; logger.info("[united] externalRef (Salesforce app id) = " + appId); }
-        }
+      // Deterministic create evidence only — the specific popup phrase, NOT a
+      // bare "successfully" (unrelated success copy would false-pass).
+      const createdSeen = /application (?:has been |was )?created(?: successfully)?|ba\u015fvuru(?:nuz)? (?:olu\u015fturuldu|al\u0131nd\u0131)/i.test(
+        String(await page.evaluate("(()=>document.body?document.body.innerText:'')()")));
+      // Dismiss the popup (OK / Tamam), then verify it actually closed.
+      const okClicked = await page.evaluate(() => {
+        const ok = [...document.querySelectorAll("button,a,input[type=button],input[type=submit]")].find(
+          (b) => /^(ok|okay|tamam)$/i.test(((b as HTMLInputElement).value || b.textContent || "").trim()) && (b as HTMLElement).offsetParent) as HTMLElement | undefined;
+        if (ok) { ok.click(); return true; }
+        return false;
+      });
+      await wait(1500);
+      if (okClicked) {
+        const stillOpen = await page.evaluate(() => {
+          const ok = [...document.querySelectorAll("button,a,input[type=button],input[type=submit]")].find(
+            (b) => /^(ok|okay|tamam)$/i.test(((b as HTMLInputElement).value || b.textContent || "").trim()) && (b as HTMLElement).offsetParent);
+          return !!ok;
+        });
+        if (stillOpen) { logger.warn("[united] create popup may still be open after OK click"); await page.keyboard.press("Escape").catch(() => {}); await wait(800); }
+      } else {
+        logger.info("[united] no OK/Tamam popup button found (popup may auto-dismiss)");
       }
+      // Capture the created ApplicationId (Salesforce a0vP...) for writeback.
+      let appIdText = (await page.evaluate(
+        "(()=>{const m=document.body?document.body.innerText.match(/a0vP[0-9A-Za-z]{10,}/):null;return m?m[0]:null})()")) as string | null;
+      if (!appIdText) {
+        try { const a = page.locator("#appid"); if (await a.count()) appIdText = (await a.inputValue().catch(() => "")) || null; } catch {}
+      }
+      logger.info("[united] application created id=" + appIdText + " createdSeen=" + createdSeen + " okClicked=" + okClicked);
+      if (!appIdText && !createdSeen) {
+        // Uncertain create state (popup transient/localized, #appid unreadable).
+        // Before failing, re-query searchapp: a count INCREASE vs the pre-create
+        // baseline is server-side proof the application exists — returning
+        // "failed" on a real create would risk a duplicate on retry.
+        let recheckCreated = false;
+        try {
+          const after = await searchApp("post-create recheck");
+          if (dedupCountBefore >= 0 && after.count > dedupCountBefore) recheckCreated = true;
+        } catch (e: any) { logger.warn("[united] post-create recheck failed: " + (e?.message || e)); }
+        if (!recheckCreated) {
+          // Fail-closed on writeback: no evidence the create happened — do not
+          // report submitted; surface diagnostics instead.
+          result.stuckStep = 4;
+          result.stuckBody = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")).replace(/\s+/g, " ").slice(0, 220);
+          logger.warn("[united] no evidence of application create after Personal\u2192Continue (popup/appid/recheck all negative) \u2014 NOT marking submitted");
+          return result;
+        }
+        logger.info("[united] create confirmed via searchapp count increase \u2014 continuing to documents");
+      }
+
+      // ---- §6 Documents upload (live-mapped slots) --------------------------
+      // Each input[type=file] has onchange="uploadsinglefile('<id>','<label>')" —
+      // setInputFiles fires it, which uploads via AJAX. Visible slots for this
+      // application: face=Photograph, pass=Passport (MANDATORY),
+      // cerb/transb=Bachelor Diploma/Transcript (Master app). Degree-dependent
+      // variants: cer/trans (HS), cerp/transp (Master's own docs). A missing
+      // document must NOT drop the already-created application.
+      const uploadDoc = async (ids: string[], localPath?: string) => {
+        if (!localPath) { logger.warn("[united] no local file for slot [" + ids.join(",") + "] — skipped"); return false; }
+        for (const id of ids) {
+          try {
+            if (!(await page.locator("#" + id).count())) continue;
+            await page.setInputFiles("#" + id, localPath); // triggers uploadsinglefile
+            await wait(2500); // upload AJAX
+            logger.info("[united] uploaded #" + id);
+            return true;
+          } catch (e: any) { logger.warn("[united] upload #" + id + " failed: " + String(e?.message || e).slice(0, 80)); }
+        }
+        logger.warn("[united] no document slot found among [" + ids.join(",") + "] — skipped");
+        return false;
+      };
+      // SubmitFiles carries pre-downloaded LOCAL paths (worker doc-fetch) — use
+      // them directly; no URL download needed here.
+      await uploadDoc(["face"], _files.photo);
+      await uploadDoc(["pass"], _files.passport);
+      await uploadDoc(["cerb", "cer", "cerp"], _files.diploma);
+      await uploadDoc(["transb", "trans", "transp"], _files.transcript);
+      // NationalID slot is optional and SubmitFiles has no national-id source — skipped.
+
+      result.submitted = true;
+      if (appIdText) { result.externalRef = appIdText; logger.info("[united] externalRef (Salesforce app id) = " + appIdText); }
+      logger.info("[united] submission complete appId=" + appIdText);
     } catch (e: any) { result.error = e.message; }
     finally {
       try { page.off("requestfinished", onFinished); } catch {}
