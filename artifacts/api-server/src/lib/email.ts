@@ -56,10 +56,11 @@ function buildConfigHash(host: string, port: number, user: string, pass: string)
 }
 
 export async function createSmtpTransporter(config: SmtpConfig): Promise<Transporter> {
-  const secure = config.port === 465;
+  const port = Number(config.port);
+  const secure = port === 465;
   return nodemailer.createTransport({
     host: config.host,
-    port: config.port,
+    port,
     secure,
     // Force STARTTLS on non-implicit-TLS ports so credentials and message
     // bodies are never sent over a plaintext connection.
