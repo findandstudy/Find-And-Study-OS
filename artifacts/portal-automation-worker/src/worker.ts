@@ -11,6 +11,8 @@
  */
 
 import os from "node:os";
+import fs from "node:fs";
+import path from "node:path";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
 import {
@@ -31,6 +33,41 @@ import { resolvePortalCreds } from "./credResolver.js";
 const POLL_MS   = parseInt(process.env.WORKER_POLL_MS   ?? "5000",   10);
 const STALE_MS  = parseInt(process.env.WORKER_STALE_MS  ?? "300000", 10);
 const WORKER_ID = `${os.hostname()}-${process.pid}`;
+
+// ---------------------------------------------------------------------------
+// Safety-net /tmp sweeper — removes stale portal temp files left by crashes or
+// leaks.  Only touches patterns we own; never touches functional state files
+// (topkapi-portal-state.json, sit-login-state.png), DB dumps, or Node caches.
+// Called at the top of every tick (cheap — synchronous readdir, no await).
+// ---------------------------------------------------------------------------
+const SWEEP_PATTERNS = [
+  /^portal-sub-/,
+  /^portal-shot-/,
+  /-step\d*\.png$/i,
+  /^playwright_chromiumdev_profile-/,
+];
+
+function sweepTmp(maxAgeMin = 180): void {
+  const dir = os.tmpdir();
+  const cutoff = Date.now() - maxAgeMin * 60_000;
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (!SWEEP_PATTERNS.some((p) => p.test(name))) continue;
+      const full = path.join(dir, name);
+      try {
+        const st = fs.statSync(full);
+        if (st.mtimeMs < cutoff) {
+          fs.rmSync(full, { recursive: true, force: true });
+          console.log(`[portal-worker] sweepTmp: removed stale ${name}`);
+        }
+      } catch {
+        // Ignore per-entry errors (file disappeared, permission, etc.)
+      }
+    }
+  } catch {
+    // Non-fatal — tmpdir unreadable
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Main loop
@@ -87,6 +124,9 @@ async function loadTriggerStages(): Promise<string[]> {
 }
 
 async function tick(): Promise<void> {
+  // Sweep stale /tmp artifacts from crashes or leaks (cheap, sync, non-fatal)
+  sweepTmp();
+
   // Reset stale locks on every tick (cheap, idempotent)
   const released = await releaseStale(STALE_MS);
   if (released.length > 0) {

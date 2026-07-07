@@ -803,9 +803,12 @@ async function ensureEducationRow(
 
 // ---------------------------------------------------------------------------
 // Screenshot helper — writes a viewport PNG to /tmp and returns the path.
-// Returns null and logs a warning on any failure (non-fatal).
+// Gated behind PORTAL_DEBUG=1; in production (no flag) returns null immediately
+// so no files accumulate in /tmp. Returns null and logs a warning on any
+// failure (non-fatal).
 // ---------------------------------------------------------------------------
 async function takeShot(page: Page, step: string): Promise<string | null> {
+  if (process.env.PORTAL_DEBUG !== "1") return null;
   try {
     const p = path.join(
       os.tmpdir(),

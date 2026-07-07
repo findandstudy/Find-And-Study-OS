@@ -91,13 +91,15 @@ export async function runSubmission(
 
     const result = await adapter.submit(session, profile, files);
 
-    // Capture post-submit screenshot
-    try {
-      const buf = await (session as unknown as { page: { screenshot(): Promise<Buffer> } })
-        .page.screenshot();
-      screenshotUrls.push(`data:image/png;base64,${buf.toString("base64").slice(0, 64)}…`);
-    } catch {
-      // Screenshot failure is non-fatal
+    // Capture post-submit screenshot (debug only — gate behind PORTAL_DEBUG=1)
+    if (process.env.PORTAL_DEBUG === "1") {
+      try {
+        const buf = await (session as unknown as { page: { screenshot(): Promise<Buffer> } })
+          .page.screenshot();
+        screenshotUrls.push(`data:image/png;base64,${buf.toString("base64").slice(0, 64)}…`);
+      } catch {
+        // Screenshot failure is non-fatal
+      }
     }
 
     return {
