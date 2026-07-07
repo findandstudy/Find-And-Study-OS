@@ -632,6 +632,7 @@ export default function SettingsPage() {
         {isSuperAdminLocal && <OfferExpiryThresholdsCard />}
         {isSuperAdminLocal && <ContractExpiryThresholdsCard />}
         <SigningDeadlineDaysCard />
+        <SuppressAutomationNotificationsCard />
         <NotificationRulesManager isAdmin={isManager} notifications={notifications} setNotifications={setNotifications} />
       </div>
     );
@@ -2604,6 +2605,59 @@ function SigningDeadlineDaysCard() {
         <Button onClick={handleSave} disabled={saving}>
           {saving ? t("settingsPage.saving") : t("settingsPage.save")}
         </Button>
+      </div>
+    </Card>
+  );
+}
+
+function SuppressAutomationNotificationsCard() {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+    queryFn: () => customFetch("/api/settings"),
+  });
+  const [value, setValue] = useState<boolean>(true);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (settings !== undefined) {
+      setValue(settings?.suppressAutomationAppNotifications !== false);
+      setLoaded(true);
+    }
+  }, [settings?.suppressAutomationAppNotifications, settings]);
+
+  async function handleToggle(next: boolean) {
+    setValue(next);
+    setSaving(true);
+    try {
+      await customFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suppressAutomationAppNotifications: next }),
+      });
+      qc.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: t("settingsPage.suppressAutomationNotifSaved") });
+    } catch (err: any) {
+      setValue(!next);
+      toast({ title: t("settingsPage.saveFailed"), description: err?.message, variant: "destructive" });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Card className="border shadow-sm p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-display font-semibold text-base">{t("settingsPage.suppressAutomationNotifTitle")}</h3>
+          <p className="text-sm text-muted-foreground mt-1">{t("settingsPage.suppressAutomationNotifDesc")}</p>
+        </div>
+        <Switch
+          checked={value}
+          onCheckedChange={handleToggle}
+          disabled={!loaded || saving}
+        />
       </div>
     </Card>
   );

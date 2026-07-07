@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { normalizeYears, invalidateSeasonCache } from "../lib/season";
+import { invalidateSuppressAutomationCache } from "../lib/notificationDispatcher";
 
 const router: IRouter = Router();
 
@@ -44,6 +45,7 @@ const SETTINGS_PATCH_FIELDS = [
   "agentCanChangeLeadStage",
   "agentCanChangeStudentAppStage",
   "directStudentEnrollmentBonusRate",
+  "suppressAutomationAppNotifications",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];
@@ -130,6 +132,9 @@ router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req
       return;
     }
     updates.defaultSigningDeadlineDays = n;
+  }
+  if (updates.suppressAutomationAppNotifications !== undefined) {
+    invalidateSuppressAutomationCache();
   }
 
   const [existing] = await db.select().from(settingsTable);

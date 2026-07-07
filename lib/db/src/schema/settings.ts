@@ -144,6 +144,10 @@ export const settingsTable = pgTable("settings", {
 
   // Flat bonus amount per direct enrolled student assigned to staff member
   directStudentEnrollmentBonusRate: text("direct_student_enrollment_bonus_rate").notNull().default("0"),
+
+  // Suppress in-app + email notifications for automation-created applications (created_source='automation').
+  // Default true = otomasyon başvuruları bildirim göndermez (mail seli önlenir).
+  suppressAutomationAppNotifications: boolean("suppress_automation_app_notifications").notNull().default(true),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });

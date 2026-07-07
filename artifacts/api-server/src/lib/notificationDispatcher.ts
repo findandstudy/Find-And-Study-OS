@@ -1,9 +1,27 @@
-import { db, notificationRulesTable, notificationsTable, usersTable, integrationsTable } from "@workspace/db";
+import { db, notificationRulesTable, notificationsTable, usersTable, integrationsTable, settingsTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { sendEmail, buildNotificationEmail } from "./email";
 import { notificationBus } from "./notificationBus";
 import { decryptConfig } from "./encryption";
 import { sendWhatsAppText, type WhatsAppConfig } from "./inbox/channels/whatsapp";
+
+// ---------------------------------------------------------------------------
+// Cached settings helper — suppress_automation_app_notifications
+// ---------------------------------------------------------------------------
+let _suppressCache: { value: boolean; expiresAt: number } | null = null;
+const SUPPRESS_CACHE_TTL_MS = 60_000;
+
+async function getSuppressAutomationAppNotifications(): Promise<boolean> {
+  if (_suppressCache && Date.now() < _suppressCache.expiresAt) return _suppressCache.value;
+  const [row] = await db.select({ v: settingsTable.suppressAutomationAppNotifications }).from(settingsTable).limit(1);
+  const value = row?.v ?? true;
+  _suppressCache = { value, expiresAt: Date.now() + SUPPRESS_CACHE_TTL_MS };
+  return value;
+}
+
+export function invalidateSuppressAutomationCache(): void {
+  _suppressCache = null;
+}
 
 interface DispatchContext {
   event: string;
@@ -152,7 +170,9 @@ async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
 
 export async function dispatchNotification(ctx: DispatchContext): Promise<void> {
   try {
-    if (ctx.event.startsWith("application.") && ctx.createdSource === "automation") return;
+    if (ctx.event.startsWith("application.") && ctx.createdSource === "automation") {
+      if (await getSuppressAutomationAppNotifications()) return;
+    }
 
     const [rule] = await db.select().from(notificationRulesTable)
       .where(and(eq(notificationRulesTable.event, ctx.event), eq(notificationRulesTable.isActive, true)));
