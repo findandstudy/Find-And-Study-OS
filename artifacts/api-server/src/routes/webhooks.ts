@@ -578,23 +578,26 @@ router.post("/webhooks/web-form/:formId", webhookLimiter, rawAny, parseRawByCont
 // ─── Zernio omnichannel webhook ────────────────────────────────────────────
 // Receives unified message events from Zernio (WhatsApp/Instagram/Facebook/
 // Telegram). Verified with HMAC-SHA256 using the global webhook secret stored
-// in integrations.zernio.webhookSecret. Signature header: X-Zernio-Signature
-// (format: "sha256=<hex>").  Unknown accounts and duplicate messageIds are
-// silently swallowed (dedup is handled by processInboundMessage).
+// in integrations.zernio.webhookSecret. Signature header: X-Late-Signature
+// (bare 64-char hex, no "sha256=" prefix — Zernio legacy from getlate.dev).
+// Falls back to X-Zernio-Signature for forward compat. Unknown accounts and
+// duplicate messageIds are silently swallowed (dedup via processInboundMessage).
 
 function verifyZernioSignature(raw: Buffer, sig: string, secret: string): boolean {
   if (!sig || !secret) return false;
-  const expected = "sha256=" + crypto.createHmac("sha256", secret).update(raw).digest("hex");
-  try {
-    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
-  } catch {
-    return false;
-  }
+  const expected = crypto.createHmac("sha256", secret).update(raw).digest("hex");
+  const a = Buffer.from(sig.trim(), "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  try { return crypto.timingSafeEqual(a, b); } catch { return false; }
 }
 
 router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promise<void> => {
   const raw = req.body as Buffer;
-  const sig = String(req.headers["x-zernio-signature"] || "");
+  const sig = String(
+    req.headers["x-late-signature"] ||
+    req.headers["x-zernio-signature"] || ""
+  );
 
   // Load Zernio global config (apiKey + webhookSecret).
   const [zernioRow] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "zernio"));
