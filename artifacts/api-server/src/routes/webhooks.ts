@@ -575,4 +575,116 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
 router.post("/webhooks/web-form", webhookLimiter, rawAny, parseRawByContentType, handleWebFormPost);
 router.post("/webhooks/web-form/:formId", webhookLimiter, rawAny, parseRawByContentType, handleWebFormPost);
 
+// ─── Zernio omnichannel webhook ────────────────────────────────────────────
+// Receives unified message events from Zernio (WhatsApp/Instagram/Facebook/
+// Telegram). Verified with HMAC-SHA256 using the global webhook secret stored
+// in integrations.zernio.webhookSecret. Signature header: X-Zernio-Signature
+// (format: "sha256=<hex>").  Unknown accounts and duplicate messageIds are
+// silently swallowed (dedup is handled by processInboundMessage).
+
+function verifyZernioSignature(raw: Buffer, sig: string, secret: string): boolean {
+  if (!sig || !secret) return false;
+  const expected = "sha256=" + crypto.createHmac("sha256", secret).update(raw).digest("hex");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
+router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promise<void> => {
+  const raw = req.body as Buffer;
+  const sig = String(req.headers["x-zernio-signature"] || "");
+
+  // Load Zernio global config (apiKey + webhookSecret).
+  const [zernioRow] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "zernio"));
+  if (!zernioRow || !zernioRow.isEnabled) {
+    // Not configured or disabled — accept silently so Zernio doesn't retry.
+    res.status(200).json({ ok: true });
+    return;
+  }
+
+  const cfg = decryptConfig(zernioRow.config as Record<string, any>) as { apiKey?: string; webhookSecret?: string };
+  if (!verifyZernioSignature(raw, sig, cfg.webhookSecret || "")) {
+    res.status(401).json({ error: "Invalid signature" });
+    return;
+  }
+
+  let body: any;
+  try {
+    body = JSON.parse(raw.toString("utf8"));
+  } catch {
+    res.status(400).json({ error: "Invalid JSON" });
+    return;
+  }
+
+  try {
+    if (body?.event === "message.received" && body?.data?.direction === "incoming") {
+      const d = body.data as {
+        messageId: string | number;
+        conversationId: string | number;
+        platform: string;
+        text?: string;
+        sender: { id: string | number; name?: string };
+        timestamp: number | string;
+        accountId: string | number;
+        media?: unknown;
+      };
+
+      // Look up the channel_accounts row tagged as provider='zernio'.
+      const [acct] = await db
+        .select()
+        .from(channelAccountsTable)
+        .where(
+          and(
+            eq(channelAccountsTable.provider, "zernio"),
+            eq(channelAccountsTable.channel, d.platform),
+            eq(channelAccountsTable.externalAccountId, String(d.accountId)),
+          ),
+        );
+
+      if (!acct || !acct.isActive) {
+        // Unknown / deactivated account — swallow silently.
+        res.status(200).json({ ok: true });
+        return;
+      }
+
+      const result = await processInboundMessage({
+        channel: d.platform as any,
+        channelAccountId: acct.id,
+        contact: {
+          externalId: String(d.sender.id),
+          displayName: d.sender.name || String(d.sender.id),
+          phone: d.platform === "whatsapp" ? String(d.sender.id) : undefined,
+        },
+        message: {
+          externalMessageId: String(d.messageId),
+          text: d.text || "",
+          externalThreadId: String(d.conversationId),
+          receivedAt: new Date(Number(d.timestamp)),
+          metadata: { raw: body, ...(d.media ? { media: d.media } : {}) },
+        },
+      });
+
+      if (!result.duplicate) {
+        (async () => {
+          try {
+            await maybeAutoReply({
+              conversationId: result.conversationId!,
+              inboundMessageId: result.messageId!,
+            });
+          } catch (err) {
+            console.error("[ZERNIO] auto-reply error:", err);
+          }
+        })();
+      }
+    }
+
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[ZERNIO] webhook processing error:", err);
+    res.status(500).json({ error: "Processing failed" });
+  }
+});
+
 export default router;

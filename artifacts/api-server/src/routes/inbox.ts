@@ -14,6 +14,8 @@ import {
   pipelineStagesTable,
   notesTable,
   followUpsTable,
+  channelAccountsTable,
+  integrationsTable,
 } from "@workspace/db";
 import type { ConversationAiSummary } from "@workspace/db";
 import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
@@ -40,6 +42,7 @@ import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
 import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
+import { decryptConfig } from "../lib/encryption";
 import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
 import {
   getAiAgentConfig,
@@ -925,6 +928,124 @@ router.post(
         .update(conversationsTable)
         .set({ botEnabled: false, botReplyCount: 0 })
         .where(eq(conversationsTable.id, id));
+    }
+
+    // ── Zernio-routed conversations (provider='zernio') ──────────────────────
+    // Check before channel-specific direct-API branches: same channel name
+    // (whatsapp/instagram/facebook/telegram) but the account is Zernio-hosted.
+    if (conv.channelAccountId != null) {
+      const [zernioAcct] = await db
+        .select()
+        .from(channelAccountsTable)
+        .where(
+          and(
+            eq(channelAccountsTable.id, conv.channelAccountId),
+            eq(channelAccountsTable.provider, "zernio"),
+          ),
+        );
+
+      if (zernioAcct) {
+        const [zernioRow] = await db
+          .select()
+          .from(integrationsTable)
+          .where(eq(integrationsTable.key, "zernio"));
+        const zernioCfg = zernioRow
+          ? (decryptConfig(zernioRow.config as Record<string, any>) as { apiKey?: string })
+          : {};
+
+        if (!zernioCfg.apiKey) {
+          res.status(502).json({ error: "Zernio API key not configured" });
+          return;
+        }
+        if (!conv.externalThreadId) {
+          res.status(400).json({ error: "Conversation has no external thread ID" });
+          return;
+        }
+
+        const [pending] = await db
+          .insert(messagesTable)
+          .values({
+            conversationId: id,
+            senderId: req.user!.id,
+            content,
+            channel: conv.channel,
+            direction: "outbound",
+            status: "pending",
+            metadata: {},
+          })
+          .returning();
+
+        let sendOk = false;
+        let sendError: string | undefined;
+        let externalMessageId: string | undefined;
+
+        try {
+          const zResponse = await fetch(
+            `https://zernio.com/api/v1/inbox/conversations/${encodeURIComponent(conv.externalThreadId)}/messages`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${zernioCfg.apiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ accountId: zernioAcct.externalAccountId, message: content }),
+            },
+          );
+          if (zResponse.ok) {
+            const zData = await zResponse.json().catch(() => ({})) as any;
+            sendOk = true;
+            externalMessageId = zData?.messageId ? String(zData.messageId) : undefined;
+          } else {
+            const errBody = await zResponse.text().catch(() => "");
+            sendError = `Zernio send failed (${zResponse.status}): ${errBody.slice(0, 200)}`;
+          }
+        } catch (err: any) {
+          sendError = `Zernio send error: ${err?.message || "Unknown"}`;
+        }
+
+        const [msg] = await db
+          .update(messagesTable)
+          .set({
+            status: sendOk ? "sent" : "failed",
+            externalMessageId: externalMessageId || null,
+            failedReason: sendOk ? null : sendError || "send_failed",
+            sentAt: sendOk ? new Date() : null,
+            metadata: sendOk ? {} : { error: sendError },
+          })
+          .where(eq(messagesTable.id, pending.id))
+          .returning();
+
+        if (sendOk) {
+          await db
+            .update(conversationsTable)
+            .set({ lastMessageAt: new Date(), lastMessagePreview: content.slice(0, 200) })
+            .where(eq(conversationsTable.id, id));
+          inboxBus.publish({
+            type: "message",
+            conversationId: id,
+            channel: conv.channel,
+            assignedToId: conv.assignedToId ?? null,
+            unmatched: conv.unmatched,
+            direction: "outbound",
+          });
+        } else {
+          try {
+            await dispatchNotification({
+              event: "inbox.send_failed",
+              title: `Zernio send failed for conversation #${id}`,
+              body: sendError || "Send failed",
+              actionUrl: `/staff/messages?conversation=${id}`,
+              icon: "alert",
+              data: { conversationId: id, channel: conv.channel, error: sendError },
+            });
+          } catch (notifErr) {
+            console.error("[INBOX] zernio send_failed dispatch error:", notifErr);
+          }
+        }
+
+        res.status(sendOk ? 201 : 502).json({ message: msg, error: sendError });
+        return;
+      }
     }
 
     if (conv.channel === "whatsapp") {

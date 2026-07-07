@@ -14,7 +14,7 @@ import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 
 const router: IRouter = Router();
 
-const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form", "facebook_messenger", "instagram"]);
+const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form", "facebook_messenger", "instagram", "zernio"]);
 
 router.get("/integrations/live-mode", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
   res.json({ live: isLiveIntegrationsEnabled(), reason: liveModeReason() });
@@ -326,6 +326,31 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
         ? "Web form is live — submissions will be accepted."
         : "Web form configured — set ALLOW_LIVE_INTEGRATIONS=true (or deploy) to accept submissions.",
     });
+    return;
+  }
+
+  if (String(req.params.key) === "zernio") {
+    if (!config.apiKey || !config.webhookSecret) {
+      res.json({ success: false, message: "API Key and Webhook Secret are required" });
+      return;
+    }
+    if (!isLiveIntegrationsEnabled()) {
+      res.json({ success: true, message: "Test skipped — running in simulated mode (set ALLOW_LIVE_INTEGRATIONS=true to test live)" });
+      return;
+    }
+    try {
+      const r = await fetch("https://zernio.com/api/v1/me", {
+        headers: { Authorization: `Bearer ${config.apiKey}` },
+      });
+      if (r.ok) {
+        res.json({ success: true, message: "Zernio API key verified" });
+      } else {
+        const body = await r.text().catch(() => "");
+        res.json({ success: false, message: `Zernio test failed (${r.status}): ${body.slice(0, 200)}` });
+      }
+    } catch (err: any) {
+      res.json({ success: false, message: `Zernio test failed: ${err?.message || "Unknown error"}` });
+    }
     return;
   }
 

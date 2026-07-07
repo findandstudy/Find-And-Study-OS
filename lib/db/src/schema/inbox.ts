@@ -10,6 +10,7 @@ export const channelAccountsTable = pgTable("channel_accounts", {
   externalAccountId: text("external_account_id"),
   configEncrypted: text("config_encrypted"),
   webhookSecret: text("webhook_secret"),
+  provider: text("provider").notNull().default("direct"),
   status: text("status").notNull().default("active"),
   isActive: boolean("is_active").notNull().default(true),
   isDefault: boolean("is_default").notNull().default(false),

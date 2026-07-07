@@ -657,6 +657,14 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS agent_can_change_student_app_stage BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS direct_student_enrollment_bonus_rate TEXT NOT NULL DEFAULT '0'`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS suppress_automation_app_notifications BOOLEAN NOT NULL DEFAULT true`);
+    // Zernio omnichannel provider — per-account provider tagging.
+    await pool.query(`ALTER TABLE channel_accounts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'direct'`);
+    // Seed the Zernio integration config row so admin can enter apiKey/webhookSecret.
+    await pool.query(`
+      INSERT INTO integrations (key, name, category, is_enabled, config)
+      SELECT 'zernio', 'Zernio', 'communication', false, '{}'::jsonb
+      WHERE NOT EXISTS (SELECT 1 FROM integrations WHERE key = 'zernio')
+    `);
     // Faz J — stage-doc mirror link: documents rows created by mirroring a
     // stage upload now carry a back-reference so the mirror can be removed
     // when the stage doc is deleted.

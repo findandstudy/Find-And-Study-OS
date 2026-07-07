@@ -21,6 +21,14 @@
         "webhookVerifyToken": "Webhook Doğrulama Anahtarı"
       }
     },
+    "zernio": {
+      "name": "Zernio",
+      "description": "WhatsApp, Instagram, Facebook ve Telegram'ı tek çatı altında birleştiren Zernio omnichannel gelen kutusu.",
+      "fields": {
+        "apiKey": "API Anahtarı",
+        "webhookSecret": "Webhook Secret"
+      }
+    },
     "metaWebhook": {
       "title": "Meta webhook kurulumu",
       "instructions": "Meta → Uygulama Paneli → Webhooks bölümünde aşağıdaki Geri Çağrı URL'sini ve Doğrulama Anahtarını yapıştırın, ardından mesajlaşma alanlarına abone olun. Meta bu URL'yi hub.verify_token ile çağırır; anahtar tam eşleşmezse doğrulama başarısız olur.",

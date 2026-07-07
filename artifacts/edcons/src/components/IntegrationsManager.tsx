@@ -137,6 +137,16 @@ const INTEGRATION_DEFS: IntegrationDef[] = [
     ],
   },
   {
+    key: "zernio", name: "Zernio", category: "communication",
+    i18nKey: "zernio",
+    icon: Zap, color: "bg-violet-500/10 text-violet-600 border-violet-200",
+    description: "Unified omnichannel inbox: WhatsApp, Instagram, Facebook & Telegram via Zernio.",
+    fields: [
+      { key: "apiKey", label: "API Key", type: "password", required: true },
+      { key: "webhookSecret", label: "Webhook Secret", type: "password", required: true },
+    ],
+  },
+  {
     key: "telegram", name: "Telegram Bot", category: "communication",
     icon: Send, color: "bg-sky-500/10 text-sky-600 border-sky-200",
     description: "Send messages via Telegram Bot API",

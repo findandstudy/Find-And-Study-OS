@@ -21,6 +21,14 @@
         "webhookVerifyToken": "Webhook Verify Token"
       }
     },
+    "zernio": {
+      "name": "Zernio",
+      "description": "Boîte de réception omnicanale unifiée : WhatsApp, Instagram, Facebook et Telegram via Zernio.",
+      "fields": {
+        "apiKey": "Clé API",
+        "webhookSecret": "Secret Webhook"
+      }
+    },
     "metaWebhook": {
       "title": "Meta webhook setup",
       "instructions": "In Meta → App Dashboard → Webhooks, paste the Callback URL and Verify Token below, then subscribe to the messaging fields. Meta will GET this URL with hub.verify_token; the handshake passes only if the token matches exactly.",
