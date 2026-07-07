@@ -622,50 +622,50 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
   }
 
   try {
-    if (body?.event === "message.received" && body?.data?.direction === "incoming") {
-      const d = body.data as {
-        messageId: string | number;
-        conversationId: string | number;
-        platform: string;
-        text?: string;
-        sender: { id: string | number; name?: string };
-        timestamp: number | string;
-        accountId: string | number;
-        media?: unknown;
-      };
+    const m = body?.message;
+    const acctPayload = body?.account;
 
-      // Look up the channel_accounts row tagged as provider='zernio'.
+    if (body?.event === "message.received" && m?.direction === "incoming") {
+      const zAccountId = String(acctPayload?.id ?? acctPayload?.accountId ?? "");
+      const platform   = String(m.platform ?? acctPayload?.platform ?? "");
+
       const [acct] = await db
         .select()
         .from(channelAccountsTable)
         .where(
           and(
             eq(channelAccountsTable.provider, "zernio"),
-            eq(channelAccountsTable.channel, d.platform),
-            eq(channelAccountsTable.externalAccountId, String(d.accountId)),
+            eq(channelAccountsTable.externalAccountId, zAccountId),
+            eq(channelAccountsTable.channel, platform),
           ),
-        );
+        )
+        .limit(1);
 
-      if (!acct || !acct.isActive) {
-        // Unknown / deactivated account — swallow silently.
-        res.status(200).json({ ok: true });
+      if (!acct || acct.isActive === false) {
+        res.status(200).json({ ok: true, skipped: "no active channel account" });
         return;
       }
 
+      const attachments = Array.isArray(m.attachments) && m.attachments.length > 0
+        ? { attachments: m.attachments }
+        : {};
+
       const result = await processInboundMessage({
-        channel: d.platform as any,
+        channel: platform as any,
         channelAccountId: acct.id,
         contact: {
-          externalId: String(d.sender.id),
-          displayName: d.sender.name || String(d.sender.id),
-          phone: d.platform === "whatsapp" ? String(d.sender.id) : undefined,
+          externalId: String(m.sender?.id ?? m.sender?.contactId ?? ""),
+          displayName: m.sender?.name ?? null,
+          phone: platform === "whatsapp"
+            ? (m.sender?.phoneNumber ?? m.sender?.id ?? undefined)
+            : undefined,
         },
         message: {
-          externalMessageId: String(d.messageId),
-          text: d.text || "",
-          externalThreadId: String(d.conversationId),
-          receivedAt: new Date(Number(d.timestamp)),
-          metadata: { raw: body, ...(d.media ? { media: d.media } : {}) },
+          externalMessageId: String(m.platformMessageId ?? m.id),
+          text: m.text ?? "",
+          externalThreadId: String(m.conversationId ?? body?.conversation?.id ?? ""),
+          receivedAt: m.sentAt ? new Date(m.sentAt) : new Date(),
+          metadata: { raw: body, ...attachments },
         },
       });
 
