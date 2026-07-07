@@ -730,6 +730,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     actionUrl: `/staff/applications/${app.id}`,
     icon: "FileText",
     templateVars: { studentName: studentFullName || "", universityName: snapshotUniversityName || "", programName: snapshotProgramName || "" },
+    createdSource: app.createdSource,
   }).catch(() => {});
 
   // Portal automation auto-trigger (fire-and-forget — never blocks response).
@@ -1297,6 +1298,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       icon: "ArrowRight",
       recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
       templateVars: { studentName: sName3, universityName: app.universityName || "", programName: app.programName || "", newStage: stageStr },
+      createdSource: app.createdSource,
     }).catch(() => {});
   }
 
@@ -1312,6 +1314,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       icon: "UserCheck",
       recipientUserIds: [updates.assignedToId as number],
       templateVars: { studentName: sName4, universityName: app.universityName || "", programName: app.programName || "" },
+      createdSource: app.createdSource,
     }).catch(() => {});
   }
 
@@ -1355,6 +1358,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         icon: "Building2",
         recipientUserIds: app.assignedToId ? [app.assignedToId] : undefined,
         templateVars: { studentName: sName5, universityName: app.universityName || "" },
+        createdSource: app.createdSource,
       }).catch(() => {});
     } else {
       dispatchNotification({
@@ -1366,6 +1370,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         icon: "Unlink",
         recipientUserIds: app.assignedToId ? [app.assignedToId] : undefined,
         templateVars: { studentName: sName5, universityName: app.universityName || "" },
+        createdSource: app.createdSource,
       }).catch(() => {});
     }
   }

@@ -20,6 +20,7 @@ interface DispatchContext {
     text: string;
   };
   templateVars?: Record<string, string>;
+  createdSource?: string | null;
 }
 
 interface LangTemplate {
@@ -151,6 +152,8 @@ async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
 
 export async function dispatchNotification(ctx: DispatchContext): Promise<void> {
   try {
+    if (ctx.event.startsWith("application.") && ctx.createdSource === "automation") return;
+
     const [rule] = await db.select().from(notificationRulesTable)
       .where(and(eq(notificationRulesTable.event, ctx.event), eq(notificationRulesTable.isActive, true)));
 
