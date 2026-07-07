@@ -18,7 +18,7 @@ import {
   integrationsTable,
 } from "@workspace/db";
 import type { ConversationAiSummary } from "@workspace/db";
-import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { ExternalContact } from "@workspace/db";
 import { z } from "zod";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
@@ -327,6 +327,28 @@ router.get(
     if (tab === "mine") where.push(eq(conversationsTable.assignedToId, userId));
     else if (tab === "unassigned") where.push(isNull(conversationsTable.assignedToId));
     else if (tab === "unmatched") where.push(eq(conversationsTable.unmatched, true));
+    else if (tab === "unanswered") {
+      where.push(eq(conversationsTable.status, "open"));
+      where.push(isNotNull(conversationsTable.lastInboundAt));
+      where.push(sql`NOT EXISTS (
+        SELECT 1 FROM messages m
+        WHERE m.conversation_id = ${conversationsTable.id}
+        AND m.direction IN ('outbound', 'internal')
+        AND m.created_at > ${conversationsTable.lastInboundAt}
+      )`);
+    } else if (tab === "subscribed") {
+      where.push(sql`EXISTS (
+        SELECT 1 FROM conversation_participants cp
+        WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
+      )`);
+    } else if (tab === "starred") {
+      where.push(sql`EXISTS (
+        SELECT 1 FROM conversation_participants cp
+        WHERE cp.conversation_id = ${conversationsTable.id}
+        AND cp.user_id = ${userId} AND cp.is_starred = true
+      )`);
+    }
+    // tab === "open" or "all": no extra filter beyond isArchived=false
 
     const rows = await db
       .select({
@@ -343,6 +365,15 @@ router.get(
         lastMessagePreview: conversationsTable.lastMessagePreview,
         lastInboundAt: conversationsTable.lastInboundAt,
         createdAt: conversationsTable.createdAt,
+        isStarred: sql<boolean>`EXISTS (
+          SELECT 1 FROM conversation_participants cp
+          WHERE cp.conversation_id = ${conversationsTable.id}
+          AND cp.user_id = ${userId} AND cp.is_starred = true
+        )`.as("is_starred"),
+        isSubscribed: sql<boolean>`EXISTS (
+          SELECT 1 FROM conversation_participants cp
+          WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
+        )`.as("is_subscribed"),
       })
       .from(conversationsTable)
       .where(and(...where))
@@ -910,9 +941,14 @@ router.post(
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
     const id = parseInt(String(req.params.id), 10);
-    const { content } = req.body as { content: string };
-    if (!id || !content || !content.trim()) {
-      res.status(400).json({ error: "content is required" });
+    const { content, attachments: bodyAttachments } = req.body as {
+      content: string;
+      attachments?: Array<{ url: string; type?: string; name?: string }>;
+    };
+    const hasContent = Boolean(content && content.trim());
+    const hasAttachments = Array.isArray(bodyAttachments) && bodyAttachments.length > 0;
+    if (!id || (!hasContent && !hasAttachments)) {
+      res.status(400).json({ error: "content or attachments is required" });
       return;
     }
     const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id));
@@ -962,16 +998,17 @@ router.post(
           return;
         }
 
+        const msgContent = content?.trim() || (hasAttachments ? "[attachment]" : "");
         const [pending] = await db
           .insert(messagesTable)
           .values({
             conversationId: id,
             senderId: req.user!.id,
-            content,
+            content: msgContent,
             channel: conv.channel,
             direction: "outbound",
             status: "pending",
-            metadata: {},
+            metadata: hasAttachments ? { attachments: bodyAttachments } : {},
           })
           .returning();
 
@@ -979,25 +1016,55 @@ router.post(
         let sendError: string | undefined;
         let externalMessageId: string | undefined;
 
+        const zernioUrl = `https://zernio.com/api/v1/inbox/conversations/${encodeURIComponent(conv.externalThreadId)}/messages`;
+        const zernioHeaders: Record<string, string> = {
+          Authorization: `Bearer ${zernioCfg.apiKey}`,
+          "Content-Type": "application/json",
+        };
+
         try {
-          const zResponse = await fetch(
-            `https://zernio.com/api/v1/inbox/conversations/${encodeURIComponent(conv.externalThreadId)}/messages`,
-            {
+          // Send text message first (if any)
+          if (hasContent) {
+            const zResponse = await fetch(zernioUrl, {
               method: "POST",
-              headers: {
-                Authorization: `Bearer ${zernioCfg.apiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ accountId: zernioAcct.externalAccountId, message: content }),
-            },
-          );
-          if (zResponse.ok) {
-            const zData = await zResponse.json().catch(() => ({})) as any;
-            sendOk = true;
-            externalMessageId = zData?.messageId ? String(zData.messageId) : undefined;
-          } else {
-            const errBody = await zResponse.text().catch(() => "");
-            sendError = `Zernio send failed (${zResponse.status}): ${errBody.slice(0, 200)}`;
+              headers: zernioHeaders,
+              body: JSON.stringify({ accountId: zernioAcct.externalAccountId, message: content.trim() }),
+            });
+            if (zResponse.ok) {
+              const zData = await zResponse.json().catch(() => ({})) as any;
+              sendOk = true;
+              externalMessageId = zData?.messageId ? String(zData.messageId) : undefined;
+            } else {
+              const errBody = await zResponse.text().catch(() => "");
+              sendError = `Zernio send failed (${zResponse.status}): ${errBody.slice(0, 200)}`;
+            }
+          }
+          // Send each attachment as a separate Zernio message
+          if (hasAttachments && !sendError) {
+            for (const att of bodyAttachments!) {
+              const attBody: Record<string, any> = {
+                accountId: zernioAcct.externalAccountId,
+                attachmentUrl: att.url,
+                attachmentType: att.type ?? "file",
+              };
+              if (att.name) attBody.attachmentName = att.name;
+              const aResp = await fetch(zernioUrl, {
+                method: "POST",
+                headers: zernioHeaders,
+                body: JSON.stringify(attBody),
+              });
+              if (aResp.ok) {
+                sendOk = true;
+                if (!externalMessageId) {
+                  const aData = await aResp.json().catch(() => ({})) as any;
+                  externalMessageId = aData?.messageId ? String(aData.messageId) : undefined;
+                }
+              } else {
+                const errBody = await aResp.text().catch(() => "");
+                sendError = `Zernio attachment send failed (${aResp.status}): ${errBody.slice(0, 200)}`;
+                break;
+              }
+            }
           }
         } catch (err: any) {
           sendError = `Zernio send error: ${err?.message || "Unknown"}`;
@@ -1010,7 +1077,9 @@ router.post(
             externalMessageId: externalMessageId || null,
             failedReason: sendOk ? null : sendError || "send_failed",
             sentAt: sendOk ? new Date() : null,
-            metadata: sendOk ? {} : { error: sendError },
+            metadata: sendOk
+              ? (hasAttachments ? { attachments: bodyAttachments } : {})
+              : { error: sendError },
           })
           .where(eq(messagesTable.id, pending.id))
           .returning();
@@ -1018,7 +1087,7 @@ router.post(
         if (sendOk) {
           await db
             .update(conversationsTable)
-            .set({ lastMessageAt: new Date(), lastMessagePreview: content.slice(0, 200) })
+            .set({ lastMessageAt: new Date(), lastMessagePreview: msgContent.slice(0, 200) })
             .where(eq(conversationsTable.id, id));
           inboxBus.publish({
             type: "message",
@@ -1028,6 +1097,10 @@ router.post(
             unmatched: conv.unmatched,
             direction: "outbound",
           });
+          // Auto-subscribe the replying user so they can find the conversation under "Subscribed"
+          await db.insert(conversationParticipantsTable)
+            .values({ conversationId: id, userId: req.user!.id, isStarred: false })
+            .onConflictDoNothing();
         } else {
           try {
             await dispatchNotification({
@@ -1807,6 +1880,61 @@ router.post(
     } catch (err) {
       console.error("[ai-agent-test]", err);
       res.status(502).json({ error: "Test run failed" });
+    }
+  },
+);
+
+// ── Per-conversation star toggle (per-user) ──────────────────────────────────
+router.post(
+  "/inbox/conversations/:id/star",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    const userId = req.user!.id;
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+
+    const [existing] = await db
+      .select()
+      .from(conversationParticipantsTable)
+      .where(and(eq(conversationParticipantsTable.conversationId, id), eq(conversationParticipantsTable.userId, userId)))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(conversationParticipantsTable)
+        .set({ isStarred: !existing.isStarred })
+        .where(eq(conversationParticipantsTable.id, existing.id));
+      res.json({ starred: !existing.isStarred });
+    } else {
+      await db.insert(conversationParticipantsTable).values({ conversationId: id, userId, isStarred: true });
+      res.json({ starred: true });
+    }
+  },
+);
+
+// ── Per-conversation subscribe toggle (per-user) ─────────────────────────────
+router.post(
+  "/inbox/conversations/:id/subscribe",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    const userId = req.user!.id;
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+
+    const [existing] = await db
+      .select()
+      .from(conversationParticipantsTable)
+      .where(and(eq(conversationParticipantsTable.conversationId, id), eq(conversationParticipantsTable.userId, userId)))
+      .limit(1);
+
+    if (existing) {
+      await db.delete(conversationParticipantsTable).where(eq(conversationParticipantsTable.id, existing.id));
+      res.json({ subscribed: false });
+    } else {
+      await db.insert(conversationParticipantsTable).values({ conversationId: id, userId, isStarred: false });
+      res.json({ subscribed: true });
     }
   },
 );

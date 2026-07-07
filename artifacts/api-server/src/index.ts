@@ -659,6 +659,9 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS suppress_automation_app_notifications BOOLEAN NOT NULL DEFAULT true`);
     // Zernio omnichannel provider — per-account provider tagging.
     await pool.query(`ALTER TABLE channel_accounts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'direct'`);
+    await pool.query(`ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS is_starred BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS cp_user_starred_idx ON conversation_participants(user_id, is_starred)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS cp_conv_user_uniq ON conversation_participants(conversation_id, user_id)`);
     // Seed the Zernio integration config row so admin can enter apiKey/webhookSecret.
     await pool.query(`
       INSERT INTO integrations (key, name, category, is_enabled, config)

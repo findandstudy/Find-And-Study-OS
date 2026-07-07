@@ -37,7 +37,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
-  MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown,
+  MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown, Star, Bell,
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
   Facebook, Instagram
@@ -58,10 +58,13 @@ interface Conversation {
 }
 
 interface MessageAttachment {
-  fileName: string;
-  fileUrl: string;
-  fileType: string;
-  fileSize: number;
+  fileName?: string;
+  fileUrl?: string;
+  fileType?: string;
+  fileSize?: number;
+  url?: string;
+  type?: string;
+  name?: string;
 }
 
 interface Message {
@@ -71,8 +74,9 @@ interface Message {
   content: string;
   channel: string;
   status: string;
+  direction?: string;
   createdAt: string;
-  metadata?: { attachment?: MessageAttachment };
+  metadata?: { attachment?: MessageAttachment; attachments?: MessageAttachment[] };
   senderFirstName: string | null;
   senderLastName: string | null;
   senderAvatarUrl: string | null;
@@ -134,6 +138,8 @@ interface InboxConversation {
     agentId: number | null;
   } | null;
   assignedTo: { id: number; firstName: string; lastName: string; avatarUrl: string | null } | null;
+  isStarred?: boolean;
+  isSubscribed?: boolean;
 }
 
 // If no event/heartbeat arrives within this window, the indicator switches
@@ -245,7 +251,7 @@ function InboxTab() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<"mine" | "unassigned" | "unmatched" | "all">("mine");
+  const [tab, setTab] = useState<"mine" | "unassigned" | "unmatched" | "all" | "open" | "unanswered" | "subscribed" | "starred">("mine");
   const [assignedNotice, setAssignedNotice] = useState(false);
   const [channel, setChannel] = useState<string>("all");
   const [convs, setConvs] = useState<InboxConversation[]>([]);
@@ -278,6 +284,9 @@ function InboxTab() {
   const [reconnectKey, setReconnectKey] = useState(0);
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close the mobile lead-info drawer whenever the selected conversation changes
   useEffect(() => {
@@ -560,18 +569,52 @@ function InboxTab() {
     }
   }
 
-  async function sendReply() {
-    if (!selectedId || !reply.trim()) return;
-    setSending(true);
+  async function uploadFileForInbox(file: File): Promise<{ url: string; type: string; name: string } | null> {
     try {
+      const urlRes = await customFetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prefix: "inbox", contentType: file.type, filename: file.name }),
+      }) as any;
+      const { uploadURL, objectPath } = urlRes;
+      const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      if (!uploadResp.ok) throw new Error("Upload failed");
+      const publicUrl = `${window.location.origin}/api/storage/public-objects/${objectPath}`;
+      const type = file.type.startsWith("image/") ? "image"
+        : file.type.startsWith("video/") ? "video"
+        : file.type.startsWith("audio/") ? "audio"
+        : "file";
+      return { url: publicUrl, type, name: file.name };
+    } catch (err: any) {
+      toast({ title: t("inbox.error.sendMediaFailed"), description: err?.message, variant: "destructive" });
+      return null;
+    }
+  }
+
+  async function sendReply() {
+    if (!selectedId || (!reply.trim() && pendingFiles.length === 0)) return;
+    setSending(true);
+    setUploading(true);
+    try {
+      const attachments: Array<{ url: string; type: string; name: string }> = [];
+      for (const file of pendingFiles) {
+        const r = await uploadFileForInbox(file);
+        if (!r) { setSending(false); setUploading(false); return; }
+        attachments.push(r);
+      }
+      setUploading(false);
       const res: any = await customFetch(`/api/inbox/conversations/${selectedId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: reply.trim() }),
+        body: JSON.stringify({
+          content: reply.trim(),
+          ...(attachments.length > 0 ? { attachments } : {}),
+        }),
       });
       if (res?.simulated) toast({ title: t("messagesPage.sentSimulated"), description: t("messagesPage.outboundSimulated") });
       else toast({ title: t("messagesPage.sent") });
       setReply("");
+      setPendingFiles([]);
       fetchDetail(selectedId);
     } catch (err: any) {
       const body = err?.body;
@@ -583,6 +626,29 @@ function InboxTab() {
       }
     } finally {
       setSending(false);
+      setUploading(false);
+    }
+  }
+
+  async function toggleStar(convId: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      const res = await customFetch(`/api/inbox/conversations/${convId}/star`, { method: "POST" }) as any;
+      fetchInbox();
+      toast({ title: res.starred ? t("inbox.action.star") : t("inbox.action.unstar") });
+    } catch {
+      toast({ title: "Failed to update", variant: "destructive" });
+    }
+  }
+
+  async function toggleSubscribe(convId: number) {
+    try {
+      const res = await customFetch(`/api/inbox/conversations/${convId}/subscribe`, { method: "POST" }) as any;
+      fetchInbox();
+      if (selectedId === convId) fetchDetail(convId);
+      toast({ title: res.subscribed ? t("inbox.action.subscribe") : t("inbox.action.unsubscribe") });
+    } catch {
+      toast({ title: "Failed to update", variant: "destructive" });
     }
   }
 
@@ -692,6 +758,10 @@ function InboxTab() {
   const tabs: Array<{ key: typeof tab; label: string; icon: any }> = [
     { key: "mine", label: t("messagesPage.mine"), icon: UserCheck },
     { key: "unassigned", label: t("messagesPage.unassigned"), icon: InboxIcon },
+    { key: "open", label: t("inbox.tabs.open"), icon: MessageCircle },
+    { key: "unanswered", label: t("inbox.tabs.unanswered"), icon: Clock },
+    { key: "subscribed", label: t("inbox.tabs.subscribed"), icon: Bell },
+    { key: "starred", label: t("inbox.tabs.starred"), icon: Star },
     { key: "unmatched", label: t("messagesPage.unmatched"), icon: AlertTriangle },
     { key: "all", label: t("messagesPage.all"), icon: Hash },
   ];
@@ -727,7 +797,7 @@ function InboxTab() {
               />
             </div>
 
-            <div className="flex w-full rounded-lg bg-muted/50 p-1 gap-0.5">
+            <div className="flex w-full rounded-lg bg-muted/50 p-1 gap-0.5 overflow-x-auto scrollbar-none">
               {tabs.map((tb) => {
                 const Icon = tb.icon;
                 const active = tab === tb.key;
@@ -737,7 +807,7 @@ function InboxTab() {
                     onClick={() => setTab(tb.key)}
                     aria-pressed={active}
                     className={cn(
-                      "flex-1 min-w-0 px-2 py-1 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1.5",
+                      "shrink-0 min-w-[68px] px-2 py-1 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1",
                       active
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground hover:bg-background/50"
@@ -834,6 +904,14 @@ function InboxTab() {
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{c.lastMessagePreview || "—"}</p>
                   </div>
+                  <button
+                    type="button"
+                    className="p-1 rounded hover:bg-muted shrink-0"
+                    onClick={(e) => toggleStar(c.id, e)}
+                    title={c.isStarred ? t("inbox.action.unstar") : t("inbox.action.star")}
+                  >
+                    <Star className={`w-3.5 h-3.5 ${c.isStarred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"}`} />
+                  </button>
                 </div>
               );
             })}
@@ -917,6 +995,16 @@ function InboxTab() {
                     <span className="text-xs text-green-600 font-medium">{t("messagesPage.assignedToYou")}</span>
                   )}
                   <Button
+                    size="sm"
+                    variant={(conv as any).isSubscribed ? "default" : "outline"}
+                    onClick={() => toggleSubscribe(conv.id)}
+                    className="h-7 text-xs gap-1"
+                    title={(conv as any).isSubscribed ? t("inbox.action.unsubscribe") : t("inbox.action.subscribe")}
+                  >
+                    <Bell className="w-3 h-3" />
+                    <span className="hidden lg:inline">{(conv as any).isSubscribed ? t("inbox.action.unsubscribe") : t("inbox.action.subscribe")}</span>
+                  </Button>
+                  <Button
                     size="icon"
                     variant="ghost"
                     className="lg:hidden h-8 w-8"
@@ -960,7 +1048,39 @@ function InboxTab() {
                   return (
                     <div key={m.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${out ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
-                        <p className="whitespace-pre-wrap">{m.content}</p>
+                        {m.content && m.content !== "[attachment]" && (
+                          <p className="whitespace-pre-wrap">{m.content}</p>
+                        )}
+                        {(() => {
+                          const singleAtt = (m.metadata as any)?.attachment as MessageAttachment | undefined;
+                          const allAtts: MessageAttachment[] = [
+                            ...(singleAtt ? [singleAtt] : []),
+                            ...((m.metadata as any)?.attachments ?? []),
+                          ];
+                          if (!allAtts.length) return null;
+                          return (
+                            <div className="mt-1.5 space-y-1.5">
+                              {allAtts.map((a: MessageAttachment, i: number) => {
+                                const url = a.url ?? a.fileUrl ?? "";
+                                const type = a.type ?? a.fileType ?? "file";
+                                const name = a.name ?? a.fileName ?? "file";
+                                if (type === "image") return (
+                                  <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                    <img src={url} alt={name} className="max-w-[240px] rounded-lg" loading="lazy" />
+                                  </a>
+                                );
+                                if (type === "video") return <video key={i} src={url} controls className="max-w-[240px] rounded-lg" />;
+                                if (type === "audio") return <audio key={i} src={url} controls className="w-full" />;
+                                return (
+                                  <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                    className={`flex items-center gap-1.5 text-xs underline ${out ? "text-primary-foreground/80" : "text-foreground/80"}`}>
+                                    <Paperclip className="w-3 h-3 shrink-0" /> {name}
+                                  </a>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                         <div className={`text-[10px] mt-1 ${out ? "opacity-80" : "text-muted-foreground"}`}>
                           {new Date(m.createdAt).toLocaleString()}
                           {m.status === "failed" && <span className="ml-1 text-red-300">• failed</span>}
@@ -976,23 +1096,73 @@ function InboxTab() {
                 activeTab={composeTab}
                 onTabChange={setComposeTab}
                 chatSlot={
-                  <div className="p-3 flex items-end gap-2">
-                    <Textarea
-                      value={reply}
-                      onChange={(e) => setReply(e.target.value)}
-                      placeholder={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow ? (conv.channel === "whatsapp" ? "Outside 24h — use a template" : "Outside 24h window") : "Reply..."}
-                      rows={2}
-                      className="flex-1 rounded-lg text-sm"
-                      disabled={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow}
-                    />
-                    {conv.channel === "whatsapp" && (
-                      <Button size="sm" variant="outline" onClick={openTemplateDialog} className="h-9 gap-1">
-                        <FileText className="w-3 h-3" /> {t("messagesPage.template")}
-                      </Button>
+                  <div className="p-3 flex flex-col gap-2">
+                    {pendingFiles.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {pendingFiles.map((f, i) => (
+                          <div key={i} className="flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs max-w-[180px]">
+                            <Paperclip className="w-3 h-3 shrink-0" />
+                            <span className="truncate flex-1">{f.name}</span>
+                            <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} className="rounded hover:text-destructive shrink-0">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                    <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim() || ((conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow)} className="h-9 gap-1">
-                      {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />} Send
-                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        if (files.length > 0) setPendingFiles(prev => [...prev, ...files]);
+                        e.target.value = "";
+                      }}
+                    />
+                    <div className="flex items-end gap-2">
+                      <Textarea
+                        value={reply}
+                        onChange={(e) => setReply(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            sendReply();
+                          }
+                        }}
+                        placeholder={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow ? (conv.channel === "whatsapp" ? "Outside 24h — use a template" : "Outside 24h window") : t("messagesPage.replyPlaceholder") || "Reply…"}
+                        rows={2}
+                        className="flex-1 rounded-lg text-sm"
+                        disabled={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow && pendingFiles.length === 0}
+                      />
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0"
+                          title={t("inbox.compose.attach")}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Paperclip className="w-4 h-4" />
+                        </Button>
+                        {conv.channel === "whatsapp" && (
+                          <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={openTemplateDialog} title={t("messagesPage.template")}>
+                            <FileText className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={sendReply}
+                        disabled={sending || uploading || (reply.trim() === "" && pendingFiles.length === 0) || ((conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow && pendingFiles.length === 0)}
+                        className="h-9 gap-1"
+                      >
+                        {(sending || uploading) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                        {t("inbox.send") || "Send"}
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">{t("inbox.compose.enterToSend")}</p>
                   </div>
                 }
                 noteDraft={noteDraft}
@@ -1560,11 +1730,11 @@ function MessageThread({
                     <p className="text-xs text-muted-foreground mb-1">{msg.senderFirstName} {msg.senderLastName}</p>
                   )}
                   <div className={`rounded-2xl px-4 py-2.5 ${isMe ? "bg-primary text-white rounded-tr-sm" : "bg-secondary rounded-tl-sm"}`}>
-                    {att && isImage(att.fileType) && (
+                    {att && isImage(att.fileType!) && (
                       <div className="mb-1 group/att relative">
-                        <img src={att.fileUrl} alt={att.fileName} className="max-w-full max-h-48 rounded-lg object-cover" />
+                        <img src={att.fileUrl!} alt={att.fileName!} className="max-w-full max-h-48 rounded-lg object-cover" />
                         <button
-                          onClick={() => handleDownload(att.fileUrl, att.fileName)}
+                          onClick={() => handleDownload(att.fileUrl!, att.fileName!)}
                           className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/att:opacity-100 transition-opacity hover:bg-black/70"
                           title={t("messagesPage.download")}
                         >
@@ -1572,15 +1742,15 @@ function MessageThread({
                         </button>
                       </div>
                     )}
-                    {att && !isImage(att.fileType) && (
+                    {att && !isImage(att.fileType!) && (
                       <button
-                        onClick={() => handleDownload(att.fileUrl, att.fileName)}
+                        onClick={() => handleDownload(att.fileUrl!, att.fileName!)}
                         className={`flex items-center gap-2 p-2 rounded-lg mb-1 w-full text-left ${isMe ? "bg-white/10 hover:bg-white/20" : "bg-background hover:bg-background/80"} transition-colors`}
                       >
                         <FileText className="w-5 h-5 shrink-0" />
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium truncate">{att.fileName}</p>
-                          <p className={`text-[10px] ${isMe ? "text-white/60" : "text-muted-foreground"}`}>{formatFileSize(att.fileSize)}</p>
+                          <p className="text-xs font-medium truncate">{att.fileName!}</p>
+                          <p className={`text-[10px] ${isMe ? "text-white/60" : "text-muted-foreground"}`}>{formatFileSize(att.fileSize!)}</p>
                         </div>
                         <Download className={`w-4 h-4 shrink-0 ${isMe ? "text-white/60" : "text-muted-foreground"}`} />
                       </button>

@@ -52,6 +52,7 @@ export const conversationParticipantsTable = pgTable("conversation_participants"
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   lastReadAt: timestamp("last_read_at", { withTimezone: true }),
   isMuted: boolean("is_muted").notNull().default(false),
+  isStarred: boolean("is_starred").notNull().default(false),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

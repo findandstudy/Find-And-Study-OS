@@ -686,7 +686,15 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
       }
 
       const attachments = Array.isArray(m.attachments) && m.attachments.length > 0
-        ? { attachments: m.attachments }
+        ? {
+            attachments: m.attachments
+              .map((att: any) => ({
+                url: att.url ?? att.link ?? att.mediaUrl ?? "",
+                type: (att.type ?? "file") as "image" | "video" | "audio" | "file",
+                name: att.name ?? att.filename ?? undefined,
+              }))
+              .filter((a: any) => a.url),
+          }
         : {};
 
       const result = await processInboundMessage({

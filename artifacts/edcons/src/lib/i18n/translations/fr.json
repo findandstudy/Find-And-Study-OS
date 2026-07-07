@@ -958,7 +958,9 @@
       "taskDisabledHint": "Liez cette conversation à un prospect ou étudiant pour créer des suivis.",
       "createTask": "Créer un suivi",
       "taskCreated": "Suivi créé",
-      "taskFailed": "Échec de la création du suivi"
+      "taskFailed": "Échec de la création du suivi",
+      "attach": "Joindre un fichier",
+      "enterToSend": "Entrée pour envoyer"
     },
     "title": "Boîte de réception",
     "internal": "Interne",
@@ -966,7 +968,11 @@
       "mine": "Les miennes",
       "unassigned": "Non attribuées",
       "unmatched": "Non rapprochées",
-      "all": "Toutes"
+      "all": "Toutes",
+      "open": "Ouvert",
+      "unanswered": "Sans réponse",
+      "subscribed": "Abonné",
+      "starred": "Suivi"
     },
     "channels": {
       "all": "Tous",
@@ -1003,7 +1009,20 @@
     "simulatedHelp": "L'envoi sortant est simulé en dehors de la production",
     "reply": "Répondre...",
     "allMessaging": "Toute la messagerie",
-    "noMessagingHistory": "Aucun historique de messagerie externe pour le moment."
+    "noMessagingHistory": "Aucun historique de messagerie externe pour le moment.",
+    "action": {
+      "star": "Suivre",
+      "unstar": "Ne plus suivre",
+      "subscribe": "S'abonner",
+      "unsubscribe": "Se désabonner"
+    },
+    "attachment": {
+      "download": "Télécharger"
+    },
+    "error": {
+      "window24h": "Hors de la fenêtre de réponse WhatsApp de 24h. Utilisez un modèle.",
+      "sendMediaFailed": "Échec de l'envoi du média"
+    }
   },
   "integrations": {
     "prodOnlyTitle": "Les intégrations réservées à la production sont simulées.",

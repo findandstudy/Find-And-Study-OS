@@ -958,7 +958,9 @@
       "taskDisabledHint": "Link this conversation to a lead or student to create follow-ups.",
       "createTask": "Create follow-up",
       "taskCreated": "Follow-up created",
-      "taskFailed": "Failed to create follow-up"
+      "taskFailed": "Failed to create follow-up",
+      "attach": "Attach file",
+      "enterToSend": "Enter to send"
     },
     "title": "Inbox",
     "internal": "Internal",
@@ -966,7 +968,11 @@
       "mine": "Mine",
       "unassigned": "Unassigned",
       "unmatched": "Unmatched",
-      "all": "All"
+      "all": "All",
+      "open": "Open",
+      "unanswered": "Unanswered",
+      "subscribed": "Subscribed",
+      "starred": "Starred"
     },
     "channels": {
       "all": "All",
@@ -1003,7 +1009,20 @@
     "simulatedHelp": "Outbound is simulated outside production",
     "reply": "Reply...",
     "allMessaging": "All Messaging",
-    "noMessagingHistory": "No external messaging history yet."
+    "noMessagingHistory": "No external messaging history yet.",
+    "action": {
+      "star": "Star",
+      "unstar": "Unstar",
+      "subscribe": "Subscribe",
+      "unsubscribe": "Unsubscribe"
+    },
+    "attachment": {
+      "download": "Download"
+    },
+    "error": {
+      "window24h": "Outside the WhatsApp 24-hour reply window. Use a template instead.",
+      "sendMediaFailed": "Failed to send media"
+    }
   },
   "integrations": {
     "prodOnlyTitle": "Production-only integrations are simulated.",

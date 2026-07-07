@@ -958,7 +958,9 @@
       "taskDisabledHint": "फ़ॉलो-अप बनाने के लिए इस बातचीत को किसी लीड या छात्र से लिंक करें।",
       "createTask": "फ़ॉलो-अप बनाएं",
       "taskCreated": "फ़ॉलो-अप बनाया गया",
-      "taskFailed": "फ़ॉलो-अप बनाने में विफल"
+      "taskFailed": "फ़ॉलो-अप बनाने में विफल",
+      "attach": "फ़ाइल संलग्न करें",
+      "enterToSend": "भेजने के लिए Enter दबाएं"
     },
     "title": "इनबॉक्स",
     "internal": "आंतरिक",
@@ -966,7 +968,11 @@
       "mine": "मेरे",
       "unassigned": "असौंपे गए",
       "unmatched": "बेमेल",
-      "all": "सभी"
+      "all": "सभी",
+      "open": "खुले",
+      "unanswered": "अनुत्तरित",
+      "subscribed": "सब्स्क्राइब्ड",
+      "starred": "स्टार किए"
     },
     "channels": {
       "all": "सभी",
@@ -1003,7 +1009,20 @@
     "simulatedHelp": "उत्पादन के बाहर आउटबाउंड सिम्युलेटेड है",
     "reply": "उत्तर...",
     "allMessaging": "सभी संदेश",
-    "noMessagingHistory": "अभी तक कोई बाहरी संदेश इतिहास नहीं।"
+    "noMessagingHistory": "अभी तक कोई बाहरी संदेश इतिहास नहीं।",
+    "action": {
+      "star": "स्टार",
+      "unstar": "स्टार हटाएं",
+      "subscribe": "सब्स्क्राइब करें",
+      "unsubscribe": "अनसब्स्क्राइब करें"
+    },
+    "attachment": {
+      "download": "डाउनलोड"
+    },
+    "error": {
+      "window24h": "WhatsApp 24-घंटे की रिप्लाई विंडो के बाहर। टेम्पलेट उपयोग करें।",
+      "sendMediaFailed": "मीडिया भेजने में विफल"
+    }
   },
   "integrations": {
     "prodOnlyTitle": "केवल-उत्पादन इंटीग्रेशन सिम्युलेटेड हैं।",

@@ -958,7 +958,9 @@
       "taskDisabledHint": "Vincula esta conversación a un prospecto o estudiante para crear seguimientos.",
       "createTask": "Crear seguimiento",
       "taskCreated": "Seguimiento creado",
-      "taskFailed": "Error al crear el seguimiento"
+      "taskFailed": "Error al crear el seguimiento",
+      "attach": "Adjuntar archivo",
+      "enterToSend": "Enter para enviar"
     },
     "title": "Bandeja de entrada",
     "internal": "Interno",
@@ -966,7 +968,11 @@
       "mine": "Míos",
       "unassigned": "Sin asignar",
       "unmatched": "Sin coincidencia",
-      "all": "Todos"
+      "all": "Todos",
+      "open": "Abierto",
+      "unanswered": "Sin respuesta",
+      "subscribed": "Suscrito",
+      "starred": "Destacado"
     },
     "channels": {
       "all": "Todos",
@@ -1003,7 +1009,20 @@
     "simulatedHelp": "El envío saliente se simula fuera de producción",
     "reply": "Responder...",
     "allMessaging": "Toda la mensajería",
-    "noMessagingHistory": "Aún no hay historial de mensajería externa."
+    "noMessagingHistory": "Aún no hay historial de mensajería externa.",
+    "action": {
+      "star": "Destacar",
+      "unstar": "Quitar destacado",
+      "subscribe": "Suscribirse",
+      "unsubscribe": "Cancelar suscripción"
+    },
+    "attachment": {
+      "download": "Descargar"
+    },
+    "error": {
+      "window24h": "Fuera de la ventana de respuesta de 24h de WhatsApp. Usa una plantilla.",
+      "sendMediaFailed": "Error al enviar el archivo multimedia"
+    }
   },
   "integrations": {
     "prodOnlyTitle": "Las integraciones exclusivas de producción se simulan.",

@@ -958,7 +958,9 @@
       "taskDisabledHint": "将此对话关联到线索或学生以创建跟进。",
       "createTask": "创建跟进",
       "taskCreated": "跟进已创建",
-      "taskFailed": "创建跟进失败"
+      "taskFailed": "创建跟进失败",
+      "attach": "附加文件",
+      "enterToSend": "回车发送"
     },
     "title": "收件箱",
     "internal": "内部",
@@ -966,7 +968,11 @@
       "mine": "我的",
       "unassigned": "未分配",
       "unmatched": "未匹配",
-      "all": "全部"
+      "all": "全部",
+      "open": "开放",
+      "unanswered": "未回复",
+      "subscribed": "已订阅",
+      "starred": "已收藏"
     },
     "channels": {
       "all": "全部",
@@ -1003,7 +1009,20 @@
     "simulatedHelp": "非生产环境下发送为模拟操作",
     "reply": "回复...",
     "allMessaging": "全部消息",
-    "noMessagingHistory": "暂无外部消息记录。"
+    "noMessagingHistory": "暂无外部消息记录。",
+    "action": {
+      "star": "收藏",
+      "unstar": "取消收藏",
+      "subscribe": "订阅",
+      "unsubscribe": "取消订阅"
+    },
+    "attachment": {
+      "download": "下载"
+    },
+    "error": {
+      "window24h": "超出 WhatsApp 24 小时回复窗口，请使用模板。",
+      "sendMediaFailed": "发送媒体失败"
+    }
   },
   "integrations": {
     "prodOnlyTitle": "仅限生产环境的集成为模拟运行。",

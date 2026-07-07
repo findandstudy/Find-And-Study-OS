@@ -958,7 +958,9 @@
       "taskDisabledHint": "Tautkan percakapan ini ke prospek atau siswa untuk membuat tindak lanjut.",
       "createTask": "Buat tindak lanjut",
       "taskCreated": "Tindak lanjut dibuat",
-      "taskFailed": "Gagal membuat tindak lanjut"
+      "taskFailed": "Gagal membuat tindak lanjut",
+      "attach": "Lampirkan file",
+      "enterToSend": "Enter untuk mengirim"
     },
     "title": "Kotak Masuk",
     "internal": "Internal",
@@ -966,7 +968,11 @@
       "mine": "Milik Saya",
       "unassigned": "Belum Ditugaskan",
       "unmatched": "Tidak Cocok",
-      "all": "Semua"
+      "all": "Semua",
+      "open": "Terbuka",
+      "unanswered": "Belum Dibalas",
+      "subscribed": "Berlangganan",
+      "starred": "Berbintang"
     },
     "channels": {
       "all": "Semua",
@@ -1003,7 +1009,20 @@
     "simulatedHelp": "Pengiriman keluar disimulasikan di luar produksi",
     "reply": "Balas...",
     "allMessaging": "Semua Pesan",
-    "noMessagingHistory": "Belum ada riwayat pesan eksternal."
+    "noMessagingHistory": "Belum ada riwayat pesan eksternal.",
+    "action": {
+      "star": "Bintangi",
+      "unstar": "Hapus bintang",
+      "subscribe": "Berlangganan",
+      "unsubscribe": "Berhenti berlangganan"
+    },
+    "attachment": {
+      "download": "Unduh"
+    },
+    "error": {
+      "window24h": "Di luar jendela balasan 24 jam WhatsApp. Gunakan template.",
+      "sendMediaFailed": "Gagal mengirim media"
+    }
   },
   "integrations": {
     "prodOnlyTitle": "Integrasi khusus produksi disimulasikan.",

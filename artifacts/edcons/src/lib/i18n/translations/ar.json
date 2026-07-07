@@ -958,7 +958,9 @@
       "taskDisabledHint": "اربط هذه المحادثة بعميل محتمل أو طالب لإنشاء المتابعات.",
       "createTask": "إنشاء متابعة",
       "taskCreated": "تم إنشاء المتابعة",
-      "taskFailed": "فشل إنشاء المتابعة"
+      "taskFailed": "فشل إنشاء المتابعة",
+      "attach": "إرفاق ملف",
+      "enterToSend": "Enter للإرسال"
     },
     "title": "صندوق الوارد",
     "internal": "داخلي",
@@ -966,7 +968,11 @@
       "mine": "الخاصة بي",
       "unassigned": "غير مُسندة",
       "unmatched": "غير مطابَقة",
-      "all": "الكل"
+      "all": "الكل",
+      "open": "مفتوح",
+      "unanswered": "بلا رد",
+      "subscribed": "مشترك",
+      "starred": "مميز بنجمة"
     },
     "channels": {
       "all": "الكل",
@@ -1003,7 +1009,20 @@
     "simulatedHelp": "تتم محاكاة الإرسال الصادر خارج بيئة الإنتاج",
     "reply": "رد...",
     "allMessaging": "كل المراسلات",
-    "noMessagingHistory": "لا يوجد سجل مراسلات خارجية بعد."
+    "noMessagingHistory": "لا يوجد سجل مراسلات خارجية بعد.",
+    "action": {
+      "star": "تمييز",
+      "unstar": "إزالة التمييز",
+      "subscribe": "اشتراك",
+      "unsubscribe": "إلغاء الاشتراك"
+    },
+    "attachment": {
+      "download": "تحميل"
+    },
+    "error": {
+      "window24h": "خارج نافذة الرد البالغة 24 ساعة على واتساب. استخدم نموذجاً.",
+      "sendMediaFailed": "فشل إرسال الوسائط"
+    }
   },
   "integrations": {
     "prodOnlyTitle": "تتم محاكاة عمليات التكامل الخاصة ببيئة الإنتاج فقط.",

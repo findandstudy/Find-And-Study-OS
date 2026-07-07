@@ -958,7 +958,9 @@
       "taskDisabledHint": "Takip oluşturmak için bu görüşmeyi bir lead veya öğrenciye bağlayın.",
       "createTask": "Takip oluştur",
       "taskCreated": "Takip oluşturuldu",
-      "taskFailed": "Takip oluşturulamadı"
+      "taskFailed": "Takip oluşturulamadı",
+      "attach": "Dosya ekle",
+      "enterToSend": "Enter ile gönder"
     },
     "title": "Gelen Kutusu",
     "internal": "Dahili",
@@ -966,7 +968,11 @@
       "mine": "Bana Atanan",
       "unassigned": "Atanmamış",
       "unmatched": "Eşleşmemiş",
-      "all": "Tümü"
+      "all": "Tümü",
+      "open": "Açık",
+      "unanswered": "Cevaplanmamış",
+      "subscribed": "Abone",
+      "starred": "Yıldızlı"
     },
     "channels": {
       "all": "Tümü",
@@ -1003,7 +1009,20 @@
     "simulatedHelp": "Üretim dışında giden mesajlar simüle edilir",
     "reply": "Yanıtla...",
     "allMessaging": "Tüm Mesajlaşma",
-    "noMessagingHistory": "Henüz dış mesajlaşma geçmişi yok."
+    "noMessagingHistory": "Henüz dış mesajlaşma geçmişi yok.",
+    "action": {
+      "star": "Yıldızla",
+      "unstar": "Yıldızı kaldır",
+      "subscribe": "Abone ol",
+      "unsubscribe": "Aboneliği bırak"
+    },
+    "attachment": {
+      "download": "İndir"
+    },
+    "error": {
+      "window24h": "WhatsApp 24 saatlik cevap penceresi dışında. Lütfen şablon kullanın.",
+      "sendMediaFailed": "Medya gönderilemedi"
+    }
   },
   "integrations": {
     "prodOnlyTitle": "Üretim modunda olmayan entegrasyonlar simüle edilir.",
