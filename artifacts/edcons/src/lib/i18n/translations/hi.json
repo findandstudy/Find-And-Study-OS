@@ -4818,6 +4818,12 @@
       "testLoginSuccess": "Login successful",
       "testLoginFailed": "Login failed",
       "activeLabel": "Active",
+      "fanOutModeLabel": "Fan-out",
+      "fanOutMode_off": "बंद",
+      "fanOutMode_manual": "मैन्युअल",
+      "fanOutMode_auto": "स्वचालित",
+      "fanOutModeSuccess": "Fan-out मोड अपडेट हुआ",
+      "fanOutModeError": "Fan-out मोड अपडेट नहीं हो सका",
       "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
       "addDialog": {
@@ -5242,6 +5248,16 @@
         "MISSING_CRM_ID": "Missing CRM program id",
         "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
       }
+    },
+    "fanOut": {
+      "title": "Fan-out मोड",
+      "description": "नियंत्रित करता है कि आवेदन कई विश्वविद्यालयों में कैसे फैलाया जाए। प्रति-विश्वविद्यालय सेटिंग्स प्राथमिकता लेती हैं।",
+      "mode_off": "बंद",
+      "mode_manual": "मैन्युअल",
+      "mode_auto": "स्वचालित",
+      "offHint": "Fan-out बंद है — प्रत्येक आवेदन केवल चुने हुए विश्वविद्यालय को भेजा जाता है।",
+      "manualHint": "मैन्युअल — ऑपरेटर Fan-out बटन के माध्यम से प्रति आवेदन ट्रिगर करते हैं।",
+      "autoHint": "स्वचालित — सिस्टम तब स्वचालित रूप से फैलाता है जब छात्र ट्रिगर चरण तक पहुँचता है।"
     },
     "states": {
       "errorTitle": "Couldn't load",

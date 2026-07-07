@@ -4818,6 +4818,12 @@
       "testLoginSuccess": "Login successful",
       "testLoginFailed": "Login failed",
       "activeLabel": "Active",
+      "fanOutModeLabel": "Difusión",
+      "fanOutMode_off": "Desactivado",
+      "fanOutMode_manual": "Manual",
+      "fanOutMode_auto": "Automático",
+      "fanOutModeSuccess": "Modo de difusión actualizado",
+      "fanOutModeError": "No se pudo actualizar el modo de difusión",
       "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
       "addDialog": {
@@ -5242,6 +5248,16 @@
         "MISSING_CRM_ID": "Missing CRM program id",
         "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
       }
+    },
+    "fanOut": {
+      "title": "Modo de difusión",
+      "description": "Controla cómo se distribuye una solicitud a varias universidades. Los ajustes por universidad tienen prioridad.",
+      "mode_off": "Desactivado",
+      "mode_manual": "Manual",
+      "mode_auto": "Automático",
+      "offHint": "Difusión desactivada — cada solicitud solo se dirige a la universidad solicitada.",
+      "manualHint": "Manual — los operadores activan la difusión por solicitud mediante el botón Difusión.",
+      "autoHint": "Automático — el sistema difunde automáticamente cuando un estudiante alcanza una etapa de activación."
     },
     "states": {
       "errorTitle": "Couldn't load",

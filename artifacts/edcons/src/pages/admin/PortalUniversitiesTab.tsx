@@ -118,6 +118,7 @@ interface PortalUniversity {
   programCount: number;
   linkStatus: "linked" | "stale" | "unlinked";
   createdAt: string;
+  fanOutMode: "off" | "manual" | "auto" | null;
 }
 
 interface RegistryAdapter {
@@ -799,6 +800,7 @@ interface RowProps {
   uni: PortalUniversity;
   onToggle: (id: number, active: boolean) => Promise<void>;
   onToggleAutoProcess: (id: number, autoProcess: boolean) => Promise<void>;
+  onSetFanOutMode: (id: number, mode: "off" | "manual" | "auto") => Promise<void>;
   onTestLogin: (id: number) => Promise<void>;
   onEditDefaults: (uni: PortalUniversity) => void;
   onManageCreds: (uni: PortalUniversity) => void;
@@ -807,16 +809,18 @@ interface RowProps {
   experimental:           boolean;
   togglingId:             number | null;
   togglingAutoProcessId:  number | null;
+  settingFanOutModeId:    number | null;
   testingId:              number | null;
   selected: boolean;
   onToggleSelect: (id: number) => void;
   bulkBusy: boolean;
 }
 
-function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEditDefaults, onManageCreds, onManageMembers, onDelete, experimental, togglingId, togglingAutoProcessId, testingId, selected, onToggleSelect, bulkBusy }: RowProps) {
+function UniversityRow({ uni, onToggle, onToggleAutoProcess, onSetFanOutMode, onTestLogin, onEditDefaults, onManageCreds, onManageMembers, onDelete, experimental, togglingId, togglingAutoProcessId, settingFanOutModeId, testingId, selected, onToggleSelect, bulkBusy }: RowProps) {
   const { t } = useI18n();
   const isToggling            = togglingId            === uni.id;
   const isTogglingAutoProcess = togglingAutoProcessId === uni.id;
+  const isSettingFanOutMode   = settingFanOutModeId   === uni.id;
   const isTesting             = testingId             === uni.id;
   const defaults   = (uni.defaults ?? {}) as UniversityDefaults;
   const hasDefaults = !!(defaults.intakeType || defaults.semester || defaults.degreeLevel);
@@ -919,6 +923,32 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onTestLogin, onEdit
                 )}
               <span className="text-xs text-muted-foreground">
                 {t("portalAutomation.unis.activeLabel")}
+              </span>
+            </div>
+
+            {/* fanOutMode selector */}
+            <div className="flex items-center gap-1.5">
+              {isSettingFanOutMode
+                ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                : (
+                  <Select
+                    value={uni.fanOutMode ?? "off"}
+                    onValueChange={(v) => onSetFanOutMode(uni.id, v as "off" | "manual" | "auto")}
+                  >
+                    <SelectTrigger className="h-6 text-xs px-2 w-[86px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(["off", "manual", "auto"] as const).map((m) => (
+                        <SelectItem key={m} value={m} className="text-xs">
+                          {t(`portalAutomation.unis.fanOutMode_${m}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              <span className="text-xs text-muted-foreground">
+                {t("portalAutomation.unis.fanOutModeLabel")}
               </span>
             </div>
 
@@ -1079,6 +1109,7 @@ export default function PortalUniversitiesTab() {
 
   const [togglingId, setTogglingId]                         = useState<number | null>(null);
   const [togglingAutoProcessId, setTogglingAutoProcessId]   = useState<number | null>(null);
+  const [settingFanOutModeId, setSettingFanOutModeId]       = useState<number | null>(null);
   const [testingId,  setTestingId]  = useState<number | null>(null);
 
   const [addOpen, setAddOpen]         = useState(false);
@@ -1207,6 +1238,27 @@ export default function PortalUniversitiesTab() {
       toast({ title: t("portalAutomation.unis.toggleError"), variant: "destructive" });
     } finally {
       setTogglingAutoProcessId(null);
+    }
+  };
+
+  // Set fan-out mode override for a university
+  const handleSetFanOutMode = async (id: number, mode: "off" | "manual" | "auto") => {
+    setSettingFanOutModeId(id);
+    try {
+      const updated = await customFetch<PortalUniversity>(
+        `/api/portal-universities/${id}/fan-out-mode`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ fanOutMode: mode }),
+        },
+      );
+      setUnis((prev) => prev.map((u) => (u.id === id ? { ...u, ...updated } : u)));
+      toast({ title: t("portalAutomation.unis.fanOutModeSuccess") });
+    } catch {
+      toast({ title: t("portalAutomation.unis.fanOutModeError"), variant: "destructive" });
+    } finally {
+      setSettingFanOutModeId(null);
     }
   };
 
@@ -1527,6 +1579,7 @@ export default function PortalUniversitiesTab() {
               uni={uni}
               onToggle={handleToggle}
               onToggleAutoProcess={handleToggleAutoProcess}
+              onSetFanOutMode={handleSetFanOutMode}
               onTestLogin={handleTestLogin}
               onEditDefaults={setEditTarget}
               onManageCreds={setCredsTarget}
@@ -1535,6 +1588,7 @@ export default function PortalUniversitiesTab() {
               experimental={experimentalKeys.has(uni.adapterKey)}
               togglingId={togglingId}
               togglingAutoProcessId={togglingAutoProcessId}
+              settingFanOutModeId={settingFanOutModeId}
               testingId={testingId}
               selected={selectedIds.has(uni.id)}
               onToggleSelect={toggleSelect}

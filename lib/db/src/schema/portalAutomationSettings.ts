@@ -5,6 +5,7 @@ import {
   boolean,
   integer,
   jsonb,
+  text,
   timestamp,
 } from "drizzle-orm/pg-core";
 
@@ -61,6 +62,18 @@ export const portalAutomationSettingsTable = pgTable(
      * configured fallback rule when this flag is on. false = no-op + log.
      */
     fallbackEnabled: boolean("fallback_enabled").notNull().default(false),
+    // ---------------------------------------------------------------------------
+    // Fan-out mode (global default; per-university override lives on portal_universities)
+    // ---------------------------------------------------------------------------
+    /**
+     * Global default fan-out mode.
+     *   'off'    — no fan-out (only submit to the directly applied university). Default.
+     *   'manual' — operator presses the fan-out button to trigger for a given application.
+     *   'auto'   — fan out automatically when a student reaches a trigger stage.
+     * Overridden per-university via portal_universities.fan_out_mode (null = inherit).
+     * Master kill-switch (isEnabled=false) always forces 'off' regardless.
+     */
+    fanOutMode: text("fan_out_mode").notNull().default("off"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

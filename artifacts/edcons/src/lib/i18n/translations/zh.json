@@ -4818,6 +4818,12 @@
       "testLoginSuccess": "Login successful",
       "testLoginFailed": "Login failed",
       "activeLabel": "Active",
+      "fanOutModeLabel": "扩散",
+      "fanOutMode_off": "关闭",
+      "fanOutMode_manual": "手动",
+      "fanOutMode_auto": "自动",
+      "fanOutModeSuccess": "扩散模式已更新",
+      "fanOutModeError": "无法更新扩散模式",
       "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
       "addDialog": {
@@ -5242,6 +5248,16 @@
         "MISSING_CRM_ID": "Missing CRM program id",
         "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
       }
+    },
+    "fanOut": {
+      "title": "扩散模式",
+      "description": "控制申请如何分发到多所大学。每所大学的设置优先生效。",
+      "mode_off": "关闭",
+      "mode_manual": "手动",
+      "mode_auto": "自动",
+      "offHint": "扩散已关闭 — 每个申请仅提交到所申请的大学。",
+      "manualHint": "手动 — 操作员通过扩散按钮逐个申请触发扩散。",
+      "autoHint": "自动 — 当学生进入触发阶段时，系统自动扩散。"
     },
     "states": {
       "errorTitle": "Couldn't load",

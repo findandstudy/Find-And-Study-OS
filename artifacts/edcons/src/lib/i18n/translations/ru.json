@@ -4818,6 +4818,12 @@
       "testLoginSuccess": "Login successful",
       "testLoginFailed": "Login failed",
       "activeLabel": "Active",
+      "fanOutModeLabel": "Fan-out",
+      "fanOutMode_off": "Выкл",
+      "fanOutMode_manual": "Вручную",
+      "fanOutMode_auto": "Авто",
+      "fanOutModeSuccess": "Режим fan-out обновлён",
+      "fanOutModeError": "Не удалось обновить режим fan-out",
       "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
       "addDialog": {
@@ -5242,6 +5248,16 @@
         "MISSING_CRM_ID": "Missing CRM program id",
         "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
       }
+    },
+    "fanOut": {
+      "title": "Режим fan-out",
+      "description": "Управляет распределением заявки по нескольким университетам. Настройки по университетам имеют приоритет.",
+      "mode_off": "Выкл",
+      "mode_manual": "Вручную",
+      "mode_auto": "Авто",
+      "offHint": "Fan-out отключён — каждая заявка направляется только в выбранный университет.",
+      "manualHint": "Вручную — операторы запускают fan-out для каждой заявки через кнопку.",
+      "autoHint": "Авто — система рассылает автоматически, когда студент достигает триггерного этапа."
     },
     "states": {
       "errorTitle": "Couldn't load",

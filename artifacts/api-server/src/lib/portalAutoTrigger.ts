@@ -411,6 +411,15 @@ export async function enqueueOnStageChange(opts: {
           ` app=${opts.applicationId} stage=${opts.newStage}`,
         );
       }
+
+      // Auto fan-out (best-effort). Dynamic import breaks the circular dependency
+      // with portalAutomation.ts (which itself imports from this module).
+      void (async () => {
+        try {
+          const { maybeFanOutStudentForApplication } = await import("../routes/portalAutomation.js");
+          await maybeFanOutStudentForApplication(opts.applicationId as number, actorId);
+        } catch (_) { /* non-fatal */ }
+      })();
       return;
     }
 
@@ -445,6 +454,14 @@ export async function enqueueOnStageChange(opts: {
           ` app=${app.id} stage=${opts.newStage}`,
         );
       }
+
+      // Auto fan-out per application (best-effort, dynamic import, non-blocking).
+      void (async () => {
+        try {
+          const { maybeFanOutStudentForApplication } = await import("../routes/portalAutomation.js");
+          await maybeFanOutStudentForApplication(app.id, actorId);
+        } catch (_) { /* non-fatal */ }
+      })();
     }
   } catch (e) {
     console.error("[portal-auto] enqueueOnStageChange error (non-fatal):", e);

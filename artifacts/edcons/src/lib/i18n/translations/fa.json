@@ -4818,6 +4818,12 @@
       "testLoginSuccess": "Login successful",
       "testLoginFailed": "Login failed",
       "activeLabel": "Active",
+      "fanOutModeLabel": "Fan-out",
+      "fanOutMode_off": "خاموش",
+      "fanOutMode_manual": "دستی",
+      "fanOutMode_auto": "خودکار",
+      "fanOutModeSuccess": "حالت fan-out به‌روز شد",
+      "fanOutModeError": "به‌روزرسانی حالت fan-out ممکن نبود",
       "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
       "addDialog": {
@@ -5242,6 +5248,16 @@
         "MISSING_CRM_ID": "Missing CRM program id",
         "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
       }
+    },
+    "fanOut": {
+      "title": "حالت Fan-out",
+      "description": "نحوه توزیع درخواست به چند دانشگاه را کنترل می‌کند. تنظیمات هر دانشگاه اولویت دارد.",
+      "mode_off": "خاموش",
+      "mode_manual": "دستی",
+      "mode_auto": "خودکار",
+      "offHint": "Fan-out خاموش است — هر درخواست فقط به دانشگاه انتخاب‌شده ارسال می‌شود.",
+      "manualHint": "دستی — اپراتورها برای هر درخواست از دکمه Fan-out استفاده می‌کنند.",
+      "autoHint": "خودکار — سیستم هنگامی که دانشجو به مرحله راه‌انداز می‌رسد، به‌صورت خودکار توزیع می‌کند."
     },
     "states": {
       "errorTitle": "Couldn't load",

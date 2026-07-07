@@ -1573,6 +1573,9 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE portal_universities ADD COLUMN IF NOT EXISTS is_multi_portal BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE portal_universities ADD COLUMN IF NOT EXISTS routes_via TEXT`);
     await pool.query(`CREATE INDEX IF NOT EXISTS portal_uni_routes_via_idx ON portal_universities (routes_via)`);
+    // Fan-out 3-mode: global default on settings + per-university override (null = inherit).
+    await pool.query(`ALTER TABLE portal_automation_settings ADD COLUMN IF NOT EXISTS fan_out_mode TEXT NOT NULL DEFAULT 'off'`);
+    await pool.query(`ALTER TABLE portal_universities ADD COLUMN IF NOT EXISTS fan_out_mode TEXT`);
     // Phase 3: program-fallback (supersession) rules. Maps a SOURCE CRM programme
     // (the full one) to an ordered list of fallback CRM program ids, scoped to a
     // portal university. Idempotent — required in prod for the fallback orchestrator.

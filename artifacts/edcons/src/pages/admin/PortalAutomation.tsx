@@ -54,6 +54,7 @@ interface PortalSettings {
   autoProcessEnabled: boolean;
   autoProcessIntervalMinutes: number;
   fallbackEnabled: boolean;
+  fanOutMode: "off" | "manual" | "auto";
 }
 
 interface PortalUniversity {
@@ -75,6 +76,7 @@ const DEFAULTS: PortalSettings = {
   autoProcessEnabled: false,
   autoProcessIntervalMinutes: 20,
   fallbackEnabled: false,
+  fanOutMode: "off",
 };
 
 // ---------------------------------------------------------------------------
@@ -160,6 +162,7 @@ function AutomationRulesTab() {
           autoProcessEnabled: settings.autoProcessEnabled,
           autoProcessIntervalMinutes: settings.autoProcessIntervalMinutes,
           fallbackEnabled: settings.fallbackEnabled,
+          fanOutMode: settings.fanOutMode,
         }),
       });
       toast({ title: t("portalAutomation.rules.saveSuccess") });
@@ -347,6 +350,46 @@ function AutomationRulesTab() {
               </Badge>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Fan-out mode (global default) ───────────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{t("portalAutomation.fanOut.title")}</CardTitle>
+          <CardDescription>{t("portalAutomation.fanOut.description")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select
+            value={settings.fanOutMode}
+            onValueChange={(v) => setSettings((p) => ({ ...p, fanOutMode: v as "off" | "manual" | "auto" }))}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(["off", "manual", "auto"] as const).map((m) => (
+                <SelectItem key={m} value={m}>
+                  {t(`portalAutomation.fanOut.mode_${m}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {settings.fanOutMode === "off" && (
+            <p className="text-sm text-muted-foreground mt-2">
+              {t("portalAutomation.fanOut.offHint")}
+            </p>
+          )}
+          {settings.fanOutMode === "manual" && (
+            <p className="text-sm text-muted-foreground mt-2">
+              {t("portalAutomation.fanOut.manualHint")}
+            </p>
+          )}
+          {settings.fanOutMode === "auto" && (
+            <p className="text-sm text-amber-600 dark:text-amber-500 mt-2">
+              {t("portalAutomation.fanOut.autoHint")}
+            </p>
+          )}
         </CardContent>
       </Card>
 

@@ -4818,6 +4818,12 @@
       "testLoginSuccess": "Login successful",
       "testLoginFailed": "Login failed",
       "activeLabel": "Active",
+      "fanOutModeLabel": "Fan-out",
+      "fanOutMode_off": "Off",
+      "fanOutMode_manual": "Manual",
+      "fanOutMode_auto": "Auto",
+      "fanOutModeSuccess": "Fan-out mode updated",
+      "fanOutModeError": "Could not update fan-out mode",
       "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
       "addDialog": {
@@ -5242,6 +5248,16 @@
         "MISSING_CRM_ID": "Missing CRM program id",
         "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
       }
+    },
+    "fanOut": {
+      "title": "Fan-out Mode",
+      "description": "Controls how a submission is spread to multiple universities. Per-university overrides take precedence.",
+      "mode_off": "Off",
+      "mode_manual": "Manual",
+      "mode_auto": "Auto",
+      "offHint": "Fan-out is off — each submission only targets the applied university.",
+      "manualHint": "Manual — operators trigger fan-out per application via the Fan-out button.",
+      "autoHint": "Auto — the system fans out automatically when a student reaches a trigger stage."
     },
     "states": {
       "errorTitle": "Couldn't load",

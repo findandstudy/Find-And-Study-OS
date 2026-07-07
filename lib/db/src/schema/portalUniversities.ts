@@ -43,6 +43,12 @@ export const portalUniversitiesTable = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
+    /**
+     * Per-university fan-out mode override.
+     * null = inherit from global portal_automation_settings.fan_out_mode.
+     * 'off' | 'manual' | 'auto' = explicit override.
+     */
+    fanOutMode: text("fan_out_mode"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => [

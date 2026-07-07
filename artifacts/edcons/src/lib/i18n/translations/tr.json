@@ -4818,6 +4818,12 @@
       "testLoginSuccess": "Giriş başarılı",
       "testLoginFailed": "Giriş başarısız",
       "activeLabel": "Aktif",
+      "fanOutModeLabel": "Yayılım",
+      "fanOutMode_off": "Kapalı",
+      "fanOutMode_manual": "Manuel",
+      "fanOutMode_auto": "Otomatik",
+      "fanOutModeSuccess": "Yayılım modu güncellendi",
+      "fanOutModeError": "Yayılım modu güncellenemedi",
       "autoProcessLabel": "Otomatik İşlem",
       "defaultsButton": "Varsayılanlar",
       "addDialog": {
@@ -5242,6 +5248,16 @@
         "MISSING_CRM_ID": "CRM program id eksik",
         "INVALID_PORTAL_VALUE": "Portal değeri canlı bir opsiyonla eşleşmiyor"
       }
+    },
+    "fanOut": {
+      "title": "Yayılım Modu",
+      "description": "Başvurunun birden fazla üniversiteye nasıl dağıtılacağını belirler. Üniversite bazlı ayarlar önceliklidir.",
+      "mode_off": "Kapalı",
+      "mode_manual": "Manuel",
+      "mode_auto": "Otomatik",
+      "offHint": "Yayılım kapalı — her başvuru yalnızca başvurulan üniversiteye gönderilir.",
+      "manualHint": "Manuel — operatörler her başvuru için Yayılım düğmesini kullanır.",
+      "autoHint": "Otomatik — sistem öğrenci tetikleyici aşamaya geldiğinde otomatik yayılır."
     },
     "states": {
       "errorTitle": "Yüklenemedi",

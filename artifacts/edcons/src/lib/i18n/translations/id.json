@@ -4818,6 +4818,12 @@
       "testLoginSuccess": "Login successful",
       "testLoginFailed": "Login failed",
       "activeLabel": "Active",
+      "fanOutModeLabel": "Fan-out",
+      "fanOutMode_off": "Mati",
+      "fanOutMode_manual": "Manual",
+      "fanOutMode_auto": "Otomatis",
+      "fanOutModeSuccess": "Mode fan-out diperbarui",
+      "fanOutModeError": "Tidak dapat memperbarui mode fan-out",
       "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
       "addDialog": {
@@ -5242,6 +5248,16 @@
         "MISSING_CRM_ID": "Missing CRM program id",
         "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
       }
+    },
+    "fanOut": {
+      "title": "Mode Fan-out",
+      "description": "Mengontrol cara pengajuan disebarkan ke beberapa universitas. Pengaturan per-universitas lebih diutamakan.",
+      "mode_off": "Mati",
+      "mode_manual": "Manual",
+      "mode_auto": "Otomatis",
+      "offHint": "Fan-out mati — setiap pengajuan hanya ditargetkan ke universitas yang dipilih.",
+      "manualHint": "Manual — operator memicu fan-out per pengajuan melalui tombol Fan-out.",
+      "autoHint": "Otomatis — sistem menyebarkan secara otomatis ketika siswa mencapai tahap pemicu."
     },
     "states": {
       "errorTitle": "Couldn't load",

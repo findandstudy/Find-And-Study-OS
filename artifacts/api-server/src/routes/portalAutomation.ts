@@ -1764,54 +1764,95 @@ function triggerBackgroundDrain(label: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// SIT automatic multi-university fan-out
+// Portal-agnostic 3-mode fan-out system
 //
-// When a student is routed to the SIT (study_in_turkey) aggregator, fan the
-// application out to ALL permitted SIT MEMBER universities using the SAME shared
-// core (matchProgram X1/Y1 → advisory-locked app dedup/create with
-// mainApplicationId set → submission dedup/enqueue routed via the aggregator).
-// The X2/X3 · Y2/Y3 program+language fallback steps are then applied REACTIVELY
-// by the worker's orchestrator when a member returns program_missing/full — so
-// no parallel matcher is introduced here.
+// Fan-out mode is DB-driven (portal_automation_settings.fan_out_mode for the
+// global default; portal_universities.fan_out_mode for per-university overrides).
 //
-// Env-gated by SIT_AUTO_FANOUT (default OFF); when off, only the manual
-// "Apply to All Universities" button fans out. Submission Mode (settings.mode)
-// decides dry vs real, exactly like the manual path.
+//   'off'    — no fan-out; only submit to the directly applied university (default).
+//   'manual' — operator presses the "Fan-out" button to trigger for an application.
+//   'auto'   — fan out automatically when a student reaches a trigger stage.
+//
+// The master kill-switch (settings.isEnabled=false) forces 'off' regardless.
+// Legacy SIT_AUTO_FANOUT env is honoured as a fallback for the SIT aggregator
+// when the DB does not explicitly set it to a non-default value.
+//
+// Target universities:
+//   • Multi-portal aggregator (SIT, United…): members of that aggregator,
+//     routed via the aggregator key (existing behaviour).
+//   • Direct portal (Topkapi, etc.): all credential-ready, CRM-linked universities.
 // ---------------------------------------------------------------------------
 
-/** The SIT aggregator's portal key / adapter key. */
+/** The SIT aggregator's portal key / adapter key (kept for routing checks). */
 const SIT_AGGREGATOR_KEY = "sit";
 
-/** True only when SIT_AUTO_FANOUT is explicitly enabled (default OFF). */
-function isSitAutoFanOutEnabled(): boolean {
-  const v = (process.env.SIT_AUTO_FANOUT ?? "").trim().toLowerCase();
-  return v === "true" || v === "1" || v === "yes" || v === "on";
+/**
+ * Resolve the effective fan-out mode for a given portal university key.
+ *
+ * Priority:
+ *   1. Master kill-switch: if settings.isEnabled === false → always 'off'.
+ *   2. Per-university override (portal_universities.fan_out_mode, non-null).
+ *   3. Legacy SIT_AUTO_FANOUT env (for SIT key only, when DB has not set auto).
+ *   4. Global default (portal_automation_settings.fan_out_mode, default 'off').
+ *
+ * @param universityKey  The resolved portal university key (after routing).
+ * @param settings       Pre-fetched settings row (optional, avoids extra query).
+ */
+async function resolveFanOutMode(
+  universityKey: string,
+  settings?: typeof portalAutomationSettingsTable.$inferSelect,
+): Promise<"off" | "manual" | "auto"> {
+  const s = settings ??
+    (await db.select().from(portalAutomationSettingsTable).limit(1))[0];
+
+  // Master kill-switch always wins.
+  if (!s?.isEnabled) return "off";
+
+  // Per-university override (null = inherit).
+  const [uni] = await db
+    .select({ fanOutMode: portalUniversitiesTable.fanOutMode })
+    .from(portalUniversitiesTable)
+    .where(and(
+      eq(portalUniversitiesTable.universityKey, universityKey),
+      isNull(portalUniversitiesTable.deletedAt),
+    ))
+    .limit(1);
+
+  const uniMode = uni?.fanOutMode as "off" | "manual" | "auto" | null | undefined;
+  if (uniMode) return uniMode;
+
+  // Legacy SIT_AUTO_FANOUT env compatibility: only applies to the SIT key and
+  // only when the DB global is still at the default ('off' or unset).
+  const globalMode = (s as { fanOutMode?: string }).fanOutMode as "off" | "manual" | "auto" | undefined;
+  if (universityKey === SIT_AGGREGATOR_KEY && (!globalMode || globalMode === "off")) {
+    const v = (process.env.SIT_AUTO_FANOUT ?? "").trim().toLowerCase();
+    if (v === "true" || v === "1" || v === "yes" || v === "on") return "auto";
+  }
+
+  return globalMode ?? "off";
 }
 
 /**
- * The permitted SIT member universities to fan out to, as fan-out candidates
- * routed through the aggregator. Authoritative membership = the enabled rows in
- * portal_account_universities under the active SIT aggregator, further filtered
- * by isSitMember (the agreed allowlist ∪ SIT_MEMBER_UNIVERSITIES) so a stray
- * junction row can never push a non-member into SIT. Each candidate carries the
- * MEMBER's CRM university id + name (for program match + application creation);
- * routing to the aggregator key is applied by the caller via routeVia.
- * Returns [] when the aggregator is missing/inactive.
+ * Load the fan-out candidate universities for a MULTI-PORTAL aggregator.
+ * Returns the aggregator's enabled member universities, each carrying the
+ * member's CRM id + name (for program-match + application creation) and the
+ * aggregator's key + adapter (for routing + credentials).
+ * Returns [] when the aggregator row is missing or inactive.
  */
-async function loadSitMemberUniversities(): Promise<CredentialReadyUniversity[]> {
+async function loadAggregatorMemberUniversities(
+  aggregatorKey: string,
+): Promise<CredentialReadyUniversity[]> {
   const [aggregator] = await db
     .select({
       universityKey: portalUniversitiesTable.universityKey,
       adapterKey:    portalUniversitiesTable.adapterKey,
     })
     .from(portalUniversitiesTable)
-    .where(
-      and(
-        eq(portalUniversitiesTable.universityKey, SIT_AGGREGATOR_KEY),
-        eq(portalUniversitiesTable.isActive, true),
-        isNull(portalUniversitiesTable.deletedAt),
-      ),
-    )
+    .where(and(
+      eq(portalUniversitiesTable.universityKey, aggregatorKey),
+      eq(portalUniversitiesTable.isActive, true),
+      isNull(portalUniversitiesTable.deletedAt),
+    ))
     .limit(1);
   if (!aggregator) return [];
 
@@ -1825,38 +1866,46 @@ async function loadSitMemberUniversities(): Promise<CredentialReadyUniversity[]>
       universitiesTable,
       eq(universitiesTable.id, portalAccountUniversitiesTable.catalogUniversityId),
     )
-    .where(
-      and(
-        eq(portalAccountUniversitiesTable.portalKey, aggregator.universityKey),
-        eq(portalAccountUniversitiesTable.enabled, true),
-      ),
-    );
+    .where(and(
+      eq(portalAccountUniversitiesTable.portalKey, aggregatorKey),
+      eq(portalAccountUniversitiesTable.enabled, true),
+    ));
 
-  return members
-    .filter((m) => isSitMember(m.name))
-    .map((m) => ({
-      // universityKey reported per candidate is the aggregator (the portal
-      // actually used); the member is identified by name + crmUniversityId.
-      universityKey:   aggregator.universityKey,
-      universityName:  m.name,
-      adapterKey:      aggregator.adapterKey,
-      crmUniversityId: m.catalogUniversityId,
-    }));
+  // For the SIT aggregator, additionally gate on the agreed membership allowlist.
+  const filtered = aggregatorKey === SIT_AGGREGATOR_KEY
+    ? members.filter((m) => isSitMember(m.name))
+    : members;
+
+  return filtered.map((m) => ({
+    universityKey:   aggregator.universityKey,
+    universityName:  m.name,
+    adapterKey:      aggregator.adapterKey,
+    crmUniversityId: m.catalogUniversityId,
+  }));
 }
 
 /**
- * Fire-and-forget: if SIT_AUTO_FANOUT is enabled and the given application is
- * routed to the SIT aggregator, fan the student out to all permitted SIT member
- * universities. Idempotent — re-invocation only fills gaps (dedup). Honors the
- * global kill-switch (settings.isEnabled) and Submission Mode. Never throws.
+ * Fire-and-forget: portal-agnostic automatic fan-out gate.
+ *
+ * Called from enqueueOnStageChange (stage-change hook) for every application
+ * whose university resolves to a portal with fanOutMode='auto'.
+ *
+ * Steps:
+ *   1. Master kill-switch (settings.isEnabled) — early return.
+ *   2. Trigger-stage gate — fan-out only when app is at a configured stage.
+ *   3. Resolve portal routing for the application's university.
+ *   4. resolveFanOutMode — return unless 'auto'.
+ *   5. Credential check on the resolved portal.
+ *   6. Load target universities (aggregator members OR all credential-ready).
+ *   7. fanOutApplicationToUniversities — dedup+enqueue.
+ *
+ * Idempotent: re-invocation only fills gaps (dedup). Never throws.
  */
-export async function maybeFanOutSitStudentForApplication(
+export async function maybeFanOutStudentForApplication(
   applicationId: number,
   actorUserId: number,
 ): Promise<void> {
   try {
-    if (!isSitAutoFanOutEnabled()) return;
-
     const [settings] = await db
       .select()
       .from(portalAutomationSettingsTable)
@@ -1870,65 +1919,154 @@ export async function maybeFanOutSitStudentForApplication(
       .limit(1);
     if (!srcApp) return;
 
-    // Gate on trigger stage — fan out only when the app is at a stage that would
-    // itself be auto-submitted, so auto fan-out and the per-app enqueue agree.
+    // Gate on trigger stage — fan out only when the app is at a stage that
+    // would itself be auto-submitted, so auto fan-out and per-app enqueue agree.
     const triggerStages = Array.isArray(settings.triggerStages)
       ? (settings.triggerStages as string[])
       : [];
     if (!triggerStages.includes(String(srcApp.stage))) return;
 
-    // Only fan out when THIS application is actually routed to SIT.
+    // Resolve the portal (and aggregator routing) for this application.
     const routing = await resolvePortalRouting({
       universityId:   srcApp.universityId ?? null,
       universityName: srcApp.universityName ?? null,
     });
-    if (!routing || routing.portalUni.universityKey !== SIT_AGGREGATOR_KEY) return;
+    if (!routing) return;
 
-    // Credentials live on the aggregator (one set); gate once — mirrors the
-    // per-application enqueue gate so we never enqueue unrunnable rows.
-    if (!await checkHasPortalCredentials(SIT_AGGREGATOR_KEY, routing.portalUni.adapterKey)) {
-      console.warn(`[sit-fanout] skipped app=${applicationId}: aggregator credentials missing`);
+    const portalKey = routing.portalUni.universityKey;
+
+    // Check fan-out mode for the resolved portal key.
+    const fanOutMode = await resolveFanOutMode(portalKey, settings);
+    if (fanOutMode !== "auto") return;
+
+    // Credential check — mirrors the per-app enqueue gate so we never enqueue
+    // rows that can't run.
+    if (!await checkHasPortalCredentials(portalKey, routing.portalUni.adapterKey)) {
+      console.warn(`[portal-fanout] skipped app=${applicationId}: credentials missing for ${portalKey}`);
       return;
     }
 
-    const members = await loadSitMemberUniversities();
-    if (members.length === 0) return;
+    // Target university selection:
+    //   Multi-portal aggregator → load its member universities (routeVia set).
+    //   Direct portal           → all credential-ready unis except the source.
+    let unis: CredentialReadyUniversity[];
+    let routeVia: { universityKey: string } | undefined;
+
+    if (routing.portalUni.isMultiPortal) {
+      unis    = await loadAggregatorMemberUniversities(portalKey);
+      routeVia = { universityKey: portalKey };
+    } else {
+      unis = (await loadCredentialReadyPortalUniversities())
+        .filter((u) => u.universityKey !== portalKey);
+    }
+
+    if (unis.length === 0) return;
 
     const mode = settings.mode === "real" ? "real" : "dry";
-    const results = await fanOutApplicationToUniversities(
-      srcApp,
-      members,
-      mode,
-      actorUserId,
-      { universityKey: SIT_AGGREGATOR_KEY },
-    );
-    const counts = computeApplyToAllCounts(results);
+    const results = await fanOutApplicationToUniversities(srcApp, unis, mode, actorUserId, routeVia);
+    const counts  = computeApplyToAllCounts(results);
 
-    if (counts.queued > 0) triggerBackgroundDrain(`sitfanout-${actorUserId}`);
+    if (counts.queued > 0) triggerBackgroundDrain(`fanout-${actorUserId}`);
 
     await logAudit(
       actorUserId,
-      "portal.sitAutoFanOut",
+      "portal.autoFanOut",
       "student",
       srcApp.studentId,
       {
         applicationId,
+        portalKey,
         mode,
-        members: members.length,
+        unis: unis.length,
         ...counts,
         total: results.length,
       },
     );
 
     console.log(
-      `[sit-fanout] app=${applicationId} student=${srcApp.studentId} mode=${mode}` +
-      ` members=${members.length} queued=${counts.queued} excluded=${counts.excluded}` +
+      `[portal-fanout] app=${applicationId} student=${srcApp.studentId}` +
+      ` portal=${portalKey} mode=${mode} unis=${unis.length}` +
+      ` queued=${counts.queued} excluded=${counts.excluded}` +
       ` noProgram=${counts.noProgram} duplicate=${counts.duplicate} failed=${counts.failed}`,
     );
   } catch (err) {
-    console.error(`[sit-fanout] failed for app=${applicationId}:`, err);
+    console.error(`[portal-fanout] failed for app=${applicationId}:`, err);
   }
 }
+
+/**
+ * Backward-compat alias — applications.ts still imports this name.
+ * Delegates to the portal-agnostic maybeFanOutStudentForApplication.
+ */
+export const maybeFanOutSitStudentForApplication = maybeFanOutStudentForApplication;
+
+// ---------------------------------------------------------------------------
+// POST /portal-automation/applications/:id/fanout — Manual fan-out for one app
+//
+// Fans out a single application to all credential-ready universities right now,
+// regardless of the fan-out mode (operator decision). The only hard gate is the
+// master kill-switch (settings.isEnabled=false → 409). Idempotent: re-triggering
+// only fills gaps (dedup). Submission Mode (settings.mode) decides dry vs real.
+// ---------------------------------------------------------------------------
+const fanoutParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+type FanoutSchemas = { params: typeof fanoutParamsSchema };
+
+router.post(
+  "/portal-automation/applications/:id/fanout",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: fanoutParamsSchema }),
+  async (req, res): Promise<void> => {
+    const user = req.user!;
+    const { id: applicationId } = getValidated<FanoutSchemas>(req).params;
+
+    // Master kill-switch: isEnabled=false → manual fan-out also blocked.
+    const [settings] = await db.select().from(portalAutomationSettingsTable).limit(1);
+    if (!settings?.isEnabled) {
+      res.status(409).json({
+        error: "PORTAL_DISABLED",
+        message: "Portal automation is disabled. Enable it in settings before fanning out.",
+      });
+      return;
+    }
+
+    const [srcApp] = await db
+      .select()
+      .from(applicationsTable)
+      .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.deletedAt)))
+      .limit(1);
+    if (!srcApp) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    // Fan out to all credential-ready universities (same pool as apply-to-all).
+    const unis  = await loadCredentialReadyPortalUniversities();
+    const mode  = settings.mode === "real" ? "real" : "dry";
+    const results = await fanOutApplicationToUniversities(srcApp, unis, mode, user.id);
+    const counts  = computeApplyToAllCounts(results);
+
+    if (counts.queued > 0) triggerBackgroundDrain(`manual-fanout-${user.id}`);
+
+    await logAudit(
+      user.id,
+      "portal.manualFanOut",
+      "application",
+      applicationId,
+      { mode, unis: unis.length, ...counts, total: results.length },
+      req.ip,
+    );
+
+    res.json({
+      created:  counts.queued,
+      excluded: counts.excluded,
+      noProgram: counts.noProgram,
+      duplicate: counts.duplicate,
+      failed:   counts.failed,
+      total:    results.length,
+    });
+  },
+);
 
 router.post(
   "/portal-automation/apply-to-all",

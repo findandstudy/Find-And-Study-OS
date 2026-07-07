@@ -4818,6 +4818,12 @@
       "testLoginSuccess": "Login successful",
       "testLoginFailed": "Login failed",
       "activeLabel": "Active",
+      "fanOutModeLabel": "Diffusion",
+      "fanOutMode_off": "Désactivé",
+      "fanOutMode_manual": "Manuel",
+      "fanOutMode_auto": "Auto",
+      "fanOutModeSuccess": "Mode de diffusion mis à jour",
+      "fanOutModeError": "Impossible de mettre à jour le mode de diffusion",
       "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
       "addDialog": {
@@ -5242,6 +5248,16 @@
         "MISSING_CRM_ID": "Missing CRM program id",
         "INVALID_PORTAL_VALUE": "Portal value does not match any live option"
       }
+    },
+    "fanOut": {
+      "title": "Mode de diffusion",
+      "description": "Contrôle comment une candidature est envoyée à plusieurs universités. Les paramètres par université sont prioritaires.",
+      "mode_off": "Désactivé",
+      "mode_manual": "Manuel",
+      "mode_auto": "Auto",
+      "offHint": "Diffusion désactivée — chaque candidature cible uniquement l'université choisie.",
+      "manualHint": "Manuel — les opérateurs déclenchent la diffusion par candidature via le bouton Diffusion.",
+      "autoHint": "Auto — le système diffuse automatiquement quand un étudiant atteint une étape déclencheur."
     },
     "states": {
       "errorTitle": "Couldn't load",

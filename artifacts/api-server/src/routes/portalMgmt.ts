@@ -79,6 +79,7 @@ router.get(
         autoProcessEnabled: false,
         autoProcessIntervalMinutes: 20,
         fallbackEnabled: false,
+        fanOutMode: "off",
         lastAutoDrainAt: null,
         createdAt: null,
         updatedAt: null,
@@ -102,6 +103,7 @@ const putSettingsBodySchema = z.object({
   autoProcessEnabled: z.boolean().optional(),
   autoProcessIntervalMinutes: z.number().int().min(1).max(1440).optional(),
   fallbackEnabled: z.boolean().optional(),
+  fanOutMode: z.enum(["off", "manual", "auto"]).optional(),
 });
 type PutSettingsSchemas = { body: typeof putSettingsBodySchema };
 
@@ -133,6 +135,7 @@ router.put(
           ...(body.autoProcessEnabled !== undefined && { autoProcessEnabled: body.autoProcessEnabled }),
           ...(body.autoProcessIntervalMinutes !== undefined && { autoProcessIntervalMinutes: body.autoProcessIntervalMinutes }),
           ...(body.fallbackEnabled !== undefined && { fallbackEnabled: body.fallbackEnabled }),
+          ...(body.fanOutMode     !== undefined && { fanOutMode:     body.fanOutMode }),
           updatedAt:                   new Date(),
         })
         .where(eq(portalAutomationSettingsTable.id, existing.id))
@@ -149,6 +152,7 @@ router.put(
           autoProcessEnabled:          body.autoProcessEnabled ?? false,
           autoProcessIntervalMinutes:  body.autoProcessIntervalMinutes ?? 20,
           fallbackEnabled:             body.fallbackEnabled ?? false,
+          fanOutMode:                  body.fanOutMode ?? "off",
         })
         .returning();
     }
@@ -166,6 +170,7 @@ router.put(
         autoProcessEnabled: body.autoProcessEnabled,
         autoProcessIntervalMinutes: body.autoProcessIntervalMinutes,
         fallbackEnabled: body.fallbackEnabled,
+        fanOutMode: body.fanOutMode,
       },
       req.ip,
     );
@@ -418,6 +423,56 @@ router.patch(
 );
 
 // ---------------------------------------------------------------------------
+// PATCH /portal-universities/:id/fan-out-mode  — toggle (must be BEFORE /:id)
+// ---------------------------------------------------------------------------
+const toggleFanOutModeBodySchema = z.object({
+  fanOutMode: z.enum(["off", "manual", "auto"]).nullable(),
+});
+type ToggleFanOutModeSchemas = { params: typeof idParamsSchema; body: typeof toggleFanOutModeBodySchema };
+
+router.patch(
+  "/portal-universities/:id/fan-out-mode",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  validate({ params: idParamsSchema, body: toggleFanOutModeBodySchema }),
+  async (req, res): Promise<void> => {
+    const { id }        = getValidated<ToggleFanOutModeSchemas>(req).params;
+    const { fanOutMode } = getValidated<ToggleFanOutModeSchemas>(req).body;
+    const user          = req.user!;
+
+    const [row] = await db
+      .select({ id: portalUniversitiesTable.id })
+      .from(portalUniversitiesTable)
+      .where(and(
+        eq(portalUniversitiesTable.id, id),
+        isNull(portalUniversitiesTable.deletedAt),
+      ));
+
+    if (!row) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    const [updated] = await db
+      .update(portalUniversitiesTable)
+      .set({ fanOutMode: fanOutMode ?? null, updatedAt: new Date() })
+      .where(eq(portalUniversitiesTable.id, id))
+      .returning();
+
+    logAudit(
+      user.id,
+      "set_portal_fan_out_mode",
+      "portal_university",
+      id,
+      { fanOutMode },
+      req.ip,
+    );
+
+    res.json(updated);
+  },
+);
+
+// ---------------------------------------------------------------------------
 // PATCH /portal-universities/:id/active  — toggle (must be BEFORE /:id)
 // ---------------------------------------------------------------------------
 const toggleActiveBodySchema = z.object({
@@ -477,6 +532,7 @@ const updateUniversityBodySchema = z.object({
   crmUniversityId: z.coerce.number().int().positive().nullable().optional(),
   defaults:        z.record(z.unknown()).nullable().optional(),
   isMultiPortal:   z.boolean().optional(),
+  fanOutMode:      z.enum(["off", "manual", "auto"]).nullable().optional(),
 }).strict();
 type UpdateUniSchemas = { params: typeof idParamsSchema; body: typeof updateUniversityBodySchema };
 
@@ -528,6 +584,7 @@ router.patch(
     if ("crmUniversityId" in body)          patch.crmUniversityId = body.crmUniversityId ?? null;
     if ("defaults"        in body)          patch.defaults        = body.defaults ?? null;
     if (body.isMultiPortal !== undefined)   patch.isMultiPortal   = body.isMultiPortal;
+    if ("fanOutMode"      in body)          patch.fanOutMode      = body.fanOutMode ?? null;
 
     const keyRenamed =
       body.universityKey !== undefined && body.universityKey !== row.universityKey;
