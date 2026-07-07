@@ -14,6 +14,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
+import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
@@ -879,6 +880,16 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   }
 
   if (updates.status && updates.status !== existing.status) {
+    // Event-driven portal enqueue: if this lead is already converted to a
+    // student, propagate the stage change to their applications immediately.
+    if (lead.convertedStudentId) {
+      void enqueueOnStageChange({
+        studentId:   lead.convertedStudentId,
+        newStage:    String(updates.status),
+        actorUserId: req.user!.id,
+      });
+    }
+
     dispatchNotification({
     actorUserId: req.user!.id,
       event: "lead.stage_changed",

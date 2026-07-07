@@ -13,6 +13,7 @@ import { getRateLimitIp } from "../lib/clientIp";
 import { createApplicationForStudent } from "./public-apply";
 import { checkMandatoryDocs, checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
+import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
@@ -1453,6 +1454,15 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
             .set({ status: "converted", convertedStudentId: resultStudentId })
             .where(eq(leadsTable.id, result.leadId));
           console.log(`[EMBED-APPLY] Auto-converted lead #${result.leadId} → student #${resultStudentId} (slug=${widget.slug}, stage=${studentStageKey})`);
+          // Event-driven portal enqueue: student just entered the configured
+          // auto-convert stage. actorUserId is null (public endpoint — no
+          // logged-in user); enqueueOnStageChange handles this gracefully.
+          void enqueueOnStageChange({
+            studentId:  resultStudentId,
+            newStage:   studentStageKey,
+            actorUserId: null,
+            ...(resultAppId !== null ? { applicationId: resultAppId } : {}),
+          });
         } else {
           console.log(`[EMBED-APPLY] Auto-convert disabled by settings; lead #${result.leadId} left untouched (slug=${widget.slug})`);
         }

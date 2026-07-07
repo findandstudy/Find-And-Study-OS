@@ -50,7 +50,7 @@ export interface AutoTriggerParams {
   universityName: string | null;
   /** Application's universityId FK (→ universities.id; used for exact match). */
   universityId:   number | null;
-  actorUserId:    number;
+  actorUserId:    number | null;
 }
 
 /** Settings row shape used by the eligibility gate. */
@@ -358,6 +358,96 @@ export async function maybeEnqueuePortalSubmission(
       `[portal-auto] Dedup — active submission already exists ` +
       `for app #${params.applicationId}; skipping`,
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// enqueueOnStageChange — event-driven hook for any pipeline-stage update
+// ---------------------------------------------------------------------------
+
+/**
+ * Best-effort immediate enqueue after any pipeline-stage change.
+ * Call fire-and-forget (void) from every stage-change callsite.
+ *
+ * - If `applicationId` is provided (single application known): only that
+ *   application is evaluated against the eligibility gate.
+ * - Otherwise: every non-deleted application belonging to `studentId` is
+ *   evaluated, covering student-status-level promotions where the applicationId
+ *   is not directly at hand.
+ *
+ * `actorUserId` accepts null for system-initiated enqueues (public embed etc.).
+ * Wrapped entirely in try/catch — never throws, never blocks the caller.
+ */
+export async function enqueueOnStageChange(opts: {
+  studentId: number;
+  newStage: string;
+  actorUserId: number | null;
+  applicationId?: number;
+  universityName?: string | null;
+  universityId?: number | null;
+}): Promise<void> {
+  try {
+    const [settings] = await db.select().from(portalAutomationSettingsTable).limit(1);
+    if (!settings?.isEnabled) return;
+
+    const actorId = opts.actorUserId ?? 0;
+
+    if (opts.applicationId !== undefined) {
+      // Fast path — single application known
+      const outcome = await enqueueIfEligible(
+        {
+          applicationId:  opts.applicationId,
+          studentId:      opts.studentId,
+          newStage:       opts.newStage,
+          universityName: opts.universityName ?? null,
+          universityId:   opts.universityId ?? null,
+          actorUserId:    actorId,
+        },
+        settings,
+      );
+      if (outcome.status === "queued") {
+        console.log(
+          `[portal-auto] Stage-change enqueue: sub=#${outcome.submissionId}` +
+          ` app=${opts.applicationId} stage=${opts.newStage}`,
+        );
+      }
+      return;
+    }
+
+    // Student-level stage change — scan all non-deleted applications
+    const apps = await db
+      .select({
+        id:             applicationsTable.id,
+        universityId:   applicationsTable.universityId,
+        universityName: applicationsTable.universityName,
+      })
+      .from(applicationsTable)
+      .where(and(
+        eq(applicationsTable.studentId, opts.studentId),
+        isNull(applicationsTable.deletedAt),
+      ));
+
+    for (const app of apps) {
+      const outcome = await enqueueIfEligible(
+        {
+          applicationId:  app.id,
+          studentId:      opts.studentId,
+          newStage:       opts.newStage,
+          universityName: app.universityName ?? null,
+          universityId:   app.universityId ?? null,
+          actorUserId:    actorId,
+        },
+        settings,
+      );
+      if (outcome.status === "queued") {
+        console.log(
+          `[portal-auto] Stage-change enqueue: sub=#${outcome.submissionId}` +
+          ` app=${app.id} stage=${opts.newStage}`,
+        );
+      }
+    }
+  } catch (e) {
+    console.error("[portal-auto] enqueueOnStageChange error (non-fatal):", e);
   }
 }
 

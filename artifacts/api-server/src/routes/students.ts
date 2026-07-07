@@ -21,6 +21,7 @@ import { verifyStudentPhotoSignature } from "@workspace/portal-adapters";
 import bcrypt from "bcryptjs";
 import { deleteSessionsForUser } from "../lib/replitAuth";
 import { getCurrentSeason } from "../lib/season";
+import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
 
 const router: IRouter = Router();
 
@@ -693,6 +694,14 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   }
 
   if (updates.status && updates.status !== existing.status) {
+    // Event-driven portal enqueue: student stage changed — check all their
+    // applications immediately instead of waiting for the batch scan.
+    void enqueueOnStageChange({
+      studentId:   id,
+      newStage:    String(updates.status),
+      actorUserId: req.user!.id,
+    });
+
     const recipientIds: number[] = [];
     if (student.assignedToId) recipientIds.push(student.assignedToId);
     if (student.userId) recipientIds.push(student.userId);

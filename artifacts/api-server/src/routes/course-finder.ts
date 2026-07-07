@@ -8,6 +8,7 @@ import { resolveAgentCommission } from "../lib/agentCommission";
 import { getCurrentSeason } from "../lib/season";
 import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
+import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { getVisibleBranchIds } from "../lib/branchScope";
 
@@ -500,6 +501,17 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
       .where(and(eq(pipelineStagesTable.entityType, "student"), eq(pipelineStagesTable.variant, "won")));
     if (appMadeStage && (student.status === "active" || student.status === "inactive")) {
       await db.update(studentsTable).set({ status: appMadeStage.key }).where(eq(studentsTable.id, student.id));
+      // Event-driven portal enqueue: the new application was created at "inquiry"
+      // but the student just entered a won stage — trigger immediately rather than
+      // waiting for the next batch scan.
+      void enqueueOnStageChange({
+        applicationId:  application.id,
+        studentId:      student.id,
+        newStage:       appMadeStage.key,
+        universityName: application.universityName ?? null,
+        universityId:   application.universityId ?? null,
+        actorUserId:    req.user!.id,
+      });
     }
   } catch {}
 
