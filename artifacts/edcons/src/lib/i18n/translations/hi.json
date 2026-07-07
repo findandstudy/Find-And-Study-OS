@@ -5475,7 +5475,12 @@
     "supersededTo": "Superseded → #{id}",
     "supersededFrom": "Backup of #{id}",
     "fallbackStepAuto": "स्वतः बैकअप · {step}",
-    "fallbackStepRule": "एडमिन नियम · {step}"
+    "fallbackStepRule": "एडमिन नियम · {step}",
+    "directLabel": "प्रत्यक्ष",
+    "supersededSameLang": "बैकअप · समान भाषा",
+    "supersededOppLang": "बैकअप · अन्य भाषा",
+    "primaryBadge": "प्राथमिक",
+    "fanoutBadge": "Fan-out"
   },
   "portalExclusion": {
     "title": "Exclusive Regions",

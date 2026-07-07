@@ -5475,7 +5475,12 @@
     "supersededTo": "Devredildi → #{id}",
     "supersededFrom": "#{id} yedeği",
     "fallbackStepAuto": "Otomatik yedek · {step}",
-    "fallbackStepRule": "Yönetici kuralı · {step}"
+    "fallbackStepRule": "Yönetici kuralı · {step}",
+    "directLabel": "Direkt",
+    "supersededSameLang": "Yedek · Aynı dil",
+    "supersededOppLang": "Yedek · Opp. dil",
+    "primaryBadge": "Birincil",
+    "fanoutBadge": "Fan-out"
   },
   "portalExclusion": {
     "title": "Exclusive Bölgeler",

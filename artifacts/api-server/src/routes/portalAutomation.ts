@@ -517,6 +517,14 @@ router.get(
         programName: applicationsTable.programName,
         programLanguage: applicationsTable.instructionLanguage,
         programLevel: applicationsTable.level,
+        // Program name on the ORIGINAL (parent) application when this row is a
+        // fallback child — correlated subquery avoids the drizzle alias import.
+        // Null for direct (non-superseded) submissions.
+        appliedProgramName: sql<string | null>`(
+          SELECT a2.program_name
+          FROM applications a2
+          WHERE a2.id = ${applicationsTable.supersededFromApplicationId}
+        )`,
       })
       .from(portalSubmissionsTable)
       .leftJoin(

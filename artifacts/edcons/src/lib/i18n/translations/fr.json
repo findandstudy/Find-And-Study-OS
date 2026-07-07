@@ -5475,7 +5475,12 @@
     "supersededTo": "Superseded → #{id}",
     "supersededFrom": "Backup of #{id}",
     "fallbackStepAuto": "Repli auto · {step}",
-    "fallbackStepRule": "Règle admin · {step}"
+    "fallbackStepRule": "Règle admin · {step}",
+    "directLabel": "Direct",
+    "supersededSameLang": "Sauvegarde · Même langue",
+    "supersededOppLang": "Sauvegarde · Autre langue",
+    "primaryBadge": "Principal",
+    "fanoutBadge": "Fan-out"
   },
   "portalExclusion": {
     "title": "Exclusive Regions",

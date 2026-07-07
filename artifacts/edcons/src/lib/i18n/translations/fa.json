@@ -5475,7 +5475,12 @@
     "supersededTo": "Superseded → #{id}",
     "supersededFrom": "Backup of #{id}",
     "fallbackStepAuto": "جایگزین خودکار · {step}",
-    "fallbackStepRule": "قانون مدیر · {step}"
+    "fallbackStepRule": "قانون مدیر · {step}",
+    "directLabel": "مستقیم",
+    "supersededSameLang": "پشتیبان · همان زبان",
+    "supersededOppLang": "پشتیبان · زبان دیگر",
+    "primaryBadge": "اصلی",
+    "fanoutBadge": "Fan-out"
   },
   "portalExclusion": {
     "title": "Exclusive Regions",

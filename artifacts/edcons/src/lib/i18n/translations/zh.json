@@ -5475,7 +5475,12 @@
     "supersededTo": "Superseded → #{id}",
     "supersededFrom": "Backup of #{id}",
     "fallbackStepAuto": "自动备选 · {step}",
-    "fallbackStepRule": "管理员规则 · {step}"
+    "fallbackStepRule": "管理员规则 · {step}",
+    "directLabel": "直接",
+    "supersededSameLang": "备用 · 相同语言",
+    "supersededOppLang": "备用 · 不同语言",
+    "primaryBadge": "主要",
+    "fanoutBadge": "扩展"
   },
   "portalExclusion": {
     "title": "Exclusive Regions",

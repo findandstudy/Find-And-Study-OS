@@ -87,10 +87,14 @@ interface PortalSubmission {
   updatedAt: string;
   supersededByApplicationId: number | null;
   supersededFromApplicationId: number | null;
+  mainApplicationId: number | null;
   studentName: string | null;
   programName: string | null;
   programLanguage: string | null;
   programLevel: string | null;
+  /** Program name of the parent (original) application when this is a fallback
+   *  child — used to render "applied → submitted" transparency. */
+  appliedProgramName: string | null;
   /** Chain step label (X1/X2/X3/Y1/Y2/Y3) — derived server-side for every
    *  attempt; null only for the admin-rule fallback path. */
   fallbackStep: string | null;
@@ -296,6 +300,41 @@ function SubmissionRow({
                   )}
                 </Badge>
               )}
+              {/* Direct / Superseded clarity */}
+              {sub.supersededFromApplicationId == null ? (
+                <Badge
+                  variant="outline"
+                  className="text-xs py-0 border-green-300 text-green-700 dark:border-green-800 dark:text-green-400"
+                >
+                  {t("portalFallback.directLabel")}
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="text-xs py-0 border-orange-300 text-orange-700 dark:border-orange-800 dark:text-orange-400"
+                >
+                  {sub.fallbackStep?.endsWith("3")
+                    ? t("portalFallback.supersededOppLang")
+                    : t("portalFallback.supersededSameLang")}
+                </Badge>
+              )}
+              {/* Primary (X = same university) / Fan-out (Y = different university) */}
+              {sub.fallbackStep?.startsWith("X") && (
+                <Badge
+                  variant="outline"
+                  className="text-xs py-0 border-blue-300 text-blue-700 dark:border-blue-800 dark:text-blue-400"
+                >
+                  {t("portalFallback.primaryBadge")}
+                </Badge>
+              )}
+              {sub.fallbackStep?.startsWith("Y") && (
+                <Badge
+                  variant="outline"
+                  className="text-xs py-0 border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-400"
+                >
+                  {t("portalFallback.fanoutBadge")}
+                </Badge>
+              )}
               <span className="text-xs text-muted-foreground font-medium">
                 {sub.universityName}
               </span>
@@ -324,6 +363,16 @@ function SubmissionRow({
                     )}
                   </span>
                 )}
+              </div>
+            )}
+            {/* Applied → Submitted program transparency for fallback children */}
+            {sub.supersededFromApplicationId != null &&
+              sub.appliedProgramName &&
+              sub.appliedProgramName !== sub.programName && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <span className="line-through opacity-60">{sub.appliedProgramName}</span>
+                <ArrowRight className="w-3 h-3 shrink-0" />
+                <span>{sub.programName}</span>
               </div>
             )}
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">

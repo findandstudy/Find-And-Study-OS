@@ -5475,7 +5475,12 @@
     "supersededTo": "Superseded → #{id}",
     "supersededFrom": "Backup of #{id}",
     "fallbackStepAuto": "Авторезерв · {step}",
-    "fallbackStepRule": "Правило админа · {step}"
+    "fallbackStepRule": "Правило админа · {step}",
+    "directLabel": "Прямой",
+    "supersededSameLang": "Резерв · Тот же язык",
+    "supersededOppLang": "Резерв · Другой язык",
+    "primaryBadge": "Основной",
+    "fanoutBadge": "Fan-out"
   },
   "portalExclusion": {
     "title": "Exclusive Regions",

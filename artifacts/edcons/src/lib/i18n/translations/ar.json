@@ -5475,7 +5475,12 @@
     "supersededTo": "Superseded → #{id}",
     "supersededFrom": "Backup of #{id}",
     "fallbackStepAuto": "نسخة احتياطية تلقائية · {step}",
-    "fallbackStepRule": "قاعدة المشرف · {step}"
+    "fallbackStepRule": "قاعدة المشرف · {step}",
+    "directLabel": "مباشر",
+    "supersededSameLang": "نسخة احتياطية · نفس اللغة",
+    "supersededOppLang": "نسخة احتياطية · لغة مختلفة",
+    "primaryBadge": "أساسي",
+    "fanoutBadge": "فرعي"
   },
   "portalExclusion": {
     "title": "Exclusive Regions",

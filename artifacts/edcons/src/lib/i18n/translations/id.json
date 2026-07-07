@@ -5475,7 +5475,12 @@
     "supersededTo": "Superseded → #{id}",
     "supersededFrom": "Backup of #{id}",
     "fallbackStepAuto": "Cadangan otomatis · {step}",
-    "fallbackStepRule": "Aturan admin · {step}"
+    "fallbackStepRule": "Aturan admin · {step}",
+    "directLabel": "Langsung",
+    "supersededSameLang": "Cadangan · Bahasa sama",
+    "supersededOppLang": "Cadangan · Bahasa lain",
+    "primaryBadge": "Utama",
+    "fanoutBadge": "Fan-out"
   },
   "portalExclusion": {
     "title": "Exclusive Regions",
