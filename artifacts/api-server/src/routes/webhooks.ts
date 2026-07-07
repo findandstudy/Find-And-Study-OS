@@ -629,7 +629,7 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
       const zAccountId = String(acctPayload?.id ?? acctPayload?.accountId ?? "");
       const platform   = String(m.platform ?? acctPayload?.platform ?? "");
 
-      const [acct] = await db
+      let [acct] = await db
         .select()
         .from(channelAccountsTable)
         .where(
@@ -641,8 +641,47 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
         )
         .limit(1);
 
+      if (!acct) {
+        // Auto-register: first message from a new Zernio-connected account.
+        // Only applies to provider='zernio'; direct Meta/web-form rows are never touched.
+        const a = acctPayload ?? {};
+        const label = a.displayName || a.username || `${zAccountId.slice(0, 6)}`;
+        const displayName = `${platform.charAt(0).toUpperCase() + platform.slice(1)} - ${label}`;
+        const inserted = await db
+          .insert(channelAccountsTable)
+          .values({
+            channel: platform,
+            provider: "zernio",
+            externalAccountId: zAccountId,
+            displayName,
+            isActive: true,
+            status: "active",
+          })
+          .onConflictDoNothing()
+          .returning();
+        // If onConflictDoNothing swallowed the insert (race), re-fetch.
+        acct = inserted[0] ?? (
+          await db
+            .select()
+            .from(channelAccountsTable)
+            .where(
+              and(
+                eq(channelAccountsTable.provider, "zernio"),
+                eq(channelAccountsTable.externalAccountId, zAccountId),
+                eq(channelAccountsTable.channel, platform),
+              ),
+            )
+            .limit(1)
+        )[0];
+        if (acct) {
+          console.log(
+            `[INBOX] auto-registered zernio channel_account ${acct.id} (${platform}/${zAccountId})`,
+          );
+        }
+      }
+
       if (!acct || acct.isActive === false) {
-        res.status(200).json({ ok: true, skipped: "no active channel account" });
+        res.status(200).json({ ok: true, skipped: "inactive channel account" });
         return;
       }
 
