@@ -189,6 +189,24 @@ function getStorage(): ObjectStorageService {
 }
 
 /**
+ * The inbox composer builds attachment URLs as
+ * `${origin}/api/storage/public-objects/${objectPath}` where `objectPath` is
+ * the value returned by the upload-URL endpoint — which already carries a
+ * leading `/objects/` prefix meant for the AUTHENTICATED `/storage/objects/*`
+ * route, not this public one. That produces keys like
+ * `/objects/inbox/<uuid>` (with a stray leading slash, i.e. a `//` in the
+ * full URL) instead of the real on-disk key `inbox/<uuid>`. Normalize away
+ * both artifacts here so we resolve to the same key the storage layer
+ * actually used when writing the file.
+ */
+function normalizePublicObjectKey(raw: string): string {
+  let key = raw.replace(/^\/+/, "");
+  key = key.replace(/^objects\//, "");
+  key = key.replace(/\/{2,}/g, "/");
+  return key;
+}
+
+/**
  * Load the attachment bytes. Attachments uploaded from the inbox composer have
  * URLs of the form `${origin}/api/storage/public-objects/<objectPath>`; we
  * read those straight from our own storage (no HTTP round-trip). Anything else
@@ -201,8 +219,10 @@ async function downloadAttachmentBytes(
     const withoutQuery = attUrl.split("?")[0];
     const match = withoutQuery.match(/\/api\/storage\/public-objects\/(.+)$/);
     if (match) {
-      const filePath = decodeURIComponent(match[1]);
+      const rawFilePath = decodeURIComponent(match[1]);
+      const filePath = normalizePublicObjectKey(rawFilePath);
       if (filePath.includes("..") || filePath.includes("\\")) return null;
+      console.log("[ZERNIO] resolving attachment storage key:", { rawFilePath, filePath });
       const file = await getStorage().searchPublicObject(filePath);
       if (!file) {
         console.warn("[ZERNIO] attachment object not found in storage:", filePath);

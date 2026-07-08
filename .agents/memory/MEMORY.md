@@ -131,3 +131,4 @@
 - [United live-submit hardening](united-adapter-live-hardening.md) — multi-step ASP.NET/Salesforce wizard (not a webhook); create-POST instrumentation must default-deny redact body VALUES (keys+structural ids only, never PII); dry stops at Program→Personal (spec-locked, no guard).
 - [Public doc intake: data-URL + lead-first](public-doc-intake-dataurl-leadfirst.md) — public base64 doc endpoints must strip data:URL prefix before decode AND never 400 before the lead is saved (drop bad docs w/ documentWarnings).
 - [Unmatched inbox notification rule](inbox-unmatched-notification-rule.md) — event renamed to inbox.message_unmatched, email OFF by default; legacy inbox.unmatched row kept inert (deactivated), never dispatched again.
+- [Local storage public-objects mismatch](local-storage-public-objects-mismatch.md) — local driver has no "public/" subfolder; outbound senders must resolve keys via shared searchPublicObject, not hand-rolled URL parsing.

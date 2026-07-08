@@ -206,11 +206,26 @@ export class ObjectStorageService {
 
   async searchPublicObject(filePath: string): Promise<ObjectFileHandle | null> {
     if (isLocalDriver()) {
+      if (filePath.includes("..") || filePath.includes("\\")) return null;
       const localDir = getLocalStorageDir();
-      const localPath = nodePath.join(localDir, "public", filePath);
+      // Local-driver uploads (getObjectEntityUploadURL / local-upload route)
+      // are written flat under `${STORAGE_LOCAL_DIR}/${prefix}/${objectId}` —
+      // there is no separate "public" subdirectory anywhere in this app's
+      // upload flows (checked: no caller ever passes a "public/..." prefix).
+      // Try the bare path first since that's how every local-driver upload is
+      // actually stored; keep the legacy "public/" join as a fallback in case
+      // some deployment did place files there.
+      const bareLocalPath = nodePath.join(localDir, filePath);
       try {
-        await fsPromises.access(localPath);
-        return new LocalStorageFile(localPath, nodePath.join("public", filePath));
+        await fsPromises.access(bareLocalPath);
+        return new LocalStorageFile(bareLocalPath, filePath);
+      } catch {
+        // fall through to legacy "public/" location below
+      }
+      const publicLocalPath = nodePath.join(localDir, "public", filePath);
+      try {
+        await fsPromises.access(publicLocalPath);
+        return new LocalStorageFile(publicLocalPath, nodePath.join("public", filePath));
       } catch {
         return null;
       }
