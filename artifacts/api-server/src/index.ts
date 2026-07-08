@@ -1845,17 +1845,23 @@ async function seedClaudeIntegration() {
     console.error("[migrate] knowledge_sources:", err);
   }
 
-  // Step 2b17: knowledge_chunks — AI Agent Faz 2 RAG pipeline. Requires the
-  // pgvector extension (`vector` type) for embedding storage + cosine-distance
-  // search (`<=>` operator). Idempotent CREATE EXTENSION/TABLE/INDEX.
+  // Step 2b17: knowledge_chunks — AI Agent Faz 2 RAG pipeline.
+  //
+  // NOTE (Faz 2b): does NOT use the Postgres `vector` type or the pgvector
+  // extension — production (Hostinger Postgres) does not have pgvector
+  // available at all (`CREATE EXTENSION vector` fails; not even listed in
+  // pg_available_extensions), which silently prevented this table from ever
+  // being created. `embedding` is stored as plain JSONB (a JSON array of
+  // floats); similarity search is brute-force cosine computed in Node
+  // (see knowledgeRetrieval.ts) — fast enough for a knowledge base of a few
+  // thousand chunks and portable to any Postgres. Idempotent CREATE TABLE.
   try {
-    await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS knowledge_chunks (
         id SERIAL PRIMARY KEY,
         source_id INTEGER NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
         content TEXT NOT NULL,
-        embedding vector(1536),
+        embedding JSONB NOT NULL DEFAULT '[]',
         token_count INTEGER NOT NULL DEFAULT 0,
         chunk_index INTEGER NOT NULL DEFAULT 0,
         metadata JSONB NOT NULL DEFAULT '{}',
@@ -1863,17 +1869,6 @@ async function seedClaudeIntegration() {
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS knowledge_chunks_source_id_idx ON knowledge_chunks (source_id)`);
-    // IVFFlat index accelerates cosine-distance search; harmless no-op cost on
-    // small tables, needed once a source library grows beyond a few thousand
-    // chunks. Wrapped separately so a pgvector version without ivfflat support
-    // doesn't block the table/extension creation above.
-    try {
-      await pool.query(
-        `CREATE INDEX IF NOT EXISTS knowledge_chunks_embedding_idx ON knowledge_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)`,
-      );
-    } catch (idxErr) {
-      console.error("[migrate] knowledge_chunks ivfflat index (non-fatal):", idxErr);
-    }
   } catch (err) {
     console.error("[migrate] knowledge_chunks:", err);
   }

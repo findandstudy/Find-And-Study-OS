@@ -2,8 +2,14 @@
 // most relevant chunks from ACTIVE, ready file/url/text knowledge sources.
 // Never touches program_scope/webhook/conversation source types — those stay
 // on their own dedicated paths (searchPrograms tool / future integrations).
+//
+// Faz 2b: production Postgres (Hostinger) has no pgvector extension
+// available, so embeddings are stored as plain JSONB float arrays and
+// similarity is computed with brute-force cosine in Node. This is entirely
+// fast enough for a knowledge base of a few thousand chunks — do not
+// reintroduce the `vector` type, `<=>` operator, or ivfflat/hnsw indexes.
 import { db, knowledgeChunksTable, knowledgeSourcesTable } from "@workspace/db";
-import { and, eq, sql, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { embedQuery } from "./knowledgeEmbed";
 
 export interface RetrievedChunk {
@@ -15,9 +21,26 @@ export interface RetrievedChunk {
 
 const RAG_SOURCE_TYPES = ["file", "url", "text"] as const;
 const TOP_K = 5;
-// Cosine distance (pgvector `<=>`) ranges 0 (identical) to 2 (opposite).
-// Chunks farther than this are considered irrelevant noise and dropped.
+// Cosine distance (1 - cosine similarity) ranges 0 (identical) to 2
+// (opposite). Chunks farther than this are considered irrelevant noise and
+// dropped.
 const MAX_DISTANCE = 0.6;
+
+function cosineDistance(a: number[], b: number[]): number {
+  const len = Math.min(a.length, b.length);
+  if (len === 0) return 2;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < len; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 2;
+  const similarity = dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  return 1 - similarity;
+}
 
 /**
  * Retrieve the top-K relevant knowledge chunks for a query message. Returns an
@@ -45,27 +68,28 @@ export async function retrieveKnowledgeChunks(query: string): Promise<RetrievedC
     const nameById = new Map(activeSourceIds.map((s) => [s.id, s.name]));
 
     const embedding = await embedQuery(trimmed);
-    const vectorLiteral = `[${embedding.join(",")}]`;
 
     const rows = await db
       .select({
         sourceId: knowledgeChunksTable.sourceId,
         content: knowledgeChunksTable.content,
-        distance: sql<number>`${knowledgeChunksTable.embedding} <=> ${vectorLiteral}::vector`,
+        embedding: knowledgeChunksTable.embedding,
       })
       .from(knowledgeChunksTable)
-      .where(inArray(knowledgeChunksTable.sourceId, [...idSet]))
-      .orderBy(sql`${knowledgeChunksTable.embedding} <=> ${vectorLiteral}::vector`)
-      .limit(TOP_K);
+      .where(inArray(knowledgeChunksTable.sourceId, [...idSet]));
 
-    return rows
-      .filter((r) => r.distance <= MAX_DISTANCE)
+    const scored = rows
       .map((r) => ({
         sourceId: r.sourceId,
         sourceName: nameById.get(r.sourceId) ?? "Knowledge source",
         content: r.content,
-        distance: r.distance,
-      }));
+        distance: cosineDistance(embedding, (r.embedding as number[] | null) ?? []),
+      }))
+      .filter((r) => r.distance <= MAX_DISTANCE)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, TOP_K);
+
+    return scored;
   } catch (err) {
     console.error("[knowledge-retrieval] failed, continuing without RAG context:", err);
     return [];

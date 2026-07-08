@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, boolean, jsonb, timestamp, customType } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
 // Table — knowledge_sources (AI Agent Faz 1 scaffold, extended in Faz 2)
@@ -49,28 +49,22 @@ export type InsertKnowledgeSource = typeof knowledgeSourcesTable.$inferInsert;
 //
 // Chunked + embedded text extracted from a `file`/`url`/`text` knowledge
 // source. Retrieval (knowledgeRetrieval.ts) embeds the student's message and
-// pulls the top-K chunks by cosine distance (pgvector `<=>` operator) from
-// ACTIVE sources only, injecting them into the bot system prompt as untrusted
-// data (never as instructions). `embedding` uses OpenAI text-embedding-3-small
-// (1536 dims), called directly against the OpenAI API — the AI Integrations
-// proxy does not support embeddings.
+// pulls the top-K chunks by cosine similarity, computed in Node over the
+// `embedding` column (a plain JSON array of floats), from ACTIVE sources
+// only, injecting them into the bot system prompt as untrusted data (never
+// as instructions). `embedding` uses OpenAI text-embedding-3-small (1536
+// dims), called directly against the OpenAI API — the AI Integrations proxy
+// does not support embeddings.
+//
+// NOTE: this intentionally does NOT use the Postgres `vector` type/pgvector
+// extension — the production Hostinger Postgres instance does not have
+// pgvector available (`CREATE EXTENSION vector` fails, extension isn't even
+// listed in pg_available_extensions). Storing embeddings as jsonb keeps this
+// portable across any plain Postgres; similarity search is brute-force
+// cosine in Node, which is entirely fast enough for a knowledge base of a
+// few thousand chunks. Do not reintroduce `vector`, `<=>`, or ivfflat/hnsw
+// indexes here.
 // ---------------------------------------------------------------------------
-
-const vector1536 = customType<{ data: number[]; driverData: string }>({
-  dataType() {
-    return "vector(1536)";
-  },
-  toDriver(value: number[]): string {
-    return `[${value.join(",")}]`;
-  },
-  fromDriver(value: string): number[] {
-    return value
-      .slice(1, -1)
-      .split(",")
-      .filter((s) => s.length > 0)
-      .map(Number);
-  },
-});
 
 export const knowledgeChunksTable = pgTable("knowledge_chunks", {
   id: serial("id").primaryKey(),
@@ -78,7 +72,7 @@ export const knowledgeChunksTable = pgTable("knowledge_chunks", {
     .notNull()
     .references(() => knowledgeSourcesTable.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
-  embedding: vector1536("embedding"),
+  embedding: jsonb("embedding").$type<number[]>().notNull().default([]),
   tokenCount: integer("token_count").notNull().default(0),
   chunkIndex: integer("chunk_index").notNull().default(0),
   metadata: jsonb("metadata").notNull().default({}),
