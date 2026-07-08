@@ -46,6 +46,7 @@ const SETTINGS_PATCH_FIELDS = [
   "agentCanChangeStudentAppStage",
   "directStudentEnrollmentBonusRate",
   "suppressAutomationAppNotifications",
+  "autoAssignStuckConversationsEnabled",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];

@@ -633,6 +633,7 @@ export default function SettingsPage() {
         {isSuperAdminLocal && <ContractExpiryThresholdsCard />}
         <SigningDeadlineDaysCard />
         <SuppressAutomationNotificationsCard />
+        {isSuperAdminLocal && <AutoAssignStuckConversationsCard />}
         <NotificationRulesManager isAdmin={isManager} notifications={notifications} setNotifications={setNotifications} />
       </div>
     );
@@ -2652,6 +2653,59 @@ function SuppressAutomationNotificationsCard() {
         <div>
           <h3 className="font-display font-semibold text-base">{t("settingsPage.suppressAutomationNotifTitle")}</h3>
           <p className="text-sm text-muted-foreground mt-1">{t("settingsPage.suppressAutomationNotifDesc")}</p>
+        </div>
+        <Switch
+          checked={value}
+          onCheckedChange={handleToggle}
+          disabled={!loaded || saving}
+        />
+      </div>
+    </Card>
+  );
+}
+
+function AutoAssignStuckConversationsCard() {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+    queryFn: () => customFetch("/api/settings"),
+  });
+  const [value, setValue] = useState<boolean>(false);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (settings !== undefined) {
+      setValue(settings?.autoAssignStuckConversationsEnabled === true);
+      setLoaded(true);
+    }
+  }, [settings?.autoAssignStuckConversationsEnabled, settings]);
+
+  async function handleToggle(next: boolean) {
+    setValue(next);
+    setSaving(true);
+    try {
+      await customFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoAssignStuckConversationsEnabled: next }),
+      });
+      qc.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: t("settingsPage.autoAssignStuckConvSaved") });
+    } catch (err: any) {
+      setValue(!next);
+      toast({ title: t("settingsPage.saveFailed"), description: err?.message, variant: "destructive" });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <Card className="border shadow-sm p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-display font-semibold text-base">{t("settingsPage.autoAssignStuckConvTitle")}</h3>
+          <p className="text-sm text-muted-foreground mt-1">{t("settingsPage.autoAssignStuckConvDesc")}</p>
         </div>
         <Switch
           checked={value}

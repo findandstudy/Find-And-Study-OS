@@ -2203,7 +2203,10 @@
     "signingDeadlineDesc": "创建新代理时，自动开启的主入驻签署会话应保持有效多少天？过期后代理将看到锁定界面，管理员可重新发送。（1–365 天，默认 14）",
     "daysLabel": "天数",
     "contractExpiryTitle": "代理合同到期通知阈值",
-    "contractExpiryDesc": "设置在代理合同结束日期前多少天通知超级管理员、机构所有者及指定办公室员工（应用内 + 邮件）。每个阈值对每份合同仅触发一次。以逗号分隔的正整数天数（例如"
+    "contractExpiryDesc": "设置在代理合同结束日期前多少天通知超级管理员、机构所有者及指定办公室员工（应用内 + 邮件）。每个阈值对每份合同仅触发一次。以逗号分隔的正整数天数（例如",
+    "autoAssignStuckConvTitle": "自动分配停滞对话",
+    "autoAssignStuckConvDesc": "自动将长时间无人处理的收件箱对话分配给可用员工（先匹配工作时间，再匹配国家，最后轮询分配）。",
+    "autoAssignStuckConvSaved": "自动分配设置已保存"
   },
   "financePage": {
     "statusPotential": "潜在",

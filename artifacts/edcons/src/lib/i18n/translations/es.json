@@ -2203,7 +2203,10 @@
     "signingDeadlineDesc": "Cuando se crea un nuevo agente, ¿cuántos días debe permanecer válida la sesión de firma de incorporación principal abierta automáticamente? Cuando vence, el agente ve una pantalla bloqueada y un administrador puede reenviarla. (1–365 días, predeterminado 14)",
     "daysLabel": "Días",
     "contractExpiryTitle": "Umbrales de notificación de vencimiento del contrato del agente",
-    "contractExpiryDesc": "Define cuántos días antes de la fecha de fin del contrato del agente se notificará al superadministrador, al propietario de la agencia y al personal de oficina asignado (en la app + correo electrónico). Cada umbral se activa solo una vez por contrato. Cantidades de días positivas separadas por comas (p. ej."
+    "contractExpiryDesc": "Define cuántos días antes de la fecha de fin del contrato del agente se notificará al superadministrador, al propietario de la agencia y al personal de oficina asignado (en la app + correo electrónico). Cada umbral se activa solo una vez por contrato. Cantidades de días positivas separadas por comas (p. ej.",
+    "autoAssignStuckConvTitle": "Asignación automática de conversaciones atascadas",
+    "autoAssignStuckConvDesc": "Asigna automáticamente las conversaciones de la bandeja de entrada sin atender al personal disponible (primero por horario laboral, luego por país, luego por turnos).",
+    "autoAssignStuckConvSaved": "Configuración de asignación automática guardada"
   },
   "financePage": {
     "statusPotential": "Potencial",

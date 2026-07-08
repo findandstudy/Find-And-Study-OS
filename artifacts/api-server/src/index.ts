@@ -657,6 +657,8 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS agent_can_change_student_app_stage BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS direct_student_enrollment_bonus_rate TEXT NOT NULL DEFAULT '0'`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS suppress_automation_app_notifications BOOLEAN NOT NULL DEFAULT true`);
+    // Faz 2 (staff auto-assign): opt-in toggle for the periodic assignStuckConversation sweep.
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_assign_stuck_conversations_enabled BOOLEAN NOT NULL DEFAULT false`);
     // Zernio omnichannel provider — per-account provider tagging.
     await pool.query(`ALTER TABLE channel_accounts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'direct'`);
     await pool.query(`ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS is_starred BOOLEAN NOT NULL DEFAULT false`);
@@ -1942,6 +1944,30 @@ async function seedClaudeIntegration() {
       console.error("[migrate] inbox.message_unmatched notification rule:", err);
     }
 
+    // Faz 2 (staff auto-assign): notification fired when the periodic
+    // assignStuckConversation sweep assigns a stuck conversation to a staff
+    // member. In-app only by design — this is a high-frequency operational
+    // signal, not something that should flood email/WhatsApp.
+    try {
+      await pool.query(`
+        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
+        VALUES (
+          'conversation.stuck_assigned',
+          'Stuck Conversation Auto-Assigned',
+          'When the auto-assign sweep assigns an unattended inbox conversation to a staff member',
+          'inbox',
+          '["in_app"]'::jsonb,
+          'specific',
+          '[]'::jsonb,
+          true,
+          '{}'::jsonb
+        )
+        ON CONFLICT (event) DO NOTHING
+      `);
+    } catch (err) {
+      console.error("[migrate] conversation.stuck_assigned notification rule:", err);
+    }
+
     // One-shot data fix: sync leads and applications whose assigned_to_id does
     // not match their student's assigned_to_id. These accumulated over time
     // because assignment cascades are permission-gated and many historical
@@ -2112,6 +2138,8 @@ async function seedClaudeIntegration() {
     startPortalStuckReset();
     const { startPortalUniversityLinker } = await import("./lib/portalUniversityLinker");
     startPortalUniversityLinker();
+    const { startStuckConversationSweep } = await import("./lib/stuckConversationAssigner");
+    startStuckConversationSweep();
   }
 
   serveStaticFrontend();

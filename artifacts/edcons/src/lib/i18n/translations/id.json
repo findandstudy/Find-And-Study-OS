@@ -2203,7 +2203,10 @@
     "signingDeadlineDesc": "Saat agen baru dibuat, berapa hari sesi penandatanganan onboarding utama yang dibuka otomatis harus tetap berlaku? Saat kedaluwarsa, agen akan melihat layar terkunci dan admin dapat mengirimnya ulang. (1–365 hari, default 14)",
     "daysLabel": "Hari",
     "contractExpiryTitle": "Ambang Notifikasi Kedaluwarsa Kontrak Agen",
-    "contractExpiryDesc": "Tetapkan berapa hari sebelum tanggal berakhir kontrak agen super admin, pemilik agensi, dan staf kantor yang ditugaskan akan diberi tahu (dalam aplikasi + email). Setiap ambang hanya aktif sekali per kontrak. Jumlah hari positif dipisahkan koma (mis."
+    "contractExpiryDesc": "Tetapkan berapa hari sebelum tanggal berakhir kontrak agen super admin, pemilik agensi, dan staf kantor yang ditugaskan akan diberi tahu (dalam aplikasi + email). Setiap ambang hanya aktif sekali per kontrak. Jumlah hari positif dipisahkan koma (mis.",
+    "autoAssignStuckConvTitle": "Penugasan Otomatis Percakapan Terhenti",
+    "autoAssignStuckConvDesc": "Menugaskan percakapan kotak masuk yang belum ditangani secara otomatis ke staf yang tersedia (kecocokan jam kerja, lalu negara, lalu bergiliran).",
+    "autoAssignStuckConvSaved": "Pengaturan penugasan otomatis disimpan"
   },
   "financePage": {
     "statusPotential": "Potensial",

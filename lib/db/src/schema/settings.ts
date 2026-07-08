@@ -148,6 +148,10 @@ export const settingsTable = pgTable("settings", {
   // Suppress in-app + email notifications for automation-created applications (created_source='automation').
   // Default true = otomasyon başvuruları bildirim göndermez (mail seli önlenir).
   suppressAutomationAppNotifications: boolean("suppress_automation_app_notifications").notNull().default(true),
+
+  // Auto-assign stuck (needsHuman=true, unassigned, open) inbox conversations to eligible staff via
+  // the periodic assignStuckConversation sweep. Default false = feature is opt-in.
+  autoAssignStuckConversationsEnabled: boolean("auto_assign_stuck_conversations_enabled").notNull().default(false),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });

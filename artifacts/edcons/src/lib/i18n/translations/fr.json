@@ -2254,7 +2254,10 @@
     "signingDeadlineDesc": "Lors de la création d'un nouvel agent, combien de jours la session de signature principale d'intégration ouverte automatiquement doit-elle rester valide ? À son expiration, l'agent voit un écran verrouillé et un administrateur peut la renvoyer. (1 à 365 jours, par défaut 14)",
     "daysLabel": "Jours",
     "contractExpiryTitle": "Seuils de notification d'expiration du contrat d'agent",
-    "contractExpiryDesc": "Définissez combien de jours avant la date de fin du contrat d'agent le super administrateur, le propriétaire de l'agence et le personnel de bureau affecté seront notifiés (dans l'application + e-mail). Chaque seuil ne se déclenche qu'une seule fois par contrat. Nombres de jours positifs séparés par des virgules (par ex."
+    "contractExpiryDesc": "Définissez combien de jours avant la date de fin du contrat d'agent le super administrateur, le propriétaire de l'agence et le personnel de bureau affecté seront notifiés (dans l'application + e-mail). Chaque seuil ne se déclenche qu'une seule fois par contrat. Nombres de jours positifs séparés par des virgules (par ex.",
+    "autoAssignStuckConvTitle": "Attribution automatique des conversations bloquées",
+    "autoAssignStuckConvDesc": "Attribue automatiquement les conversations de la boîte de réception restées sans réponse à un membre du personnel disponible (horaires de travail, puis pays, puis tour de rôle).",
+    "autoAssignStuckConvSaved": "Paramètre d'attribution automatique enregistré"
   },
   "financePage": {
     "statusPotential": "Potentiel",

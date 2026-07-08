@@ -2436,7 +2436,10 @@
     "invalidDaysDesc": "1 ile 365 arasında bir tam sayı girin.",
     "personalGroup": "Kişisel",
     "organizationGroup": "Organizasyon",
-    "rtlNote": "Arapça için RTL (sağdan-sola) otomatik uygulanır."
+    "rtlNote": "Arapça için RTL (sağdan-sola) otomatik uygulanır.",
+    "autoAssignStuckConvTitle": "Takılı Kalan Konuşmaları Otomatik Ata",
+    "autoAssignStuckConvDesc": "Uzun süredir yanıtsız kalan gelen kutusu konuşmalarını uygun personele otomatik olarak ata (önce mesai saati, sonra ülke, sonra sırayla dağıtım).",
+    "autoAssignStuckConvSaved": "Otomatik atama ayarı kaydedildi"
   },
   "financePage": {
     "statusPotential": "Potansiyel",
