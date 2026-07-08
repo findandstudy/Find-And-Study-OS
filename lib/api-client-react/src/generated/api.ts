@@ -81,6 +81,8 @@ import type {
   InboxLeadSuggestionResponse,
   Invoice,
   InvoicesListResponse,
+  KnowledgeSourceProgramScopeResponse,
+  KnowledgeSourceProgramScopeUpdate,
   KommoSummary,
   Lead,
   LeadExistsConflict,
@@ -8115,6 +8117,179 @@ export const useTestAiAgent = <
   TContext
 > => {
   return useMutation(getTestAiAgentMutationOptions(options));
+};
+
+/**
+ * @summary Read the program_scope knowledge source (admin only)
+ */
+export const getGetKnowledgeSourceProgramScopeUrl = () => {
+  return `/api/inbox/knowledge-sources/program-scope`;
+};
+
+export const getKnowledgeSourceProgramScope = async (
+  options?: RequestInit,
+): Promise<KnowledgeSourceProgramScopeResponse> => {
+  return customFetch<KnowledgeSourceProgramScopeResponse>(
+    getGetKnowledgeSourceProgramScopeUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetKnowledgeSourceProgramScopeQueryKey = () => {
+  return [`/api/inbox/knowledge-sources/program-scope`] as const;
+};
+
+export const getGetKnowledgeSourceProgramScopeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getKnowledgeSourceProgramScope>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getKnowledgeSourceProgramScope>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetKnowledgeSourceProgramScopeQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getKnowledgeSourceProgramScope>>
+  > = ({ signal }) =>
+    getKnowledgeSourceProgramScope({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getKnowledgeSourceProgramScope>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetKnowledgeSourceProgramScopeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getKnowledgeSourceProgramScope>>
+>;
+export type GetKnowledgeSourceProgramScopeQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Read the program_scope knowledge source (admin only)
+ */
+
+export function useGetKnowledgeSourceProgramScope<
+  TData = Awaited<ReturnType<typeof getKnowledgeSourceProgramScope>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getKnowledgeSourceProgramScope>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetKnowledgeSourceProgramScopeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update the program_scope knowledge source (admin only)
+ */
+export const getUpdateKnowledgeSourceProgramScopeUrl = () => {
+  return `/api/inbox/knowledge-sources/program-scope`;
+};
+
+export const updateKnowledgeSourceProgramScope = async (
+  knowledgeSourceProgramScopeUpdate: KnowledgeSourceProgramScopeUpdate,
+  options?: RequestInit,
+): Promise<KnowledgeSourceProgramScopeResponse> => {
+  return customFetch<KnowledgeSourceProgramScopeResponse>(
+    getUpdateKnowledgeSourceProgramScopeUrl(),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(knowledgeSourceProgramScopeUpdate),
+    },
+  );
+};
+
+export const getUpdateKnowledgeSourceProgramScopeMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateKnowledgeSourceProgramScope>>,
+    TError,
+    { data: BodyType<KnowledgeSourceProgramScopeUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateKnowledgeSourceProgramScope>>,
+  TError,
+  { data: BodyType<KnowledgeSourceProgramScopeUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateKnowledgeSourceProgramScope"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateKnowledgeSourceProgramScope>>,
+    { data: BodyType<KnowledgeSourceProgramScopeUpdate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateKnowledgeSourceProgramScope(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateKnowledgeSourceProgramScopeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateKnowledgeSourceProgramScope>>
+>;
+export type UpdateKnowledgeSourceProgramScopeMutationBody =
+  BodyType<KnowledgeSourceProgramScopeUpdate>;
+export type UpdateKnowledgeSourceProgramScopeMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update the program_scope knowledge source (admin only)
+ */
+export const useUpdateKnowledgeSourceProgramScope = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateKnowledgeSourceProgramScope>>,
+    TError,
+    { data: BodyType<KnowledgeSourceProgramScopeUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateKnowledgeSourceProgramScope>>,
+  TError,
+  { data: BodyType<KnowledgeSourceProgramScopeUpdate> },
+  TContext
+> => {
+  return useMutation(
+    getUpdateKnowledgeSourceProgramScopeMutationOptions(options),
+  );
 };
 
 /**

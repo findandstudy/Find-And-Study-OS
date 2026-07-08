@@ -44,9 +44,30 @@ export interface AiAgentConfig {
   escalationKeywords: Record<EscalationTopic, string[]>;
   /** The editable markdown knowledge base / system-prompt body. */
   knowledgeBase: string;
+  /**
+   * Faz 1 — country / university-type scope for the live searchPrograms tool.
+   * When enabled=false the tool is disabled entirely (bot falls back to the
+   * static knowledgeBase, as if no live program data existed). "all" means no
+   * restriction on that axis. Mirrored onto the knowledge_sources
+   * type='program_scope' row so both surfaces stay in sync (see
+   * knowledgeSources.ts / routes/inbox.ts knowledge-sources endpoints).
+   */
+  programScope: ProgramScope;
+}
+
+export interface ProgramScope {
+  enabled: boolean;
+  countries: string[] | "all";
+  universityTypes: string[] | "all";
 }
 
 const SUPPORTED_LANGUAGES: BotLanguage[] = ["tr", "en", "ar", "ru", "fr"];
+
+export const DEFAULT_PROGRAM_SCOPE: ProgramScope = {
+  enabled: true,
+  countries: "all",
+  universityTypes: "all",
+};
 
 export const DEFAULT_AI_AGENT_CONFIG: AiAgentConfig = {
   // enabled defaults TRUE so existing #530 behavior (per-conversation toggle
@@ -64,6 +85,7 @@ export const DEFAULT_AI_AGENT_CONFIG: AiAgentConfig = {
   languages: [...SUPPORTED_LANGUAGES],
   escalationKeywords: DEFAULT_ESCALATION_KEYWORDS,
   knowledgeBase: DEFAULT_KNOWLEDGE_BASE,
+  programScope: DEFAULT_PROGRAM_SCOPE,
 };
 
 // ---------------------------------------------------------------------------
@@ -77,6 +99,12 @@ const escalationKeywordsSchema = z.object({
   partner: z.array(z.string()),
 });
 
+const programScopeSchema = z.object({
+  enabled: z.boolean(),
+  countries: z.union([z.array(z.string()), z.literal("all")]),
+  universityTypes: z.union([z.array(z.string()), z.literal("all")]),
+});
+
 export const aiAgentConfigSchema = z.object({
   enabled: z.boolean(),
   defaultOnForNew: z.boolean(),
@@ -87,6 +115,7 @@ export const aiAgentConfigSchema = z.object({
   languages: z.array(z.enum(["tr", "en", "ar", "ru", "fr"])).min(1),
   escalationKeywords: escalationKeywordsSchema,
   knowledgeBase: z.string().min(1).max(20000),
+  programScope: programScopeSchema,
 });
 
 export const aiAgentConfigPatchSchema = aiAgentConfigSchema.partial();
@@ -121,6 +150,30 @@ function mergeKeywords(raw: unknown): Record<EscalationTopic, string[]> {
   };
 }
 
+function cloneProgramScope(scope: ProgramScope): ProgramScope {
+  return {
+    enabled: scope.enabled,
+    countries: scope.countries === "all" ? "all" : [...scope.countries],
+    universityTypes: scope.universityTypes === "all" ? "all" : [...scope.universityTypes],
+  };
+}
+
+function mergeProgramScope(raw: unknown): ProgramScope {
+  const d = DEFAULT_AI_AGENT_CONFIG.programScope;
+  if (!raw || typeof raw !== "object") return cloneProgramScope(d);
+  const r = raw as Partial<ProgramScope>;
+  const pickListOrAll = (v: unknown, fallback: string[] | "all"): string[] | "all" => {
+    if (v === "all") return "all";
+    if (Array.isArray(v)) return v.map((s) => String(s));
+    return fallback;
+  };
+  return {
+    enabled: typeof r.enabled === "boolean" ? r.enabled : d.enabled,
+    countries: pickListOrAll(r.countries, d.countries),
+    universityTypes: pickListOrAll(r.universityTypes, d.universityTypes),
+  };
+}
+
 function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiAgentConfig {
   const d = DEFAULT_AI_AGENT_CONFIG;
   if (!raw || typeof raw !== "object") {
@@ -128,6 +181,7 @@ function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiA
       ...d,
       languages: [...d.languages],
       escalationKeywords: cloneKeywords(d.escalationKeywords),
+      programScope: cloneProgramScope(d.programScope),
     };
   }
   const r = raw as Partial<AiAgentConfig>;
@@ -148,6 +202,7 @@ function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiA
     languages: languages.length ? languages : [...d.languages],
     escalationKeywords: mergeKeywords(r.escalationKeywords),
     knowledgeBase: typeof r.knowledgeBase === "string" && r.knowledgeBase.trim() ? r.knowledgeBase : d.knowledgeBase,
+    programScope: mergeProgramScope(r.programScope),
   };
 }
 

@@ -32,6 +32,12 @@ import {
 import { getAiAgentConfig, DEFAULT_BOT_MODEL } from "./aiAgentConfig";
 import { resolveZernioAccount, sendViaZernio } from "./zernioSend";
 import { assignStuckConversationById } from "../stuckConversationAssigner";
+import {
+  searchProgramsToolDefinition,
+  executeSearchProgramsTool,
+  SEARCH_PROGRAMS_TOOL_NAME,
+} from "./programSearchTool";
+import { isProgramSearchToolEnabled } from "./knowledgeSources";
 
 // Faz 2 handoff hook: fire-and-forget so we never delay the webhook response
 // or the bot-reply flow on assignment work. Errors are logged, not thrown.
@@ -157,24 +163,77 @@ export function __setBotSendOverrideForTests(
   __botSendOverride = fn;
 }
 
+// Max tool-use round trips per reply. Bounds cost and guarantees the loop
+// terminates even if the model keeps calling tools — after the cap we force
+// a final plain-text turn by simply not offering tools again.
+const MAX_TOOL_ROUNDS = 3;
+
+/**
+ * Generate a bot reply, optionally giving the model the live searchPrograms
+ * tool (Faz 1). When the tool is disabled (admin toggle off / no active
+ * knowledge_sources scope row) we simply never pass `tools`, so the model
+ * falls back to the static knowledgeBase exactly like before this feature —
+ * no behavior change for agencies that haven't turned it on.
+ */
 async function generateBotReply(input: BotReplyInput): Promise<string> {
   if (__botReplyOverride) return __botReplyOverride(input);
   const anthropic = await getAnthropicClient();
-  const message = await anthropic.messages.create({
-    model: input.model,
-    max_tokens: 600,
-    temperature: input.temperature,
-    system: input.systemPrompt,
-    messages: input.messages.map((m) => ({
-      role: m.direction === "inbound" ? ("user" as const) : ("assistant" as const),
-      content: m.content,
-    })),
-  });
-  const textBlock = message.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Bot AI returned no text content");
+  const { enabled: toolsEnabled } = await isProgramSearchToolEnabled();
+
+  type AnthropicMessage = { role: "user" | "assistant"; content: any };
+  const conversation: AnthropicMessage[] = input.messages.map((m) => ({
+    role: m.direction === "inbound" ? ("user" as const) : ("assistant" as const),
+    content: m.content,
+  }));
+
+  for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+    const offerTools = toolsEnabled && round < MAX_TOOL_ROUNDS;
+    const message = await anthropic.messages.create({
+      model: input.model,
+      max_tokens: 600,
+      temperature: input.temperature,
+      system: input.systemPrompt,
+      messages: conversation,
+      ...(offerTools ? { tools: [searchProgramsToolDefinition] } : {}),
+    });
+
+    if (message.stop_reason === "tool_use") {
+      const toolUseBlocks = message.content.filter((b) => b.type === "tool_use");
+      if (!toolUseBlocks.length) {
+        // Unexpected shape — fall through and try to extract text below.
+      } else {
+        conversation.push({ role: "assistant", content: message.content });
+        const toolResults = await Promise.all(
+          toolUseBlocks.map(async (block: any) => {
+            let resultPayload: unknown;
+            try {
+              resultPayload =
+                block.name === SEARCH_PROGRAMS_TOOL_NAME
+                  ? await executeSearchProgramsTool(block.input || {})
+                  : { error: `unknown_tool:${block.name}` };
+            } catch (err) {
+              console.error("[bot] tool execution failed:", block.name, err);
+              resultPayload = { error: "tool_execution_failed" };
+            }
+            return {
+              type: "tool_result" as const,
+              tool_use_id: block.id,
+              content: JSON.stringify(resultPayload),
+            };
+          }),
+        );
+        conversation.push({ role: "user", content: toolResults });
+        continue;
+      }
+    }
+
+    const textBlock = message.content.find((b) => b.type === "text");
+    if (!textBlock || textBlock.type !== "text") {
+      throw new Error("Bot AI returned no text content");
+    }
+    return textBlock.text.trim();
   }
-  return textBlock.text.trim();
+  throw new Error("Bot AI tool-use loop did not terminate");
 }
 
 // ---------------------------------------------------------------------------

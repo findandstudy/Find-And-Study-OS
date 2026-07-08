@@ -5594,7 +5594,23 @@
     "testHistoryInbound": "Student",
     "testHistoryOutbound": "Agent",
     "testHistoryContentPlaceholder": "Message content",
-    "testHistoryRemove": "Remove turn"
+    "testHistoryRemove": "Remove turn",
+    "knowledgeSources": {
+      "title": "知识来源",
+      "hint": "除了上面的静态知识库外,AI 助手在聊天时可以查询的实时数据源。",
+      "loadError": "无法加载知识来源。",
+      "saveSuccess": "知识来源已保存。",
+      "saveError": "无法保存知识来源。",
+      "programScopeLabel": "实时课程搜索 (Course Finder)",
+      "programScopeHint": "让 AI 助手能够查找真实、最新的课程,而不仅仅依赖静态知识库。",
+      "countriesLabel": "国家",
+      "universityTypesLabel": "大学类型",
+      "allCountries": "所有国家",
+      "allUniversityTypes": "所有大学类型",
+      "selectedCount": "已选择 {count} 项",
+      "lastSyncedAt": "最后更新时间:{date}",
+      "save": "保存"
+    }
   },
   "portalFallback": {
     "title": "Backup Programs",

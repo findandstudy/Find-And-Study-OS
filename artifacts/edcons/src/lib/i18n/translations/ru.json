@@ -5594,7 +5594,23 @@
     "testHistoryInbound": "Student",
     "testHistoryOutbound": "Agent",
     "testHistoryContentPlaceholder": "Message content",
-    "testHistoryRemove": "Remove turn"
+    "testHistoryRemove": "Remove turn",
+    "knowledgeSources": {
+      "title": "Источники знаний",
+      "hint": "Живые источники данных, к которым ИИ-агент может обращаться во время чата, в дополнение к статической базе знаний выше.",
+      "loadError": "Не удалось загрузить источники знаний.",
+      "saveSuccess": "Источник знаний сохранён.",
+      "saveError": "Не удалось сохранить источник знаний.",
+      "programScopeLabel": "Живой поиск программ (Course Finder)",
+      "programScopeHint": "Позволяет ИИ-агенту находить реальные и актуальные программы вместо использования только статической базы знаний.",
+      "countriesLabel": "Страны",
+      "universityTypesLabel": "Типы университетов",
+      "allCountries": "Все страны",
+      "allUniversityTypes": "Все типы университетов",
+      "selectedCount": "Выбрано: {count}",
+      "lastSyncedAt": "Последнее обновление: {date}",
+      "save": "Сохранить"
+    }
   },
   "portalFallback": {
     "title": "Backup Programs",

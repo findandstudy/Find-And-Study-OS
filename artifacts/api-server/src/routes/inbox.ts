@@ -57,6 +57,10 @@ import {
   aiAgentConfigPatchSchema,
 } from "../lib/inbox/aiAgentConfig";
 import { runBotReplyTest } from "../lib/inbox/botAutoReply";
+import {
+  getProgramScopeSource,
+  writeProgramScopeSource,
+} from "../lib/inbox/knowledgeSources";
 
 const router: IRouter = Router();
 
@@ -2302,6 +2306,62 @@ router.post(
       console.error("[ai-agent-test]", err);
       res.status(502).json({ error: "Test run failed" });
     }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Knowledge Sources (FAZ 1 scaffold) — admin-only management of the
+// program_scope source. This mirrors onto AiAgentConfig.programScope so the
+// live searchPrograms tool and this admin surface can never drift apart (see
+// writeProgramScopeSource in lib/inbox/knowledgeSources.ts).
+// ---------------------------------------------------------------------------
+
+const programScopeSchema = z.object({
+  enabled: z.boolean(),
+  countries: z.union([z.array(z.string()), z.literal("all")]),
+  universityTypes: z.union([z.array(z.string()), z.literal("all")]),
+});
+const knowledgeSourceProgramScopeSchema = z.object({
+  isActive: z.boolean(),
+  scope: programScopeSchema,
+});
+
+// GET /inbox/knowledge-sources/program-scope — read the program_scope source
+// (falls back to the AiAgentConfig default when the row hasn't been seeded
+// yet, e.g. a brand-new environment before its first boot cycle).
+router.get(
+  "/inbox/knowledge-sources/program-scope",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const source = await getProgramScopeSource();
+    if (source) {
+      res.json({ source: { isActive: source.isActive, scope: source.scope, lastSyncedAt: source.lastSyncedAt } });
+      return;
+    }
+    const config = await getAiAgentConfig();
+    res.json({ source: { isActive: true, scope: config.programScope, lastSyncedAt: null } });
+  },
+);
+
+// PUT /inbox/knowledge-sources/program-scope — validate and persist the
+// program_scope source + mirror onto AiAgentConfig.programScope.
+router.put(
+  "/inbox/knowledge-sources/program-scope",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const parsed = knowledgeSourceProgramScopeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+    const source = await writeProgramScopeSource(parsed.data);
+    logAudit(req.user!.id, "update_knowledge_source_program_scope", "integration", undefined, {
+      isActive: source.isActive,
+      enabled: source.scope.enabled,
+    }, req.ip);
+    res.json({ source: { isActive: source.isActive, scope: source.scope, lastSyncedAt: source.lastSyncedAt } });
   },
 );
 

@@ -5594,7 +5594,23 @@
     "testHistoryInbound": "Student",
     "testHistoryOutbound": "Agent",
     "testHistoryContentPlaceholder": "Message content",
-    "testHistoryRemove": "Remove turn"
+    "testHistoryRemove": "Remove turn",
+    "knowledgeSources": {
+      "title": "ज्ञान स्रोत",
+      "hint": "ऊपर दिए गए स्थिर नॉलेज बेस के अलावा, लाइव डेटा स्रोत जिन्हें AI एजेंट चैट के दौरान क्वेरी कर सकता है।",
+      "loadError": "ज्ञान स्रोत लोड नहीं हो सके।",
+      "saveSuccess": "ज्ञान स्रोत सहेजा गया।",
+      "saveError": "ज्ञान स्रोत सहेजा नहीं जा सका।",
+      "programScopeLabel": "लाइव प्रोग्राम खोज (Course Finder)",
+      "programScopeHint": "AI एजेंट को केवल स्थिर नॉलेज बेस पर निर्भर रहने के बजाय वास्तविक, अद्यतित प्रोग्राम खोजने देता है।",
+      "countriesLabel": "देश",
+      "universityTypesLabel": "विश्वविद्यालय प्रकार",
+      "allCountries": "सभी देश",
+      "allUniversityTypes": "सभी विश्वविद्यालय प्रकार",
+      "selectedCount": "{count} चयनित",
+      "lastSyncedAt": "अंतिम अद्यतन: {date}",
+      "save": "सहेजें"
+    }
   },
   "portalFallback": {
     "title": "Backup Programs",

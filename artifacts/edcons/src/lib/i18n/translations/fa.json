@@ -5594,7 +5594,23 @@
     "testHistoryInbound": "Student",
     "testHistoryOutbound": "Agent",
     "testHistoryContentPlaceholder": "Message content",
-    "testHistoryRemove": "Remove turn"
+    "testHistoryRemove": "Remove turn",
+    "knowledgeSources": {
+      "title": "منابع دانش",
+      "hint": "منابع داده زنده‌ای که دستیار هوش مصنوعی می‌تواند هنگام گفتگو از آن‌ها استفاده کند، علاوه بر پایگاه دانش ثابت بالا.",
+      "loadError": "منابع دانش بارگذاری نشد.",
+      "saveSuccess": "منبع دانش ذخیره شد.",
+      "saveError": "ذخیره منبع دانش ممکن نشد.",
+      "programScopeLabel": "جستجوی زنده برنامه‌ها (Course Finder)",
+      "programScopeHint": "به دستیار هوش مصنوعی اجازه می‌دهد برنامه‌های واقعی و به‌روز را بیابد، نه فقط بر پایگاه دانش ثابت تکیه کند.",
+      "countriesLabel": "کشورها",
+      "universityTypesLabel": "انواع دانشگاه",
+      "allCountries": "همه کشورها",
+      "allUniversityTypes": "همه انواع دانشگاه",
+      "selectedCount": "{count} انتخاب شد",
+      "lastSyncedAt": "آخرین به‌روزرسانی: {date}",
+      "save": "ذخیره"
+    }
   },
   "portalFallback": {
     "title": "Backup Programs",

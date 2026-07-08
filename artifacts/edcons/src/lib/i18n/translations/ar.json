@@ -5594,7 +5594,23 @@
     "testHistoryInbound": "Student",
     "testHistoryOutbound": "Agent",
     "testHistoryContentPlaceholder": "Message content",
-    "testHistoryRemove": "Remove turn"
+    "testHistoryRemove": "Remove turn",
+    "knowledgeSources": {
+      "title": "مصادر المعرفة",
+      "hint": "مصادر بيانات حية يمكن لوكيل الذكاء الاصطناعي الاستعلام عنها أثناء الدردشة، بالإضافة إلى قاعدة المعرفة الثابتة أعلاه.",
+      "loadError": "تعذر تحميل مصادر المعرفة.",
+      "saveSuccess": "تم حفظ مصدر المعرفة.",
+      "saveError": "تعذر حفظ مصدر المعرفة.",
+      "programScopeLabel": "بحث البرامج المباشر (Course Finder)",
+      "programScopeHint": "يتيح لوكيل الذكاء الاصطناعي البحث عن برامج حقيقية ومحدثة بدلاً من الاعتماد فقط على قاعدة المعرفة الثابتة.",
+      "countriesLabel": "الدول",
+      "universityTypesLabel": "أنواع الجامعات",
+      "allCountries": "جميع الدول",
+      "allUniversityTypes": "جميع أنواع الجامعات",
+      "selectedCount": "تم اختيار {count}",
+      "lastSyncedAt": "آخر تحديث: {date}",
+      "save": "حفظ"
+    }
   },
   "portalFallback": {
     "title": "Backup Programs",

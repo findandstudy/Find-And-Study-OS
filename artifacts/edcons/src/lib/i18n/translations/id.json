@@ -5594,7 +5594,23 @@
     "testHistoryInbound": "Student",
     "testHistoryOutbound": "Agent",
     "testHistoryContentPlaceholder": "Message content",
-    "testHistoryRemove": "Remove turn"
+    "testHistoryRemove": "Remove turn",
+    "knowledgeSources": {
+      "title": "Sumber Pengetahuan",
+      "hint": "Sumber data langsung yang dapat diakses agen AI saat mengobrol, selain basis pengetahuan statis di atas.",
+      "loadError": "Sumber pengetahuan tidak dapat dimuat.",
+      "saveSuccess": "Sumber pengetahuan disimpan.",
+      "saveError": "Sumber pengetahuan tidak dapat disimpan.",
+      "programScopeLabel": "Pencarian program langsung (Course Finder)",
+      "programScopeHint": "Memungkinkan agen AI mencari program nyata dan terkini, bukan hanya mengandalkan basis pengetahuan statis.",
+      "countriesLabel": "Negara",
+      "universityTypesLabel": "Jenis universitas",
+      "allCountries": "Semua negara",
+      "allUniversityTypes": "Semua jenis universitas",
+      "selectedCount": "{count} dipilih",
+      "lastSyncedAt": "Terakhir diperbarui: {date}",
+      "save": "Simpan"
+    }
   },
   "portalFallback": {
     "title": "Backup Programs",

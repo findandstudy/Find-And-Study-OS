@@ -2105,6 +2105,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /inbox/knowledge-sources/program-scope:
+    get:
+      operationId: getKnowledgeSourceProgramScope
+      tags: [inbox, ai]
+      summary: Read the program_scope knowledge source (admin only)
+      responses:
+        "200":
+          description: Current program_scope knowledge source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeSourceProgramScopeResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateKnowledgeSourceProgramScope
+      tags: [inbox, ai]
+      summary: Update the program_scope knowledge source (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeSourceProgramScopeUpdate"
+      responses:
+        "200":
+          description: Updated program_scope knowledge source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeSourceProgramScopeResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /inbox/conversations/{id}/notes:
     post:
       operationId: addInboxConversationNote
@@ -5592,6 +5652,8 @@ components:
           $ref: "#/components/schemas/EscalationKeywords"
         knowledgeBase:
           type: string
+        programScope:
+          $ref: "#/components/schemas/ProgramScope"
       required:
         - enabled
         - defaultOnForNew
@@ -5602,6 +5664,68 @@ components:
         - languages
         - escalationKeywords
         - knowledgeBase
+        - programScope
+
+    ProgramScope:
+      type: object
+      description: >-
+        Country / university-type scope for the live searchPrograms tool
+        (FAZ 1). "all" means no restriction on that axis.
+      properties:
+        enabled:
+          type: boolean
+        countries:
+          oneOf:
+            - type: array
+              items:
+                type: string
+            - type: string
+              enum: [all]
+        universityTypes:
+          oneOf:
+            - type: array
+              items:
+                type: string
+            - type: string
+              enum: [all]
+      required:
+        - enabled
+        - countries
+        - universityTypes
+
+    KnowledgeSourceProgramScope:
+      type: object
+      properties:
+        isActive:
+          type: boolean
+        scope:
+          $ref: "#/components/schemas/ProgramScope"
+        lastSyncedAt:
+          type: ["string", "null"]
+          format: date-time
+      required:
+        - isActive
+        - scope
+        - lastSyncedAt
+
+    KnowledgeSourceProgramScopeResponse:
+      type: object
+      properties:
+        source:
+          $ref: "#/components/schemas/KnowledgeSourceProgramScope"
+      required:
+        - source
+
+    KnowledgeSourceProgramScopeUpdate:
+      type: object
+      properties:
+        isActive:
+          type: boolean
+        scope:
+          $ref: "#/components/schemas/ProgramScope"
+      required:
+        - isActive
+        - scope
 
     AiAgentConfigResponse:
       type: object

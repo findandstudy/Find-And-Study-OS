@@ -7,6 +7,7 @@
  */
 import type { AiAgentConfigLanguagesItem } from "./aiAgentConfigLanguagesItem";
 import type { EscalationKeywords } from "./escalationKeywords";
+import type { ProgramScope } from "./programScope";
 
 export interface AiAgentConfig {
   enabled: boolean;
@@ -18,4 +19,5 @@ export interface AiAgentConfig {
   languages: AiAgentConfigLanguagesItem[];
   escalationKeywords: EscalationKeywords;
   knowledgeBase: string;
+  programScope: ProgramScope;
 }

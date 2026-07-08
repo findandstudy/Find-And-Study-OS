@@ -180,7 +180,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
  * University dropdowns but keeps the Country dropdown showing every
  * country (so the user can still switch).
  */
-function buildProgramFacetConditions(
+export function buildProgramFacetConditions(
   params: Record<string, string | undefined>,
   excludeKey?:
     | "country" | "city" | "universityType" | "universityId"

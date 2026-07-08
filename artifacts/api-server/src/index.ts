@@ -13,6 +13,7 @@ import { seedDocumentTypes } from "./scripts/seedDocumentTypes";
 import { seedCurrencies } from "./scripts/seedCurrencies";
 import { HARDCODED_EXTRACTOR_FIELDS, HARDCODED_EXTRACTOR_RULES } from "./lib/aiDefaultConfigs";
 import { seedAiAgentConfig } from "./lib/inbox/aiAgentConfig";
+import { seedProgramScopeSource } from "./lib/inbox/knowledgeSources";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -1824,6 +1825,26 @@ async function seedClaudeIntegration() {
     console.error("[migrate] message_templates.approval_status:", err);
   }
 
+  // Step 2b16: knowledge_sources — AI Agent Faz 1 scaffold registry (a single
+  // program_scope row today; Faz 2/3 add url/file/webhook/conversation rows
+  // to the same table). Idempotent CREATE TABLE IF NOT EXISTS.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS knowledge_sources (
+        id SERIAL PRIMARY KEY,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        config JSONB NOT NULL DEFAULT '{}',
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        status TEXT,
+        last_synced_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+  } catch (err) {
+    console.error("[migrate] knowledge_sources:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
@@ -1847,6 +1868,7 @@ async function seedClaudeIntegration() {
     // environments that were already bootstrapped still materialize the
     // ai_agent config row. Idempotent — only inserts when the row is absent.
     await seedAiAgentConfig();
+    await seedProgramScopeSource();
 
     // Runs on EVERY boot (outside the bootstrap_done lock) so it heals
     // existing/prod data, not just freshly seeded environments. Idempotent and

@@ -5594,7 +5594,23 @@
     "testHistoryInbound": "Öğrenci",
     "testHistoryOutbound": "Danışman",
     "testHistoryContentPlaceholder": "Mesaj içeriği",
-    "testHistoryRemove": "Mesajı kaldır"
+    "testHistoryRemove": "Mesajı kaldır",
+    "knowledgeSources": {
+      "title": "Bilgi Kaynakları",
+      "hint": "Yukarıdaki statik bilgi tabanına ek olarak, AI asistanının sohbet sırasında sorgulayabileceği canlı veri kaynakları.",
+      "loadError": "Bilgi kaynakları yüklenemedi.",
+      "saveSuccess": "Bilgi kaynağı kaydedildi.",
+      "saveError": "Bilgi kaynağı kaydedilemedi.",
+      "programScopeLabel": "Canlı program arama (Course Finder)",
+      "programScopeHint": "AI asistanının yalnızca statik bilgi tabanına değil, gerçek ve güncel programlara başvurmasını sağlar.",
+      "countriesLabel": "Ülkeler",
+      "universityTypesLabel": "Üniversite türleri",
+      "allCountries": "Tüm ülkeler",
+      "allUniversityTypes": "Tüm üniversite türleri",
+      "selectedCount": "{count} seçildi",
+      "lastSyncedAt": "Son güncelleme: {date}",
+      "save": "Kaydet"
+    }
   },
   "portalFallback": {
     "title": "Yedek Programlar",

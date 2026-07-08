@@ -5594,7 +5594,23 @@
     "testHistoryInbound": "Student",
     "testHistoryOutbound": "Agent",
     "testHistoryContentPlaceholder": "Message content",
-    "testHistoryRemove": "Remove turn"
+    "testHistoryRemove": "Remove turn",
+    "knowledgeSources": {
+      "title": "Knowledge Sources",
+      "hint": "Live data sources the AI agent can query while chatting, in addition to the static knowledge base above.",
+      "loadError": "Could not load knowledge sources.",
+      "saveSuccess": "Knowledge source saved.",
+      "saveError": "Could not save the knowledge source.",
+      "programScopeLabel": "Live program search (Course Finder)",
+      "programScopeHint": "Lets the AI agent look up real, up-to-date programs instead of relying only on the static knowledge base.",
+      "countriesLabel": "Countries",
+      "universityTypesLabel": "University types",
+      "allCountries": "All countries",
+      "allUniversityTypes": "All university types",
+      "selectedCount": "{count} selected",
+      "lastSyncedAt": "Last updated: {date}",
+      "save": "Save"
+    }
   },
   "portalFallback": {
     "title": "Backup Programs",

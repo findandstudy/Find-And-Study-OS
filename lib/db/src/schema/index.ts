@@ -53,3 +53,4 @@ export * from "./portalProgramFallbacks";
 export * from "./portalUniversityExclusions";
 export * from "./portalProgramCache";
 export * from "./portalCredentials";
+export * from "./knowledgeSources";

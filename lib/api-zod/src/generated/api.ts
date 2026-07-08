@@ -2416,6 +2416,18 @@ export const GetAiAgentConfigResponse = zod.object({
       partner: zod.array(zod.string()),
     }),
     knowledgeBase: zod.string(),
+    programScope: zod
+      .object({
+        enabled: zod.boolean(),
+        countries: zod.union([zod.array(zod.string()), zod.enum(["all"])]),
+        universityTypes: zod.union([
+          zod.array(zod.string()),
+          zod.enum(["all"]),
+        ]),
+      })
+      .describe(
+        'Country \/ university-type scope for the live searchPrograms tool (FAZ 1). \"all\" means no restriction on that axis.',
+      ),
   }),
 });
 
@@ -2459,6 +2471,18 @@ export const UpdateAiAgentConfigResponse = zod.object({
       partner: zod.array(zod.string()),
     }),
     knowledgeBase: zod.string(),
+    programScope: zod
+      .object({
+        enabled: zod.boolean(),
+        countries: zod.union([zod.array(zod.string()), zod.enum(["all"])]),
+        universityTypes: zod.union([
+          zod.array(zod.string()),
+          zod.enum(["all"]),
+        ]),
+      })
+      .describe(
+        'Country \/ university-type scope for the live searchPrograms tool (FAZ 1). \"all\" means no restriction on that axis.',
+      ),
   }),
 });
 
@@ -2495,6 +2519,63 @@ export const TestAiAgentResponse = zod.object({
         .nullable(),
     }),
     model: zod.string(),
+  }),
+});
+
+/**
+ * @summary Read the program_scope knowledge source (admin only)
+ */
+export const GetKnowledgeSourceProgramScopeResponse = zod.object({
+  source: zod.object({
+    isActive: zod.boolean(),
+    scope: zod
+      .object({
+        enabled: zod.boolean(),
+        countries: zod.union([zod.array(zod.string()), zod.enum(["all"])]),
+        universityTypes: zod.union([
+          zod.array(zod.string()),
+          zod.enum(["all"]),
+        ]),
+      })
+      .describe(
+        'Country \/ university-type scope for the live searchPrograms tool (FAZ 1). \"all\" means no restriction on that axis.',
+      ),
+    lastSyncedAt: zod.date().nullable(),
+  }),
+});
+
+/**
+ * @summary Update the program_scope knowledge source (admin only)
+ */
+export const UpdateKnowledgeSourceProgramScopeBody = zod.object({
+  isActive: zod.boolean(),
+  scope: zod
+    .object({
+      enabled: zod.boolean(),
+      countries: zod.union([zod.array(zod.string()), zod.enum(["all"])]),
+      universityTypes: zod.union([zod.array(zod.string()), zod.enum(["all"])]),
+    })
+    .describe(
+      'Country \/ university-type scope for the live searchPrograms tool (FAZ 1). \"all\" means no restriction on that axis.',
+    ),
+});
+
+export const UpdateKnowledgeSourceProgramScopeResponse = zod.object({
+  source: zod.object({
+    isActive: zod.boolean(),
+    scope: zod
+      .object({
+        enabled: zod.boolean(),
+        countries: zod.union([zod.array(zod.string()), zod.enum(["all"])]),
+        universityTypes: zod.union([
+          zod.array(zod.string()),
+          zod.enum(["all"]),
+        ]),
+      })
+      .describe(
+        'Country \/ university-type scope for the live searchPrograms tool (FAZ 1). \"all\" means no restriction on that axis.',
+      ),
+    lastSyncedAt: zod.date().nullable(),
   }),
 });
 

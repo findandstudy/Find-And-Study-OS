@@ -5594,7 +5594,23 @@
     "testHistoryInbound": "Student",
     "testHistoryOutbound": "Agent",
     "testHistoryContentPlaceholder": "Message content",
-    "testHistoryRemove": "Remove turn"
+    "testHistoryRemove": "Remove turn",
+    "knowledgeSources": {
+      "title": "Fuentes de conocimiento",
+      "hint": "Fuentes de datos en vivo que el agente de IA puede consultar durante el chat, además de la base de conocimiento estática anterior.",
+      "loadError": "No se pudieron cargar las fuentes de conocimiento.",
+      "saveSuccess": "Fuente de conocimiento guardada.",
+      "saveError": "No se pudo guardar la fuente de conocimiento.",
+      "programScopeLabel": "Búsqueda de programas en vivo (Course Finder)",
+      "programScopeHint": "Permite al agente de IA buscar programas reales y actualizados en lugar de depender solo de la base de conocimiento estática.",
+      "countriesLabel": "Países",
+      "universityTypesLabel": "Tipos de universidad",
+      "allCountries": "Todos los países",
+      "allUniversityTypes": "Todos los tipos de universidad",
+      "selectedCount": "{count} seleccionado(s)",
+      "lastSyncedAt": "Última actualización: {date}",
+      "save": "Guardar"
+    }
   },
   "portalFallback": {
     "title": "Backup Programs",

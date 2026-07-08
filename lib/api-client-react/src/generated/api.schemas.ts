@@ -1679,6 +1679,15 @@ export const AiAgentConfigLanguagesItem = {
   fr: "fr",
 } as const;
 
+/**
+ * Country / university-type scope for the live searchPrograms tool (FAZ 1). "all" means no restriction on that axis.
+ */
+export interface ProgramScope {
+  enabled: boolean;
+  countries: string[] | "all";
+  universityTypes: string[] | "all";
+}
+
 export interface AiAgentConfig {
   enabled: boolean;
   defaultOnForNew: boolean;
@@ -1689,6 +1698,23 @@ export interface AiAgentConfig {
   languages: AiAgentConfigLanguagesItem[];
   escalationKeywords: EscalationKeywords;
   knowledgeBase: string;
+  programScope: ProgramScope;
+}
+
+export interface KnowledgeSourceProgramScope {
+  isActive: boolean;
+  scope: ProgramScope;
+  /** @nullable */
+  lastSyncedAt: string | null;
+}
+
+export interface KnowledgeSourceProgramScopeResponse {
+  source: KnowledgeSourceProgramScope;
+}
+
+export interface KnowledgeSourceProgramScopeUpdate {
+  isActive: boolean;
+  scope: ProgramScope;
 }
 
 export interface AiAgentConfigResponse {

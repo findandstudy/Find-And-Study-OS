@@ -5,6 +5,8 @@ import type {
   AiAgentConfigUpdate,
   AiAgentTestResult,
   AiAgentTestRequestHistoryItem,
+  KnowledgeSourceProgramScope,
+  ProgramScope,
 } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   Select,
   SelectContent,
@@ -37,6 +40,7 @@ import {
   AlertTriangle,
   Plus,
   Trash2,
+  Database,
 } from "lucide-react";
 
 type HistoryDirection = "inbound" | "outbound";
@@ -72,6 +76,16 @@ export default function AiAgent() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Knowledge Sources — program_scope (FAZ 1 scaffold).
+  const [programScopeSource, setProgramScopeSource] =
+    useState<KnowledgeSourceProgramScope | null>(null);
+  const [scopeLoading, setScopeLoading] = useState(true);
+  const [scopeSaving, setScopeSaving] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<{
+    countries: string[];
+    universityTypes: string[];
+  }>({ countries: [], universityTypes: [] });
 
   // Test console state.
   const [testMessage, setTestMessage] = useState("");
@@ -112,12 +126,65 @@ export default function AiAgent() {
     }
   }, [t, toast]);
 
+  const loadProgramScope = useCallback(async () => {
+    setScopeLoading(true);
+    try {
+      const [{ source }, filters] = await Promise.all([
+        customFetch<{ source: KnowledgeSourceProgramScope }>(
+          "/api/inbox/knowledge-sources/program-scope",
+        ),
+        customFetch<{ countries?: string[]; universityTypes?: string[] }>(
+          "/api/course-finder/filters",
+        ).catch(() => ({ countries: [], universityTypes: [] })),
+      ]);
+      setProgramScopeSource(source);
+      setFilterOptions({
+        countries: filters.countries ?? [],
+        universityTypes: filters.universityTypes ?? [],
+      });
+    } catch {
+      toast({ title: t("aiAgentAdmin.knowledgeSources.loadError"), variant: "destructive" });
+    } finally {
+      setScopeLoading(false);
+    }
+  }, [t, toast]);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadProgramScope();
+  }, [load, loadProgramScope]);
 
   const patch = (p: Partial<AiAgentConfig>) =>
     setConfig((prev) => (prev ? { ...prev, ...p } : prev));
+
+  const patchScope = (p: Partial<ProgramScope>) =>
+    setProgramScopeSource((prev) =>
+      prev ? { ...prev, scope: { ...prev.scope, ...p } } : prev,
+    );
+
+  const saveProgramScope = async () => {
+    if (!programScopeSource) return;
+    setScopeSaving(true);
+    try {
+      const { source } = await customFetch<{ source: KnowledgeSourceProgramScope }>(
+        "/api/inbox/knowledge-sources/program-scope",
+        {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            isActive: programScopeSource.isActive,
+            scope: programScopeSource.scope,
+          }),
+        },
+      );
+      setProgramScopeSource(source);
+      toast({ title: t("aiAgentAdmin.knowledgeSources.saveSuccess") });
+    } catch {
+      toast({ title: t("aiAgentAdmin.knowledgeSources.saveError"), variant: "destructive" });
+    } finally {
+      setScopeSaving(false);
+    }
+  };
 
   const save = async () => {
     if (!config) return;
@@ -348,6 +415,126 @@ export default function AiAgent() {
           <p className="text-xs text-muted-foreground mt-1.5">
             {config.knowledgeBase.length} / 20000
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Knowledge Sources — program_scope (FAZ 1 scaffold) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base">
+              {t("aiAgentAdmin.knowledgeSources.title")}
+            </CardTitle>
+          </div>
+          <CardDescription>
+            {t("aiAgentAdmin.knowledgeSources.hint")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {scopeLoading || !programScopeSource ? (
+            <Skeleton className="h-32 w-full rounded-xl" />
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-4 rounded-xl border p-3">
+                <div>
+                  <p className="font-medium text-sm">
+                    {t("aiAgentAdmin.knowledgeSources.programScopeLabel")}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t("aiAgentAdmin.knowledgeSources.programScopeHint")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Switch
+                    checked={programScopeSource.isActive && programScopeSource.scope.enabled}
+                    onCheckedChange={(v) => {
+                      setProgramScopeSource((prev) =>
+                        prev
+                          ? { ...prev, isActive: v, scope: { ...prev.scope, enabled: v } }
+                          : prev,
+                      );
+                    }}
+                  />
+                  <Badge
+                    variant={
+                      programScopeSource.isActive && programScopeSource.scope.enabled
+                        ? "default"
+                        : "secondary"
+                    }
+                  >
+                    {programScopeSource.isActive && programScopeSource.scope.enabled
+                      ? t("aiAgentAdmin.statusOn")
+                      : t("aiAgentAdmin.statusOff")}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>{t("aiAgentAdmin.knowledgeSources.countriesLabel")}</Label>
+                  <MultiSelectFilter
+                    values={
+                      programScopeSource.scope.countries === "all"
+                        ? []
+                        : programScopeSource.scope.countries
+                    }
+                    onChange={(vals) =>
+                      patchScope({ countries: vals.length ? vals : "all" })
+                    }
+                    options={filterOptions.countries.map((c) => ({ value: c, label: c }))}
+                    placeholder={t("aiAgentAdmin.knowledgeSources.allCountries")}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {programScopeSource.scope.countries === "all"
+                      ? t("aiAgentAdmin.knowledgeSources.allCountries")
+                      : t("aiAgentAdmin.knowledgeSources.selectedCount", {
+                          count: programScopeSource.scope.countries.length,
+                        })}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t("aiAgentAdmin.knowledgeSources.universityTypesLabel")}</Label>
+                  <MultiSelectFilter
+                    values={
+                      programScopeSource.scope.universityTypes === "all"
+                        ? []
+                        : programScopeSource.scope.universityTypes
+                    }
+                    onChange={(vals) =>
+                      patchScope({ universityTypes: vals.length ? vals : "all" })
+                    }
+                    options={filterOptions.universityTypes.map((c) => ({ value: c, label: c }))}
+                    placeholder={t("aiAgentAdmin.knowledgeSources.allUniversityTypes")}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {programScopeSource.scope.universityTypes === "all"
+                      ? t("aiAgentAdmin.knowledgeSources.allUniversityTypes")
+                      : t("aiAgentAdmin.knowledgeSources.selectedCount", {
+                          count: programScopeSource.scope.universityTypes.length,
+                        })}
+                  </p>
+                </div>
+              </div>
+
+              {programScopeSource.lastSyncedAt && (
+                <p className="text-xs text-muted-foreground">
+                  {t("aiAgentAdmin.knowledgeSources.lastSyncedAt", {
+                    date: new Date(programScopeSource.lastSyncedAt).toLocaleString(),
+                  })}
+                </p>
+              )}
+
+              <div className="flex justify-end">
+                <Button onClick={saveProgramScope} disabled={scopeSaving} size="sm">
+                  <Save className="h-4 w-4 mr-2" />
+                  {scopeSaving
+                    ? t("aiAgentAdmin.saving")
+                    : t("aiAgentAdmin.knowledgeSources.save")}
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
