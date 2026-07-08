@@ -12,7 +12,7 @@ import { parseMessengerWebhook, type MessengerConfig } from "../lib/inbox/channe
 import { parseInstagramWebhook, type InstagramConfig } from "../lib/inbox/channels/instagram";
 import { CHANNEL_MESSENGER, CHANNEL_INSTAGRAM } from "../lib/inbox/channels/constants";
 import { resolveInboundAccount, parseAccountConfig } from "../lib/inbox/channelAccountConfig";
-import { decryptConfig } from "../lib/encryption";
+import { decryptConfig, decryptString } from "../lib/encryption";
 import { logAudit } from "../lib/auth";
 import crypto from "crypto";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
@@ -608,7 +608,12 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
   }
 
   const cfg = decryptConfig(zernioRow.config as Record<string, any>) as { apiKey?: string; webhookSecret?: string };
-  if (!verifyZernioSignature(raw, sig, cfg.webhookSecret || "")) {
+  // decryptConfig decrypts fields matching enc::v1:: but silently returns the
+  // raw ciphertext if decryption throws. Apply decryptString explicitly so the
+  // webhookSecret is always resolved to plaintext before HMAC — same pattern
+  // used by getZernioApiKey for apiKey. Never log the resolved secret.
+  const webhookSecret = decryptString(cfg.webhookSecret || "");
+  if (!verifyZernioSignature(raw, sig, webhookSecret)) {
     res.status(401).json({ error: "Invalid signature" });
     return;
   }
