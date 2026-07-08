@@ -1,6 +1,7 @@
 import { db, channelAccountsTable, integrationsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { decryptConfig } from "../encryption";
+import { ObjectStorageService } from "../objectStorage";
 
 /**
  * Single source of truth for Zernio outbound sends.
@@ -119,22 +120,14 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
     }
     if (params.attachments?.length && !error) {
       for (const att of params.attachments) {
-        const body: Record<string, any> = {
-          accountId: params.externalAccountId,
-          attachmentUrl: att.url,
-          attachmentType: att.type ?? "file",
-        };
-        if (att.name) body.attachmentName = att.name;
-        const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-        if (resp.ok) {
+        const outcome = await sendZernioAttachment(url, apiKey, params.externalAccountId, att);
+        if (outcome.ok) {
           ok = true;
-          if (!externalMessageId) {
-            const data = (await resp.json().catch(() => ({}))) as any;
-            externalMessageId = data?.messageId ? String(data.messageId) : undefined;
+          if (!externalMessageId && outcome.externalMessageId) {
+            externalMessageId = outcome.externalMessageId;
           }
         } else {
-          const errBody = await resp.text().catch(() => "");
-          error = `Zernio attachment send failed (${resp.status}): ${errBody.slice(0, 200)}`;
+          error = outcome.error;
           break;
         }
       }
