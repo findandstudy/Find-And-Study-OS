@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
@@ -40,7 +40,7 @@ import {
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown, Star, Bell,
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
-  Facebook, Instagram
+  Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -251,7 +251,7 @@ function InboxTab() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<"mine" | "unassigned" | "unmatched" | "all" | "open" | "unanswered" | "subscribed" | "starred">("mine");
+  const [tab, setTab] = useState<"mine" | "unassigned" | "unmatched" | "all" | "open" | "unanswered" | "subscribed" | "starred" | "archived">("mine");
   const [assignedNotice, setAssignedNotice] = useState(false);
   const [channel, setChannel] = useState<string>("all");
   const [convs, setConvs] = useState<InboxConversation[]>([]);
@@ -287,6 +287,31 @@ function InboxTab() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Sort order for the conversation list — persisted per user preference.
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">(() => {
+    try { return localStorage.getItem("inbox_sort_order") === "asc" ? "asc" : "desc"; } catch { return "desc"; }
+  });
+  // Test/junk conversations hidden by default; toggle reveals them for cleanup.
+  const [showTests, setShowTests] = useState<boolean>(() => {
+    try { return localStorage.getItem("inbox_show_tests") === "true"; } catch { return false; }
+  });
+  // Multi-select + bulk archive / restore / permanent delete
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState<null | { type: "archive" | "unarchive" | "delete"; step: 1 | 2 }>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // WhatsApp-style thread: windowed history + smart auto-scroll
+  const [olderMsgs, setOlderMsgs] = useState<any[]>([]);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [newBelow, setNewBelow] = useState(0);
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+  const msgScrollRef = useRef<HTMLDivElement>(null);
+  const atBottomRef = useRef(true);
+  const prevLastMsgIdRef = useRef<number | null>(null);
+
+  useEffect(() => { try { localStorage.setItem("inbox_sort_order", sortOrder); } catch {} }, [sortOrder]);
+  useEffect(() => { try { localStorage.setItem("inbox_show_tests", String(showTests)); } catch {} }, [showTests]);
 
   // Close the mobile lead-info drawer whenever the selected conversation changes
   useEffect(() => {
@@ -313,7 +338,7 @@ function InboxTab() {
   const fetchInbox = useCallback(async () => {
     setLoading(true);
     try {
-      const url = `/api/inbox/conversations?tab=${tab}${channel !== "all" ? `&channel=${channel}` : ""}`;
+      const url = `/api/inbox/conversations?tab=${tab}${channel !== "all" ? `&channel=${channel}` : ""}&order=${sortOrder}${showTests ? "&showTests=true" : ""}`;
       const res = await customFetch(url);
       setConvs((res as any)?.data || []);
     } catch {
@@ -321,7 +346,7 @@ function InboxTab() {
     } finally {
       setLoading(false);
     }
-  }, [tab, channel]);
+  }, [tab, channel, sortOrder, showTests]);
 
   useEffect(() => { fetchInbox(); }, [fetchInbox]);
 
@@ -329,6 +354,7 @@ function InboxTab() {
     try {
       const res = await customFetch(`/api/inbox/conversations/${id}`);
       setDetail(res as InboxConversationDetailResponse);
+      setHasMoreOlder(Boolean((res as any)?.hasMoreMessages));
     } catch {
       setDetail(null);
     }
@@ -343,6 +369,12 @@ function InboxTab() {
     setReply("");
     setNoteDraft("");
     setTaskDraft({ title: "", scheduledAt: "", notes: "" });
+    // Reset thread pagination + scroll bookkeeping for the new conversation.
+    setOlderMsgs([]);
+    setHasMoreOlder(false);
+    setNewBelow(0);
+    atBottomRef.current = true;
+    prevLastMsgIdRef.current = null;
   }, [selectedId, fetchDetail]);
 
   // Live updates via Server-Sent Events. Refs let the long-lived EventSource
@@ -764,7 +796,150 @@ function InboxTab() {
     { key: "starred", label: t("inbox.tabs.starred"), icon: Star },
     { key: "unmatched", label: t("messagesPage.unmatched"), icon: AlertTriangle },
     { key: "all", label: t("messagesPage.all"), icon: Hash },
+    { key: "archived", label: t("inbox.tabs.archived"), icon: Archive },
   ];
+
+  // ── Thread helpers: windowed history, smart auto-scroll, retry ──────────
+
+  // Merge older pages (loaded via `before` cursor) with the live window.
+  const allMsgs = useMemo(() => {
+    const base = ((detail?.messages || []) as any[]);
+    const seen = new Set(base.map((m) => m.id));
+    return [...olderMsgs.filter((m) => !seen.has(m.id)), ...base];
+  }, [detail, olderMsgs]);
+
+  async function loadOlderMessages() {
+    if (!selectedId || loadingOlder) return;
+    const oldest = allMsgs[0];
+    if (!oldest) return;
+    setLoadingOlder(true);
+    const el = msgScrollRef.current;
+    const prevHeight = el?.scrollHeight ?? 0;
+    const prevTop = el?.scrollTop ?? 0;
+    try {
+      const res: any = await customFetch(`/api/inbox/conversations/${selectedId}?before=${oldest.id}&limit=50`);
+      const older = (res?.messages || []) as any[];
+      setHasMoreOlder(Boolean(res?.hasMoreMessages));
+      setOlderMsgs((prev) => {
+        const have = new Set(prev.map((m) => m.id));
+        return [...older.filter((m) => !have.has(m.id)), ...prev];
+      });
+      // Keep the viewport anchored on the message the user was reading.
+      requestAnimationFrame(() => {
+        if (el) el.scrollTop = el.scrollHeight - prevHeight + prevTop;
+      });
+    } catch {
+      // non-fatal; the button stays available
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
+
+  // Smart auto-scroll: stick to bottom when the user is already there;
+  // otherwise show a "new messages" jump badge instead of yanking the view.
+  useEffect(() => {
+    const el = msgScrollRef.current;
+    if (!el || allMsgs.length === 0) return;
+    const last = allMsgs[allMsgs.length - 1];
+    const prevLast = prevLastMsgIdRef.current;
+    if (prevLast === last.id) return;
+    prevLastMsgIdRef.current = last.id;
+    if (prevLast === null || atBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      setNewBelow(0);
+    } else {
+      setNewBelow((n) => n + 1);
+    }
+  }, [allMsgs]);
+
+  const handleMsgScroll = () => {
+    const el = msgScrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
+    atBottomRef.current = atBottom;
+    if (atBottom) setNewBelow(0);
+  };
+
+  const jumpToBottom = () => {
+    const el = msgScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    atBottomRef.current = true;
+    setNewBelow(0);
+  };
+
+  async function retryMessage(id: number) {
+    setRetryingId(id);
+    try {
+      await customFetch(`/api/inbox/messages/${id}/retry`, { method: "POST" });
+      toast({ title: t("inbox.retry.success") });
+    } catch (err: any) {
+      toast({ title: err?.body?.error || t("inbox.retry.failed"), variant: "destructive" });
+    } finally {
+      setRetryingId(null);
+    }
+    if (selectedId) fetchDetail(selectedId);
+  }
+
+  // ── Bulk selection helpers ───────────────────────────────────────────────
+  const toggleSelected = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelectedIds((prev) =>
+      prev.size === convs.length ? new Set() : new Set(convs.map((c) => c.id)),
+    );
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  async function runBulk(type: "archive" | "unarchive" | "delete") {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    try {
+      const path = type === "archive" ? "bulk-archive" : type === "unarchive" ? "bulk-unarchive" : "bulk-delete";
+      await customFetch(`/api/inbox/conversations/${path}`, {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      });
+      toast({
+        title:
+          type === "archive"
+            ? t("inbox.bulk.archivedToast", { count: ids.length })
+            : type === "unarchive"
+              ? t("inbox.bulk.restoredToast", { count: ids.length })
+              : t("inbox.bulk.deletedToast", { count: ids.length }),
+      });
+      setBulkConfirm(null);
+      exitSelectMode();
+      if (selectedId && ids.includes(selectedId)) setSelectedId(null);
+      fetchInbox();
+    } catch (err: any) {
+      toast({ title: err?.body?.error || t("inbox.bulk.failed"), variant: "destructive" });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  // Day separator label: Today / Yesterday / localized date.
+  const dayLabelOf = (d: Date) => {
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return t("inbox.chat.today");
+    if (d.toDateString() === yesterday.toDateString()) return t("inbox.chat.yesterday");
+    return d.toLocaleDateString();
+  };
 
   // Safe non-null assertion: `conv` is only read inside the `!detail ? loader : (...)` JSX branch below.
   const conv = detail?.conversation!;
@@ -873,6 +1048,92 @@ function InboxTab() {
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs gap-1 text-muted-foreground"
+                onClick={() => setSortOrder((o) => (o === "desc" ? "asc" : "desc"))}
+                title={t("inbox.sort.toggle")}
+                data-testid="button-inbox-sort"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" />
+                {sortOrder === "desc" ? t("inbox.sort.newestFirst") : t("inbox.sort.oldestFirst")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn("h-7 px-2 text-xs gap-1", showTests ? "text-amber-600" : "text-muted-foreground")}
+                onClick={() => setShowTests((v) => !v)}
+                title={t("inbox.tests.toggleHint")}
+                data-testid="button-inbox-show-tests"
+              >
+                <FlaskConical className="w-3.5 h-3.5" />
+                {showTests ? t("inbox.tests.shown") : t("inbox.tests.hidden")}
+              </Button>
+              <div className="flex-1" />
+              <Button
+                variant={selectMode ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs gap-1 text-muted-foreground"
+                onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+                data-testid="button-inbox-select-mode"
+              >
+                <ListChecks className="w-3.5 h-3.5" />
+                {selectMode ? t("inbox.bulk.cancel") : t("inbox.bulk.select")}
+              </Button>
+            </div>
+
+            {selectMode && (
+              <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 py-1.5">
+                <button
+                  type="button"
+                  onClick={selectAllVisible}
+                  className="text-xs font-medium text-primary hover:underline shrink-0"
+                >
+                  {selectedIds.size === convs.length && convs.length > 0
+                    ? t("inbox.bulk.clearAll")
+                    : t("inbox.bulk.selectAll")}
+                </button>
+                <span className="text-xs text-muted-foreground flex-1 truncate">
+                  {t("inbox.bulk.selectedCount", { count: selectedIds.size })}
+                </span>
+                {tab === "archived" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-[11px] gap-1"
+                    disabled={selectedIds.size === 0 || bulkBusy}
+                    onClick={() => setBulkConfirm({ type: "unarchive", step: 1 })}
+                    data-testid="button-bulk-unarchive"
+                  >
+                    <ArchiveRestore className="w-3 h-3" /> {t("inbox.bulk.restore")}
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-[11px] gap-1"
+                    disabled={selectedIds.size === 0 || bulkBusy}
+                    onClick={() => setBulkConfirm({ type: "archive", step: 1 })}
+                    data-testid="button-bulk-archive"
+                  >
+                    <Archive className="w-3 h-3" /> {t("inbox.bulk.archive")}
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[11px] gap-1 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                  disabled={selectedIds.size === 0 || bulkBusy}
+                  onClick={() => setBulkConfirm({ type: "delete", step: 1 })}
+                  data-testid="button-bulk-delete"
+                >
+                  <Trash2 className="w-3 h-3" /> {t("inbox.bulk.delete")}
+                </Button>
+              </div>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto">
             {loading ? (
@@ -885,13 +1146,24 @@ function InboxTab() {
             ) : convs.map((c) => {
               const Icon = channelIcon[c.channel] || MessageCircle;
               const isSel = c.id === selectedId;
+              const isChecked = selectedIds.has(c.id);
               return (
                 <div
                   key={c.id}
                   data-testid="inbox-conversation-item"
-                  onClick={() => setSelectedId(c.id)}
-                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-border/30 ${isSel ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-secondary/50"}`}
+                  onClick={() => (selectMode ? toggleSelected(c.id) : setSelectedId(c.id))}
+                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-border/30 ${isSel && !selectMode ? "bg-primary/5 border-l-2 border-l-primary" : isChecked ? "bg-primary/10" : "hover:bg-secondary/50"}`}
                 >
+                  {selectMode && (
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleSelected(c.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 shrink-0 accent-primary"
+                      data-testid={`checkbox-conv-${c.id}`}
+                    />
+                  )}
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center ${channelColor[c.channel] || ""}`}>
                     <Icon className="w-4 h-4" />
                   </div>
@@ -904,14 +1176,16 @@ function InboxTab() {
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{c.lastMessagePreview || "—"}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="p-1 rounded hover:bg-muted shrink-0"
-                    onClick={(e) => toggleStar(c.id, e)}
-                    title={c.isStarred ? t("inbox.action.unstar") : t("inbox.action.star")}
-                  >
-                    <Star className={`w-3.5 h-3.5 ${c.isStarred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"}`} />
-                  </button>
+                  {!selectMode && (
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-muted shrink-0"
+                      onClick={(e) => toggleStar(c.id, e)}
+                      title={c.isStarred ? t("inbox.action.unstar") : t("inbox.action.star")}
+                    >
+                      <Star className={`w-3.5 h-3.5 ${c.isStarred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40"}`} />
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -1042,11 +1316,38 @@ function InboxTab() {
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {(detail.messages || []).map((m: any) => {
+              <div className="relative flex-1 min-h-0 flex flex-col">
+              <div ref={msgScrollRef} onScroll={handleMsgScroll} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3" data-testid="inbox-message-scroll">
+                {hasMoreOlder && (
+                  <div className="flex justify-center">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1"
+                      onClick={loadOlderMessages}
+                      disabled={loadingOlder}
+                      data-testid="button-load-older"
+                    >
+                      {loadingOlder ? <Loader2 className="w-3 h-3 animate-spin" /> : <Clock className="w-3 h-3" />}
+                      {t("inbox.chat.loadOlder")}
+                    </Button>
+                  </div>
+                )}
+                {allMsgs.map((m: any, idx: number) => {
                   const out = m.direction === "outbound";
+                  const day = new Date(m.createdAt);
+                  const prevMsg = idx > 0 ? allMsgs[idx - 1] : null;
+                  const showDaySep = !prevMsg || new Date(prevMsg.createdAt).toDateString() !== day.toDateString();
                   return (
-                    <div key={m.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
+                    <div key={m.id}>
+                    {showDaySep && (
+                      <div className="flex items-center justify-center my-2">
+                        <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          {dayLabelOf(day)}
+                        </span>
+                      </div>
+                    )}
+                    <div className={`flex ${out ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${out ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
                         {m.content && m.content !== "[attachment]" && (
                           <p className="whitespace-pre-wrap">{m.content}</p>
@@ -1081,15 +1382,58 @@ function InboxTab() {
                             </div>
                           );
                         })()}
-                        <div className={`text-[10px] mt-1 ${out ? "opacity-80" : "text-muted-foreground"}`}>
-                          {new Date(m.createdAt).toLocaleString()}
-                          {m.status === "failed" && <span className="ml-1 text-red-300">• failed</span>}
-                          {m.metadata?.simulated && <span className="ml-1 opacity-80">• simulated</span>}
+                        <div className={`flex items-center gap-1 text-[10px] mt-1 ${out ? "opacity-80" : "text-muted-foreground"}`}>
+                          <span>{day.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                          {out && m.status === "failed" && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-red-300 font-medium cursor-help"
+                              title={m.failedReason || t("inbox.status.failed")}
+                              data-testid={`status-failed-${m.id}`}
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5" /> {t("inbox.status.failed")}
+                            </span>
+                          )}
+                          {out && (m.status === "pending" || m.status === "queued") && (
+                            <span className="inline-flex items-center gap-0.5" title={t("inbox.status.pending")}>
+                              <Clock className="w-2.5 h-2.5" />
+                            </span>
+                          )}
+                          {out && (m.status === "sent" || m.status === "delivered" || m.status === "read") && (
+                            <span className="inline-flex items-center" title={t(`inbox.status.${m.status}`)}>
+                              {m.status === "sent" ? <Check className="w-3 h-3" /> : <CheckCheck className={`w-3 h-3 ${m.status === "read" ? "text-sky-300" : ""}`} />}
+                            </span>
+                          )}
+                          {m.metadata?.simulated && <span className="opacity-80">• {t("inbox.status.simulated")}</span>}
                         </div>
+                        {out && m.status === "failed" && (
+                          <button
+                            type="button"
+                            onClick={() => retryMessage(m.id)}
+                            disabled={retryingId === m.id}
+                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-red-300/60 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-100 hover:bg-red-500/20 disabled:opacity-50"
+                            title={m.failedReason || undefined}
+                            data-testid={`button-retry-${m.id}`}
+                          >
+                            {retryingId === m.id ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
+                            {t("inbox.retry.resend")}
+                          </button>
+                        )}
                       </div>
+                    </div>
                     </div>
                   );
                 })}
+              </div>
+              {newBelow > 0 && (
+                <button
+                  type="button"
+                  onClick={jumpToBottom}
+                  className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground shadow-lg hover:bg-primary/90"
+                  data-testid="button-jump-new"
+                >
+                  <ArrowDown className="w-3 h-3" /> {t("inbox.chat.newMessages", { count: newBelow })}
+                </button>
+              )}
               </div>
 
               <ChatNoteTaskTabs
@@ -1362,13 +1706,84 @@ function InboxTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={bulkConfirm !== null} onOpenChange={(open) => { if (!open && !bulkBusy) setBulkConfirm(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {bulkConfirm?.type === "delete" ? (
+                <Trash2 className="w-4 h-4 text-red-600" />
+              ) : bulkConfirm?.type === "unarchive" ? (
+                <ArchiveRestore className="w-4 h-4" />
+              ) : (
+                <Archive className="w-4 h-4" />
+              )}
+              {bulkConfirm?.type === "delete"
+                ? bulkConfirm.step === 2
+                  ? t("inbox.bulk.deleteConfirmTitle2")
+                  : t("inbox.bulk.deleteConfirmTitle")
+                : bulkConfirm?.type === "unarchive"
+                  ? t("inbox.bulk.restoreConfirmTitle")
+                  : t("inbox.bulk.archiveConfirmTitle")}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {bulkConfirm?.type === "delete"
+              ? bulkConfirm.step === 2
+                ? t("inbox.bulk.deleteConfirmBody2", { count: selectedIds.size })
+                : t("inbox.bulk.deleteConfirmBody", { count: selectedIds.size })
+              : bulkConfirm?.type === "unarchive"
+                ? t("inbox.bulk.restoreConfirmBody", { count: selectedIds.size })
+                : t("inbox.bulk.archiveConfirmBody", { count: selectedIds.size })}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" disabled={bulkBusy} onClick={() => setBulkConfirm(null)}>
+              {t("messagesPage.cancel")}
+            </Button>
+            {bulkConfirm?.type === "delete" ? (
+              bulkConfirm.step === 1 ? (
+                <Button
+                  variant="destructive"
+                  onClick={() => setBulkConfirm({ type: "delete", step: 2 })}
+                  data-testid="button-bulk-delete-step1"
+                >
+                  {t("inbox.bulk.deleteContinue")}
+                </Button>
+              ) : (
+                <Button
+                  variant="destructive"
+                  disabled={bulkBusy}
+                  onClick={() => runBulk("delete")}
+                  className="gap-1"
+                  data-testid="button-bulk-delete-step2"
+                >
+                  {bulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
+                  {t("inbox.bulk.deleteForever")}
+                </Button>
+              )
+            ) : (
+              <Button
+                disabled={bulkBusy}
+                onClick={() => runBulk(bulkConfirm?.type === "unarchive" ? "unarchive" : "archive")}
+                className="gap-1"
+                data-testid="button-bulk-confirm"
+              >
+                {bulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
+                {bulkConfirm?.type === "unarchive" ? t("inbox.bulk.restore") : t("inbox.bulk.archive")}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
     </>
   );
 }
 
 function ConversationList({
-  conversations, selectedId, onSelect, onNewConversation, search, setSearch
+  conversations, selectedId, onSelect, onNewConversation, search, setSearch,
+  sortOrder, onToggleSort, selectMode, onToggleSelectMode, selectedIds,
+  onToggleSelected, onSelectAll, onBulkArchive, onBulkDelete, bulkBusy
 }: {
   conversations: Conversation[];
   selectedId: number | null;
@@ -1376,6 +1791,16 @@ function ConversationList({
   onNewConversation: () => void;
   search: string;
   setSearch: (s: string) => void;
+  sortOrder: "desc" | "asc";
+  onToggleSort: () => void;
+  selectMode: boolean;
+  onToggleSelectMode: () => void;
+  selectedIds: Set<number>;
+  onToggleSelected: (id: number) => void;
+  onSelectAll: () => void;
+  onBulkArchive: () => void;
+  onBulkDelete: () => void;
+  bulkBusy: boolean;
 }) {
   const { user } = useAuth();
   const { t } = useI18n();
@@ -1395,6 +1820,66 @@ function ConversationList({
           <Input value={search} onChange={e => setSearch(e.target.value)}
             placeholder={t("messagesPage.searchConversations")} className="pl-9 h-8 text-sm rounded-lg" />
         </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1 text-muted-foreground"
+            onClick={onToggleSort}
+            title={t("inbox.sort.toggle")}
+            data-testid="button-internal-sort"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" />
+            {sortOrder === "desc" ? t("inbox.sort.newestFirst") : t("inbox.sort.oldestFirst")}
+          </Button>
+          <div className="flex-1" />
+          <Button
+            variant={selectMode ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 px-2 text-xs gap-1 text-muted-foreground"
+            onClick={onToggleSelectMode}
+            data-testid="button-internal-select-mode"
+          >
+            <ListChecks className="w-3.5 h-3.5" />
+            {selectMode ? t("inbox.bulk.cancel") : t("inbox.bulk.select")}
+          </Button>
+        </div>
+        {selectMode && (
+          <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 py-1.5">
+            <button
+              type="button"
+              onClick={onSelectAll}
+              className="text-xs font-medium text-primary hover:underline shrink-0"
+            >
+              {selectedIds.size === conversations.length && conversations.length > 0
+                ? t("inbox.bulk.clearAll")
+                : t("inbox.bulk.selectAll")}
+            </button>
+            <span className="text-xs text-muted-foreground flex-1 truncate">
+              {t("inbox.bulk.selectedCount", { count: selectedIds.size })}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[11px] gap-1"
+              disabled={selectedIds.size === 0 || bulkBusy}
+              onClick={onBulkArchive}
+              data-testid="button-internal-bulk-archive"
+            >
+              <Archive className="w-3 h-3" /> {t("inbox.bulk.archive")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[11px] gap-1 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+              disabled={selectedIds.size === 0 || bulkBusy}
+              onClick={onBulkDelete}
+              data-testid="button-internal-bulk-delete"
+            >
+              <Trash2 className="w-3 h-3" /> {t("inbox.bulk.delete")}
+            </Button>
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto">
         {conversations.length === 0 ? (
@@ -1409,13 +1894,24 @@ function ConversationList({
             const initials = others[0] ? `${others[0].firstName?.[0] || ""}${others[0].lastName?.[0] || ""}` : "?";
             const avatarUrl = others[0]?.avatarUrl || null;
             const isSelected = conv.id === selectedId;
+            const isChecked = selectedIds.has(conv.id);
 
             return (
               <div
                 key={conv.id}
-                onClick={() => onSelect(conv.id)}
-                className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-border/30 transition-colors ${isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-secondary/50"}`}
+                onClick={() => (selectMode ? onToggleSelected(conv.id) : onSelect(conv.id))}
+                className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-border/30 transition-colors ${isSelected && !selectMode ? "bg-primary/5 border-l-2 border-l-primary" : isChecked ? "bg-primary/10" : "hover:bg-secondary/50"}`}
               >
+                {selectMode && (
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => onToggleSelected(conv.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-4 h-4 shrink-0 accent-primary"
+                    data-testid={`checkbox-internal-conv-${conv.id}`}
+                  />
+                )}
                 {avatarUrl ? (
                   <img src={avatarUrl} alt={displayName} className="w-10 h-10 rounded-full object-cover shrink-0" />
                 ) : (
@@ -2456,13 +2952,58 @@ export default function MessagesPage() {
   const { toast } = useToast();
   const { user } = useAuth(true);
   const canBroadcast = BROADCAST_ROLES.includes(user?.role || "");
+  const [internalSort, setInternalSort] = useState<"desc" | "asc">(() => {
+    try { return localStorage.getItem("internal_sort_order") === "asc" ? "asc" : "desc"; } catch { return "desc"; }
+  });
+  const [internalSelectMode, setInternalSelectMode] = useState(false);
+  const [internalSelectedIds, setInternalSelectedIds] = useState<Set<number>>(new Set());
+  const [internalBulkConfirm, setInternalBulkConfirm] = useState<null | { type: "archive" | "delete"; step: 1 | 2 }>(null);
+  const [internalBulkBusy, setInternalBulkBusy] = useState(false);
+
+  useEffect(() => { try { localStorage.setItem("internal_sort_order", internalSort); } catch {} }, [internalSort]);
 
   const fetchConversations = useCallback(async () => {
     try {
-      const res = await customFetch(`/api/conversations${search ? `?search=${search}` : ""}`);
+      const res = await customFetch(`/api/conversations?order=${internalSort}${search ? `&search=${search}` : ""}`);
       setConversations((res as any)?.data || res || []);
     } catch {}
-  }, [search]);
+  }, [search, internalSort]);
+
+  const toggleInternalSelected = (id: number) => {
+    setInternalSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  async function runInternalBulk(type: "archive" | "delete") {
+    const ids = Array.from(internalSelectedIds);
+    if (ids.length === 0) return;
+    setInternalBulkBusy(true);
+    try {
+      const path = type === "archive" ? "bulk-archive" : "bulk-delete";
+      await customFetch(`/api/inbox/conversations/${path}`, {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      });
+      toast({
+        title: type === "archive"
+          ? t("inbox.bulk.archivedToast", { count: ids.length })
+          : t("inbox.bulk.deletedToast", { count: ids.length }),
+      });
+      setInternalBulkConfirm(null);
+      setInternalSelectMode(false);
+      setInternalSelectedIds(new Set());
+      if (selectedConv && ids.includes(selectedConv)) setSelectedConv(null);
+      fetchConversations();
+    } catch (err: any) {
+      toast({ title: err?.body?.error || t("inbox.bulk.failed"), variant: "destructive" });
+    } finally {
+      setInternalBulkBusy(false);
+    }
+  }
 
   useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
@@ -2557,6 +3098,25 @@ export default function MessagesPage() {
                     onNewConversation={() => setNewConvOpen(true)}
                     search={search}
                     setSearch={setSearch}
+                    sortOrder={internalSort}
+                    onToggleSort={() => setInternalSort((o) => (o === "desc" ? "asc" : "desc"))}
+                    selectMode={internalSelectMode}
+                    onToggleSelectMode={() => {
+                      setInternalSelectMode((v) => !v);
+                      setInternalSelectedIds(new Set());
+                    }}
+                    selectedIds={internalSelectedIds}
+                    onToggleSelected={toggleInternalSelected}
+                    onSelectAll={() =>
+                      setInternalSelectedIds((prev) =>
+                        prev.size === conversations.length
+                          ? new Set()
+                          : new Set(conversations.map((c) => c.id)),
+                      )
+                    }
+                    onBulkArchive={() => setInternalBulkConfirm({ type: "archive", step: 1 })}
+                    onBulkDelete={() => setInternalBulkConfirm({ type: "delete", step: 1 })}
+                    bulkBusy={internalBulkBusy}
                   />
                 </div>
                 <div className={`lg:col-span-8 h-full min-h-0 ${selectedConv === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
@@ -2640,6 +3200,69 @@ export default function MessagesPage() {
             <Button onClick={createConversation} disabled={creating || selectedUsers.length === 0}>
               {creating ? "Creating..." : "Start Conversation"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={internalBulkConfirm !== null} onOpenChange={(open) => { if (!open && !internalBulkBusy) setInternalBulkConfirm(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {internalBulkConfirm?.type === "delete" ? (
+                <Trash2 className="w-4 h-4 text-red-600" />
+              ) : (
+                <Archive className="w-4 h-4" />
+              )}
+              {internalBulkConfirm?.type === "delete"
+                ? internalBulkConfirm.step === 2
+                  ? t("inbox.bulk.deleteConfirmTitle2")
+                  : t("inbox.bulk.deleteConfirmTitle")
+                : t("inbox.bulk.archiveConfirmTitle")}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {internalBulkConfirm?.type === "delete"
+              ? internalBulkConfirm.step === 2
+                ? t("inbox.bulk.deleteConfirmBody2", { count: internalSelectedIds.size })
+                : t("inbox.bulk.deleteConfirmBody", { count: internalSelectedIds.size })
+              : t("inbox.bulk.archiveConfirmBody", { count: internalSelectedIds.size })}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" disabled={internalBulkBusy} onClick={() => setInternalBulkConfirm(null)}>
+              {t("messagesPage.cancel")}
+            </Button>
+            {internalBulkConfirm?.type === "delete" ? (
+              internalBulkConfirm.step === 1 ? (
+                <Button
+                  variant="destructive"
+                  onClick={() => setInternalBulkConfirm({ type: "delete", step: 2 })}
+                  data-testid="button-internal-bulk-delete-step1"
+                >
+                  {t("inbox.bulk.deleteContinue")}
+                </Button>
+              ) : (
+                <Button
+                  variant="destructive"
+                  disabled={internalBulkBusy}
+                  onClick={() => runInternalBulk("delete")}
+                  className="gap-1"
+                  data-testid="button-internal-bulk-delete-step2"
+                >
+                  {internalBulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
+                  {t("inbox.bulk.deleteForever")}
+                </Button>
+              )
+            ) : (
+              <Button
+                disabled={internalBulkBusy}
+                onClick={() => runInternalBulk("archive")}
+                className="gap-1"
+                data-testid="button-internal-bulk-confirm"
+              >
+                {internalBulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
+                {t("inbox.bulk.archive")}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

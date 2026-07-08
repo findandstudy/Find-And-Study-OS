@@ -43,6 +43,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
 import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
 import { decryptConfig } from "../lib/encryption";
+import { sendViaZernio, getZernioApiKey, resolveZernioAccount } from "../lib/inbox/zernioSend";
 import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
 import {
   getAiAgentConfig,
@@ -309,10 +310,27 @@ router.get(
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
     const userId = req.user!.id;
-    const tab = String(req.query.tab || "mine"); // mine | unassigned | unmatched | all
+    const tab = String(req.query.tab || "mine"); // mine | unassigned | unmatched | all | archived
     const channel = req.query.channel ? String(req.query.channel) : null;
+    const order = String(req.query.order || "desc") === "asc" ? "asc" : "desc";
+    const showTests = String(req.query.showTests || "") === "true";
 
-    const where: SQL[] = [eq(conversationsTable.isArchived, false)];
+    const where: SQL[] = [
+      tab === "archived"
+        ? eq(conversationsTable.isArchived, true)
+        : eq(conversationsTable.isArchived, false),
+    ];
+
+    // Test/junk conversations are hidden by default: e2e-suite artifacts and
+    // quick-contact WhatsApp stubs that never left the queue. Toggle with
+    // showTests=true (used by the cleanup UI).
+    if (!showTests) {
+      where.push(sql`NOT (
+        COALESCE(${conversationsTable.title}, '') ILIKE 'Playwright Inbox%'
+        OR COALESCE(${conversationsTable.title}, '') ILIKE 'automated e2e webhook%'
+        OR (COALESCE(${conversationsTable.title}, '') ILIKE 'WhatsApp to %' AND ${conversationsTable.status} = 'queued')
+      )`);
+    }
 
     // Channel filter has full parity, including the value 'internal'. When NO
     // channel is requested, default the inbox scope to external channels only
@@ -377,7 +395,11 @@ router.get(
       })
       .from(conversationsTable)
       .where(and(...where))
-      .orderBy(desc(conversationsTable.lastMessageAt))
+      .orderBy(
+        order === "asc"
+          ? asc(conversationsTable.lastMessageAt)
+          : desc(conversationsTable.lastMessageAt),
+      )
       .limit(200);
 
     const externalIds = rows.map((r) => r.externalContactId).filter((x): x is number => !!x);
@@ -446,11 +468,24 @@ router.get(
           .from(usersTable)
           .where(eq(usersTable.id, conv.assignedToId))
       : [null];
-    const messages = await db
+    // Windowed message fetch: newest `limit` messages by default; `before=<id>`
+    // pages older history (WhatsApp-style load-older). Rows are returned in
+    // ascending order for rendering.
+    const rawLimit = parseInt(String(req.query.limit ?? ""), 10);
+    const msgLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+    const beforeId = parseInt(String(req.query.before ?? ""), 10);
+    const msgWhere: SQL[] = [eq(messagesTable.conversationId, id)];
+    if (Number.isFinite(beforeId) && beforeId > 0) {
+      msgWhere.push(sql`${messagesTable.id} < ${beforeId}`);
+    }
+    const newestFirst = await db
       .select()
       .from(messagesTable)
-      .where(eq(messagesTable.conversationId, id))
-      .orderBy(messagesTable.createdAt);
+      .where(and(...msgWhere))
+      .orderBy(desc(messagesTable.id))
+      .limit(msgLimit + 1);
+    const hasMoreMessages = newestFirst.length > msgLimit;
+    const messages = newestFirst.slice(0, msgLimit).reverse();
 
     const leadId = externalContact?.leadId ?? null;
     const studentId = externalContact?.studentId ?? null;
@@ -549,6 +584,7 @@ router.get(
       conversation: { ...conv, assignedTo: assignedTo ?? null },
       externalContact,
       messages,
+      hasMoreMessages,
       withinWindow: CHANNELS_WITH_24H_WINDOW.has(conv.channel) ? isWithin24hWindow(conv.lastInboundAt) : true,
       lead: lead ?? null,
       student: student ?? null,
@@ -981,15 +1017,8 @@ router.post(
         );
 
       if (zernioAcct) {
-        const [zernioRow] = await db
-          .select()
-          .from(integrationsTable)
-          .where(eq(integrationsTable.key, "zernio"));
-        const zernioCfg = zernioRow
-          ? (decryptConfig(zernioRow.config as Record<string, any>) as { apiKey?: string })
-          : {};
-
-        if (!zernioCfg.apiKey) {
+        const zernioApiKey = await getZernioApiKey();
+        if (!zernioApiKey) {
           res.status(502).json({ error: "Zernio API key not configured" });
           return;
         }
@@ -1012,63 +1041,16 @@ router.post(
           })
           .returning();
 
-        let sendOk = false;
-        let sendError: string | undefined;
-        let externalMessageId: string | undefined;
-
-        const zernioUrl = `https://zernio.com/api/v1/inbox/conversations/${encodeURIComponent(conv.externalThreadId)}/messages`;
-        const zernioHeaders: Record<string, string> = {
-          Authorization: `Bearer ${zernioCfg.apiKey}`,
-          "Content-Type": "application/json",
-        };
-
-        try {
-          // Send text message first (if any)
-          if (hasContent) {
-            const zResponse = await fetch(zernioUrl, {
-              method: "POST",
-              headers: zernioHeaders,
-              body: JSON.stringify({ accountId: zernioAcct.externalAccountId, message: content.trim() }),
-            });
-            if (zResponse.ok) {
-              const zData = await zResponse.json().catch(() => ({})) as any;
-              sendOk = true;
-              externalMessageId = zData?.messageId ? String(zData.messageId) : undefined;
-            } else {
-              const errBody = await zResponse.text().catch(() => "");
-              sendError = `Zernio send failed (${zResponse.status}): ${errBody.slice(0, 200)}`;
-            }
-          }
-          // Send each attachment as a separate Zernio message
-          if (hasAttachments && !sendError) {
-            for (const att of bodyAttachments!) {
-              const attBody: Record<string, any> = {
-                accountId: zernioAcct.externalAccountId,
-                attachmentUrl: att.url,
-                attachmentType: att.type ?? "file",
-              };
-              if (att.name) attBody.attachmentName = att.name;
-              const aResp = await fetch(zernioUrl, {
-                method: "POST",
-                headers: zernioHeaders,
-                body: JSON.stringify(attBody),
-              });
-              if (aResp.ok) {
-                sendOk = true;
-                if (!externalMessageId) {
-                  const aData = await aResp.json().catch(() => ({})) as any;
-                  externalMessageId = aData?.messageId ? String(aData.messageId) : undefined;
-                }
-              } else {
-                const errBody = await aResp.text().catch(() => "");
-                sendError = `Zernio attachment send failed (${aResp.status}): ${errBody.slice(0, 200)}`;
-                break;
-              }
-            }
-          }
-        } catch (err: any) {
-          sendError = `Zernio send error: ${err?.message || "Unknown"}`;
-        }
+        // Single source of truth for Zernio outbound — same helper the AI bot uses.
+        const outcome = await sendViaZernio({
+          externalThreadId: conv.externalThreadId,
+          externalAccountId: zernioAcct.externalAccountId!,
+          text: hasContent ? content : undefined,
+          attachments: hasAttachments ? bodyAttachments : undefined,
+        });
+        const sendOk = outcome.ok;
+        const sendError = outcome.error;
+        const externalMessageId = outcome.externalMessageId;
 
         const [msg] = await db
           .update(messagesTable)
@@ -1361,6 +1343,243 @@ router.post(
     }
 
     res.status(400).json({ error: `Channel '${conv.channel}' is not supported by this endpoint` });
+  },
+);
+
+// Retry a failed outbound message through the same send paths as the manual
+// composer (Zernio-hosted → Zernio API; otherwise direct channel senders).
+router.post(
+  "/inbox/messages/:id/retry",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const msgId = parseInt(String(req.params.id), 10);
+    if (!msgId) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const [msg] = await db.select().from(messagesTable).where(eq(messagesTable.id, msgId));
+    if (!msg) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (msg.direction !== "outbound" || msg.status !== "failed") {
+      res.status(409).json({ error: "only_failed_outbound_retryable" });
+      return;
+    }
+    const [conv] = await db
+      .select()
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, msg.conversationId));
+    if (!conv) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+
+    const meta = (msg.metadata ?? {}) as Record<string, any>;
+    const attachments = Array.isArray(meta.attachments) ? meta.attachments : undefined;
+    const text = msg.content && msg.content !== "[attachment]" ? msg.content : undefined;
+
+    let ok = false;
+    let error: string | undefined;
+    let externalMessageId: string | undefined;
+    let handled = false;
+
+    const zernioAcct = await resolveZernioAccount(conv.channelAccountId);
+    if (zernioAcct && conv.externalThreadId) {
+      handled = true;
+      const outcome = await sendViaZernio({
+        externalThreadId: conv.externalThreadId,
+        externalAccountId: zernioAcct.externalAccountId,
+        text,
+        attachments,
+      });
+      ok = outcome.ok;
+      error = outcome.error;
+      externalMessageId = outcome.externalMessageId;
+    } else if (conv.channel === "whatsapp") {
+      handled = true;
+      if (!isWithin24hWindow(conv.lastInboundAt)) {
+        res.status(409).json({ error: "outside_24h_window" });
+        return;
+      }
+      const [contact] = conv.externalContactId
+        ? await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId))
+        : [null];
+      if (!contact?.phoneE164) {
+        res.status(400).json({ error: "Contact has no E.164 phone" });
+        return;
+      }
+      const cfg: WhatsAppConfig =
+        (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
+      const result = await sendWhatsAppText({ config: cfg, toPhoneE164: contact.phoneE164, text: text || "" });
+      ok = result.ok;
+      error = result.error;
+      externalMessageId = result.externalMessageId;
+    } else if (conv.channel === "messenger" || conv.channel === "instagram") {
+      handled = true;
+      if (!isWithin24hWindow(conv.lastInboundAt)) {
+        res.status(409).json({ error: "outside_24h_window" });
+        return;
+      }
+      const [contact] = conv.externalContactId
+        ? await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId))
+        : [null];
+      const recipientId = contact?.externalId || conv.externalThreadId || "";
+      if (!recipientId) {
+        res.status(400).json({ error: "Conversation has no recipient id" });
+        return;
+      }
+      const metaCfg =
+        (await resolveOutboundConfig<MessengerConfig & InstagramConfig>(conv.channel, conv.channelAccountId)) || {};
+      const result =
+        conv.channel === "messenger"
+          ? await sendMessengerText({ config: metaCfg as MessengerConfig, recipientId, text: text || "" })
+          : await sendInstagramText({ config: metaCfg as InstagramConfig, recipientId, text: text || "" });
+      ok = result.ok;
+      error = result.error;
+      externalMessageId = result.externalMessageId;
+    }
+
+    if (!handled) {
+      res.status(400).json({ error: `Channel '${conv.channel}' does not support retry` });
+      return;
+    }
+
+    const [updated] = await db
+      .update(messagesTable)
+      .set({
+        status: ok ? "sent" : "failed",
+        externalMessageId: externalMessageId || msg.externalMessageId,
+        failedReason: ok ? null : error || "send_failed",
+        sentAt: ok ? new Date() : null,
+        metadata: { ...meta, retriedAt: new Date().toISOString(), ...(ok ? {} : { error }) },
+      })
+      .where(eq(messagesTable.id, msgId))
+      .returning();
+
+    if (ok) {
+      inboxBus.publish({
+        type: "message",
+        conversationId: conv.id,
+        channel: conv.channel,
+        assignedToId: conv.assignedToId ?? null,
+        unmatched: conv.unmatched,
+        direction: "outbound",
+      });
+    }
+    res.status(ok ? 200 : 502).json({ message: updated, error });
+  },
+);
+
+// ─── Bulk conversation management (archive / restore / permanent delete) ────
+const bulkIdsSchema = z.object({ ids: z.array(z.number().int().positive()).min(1).max(500) });
+
+/** Internal (user-DM) conversations require participant membership for non-admins. */
+async function filterBulkAccessibleIds(userId: number, isAdmin: boolean, ids: number[]): Promise<number[]> {
+  const rows = await db
+    .select({ id: conversationsTable.id, channel: conversationsTable.channel })
+    .from(conversationsTable)
+    .where(inArray(conversationsTable.id, ids));
+  const internalIds = rows.filter((r) => r.channel === "internal").map((r) => r.id);
+  let allowedInternal = new Set<number>(internalIds);
+  if (!isAdmin && internalIds.length > 0) {
+    const parts = await db
+      .select({ conversationId: conversationParticipantsTable.conversationId })
+      .from(conversationParticipantsTable)
+      .where(
+        and(
+          inArray(conversationParticipantsTable.conversationId, internalIds),
+          eq(conversationParticipantsTable.userId, userId),
+        ),
+      );
+    allowedInternal = new Set(parts.map((p) => p.conversationId));
+  }
+  return rows
+    .filter((r) => r.channel !== "internal" || allowedInternal.has(r.id))
+    .map((r) => r.id);
+}
+
+router.post(
+  "/inbox/conversations/bulk-archive",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const parsed = bulkIdsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "ids array required" });
+      return;
+    }
+    const isAdmin = (ADMIN_ROLES as readonly string[]).includes(req.user!.role);
+    const ids = await filterBulkAccessibleIds(req.user!.id, isAdmin, parsed.data.ids);
+    if (ids.length === 0) {
+      res.json({ archived: 0 });
+      return;
+    }
+    const updated = await db
+      .update(conversationsTable)
+      .set({ isArchived: true })
+      .where(inArray(conversationsTable.id, ids))
+      .returning({ id: conversationsTable.id });
+    res.json({ archived: updated.length });
+  },
+);
+
+router.post(
+  "/inbox/conversations/bulk-unarchive",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const parsed = bulkIdsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "ids array required" });
+      return;
+    }
+    const isAdmin = (ADMIN_ROLES as readonly string[]).includes(req.user!.role);
+    const ids = await filterBulkAccessibleIds(req.user!.id, isAdmin, parsed.data.ids);
+    if (ids.length === 0) {
+      res.json({ restored: 0 });
+      return;
+    }
+    const updated = await db
+      .update(conversationsTable)
+      .set({ isArchived: false })
+      .where(inArray(conversationsTable.id, ids))
+      .returning({ id: conversationsTable.id });
+    res.json({ restored: updated.length });
+  },
+);
+
+// Permanent delete — irreversible; the client shows a double confirmation.
+router.post(
+  "/inbox/conversations/bulk-delete",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const parsed = bulkIdsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "ids array required" });
+      return;
+    }
+    const isAdmin = (ADMIN_ROLES as readonly string[]).includes(req.user!.role);
+    const ids = await filterBulkAccessibleIds(req.user!.id, isAdmin, parsed.data.ids);
+    if (ids.length === 0) {
+      res.json({ deleted: 0 });
+      return;
+    }
+    const deleted = await db.transaction(async (tx) => {
+      await tx.delete(messagesTable).where(inArray(messagesTable.conversationId, ids));
+      await tx
+        .delete(conversationParticipantsTable)
+        .where(inArray(conversationParticipantsTable.conversationId, ids));
+      const rows = await tx
+        .delete(conversationsTable)
+        .where(inArray(conversationsTable.id, ids))
+        .returning({ id: conversationsTable.id });
+      return rows.length;
+    });
+    await logAudit(req.user!.id, "inbox_bulk_delete", "conversation", undefined, { ids, deleted }, req.ip);
+    res.json({ deleted });
   },
 );
 

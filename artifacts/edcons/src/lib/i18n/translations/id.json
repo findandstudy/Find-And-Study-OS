@@ -972,7 +972,8 @@
       "open": "Terbuka",
       "unanswered": "Belum Dibalas",
       "subscribed": "Berlangganan",
-      "starred": "Berbintang"
+      "starred": "Berbintang",
+      "archived": "Diarsipkan"
     },
     "channels": {
       "all": "Semua",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "Di luar jendela balasan 24 jam WhatsApp. Gunakan template.",
       "sendMediaFailed": "Gagal mengirim media"
+    },
+    "sort": {
+      "toggle": "Ubah urutan",
+      "newestFirst": "Terbaru dahulu",
+      "oldestFirst": "Terlama dahulu"
+    },
+    "tests": {
+      "toggleHint": "Tampilkan atau sembunyikan percakapan uji",
+      "shown": "Uji ditampilkan",
+      "hidden": "Uji disembunyikan"
+    },
+    "bulk": {
+      "select": "Pilih",
+      "cancel": "Batal",
+      "selectAll": "Pilih semua",
+      "clearAll": "Hapus pilihan",
+      "selectedCount": "{count} dipilih",
+      "archive": "Arsipkan",
+      "restore": "Pulihkan",
+      "delete": "Hapus",
+      "archivedToast": "{count} percakapan diarsipkan",
+      "restoredToast": "{count} percakapan dipulihkan",
+      "deletedToast": "{count} percakapan dihapus permanen",
+      "failed": "Aksi massal gagal",
+      "archiveConfirmTitle": "Arsipkan percakapan?",
+      "archiveConfirmBody": "{count} percakapan akan dipindahkan ke arsip. Anda dapat memulihkannya nanti.",
+      "restoreConfirmTitle": "Pulihkan percakapan?",
+      "restoreConfirmBody": "{count} percakapan akan dipulihkan ke kotak masuk.",
+      "deleteConfirmTitle": "Hapus percakapan?",
+      "deleteConfirmTitle2": "Hapus permanen?",
+      "deleteConfirmBody": "{count} percakapan beserta semua pesannya akan dihapus. Tindakan ini tidak dapat dibatalkan.",
+      "deleteConfirmBody2": "Apakah Anda benar-benar yakin? {count} percakapan akan dihapus permanen tanpa dapat dipulihkan.",
+      "deleteContinue": "Lanjutkan",
+      "deleteForever": "Hapus selamanya"
+    },
+    "chat": {
+      "loadOlder": "Muat pesan yang lebih lama",
+      "today": "Hari ini",
+      "yesterday": "Kemarin",
+      "newMessages": "{count} baru"
+    },
+    "retry": {
+      "resend": "Kirim ulang",
+      "success": "Pesan dikirim ulang",
+      "failed": "Gagal mengirim ulang"
+    },
+    "status": {
+      "failed": "Gagal",
+      "pending": "Mengirim…",
+      "sent": "Terkirim",
+      "delivered": "Tersampaikan",
+      "read": "Dibaca",
+      "simulated": "simulasi"
     }
   },
   "integrations": {

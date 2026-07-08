@@ -30,6 +30,7 @@ import {
   type EscalationTopic,
 } from "./botBrain";
 import { getAiAgentConfig, DEFAULT_BOT_MODEL } from "./aiAgentConfig";
+import { resolveZernioAccount, sendViaZernio } from "./zernioSend";
 
 // Re-export so existing consumers of EscalationTopic from this module keep working.
 export type { EscalationTopic };
@@ -129,6 +130,10 @@ export interface BotSendInput {
   // The conversation's connected account (multi-account-per-channel). When null
   // the legacy single-config integrations row is used (resolveOutboundConfig).
   channelAccountId?: number | null;
+  // Set when the conversation is Zernio-hosted: the reply MUST go through the
+  // Zernio API (same path as manual staff replies), never the direct Meta
+  // senders — those fail with "The account is not registered".
+  zernio?: { externalAccountId: string; externalThreadId: string } | null;
 }
 export interface BotSendResult {
   ok: boolean;
@@ -235,6 +240,15 @@ export async function runBotReplyTest(input: BotTestInput): Promise<BotTestResul
 // slotted in here without touching the engine logic.
 async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
   if (__botSendOverride) return __botSendOverride(input);
+  // Zernio-hosted conversations: unified send path shared with manual replies.
+  if (input.zernio) {
+    const z = await sendViaZernio({
+      externalThreadId: input.zernio.externalThreadId,
+      externalAccountId: input.zernio.externalAccountId,
+      text: input.text,
+    });
+    return { ok: z.ok, externalMessageId: z.externalMessageId, error: z.error };
+  }
   if (input.channel === "whatsapp") {
     const cfg: WhatsAppConfig =
       (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", input.channelAccountId)) || {};
@@ -466,12 +480,22 @@ export async function maybeAutoReply(opts: {
       ? contact?.externalId || conv.externalThreadId || null
       : toPhone;
 
+  // Zernio-hosted conversation? Then ALL bot sends must go through the Zernio
+  // API (same as manual staff replies) — the direct Meta senders reject these
+  // accounts ("The account is not registered"). Zernio addresses by thread id,
+  // so the phone / 24h-template gates below don't apply.
+  const zernioAcct = await resolveZernioAccount(conv.channelAccountId);
+  const zernioRoute =
+    zernioAcct && conv.externalThreadId
+      ? { externalAccountId: zernioAcct.externalAccountId, externalThreadId: conv.externalThreadId }
+      : null;
+
   // 24h service window: free-form replies are only allowed within 24h of the
   // last inbound message (Meta policy). For WhatsApp, re-engage with an
   // approved template (Task #61 message_templates) if one is configured;
   // otherwise defer to staff. For Messenger / Instagram there is no template
   // path in scope, so simply defer to staff.
-  if (conv.channel === "whatsapp" && !isWithin24hWindow(conv.lastInboundAt)) {
+  if (conv.channel === "whatsapp" && !zernioRoute && !isWithin24hWindow(conv.lastInboundAt)) {
     if (!toPhone) return { acted: false, reason: "no_phone" };
     const template = await resolveReengagementTemplate();
     if (!template) return { acted: false, reason: "outside_window" };
@@ -530,16 +554,16 @@ export async function maybeAutoReply(opts: {
       : { acted: false, reason: "send_failed" };
   }
 
-  if (conv.channel === "whatsapp" && !toPhone) {
+  if (conv.channel === "whatsapp" && !zernioRoute && !toPhone) {
     return { acted: false, reason: "no_phone" };
   }
 
   // Messenger / Instagram: no template re-engagement path in scope, so outside
   // the 24h window the bot stays silent and defers to staff.
-  if (isMetaChannel && !isWithin24hWindow(conv.lastInboundAt)) {
+  if (isMetaChannel && !zernioRoute && !isWithin24hWindow(conv.lastInboundAt)) {
     return { acted: false, reason: "outside_window" };
   }
-  if (isMetaChannel && !recipient) {
+  if (isMetaChannel && !zernioRoute && !recipient) {
     return { acted: false, reason: "no_phone" };
   }
 
@@ -569,6 +593,7 @@ export async function maybeAutoReply(opts: {
         recipient: recipient || "",
         text: handoffText,
         channelAccountId: conv.channelAccountId,
+        zernio: zernioRoute,
       });
       sendOk = handoffResult.ok;
       await db
@@ -661,6 +686,7 @@ export async function maybeAutoReply(opts: {
     recipient: recipient || "",
     text: replyText,
     channelAccountId: conv.channelAccountId,
+    zernio: zernioRoute,
   });
 
   await db

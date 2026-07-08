@@ -972,7 +972,8 @@
       "open": "खुले",
       "unanswered": "अनुत्तरित",
       "subscribed": "सब्स्क्राइब्ड",
-      "starred": "स्टार किए"
+      "starred": "स्टार किए",
+      "archived": "संग्रहीत"
     },
     "channels": {
       "all": "सभी",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "WhatsApp 24-घंटे की रिप्लाई विंडो के बाहर। टेम्पलेट उपयोग करें।",
       "sendMediaFailed": "मीडिया भेजने में विफल"
+    },
+    "sort": {
+      "toggle": "क्रम बदलें",
+      "newestFirst": "सबसे नए पहले",
+      "oldestFirst": "सबसे पुराने पहले"
+    },
+    "tests": {
+      "toggleHint": "परीक्षण वार्तालाप दिखाएँ या छिपाएँ",
+      "shown": "परीक्षण दिख रहे हैं",
+      "hidden": "परीक्षण छिपे हैं"
+    },
+    "bulk": {
+      "select": "चुनें",
+      "cancel": "रद्द करें",
+      "selectAll": "सभी चुनें",
+      "clearAll": "सभी हटाएँ",
+      "selectedCount": "{count} चयनित",
+      "archive": "संग्रहित करें",
+      "restore": "पुनर्स्थापित करें",
+      "delete": "हटाएँ",
+      "archivedToast": "{count} वार्तालाप संग्रहीत किए गए",
+      "restoredToast": "{count} वार्तालाप पुनर्स्थापित किए गए",
+      "deletedToast": "{count} वार्तालाप स्थायी रूप से हटाए गए",
+      "failed": "थोक कार्रवाई विफल रही",
+      "archiveConfirmTitle": "वार्तालाप संग्रहित करें?",
+      "archiveConfirmBody": "{count} वार्तालाप संग्रह में ले जाए जाएँगे। आप उन्हें बाद में पुनर्स्थापित कर सकते हैं।",
+      "restoreConfirmTitle": "वार्तालाप पुनर्स्थापित करें?",
+      "restoreConfirmBody": "{count} वार्तालाप इनबॉक्स में पुनर्स्थापित किए जाएँगे।",
+      "deleteConfirmTitle": "वार्तालाप हटाएँ?",
+      "deleteConfirmTitle2": "स्थायी रूप से हटाएँ?",
+      "deleteConfirmBody": "{count} वार्तालाप और उनके सभी संदेश हटा दिए जाएँगे। इसे पूर्ववत नहीं किया जा सकता।",
+      "deleteConfirmBody2": "क्या आप पूरी तरह निश्चित हैं? {count} वार्तालाप स्थायी रूप से हटा दिए जाएँगे और उन्हें पुनर्प्राप्त नहीं किया जा सकेगा।",
+      "deleteContinue": "जारी रखें",
+      "deleteForever": "हमेशा के लिए हटाएँ"
+    },
+    "chat": {
+      "loadOlder": "पुराने संदेश लोड करें",
+      "today": "आज",
+      "yesterday": "कल",
+      "newMessages": "{count} नए"
+    },
+    "retry": {
+      "resend": "पुनः भेजें",
+      "success": "संदेश पुनः भेजा गया",
+      "failed": "पुनः भेजना विफल रहा"
+    },
+    "status": {
+      "failed": "विफल",
+      "pending": "भेजा जा रहा है…",
+      "sent": "भेजा गया",
+      "delivered": "पहुँचा",
+      "read": "पढ़ा गया",
+      "simulated": "सिम्युलेटेड"
     }
   },
   "integrations": {

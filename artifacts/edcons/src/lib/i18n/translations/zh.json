@@ -972,7 +972,8 @@
       "open": "开放",
       "unanswered": "未回复",
       "subscribed": "已订阅",
-      "starred": "已收藏"
+      "starred": "已收藏",
+      "archived": "已归档"
     },
     "channels": {
       "all": "全部",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "超出 WhatsApp 24 小时回复窗口，请使用模板。",
       "sendMediaFailed": "发送媒体失败"
+    },
+    "sort": {
+      "toggle": "切换排序顺序",
+      "newestFirst": "最新优先",
+      "oldestFirst": "最早优先"
+    },
+    "tests": {
+      "toggleHint": "显示或隐藏测试会话",
+      "shown": "已显示测试",
+      "hidden": "已隐藏测试"
+    },
+    "bulk": {
+      "select": "选择",
+      "cancel": "取消",
+      "selectAll": "全选",
+      "clearAll": "取消全选",
+      "selectedCount": "已选择 {count} 项",
+      "archive": "归档",
+      "restore": "恢复",
+      "delete": "删除",
+      "archivedToast": "已归档 {count} 个会话",
+      "restoredToast": "已恢复 {count} 个会话",
+      "deletedToast": "已永久删除 {count} 个会话",
+      "failed": "批量操作失败",
+      "archiveConfirmTitle": "归档会话？",
+      "archiveConfirmBody": "{count} 个会话将移至归档。您可以稍后恢复它们。",
+      "restoreConfirmTitle": "恢复会话？",
+      "restoreConfirmBody": "{count} 个会话将恢复到收件箱。",
+      "deleteConfirmTitle": "删除会话？",
+      "deleteConfirmTitle2": "永久删除？",
+      "deleteConfirmBody": "{count} 个会话及其所有消息将被删除。此操作无法撤消。",
+      "deleteConfirmBody2": "您确定吗？{count} 个会话将被永久删除且无法恢复。",
+      "deleteContinue": "继续",
+      "deleteForever": "永久删除"
+    },
+    "chat": {
+      "loadOlder": "加载更早的消息",
+      "today": "今天",
+      "yesterday": "昨天",
+      "newMessages": "{count} 条新消息"
+    },
+    "retry": {
+      "resend": "重新发送",
+      "success": "消息已重新发送",
+      "failed": "重新发送失败"
+    },
+    "status": {
+      "failed": "失败",
+      "pending": "发送中…",
+      "sent": "已发送",
+      "delivered": "已送达",
+      "read": "已读",
+      "simulated": "模拟"
     }
   },
   "integrations": {

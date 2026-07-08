@@ -972,7 +972,8 @@
       "open": "باز",
       "unanswered": "بی‌پاسخ",
       "subscribed": "اشتراک",
-      "starred": "ستاره‌دار"
+      "starred": "ستاره‌دار",
+      "archived": "بایگانی"
     },
     "channels": {
       "all": "همه",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "خارج از پنجره 24 ساعته پاسخ واتساپ. از قالب استفاده کنید.",
       "sendMediaFailed": "ارسال رسانه ناموفق بود"
+    },
+    "sort": {
+      "toggle": "تغییر ترتیب مرتب‌سازی",
+      "newestFirst": "جدیدترین‌ها اول",
+      "oldestFirst": "قدیمی‌ترین‌ها اول"
+    },
+    "tests": {
+      "toggleHint": "نمایش یا پنهان‌سازی گفتگوهای آزمایشی",
+      "shown": "آزمایش‌ها نمایان",
+      "hidden": "آزمایش‌ها پنهان"
+    },
+    "bulk": {
+      "select": "انتخاب",
+      "cancel": "لغو",
+      "selectAll": "انتخاب همه",
+      "clearAll": "لغو انتخاب همه",
+      "selectedCount": "{count} انتخاب شد",
+      "archive": "بایگانی",
+      "restore": "بازیابی",
+      "delete": "حذف",
+      "archivedToast": "{count} گفتگو بایگانی شد",
+      "restoredToast": "{count} گفتگو بازیابی شد",
+      "deletedToast": "{count} گفتگو برای همیشه حذف شد",
+      "failed": "اقدام گروهی ناموفق بود",
+      "archiveConfirmTitle": "گفتگوها بایگانی شوند؟",
+      "archiveConfirmBody": "{count} گفتگو به بایگانی منتقل می‌شود. بعداً می‌توانید آنها را بازیابی کنید.",
+      "restoreConfirmTitle": "گفتگوها بازیابی شوند؟",
+      "restoreConfirmBody": "{count} گفتگو به صندوق ورودی بازگردانده می‌شود.",
+      "deleteConfirmTitle": "گفتگوها حذف شوند؟",
+      "deleteConfirmTitle2": "حذف دائمی؟",
+      "deleteConfirmBody": "{count} گفتگو و همه پیام‌های آنها حذف خواهد شد. این عمل قابل بازگشت نیست.",
+      "deleteConfirmBody2": "کاملاً مطمئن هستید؟ {count} گفتگو برای همیشه حذف می‌شود و قابل بازیابی نخواهد بود.",
+      "deleteContinue": "ادامه",
+      "deleteForever": "حذف برای همیشه"
+    },
+    "chat": {
+      "loadOlder": "بارگیری پیام‌های قدیمی‌تر",
+      "today": "امروز",
+      "yesterday": "دیروز",
+      "newMessages": "{count} جدید"
+    },
+    "retry": {
+      "resend": "ارسال مجدد",
+      "success": "پیام دوباره ارسال شد",
+      "failed": "ارسال مجدد ناموفق بود"
+    },
+    "status": {
+      "failed": "ناموفق",
+      "pending": "در حال ارسال…",
+      "sent": "ارسال شد",
+      "delivered": "تحویل شد",
+      "read": "خوانده شد",
+      "simulated": "شبیه‌سازی"
     }
   },
   "integrations": {

@@ -972,7 +972,8 @@
       "open": "Открытые",
       "unanswered": "Без ответа",
       "subscribed": "Подписки",
-      "starred": "Избранные"
+      "starred": "Избранные",
+      "archived": "Архив"
     },
     "channels": {
       "all": "Все",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "За пределами 24-часового окна ответа WhatsApp. Используйте шаблон.",
       "sendMediaFailed": "Не удалось отправить медиа"
+    },
+    "sort": {
+      "toggle": "Изменить порядок сортировки",
+      "newestFirst": "Сначала новые",
+      "oldestFirst": "Сначала старые"
+    },
+    "tests": {
+      "toggleHint": "Показать или скрыть тестовые переписки",
+      "shown": "Тесты показаны",
+      "hidden": "Тесты скрыты"
+    },
+    "bulk": {
+      "select": "Выбрать",
+      "cancel": "Отмена",
+      "selectAll": "Выбрать все",
+      "clearAll": "Снять выбор",
+      "selectedCount": "Выбрано: {count}",
+      "archive": "В архив",
+      "restore": "Восстановить",
+      "delete": "Удалить",
+      "archivedToast": "Переписок в архиве: {count}",
+      "restoredToast": "Переписок восстановлено: {count}",
+      "deletedToast": "Переписок удалено навсегда: {count}",
+      "failed": "Массовое действие не выполнено",
+      "archiveConfirmTitle": "Архивировать переписки?",
+      "archiveConfirmBody": "{count} переписок будет перемещено в архив. Позже их можно восстановить.",
+      "restoreConfirmTitle": "Восстановить переписки?",
+      "restoreConfirmBody": "{count} переписок будет возвращено во входящие.",
+      "deleteConfirmTitle": "Удалить переписки?",
+      "deleteConfirmTitle2": "Удалить навсегда?",
+      "deleteConfirmBody": "{count} переписок и все их сообщения будут удалены. Это действие необратимо.",
+      "deleteConfirmBody2": "Вы абсолютно уверены? {count} переписок будет удалено навсегда без возможности восстановления.",
+      "deleteContinue": "Продолжить",
+      "deleteForever": "Удалить навсегда"
+    },
+    "chat": {
+      "loadOlder": "Загрузить более старые сообщения",
+      "today": "Сегодня",
+      "yesterday": "Вчера",
+      "newMessages": "{count} новых"
+    },
+    "retry": {
+      "resend": "Отправить снова",
+      "success": "Сообщение отправлено повторно",
+      "failed": "Повторная отправка не удалась"
+    },
+    "status": {
+      "failed": "Ошибка",
+      "pending": "Отправка…",
+      "sent": "Отправлено",
+      "delivered": "Доставлено",
+      "read": "Прочитано",
+      "simulated": "симуляция"
     }
   },
   "integrations": {

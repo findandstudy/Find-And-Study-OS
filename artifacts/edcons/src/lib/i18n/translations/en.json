@@ -972,7 +972,8 @@
       "open": "Open",
       "unanswered": "Unanswered",
       "subscribed": "Subscribed",
-      "starred": "Starred"
+      "starred": "Starred",
+      "archived": "Archived"
     },
     "channels": {
       "all": "All",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "Outside the WhatsApp 24-hour reply window. Use a template instead.",
       "sendMediaFailed": "Failed to send media"
+    },
+    "sort": {
+      "toggle": "Toggle sort order",
+      "newestFirst": "Newest first",
+      "oldestFirst": "Oldest first"
+    },
+    "tests": {
+      "toggleHint": "Show or hide test conversations",
+      "shown": "Tests shown",
+      "hidden": "Tests hidden"
+    },
+    "bulk": {
+      "select": "Select",
+      "cancel": "Cancel",
+      "selectAll": "Select all",
+      "clearAll": "Clear all",
+      "selectedCount": "{count} selected",
+      "archive": "Archive",
+      "restore": "Restore",
+      "delete": "Delete",
+      "archivedToast": "{count} conversation(s) archived",
+      "restoredToast": "{count} conversation(s) restored",
+      "deletedToast": "{count} conversation(s) permanently deleted",
+      "failed": "Bulk action failed",
+      "archiveConfirmTitle": "Archive conversations?",
+      "archiveConfirmBody": "{count} conversation(s) will be moved to the archive. You can restore them later.",
+      "restoreConfirmTitle": "Restore conversations?",
+      "restoreConfirmBody": "{count} conversation(s) will be restored to the inbox.",
+      "deleteConfirmTitle": "Delete conversations?",
+      "deleteConfirmTitle2": "Permanently delete?",
+      "deleteConfirmBody": "{count} conversation(s) and all their messages will be deleted. This cannot be undone.",
+      "deleteConfirmBody2": "Are you absolutely sure? {count} conversation(s) will be permanently deleted with no way to recover them.",
+      "deleteContinue": "Continue",
+      "deleteForever": "Delete forever"
+    },
+    "chat": {
+      "loadOlder": "Load older messages",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "newMessages": "{count} new"
+    },
+    "retry": {
+      "resend": "Resend",
+      "success": "Message resent",
+      "failed": "Resend failed"
+    },
+    "status": {
+      "failed": "Failed",
+      "pending": "Sending…",
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read",
+      "simulated": "simulated"
     }
   },
   "integrations": {

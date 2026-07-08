@@ -972,7 +972,8 @@
       "open": "مفتوح",
       "unanswered": "بلا رد",
       "subscribed": "مشترك",
-      "starred": "مميز بنجمة"
+      "starred": "مميز بنجمة",
+      "archived": "المؤرشفة"
     },
     "channels": {
       "all": "الكل",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "خارج نافذة الرد البالغة 24 ساعة على واتساب. استخدم نموذجاً.",
       "sendMediaFailed": "فشل إرسال الوسائط"
+    },
+    "sort": {
+      "toggle": "تبديل ترتيب الفرز",
+      "newestFirst": "الأحدث أولاً",
+      "oldestFirst": "الأقدم أولاً"
+    },
+    "tests": {
+      "toggleHint": "إظهار أو إخفاء محادثات الاختبار",
+      "shown": "الاختبارات ظاهرة",
+      "hidden": "الاختبارات مخفية"
+    },
+    "bulk": {
+      "select": "تحديد",
+      "cancel": "إلغاء",
+      "selectAll": "تحديد الكل",
+      "clearAll": "إلغاء تحديد الكل",
+      "selectedCount": "تم تحديد {count}",
+      "archive": "أرشفة",
+      "restore": "استعادة",
+      "delete": "حذف",
+      "archivedToast": "تمت أرشفة {count} محادثة",
+      "restoredToast": "تمت استعادة {count} محادثة",
+      "deletedToast": "تم حذف {count} محادثة نهائيًا",
+      "failed": "فشل الإجراء الجماعي",
+      "archiveConfirmTitle": "أرشفة المحادثات؟",
+      "archiveConfirmBody": "سيتم نقل {count} محادثة إلى الأرشيف. يمكنك استعادتها لاحقًا.",
+      "restoreConfirmTitle": "استعادة المحادثات؟",
+      "restoreConfirmBody": "سيتم استعادة {count} محادثة إلى البريد الوارد.",
+      "deleteConfirmTitle": "حذف المحادثات؟",
+      "deleteConfirmTitle2": "حذف نهائي؟",
+      "deleteConfirmBody": "سيتم حذف {count} محادثة وجميع رسائلها. لا يمكن التراجع عن هذا الإجراء.",
+      "deleteConfirmBody2": "هل أنت متأكد تمامًا؟ سيتم حذف {count} محادثة نهائيًا دون إمكانية استردادها.",
+      "deleteContinue": "متابعة",
+      "deleteForever": "حذف نهائي"
+    },
+    "chat": {
+      "loadOlder": "تحميل الرسائل الأقدم",
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "newMessages": "{count} جديد"
+    },
+    "retry": {
+      "resend": "إعادة الإرسال",
+      "success": "تمت إعادة إرسال الرسالة",
+      "failed": "فشلت إعادة الإرسال"
+    },
+    "status": {
+      "failed": "فشل",
+      "pending": "جارٍ الإرسال…",
+      "sent": "تم الإرسال",
+      "delivered": "تم التسليم",
+      "read": "مقروءة",
+      "simulated": "محاكاة"
     }
   },
   "integrations": {

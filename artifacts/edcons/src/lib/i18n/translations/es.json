@@ -972,7 +972,8 @@
       "open": "Abierto",
       "unanswered": "Sin respuesta",
       "subscribed": "Suscrito",
-      "starred": "Destacado"
+      "starred": "Destacado",
+      "archived": "Archivadas"
     },
     "channels": {
       "all": "Todos",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "Fuera de la ventana de respuesta de 24h de WhatsApp. Usa una plantilla.",
       "sendMediaFailed": "Error al enviar el archivo multimedia"
+    },
+    "sort": {
+      "toggle": "Cambiar orden",
+      "newestFirst": "Más recientes primero",
+      "oldestFirst": "Más antiguas primero"
+    },
+    "tests": {
+      "toggleHint": "Mostrar u ocultar conversaciones de prueba",
+      "shown": "Pruebas visibles",
+      "hidden": "Pruebas ocultas"
+    },
+    "bulk": {
+      "select": "Seleccionar",
+      "cancel": "Cancelar",
+      "selectAll": "Seleccionar todo",
+      "clearAll": "Deseleccionar todo",
+      "selectedCount": "{count} seleccionada(s)",
+      "archive": "Archivar",
+      "restore": "Restaurar",
+      "delete": "Eliminar",
+      "archivedToast": "{count} conversación(es) archivada(s)",
+      "restoredToast": "{count} conversación(es) restaurada(s)",
+      "deletedToast": "{count} conversación(es) eliminada(s) permanentemente",
+      "failed": "La acción masiva falló",
+      "archiveConfirmTitle": "¿Archivar conversaciones?",
+      "archiveConfirmBody": "{count} conversación(es) se moverán al archivo. Puede restaurarlas más tarde.",
+      "restoreConfirmTitle": "¿Restaurar conversaciones?",
+      "restoreConfirmBody": "{count} conversación(es) se restaurarán a la bandeja de entrada.",
+      "deleteConfirmTitle": "¿Eliminar conversaciones?",
+      "deleteConfirmTitle2": "¿Eliminar permanentemente?",
+      "deleteConfirmBody": "{count} conversación(es) y todos sus mensajes serán eliminados. Esto no se puede deshacer.",
+      "deleteConfirmBody2": "¿Está completamente seguro? {count} conversación(es) se eliminarán permanentemente sin posibilidad de recuperación.",
+      "deleteContinue": "Continuar",
+      "deleteForever": "Eliminar para siempre"
+    },
+    "chat": {
+      "loadOlder": "Cargar mensajes anteriores",
+      "today": "Hoy",
+      "yesterday": "Ayer",
+      "newMessages": "{count} nuevo(s)"
+    },
+    "retry": {
+      "resend": "Reenviar",
+      "success": "Mensaje reenviado",
+      "failed": "Error al reenviar"
+    },
+    "status": {
+      "failed": "Fallido",
+      "pending": "Enviando…",
+      "sent": "Enviado",
+      "delivered": "Entregado",
+      "read": "Leído",
+      "simulated": "simulado"
     }
   },
   "integrations": {

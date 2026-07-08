@@ -972,7 +972,8 @@
       "open": "Açık",
       "unanswered": "Cevaplanmamış",
       "subscribed": "Abone",
-      "starred": "Yıldızlı"
+      "starred": "Yıldızlı",
+      "archived": "Arşiv"
     },
     "channels": {
       "all": "Tümü",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "WhatsApp 24 saatlik cevap penceresi dışında. Lütfen şablon kullanın.",
       "sendMediaFailed": "Medya gönderilemedi"
+    },
+    "sort": {
+      "toggle": "Sıralamayı değiştir",
+      "newestFirst": "Önce en yeni",
+      "oldestFirst": "Önce en eski"
+    },
+    "tests": {
+      "toggleHint": "Test konuşmalarını göster veya gizle",
+      "shown": "Testler görünür",
+      "hidden": "Testler gizli"
+    },
+    "bulk": {
+      "select": "Seç",
+      "cancel": "İptal",
+      "selectAll": "Tümünü seç",
+      "clearAll": "Tümünü kaldır",
+      "selectedCount": "{count} seçildi",
+      "archive": "Arşivle",
+      "restore": "Geri yükle",
+      "delete": "Sil",
+      "archivedToast": "{count} konuşma arşivlendi",
+      "restoredToast": "{count} konuşma geri yüklendi",
+      "deletedToast": "{count} konuşma kalıcı olarak silindi",
+      "failed": "Toplu işlem başarısız oldu",
+      "archiveConfirmTitle": "Konuşmalar arşivlensin mi?",
+      "archiveConfirmBody": "{count} konuşma arşive taşınacak. Daha sonra geri yükleyebilirsiniz.",
+      "restoreConfirmTitle": "Konuşmalar geri yüklensin mi?",
+      "restoreConfirmBody": "{count} konuşma gelen kutusuna geri yüklenecek.",
+      "deleteConfirmTitle": "Konuşmalar silinsin mi?",
+      "deleteConfirmTitle2": "Kalıcı olarak silinsin mi?",
+      "deleteConfirmBody": "{count} konuşma ve tüm mesajları silinecek. Bu işlem geri alınamaz.",
+      "deleteConfirmBody2": "Kesinlikle emin misiniz? {count} konuşma kalıcı olarak silinecek ve kurtarılamayacak.",
+      "deleteContinue": "Devam et",
+      "deleteForever": "Kalıcı olarak sil"
+    },
+    "chat": {
+      "loadOlder": "Daha eski mesajları yükle",
+      "today": "Bugün",
+      "yesterday": "Dün",
+      "newMessages": "{count} yeni"
+    },
+    "retry": {
+      "resend": "Yeniden gönder",
+      "success": "Mesaj yeniden gönderildi",
+      "failed": "Yeniden gönderme başarısız"
+    },
+    "status": {
+      "failed": "Başarısız",
+      "pending": "Gönderiliyor…",
+      "sent": "Gönderildi",
+      "delivered": "İletildi",
+      "read": "Okundu",
+      "simulated": "simülasyon"
     }
   },
   "integrations": {

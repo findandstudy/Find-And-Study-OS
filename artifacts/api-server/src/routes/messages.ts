@@ -68,6 +68,9 @@ async function getVisibleUserIdsForStaff(staffUserId: number): Promise<number[]>
 router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const { search } = req.query as Record<string, string>;
+  const order = String(req.query.order || "desc") === "asc" ? "asc" : "desc";
+  const showTests = String(req.query.showTests || "") === "true";
+  const archived = String(req.query.archived || "") === "true";
 
   const myConvIds = db
     .select({ conversationId: conversationParticipantsTable.conversationId })
@@ -90,11 +93,24 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
     .where(
       and(
         inArray(conversationsTable.id, myConvIds),
-        eq(conversationsTable.isArchived, false),
-        search ? ilike(conversationsTable.title, `%${search}%`) : undefined
+        eq(conversationsTable.isArchived, archived),
+        search ? ilike(conversationsTable.title, `%${search}%`) : undefined,
+        // Hide test/junk conversations by default (quick-contact WhatsApp
+        // stubs stuck in 'queued' and e2e-suite artifacts).
+        showTests
+          ? undefined
+          : sql`NOT (
+              COALESCE(${conversationsTable.title}, '') ILIKE 'Playwright Inbox%'
+              OR COALESCE(${conversationsTable.title}, '') ILIKE 'automated e2e webhook%'
+              OR (COALESCE(${conversationsTable.title}, '') ILIKE 'WhatsApp to %' AND ${conversationsTable.status} = 'queued')
+            )`
       )
     )
-    .orderBy(desc(conversationsTable.lastMessageAt))
+    .orderBy(
+      order === "asc"
+        ? asc(conversationsTable.lastMessageAt)
+        : desc(conversationsTable.lastMessageAt)
+    )
     .limit(50)
     .$dynamic();
 

@@ -972,7 +972,8 @@
       "open": "Ouvert",
       "unanswered": "Sans réponse",
       "subscribed": "Abonné",
-      "starred": "Suivi"
+      "starred": "Suivi",
+      "archived": "Archivées"
     },
     "channels": {
       "all": "Tous",
@@ -1022,6 +1023,59 @@
     "error": {
       "window24h": "Hors de la fenêtre de réponse WhatsApp de 24h. Utilisez un modèle.",
       "sendMediaFailed": "Échec de l'envoi du média"
+    },
+    "sort": {
+      "toggle": "Changer l'ordre de tri",
+      "newestFirst": "Plus récentes d'abord",
+      "oldestFirst": "Plus anciennes d'abord"
+    },
+    "tests": {
+      "toggleHint": "Afficher ou masquer les conversations de test",
+      "shown": "Tests affichés",
+      "hidden": "Tests masqués"
+    },
+    "bulk": {
+      "select": "Sélectionner",
+      "cancel": "Annuler",
+      "selectAll": "Tout sélectionner",
+      "clearAll": "Tout désélectionner",
+      "selectedCount": "{count} sélectionnée(s)",
+      "archive": "Archiver",
+      "restore": "Restaurer",
+      "delete": "Supprimer",
+      "archivedToast": "{count} conversation(s) archivée(s)",
+      "restoredToast": "{count} conversation(s) restaurée(s)",
+      "deletedToast": "{count} conversation(s) supprimée(s) définitivement",
+      "failed": "Échec de l'action groupée",
+      "archiveConfirmTitle": "Archiver les conversations ?",
+      "archiveConfirmBody": "{count} conversation(s) seront déplacées vers les archives. Vous pourrez les restaurer plus tard.",
+      "restoreConfirmTitle": "Restaurer les conversations ?",
+      "restoreConfirmBody": "{count} conversation(s) seront restaurées dans la boîte de réception.",
+      "deleteConfirmTitle": "Supprimer les conversations ?",
+      "deleteConfirmTitle2": "Supprimer définitivement ?",
+      "deleteConfirmBody": "{count} conversation(s) et tous leurs messages seront supprimés. Cette action est irréversible.",
+      "deleteConfirmBody2": "Êtes-vous absolument sûr ? {count} conversation(s) seront supprimées définitivement sans possibilité de récupération.",
+      "deleteContinue": "Continuer",
+      "deleteForever": "Supprimer définitivement"
+    },
+    "chat": {
+      "loadOlder": "Charger les messages plus anciens",
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
+      "newMessages": "{count} nouveau(x)"
+    },
+    "retry": {
+      "resend": "Renvoyer",
+      "success": "Message renvoyé",
+      "failed": "Échec du renvoi"
+    },
+    "status": {
+      "failed": "Échec",
+      "pending": "Envoi…",
+      "sent": "Envoyé",
+      "delivered": "Distribué",
+      "read": "Lu",
+      "simulated": "simulé"
     }
   },
   "integrations": {
