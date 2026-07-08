@@ -4,7 +4,8 @@ import { salesforceAdapters }      from "./universities/salesforce/adapter.js";
 import { sitAdapter }              from "./universities/sit/adapter.js";
 import { unitedAdapter }           from "./universities/united/adapter.js";
 import { okanAdapter }             from "./universities/okan/adapter.js";
-import { emuAdapter } from "./universities/emu/adapter.js";
+import { emuAdapter }              from "./universities/emu/adapter.js";
+import { altinbasAdapter }         from "./universities/altinbas/adapter.js";
 import { createDeclarativeAdapter } from "./declarativeAdapter.js";
 import { declarativeConfigs }       from "./declarativeConfigs.js";
 
@@ -26,6 +27,7 @@ export const adapters: UniversityAdapter[] = [
   unitedAdapter,
   okanAdapter,
   emuAdapter,
+  altinbasAdapter,
   ..._declarativeAdapters,
 ];
 
@@ -52,7 +54,7 @@ export function allAdapterKeys(): string[] {
 // Adapter family classification
 // ---------------------------------------------------------------------------
 
-type AdapterFamily = "metronic" | "salesforce" | "sit" | "united" | "okan" | "emu" | "declarative";
+type AdapterFamily = "metronic" | "salesforce" | "sit" | "united" | "okan" | "emu" | "altinbas" | "declarative";
 
 function resolveFamily(adapterKey: string): AdapterFamily {
   if (adapterKey === topkapiAdapter.key) return "metronic";
@@ -61,6 +63,7 @@ function resolveFamily(adapterKey: string): AdapterFamily {
   if (adapterKey === unitedAdapter.key) return "united";
   if (adapterKey === okanAdapter.key) return "okan";
   if (adapterKey === emuAdapter.key) return "emu";
+  if (adapterKey === altinbasAdapter.key) return "altinbas";
   return "declarative";
 }
 
@@ -78,6 +81,7 @@ const EXPERIMENTAL_FAMILIES: ReadonlySet<AdapterFamily> = new Set<AdapterFamily>
   "sit",
   "united",
   "emu",
+  "altinbas",
 ]);
 
 /** True when the given adapter key belongs to an experimental (non-auto) family. */

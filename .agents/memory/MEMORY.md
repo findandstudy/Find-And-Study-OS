@@ -133,3 +133,4 @@
 - [Unmatched inbox notification rule](inbox-unmatched-notification-rule.md) — event renamed to inbox.message_unmatched, email OFF by default; legacy inbox.unmatched row kept inert (deactivated), never dispatched again.
 - [Local storage public-objects mismatch](local-storage-public-objects-mismatch.md) — local driver has no "public/" subfolder; outbound senders must resolve keys via shared searchPublicObject, not hand-rolled URL parsing.
 - [Topkapi GPA scale + parent-name guard](topkapi-gpa-parent-name.md) — topkapiGpaTo100 converts normalizeGpaRange output to 0-100; fatherName/motherName use "-" fallback (not "") in both profile builders.
+- [Altınbaş adapter (Faz 1)](altinbas-adapter-faz1.md) — SF Experience Cloud + Screen Flow; level guard Master/PhD; self-capture after Step 1; Faz 2 = program select from dry-run logs.
