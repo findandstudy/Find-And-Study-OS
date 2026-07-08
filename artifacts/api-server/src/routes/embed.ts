@@ -3268,6 +3268,9 @@ var savedFormData={};
 // duplicating) the existing "new" lead and can flip it to "converted".
 var leadId=null;
 var leadCreating=false;
+// True when the early basics-only lead fired without a phone number; the
+// next fully-valid Continue re-fires once so the deduped row gains the phone.
+var leadPhonePending=false;
 // Optional override for where handleAnalyze() should land after the AI
 // extract finishes. Set inside .then() (e.g. expired-passport branch)
 // before returning so the trailing .finally() honors the chosen step
@@ -3447,6 +3450,45 @@ function snapshotForm(scope){
   sanitizeSavedFormData();
 }
 
+// Build the Step-1 early-lead payload from savedFormData plus page URL and
+// UTM attribution. Shared by the full-form path and the basics-only
+// best-effort path below.
+function ewBuildLeadPayload(){
+  var p={
+    firstName:savedFormData.firstName,
+    lastName:savedFormData.lastName,
+    email:savedFormData.email,
+    phone:savedFormData.phone||null,
+    countryCode:savedFormData.countryCode||null,
+    programName:formProgram?formProgram.name:null,
+    universityName:formProgram?formProgram.universityName:null
+  };
+  // Capture page URL + UTMs so the lead row carries source attribution.
+  try{p.sourcePageUrl=window.parent.location.href}catch(_){p.sourcePageUrl=window.location.href}
+  try{
+    var search=window.location.search;
+    try{search=window.parent.location.search}catch(_){}
+    var params=new URLSearchParams(search);
+    var utmMap={utm_source:'utmSource',utm_medium:'utmMedium',utm_campaign:'utmCampaign',utm_term:'utmTerm',utm_content:'utmContent'};
+    Object.keys(utmMap).forEach(function(k){var v=params.get(k);if(v)p[utmMap[k]]=v});
+  }catch(_){}
+  return p;
+}
+// Fire-and-forget early lead capture. Never blocks or navigates; the
+// backend dedups by email+source, so re-fires refresh the same row.
+function ewFireEarlyLead(){
+  leadCreating=true;
+  fetch(addToken(API+'/lead'),{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(ewBuildLeadPayload())
+  }).then(function(r){
+    return r.json();
+  }).then(function(d){
+    leadCreating=false;
+    if(d&&d.leadId)leadId=d.leadId;
+  }).catch(function(){leadCreating=false});
+}
 // Capture the personal-info form values into savedFormData and advance to
 // the documents step. Validates the small set of required basics. Used by
 // the "Continue" button on step 1 in both the modal and the inline view.
@@ -3457,6 +3499,15 @@ function handleNextPersonal(scope){
   }
   sanitizeSavedFormData();
   if(!savedFormData.firstName||!savedFormData.lastName||!savedFormData.email||!savedFormData.phone||!savedFormData.countryCode){
+    // Best-effort early lead: name+email basics are enough for the CRM
+    // row, so capture the lead even though the missing phone/country
+    // code still blocks navigation to the next step. Skipped for
+    // lead_form widgets — there the Step-1 form IS the whole submission
+    // and marking leadId now would drop the phone entirely.
+    if(MODE!=='lead_form'&&savedFormData.firstName&&savedFormData.lastName&&savedFormData.email&&!ewFirstNonLatinName()&&!leadId&&!leadCreating){
+      leadPhonePending=true;
+      ewFireEarlyLead();
+    }
     alert('Please fill in all required fields, including the phone country code.');
     return;
   }
@@ -3468,6 +3519,13 @@ function handleNextPersonal(scope){
   // came back, edited, clicked Next again) skip the create call and just
   // advance — the final /apply will update that same row.
   if(leadId||leadCreating){
+    // If the early basics-only capture ran without a phone, re-fire once
+    // now that the phone is filled — the backend dedups by email+source
+    // and refreshes the same row, so this adds the phone, not a new lead.
+    if(leadPhonePending&&!leadCreating&&savedFormData.phone&&savedFormData.countryCode){
+      leadPhonePending=false;
+      ewFireEarlyLead();
+    }
     if(MODE==='lead_form'){
       formSubmitted=true;formLoading=false;
       if(formOpen)showModal();else render(false);
@@ -3479,28 +3537,11 @@ function handleNextPersonal(scope){
   }
   leadCreating=true;
   if(MODE==='lead_form'){formLoading=true;if(formOpen)showModal();else render(false);}
-  var leadPayload={
-    firstName:savedFormData.firstName,
-    lastName:savedFormData.lastName,
-    email:savedFormData.email,
-    phone:savedFormData.phone,
-    countryCode:savedFormData.countryCode,
-    programName:formProgram?formProgram.name:null,
-    universityName:formProgram?formProgram.universityName:null
-  };
-  // Capture page URL + UTMs so the lead row carries source attribution.
-  try{leadPayload.sourcePageUrl=window.parent.location.href}catch(_){leadPayload.sourcePageUrl=window.location.href}
-  try{
-    var search=window.location.search;
-    try{search=window.parent.location.search}catch(_){}
-    var params=new URLSearchParams(search);
-    var utmMap={utm_source:'utmSource',utm_medium:'utmMedium',utm_campaign:'utmCampaign',utm_term:'utmTerm',utm_content:'utmContent'};
-    Object.keys(utmMap).forEach(function(k){var v=params.get(k);if(v)leadPayload[utmMap[k]]=v});
-  }catch(_){}
+  leadPhonePending=false;
   fetch(addToken(API+'/lead'),{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(leadPayload)
+    body:JSON.stringify(ewBuildLeadPayload())
   }).then(function(r){
     return r.json().then(function(d){return {ok:r.ok,data:d}});
   }).then(function(res){
