@@ -136,7 +136,11 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
       if (resp.ok) {
         let data: any = {};
         try { data = JSON.parse(bodyText); } catch { /* non-JSON body */ }
-        const messageId = data?.messageId ? String(data.messageId) : undefined;
+        const messageId = data?.data?.messageId
+          ? String(data.data.messageId)
+          : data?.messageId
+            ? String(data.messageId)
+            : undefined;
         if (messageId) {
           ok = true;
           externalMessageId = messageId;
@@ -351,7 +355,11 @@ async function sendZernioAttachment(
 
   let sendData: any = {};
   try { sendData = JSON.parse(sendBodyText); } catch { /* non-JSON */ }
-  const messageId = sendData?.messageId ? String(sendData.messageId) : undefined;
+  const messageId = sendData?.data?.messageId
+    ? String(sendData.data.messageId)
+    : sendData?.messageId
+      ? String(sendData.messageId)
+      : undefined;
   if (messageId) {
     return { ok: true, externalMessageId: messageId };
   }
