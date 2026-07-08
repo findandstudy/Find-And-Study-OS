@@ -77,12 +77,27 @@ export async function getZernioApiKey(): Promise<string | null> {
   return cfg.apiKey || null;
 }
 
+/** Never log the raw API key — only enough to correlate log lines by eye. */
+function maskApiKey(key: string): string {
+  if (key.length <= 8) return "****";
+  return `${key.slice(0, 4)}...${key.slice(-4)}`;
+}
+
 /**
  * Send a text and/or attachments to a Zernio conversation.
  * Text goes first; each attachment is a separate POST (Zernio API shape).
  * `ok` mirrors "anything was delivered"; `error` carries the first failure so
  * a partial send is reported as sent-with-error (same semantics the manual
  * inbox route always had).
+ *
+ * STRICT CONTRACT (do not weaken): a send is only ever considered successful
+ * when Zernio replies 2xx AND the response body contains a `messageId`. A 2xx
+ * with no `messageId` is treated as a failure — Zernio has historically
+ * returned 2xx for payloads it silently dropped (e.g. unreachable
+ * attachmentUrl), which previously caused messages to be marked "sent" while
+ * nothing was actually delivered. Every request/response is logged in full
+ * (API key masked) so a persistent contract mismatch is diagnosable from logs
+ * alone.
  */
 export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSendOutcome> {
   if (__zernioSendOverride) return __zernioSendOverride(params);
@@ -104,18 +119,34 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
   try {
     const text = params.text?.trim();
     if (text) {
+      console.log("[ZERNIO] text send request:", JSON.stringify({
+        url,
+        accountId: params.externalAccountId,
+        externalThreadId: params.externalThreadId,
+        textLength: text.length,
+        auth: `Bearer ${maskApiKey(apiKey)}`,
+      }));
       const resp = await fetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify({ accountId: params.externalAccountId, message: text }),
       });
+      const bodyText = await resp.text().catch(() => "");
+      console.log(`[ZERNIO] text send response (${resp.status}):`, bodyText);
       if (resp.ok) {
-        const data = (await resp.json().catch(() => ({}))) as any;
-        ok = true;
-        externalMessageId = data?.messageId ? String(data.messageId) : undefined;
+        let data: any = {};
+        try { data = JSON.parse(bodyText); } catch { /* non-JSON body */ }
+        const messageId = data?.messageId ? String(data.messageId) : undefined;
+        if (messageId) {
+          ok = true;
+          externalMessageId = messageId;
+        } else {
+          error = `Zernio text send returned ${resp.status} but no messageId in response: ${bodyText}`;
+          console.error("[ZERNIO] " + error);
+        }
       } else {
-        const errBody = await resp.text().catch(() => "");
-        error = `Zernio send failed (${resp.status}): ${errBody.slice(0, 200)}`;
+        error = `Zernio text send failed (${resp.status}): ${bodyText}`;
+        console.error("[ZERNIO] " + error);
       }
     }
     if (params.attachments?.length && !error) {
@@ -134,6 +165,7 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
     }
   } catch (err: any) {
     error = `Zernio send error: ${err?.message || "Unknown"}`;
+    console.error("[ZERNIO] send exception:", err?.stack || err);
   }
 
   return { ok, error, externalMessageId };
@@ -142,8 +174,13 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
 // ── Attachment upload (multipart) ─────────────────────────────────────────────
 // Zernio cannot reliably download our public-objects URLs from the outside
 // (VPS/ACL), so we upload the binary directly: download the file from our own
-// object storage and POST it as multipart/form-data. The legacy attachmentUrl
-// JSON body is kept only as a fallback when the bytes cannot be loaded.
+// object storage and POST it as multipart/form-data. There is INTENTIONALLY no
+// fallback to the raw attachmentUrl JSON body anymore — Zernio previously
+// accepted that JSON with a 2xx while silently failing to fetch the
+// unreachable local URL, which made us mark attachment-less "sent" messages
+// as delivered. If multipart fails (or bytes can't be loaded), the message is
+// marked failed so the real Zernio response is visible instead of a false
+// positive.
 
 let _storage: ObjectStorageService | null = null;
 function getStorage(): ObjectStorageService {
@@ -189,6 +226,12 @@ async function downloadAttachmentBytes(
   }
 }
 
+/**
+ * STRICT CONTRACT (see sendViaZernio doc comment): only a 2xx response that
+ * also contains a `messageId` counts as delivered. There is no fallback to
+ * the raw attachmentUrl JSON body — that path let Zernio 2xx an
+ * undeliverable message and we'd wrongly mark it "sent".
+ */
 async function sendZernioAttachment(
   url: string,
   apiKey: string,
@@ -199,72 +242,65 @@ async function sendZernioAttachment(
   const type = att.type ?? "file";
   const bytes = await downloadAttachmentBytes(att.url);
 
-  if (bytes) {
-    // Zernio's docs say "For binary file uploads, use multipart/form-data" but
-    // the exact binary field name is not pinned down. Try `file` (docs wording)
-    // first, then retry once with `attachment` on a 4xx. The response body is
-    // always logged so a persistent 400 reveals the exact contract mismatch.
-    const fileFieldCandidates = ["file", "attachment"] as const;
-    for (const fileField of fileFieldCandidates) {
-      const form = new FormData();
-      form.append("accountId", externalAccountId);
-      form.append("attachmentType", type);
-      form.append("attachmentName", name);
-      form.append(
-        fileField,
-        new Blob([new Uint8Array(bytes.buf)], { type: bytes.contentType }),
-        name,
-      );
-      // Diagnostic log — request shape without secrets.
-      console.log("[ZERNIO] multipart attachment send:", JSON.stringify({
-        url,
-        fields: ["accountId", "attachmentType", "attachmentName", fileField],
-        fileField,
-        attachmentType: type,
-        fileName: name,
-        fileSize: bytes.buf.length,
-        contentType: bytes.contentType,
-      }));
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}` }, // no Content-Type — fetch sets the boundary
-        body: form,
-      });
-      const bodyText = await resp.text().catch(() => "");
-      if (resp.ok) {
-        let data: any = {};
-        try { data = JSON.parse(bodyText); } catch { /* non-JSON success body */ }
-        console.log(`[ZERNIO] multipart attachment accepted (${resp.status}, field=${fileField}):`, bodyText.slice(0, 300));
-        return { ok: true, externalMessageId: data?.messageId ? String(data.messageId) : undefined };
-      }
-      console.error(`[ZERNIO] multipart attachment send failed (${resp.status}, field=${fileField}):`, bodyText.slice(0, 600));
-      // Retry with the alternate field name only on 4xx (contract mismatch);
-      // a 5xx means Zernio itself is failing — don't hammer it.
-      if (resp.status >= 500) break;
-    }
-    // Fall through to the legacy attachmentUrl fallback below.
-  } else {
-    console.warn("[ZERNIO] attachment bytes unavailable, falling back to attachmentUrl JSON:", name);
+  if (!bytes) {
+    const error = `Zernio attachment bytes unavailable for "${name}" (source url: ${att.url}) — cannot upload binary; NOT falling back to attachmentUrl JSON`;
+    console.error("[ZERNIO] " + error);
+    return { ok: false, error };
   }
 
-  // Legacy fallback: hand Zernio the URL and let it download the file itself.
-  const body: Record<string, any> = {
-    accountId: externalAccountId,
-    attachmentUrl: att.url,
-    attachmentType: type,
-    attachmentName: name,
-  };
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const bodyText = await resp.text().catch(() => "");
-  if (resp.ok) {
-    let data: any = {};
-    try { data = JSON.parse(bodyText); } catch { /* non-JSON success body */ }
-    return { ok: true, externalMessageId: data?.messageId ? String(data.messageId) : undefined };
+  // Zernio's docs say "For binary file uploads, use multipart/form-data" but
+  // the exact binary field name is not pinned down. Try `file` (docs wording)
+  // first, then retry once with `attachment` on a 4xx. Every request and the
+  // FULL response body is logged so a persistent contract mismatch (wrong
+  // field name, wrong required fields, etc.) is diagnosable from logs alone.
+  const fileFieldCandidates = ["file", "attachment"] as const;
+  let lastError: string | undefined;
+  for (const fileField of fileFieldCandidates) {
+    const form = new FormData();
+    form.append("accountId", externalAccountId);
+    form.append("attachmentType", type);
+    form.append("attachmentName", name);
+    form.append(
+      fileField,
+      new Blob([new Uint8Array(bytes.buf)], { type: bytes.contentType }),
+      name,
+    );
+    console.log("[ZERNIO] multipart attachment request:", JSON.stringify({
+      url,
+      fields: ["accountId", "attachmentType", "attachmentName", fileField],
+      fileField,
+      attachmentType: type,
+      fileName: name,
+      fileSize: bytes.buf.length,
+      contentType: bytes.contentType,
+      auth: `Bearer ${maskApiKey(apiKey)}`,
+    }));
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` }, // no Content-Type — fetch sets the boundary
+      body: form,
+    });
+    const bodyText = await resp.text().catch(() => "");
+    console.log(`[ZERNIO] multipart attachment response (${resp.status}, field=${fileField}):`, bodyText);
+    if (resp.ok) {
+      let data: any = {};
+      try { data = JSON.parse(bodyText); } catch { /* non-JSON body */ }
+      const messageId = data?.messageId ? String(data.messageId) : undefined;
+      if (messageId) {
+        return { ok: true, externalMessageId: messageId };
+      }
+      lastError = `Zernio multipart attachment returned ${resp.status} (field=${fileField}) but no messageId in response: ${bodyText}`;
+      console.error("[ZERNIO] " + lastError);
+      // Zernio accepted this field name (2xx) but the contract on the
+      // response shape is broken — retrying the other field won't help.
+      break;
+    }
+    lastError = `Zernio multipart attachment failed (${resp.status}, field=${fileField}): ${bodyText}`;
+    console.error("[ZERNIO] " + lastError);
+    // Retry with the alternate field name only on 4xx (contract mismatch);
+    // a 5xx means Zernio itself is failing — don't hammer it.
+    if (resp.status >= 500) break;
   }
-  console.error(`[ZERNIO] attachmentUrl fallback send failed (${resp.status}):`, bodyText.slice(0, 600));
-  return { ok: false, error: `Zernio attachment send failed (${resp.status}): ${bodyText.slice(0, 200)}` };
+
+  return { ok: false, error: lastError || "Zernio attachment send failed (unknown error)" };
 }
