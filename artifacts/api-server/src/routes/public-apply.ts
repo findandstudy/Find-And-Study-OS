@@ -608,6 +608,21 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         let photoSet = false;
         for (const doc of validDocs) {
           if (!doc.base64 || !doc.name) continue;
+          // Accept both bare base64 and data-URL payloads (strip the
+          // "data:<mime>;base64," prefix) so fileData never stores a
+          // corrupt/prefixed blob. Mirrors the embed /apply normalization.
+          {
+            const rawB64 = String(doc.base64 || "");
+            if (/^data:/i.test(rawB64) && rawB64.includes(",")) {
+              const commaIdx = rawB64.indexOf(",");
+              doc.base64 = rawB64.slice(commaIdx + 1);
+              if (!doc.mediaType) {
+                const m = /^data:([^;,]+)/i.exec(rawB64.slice(0, commaIdx));
+                if (m && m[1]) doc.mediaType = m[1].trim().toLowerCase();
+              }
+            }
+            doc.base64 = String(doc.base64 || "").replace(/\s/g, "");
+          }
           const mime = String(doc.mediaType || "").toLowerCase();
           if (!ALLOWED_MIME.includes(mime)) continue;
           const rawSize = doc.sizeBytes ? parseInt(String(doc.sizeBytes), 10) : 0;
@@ -1023,6 +1038,24 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
     if (documents.length > 4) {
       res.status(400).json({ error: "Maximum 4 documents allowed" });
       return;
+    }
+
+    // Accept BOTH bare base64 AND full data-URLs ("data:<mime>;base64,<b64>")
+    // — stale cached widgets send the FileReader data-URL verbatim, which
+    // decodes to garbage bytes and fails the magic-byte check. Strip the
+    // prefix (and whitespace) before decoding; fall back to the data-URL mime
+    // when mediaType was omitted. Mirrors the embed /apply normalization.
+    for (const doc of documents) {
+      const rawData = String(doc.data || "");
+      if (/^data:/i.test(rawData) && rawData.includes(",")) {
+        const commaIdx = rawData.indexOf(",");
+        doc.data = rawData.slice(commaIdx + 1);
+        if (!doc.mediaType) {
+          const m = /^data:([^;,]+)/i.exec(rawData.slice(0, commaIdx));
+          if (m && m[1]) doc.mediaType = m[1].trim().toLowerCase();
+        }
+      }
+      doc.data = String(doc.data || "").replace(/\s/g, "");
     }
 
     for (const doc of documents) {

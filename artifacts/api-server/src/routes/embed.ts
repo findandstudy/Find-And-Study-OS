@@ -1126,11 +1126,41 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   const rawDocs = Array.isArray(documents) ? documents.slice(0, 4) : [];
   const docArray = rawDocs.filter((d: any) => d && typeof d === 'object' && d.label && d.data && typeof d.data === 'string');
 
+  // Normalize document payloads: accept BOTH bare base64 AND full data-URLs
+  // ("data:<mime>;base64,<b64>"). Stale cached widgets (and some third-party
+  // callers) send the FileReader data-URL verbatim; decoding that with
+  // Buffer.from(..., "base64") silently produces garbage bytes, which then
+  // failed the magic-byte check with 400 "Dosya içeriği tanınamadı" — and
+  // because that check used to run BEFORE the lead transaction, the lead was
+  // never created. Strip the prefix (and whitespace) here so every downstream
+  // consumer — validation, documents.fileData storage — sees clean base64.
+  for (const doc of docArray) {
+    const rawData = String(doc.data || "");
+    if (/^data:/i.test(rawData) && rawData.includes(",")) {
+      const commaIdx = rawData.indexOf(",");
+      doc.data = rawData.slice(commaIdx + 1);
+      if (!doc.mediaType) {
+        // Fall back to the mime embedded in the data-URL header so
+        // isAllowedMimeType still works when the caller omitted mediaType.
+        const m = /^data:([^;,]+)/i.exec(rawData.slice(0, commaIdx));
+        if (m && m[1]) doc.mediaType = m[1].trim().toLowerCase();
+      }
+    }
+    doc.data = String(doc.data || "").replace(/\s/g, "");
+  }
+
+  // Validate documents WITHOUT ever dropping the lead: an invalid/unreadable
+  // file must never 400 the whole submission (that used to lose the contact
+  // entirely). Invalid docs are dropped with a warning; the lead + submission
+  // below are always created from the contact fields.
+  const validDocs: any[] = [];
+  const documentWarnings: string[] = [];
   for (const doc of docArray) {
     const mime = doc.mediaType || "";
+    const label = String(doc.label || "document");
     if (!mime || !isAllowedMimeType(mime)) {
-      res.status(400).json({ error: "Sadece PDF, JPG, JPEG ve PNG dosyalar\u0131 y\u00fckleyebilirsiniz." });
-      return;
+      documentWarnings.push(`${label}: Sadece PDF, JPG, JPEG ve PNG dosyalar\u0131 y\u00fckleyebilirsiniz.`);
+      continue;
     }
     const syntheticExt = isPdf(mime) ? ".pdf" : mime === "image/png" ? ".png" : ".jpg";
     const syntheticFileName = `document${syntheticExt}`;
@@ -1138,21 +1168,24 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     try {
       buffer = Buffer.from(doc.data || "", "base64");
     } catch {
-      res.status(400).json({ error: "Invalid base64 file data" });
-      return;
+      documentWarnings.push(`${label}: Invalid base64 file data`);
+      continue;
     }
     const validationError = await validateUploadedFileBuffer(syntheticFileName, mime, buffer);
     if (validationError) {
-      const statusCode = validationError.type === "size_exceeded" ? 413 : 400;
-      res.status(statusCode).json({ error: validationError.message });
-      return;
+      documentWarnings.push(`${label}: ${validationError.message}`);
+      continue;
     }
+    validDocs.push(doc);
   }
 
-  const totalDocSize = docArray.reduce((sum: number, d: any) => sum + (d.data?.length || 0), 0);
+  const totalDocSize = validDocs.reduce((sum: number, d: any) => sum + (d.data?.length || 0), 0);
   if (totalDocSize > 20_000_000) {
-    res.status(413).json({ error: "Documents too large. Maximum total size is ~15MB." });
-    return;
+    documentWarnings.push("Documents too large. Maximum total size is ~15MB.");
+    validDocs.length = 0;
+  }
+  if (documentWarnings.length > 0) {
+    console.warn(`[EMBED-APPLY] Dropped ${docArray.length - validDocs.length} invalid document(s) (slug=${widget.slug}):`, documentWarnings.join(" | "));
   }
 
   // SECURITY (Public Intake / IDOR): the embed apply NEVER trusts a
@@ -1207,7 +1240,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
       utmContent: s(utmContent, 100),
       leadId: lead.id,
       aiExtractedData: aiExtractedData || null,
-      documentCount: docArray.length,
+      documentCount: validDocs.length,
       status: "new",
     }).returning();
 
@@ -1227,15 +1260,18 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   {
     const programIdNum = programId ? parseInt(String(programId), 10) : NaN;
     if (Number.isFinite(programIdNum) && programIdNum > 0) {
-      const uploadedDocTypes = docArray
+      const uploadedDocTypes = validDocs
         .map((d: any) => String(d.label || "").toLowerCase())
         .filter(Boolean);
       const { missing } = await checkMandatoryDocs(programIdNum, uploadedDocTypes);
       if (missing.length > 0) {
+        // The lead + submission committed above are intentionally KEPT — this
+        // response only declines the application, never the contact.
         res.status(422).json({
           error: "Please upload all required documents before submitting your application.",
           missingDocuments: missing,
           leadId: result.leadId,
+          ...(documentWarnings.length > 0 ? { documentWarnings } : {}),
         });
         return;
       }
@@ -1357,8 +1393,8 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     // on the lead row. When app creation was blocked (eligibility/quota),
     // resultAppId is null but the docs must still ride with the student so they
     // are not orphaned on a lead that is about to be converted away.
-    if (docArray.length > 0 && resultStudentId) {
-      for (const doc of docArray) {
+    if (validDocs.length > 0 && resultStudentId) {
+      for (const doc of validDocs) {
         if (!doc.label || !doc.data) continue;
         const docType = String(doc.label || "other").toLowerCase();
         const docName = buildDocNameFromParts(firstName, lastName, docType, doc.mediaType);
@@ -1405,10 +1441,10 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           }
         }
       }
-    } else if (docArray.length > 0) {
+    } else if (validDocs.length > 0) {
       // Fallback: attach to the lead only (legacy behavior) so files are
       // not lost when student/app creation could not be performed.
-      for (const doc of docArray) {
+      for (const doc of validDocs) {
         if (!doc.label || !doc.data) continue;
         const docType = String(doc.label || "other").toLowerCase();
         const docName = buildDocNameFromParts(firstName, lastName, docType, doc.mediaType);
@@ -1529,6 +1565,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     leadId: result.leadId,
     studentId: resultStudentId,
     applicationId: resultAppId,
+    ...(documentWarnings.length > 0 ? { documentWarnings } : {}),
     ...(embedMissingDocTypes.length > 0
       ? { status: "missing_documents", missing: embedMissingDocTypes }
       : { status: "inquiry" }),
