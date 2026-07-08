@@ -3681,7 +3681,9 @@
     "rcp_all": "Все пользователи",
     "templateLanguage": "Язык шаблона",
     "comingSoon": "Скоро",
-    "htmlSupportedHint": "Поддерживается базовый HTML; переносы строк сохраняются для обычного текста."
+    "htmlSupportedHint": "Поддерживается базовый HTML; переносы строк сохраняются для обычного текста.",
+    "event_inbox_message_unmatched": "Несопоставленное сообщение — требует проверки",
+    "event_inbox_message_unmatched_desc": "Когда входящее сообщение (веб-форма, WhatsApp, Instagram…) не удаётся связать с известным контактом"
   },
   "stageDocRequest": {
     "title": "Запросить документы",

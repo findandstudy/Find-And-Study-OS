@@ -3630,7 +3630,9 @@
     "rcp_all": "Semua Pengguna",
     "templateLanguage": "Bahasa Templat",
     "comingSoon": "Segera hadir",
-    "htmlSupportedHint": "HTML dasar didukung; jeda baris dipertahankan untuk teks biasa."
+    "htmlSupportedHint": "HTML dasar didukung; jeda baris dipertahankan untuk teks biasa.",
+    "event_inbox_message_unmatched": "Pesan tak tertaut — perlu ditinjau",
+    "event_inbox_message_unmatched_desc": "Saat pesan masuk (formulir web, WhatsApp, Instagram…) tidak dapat ditautkan ke kontak yang dikenal"
   },
   "stageDocRequest": {
     "title": "Minta Dokumen",

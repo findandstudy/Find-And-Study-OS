@@ -44,6 +44,13 @@ const TEMPLATE_LANGS: { code: string; label: string }[] = [
 
 const PASSIVE_CHANNELS = new Set(["telegram", "sms"]);
 
+// Events whose card title is localized via i18n. Older rules render the
+// English DB name verbatim; newly introduced events should register a key
+// here so the Settings card follows the user's language.
+const EVENT_LABEL_KEYS: Record<string, string> = {
+  "inbox.message_unmatched": "notificationRules.event_inbox_message_unmatched",
+};
+
 function hasTemplateContent(tpl?: NotifTemplate): boolean {
   if (!tpl) return false;
   if (tpl.subject || tpl.body) return true;
@@ -362,7 +369,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
-                                <p className="font-semibold text-sm text-foreground">{rule.name}</p>
+                                <p className="font-semibold text-sm text-foreground">{EVENT_LABEL_KEYS[rule.event] ? t(EVENT_LABEL_KEYS[rule.event]) : rule.name}</p>
                                 <Badge variant="outline" className="text-[10px] font-mono px-1.5">
                                   {rule.event}
                                 </Badge>

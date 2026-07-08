@@ -3630,7 +3630,9 @@
     "rcp_all": "सभी उपयोगकर्ता",
     "templateLanguage": "टेम्पलेट भाषा",
     "comingSoon": "जल्द आ रहा है",
-    "htmlSupportedHint": "बेसिक HTML समर्थित है; सादे पाठ के लिए लाइन ब्रेक संरक्षित रहते हैं।"
+    "htmlSupportedHint": "बेसिक HTML समर्थित है; सादे पाठ के लिए लाइन ब्रेक संरक्षित रहते हैं।",
+    "event_inbox_message_unmatched": "बेजोड़ संदेश — समीक्षा आवश्यक",
+    "event_inbox_message_unmatched_desc": "जब कोई आने वाला संदेश (वेब फ़ॉर्म, WhatsApp, Instagram…) किसी ज्ञात संपर्क से नहीं जोड़ा जा सके"
   },
   "stageDocRequest": {
     "title": "दस्तावेज़ अनुरोध करें",

@@ -3630,7 +3630,9 @@
     "rcp_all": "Todos los usuarios",
     "templateLanguage": "Idioma de la plantilla",
     "comingSoon": "Próximamente",
-    "htmlSupportedHint": "Se admite HTML básico; los saltos de línea se conservan en el texto sin formato."
+    "htmlSupportedHint": "Se admite HTML básico; los saltos de línea se conservan en el texto sin formato.",
+    "event_inbox_message_unmatched": "Mensaje sin asociar — requiere revisión",
+    "event_inbox_message_unmatched_desc": "Cuando un mensaje entrante (formulario web, WhatsApp, Instagram…) no se puede vincular a un contacto conocido"
   },
   "stageDocRequest": {
     "title": "Solicitar documentos",

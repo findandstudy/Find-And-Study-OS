@@ -3681,7 +3681,9 @@
     "rcp_all": "Tous les utilisateurs",
     "templateLanguage": "Langue du modèle",
     "comingSoon": "Bientôt disponible",
-    "htmlSupportedHint": "Le HTML de base est pris en charge ; les sauts de ligne sont conservés pour le texte brut."
+    "htmlSupportedHint": "Le HTML de base est pris en charge ; les sauts de ligne sont conservés pour le texte brut.",
+    "event_inbox_message_unmatched": "Message non associé — à examiner",
+    "event_inbox_message_unmatched_desc": "Lorsqu’un message entrant (formulaire web, WhatsApp, Instagram…) ne peut pas être associé à un contact connu"
   },
   "stageDocRequest": {
     "title": "Demander des documents",

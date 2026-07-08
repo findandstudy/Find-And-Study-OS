@@ -1892,6 +1892,38 @@ async function seedClaudeIntegration() {
       console.error("[migrate] notification_rules channel upgrades:", err);
     }
 
+    // Idempotent + additive: the "unmatched inbound message" notification
+    // became a UI-managed rule under the new event key inbox.message_unmatched
+    // with email OFF by default (the legacy inbox.unmatched rule had email
+    // enabled and flooded staff mailboxes). Seed the new rule if missing and
+    // neutralize the legacy row (deactivate + strip email) without deleting
+    // it — its event is never dispatched anymore, so it stays inert.
+    try {
+      await pool.query(`
+        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
+        VALUES (
+          'inbox.message_unmatched',
+          'Unmatched message — needs review',
+          'When an inbound message (web form, WhatsApp, Instagram…) cannot be linked to a known contact',
+          'inbox',
+          '["in_app"]'::jsonb,
+          'role',
+          '["super_admin", "admin", "manager"]'::jsonb,
+          true,
+          '{}'::jsonb
+        )
+        ON CONFLICT (event) DO NOTHING
+      `);
+      await pool.query(`
+        UPDATE notification_rules
+        SET is_active = false, channels = '["in_app"]'::jsonb
+        WHERE event = 'inbox.unmatched'
+          AND (is_active = true OR channels @> '["email"]'::jsonb)
+      `);
+    } catch (err) {
+      console.error("[migrate] inbox.message_unmatched notification rule:", err);
+    }
+
     // One-shot data fix: sync leads and applications whose assigned_to_id does
     // not match their student's assigned_to_id. These accumulated over time
     // because assignment cascades are permission-gated and many historical

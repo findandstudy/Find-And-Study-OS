@@ -3681,7 +3681,9 @@
     "rcp_all": "جميع المستخدمين",
     "templateLanguage": "لغة القالب",
     "comingSoon": "قريبًا",
-    "htmlSupportedHint": "يُدعم HTML الأساسي؛ يتم الحفاظ على فواصل الأسطر في النص العادي."
+    "htmlSupportedHint": "يُدعم HTML الأساسي؛ يتم الحفاظ على فواصل الأسطر في النص العادي.",
+    "event_inbox_message_unmatched": "رسالة غير مطابقة — بحاجة إلى مراجعة",
+    "event_inbox_message_unmatched_desc": "عندما يتعذر ربط رسالة واردة (نموذج ويب، واتساب، إنستغرام…) بجهة اتصال معروفة"
   },
   "stageDocRequest": {
     "title": "طلب مستندات",

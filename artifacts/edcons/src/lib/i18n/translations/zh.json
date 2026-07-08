@@ -3630,7 +3630,9 @@
     "rcp_all": "所有用户",
     "templateLanguage": "模板语言",
     "comingSoon": "即将推出",
-    "htmlSupportedHint": "支持基本 HTML；纯文本中保留换行。"
+    "htmlSupportedHint": "支持基本 HTML；纯文本中保留换行。",
+    "event_inbox_message_unmatched": "未匹配的消息 — 需要审核",
+    "event_inbox_message_unmatched_desc": "当收到的消息（网页表单、WhatsApp、Instagram…）无法关联到已知联系人时"
   },
   "stageDocRequest": {
     "title": "请求文件",

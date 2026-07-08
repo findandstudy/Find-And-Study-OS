@@ -4325,7 +4325,9 @@
     "rcp_all": "All Users",
     "templateLanguage": "Template Language",
     "comingSoon": "Coming soon",
-    "htmlSupportedHint": "Basic HTML is supported; line breaks are preserved for plain text."
+    "htmlSupportedHint": "Basic HTML is supported; line breaks are preserved for plain text.",
+    "event_inbox_message_unmatched": "Unmatched message — needs review",
+    "event_inbox_message_unmatched_desc": "When an inbound message (web form, WhatsApp, Instagram…) cannot be linked to a known contact"
   },
   "subAgentsPage": {
     "addSubAgent": "Add Sub Agent",

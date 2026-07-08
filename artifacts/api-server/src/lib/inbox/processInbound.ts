@@ -346,11 +346,13 @@ export async function processInboundMessage(opts: {
       data: baseData,
     });
 
-    // Additionally dispatch inbox.unmatched when no identity was resolved, so
-    // the matching queue can route it to the appropriate role pool.
+    // Additionally dispatch inbox.message_unmatched when no identity was
+    // resolved, so the matching queue can route it to the appropriate role
+    // pool. Channels (in_app / email / whatsapp) come from the UI-managed
+    // notification rule — email is OFF by default to prevent mail floods.
     if (!isLinked) {
       await dispatchNotification({
-        event: "inbox.unmatched",
+        event: "inbox.message_unmatched",
         title: `Unmatched ${channel} message — needs review`,
         body: message.text.slice(0, 280),
         actionUrl: `/staff/messages?conversation=${conversation.id}`,

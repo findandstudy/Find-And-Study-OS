@@ -4266,7 +4266,9 @@
     "rcp_all": "Tüm Kullanıcılar",
     "templateLanguage": "Şablon Dili",
     "comingSoon": "Yakında",
-    "htmlSupportedHint": "Temel HTML desteklenir; düz metinde satır sonları korunur."
+    "htmlSupportedHint": "Temel HTML desteklenir; düz metinde satır sonları korunur.",
+    "event_inbox_message_unmatched": "Eşleşmeyen mesaj — inceleme gerekli",
+    "event_inbox_message_unmatched_desc": "Gelen bir mesaj (web formu, WhatsApp, Instagram…) bilinen bir kişiyle eşleştirilemediğinde"
   },
   "subAgentsPage": {
     "addSubAgent": "Alt Acente Ekle",

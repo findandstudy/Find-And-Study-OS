@@ -3630,7 +3630,9 @@
     "rcp_all": "همه کاربران",
     "templateLanguage": "زبان قالب",
     "comingSoon": "به‌زودی",
-    "htmlSupportedHint": "HTML پایه پشتیبانی می‌شود؛ شکست خطوط برای متن ساده حفظ می‌شود."
+    "htmlSupportedHint": "HTML پایه پشتیبانی می‌شود؛ شکست خطوط برای متن ساده حفظ می‌شود.",
+    "event_inbox_message_unmatched": "پیام تطبیق‌نیافته — نیاز به بررسی",
+    "event_inbox_message_unmatched_desc": "زمانی که یک پیام ورودی (فرم وب، واتس‌اپ، اینستاگرام…) با مخاطب شناخته‌شده‌ای مطابقت داده نشود"
   },
   "stageDocRequest": {
     "title": "درخواست مدارک",
