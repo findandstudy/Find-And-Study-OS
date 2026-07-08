@@ -205,7 +205,7 @@ async function clickNext(page: Page, logger: typeof import("../../browser.js").l
   }
 
   const btn = page.getByRole("button", { name: /(Sonraki Adım|Next Step)/i });
-  await btn.waitFor({ state: "visible", timeout: 8000 });
+  await btn.waitFor({ state: "visible", timeout: 30000 });
   await btn.click({ force: true });
 
   // Post-dismiss any modal that opened as a result of the click
@@ -237,9 +237,9 @@ async function selectByBest(
     if (v && v !== "0" && v !== "") return true;
   } catch { /* try partial */ }
 
-  // 3. Partial label — Unicode-normalised, diacritic-stripped, case-insensitive.
-  //    Handles Turkish ALL-CAPS option texts like "ÖZBEKİSTAN" where
-  //    "İ" (U+0130) decomposes to "i" + combining dot via plain toLowerCase().
+  // 3. Normalized bidirectional contains — handles Turkish ALL-CAPS ("ÖZBEKİSTAN"),
+  //    Turkey↔Türkiye variants, and cases where the option text is shorter than the
+  //    search term (e.g. portal "UK" vs search "United Kingdom").
   //    IMPORTANT: no named inner functions — esbuild wraps them with __name()
   //    which does not exist inside page.$eval's browser sandbox.
   const optVal = await page.$eval<string, string>(
@@ -248,15 +248,17 @@ async function selectByBest(
       // Inline normaliser: Turkish İ → i, NFD decompose, strip combining diacritics, lowercase
       const nv = v.replace(/\u0130/gi, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const sel = el as HTMLSelectElement;
-      const opt = Array.from(sel.options).find(
-        (o) => o.text.replace(/\u0130/gi, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(nv),
-      );
+      const opt = Array.from(sel.options).find((o) => {
+        const nt = o.text.replace(/\u0130/gi, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        return nt.includes(nv) || nv.includes(nt);
+      });
       return opt?.value ?? "";
     },
     value,
   );
   if (optVal && optVal !== "0") {
-    await page.selectOption(selector, { value: optVal });
+    // Use jQuery val+trigger so hidden select2 widgets repaint correctly
+    await setSelectByValue(page, selector, optVal);
     return true;
   }
   return false;
@@ -1207,9 +1209,9 @@ async function ensureEnglishLanguage(
   ];
   for (const url of localeUrls) {
     try {
-      await page.goto(url, { waitUntil: "networkidle", timeout: 8000 });
+      await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
       if (returnTo) {
-        await page.goto(returnTo, { waitUntil: "networkidle", timeout: 8000 });
+        await page.goto(returnTo, { waitUntil: "networkidle", timeout: 30000 });
       }
       if (await isEnglishUI(page).catch(() => false)) {
         logger.info(
@@ -1237,9 +1239,36 @@ async function ensureEnglishLanguage(
   try {
     await page.goto(returnTo ?? `${PORTAL_URL}/panel`, {
       waitUntil: "networkidle",
-      timeout: 8000,
+      timeout: 30000,
     });
   } catch { /* ignore */ }
+}
+
+// ---------------------------------------------------------------------------
+// GPA → Topkapı's 0-100 percentage scale
+//
+// The CRM stores GPA as free-form text and normalizeGpaRange() in profile.ts
+// converts it to the FIRST numeric token (e.g. "2.80/4" → 2.80). Topkapı's
+// portal rejects values ≤10 (they look nonsensical on a 0-100 scale and the
+// portal shows "unparseable GPA" or "Please check fields"). This function
+// auto-scales to 0-100 using the same heuristic as api-server/gpaNormalize.ts:
+//   ≤4  → × 100/4   (4-point scale: 3.5 → 87.50)
+//   ≤5  → × 100/5   (5-point scale: 4.2 → 84.00)
+//   ≤10 → × 100/10  (10-point: 8.5 → 85.00)
+//   ≤20 → × 100/20  (20-point: 15  → 75.00)
+//   >20 → as-is     (already 0-100: 78.66 → 78.66)
+//
+// Returns "-" when gpa is undefined/missing; never throws.
+// ---------------------------------------------------------------------------
+function topkapiGpaTo100(gpa: number | undefined): string {
+  if (gpa == null || !Number.isFinite(gpa)) return "-";
+  let pct: number;
+  if      (gpa <= 4)  pct = (gpa / 4)  * 100;
+  else if (gpa <= 5)  pct = (gpa / 5)  * 100;
+  else if (gpa <= 10) pct = (gpa / 10) * 100;
+  else if (gpa <= 20) pct = (gpa / 20) * 100;
+  else                pct = gpa;
+  return String(Math.round(pct * 100) / 100);
 }
 
 // ---------------------------------------------------------------------------
@@ -1326,9 +1355,9 @@ export const topkapiAdapter: UniversityAdapter = {
       "doSubmit:", doSubmit,
     );
 
-    // Reduce default action timeout so missing/invisible elements fail fast
-    // (default Playwright timeout is 30 s — we want ~8 s to avoid long hangs).
-    page.setDefaultTimeout(8000);
+    // Raise the default action timeout to 30 s so slow portal responses don't
+    // cause spurious failures (the previous 8 s was too short for AJAX renders).
+    page.setDefaultTimeout(30000);
 
     await page.goto(`${PORTAL_URL}/panel/applications/add`, {
       waitUntil: "networkidle",
@@ -1441,14 +1470,40 @@ export const topkapiAdapter: UniversityAdapter = {
     const genderVal = /^f|kad|woman|kız|kiz/i.test(profile.gender) ? "Female" : "Male";
     await selectByBest(page, "select[name=gender]", genderVal);
 
-    await page.fill("input[name=fathersName]", profile.fatherName);
-    await page.fill("input[name=mothersName]", profile.motherName);
+    await page.fill("input[name=fathersName]", profile.fatherName || "-");
+    await page.fill("input[name=mothersName]", profile.motherName || "-");
 
-    await page.waitForFunction(() => { const s = document.querySelector("select[name=countryOfBirth]"); return !!s && s.options.length > 1; }, { timeout: 8000 }).catch(() => {});
+    await page.waitForFunction(() => { const s = document.querySelector("select[name=countryOfBirth]"); return !!s && s.options.length > 1; }, { timeout: 30000 }).catch(() => {});
     await selectByBest(page, "select[name=countryOfBirth]", country);
     await selectByBest(page, "select[name=nationality]",    country);
     await selectByBest(page, "select[name=addressCountry]", country);
     await page.evaluate(() => { ["countryOfBirth","nationality","addressCountry"].forEach((n) => { const e = document.querySelector("select[name=" + n + "]"); if (e) { e.dispatchEvent(new Event("change", { bubbles: true })); const w = window; if (w.jQuery) { w.jQuery(e).trigger("change"); } } }); });
+
+    // Verify each country dropdown actually stuck; retry via jQuery path if still placeholder.
+    // Topkapı fires "Please check fields" (jconfirm) on Step 2 Next when any of these are empty.
+    for (const field of ["countryOfBirth", "nationality", "addressCountry"]) {
+      const choice = await readSelectChoice(page, `select[name=${field}]`);
+      if (!isPlaceholderChoice(choice.value, choice.text)) continue;
+      logger.warn(`[topkapi] Step 2: ${field} not set (value="${choice.value}") — retrying via setSelectByValue`);
+      const opts = await readSelectOptions(page, `select[name=${field}]`);
+      const cf = fold(country);
+      const found = opts.find((o, i) => {
+        if (i === 0 || !o.value || o.value === "0") return false;
+        const ft = fold(o.text);
+        return ft.includes(cf) || cf.includes(ft);
+      });
+      if (found) {
+        await setSelectByValue(page, `select[name=${field}]`, found.value);
+        await syncChange(page, `select[name=${field}]`);
+        const rc = await readSelectChoice(page, `select[name=${field}]`);
+        logger.info(`[topkapi] Step 2: ${field} retry OK — value="${rc.value}" text="${rc.text}"`);
+      } else {
+        logger.warn(
+          `[topkapi] Step 2: ${field} — no match for "${country}" in options ` +
+          `[${opts.slice(0, 10).map((o) => o.text).join(", ")}]`,
+        );
+      }
+    }
 
     logger.info("[topkapi] DBG country=" + country + " natl=" + (profile.nationality || ""));
     logger.info("[topkapi] DBG cob=" + JSON.stringify(await page.evaluate(() => { const s = document.querySelector("select[name=countryOfBirth]"); return s ? { n: s.options.length, sel: s.value, sample: Array.from(s.options).slice(0, 6).map((o) => o.value + "::" + o.text) } : "NO"; })));
@@ -1563,10 +1618,15 @@ export const topkapiAdapter: UniversityAdapter = {
     );
 
     logger.info("[topkapi] Step 3c: filling GPA");
+    // topkapiGpaTo100 converts the normalized GPA (e.g. 2.80 from "2.80/4") to
+    // Topkapı's expected 0-100 scale (e.g. 70.0). Passing sub-10 values causes
+    // the portal to show "unparseable GPA" / "Please check fields" on Next.
+    const gpaVal = topkapiGpaTo100(profile.gpa);
+    logger.info(`[topkapi] Step 3c: GPA raw=${profile.gpa ?? "n/a"} → portal="${gpaVal}"`);
     const v_gpa = await fillVisibleVerified(
       page,
       gpaSelectors,
-      profile.gpa != null ? String(profile.gpa) : "-",
+      gpaVal,
       logger,
       "gpa",
     );
@@ -2092,7 +2152,7 @@ export const topkapiAdapter: UniversityAdapter = {
     const eduLevel = mapEduLevel(level ?? "Bachelor", "");
     logger.info("[topkapi] listPrograms — level:", level ?? "(default)", "→", eduLevel);
 
-    page.setDefaultTimeout(8000);
+    page.setDefaultTimeout(30000);
     await page.goto(`${PORTAL_URL}/panel/applications/add`, {
       waitUntil: "networkidle",
     });
@@ -2141,7 +2201,7 @@ export const topkapiAdapter: UniversityAdapter = {
           const s = document.querySelector("select[name=countryOfBirth]");
           return !!s && (s as HTMLSelectElement).options.length > 1;
         },
-        { timeout: 8000 },
+        { timeout: 30000 },
       )
       .catch(() => {});
     await selectFirstRealOption(page, "select[name=countryOfBirth]");

@@ -91,6 +91,16 @@ export async function buildStudentProfile(
   if (!student) throw new Error(`Student ${sub.studentId} not found`);
 
   // ----- 4. Build SubmitProfile --------------------------------------------
+  // Guard parent names: buildProfile requires non-empty values and throws if
+  // they are blank, crashing the whole submission. Log + fall back to "-" so
+  // the portal still receives a valid form (most portals accept "-" for N/A).
+  const fatherNameVal = student.fatherName?.trim() || "-";
+  const motherNameVal = student.motherName?.trim() || "-";
+  if (!student.fatherName?.trim())
+    console.warn(`[portal-profile] #${submissionId} fatherName missing or empty — using "-" fallback`);
+  if (!student.motherName?.trim())
+    console.warn(`[portal-profile] #${submissionId} motherName missing or empty — using "-" fallback`);
+
   const profile: SubmitProfile = buildProfile({
     email:          student.email         ?? "",
     passportNumber: student.passportNumber ?? "",
@@ -98,8 +108,8 @@ export async function buildStudentProfile(
     lastName:       student.lastName       ?? "",
     dateOfBirth:    student.dateOfBirth ?? "",
     gender:         student.gender      ?? "",
-    fatherName:     student.fatherName  ?? "",
-    motherName:     student.motherName  ?? "",
+    fatherName:     fatherNameVal,
+    motherName:     motherNameVal,
     nationality:    student.nationality ?? "",
     address:        student.address     ?? "",
     phone:          student.phone          ?? "",

@@ -132,3 +132,4 @@
 - [Public doc intake: data-URL + lead-first](public-doc-intake-dataurl-leadfirst.md) — public base64 doc endpoints must strip data:URL prefix before decode AND never 400 before the lead is saved (drop bad docs w/ documentWarnings).
 - [Unmatched inbox notification rule](inbox-unmatched-notification-rule.md) — event renamed to inbox.message_unmatched, email OFF by default; legacy inbox.unmatched row kept inert (deactivated), never dispatched again.
 - [Local storage public-objects mismatch](local-storage-public-objects-mismatch.md) — local driver has no "public/" subfolder; outbound senders must resolve keys via shared searchPublicObject, not hand-rolled URL parsing.
+- [Topkapi GPA scale + parent-name guard](topkapi-gpa-parent-name.md) — topkapiGpaTo100 converts normalizeGpaRange output to 0-100; fatherName/motherName use "-" fallback (not "") in both profile builders.
