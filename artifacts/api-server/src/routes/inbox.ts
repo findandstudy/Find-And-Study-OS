@@ -241,6 +241,99 @@ router.get("/inbox/live-mode", requireAuth, async (_req, res): Promise<void> => 
 });
 
 /**
+ * Media proxy for inbound Zernio attachments.
+ *
+ * Zernio media URLs (zernio.com/api/v1/.../media/...) require a Bearer apiKey,
+ * so a plain <img src> in the browser renders as a broken image. This endpoint
+ * fetches the media server-side with the key and streams it back with the
+ * correct Content-Type. The key never reaches the browser.
+ *
+ * Index addresses the SAME combined list the UI renders:
+ * [metadata.attachment (if any), ...metadata.attachments].
+ * Only zernio.com URLs are proxied (SSRF guard) — everything else 404s
+ * because the client can already load those URLs directly.
+ */
+router.get(
+  "/inbox/media/:messageId/:index",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const messageId = Number(req.params.messageId);
+    const index = Number(req.params.index);
+    if (!Number.isInteger(messageId) || !Number.isInteger(index) || index < 0 || index > 50) {
+      res.status(400).json({ error: "Invalid message or attachment index" });
+      return;
+    }
+
+    const [msg] = await db
+      .select({ metadata: messagesTable.metadata })
+      .from(messagesTable)
+      .where(eq(messagesTable.id, messageId));
+    if (!msg) {
+      res.status(404).json({ error: "Message not found" });
+      return;
+    }
+
+    const meta = (msg.metadata ?? {}) as {
+      attachment?: { url?: string; fileUrl?: string };
+      attachments?: Array<{ url?: string; fileUrl?: string }>;
+    };
+    const allAtts = [
+      ...(meta.attachment ? [meta.attachment] : []),
+      ...(meta.attachments ?? []),
+    ];
+    const att = allAtts[index];
+    const rawUrl = att?.url ?? att?.fileUrl ?? "";
+
+    // SSRF guard: only proxy Zernio-hosted media.
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      res.status(404).json({ error: "Attachment not found" });
+      return;
+    }
+    if (parsed.protocol !== "https:" || parsed.hostname !== "zernio.com") {
+      res.status(404).json({ error: "Attachment not proxied" });
+      return;
+    }
+
+    const apiKey = await getZernioApiKey();
+    if (!apiKey) {
+      res.status(502).json({ error: "Zernio API key not configured" });
+      return;
+    }
+
+    try {
+      const upstream = await fetch(parsed.toString(), {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        redirect: "follow",
+      });
+      if (!upstream.ok) {
+        const body = await upstream.text().catch(() => "");
+        console.error(`[ZERNIO] media proxy upstream ${upstream.status} for message ${messageId}[${index}]:`, body.slice(0, 300));
+        res.status(upstream.status === 404 ? 404 : 502).json({ error: "Failed to fetch media" });
+        return;
+      }
+      res.status(200);
+      res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");
+      const len = upstream.headers.get("content-length");
+      if (len) res.setHeader("Content-Length", len);
+      res.setHeader("Cache-Control", "private, max-age=300");
+      if (upstream.body) {
+        const { Readable } = await import("node:stream");
+        Readable.fromWeb(upstream.body as unknown as Parameters<typeof Readable.fromWeb>[0]).pipe(res);
+      } else {
+        res.end();
+      }
+    } catch (err: any) {
+      console.error(`[ZERNIO] media proxy error for message ${messageId}[${index}]:`, err?.message || err);
+      res.status(502).json({ error: "Failed to fetch media" });
+    }
+  },
+);
+
+/**
  * Live inbox stream (Server-Sent Events). Pushes `inbox_message` and
  * `inbox_assigned` frames to the client so the UI can refresh without
  * polling. Payloads carry just enough context for the client to decide

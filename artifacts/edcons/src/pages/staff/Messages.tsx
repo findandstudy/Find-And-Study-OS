@@ -606,7 +606,7 @@ function InboxTab() {
       const urlRes = await customFetch("/api/storage/uploads/request-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prefix: "inbox", contentType: file.type, filename: file.name }),
+        body: JSON.stringify({ prefix: "inbox", name: file.name, size: file.size, contentType: file.type }),
       }) as any;
       const { uploadURL, objectPath } = urlRes;
       const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
@@ -1362,7 +1362,12 @@ function InboxTab() {
                           return (
                             <div className="mt-1.5 space-y-1.5">
                               {allAtts.map((a: MessageAttachment, i: number) => {
-                                const url = a.url ?? a.fileUrl ?? "";
+                                const rawUrl = a.url ?? a.fileUrl ?? "";
+                                // Zernio media URLs require a Bearer apiKey — load them
+                                // through our authenticated server proxy instead.
+                                const url = rawUrl.startsWith("https://zernio.com/")
+                                  ? `/api/inbox/media/${m.id}/${i}`
+                                  : rawUrl;
                                 const type = a.type ?? a.fileType ?? "file";
                                 const name = a.name ?? a.fileName ?? "file";
                                 if (type === "image") return (
