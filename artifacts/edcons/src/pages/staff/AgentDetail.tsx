@@ -35,7 +35,7 @@ export default function AgentDetailPage() {
 
   const [tab, setTab] = useState("leads");
   const [contactOpen, setContactOpen] = useState(false);
-  const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
+  const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "instagram" | "internal">("internal");
 
   const { data: agent, isLoading: agentLoading } = useQuery<any>({
     queryKey: ["agent-detail", agentId],

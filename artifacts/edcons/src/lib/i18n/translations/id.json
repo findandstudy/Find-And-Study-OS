@@ -926,7 +926,15 @@
       "viewFullDetail": "Lihat detail lengkap",
       "openLeadInfo": "Tampilkan info prospek",
       "leadInfoTitle": "Info prospek",
-      "interestedUniversity": "Universitas yang diminati"
+      "interestedUniversity": "Universitas yang diminati",
+      "firstName": "Nama Depan",
+      "lastName": "Nama Belakang",
+      "email": "Email",
+      "phone": "Telepon",
+      "motherName": "Nama Ibu",
+      "fatherName": "Nama Ayah",
+      "updateSaved": "Tersimpan",
+      "updateFailed": "Pembaruan gagal"
     },
     "aiSummary": {
       "title": "Ringkasan AI",
@@ -2084,7 +2092,8 @@
     "seen": "Dilihat",
     "readReceiptsOn": "Tanda baca aktif",
     "readReceiptsOff": "Tanda baca nonaktif",
-    "readReceiptsToggleFailed": "Tidak dapat memperbarui pengaturan tanda baca"
+    "readReceiptsToggleFailed": "Tidak dapat memperbarui pengaturan tanda baca",
+    "replyPlaceholder": "Ketik balasan…"
   },
   "settingsPage": {
     "navProfile": "Profil",
@@ -4008,7 +4017,15 @@
     "messageSent": "Pesan terkirim",
     "messageSentDesc": "Pesan {channel} terkirim ke {name}",
     "failedToSend": "Gagal mengirim",
-    "error": "Kesalahan"
+    "error": "Kesalahan",
+    "instagram": "Instagram",
+    "instagramTo": "Pesan Instagram ke {name}",
+    "errNoConversation": "Tidak ditemukan percakapan {channel} untuk kontak ini. Orang tersebut harus mengirim pesan terlebih dahulu.",
+    "errOutside24h": "Di luar jendela balasan 24 jam. Anda dapat membalas setelah kontak mengirim pesan lagi.",
+    "errSendFailed": "Pesan tidak dapat dikirim",
+    "dispatchedTitle": "Pesan terkirim",
+    "dispatchedDesc": "Pesan {channel} terkirim ke {name} melalui percakapan kotak masuk.",
+    "openConversation": "Buka percakapan"
   },
   "catalogPage": {
     "activeInSystem": "Aktif dalam sistem",

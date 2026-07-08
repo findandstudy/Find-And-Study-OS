@@ -14,6 +14,10 @@ export interface InboxStudentSummary {
   email?: string | null;
   /** @nullable */
   phone?: string | null;
+  /** @nullable */
+  motherName?: string | null;
+  /** @nullable */
+  fatherName?: string | null;
   status: string;
   /** @nullable */
   agentId?: number | null;

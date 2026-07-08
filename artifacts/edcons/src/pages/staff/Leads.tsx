@@ -180,7 +180,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id, disabled: !canMoveCards });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
-  const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
+  const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "instagram" | "internal">("internal");
   const [, setLoc] = useLocation();
 
   const isDirect = !lead.originType || lead.originType === "direct";
@@ -190,7 +190,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
     isDirect ? "bg-blue-50 border-blue-200 hover:border-blue-300 hover:shadow-md dark:bg-blue-900/20 dark:border-blue-700/40 dark:hover:border-blue-600/60" :
     "bg-card border-border hover:shadow-md";
 
-  function openContact(ch: "email" | "whatsapp" | "internal") {
+  function openContact(ch: "email" | "whatsapp" | "instagram" | "internal") {
     setContactChannel(ch);
     setContactOpen(true);
   }

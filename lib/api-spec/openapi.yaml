@@ -5402,6 +5402,10 @@ components:
           type: ["string", "null"]
         phone:
           type: ["string", "null"]
+        motherName:
+          type: ["string", "null"]
+        fatherName:
+          type: ["string", "null"]
         status:
           type: string
         interestedProgram:
@@ -5447,6 +5451,10 @@ components:
         email:
           type: ["string", "null"]
         phone:
+          type: ["string", "null"]
+        motherName:
+          type: ["string", "null"]
+        fatherName:
           type: ["string", "null"]
         status:
           type: string

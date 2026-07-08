@@ -926,7 +926,15 @@
       "viewFullDetail": "عرض التفاصيل الكاملة",
       "openLeadInfo": "عرض معلومات العميل المحتمل",
       "leadInfoTitle": "معلومات العميل المحتمل",
-      "interestedUniversity": "الجامعة المهتم بها"
+      "interestedUniversity": "الجامعة المهتم بها",
+      "firstName": "الاسم الأول",
+      "lastName": "اسم العائلة",
+      "email": "البريد الإلكتروني",
+      "phone": "الهاتف",
+      "motherName": "اسم الأم",
+      "fatherName": "اسم الأب",
+      "updateSaved": "تم الحفظ",
+      "updateFailed": "فشل التحديث"
     },
     "aiSummary": {
       "title": "ملخص الذكاء الاصطناعي",
@@ -2135,7 +2143,8 @@
     "seen": "تمت الرؤية",
     "readReceiptsOn": "إيصالات القراءة مفعّلة",
     "readReceiptsOff": "إيصالات القراءة معطّلة",
-    "readReceiptsToggleFailed": "تعذر تحديث إعداد إيصالات القراءة"
+    "readReceiptsToggleFailed": "تعذر تحديث إعداد إيصالات القراءة",
+    "replyPlaceholder": "اكتب ردًا…"
   },
   "settingsPage": {
     "navProfile": "الملف الشخصي",
@@ -4008,7 +4017,15 @@
     "messageSent": "تم إرسال الرسالة",
     "messageSentDesc": "تم إرسال رسالة {channel} إلى {name}",
     "failedToSend": "فشل الإرسال",
-    "error": "خطأ"
+    "error": "خطأ",
+    "instagram": "إنستغرام",
+    "instagramTo": "رسالة إنستغرام إلى {name}",
+    "errNoConversation": "لم يتم العثور على محادثة {channel} حالية لهذا الشخص. يجب أن يراسلك الشخص أولاً.",
+    "errOutside24h": "خارج نافذة الرد البالغة 24 ساعة. يمكنك الرد بعد أن يراسلك الشخص مجددًا.",
+    "errSendFailed": "تعذر إرسال الرسالة",
+    "dispatchedTitle": "تم إرسال الرسالة",
+    "dispatchedDesc": "تم تسليم رسالة {channel} إلى {name} عبر محادثة صندوق الوارد.",
+    "openConversation": "فتح المحادثة"
   },
   "catalogPage": {
     "activeInSystem": "نشط في النظام",

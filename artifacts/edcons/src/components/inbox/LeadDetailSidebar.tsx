@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, Mail, Phone, Building } from "lucide-react";
+import { ArrowRight, Building, Check, Loader2, Pencil, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
+import { customFetch } from "@workspace/api-client-react";
 import type { InboxConversationDetailResponse } from "@workspace/api-client-react";
 import { PipelineStageBadge } from "./PipelineStageBadge";
 import { AiSummaryCard } from "./AiSummaryCard";
@@ -12,6 +16,7 @@ interface LeadDetailSidebarProps {
   onOpenMatchDialog?: () => void;
   onSummarize: () => void;
   isSummarizing: boolean;
+  onUpdated?: () => void;
 }
 
 type LinkedType = "lead" | "student" | "agent";
@@ -25,14 +30,97 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+function EditableField({
+  label,
+  value,
+  fieldKey,
+  editingKey,
+  setEditingKey,
+  onSave,
+  saving,
+  type = "text",
+}: {
+  label: string;
+  value: string | null | undefined;
+  fieldKey: string;
+  editingKey: string | null;
+  setEditingKey: (k: string | null) => void;
+  onSave: (fieldKey: string, newValue: string) => Promise<void>;
+  saving: boolean;
+  type?: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const isEditing = editingKey === fieldKey;
+
+  return (
+    <div className="group" data-testid={`sidebar-field-${fieldKey}`}>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</div>
+      {isEditing ? (
+        <div className="flex items-center gap-1 mt-0.5">
+          <Input
+            autoFocus
+            type={type}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void onSave(fieldKey, draft);
+              if (e.key === "Escape") setEditingKey(null);
+            }}
+            className="h-7 text-sm"
+            data-testid={`sidebar-input-${fieldKey}`}
+          />
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 shrink-0"
+            disabled={saving}
+            onClick={() => void onSave(fieldKey, draft)}
+            data-testid={`sidebar-save-${fieldKey}`}
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5 text-emerald-600" />}
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 shrink-0"
+            disabled={saving}
+            onClick={() => setEditingKey(null)}
+          >
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1 min-w-0">
+          <span className="text-sm break-words min-w-0">{value?.trim() ? value : "—"}</span>
+          <button
+            type="button"
+            className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              setDraft(value ?? "");
+              setEditingKey(fieldKey);
+            }}
+            data-testid={`sidebar-edit-${fieldKey}`}
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function LeadDetailSidebar({
   detail,
   onOpenMatchDialog,
   onSummarize,
   isSummarizing,
+  onUpdated,
 }: LeadDetailSidebarProps) {
   const { t } = useI18n();
+  const { toast } = useToast();
   const [, navigate] = useLocation();
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const linkedType: LinkedType | null = detail.lead
     ? "lead"
@@ -61,6 +149,35 @@ export function LeadDetailSidebar({
   const entity = lead ?? student ?? agent;
   if (!entity) return null;
 
+  // Lead & student panels are editable inline; agents are read-only here.
+  const editable = linkedType === "lead" || linkedType === "student";
+  const patchUrl =
+    linkedType === "lead" && lead
+      ? `/api/leads/${lead.id}`
+      : linkedType === "student" && student
+        ? `/api/students/${student.id}`
+        : null;
+
+  async function saveField(fieldKey: string, newValue: string) {
+    if (!patchUrl) return;
+    setSaving(true);
+    try {
+      await customFetch(patchUrl, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [fieldKey]: newValue.trim() === "" ? null : newValue.trim() }),
+      });
+      setEditingKey(null);
+      toast({ title: t("inbox.sidebar.updateSaved") });
+      onUpdated?.();
+    } catch (err: any) {
+      const msg = err?.data?.error || err?.body?.error || err?.message;
+      toast({ title: t("inbox.sidebar.updateFailed"), description: typeof msg === "string" ? msg : undefined, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const typeLabel =
     linkedType === "lead"
       ? t("inbox.sidebar.typeLead")
@@ -80,6 +197,8 @@ export function LeadDetailSidebar({
     if (!Number.isFinite(n)) return lead.estimatedValue;
     return n.toLocaleString();
   })();
+
+  const editProps = { editingKey, setEditingKey, onSave: saveField, saving };
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4" data-testid="lead-detail-sidebar">
@@ -105,22 +224,33 @@ export function LeadDetailSidebar({
         onSummarize={onSummarize}
       />
 
-      {/* Contact info */}
-      {(entity.email || entity.phone) && (
-        <div className="space-y-2 text-sm">
-          {entity.email && (
-            <div className="flex items-center gap-2 min-w-0">
-              <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="truncate">{entity.email}</span>
-            </div>
-          )}
-          {entity.phone && (
-            <div className="flex items-center gap-2">
-              <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span>{entity.phone}</span>
-            </div>
-          )}
+      {/* Contact / identity info */}
+      {editable ? (
+        <div className="space-y-2.5 border-t pt-3">
+          <EditableField label={t("inbox.sidebar.firstName")} value={entity.firstName} fieldKey="firstName" {...editProps} />
+          <EditableField label={t("inbox.sidebar.lastName")} value={entity.lastName} fieldKey="lastName" {...editProps} />
+          <EditableField label={t("inbox.sidebar.email")} value={entity.email} fieldKey="email" type="email" {...editProps} />
+          <EditableField label={t("inbox.sidebar.phone")} value={entity.phone} fieldKey="phone" {...editProps} />
+          <EditableField
+            label={t("inbox.sidebar.motherName")}
+            value={(lead ?? student)?.motherName}
+            fieldKey="motherName"
+            {...editProps}
+          />
+          <EditableField
+            label={t("inbox.sidebar.fatherName")}
+            value={(lead ?? student)?.fatherName}
+            fieldKey="fatherName"
+            {...editProps}
+          />
         </div>
+      ) : (
+        (entity.email || entity.phone) && (
+          <div className="space-y-2 text-sm border-t pt-3">
+            {entity.email && <Field label={t("inbox.sidebar.email")} value={entity.email} />}
+            {entity.phone && <Field label={t("inbox.sidebar.phone")} value={entity.phone ?? ""} />}
+          </div>
+        )
       )}
 
       {/* Lead-specific */}

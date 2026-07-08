@@ -30,6 +30,7 @@ const leadDocsObjectStorage = new ObjectStorageService();
 
 const LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
+  "motherName", "fatherName",
   "interestedProgram", "interestedUniversity", "interestedCountry", "source",
   "status", "assignedTo", "notes", "estimatedValue", "season", "agentId",
 ];
@@ -690,6 +691,7 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
 
 const AGENT_LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
+  "motherName", "fatherName",
   "interestedProgram", "interestedUniversity", "interestedCountry", "source",
   "notes", "estimatedValue",
 ];

@@ -318,6 +318,20 @@ function InboxTab() {
     setSidebarSheetOpen(false);
   }, [selectedId]);
 
+  // Deep-link: /staff/messages?conversation=<id> opens the conversation directly
+  // (used by quick-contact success toasts and failure notifications).
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const convParam = params.get("conversation");
+      if (convParam) {
+        const id = parseInt(convParam, 10);
+        if (Number.isFinite(id) && id > 0) setSelectedId(id);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Tick once every 5s so the tooltip's "Xs ago" text stays roughly fresh
   // and the derived "stale" status flips after the threshold without needing
   // a separate timer per event.
@@ -664,11 +678,15 @@ function InboxTab() {
 
   async function toggleStar(convId: number, e: React.MouseEvent) {
     e.stopPropagation();
+    // Optimistic: flip the star in the list immediately; reconcile with the
+    // server response (and roll back on failure).
+    setConvs(prev => prev.map(c => c.id === convId ? { ...c, isStarred: !c.isStarred } : c));
     try {
       const res = await customFetch(`/api/inbox/conversations/${convId}/star`, { method: "POST" }) as any;
-      fetchInbox();
+      setConvs(prev => prev.map(c => c.id === convId ? { ...c, isStarred: Boolean(res.starred) } : c));
       toast({ title: res.starred ? t("inbox.action.star") : t("inbox.action.unstar") });
     } catch {
+      setConvs(prev => prev.map(c => c.id === convId ? { ...c, isStarred: !c.isStarred } : c));
       toast({ title: "Failed to update", variant: "destructive" });
     }
   }
@@ -982,14 +1000,14 @@ function InboxTab() {
                     onClick={() => setTab(tb.key)}
                     aria-pressed={active}
                     className={cn(
-                      "shrink-0 min-w-[68px] px-2 py-1 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1",
+                      "shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap",
                       active
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                     )}
                   >
                     <Icon className={cn("w-3.5 h-3.5 shrink-0", !active && "opacity-60")} />
-                    <span className="truncate">{tb.label}</span>
+                    <span>{tb.label}</span>
                   </button>
                 );
               })}
@@ -1480,7 +1498,7 @@ function InboxTab() {
                             sendReply();
                           }
                         }}
-                        placeholder={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow ? (conv.channel === "whatsapp" ? "Outside 24h — use a template" : "Outside 24h window") : t("messagesPage.replyPlaceholder") || "Reply…"}
+                        placeholder={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow ? (conv.channel === "whatsapp" ? t("messagesPage.outside24hUseTemplate") : t("messagesPage.outside24hReplyWindowMeta")) : t("messagesPage.replyPlaceholder")}
                         rows={2}
                         className="flex-1 rounded-lg text-sm"
                         disabled={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow && pendingFiles.length === 0}
@@ -1536,6 +1554,7 @@ function InboxTab() {
               onOpenMatchDialog={loadSuggestions}
               onSummarize={handleSummarize}
               isSummarizing={summarizeMutation.isPending}
+              onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
             />
           </div>
         )}
@@ -1556,6 +1575,7 @@ function InboxTab() {
                 onOpenMatchDialog={() => { setSidebarSheetOpen(false); loadSuggestions(); }}
                 onSummarize={handleSummarize}
                 isSummarizing={summarizeMutation.isPending}
+                onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
               />
             </div>
           </SheetContent>

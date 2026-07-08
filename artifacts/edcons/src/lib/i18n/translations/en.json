@@ -926,7 +926,15 @@
       "entityType": "Entity type",
       "viewFullDetail": "View full detail",
       "openLeadInfo": "Show lead info",
-      "leadInfoTitle": "Lead info"
+      "leadInfoTitle": "Lead info",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "email": "Email",
+      "phone": "Phone",
+      "motherName": "Mother's Name",
+      "fatherName": "Father's Name",
+      "updateSaved": "Saved",
+      "updateFailed": "Update failed"
     },
     "aiSummary": {
       "title": "AI Summary",
@@ -2376,7 +2384,8 @@
     "seen": "Seen",
     "readReceiptsOn": "Read receipts on",
     "readReceiptsOff": "Read receipts off",
-    "readReceiptsToggleFailed": "Could not update read receipts setting"
+    "readReceiptsToggleFailed": "Could not update read receipts setting",
+    "replyPlaceholder": "Type a reply…"
   },
   "settingsPage": {
     "navProfile": "Profile",
@@ -3951,7 +3960,15 @@
     "messageSent": "Message sent",
     "messageSentDesc": "{channel} message sent to {name}",
     "failedToSend": "Failed to send",
-    "error": "Error"
+    "error": "Error",
+    "instagram": "Instagram",
+    "instagramTo": "Instagram message to {name}",
+    "errNoConversation": "No existing {channel} conversation found for this contact. The person must message you first.",
+    "errOutside24h": "Outside the 24-hour reply window. You can reply after the contact messages you again.",
+    "errSendFailed": "Message could not be sent",
+    "dispatchedTitle": "Message sent",
+    "dispatchedDesc": "{channel} message delivered to {name} via the inbox conversation.",
+    "openConversation": "Open conversation"
   },
   "catalogPage": {
     "activeInSystem": "Active in system",

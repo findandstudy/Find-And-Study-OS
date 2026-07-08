@@ -44,6 +44,7 @@ import { sendEmail } from "../lib/email";
 import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
 import { decryptConfig } from "../lib/encryption";
 import { sendViaZernio, getZernioApiKey, resolveZernioAccount } from "../lib/inbox/zernioSend";
+import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
 import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
 import {
   getAiAgentConfig,
@@ -592,6 +593,8 @@ router.get(
             lastName: leadsTable.lastName,
             email: leadsTable.email,
             phone: leadsTable.phone,
+            motherName: leadsTable.motherName,
+            fatherName: leadsTable.fatherName,
             status: leadsTable.status,
             interestedProgram: leadsTable.interestedProgram,
             interestedUniversity: leadsTable.interestedUniversity,
@@ -617,6 +620,8 @@ router.get(
             lastName: studentsTable.lastName,
             email: studentsTable.email,
             phone: studentsTable.phone,
+            motherName: studentsTable.motherName,
+            fatherName: studentsTable.fatherName,
             status: studentsTable.status,
             agentId: studentsTable.agentId,
             assignedToId: studentsTable.assignedToId,
@@ -1110,88 +1115,46 @@ router.post(
         );
 
       if (zernioAcct) {
-        const zernioApiKey = await getZernioApiKey();
-        if (!zernioApiKey) {
+        // Meta-windowed channels enforce the 24h free-text rule regardless of
+        // whether the account is Zernio-hosted or direct (same policy as the
+        // direct-API branches below and the quick-contact route).
+        if (
+          (conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") &&
+          !isWithin24hWindow(conv.lastInboundAt)
+        ) {
+          res.status(409).json({
+            error: "outside_24h_window",
+            message: "Free-form replies are only allowed within 24h of the last inbound message. Use a template.",
+          });
+          return;
+        }
+
+        // Single source of truth for Zernio outbound — shared with quick-contact
+        // (routes/messages.ts) and, at the transport level, the AI bot.
+        const result = await sendZernioConversationMessage({
+          conv: {
+            id,
+            channel: conv.channel,
+            externalThreadId: conv.externalThreadId,
+            assignedToId: conv.assignedToId ?? null,
+            unmatched: conv.unmatched,
+          },
+          externalAccountId: zernioAcct.externalAccountId!,
+          senderId: req.user!.id,
+          content: hasContent ? content : undefined,
+          attachments: hasAttachments ? bodyAttachments : undefined,
+        });
+
+        if (result.precondition === "zernio_api_key_not_configured") {
           res.status(502).json({ error: "Zernio API key not configured" });
           return;
         }
-        if (!conv.externalThreadId) {
+        if (result.precondition === "zernio_no_external_thread") {
           res.status(400).json({ error: "Conversation has no external thread ID" });
           return;
         }
 
-        const msgContent = content?.trim() || (hasAttachments ? "[attachment]" : "");
-        const [pending] = await db
-          .insert(messagesTable)
-          .values({
-            conversationId: id,
-            senderId: req.user!.id,
-            content: msgContent,
-            channel: conv.channel,
-            direction: "outbound",
-            status: "pending",
-            metadata: hasAttachments ? { attachments: bodyAttachments } : {},
-          })
-          .returning();
-
-        // Single source of truth for Zernio outbound — same helper the AI bot uses.
-        const outcome = await sendViaZernio({
-          externalThreadId: conv.externalThreadId,
-          externalAccountId: zernioAcct.externalAccountId!,
-          text: hasContent ? content : undefined,
-          attachments: hasAttachments ? bodyAttachments : undefined,
-        });
-        const sendOk = outcome.ok;
-        const sendError = outcome.error;
-        const externalMessageId = outcome.externalMessageId;
-
-        const [msg] = await db
-          .update(messagesTable)
-          .set({
-            status: sendOk ? "sent" : "failed",
-            externalMessageId: externalMessageId || null,
-            failedReason: sendOk ? null : sendError || "send_failed",
-            sentAt: sendOk ? new Date() : null,
-            metadata: sendOk
-              ? (hasAttachments ? { attachments: bodyAttachments } : {})
-              : { error: sendError },
-          })
-          .where(eq(messagesTable.id, pending.id))
-          .returning();
-
-        if (sendOk) {
-          await db
-            .update(conversationsTable)
-            .set({ lastMessageAt: new Date(), lastMessagePreview: msgContent.slice(0, 200) })
-            .where(eq(conversationsTable.id, id));
-          inboxBus.publish({
-            type: "message",
-            conversationId: id,
-            channel: conv.channel,
-            assignedToId: conv.assignedToId ?? null,
-            unmatched: conv.unmatched,
-            direction: "outbound",
-          });
-          // Auto-subscribe the replying user so they can find the conversation under "Subscribed"
-          await db.insert(conversationParticipantsTable)
-            .values({ conversationId: id, userId: req.user!.id, isStarred: false })
-            .onConflictDoNothing();
-        } else {
-          try {
-            await dispatchNotification({
-              event: "inbox.send_failed",
-              title: `Zernio send failed for conversation #${id}`,
-              body: sendError || "Send failed",
-              actionUrl: `/staff/messages?conversation=${id}`,
-              icon: "alert",
-              data: { conversationId: id, channel: conv.channel, error: sendError },
-            });
-          } catch (notifErr) {
-            console.error("[INBOX] zernio send_failed dispatch error:", notifErr);
-          }
-        }
-
-        res.status(sendOk ? 201 : 502).json({ message: msg, error: sendError });
+        res.status(result.ok ? 201 : 502).json({ message: result.message, error: result.error });
         return;
       }
     }

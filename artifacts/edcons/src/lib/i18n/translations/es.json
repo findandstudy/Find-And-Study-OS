@@ -926,7 +926,15 @@
       "viewFullDetail": "Ver detalle completo",
       "openLeadInfo": "Mostrar información del prospecto",
       "leadInfoTitle": "Información del prospecto",
-      "interestedUniversity": "Universidad de interés"
+      "interestedUniversity": "Universidad de interés",
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "email": "Correo electrónico",
+      "phone": "Teléfono",
+      "motherName": "Nombre de la madre",
+      "fatherName": "Nombre del padre",
+      "updateSaved": "Guardado",
+      "updateFailed": "Error al actualizar"
     },
     "aiSummary": {
       "title": "Resumen IA",
@@ -2084,7 +2092,8 @@
     "seen": "Visto",
     "readReceiptsOn": "Confirmaciones de lectura activadas",
     "readReceiptsOff": "Confirmaciones de lectura desactivadas",
-    "readReceiptsToggleFailed": "No se pudo actualizar la configuración de confirmación de lectura"
+    "readReceiptsToggleFailed": "No se pudo actualizar la configuración de confirmación de lectura",
+    "replyPlaceholder": "Escribe una respuesta…"
   },
   "settingsPage": {
     "navProfile": "Perfil",
@@ -4008,7 +4017,15 @@
     "messageSent": "Mensaje enviado",
     "messageSentDesc": "Mensaje de {channel} enviado a {name}",
     "failedToSend": "Error al enviar",
-    "error": "Error"
+    "error": "Error",
+    "instagram": "Instagram",
+    "instagramTo": "Mensaje de Instagram a {name}",
+    "errNoConversation": "No se encontró una conversación de {channel} existente para este contacto. La persona debe escribirte primero.",
+    "errOutside24h": "Fuera de la ventana de respuesta de 24 horas. Podrás responder cuando el contacto te escriba de nuevo.",
+    "errSendFailed": "No se pudo enviar el mensaje",
+    "dispatchedTitle": "Mensaje enviado",
+    "dispatchedDesc": "Mensaje de {channel} entregado a {name} a través de la conversación de la bandeja de entrada.",
+    "openConversation": "Abrir conversación"
   },
   "catalogPage": {
     "activeInSystem": "Activo en el sistema",

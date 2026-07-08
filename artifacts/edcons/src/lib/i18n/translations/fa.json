@@ -926,7 +926,15 @@
       "viewFullDetail": "مشاهده جزئیات کامل",
       "openLeadInfo": "نمایش اطلاعات سرنخ",
       "leadInfoTitle": "اطلاعات سرنخ",
-      "interestedUniversity": "دانشگاه موردعلاقه"
+      "interestedUniversity": "دانشگاه موردعلاقه",
+      "firstName": "نام",
+      "lastName": "نام خانوادگی",
+      "email": "ایمیل",
+      "phone": "تلفن",
+      "motherName": "نام مادر",
+      "fatherName": "نام پدر",
+      "updateSaved": "ذخیره شد",
+      "updateFailed": "به‌روزرسانی ناموفق بود"
     },
     "aiSummary": {
       "title": "خلاصه هوش مصنوعی",
@@ -2084,7 +2092,8 @@
     "seen": "دیده شد",
     "readReceiptsOn": "تاییدیه خواندن فعال",
     "readReceiptsOff": "تاییدیه خواندن غیرفعال",
-    "readReceiptsToggleFailed": "به‌روزرسانی تنظیمات تأیید خواندن ممکن نشد"
+    "readReceiptsToggleFailed": "به‌روزرسانی تنظیمات تأیید خواندن ممکن نشد",
+    "replyPlaceholder": "پاسخی بنویسید…"
   },
   "settingsPage": {
     "navProfile": "پروفایل",
@@ -4008,7 +4017,15 @@
     "messageSent": "پیام ارسال شد",
     "messageSentDesc": "پیام {channel} به {name} ارسال شد",
     "failedToSend": "ارسال ناموفق بود",
-    "error": "خطا"
+    "error": "خطا",
+    "instagram": "اینستاگرام",
+    "instagramTo": "پیام اینستاگرام به {name}",
+    "errNoConversation": "گفتگوی {channel} موجودی برای این مخاطب یافت نشد. ابتدا باید آن شخص به شما پیام دهد.",
+    "errOutside24h": "خارج از بازه پاسخ ۲۴ ساعته. پس از پیام مجدد مخاطب می‌توانید پاسخ دهید.",
+    "errSendFailed": "پیام ارسال نشد",
+    "dispatchedTitle": "پیام ارسال شد",
+    "dispatchedDesc": "پیام {channel} از طریق گفتگوی صندوق ورودی به {name} تحویل شد.",
+    "openConversation": "باز کردن گفتگو"
   },
   "catalogPage": {
     "activeInSystem": "فعال در سیستم",

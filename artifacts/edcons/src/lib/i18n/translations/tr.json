@@ -926,7 +926,15 @@
       "entityType": "Tür",
       "viewFullDetail": "Tüm detayları gör",
       "openLeadInfo": "Lead bilgisini göster",
-      "leadInfoTitle": "Lead bilgisi"
+      "leadInfoTitle": "Lead bilgisi",
+      "firstName": "Ad",
+      "lastName": "Soyad",
+      "email": "E-posta",
+      "phone": "Telefon",
+      "motherName": "Anne Adı",
+      "fatherName": "Baba Adı",
+      "updateSaved": "Kaydedildi",
+      "updateFailed": "Güncelleme başarısız"
     },
     "aiSummary": {
       "title": "AI Özet",
@@ -2317,7 +2325,8 @@
     "seen": "Görüldü",
     "readReceiptsOn": "Okundu bilgisi açık",
     "readReceiptsOff": "Okundu bilgisi kapalı",
-    "readReceiptsToggleFailed": "Okundu bilgisi ayarı güncellenemedi"
+    "readReceiptsToggleFailed": "Okundu bilgisi ayarı güncellenemedi",
+    "replyPlaceholder": "Yanıt yazın…"
   },
   "settingsPage": {
     "navProfile": "Profil",
@@ -3892,7 +3901,15 @@
     "messageSent": "Mesaj gönderildi",
     "messageSentDesc": "{channel} mesajı {name} kişisine gönderildi",
     "failedToSend": "Gönderilemedi",
-    "error": "Hata"
+    "error": "Hata",
+    "instagram": "Instagram",
+    "instagramTo": "{name} kişisine Instagram mesajı",
+    "errNoConversation": "Bu kişi için mevcut bir {channel} görüşmesi bulunamadı. Önce kişinin size mesaj göndermesi gerekir.",
+    "errOutside24h": "24 saatlik yanıt penceresinin dışında. Kişi size yeniden mesaj gönderdikten sonra yanıt verebilirsiniz.",
+    "errSendFailed": "Mesaj gönderilemedi",
+    "dispatchedTitle": "Mesaj gönderildi",
+    "dispatchedDesc": "{channel} mesajı gelen kutusu görüşmesi üzerinden {name} kişisine iletildi.",
+    "openConversation": "Görüşmeyi aç"
   },
   "catalogPage": {
     "activeInSystem": "Sistemde aktif",

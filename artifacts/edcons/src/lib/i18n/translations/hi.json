@@ -926,7 +926,15 @@
       "viewFullDetail": "पूरा विवरण देखें",
       "openLeadInfo": "लीड जानकारी दिखाएं",
       "leadInfoTitle": "लीड जानकारी",
-      "interestedUniversity": "रुचि वाला विश्वविद्यालय"
+      "interestedUniversity": "रुचि वाला विश्वविद्यालय",
+      "firstName": "पहला नाम",
+      "lastName": "अंतिम नाम",
+      "email": "ईमेल",
+      "phone": "फ़ोन",
+      "motherName": "माता का नाम",
+      "fatherName": "पिता का नाम",
+      "updateSaved": "सहेजा गया",
+      "updateFailed": "अपडेट विफल"
     },
     "aiSummary": {
       "title": "एआई सारांश",
@@ -2084,7 +2092,8 @@
     "seen": "देखा गया",
     "readReceiptsOn": "पठन रसीदें चालू",
     "readReceiptsOff": "पठन रसीदें बंद",
-    "readReceiptsToggleFailed": "रीड रिसीप्ट सेटिंग अपडेट नहीं हो सकी"
+    "readReceiptsToggleFailed": "रीड रिसीप्ट सेटिंग अपडेट नहीं हो सकी",
+    "replyPlaceholder": "जवाब लिखें…"
   },
   "settingsPage": {
     "navProfile": "प्रोफ़ाइल",
@@ -4008,7 +4017,15 @@
     "messageSent": "संदेश भेजा गया",
     "messageSentDesc": "{name} को {channel} संदेश भेजा गया",
     "failedToSend": "भेजने में विफल",
-    "error": "त्रुटि"
+    "error": "त्रुटि",
+    "instagram": "इंस्टाग्राम",
+    "instagramTo": "{name} को इंस्टाग्राम संदेश",
+    "errNoConversation": "इस संपर्क के लिए कोई मौजूदा {channel} वार्तालाप नहीं मिला। व्यक्ति को पहले आपको संदेश भेजना होगा।",
+    "errOutside24h": "24 घंटे की जवाब विंडो के बाहर। संपर्क के दोबारा संदेश भेजने के बाद आप जवाब दे सकते हैं।",
+    "errSendFailed": "संदेश नहीं भेजा जा सका",
+    "dispatchedTitle": "संदेश भेजा गया",
+    "dispatchedDesc": "{channel} संदेश इनबॉक्स वार्तालाप के माध्यम से {name} को भेजा गया।",
+    "openConversation": "वार्तालाप खोलें"
   },
   "catalogPage": {
     "activeInSystem": "सिस्टम में सक्रिय",

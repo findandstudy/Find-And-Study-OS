@@ -926,7 +926,15 @@
       "viewFullDetail": "Посмотреть полную информацию",
       "openLeadInfo": "Показать информацию о лиде",
       "leadInfoTitle": "Информация о лиде",
-      "interestedUniversity": "Интересующий университет"
+      "interestedUniversity": "Интересующий университет",
+      "firstName": "Имя",
+      "lastName": "Фамилия",
+      "email": "Эл. почта",
+      "phone": "Телефон",
+      "motherName": "Имя матери",
+      "fatherName": "Имя отца",
+      "updateSaved": "Сохранено",
+      "updateFailed": "Не удалось обновить"
     },
     "aiSummary": {
       "title": "ИИ-сводка",
@@ -2135,7 +2143,8 @@
     "seen": "Прочитано",
     "readReceiptsOn": "Уведомления о прочтении включены",
     "readReceiptsOff": "Уведомления о прочтении отключены",
-    "readReceiptsToggleFailed": "Не удалось обновить настройку подтверждения прочтения"
+    "readReceiptsToggleFailed": "Не удалось обновить настройку подтверждения прочтения",
+    "replyPlaceholder": "Введите ответ…"
   },
   "settingsPage": {
     "navProfile": "Профиль",
@@ -4008,7 +4017,15 @@
     "messageSent": "Сообщение отправлено",
     "messageSentDesc": "Сообщение {channel} отправлено: {name}",
     "failedToSend": "Не удалось отправить",
-    "error": "Ошибка"
+    "error": "Ошибка",
+    "instagram": "Instagram",
+    "instagramTo": "Сообщение Instagram для {name}",
+    "errNoConversation": "Для этого контакта не найдено существующей беседы {channel}. Сначала собеседник должен написать вам.",
+    "errOutside24h": "Вне 24-часового окна ответа. Вы сможете ответить после того, как контакт снова напишет вам.",
+    "errSendFailed": "Не удалось отправить сообщение",
+    "dispatchedTitle": "Сообщение отправлено",
+    "dispatchedDesc": "Сообщение {channel} доставлено {name} через беседу входящих.",
+    "openConversation": "Открыть беседу"
   },
   "catalogPage": {
     "activeInSystem": "Активно в системе",

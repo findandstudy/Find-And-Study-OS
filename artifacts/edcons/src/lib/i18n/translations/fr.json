@@ -926,7 +926,15 @@
       "viewFullDetail": "Voir le détail complet",
       "openLeadInfo": "Afficher les infos du prospect",
       "leadInfoTitle": "Infos du prospect",
-      "interestedUniversity": "Université d'intérêt"
+      "interestedUniversity": "Université d'intérêt",
+      "firstName": "Prénom",
+      "lastName": "Nom",
+      "email": "E-mail",
+      "phone": "Téléphone",
+      "motherName": "Nom de la mère",
+      "fatherName": "Nom du père",
+      "updateSaved": "Enregistré",
+      "updateFailed": "Échec de la mise à jour"
     },
     "aiSummary": {
       "title": "Résumé IA",
@@ -2135,7 +2143,8 @@
     "seen": "Lu",
     "readReceiptsOn": "Accusés de lecture activés",
     "readReceiptsOff": "Accusés de lecture désactivés",
-    "readReceiptsToggleFailed": "Impossible de mettre à jour le paramètre d'accusé de lecture"
+    "readReceiptsToggleFailed": "Impossible de mettre à jour le paramètre d'accusé de lecture",
+    "replyPlaceholder": "Écrivez une réponse…"
   },
   "settingsPage": {
     "navProfile": "Profil",
@@ -4008,7 +4017,15 @@
     "messageSent": "Message envoyé",
     "messageSentDesc": "Message {channel} envoyé à {name}",
     "failedToSend": "Échec de l'envoi",
-    "error": "Erreur"
+    "error": "Erreur",
+    "instagram": "Instagram",
+    "instagramTo": "Message Instagram à {name}",
+    "errNoConversation": "Aucune conversation {channel} existante trouvée pour ce contact. La personne doit d'abord vous écrire.",
+    "errOutside24h": "En dehors de la fenêtre de réponse de 24 heures. Vous pourrez répondre lorsque le contact vous écrira à nouveau.",
+    "errSendFailed": "Le message n'a pas pu être envoyé",
+    "dispatchedTitle": "Message envoyé",
+    "dispatchedDesc": "Message {channel} envoyé à {name} via la conversation de la boîte de réception.",
+    "openConversation": "Ouvrir la conversation"
   },
   "catalogPage": {
     "activeInSystem": "Actif dans le système",

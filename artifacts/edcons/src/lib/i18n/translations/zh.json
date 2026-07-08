@@ -926,7 +926,15 @@
       "viewFullDetail": "查看完整详情",
       "openLeadInfo": "显示线索信息",
       "leadInfoTitle": "线索信息",
-      "interestedUniversity": "意向大学"
+      "interestedUniversity": "意向大学",
+      "firstName": "名字",
+      "lastName": "姓氏",
+      "email": "电子邮件",
+      "phone": "电话",
+      "motherName": "母亲姓名",
+      "fatherName": "父亲姓名",
+      "updateSaved": "已保存",
+      "updateFailed": "更新失败"
     },
     "aiSummary": {
       "title": "AI 摘要",
@@ -2084,7 +2092,8 @@
     "seen": "已读",
     "readReceiptsOn": "已开启已读回执",
     "readReceiptsOff": "已关闭已读回执",
-    "readReceiptsToggleFailed": "无法更新已读回执设置"
+    "readReceiptsToggleFailed": "无法更新已读回执设置",
+    "replyPlaceholder": "输入回复…"
   },
   "settingsPage": {
     "navProfile": "个人资料",
@@ -4008,7 +4017,15 @@
     "messageSent": "消息已发送",
     "messageSentDesc": "已通过 {channel} 向 {name} 发送消息",
     "failedToSend": "发送失败",
-    "error": "错误"
+    "error": "错误",
+    "instagram": "Instagram",
+    "instagramTo": "发送 Instagram 消息给 {name}",
+    "errNoConversation": "未找到该联系人的 {channel} 会话。对方必须先给您发消息。",
+    "errOutside24h": "已超出 24 小时回复窗口。待对方再次发消息后即可回复。",
+    "errSendFailed": "消息发送失败",
+    "dispatchedTitle": "消息已发送",
+    "dispatchedDesc": "已通过收件箱会话将 {channel} 消息发送给 {name}。",
+    "openConversation": "打开会话"
   },
   "catalogPage": {
     "activeInSystem": "系统中启用",

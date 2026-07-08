@@ -7,16 +7,18 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { Mail, Phone, MessageSquare, Send, Loader2 } from "lucide-react";
+import { Mail, Phone, MessageSquare, Send, Loader2, Instagram } from "lucide-react";
+import { useLocation } from "wouter";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-type Channel = "email" | "whatsapp" | "internal";
+type Channel = "email" | "whatsapp" | "instagram" | "internal";
 
 const CHANNELS: { key: Channel; labelKey: string; icon: typeof Mail; color: string }[] = [
   { key: "internal", labelKey: "quickContact.internal", icon: MessageSquare, color: "bg-blue-500/10 text-blue-600 border-blue-200 hover:bg-blue-500/20" },
   { key: "email", labelKey: "common.email", icon: Mail, color: "bg-purple-500/10 text-purple-600 border-purple-200 hover:bg-purple-500/20" },
   { key: "whatsapp", labelKey: "quickContact.whatsapp", icon: Phone, color: "bg-green-500/10 text-green-600 border-green-200 hover:bg-green-500/20" },
+  { key: "instagram", labelKey: "quickContact.instagram", icon: Instagram, color: "bg-pink-500/10 text-pink-600 border-pink-200 hover:bg-pink-500/20" },
 ];
 
 interface QuickContactProps {
@@ -112,12 +114,28 @@ export function QuickContactDialog({
 }) {
   const { toast } = useToast();
   const { t } = useI18n();
+  const [, navigate] = useLocation();
   const [message, setMessage] = useState("");
   const [subject, setSubject] = useState("");
   const [sending, setSending] = useState(false);
 
   const channelMeta = CHANNELS.find(c => c.key === channel)!;
   const channelLabel = t(channelMeta.labelKey);
+
+  function translateErrorCode(code: string | undefined, detail?: string | null): string {
+    switch (code) {
+      case "no_zernio_conversation":
+        return t("quickContact.errNoConversation", { channel: channelLabel });
+      case "outside_24h_window":
+        return t("quickContact.errOutside24h");
+      case "zernio_send_failed":
+        return detail
+          ? `${t("quickContact.errSendFailed")} (${detail})`
+          : t("quickContact.errSendFailed");
+      default:
+        return code || t("quickContact.failedToSend");
+    }
+  }
 
   async function handleSend() {
     if (!message.trim()) return;
@@ -138,11 +156,28 @@ export function QuickContactDialog({
           entityId,
         }),
       });
+      const body: any = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: t("quickContact.failedToSend") }));
-        throw new Error(err.error || t("quickContact.failedToSend"));
+        throw new Error(translateErrorCode(body?.error, body?.detail));
       }
-      toast({ title: t("quickContact.messageSent"), description: t("quickContact.messageSentDesc", { channel: channelLabel, name }) });
+      const conversationId: number | undefined = body?.conversationId;
+      if (body?.dispatched && conversationId) {
+        toast({
+          title: t("quickContact.dispatchedTitle"),
+          description: t("quickContact.dispatchedDesc", { channel: channelLabel, name }),
+          action: (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(`/staff/messages?conversation=${conversationId}`)}
+            >
+              {t("quickContact.openConversation")}
+            </Button>
+          ) as any,
+        });
+      } else {
+        toast({ title: t("quickContact.messageSent"), description: t("quickContact.messageSentDesc", { channel: channelLabel, name }) });
+      }
       setMessage("");
       setSubject("");
       onClose();
@@ -196,6 +231,9 @@ export function QuickContactDialog({
             )}
             {channel === "whatsapp" && phone && (
               <><Phone className="w-3.5 h-3.5" /> {t("quickContact.to", { value: phone })}</>
+            )}
+            {channel === "instagram" && (
+              <><Instagram className="w-3.5 h-3.5" /> {t("quickContact.instagramTo", { name })}</>
             )}
             {channel === "internal" && (
               <><MessageSquare className="w-3.5 h-3.5" /> {t("quickContact.internalMessageTo", { name })}</>

@@ -12,11 +12,18 @@ import {
   leadsTable,
   agentsTable,
   documentsTable,
+  applicationsTable,
+  channelAccountsTable,
+  externalContactsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, sql, inArray, ilike, or, isNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
+import { isWithin24hWindow } from "../lib/inbox/channels/whatsapp";
+import { toE164 } from "../lib/inbox/phone";
+import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 
 const router: IRouter = Router();
 
@@ -789,6 +796,163 @@ router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_
     return;
   }
 
+  // ── WhatsApp / Instagram → real dispatch through an existing inbox
+  // conversation (Zernio-hosted). No silent "queued" state: either the
+  // message is actually sent, or the caller gets a machine-readable error
+  // code the UI can translate.
+  if (channel === "whatsapp" || channel === "instagram") {
+    try {
+      // 0) Entity is mandatory for real dispatch and every lookup below is
+      //    re-derived from the DB record — the client-provided phone is never
+      //    used to select a contact (IDOR guard).
+      const numericEntityId = entityId ? parseInt(String(entityId), 10) : NaN;
+      if (!entityType || !numericEntityId) {
+        res.status(400).json({ error: "entity_required", channel });
+        return;
+      }
+
+      const contactConds: any[] = [];
+      // Agent-source scope: non-admin staff may not touch agent-sourced records.
+      let entityAgentId: number | null | undefined = undefined;
+      // Entity's own stored phone — the ONLY phone allowed for the WhatsApp
+      // contact fallback.
+      let entityPhoneE164: string | null = null;
+
+      if (entityType === "lead") {
+        const [row] = await db
+          .select({ agentId: leadsTable.agentId, phoneE164: leadsTable.phoneE164, phone: leadsTable.phone })
+          .from(leadsTable)
+          .where(eq(leadsTable.id, numericEntityId));
+        if (!row) { res.status(404).json({ error: "entity_not_found", channel }); return; }
+        entityAgentId = row.agentId;
+        entityPhoneE164 = row.phoneE164 || (row.phone ? toE164(String(row.phone)) : null);
+        contactConds.push(eq(externalContactsTable.leadId, numericEntityId));
+      } else if (entityType === "student") {
+        const [row] = await db
+          .select({ agentId: studentsTable.agentId, phoneE164: studentsTable.phoneE164, phone: studentsTable.phone })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, numericEntityId));
+        if (!row) { res.status(404).json({ error: "entity_not_found", channel }); return; }
+        entityAgentId = row.agentId;
+        entityPhoneE164 = row.phoneE164 || (row.phone ? toE164(String(row.phone)) : null);
+        contactConds.push(eq(externalContactsTable.studentId, numericEntityId));
+      } else if (entityType === "agent") {
+        const [row] = await db
+          .select({ phoneE164: agentsTable.phoneE164, phone: agentsTable.phone })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, numericEntityId));
+        if (!row) { res.status(404).json({ error: "entity_not_found", channel }); return; }
+        entityPhoneE164 = row.phoneE164 || (row.phone ? toE164(String(row.phone)) : null);
+        contactConds.push(eq(externalContactsTable.agentId, numericEntityId));
+      } else if (entityType === "application") {
+        const [app] = await db
+          .select({ studentId: applicationsTable.studentId, agentId: applicationsTable.agentId })
+          .from(applicationsTable)
+          .where(eq(applicationsTable.id, numericEntityId));
+        if (!app?.studentId) { res.status(404).json({ error: "entity_not_found", channel }); return; }
+        entityAgentId = app.agentId;
+        const [stu] = await db
+          .select({ agentId: studentsTable.agentId, phoneE164: studentsTable.phoneE164, phone: studentsTable.phone })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, app.studentId));
+        if (entityAgentId == null) entityAgentId = stu?.agentId ?? null;
+        entityPhoneE164 = stu?.phoneE164 || (stu?.phone ? toE164(String(stu.phone)) : null);
+        contactConds.push(eq(externalContactsTable.studentId, app.studentId));
+      } else {
+        res.status(400).json({ error: "entity_required", channel });
+        return;
+      }
+
+      if (entityAgentId !== undefined && isAgentSourcedAndBlockedForStaff(req.user!, entityAgentId)) {
+        res.status(404).json({ error: "entity_not_found", channel });
+        return;
+      }
+
+      // WhatsApp fallback: match by the ENTITY's stored E.164 phone when no
+      // entity link exists on the contact row. Never the client-typed phone.
+      if (channel === "whatsapp" && entityPhoneE164) {
+        contactConds.push(eq(externalContactsTable.phoneE164, entityPhoneE164));
+      }
+
+      let conv: typeof conversationsTable.$inferSelect | null = null;
+      let zernioExternalAccountId: string | null = null;
+      if (contactConds.length > 0) {
+        const contacts = await db
+          .select({ id: externalContactsTable.id })
+          .from(externalContactsTable)
+          .where(and(
+            eq(externalContactsTable.channel, channel),
+            contactConds.length === 1 ? contactConds[0] : or(...contactConds),
+          ));
+        const contactIds = contacts.map(c => c.id);
+        if (contactIds.length > 0) {
+          // 2) Find the most recent Zernio-hosted conversation for the contact.
+          const rows = await db
+            .select({
+              conv: conversationsTable,
+              externalAccountId: channelAccountsTable.externalAccountId,
+            })
+            .from(conversationsTable)
+            .innerJoin(channelAccountsTable, eq(conversationsTable.channelAccountId, channelAccountsTable.id))
+            .where(and(
+              inArray(conversationsTable.externalContactId, contactIds),
+              eq(conversationsTable.channel, channel),
+              eq(channelAccountsTable.provider, "zernio"),
+              sql`${conversationsTable.externalThreadId} IS NOT NULL`,
+            ))
+            .orderBy(desc(conversationsTable.lastMessageAt))
+            .limit(1);
+          if (rows.length > 0 && rows[0].externalAccountId) {
+            conv = rows[0].conv;
+            zernioExternalAccountId = rows[0].externalAccountId;
+          }
+        }
+      }
+
+      if (!conv || !zernioExternalAccountId) {
+        res.status(409).json({ error: "no_zernio_conversation", channel });
+        return;
+      }
+
+      // 3) 24h free-text window (WhatsApp and Instagram both enforce it).
+      if (!isWithin24hWindow(conv.lastInboundAt)) {
+        res.status(409).json({ error: "outside_24h_window", conversationId: conv.id, channel });
+        return;
+      }
+
+      // 4) Real dispatch — same helper the inbox reply route uses.
+      const result = await sendZernioConversationMessage({
+        conv: {
+          id: conv.id,
+          channel: conv.channel,
+          externalThreadId: conv.externalThreadId,
+          assignedToId: conv.assignedToId ?? null,
+          unmatched: conv.unmatched,
+        },
+        externalAccountId: zernioExternalAccountId,
+        senderId: userId,
+        content: String(message),
+      });
+
+      if (!result.ok) {
+        res.status(502).json({
+          error: "zernio_send_failed",
+          detail: result.error || null,
+          conversationId: conv.id,
+          channel,
+        });
+        return;
+      }
+
+      await logAudit(userId, "quick_contact", entityType, entityId, { channel, recipientName, conversationId: conv.id }, req.ip);
+      res.json({ success: true, conversationId: conv.id, dispatched: true });
+    } catch (err: any) {
+      console.error("Quick contact zernio error:", err);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+    return;
+  }
+
   try {
     const entityLabel = entityType ? entityType.charAt(0).toUpperCase() + entityType.slice(1) : "Contact";
     let conv;
@@ -818,14 +982,6 @@ router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_
         recipientUserId
       );
       note = "Email queued for delivery";
-    } else if (channel === "whatsapp") {
-      const title = `WhatsApp to ${recipientName}`;
-      conv = await createQuickContactConversation(
-        userId, title, "whatsapp", "queued", message,
-        { entityType, entityId, recipientName, recipientPhone },
-        recipientUserId
-      );
-      note = "WhatsApp message queued";
     } else {
       res.status(400).json({ error: "Unsupported channel" });
       return;
