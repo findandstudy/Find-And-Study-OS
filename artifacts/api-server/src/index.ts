@@ -1815,6 +1815,15 @@ async function seedClaudeIntegration() {
     console.error("[migrate] assignedToId backfill:", err);
   }
 
+  // Step 2b15: message_templates.approval_status — tracks Zernio/Meta WhatsApp
+  // template review state (pending/approved/rejected) for templates synced
+  // from the Zernio WhatsApp Template Management API. Idempotent.
+  try {
+    await pool.query(`ALTER TABLE message_templates ADD COLUMN IF NOT EXISTS approval_status TEXT`);
+  } catch (err) {
+    console.error("[migrate] message_templates.approval_status:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

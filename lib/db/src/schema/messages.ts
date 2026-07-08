@@ -104,6 +104,7 @@ export const messageTemplatesTable = pgTable("message_templates", {
   language: text("language").notNull().default("en"),
   variables: jsonb("variables").default([]),
   externalTemplateName: text("external_template_name"),
+  approvalStatus: text("approval_status"),
   isActive: boolean("is_active").notNull().default(true),
   createdById: integer("created_by_id").references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

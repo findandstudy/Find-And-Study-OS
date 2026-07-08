@@ -44,6 +44,11 @@ import { sendEmail } from "../lib/email";
 import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
 import { decryptConfig } from "../lib/encryption";
 import { sendViaZernio, getZernioApiKey, resolveZernioAccount } from "../lib/inbox/zernioSend";
+import {
+  listZernioWhatsAppTemplates,
+  createZernioWhatsAppTemplate,
+  resolveZernioWhatsAppAccount,
+} from "../lib/inbox/zernioTemplates";
 import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
 import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
 import {
@@ -1715,6 +1720,147 @@ router.post(
     res.status(result.ok ? 201 : 502).json({ message: msg, simulated: result.simulated, error: result.error });
   },
 );
+
+/**
+ * Layer A — WhatsApp Cloud API template management, proxied through Zernio
+ * (the account is hosted on Zernio, same reasoning as zernioSend.ts). Listing
+ * also syncs the results into `message_templates` (matched by
+ * externalTemplateName+language) so the existing send flow
+ * (POST /inbox/conversations/:id/templates) keeps working unchanged and the
+ * Templates management page can show both "our" canned responses and the
+ * Meta-approved templates in one place.
+ */
+router.get(
+  "/inbox/whatsapp-templates",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const channelAccountId = req.query.channelAccountId ? parseInt(String(req.query.channelAccountId), 10) : undefined;
+    const account = await resolveZernioWhatsAppAccount(channelAccountId);
+    if (!account) {
+      res.status(400).json({ error: "No Zernio-hosted WhatsApp channel account configured" });
+      return;
+    }
+    const outcome = await listZernioWhatsAppTemplates(account.externalAccountId);
+    if (!outcome.ok) {
+      res.status(502).json({ error: outcome.error || "Failed to load WhatsApp templates from Zernio" });
+      return;
+    }
+
+    // Upsert each approved/pending template into message_templates so it's
+    // immediately selectable in the existing "send template" flow.
+    for (const tpl of outcome.templates) {
+      if (!tpl.name) continue;
+      const [existing] = await db
+        .select()
+        .from(messageTemplatesTable)
+        .where(and(eq(messageTemplatesTable.externalTemplateName, tpl.name), eq(messageTemplatesTable.language, tpl.language)));
+      if (existing) {
+        await db
+          .update(messageTemplatesTable)
+          .set({
+            content: tpl.bodyText || existing.content,
+            category: tpl.category || existing.category,
+            approvalStatus: tpl.status,
+            variables: Array.from({ length: tpl.variableCount }, (_, i) => `{{${i + 1}}}`),
+          })
+          .where(eq(messageTemplatesTable.id, existing.id));
+      } else {
+        await db.insert(messageTemplatesTable).values({
+          name: tpl.name,
+          category: tpl.category || "utility",
+          content: tpl.bodyText || "",
+          channel: "whatsapp",
+          language: tpl.language,
+          externalTemplateName: tpl.name,
+          approvalStatus: tpl.status,
+          variables: Array.from({ length: tpl.variableCount }, (_, i) => `{{${i + 1}}}`),
+          createdById: req.user!.id,
+        });
+      }
+    }
+
+    const templates = await db
+      .select()
+      .from(messageTemplatesTable)
+      .where(isNotNull(messageTemplatesTable.externalTemplateName))
+      .orderBy(messageTemplatesTable.name);
+    res.json({ data: templates });
+  },
+);
+
+router.post(
+  "/inbox/whatsapp-templates",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const { mode, name, language, category, bodyText, footerText, libraryTemplateName, channelAccountId } = req.body as {
+      mode: "custom" | "library";
+      name: string;
+      language: string;
+      category?: string;
+      bodyText?: string;
+      footerText?: string;
+      libraryTemplateName?: string;
+      channelAccountId?: number;
+    };
+    if (!mode || !name || !language) {
+      res.status(400).json({ error: "mode, name and language are required" });
+      return;
+    }
+    if (mode === "custom" && !bodyText?.trim()) {
+      res.status(400).json({ error: "bodyText is required for custom templates" });
+      return;
+    }
+    if (mode === "library" && !libraryTemplateName?.trim()) {
+      res.status(400).json({ error: "libraryTemplateName is required for library templates" });
+      return;
+    }
+    const account = await resolveZernioWhatsAppAccount(channelAccountId);
+    if (!account) {
+      res.status(400).json({ error: "No Zernio-hosted WhatsApp channel account configured" });
+      return;
+    }
+
+    const outcome = await createZernioWhatsAppTemplate({
+      externalAccountId: account.externalAccountId,
+      mode,
+      name,
+      language,
+      category,
+      bodyText,
+      footerText,
+      libraryTemplateName,
+    });
+    if (!outcome.ok) {
+      res.status(502).json({ error: outcome.error || "Failed to create WhatsApp template" });
+      return;
+    }
+
+    const [template] = await db
+      .insert(messageTemplatesTable)
+      .values({
+        name,
+        category: category || "utility",
+        content: mode === "custom" ? (bodyText || "") : `[library: ${libraryTemplateName}]`,
+        channel: "whatsapp",
+        language,
+        externalTemplateName: name,
+        approvalStatus: outcome.status || "pending",
+        variables: mode === "custom" ? Array.from({ length: countVariablesForCreate(bodyText || "") }, (_, i) => `{{${i + 1}}}`) : [],
+        createdById: req.user!.id,
+      })
+      .returning();
+
+    await logAudit(req.user!.id, "create_whatsapp_template", "message_template", template.id, { name, mode, language }, req.ip);
+    res.status(201).json({ data: template });
+  },
+);
+
+function countVariablesForCreate(text: string): number {
+  const matches = text.match(/\{\{\s*\d+\s*\}\}/g);
+  return matches ? new Set(matches).size : 0;
+}
 
 router.get(
   "/inbox/external-history",

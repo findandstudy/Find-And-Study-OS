@@ -2547,6 +2547,8 @@ interface Template {
   language: string;
   variables: string[];
   isActive: boolean;
+  externalTemplateName?: string | null;
+  approvalStatus?: string | null;
   createdById: number | null;
   createdAt: string;
   updatedAt: string;
@@ -2574,6 +2576,18 @@ function TemplatesTab() {
   const [formChannel, setFormChannel] = useState("all");
   const [formLanguage, setFormLanguage] = useState("en");
 
+  const [waSyncing, setWaSyncing] = useState(false);
+  const [waSyncError, setWaSyncError] = useState<string | null>(null);
+  const [waTplOpen, setWaTplOpen] = useState(false);
+  const [waSaving, setWaSaving] = useState(false);
+  const [waMode, setWaMode] = useState<"custom" | "library">("custom");
+  const [waName, setWaName] = useState("");
+  const [waLanguage, setWaLanguage] = useState("en");
+  const [waCategory, setWaCategory] = useState("utility");
+  const [waBodyText, setWaBodyText] = useState("");
+  const [waFooterText, setWaFooterText] = useState("");
+  const [waLibraryName, setWaLibraryName] = useState("");
+
   const fetchTemplates = useCallback(async () => {
     try {
       const res = await customFetch("/api/message-templates");
@@ -2585,7 +2599,96 @@ function TemplatesTab() {
     }
   }, []);
 
+  const syncWhatsAppTemplates = useCallback(async () => {
+    setWaSyncing(true);
+    setWaSyncError(null);
+    try {
+      const res = await customFetch("/api/inbox/whatsapp-templates");
+      const synced: Template[] = (res as any)?.data || [];
+      setTemplates((prev) => {
+        const map = new Map(prev.map((t) => [t.id, t]));
+        for (const t of synced) map.set(t.id, t);
+        return Array.from(map.values());
+      });
+    } catch (err: any) {
+      setWaSyncError(err?.body?.error || tx("messagesPage.whatsappTemplateSyncFailed"));
+    } finally {
+      setWaSyncing(false);
+    }
+  }, [tx]);
+
   useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
+  useEffect(() => { syncWhatsAppTemplates(); }, [syncWhatsAppTemplates]);
+
+  function openNewWaTemplate() {
+    setWaMode("custom");
+    setWaName("");
+    setWaLanguage("en");
+    setWaCategory("utility");
+    setWaBodyText("");
+    setWaFooterText("");
+    setWaLibraryName("");
+    setWaTplOpen(true);
+  }
+
+  async function submitWaTemplate() {
+    if (!waName.trim()) {
+      toast({ title: tx("messagesPage.nameAndContentRequired"), variant: "destructive" });
+      return;
+    }
+    if (waMode === "custom" && !waBodyText.trim()) {
+      toast({ title: tx("messagesPage.nameAndContentRequired"), variant: "destructive" });
+      return;
+    }
+    if (waMode === "library" && !waLibraryName.trim()) {
+      toast({ title: tx("messagesPage.nameAndContentRequired"), variant: "destructive" });
+      return;
+    }
+    setWaSaving(true);
+    try {
+      await customFetch("/api/inbox/whatsapp-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: waMode,
+          name: waName.trim(),
+          language: waLanguage,
+          category: waCategory,
+          bodyText: waMode === "custom" ? waBodyText.trim() : undefined,
+          footerText: waMode === "custom" ? (waFooterText.trim() || undefined) : undefined,
+          libraryTemplateName: waMode === "library" ? waLibraryName.trim() : undefined,
+        }),
+      });
+      toast({ title: tx("messagesPage.whatsappTemplateSubmitted") });
+      setWaTplOpen(false);
+      fetchTemplates();
+    } catch (err: any) {
+      toast({ title: err?.body?.error || tx("messagesPage.whatsappTemplateSubmitFailed"), variant: "destructive" });
+    } finally {
+      setWaSaving(false);
+    }
+  }
+
+  function waStatusBadge(status?: string | null) {
+    const s = status || "unknown";
+    const styles: Record<string, string> = {
+      approved: "bg-green-500/10 text-green-700",
+      pending: "bg-amber-500/10 text-amber-700",
+      rejected: "bg-red-500/10 text-red-700",
+      unknown: "bg-gray-500/10 text-gray-600",
+    };
+    const labels: Record<string, string> = {
+      approved: tx("messagesPage.waStatusApproved"),
+      pending: tx("messagesPage.waStatusPending"),
+      rejected: tx("messagesPage.waStatusRejected"),
+      unknown: tx("messagesPage.waStatusUnknown"),
+    };
+    return (
+      <Badge variant="secondary" className={`text-[10px] h-5 ${styles[s] || styles.unknown}`}>
+        {labels[s] || labels.unknown}
+      </Badge>
+    );
+  }
 
   function openNew() {
     setEditingTemplate(null);
@@ -2685,7 +2788,10 @@ function TemplatesTab() {
     return true;
   });
 
-  const grouped = filtered.reduce<Record<string, Template[]>>((acc, t) => {
+  const cannedFiltered = filtered.filter(t => !t.externalTemplateName);
+  const waFiltered = filtered.filter(t => !!t.externalTemplateName);
+
+  const grouped = cannedFiltered.reduce<Record<string, Template[]>>((acc, t) => {
     (acc[t.category] = acc[t.category] || []).push(t);
     return acc;
   }, {});
@@ -2860,6 +2966,148 @@ function TemplatesTab() {
           </div>
         )}
       </Card>
+
+      <Card className="border-none shadow-lg shadow-black/5 p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" /> {tx("messagesPage.whatsappOfficialTemplates")}
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {tx("messagesPage.whatsappOfficialTemplatesDesc")}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={syncWhatsAppTemplates} disabled={waSyncing} className="rounded-xl gap-2">
+              {waSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {tx("messagesPage.refresh")}
+            </Button>
+            <Button onClick={openNewWaTemplate} className="rounded-xl gap-2">
+              <Plus className="w-4 h-4" /> {tx("messagesPage.newWhatsappTemplate")}
+            </Button>
+          </div>
+        </div>
+
+        {waSyncError && (
+          <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-xs text-amber-900">
+            {waSyncError}
+          </div>
+        )}
+
+        {waFiltered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <FileText className="w-10 h-10 mb-3 opacity-20" />
+            <p className="font-medium text-sm">{tx("messagesPage.noWhatsappTemplatesFound")}</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {waFiltered.map(t => (
+              <div key={t.id} className={`border rounded-xl p-4 transition-all hover:shadow-md ${!t.isActive ? "opacity-50 bg-secondary/30" : "bg-card hover:border-primary/30"}`}>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-foreground truncate">{t.name}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {waStatusBadge(t.approvalStatus)}
+                    <Badge variant="outline" className="text-[10px] h-5 gap-0.5">
+                      <Globe className="w-2.5 h-2.5" /> {t.language.toUpperCase()}
+                    </Badge>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">{t.content}</p>
+                <div className="flex items-center justify-between mt-3">
+                  <p className="text-[10px] text-muted-foreground capitalize">{t.category}</p>
+                  <button
+                    onClick={() => copyContent(t.content)}
+                    className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+                    title={tx("messagesPage.copyContent")}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Dialog open={waTplOpen} onOpenChange={setWaTplOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" /> {tx("messagesPage.newWhatsappTemplate")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex gap-2">
+              <Button type="button" variant={waMode === "custom" ? "default" : "outline"} size="sm" className="rounded-lg" onClick={() => setWaMode("custom")}>
+                {tx("messagesPage.waModeCustom")}
+              </Button>
+              <Button type="button" variant={waMode === "library" ? "default" : "outline"} size="sm" className="rounded-lg" onClick={() => setWaMode("library")}>
+                {tx("messagesPage.waModeLibrary")}
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{tx("messagesPage.templateNameRequired")}</Label>
+                <Input value={waName} onChange={e => setWaName(e.target.value)} placeholder="order_update" className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label>{tx("messagesPage.language")}</Label>
+                <Select value={waLanguage} onValueChange={setWaLanguage}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TEMPLATE_LANGUAGES.map(l => (
+                      <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{tx("messagesPage.category")}</Label>
+              <Select value={waCategory} onValueChange={setWaCategory}>
+                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="utility">Utility</SelectItem>
+                  <SelectItem value="marketing">Marketing</SelectItem>
+                  <SelectItem value="authentication">Authentication</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {waMode === "custom" ? (
+              <>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>{tx("messagesPage.contentRequired")}</Label>
+                    <p className="text-[10px] text-muted-foreground">{"{{1}}, {{2}} ..."}</p>
+                  </div>
+                  <Textarea value={waBodyText} onChange={e => setWaBodyText(e.target.value)} rows={5} className="rounded-xl font-mono text-sm" />
+                </div>
+                <div className="space-y-2">
+                  <Label>{tx("messagesPage.waFooterOptional")}</Label>
+                  <Input value={waFooterText} onChange={e => setWaFooterText(e.target.value)} className="rounded-xl" />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <Label>{tx("messagesPage.waLibraryTemplateName")}</Label>
+                <Input value={waLibraryName} onChange={e => setWaLibraryName(e.target.value)} className="rounded-xl" />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWaTplOpen(false)} className="rounded-xl">{tx("messagesPage.cancel")}</Button>
+            <Button onClick={submitWaTemplate} disabled={waSaving} className="rounded-xl gap-2">
+              {waSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {tx("messagesPage.submitForApproval")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
