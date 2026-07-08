@@ -954,8 +954,8 @@ function InboxTab() {
   return (
     <>
     <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
-      <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
-        <div className={`lg:col-span-4 border-r border-border/50 min-w-0 overflow-hidden ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
+      <div className="grid grid-cols-1 lg:grid-cols-12 h-full grid-rows-[minmax(0,1fr)]">
+        <div className={`lg:col-span-4 h-full min-h-0 border-r border-border/50 min-w-0 overflow-hidden ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
           <div className="p-3 border-b border-border/50 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
@@ -1192,7 +1192,7 @@ function InboxTab() {
           </div>
         </div>
 
-        <div className={`lg:col-span-5 flex flex-col ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
+        <div className={`lg:col-span-5 flex flex-col h-full min-h-0 overflow-hidden ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
           {!selectedId ? (
             <div className="text-center text-muted-foreground">
               <InboxIcon className="w-16 h-16 mx-auto mb-3 opacity-20" />
@@ -1202,7 +1202,7 @@ function InboxTab() {
             <div className="flex items-center justify-center w-full h-full"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
           ) : (
             <>
-              <div className="px-4 py-3 border-b border-border/50 flex items-center gap-3">
+              <div className="px-4 py-3 border-b border-border/50 flex items-center gap-3 shrink-0">
                 <Button size="icon" variant="ghost" className="lg:hidden" onClick={() => setSelectedId(null)}>
                   <ArrowLeft className="w-4 h-4" />
                 </Button>
@@ -1316,7 +1316,7 @@ function InboxTab() {
                 </div>
               )}
 
-              <div className="relative flex-1 min-h-0 flex flex-col">
+              <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
               <div ref={msgScrollRef} onScroll={handleMsgScroll} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3" data-testid="inbox-message-scroll">
                 {hasMoreOlder && (
                   <div className="flex justify-center">
@@ -1530,7 +1530,7 @@ function InboxTab() {
         </div>
 
         {selectedId !== null && detail && (
-          <div className="hidden lg:flex lg:col-span-3 lg:flex-col border-l border-border/50 bg-muted/20">
+          <div className="hidden lg:flex lg:col-span-3 lg:flex-col h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20">
             <LeadDetailSidebar
               detail={detail}
               onOpenMatchDialog={loadSuggestions}

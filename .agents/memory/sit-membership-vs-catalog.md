@@ -35,4 +35,4 @@ exclusion — the meta reason is the discriminator.
 
 ## SIT member universities (report to user)
 Haliç, Atlas, Ankara Medipol, Galata, Beykoz, İstinye, İstanbul Aydın, İstanbul Kent,
-Fenerbahçe, İstanbul Kültür, TED. (TODO(Dr. Namazcı): confirm the definitive list.)
+Fenerbahçe, İstanbul Kültür, TED. (TODO(user): confirm the definitive list.)

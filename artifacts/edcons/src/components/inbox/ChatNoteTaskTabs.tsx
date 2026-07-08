@@ -58,7 +58,7 @@ export function ChatNoteTaskTabs({
     <Tabs
       value={activeTab}
       onValueChange={(v) => onTabChange(v as ComposeTab)}
-      className="border-t border-border/50"
+      className="border-t border-border/50 shrink-0"
     >
       <div className="px-3 pt-2">
         <TabsList className="h-8" data-testid="compose-tabs-list">
