@@ -66,6 +66,7 @@ import {
 } from "@workspace/portal-runner";
 import { batchPortalCredentialKeys, resolvePortalCreds, checkHasPortalCredentials } from "../lib/portalCreds.js";
 import { reconcilePortalUniversityCrmLinks } from "../lib/portalUniversityLinker.js";
+import { enqueuePortalSubmissions } from "../lib/portalManualEnqueue.js";
 
 const router: IRouter = Router();
 
@@ -178,8 +179,6 @@ const manualSubmitBodySchema = z.object({
 });
 type ManualSubmitSchemas = { body: typeof manualSubmitBodySchema };
 
-type SkipReason = "NOT_FOUND" | "NO_PORTAL" | "ALREADY_QUEUED";
-
 router.post(
   "/portal-automation/submit",
   requireAuth,
@@ -204,82 +203,11 @@ router.post(
 
     const uniqueIds = [...new Set(applicationIds)];
 
-    const apps = await db
-      .select({
-        id:             applicationsTable.id,
-        studentId:      applicationsTable.studentId,
-        universityId:   applicationsTable.universityId,
-        universityName: applicationsTable.universityName,
-      })
-      .from(applicationsTable)
-      .where(and(inArray(applicationsTable.id, uniqueIds), isNull(applicationsTable.deletedAt)));
-
-    const appMap = new Map(apps.map((a) => [a.id, a]));
-
-    const queued: { applicationId: number; submissionId: number; universityKey: string }[] = [];
-    const skipped: { applicationId: number; reason: SkipReason; submissionId?: number }[] = [];
-
-    for (const appId of uniqueIds) {
-      const app = appMap.get(appId);
-      if (!app) {
-        skipped.push({ applicationId: appId, reason: "NOT_FOUND" });
-        continue;
-      }
-
-      const routing = await resolvePortalRouting({
-        universityId:   app.universityId,
-        universityName: app.universityName,
-      });
-      if (!routing) {
-        skipped.push({ applicationId: appId, reason: "NO_PORTAL" });
-        continue;
-      }
-      const { portalUni, target } = routing;
-
-      // Duplicate guard: an active (queued/running) submission for this
-      // application × university must not be re-queued.
-      const [existing] = await db
-        .select({ id: portalSubmissionsTable.id })
-        .from(portalSubmissionsTable)
-        .where(
-          and(
-            eq(portalSubmissionsTable.applicationId, appId),
-            eq(portalSubmissionsTable.universityKey, portalUni.universityKey),
-            inArray(portalSubmissionsTable.status, ["queued", "running"]),
-            isNull(portalSubmissionsTable.deletedAt),
-          ),
-        )
-        .limit(1);
-
-      if (existing) {
-        skipped.push({ applicationId: appId, reason: "ALREADY_QUEUED", submissionId: existing.id });
-        continue;
-      }
-
-      const [row] = await db
-        .insert(portalSubmissionsTable)
-        .values({
-          applicationId:  appId,
-          studentId:      app.studentId,
-          universityKey:  portalUni.universityKey,
-          universityName: target ? target.universityName : portalUni.universityName,
-          mode,
-          status:         "queued",
-          enqueuedBy:     user.id,
-          ...(target
-            ? {
-                meta: {
-                  targetCatalogUniversityId: target.catalogUniversityId,
-                  targetUniversityName:      target.universityName,
-                  routedViaAggregator:       portalUni.universityKey,
-                },
-              }
-            : {}),
-        })
-        .returning({ id: portalSubmissionsTable.id });
-
-      queued.push({ applicationId: appId, submissionId: row.id, universityKey: portalUni.universityKey });
-    }
+    const { queued, skipped } = await enqueuePortalSubmissions({
+      applicationIds: uniqueIds,
+      mode,
+      userId: user.id,
+    });
 
     // Single-application strictness: surface the precise failure instead of an
     // empty 200 so the per-application "Portala Gönder" button can react.

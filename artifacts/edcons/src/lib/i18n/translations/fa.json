@@ -5357,6 +5357,17 @@
       "confirmCancel": "Cancel",
       "confirmAccept": "Submit live"
     },
+    "bulkRun": {
+      "button": "اجرا",
+      "confirmTitle": "اتوماسیون پورتال برای {count} درخواست اجرا شود؟",
+      "confirmBody": "{count} درخواست برای ارسال واقعی به پورتال‌های دانشگاه در صف قرار می‌گیرد. این عملیات قابل بازگشت نیست.",
+      "confirmCancel": "لغو",
+      "confirmAccept": "اجرا",
+      "queuedToast": "{count} درخواست در صف اتوماسیون پورتال قرار گرفت.",
+      "noAdapterNote": "{count} رد شد — آداپتور پورتال تنظیم نشده است.",
+      "alreadyQueuedNote": "{count} از قبل در صف است.",
+      "submitError": "اجرای اتوماسیون پورتال ناموفق بود."
+    },
     "mappingImport": {
       "downloadTemplate": "Download Template",
       "uploadExcel": "Upload Excel",

@@ -5357,6 +5357,17 @@
       "confirmCancel": "Cancel",
       "confirmAccept": "Submit live"
     },
+    "bulkRun": {
+      "button": "Запустить",
+      "confirmTitle": "Запустить автоматизацию портала для {count} заявок?",
+      "confirmBody": "{count} заявок будут поставлены в очередь для реальной отправки в порталы университетов. Это действие нельзя отменить.",
+      "confirmCancel": "Отмена",
+      "confirmAccept": "Запустить",
+      "queuedToast": "{count} заявок поставлено в очередь для автоматизации портала.",
+      "noAdapterNote": "{count} пропущено — адаптер портала не настроен.",
+      "alreadyQueuedNote": "{count} уже в очереди.",
+      "submitError": "Не удалось запустить автоматизацию портала."
+    },
     "mappingImport": {
       "downloadTemplate": "Download Template",
       "uploadExcel": "Upload Excel",

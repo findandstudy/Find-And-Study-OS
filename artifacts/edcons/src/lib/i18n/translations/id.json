@@ -5357,6 +5357,17 @@
       "confirmCancel": "Cancel",
       "confirmAccept": "Submit live"
     },
+    "bulkRun": {
+      "button": "Jalankan",
+      "confirmTitle": "Jalankan otomatisasi portal untuk {count} aplikasi?",
+      "confirmBody": "{count} aplikasi akan dimasukkan ke antrean untuk pengiriman nyata ke portal universitas. Tindakan ini tidak dapat dibatalkan.",
+      "confirmCancel": "Batal",
+      "confirmAccept": "Jalankan",
+      "queuedToast": "{count} aplikasi telah diantrekan untuk otomatisasi portal.",
+      "noAdapterNote": "{count} dilewati — adaptor portal belum dikonfigurasi.",
+      "alreadyQueuedNote": "{count} sudah dalam antrean.",
+      "submitError": "Gagal menjalankan otomatisasi portal."
+    },
     "mappingImport": {
       "downloadTemplate": "Download Template",
       "uploadExcel": "Upload Excel",

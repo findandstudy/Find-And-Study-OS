@@ -5357,6 +5357,17 @@
       "confirmCancel": "Cancel",
       "confirmAccept": "Submit live"
     },
+    "bulkRun": {
+      "button": "Exécuter",
+      "confirmTitle": "Exécuter l'automatisation du portail pour {count} candidature(s) ?",
+      "confirmBody": "{count} candidature(s) seront mises en file d'attente pour un envoi réel vers les portails universitaires. Cette action est irréversible.",
+      "confirmCancel": "Annuler",
+      "confirmAccept": "Exécuter",
+      "queuedToast": "{count} candidature(s) mises en file d'attente pour l'automatisation du portail.",
+      "noAdapterNote": "{count} ignorée(s) — aucun adaptateur de portail configuré.",
+      "alreadyQueuedNote": "{count} déjà en file d'attente.",
+      "submitError": "Échec de l'exécution de l'automatisation du portail."
+    },
     "mappingImport": {
       "downloadTemplate": "Download Template",
       "uploadExcel": "Upload Excel",

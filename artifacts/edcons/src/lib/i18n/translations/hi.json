@@ -5357,6 +5357,17 @@
       "confirmCancel": "Cancel",
       "confirmAccept": "Submit live"
     },
+    "bulkRun": {
+      "button": "चलाएँ",
+      "confirmTitle": "{count} आवेदनों के लिए पोर्टल स्वचालन चलाएँ?",
+      "confirmBody": "{count} आवेदन विश्वविद्यालय पोर्टल पर वास्तविक सबमिशन के लिए कतार में डाले जाएँगे। इसे पूर्ववत नहीं किया जा सकता।",
+      "confirmCancel": "रद्द करें",
+      "confirmAccept": "चलाएँ",
+      "queuedToast": "{count} आवेदन पोर्टल स्वचालन के लिए कतारबद्ध किए गए।",
+      "noAdapterNote": "{count} छोड़े गए — कोई पोर्टल एडाप्टर कॉन्फ़िगर नहीं है।",
+      "alreadyQueuedNote": "{count} पहले से ही कतार में हैं।",
+      "submitError": "पोर्टल स्वचालन चलाने में विफल।"
+    },
     "mappingImport": {
       "downloadTemplate": "Download Template",
       "uploadExcel": "Upload Excel",

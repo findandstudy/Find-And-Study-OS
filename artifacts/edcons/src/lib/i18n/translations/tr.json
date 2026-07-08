@@ -5357,6 +5357,17 @@
       "confirmCancel": "İptal",
       "confirmAccept": "Canlı Gönder"
     },
+    "bulkRun": {
+      "button": "Çalıştır",
+      "confirmTitle": "{count} başvuru için portal otomasyonu çalıştırılsın mı?",
+      "confirmBody": "{count} başvuru, üniversite portallarına gerçek gönderim için kuyruğa alınacak. Bu işlem geri alınamaz.",
+      "confirmCancel": "İptal",
+      "confirmAccept": "Çalıştır",
+      "queuedToast": "{count} başvuru portal otomasyonuna kuyruğa alındı.",
+      "noAdapterNote": "{count} başvuru atlandı — portal adaptörü tanımlı değil.",
+      "alreadyQueuedNote": "{count} başvuru zaten kuyrukta.",
+      "submitError": "Portal otomasyonu çalıştırılamadı."
+    },
     "mappingImport": {
       "downloadTemplate": "Şablon İndir",
       "uploadExcel": "Excel Yükle",

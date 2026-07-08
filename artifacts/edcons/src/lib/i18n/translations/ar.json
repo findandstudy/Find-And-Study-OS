@@ -5357,6 +5357,17 @@
       "confirmCancel": "Cancel",
       "confirmAccept": "Submit live"
     },
+    "bulkRun": {
+      "button": "تشغيل",
+      "confirmTitle": "تشغيل أتمتة البوابة لـ {count} طلب؟",
+      "confirmBody": "سيتم وضع {count} طلب في قائمة الانتظار للإرسال الفعلي إلى بوابات الجامعات. لا يمكن التراجع عن هذا الإجراء.",
+      "confirmCancel": "إلغاء",
+      "confirmAccept": "تشغيل",
+      "queuedToast": "تم وضع {count} طلب في قائمة انتظار أتمتة البوابة.",
+      "noAdapterNote": "تم تخطي {count} — لا يوجد محول بوابة مُهيأ.",
+      "alreadyQueuedNote": "{count} في قائمة الانتظار بالفعل.",
+      "submitError": "فشل تشغيل أتمتة البوابة."
+    },
     "mappingImport": {
       "downloadTemplate": "Download Template",
       "uploadExcel": "Upload Excel",

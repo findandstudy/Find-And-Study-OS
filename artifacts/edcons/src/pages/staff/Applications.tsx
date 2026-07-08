@@ -1059,6 +1059,25 @@ function DeleteConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
   );
 }
 
+/* ── RunConfirmDialog ────────────────────────────────────── */
+function RunConfirmDialog({ open, onClose, count, onConfirm, isPending }: {
+  open: boolean; onClose: () => void; count: number; onConfirm: () => void; isPending: boolean;
+}) {
+  const { t } = useI18n();
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>{t("portalAutomation.bulkRun.confirmTitle", { count })}</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground py-2">{t("portalAutomation.bulkRun.confirmBody", { count })}</p>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>{t("portalAutomation.bulkRun.confirmCancel")}</Button>
+          <Button onClick={onConfirm} disabled={isPending}>{isPending ? "…" : t("portalAutomation.bulkRun.confirmAccept")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ── FilterPopover ────────────────────────────────────────── */
 type AppFilters = { stage: string; country: string; university: string; universityType: string; agent: string; assignedTo: string; dateRange: string; originType: string; createdSource: string };
 const DEFAULT_FILTERS: AppFilters = { stage: "all", country: "all", university: "all", universityType: "all", agent: "all", assignedTo: "mine_unassigned", dateRange: "all", originType: "all", createdSource: "all" };
@@ -1476,6 +1495,8 @@ export default function ApplicationsPage() {
   const [tableUniInfoId, setTableUniInfoId] = useState<number | null>(null);
   const [tableProgInfoId, setTableProgInfoId] = useState<number | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [runConfirmOpen, setRunConfirmOpen] = useState(false);
+  const [runInProgress, setRunInProgress] = useState(false);
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string; documentNameOverride?: string | null; moveAfterUpload?: boolean; quickMode?: boolean } | null>(null);
@@ -1842,6 +1863,32 @@ export default function ApplicationsPage() {
     queryClient.invalidateQueries({ queryKey: ["applications"] });
   }
 
+  async function handleBulkRun() {
+    setRunInProgress(true);
+    try {
+      const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "run_portal_automation" }) });
+      const d = res as any;
+      const queuedN: number = Array.isArray(d.queued) ? d.queued.length : 0;
+      const skippedArr: any[] = Array.isArray(d.skipped) ? d.skipped : [];
+      const noAdapterN = skippedArr.filter((s) => s.reason === "NO_PORTAL").length;
+      const alreadyQueuedN = skippedArr.filter((s) => s.reason === "ALREADY_QUEUED").length;
+      const descParts: string[] = [];
+      if (noAdapterN > 0) descParts.push(t("portalAutomation.bulkRun.noAdapterNote", { count: noAdapterN }));
+      if (alreadyQueuedN > 0) descParts.push(t("portalAutomation.bulkRun.alreadyQueuedNote", { count: alreadyQueuedN }));
+      toast({
+        title: t("portalAutomation.bulkRun.queuedToast", { count: queuedN }),
+        description: descParts.length > 0 ? descParts.join(" · ") : undefined,
+      });
+    } catch {
+      toast({ title: t("portalAutomation.bulkRun.submitError"), variant: "destructive" });
+    }
+    setRunInProgress(false);
+    setRunConfirmOpen(false);
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["applications"] });
+    queryClient.invalidateQueries({ queryKey: ["portal-submissions"] });
+  }
+
   return (
     <>
       <div className="h-[calc(100vh-8rem)] flex flex-col">
@@ -1870,6 +1917,16 @@ export default function ApplicationsPage() {
               entityLabel="applications"
               moveLabel="Move Stage"
             />
+            {selectedIds.size > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full h-8 gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                onClick={() => setRunConfirmOpen(true)}
+              >
+                <Send className="w-3.5 h-3.5" /> {t("portalAutomation.bulkRun.button")}
+              </Button>
+            )}
             {viewMode === "list" && (
               <ColumnSettingsMenu
                 columns={APP_COLUMN_DEFS.filter(c => c.id !== "commission" || canSeeCommission)}
@@ -2296,6 +2353,7 @@ export default function ApplicationsPage() {
 
       <EditApplicationDialog open={!!editApp} onClose={() => setEditApp(null)} app={editApp} stages={pipelineStages} />
       <DeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
+      <RunConfirmDialog open={runConfirmOpen} onClose={() => setRunConfirmOpen(false)} count={selectedIds.size} onConfirm={handleBulkRun} isPending={runInProgress} />
       <AddApplicationModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["applications"] })} defaultStage={pipelineStages[0]?.key} />
       {docUploadDialog && (
         <StageDocUploadDialog

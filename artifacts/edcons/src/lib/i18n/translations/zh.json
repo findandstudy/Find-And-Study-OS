@@ -5357,6 +5357,17 @@
       "confirmCancel": "Cancel",
       "confirmAccept": "Submit live"
     },
+    "bulkRun": {
+      "button": "运行",
+      "confirmTitle": "对 {count} 个申请运行门户自动化？",
+      "confirmBody": "{count} 个申请将被排入队列，正式提交到大学门户。此操作无法撤销。",
+      "confirmCancel": "取消",
+      "confirmAccept": "运行",
+      "queuedToast": "{count} 个申请已加入门户自动化队列。",
+      "noAdapterNote": "已跳过 {count} 个 — 未配置门户适配器。",
+      "alreadyQueuedNote": "{count} 个已在队列中。",
+      "submitError": "运行门户自动化失败。"
+    },
     "mappingImport": {
       "downloadTemplate": "Download Template",
       "uploadExcel": "Upload Excel",

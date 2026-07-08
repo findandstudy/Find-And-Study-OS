@@ -5357,6 +5357,17 @@
       "confirmCancel": "Cancel",
       "confirmAccept": "Submit live"
     },
+    "bulkRun": {
+      "button": "Run",
+      "confirmTitle": "Run portal automation for {count} application(s)?",
+      "confirmBody": "{count} application(s) will be queued for real submission to their university portals. This cannot be undone.",
+      "confirmCancel": "Cancel",
+      "confirmAccept": "Run",
+      "queuedToast": "{count} application(s) queued for portal automation.",
+      "noAdapterNote": "{count} skipped — no portal adapter configured.",
+      "alreadyQueuedNote": "{count} already queued.",
+      "submitError": "Failed to run portal automation."
+    },
     "mappingImport": {
       "downloadTemplate": "Download Template",
       "uploadExcel": "Upload Excel",

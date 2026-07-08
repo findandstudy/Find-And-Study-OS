@@ -22,6 +22,7 @@ import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 import { getCurrentSeason } from "../lib/season";
 import { maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { maybeFanOutSitStudentForApplication } from "./portalAutomation.js";
+import { enqueuePortalSubmissions } from "../lib/portalManualEnqueue.js";
 
 const router: IRouter = Router();
 
@@ -1401,9 +1402,11 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const { ids, action, assignedToId, stage } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
-  if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
-  // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only
-  if (!isAdmin && action !== "assign") {
+  if (!["delete", "assign", "move", "run_portal_automation"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
+  // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only.
+  // run_portal_automation is staff-accessible (same gate as the rest of the Applications
+  // list bulk toolbar) — it only enqueues portal_submissions rows, it never deletes/moves data.
+  if (!isAdmin && !["assign", "run_portal_automation"].includes(action)) {
     res.status(403).json({ error: "Only admins can bulk delete or move applications" }); return;
   }
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
@@ -1616,6 +1619,25 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
       res.json({ success: true, updated, skipped: bulkSkipped });
       return;
     }
+  } else if (action === "run_portal_automation") {
+    // Bulk "Run" — enqueue selected applications into portal automation
+    // (mode="real") by reusing the SAME enqueue loop as the admin Manual
+    // Submit dialog. Never write new send logic here; only orchestrate it.
+    const { queued, skipped } = await enqueuePortalSubmissions({
+      applicationIds: numericIds,
+      mode: "real",
+      userId: user.id,
+    });
+    await logAudit(
+      user.id,
+      "bulk_run_portal_automation",
+      "application",
+      undefined,
+      { ids: numericIds, queued: queued.length, skipped: skipped.length },
+      req.ip,
+    );
+    res.json({ success: true, queued, skipped });
+    return;
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
   }
