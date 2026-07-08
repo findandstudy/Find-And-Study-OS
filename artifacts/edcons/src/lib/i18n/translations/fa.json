@@ -2206,7 +2206,15 @@
     "contractExpiryDesc": "تعیین کنید چند روز پیش از تاریخ پایان قرارداد نماینده، به مدیر ارشد، مالک آژانس و کارکنان مسئول دفتر اطلاع داده شود (درون‌برنامه‌ای + ایمیل). هر آستانه فقط یک‌بار برای هر قرارداد فعال می‌شود. تعداد روزهای مثبت با کاما جدا شوند (مثلاً",
     "autoAssignStuckConvTitle": "تخصیص خودکار مکالمات معلق",
     "autoAssignStuckConvDesc": "مکالمات صندوق ورودی بدون پاسخ را به‌طور خودکار به کارکنان در دسترس تخصیص دهید (ابتدا ساعات کاری، سپس کشور، سپس چرخشی).",
-    "autoAssignStuckConvSaved": "تنظیم تخصیص خودکار ذخیره شد"
+    "autoAssignStuckConvSaved": "تنظیم تخصیص خودکار ذخیره شد",
+    "stuckAssignConsiderWorkingHoursTitle": "در نظر گرفتن ساعات کاری",
+    "stuckAssignConsiderWorkingHoursDesc": "در تخصیص خودکار، کارکنانی که هم‌اکنون در ساعات کاری خود هستند در اولویت قرار می‌گیرند.",
+    "stuckAssignConsiderCountryMatchTitle": "در نظر گرفتن تطابق کشور",
+    "stuckAssignConsiderCountryMatchDesc": "کارکنانی که کشورهای تحت پوشش آن‌ها با کشور مکالمه مطابقت دارد در اولویت قرار می‌گیرند.",
+    "stuckAssignOffHoursBehaviorTitle": "رفتار خارج از ساعات کاری",
+    "stuckAssignOffHoursBehaviorDesc": "در صورتی که در حال حاضر کسی در ساعات کاری نباشد چه اتفاقی بیفتد.",
+    "stuckAssignOffHoursAssignAnyway": "به هر حال تخصیص داده شود",
+    "stuckAssignOffHoursLeaveUnassigned": "بدون تخصیص باقی بماند (در صف)"
   },
   "financePage": {
     "statusPotential": "بالقوه",

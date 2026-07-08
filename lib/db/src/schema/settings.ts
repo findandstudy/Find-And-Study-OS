@@ -152,6 +152,15 @@ export const settingsTable = pgTable("settings", {
   // Auto-assign stuck (needsHuman=true, unassigned, open) inbox conversations to eligible staff via
   // the periodic assignStuckConversation sweep. Default false = feature is opt-in.
   autoAssignStuckConversationsEnabled: boolean("auto_assign_stuck_conversations_enabled").notNull().default(false),
+
+  // Sub-toggles for the stuck-conversation auto-assign engine (only relevant when the
+  // master toggle above is enabled). Priority order (working hours -> country -> balanced
+  // round-robin) is fixed; these only turn individual criteria on/off.
+  stuckAssignConsiderWorkingHours: boolean("stuck_assign_consider_working_hours").notNull().default(true),
+  stuckAssignConsiderCountryMatch: boolean("stuck_assign_consider_country_match").notNull().default(true),
+  // 'assign_anyway' = fall back to the full active pool when nobody is in working hours;
+  // 'leave_unassigned' = skip assignment and leave the conversation queued until someone is.
+  stuckAssignOffHoursBehavior: text("stuck_assign_off_hours_behavior").notNull().default("assign_anyway"),
 });
 
 export const insertSettingsSchema = createInsertSchema(settingsTable).omit({ id: true, createdAt: true, updatedAt: true });

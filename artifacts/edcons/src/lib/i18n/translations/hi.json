@@ -2206,7 +2206,15 @@
     "contractExpiryDesc": "निर्धारित करें कि एजेंट अनुबंध की समाप्ति तिथि से कितने दिन पहले सुपर एडमिन, एजेंसी मालिक और नियुक्त कार्यालय स्टाफ़ को सूचित किया जाएगा (ऐप में + ईमेल)। प्रत्येक सीमा प्रति अनुबंध केवल एक बार सक्रिय होती है। अल्पविराम से अलग किए गए धनात्मक दिनों की संख्या (जैसे",
     "autoAssignStuckConvTitle": "अटकी हुई बातचीत का स्वतः असाइनमेंट",
     "autoAssignStuckConvDesc": "बिना उत्तर के रह गई इनबॉक्स बातचीत को उपलब्ध स्टाफ को स्वतः असाइन करें (पहले कार्य समय, फिर देश, फिर बारी-बारी से)।",
-    "autoAssignStuckConvSaved": "स्वतः असाइनमेंट सेटिंग सहेजी गई"
+    "autoAssignStuckConvSaved": "स्वतः असाइनमेंट सेटिंग सहेजी गई",
+    "stuckAssignConsiderWorkingHoursTitle": "कार्य समय को ध्यान में रखें",
+    "stuckAssignConsiderWorkingHoursDesc": "स्वतः असाइनमेंट के समय वर्तमान में कार्य समय में मौजूद स्टाफ़ को प्राथमिकता दें।",
+    "stuckAssignConsiderCountryMatchTitle": "देश मिलान को ध्यान में रखें",
+    "stuckAssignConsiderCountryMatchDesc": "उन स्टाफ़ को प्राथमिकता दें जिनके संभाले गए देश बातचीत के देश से मेल खाते हैं।",
+    "stuckAssignOffHoursBehaviorTitle": "गैर-कार्य समय व्यवहार",
+    "stuckAssignOffHoursBehaviorDesc": "जब वर्तमान में कोई भी कार्य समय में न हो तो क्या किया जाए।",
+    "stuckAssignOffHoursAssignAnyway": "फिर भी असाइन करें",
+    "stuckAssignOffHoursLeaveUnassigned": "असाइन न करें (कतार में रखें)"
   },
   "financePage": {
     "statusPotential": "संभावित",

@@ -2498,7 +2498,15 @@
     "rtlNote": "RTL (right-to-left) is automatically applied for Arabic.",
     "autoAssignStuckConvTitle": "Auto-Assign Stuck Conversations",
     "autoAssignStuckConvDesc": "Automatically assign unattended inbox conversations to available staff (working hours match, then country match, then round-robin).",
-    "autoAssignStuckConvSaved": "Auto-assign setting saved"
+    "autoAssignStuckConvSaved": "Auto-assign setting saved",
+    "stuckAssignConsiderWorkingHoursTitle": "Consider Working Hours",
+    "stuckAssignConsiderWorkingHoursDesc": "Prefer staff who are currently within their working hours when auto-assigning.",
+    "stuckAssignConsiderCountryMatchTitle": "Consider Country Match",
+    "stuckAssignConsiderCountryMatchDesc": "Prefer staff whose handled countries match the conversation's country.",
+    "stuckAssignOffHoursBehaviorTitle": "Off-Hours Behavior",
+    "stuckAssignOffHoursBehaviorDesc": "What to do when nobody is currently within working hours.",
+    "stuckAssignOffHoursAssignAnyway": "Assign anyway",
+    "stuckAssignOffHoursLeaveUnassigned": "Leave unassigned (queue)"
   },
   "financePage": {
     "statusPotential": "Potential",

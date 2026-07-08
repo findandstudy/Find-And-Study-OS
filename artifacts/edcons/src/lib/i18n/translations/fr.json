@@ -2257,7 +2257,15 @@
     "contractExpiryDesc": "Définissez combien de jours avant la date de fin du contrat d'agent le super administrateur, le propriétaire de l'agence et le personnel de bureau affecté seront notifiés (dans l'application + e-mail). Chaque seuil ne se déclenche qu'une seule fois par contrat. Nombres de jours positifs séparés par des virgules (par ex.",
     "autoAssignStuckConvTitle": "Attribution automatique des conversations bloquées",
     "autoAssignStuckConvDesc": "Attribue automatiquement les conversations de la boîte de réception restées sans réponse à un membre du personnel disponible (horaires de travail, puis pays, puis tour de rôle).",
-    "autoAssignStuckConvSaved": "Paramètre d'attribution automatique enregistré"
+    "autoAssignStuckConvSaved": "Paramètre d'attribution automatique enregistré",
+    "stuckAssignConsiderWorkingHoursTitle": "Tenir compte des heures de travail",
+    "stuckAssignConsiderWorkingHoursDesc": "Privilégier le personnel actuellement dans ses heures de travail lors de l'attribution automatique.",
+    "stuckAssignConsiderCountryMatchTitle": "Tenir compte de la correspondance de pays",
+    "stuckAssignConsiderCountryMatchDesc": "Privilégier le personnel dont les pays gérés correspondent au pays de la conversation.",
+    "stuckAssignOffHoursBehaviorTitle": "Comportement en dehors des heures de travail",
+    "stuckAssignOffHoursBehaviorDesc": "Que faire lorsque personne n'est actuellement dans ses heures de travail.",
+    "stuckAssignOffHoursAssignAnyway": "Attribuer quand même",
+    "stuckAssignOffHoursLeaveUnassigned": "Laisser non attribué (en attente)"
   },
   "financePage": {
     "statusPotential": "Potentiel",

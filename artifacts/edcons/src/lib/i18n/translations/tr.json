@@ -2439,7 +2439,15 @@
     "rtlNote": "Arapça için RTL (sağdan-sola) otomatik uygulanır.",
     "autoAssignStuckConvTitle": "Takılı Kalan Konuşmaları Otomatik Ata",
     "autoAssignStuckConvDesc": "Uzun süredir yanıtsız kalan gelen kutusu konuşmalarını uygun personele otomatik olarak ata (önce mesai saati, sonra ülke, sonra sırayla dağıtım).",
-    "autoAssignStuckConvSaved": "Otomatik atama ayarı kaydedildi"
+    "autoAssignStuckConvSaved": "Otomatik atama ayarı kaydedildi",
+    "stuckAssignConsiderWorkingHoursTitle": "Çalışma Saatini Dikkate Al",
+    "stuckAssignConsiderWorkingHoursDesc": "Otomatik atama yaparken şu anda mesai saatinde olan personeli tercih et.",
+    "stuckAssignConsiderCountryMatchTitle": "Ülke Eşleşmesini Dikkate Al",
+    "stuckAssignConsiderCountryMatchDesc": "İlgilendiği ülkeler sohbetin ülkesiyle eşleşen personeli tercih et.",
+    "stuckAssignOffHoursBehaviorTitle": "Mesai Dışı Davranışı",
+    "stuckAssignOffHoursBehaviorDesc": "Şu anda mesaide kimse yoksa ne yapılacağı.",
+    "stuckAssignOffHoursAssignAnyway": "Yine de ata",
+    "stuckAssignOffHoursLeaveUnassigned": "Atanmadan bırak (sırada bekle)"
   },
   "financePage": {
     "statusPotential": "Potansiyel",

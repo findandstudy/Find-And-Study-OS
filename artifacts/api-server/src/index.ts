@@ -659,6 +659,9 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS suppress_automation_app_notifications BOOLEAN NOT NULL DEFAULT true`);
     // Faz 2 (staff auto-assign): opt-in toggle for the periodic assignStuckConversation sweep.
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_assign_stuck_conversations_enabled BOOLEAN NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS stuck_assign_consider_working_hours BOOLEAN NOT NULL DEFAULT true`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS stuck_assign_consider_country_match BOOLEAN NOT NULL DEFAULT true`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS stuck_assign_off_hours_behavior TEXT NOT NULL DEFAULT 'assign_anyway'`);
     // Zernio omnichannel provider — per-account provider tagging.
     await pool.query(`ALTER TABLE channel_accounts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'direct'`);
     await pool.query(`ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS is_starred BOOLEAN NOT NULL DEFAULT false`);

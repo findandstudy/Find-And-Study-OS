@@ -47,6 +47,9 @@ const SETTINGS_PATCH_FIELDS = [
   "directStudentEnrollmentBonusRate",
   "suppressAutomationAppNotifications",
   "autoAssignStuckConversationsEnabled",
+  "stuckAssignConsiderWorkingHours",
+  "stuckAssignConsiderCountryMatch",
+  "stuckAssignOffHoursBehavior",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];

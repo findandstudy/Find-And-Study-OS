@@ -31,6 +31,15 @@ import {
 } from "./botBrain";
 import { getAiAgentConfig, DEFAULT_BOT_MODEL } from "./aiAgentConfig";
 import { resolveZernioAccount, sendViaZernio } from "./zernioSend";
+import { assignStuckConversationById } from "../stuckConversationAssigner";
+
+// Faz 2 handoff hook: fire-and-forget so we never delay the webhook response
+// or the bot-reply flow on assignment work. Errors are logged, not thrown.
+function triggerStuckConversationAssignment(conversationId: number): void {
+  assignStuckConversationById(conversationId).catch((err) => {
+    console.error(`[botAutoReply] stuck-conversation auto-assign failed for conversation #${conversationId}:`, err?.message || err);
+  });
+}
 
 // Re-export so existing consumers of EscalationTopic from this module keep working.
 export type { EscalationTopic };
@@ -417,6 +426,7 @@ export async function maybeAutoReply(opts: {
       .update(conversationsTable)
       .set({ botEnabled: false, needsHuman: true, botLastHandledMessageId: inboundMessageId })
       .where(eq(conversationsTable.id, conversationId));
+    triggerStuckConversationAssignment(conversationId);
     inboxBus.publish({
       type: "message",
       conversationId,
@@ -622,6 +632,7 @@ export async function maybeAutoReply(opts: {
           : {}),
       })
       .where(eq(conversationsTable.id, conversationId));
+    triggerStuckConversationAssignment(conversationId);
     inboxBus.publish({
       type: "message",
       conversationId,

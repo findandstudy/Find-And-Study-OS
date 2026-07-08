@@ -5,16 +5,29 @@ import { logAudit } from "./auth";
 import { dispatchNotification } from "./notificationDispatcher";
 import { getStaffCountriesForUsers } from "./staffCountries";
 
-// Faz 2 (staff auto-assign): periodically sweeps inbox conversations that
-// are marked needsHuman=true but have sat unassigned too long, and assigns
-// them to an eligible staff member. Priority: working-hours match → country
-// match (Faz 1 staff_countries) → round-robin. Gated by
-// settings.autoAssignStuckConversationsEnabled (default off).
+// Faz 2 (staff auto-assign): assigns inbox conversations that are marked
+// needsHuman=true and unassigned to an eligible staff member. Priority:
+// working-hours match -> country match (Faz 1 staff_countries) -> round-robin.
+// Triggered two ways:
+//   1. Immediately via assignStuckConversationById(), called right after the
+//      bot escalation hook sets needsHuman=true (botAutoReply.ts).
+//   2. As a periodic catch-up sweep (runStuckConversationSweep) for anything
+//      that slipped through (manual needsHuman flips, transient failures).
+// Gated by settings.autoAssignStuckConversationsEnabled (default off).
 
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 const INITIAL_DELAY_MS = 45 * 1000;
 const STUCK_THRESHOLD_MS = 10 * 60 * 1000;
 const ROUND_ROBIN_KV_KEY = "stuck_conversation_rr_last_user_id";
+
+type OffHoursBehavior = "assign_anyway" | "leave_unassigned";
+
+interface AssignSettings {
+  enabled: boolean;
+  considerWorkingHours: boolean;
+  considerCountryMatch: boolean;
+  offHoursBehavior: OffHoursBehavior;
+}
 
 interface StuckConversation {
   id: number;
@@ -53,9 +66,19 @@ function tzMinutesOfDay(date: Date, tz: string): number {
   return local.getUTCHours() * 60 + local.getUTCMinutes();
 }
 
-async function isAutoAssignEnabled(): Promise<boolean> {
-  const [row] = await db.select({ v: settingsTable.autoAssignStuckConversationsEnabled }).from(settingsTable).limit(1);
-  return row?.v ?? false;
+async function getAssignSettings(): Promise<AssignSettings> {
+  const [row] = await db.select({
+    enabled: settingsTable.autoAssignStuckConversationsEnabled,
+    considerWorkingHours: settingsTable.stuckAssignConsiderWorkingHours,
+    considerCountryMatch: settingsTable.stuckAssignConsiderCountryMatch,
+    offHoursBehavior: settingsTable.stuckAssignOffHoursBehavior,
+  }).from(settingsTable).limit(1);
+  return {
+    enabled: row?.enabled ?? false,
+    considerWorkingHours: row?.considerWorkingHours ?? true,
+    considerCountryMatch: row?.considerCountryMatch ?? true,
+    offHoursBehavior: (row?.offHoursBehavior === "leave_unassigned" ? "leave_unassigned" : "assign_anyway"),
+  };
 }
 
 export async function findStuckConversations(): Promise<StuckConversation[]> {
@@ -163,24 +186,45 @@ async function pickRoundRobin(userIds: number[]): Promise<number> {
   return idx === -1 ? sorted[0] : sorted[idx];
 }
 
-async function pickAssignee(conv: StuckConversation, pool0: number[]): Promise<number> {
-  const workingHoursPool = await narrowByWorkingHours(pool0);
-  const tierPool = workingHoursPool.length > 0 ? workingHoursPool : pool0;
+// Returns null when off-hours behavior is "leave_unassigned" and nobody is
+// currently in working hours — caller must treat that as "skip, stay queued".
+async function pickAssignee(conv: StuckConversation, pool0: number[], settings: AssignSettings): Promise<number | null> {
+  let tierPool = pool0;
+  if (settings.considerWorkingHours) {
+    const workingHoursPool = await narrowByWorkingHours(pool0);
+    if (workingHoursPool.length > 0) {
+      tierPool = workingHoursPool;
+    } else if (settings.offHoursBehavior === "leave_unassigned") {
+      return null;
+    }
+    // else "assign_anyway": keep tierPool = pool0 (already set)
+  }
 
-  const country = await resolveConversationCountry(conv);
-  const countryPool = await narrowByCountry(tierPool, country);
-  const finalPool = countryPool.length > 0 ? countryPool : tierPool;
+  let finalPool = tierPool;
+  if (settings.considerCountryMatch) {
+    const country = await resolveConversationCountry(conv);
+    const countryPool = await narrowByCountry(tierPool, country);
+    finalPool = countryPool.length > 0 ? countryPool : tierPool;
+  }
 
   return pickRoundRobin(finalPool);
 }
 
-export async function assignStuckConversation(conv: StuckConversation, staffPool: number[]): Promise<number | null> {
+// Core single-conversation assignment used by both the immediate handoff hook
+// and the periodic sweep. Returns the assigned userId, or null if no
+// assignment was made (already assigned, feature disabled, or queued for
+// off-hours per settings).
+export async function assignStuckConversation(conv: StuckConversation, staffPool: number[], settings?: AssignSettings): Promise<number | null> {
   if (staffPool.length === 0) return null;
-  const assigneeId = await pickAssignee(conv, staffPool);
+  const resolvedSettings = settings ?? await getAssignSettings();
+  const assigneeId = await pickAssignee(conv, staffPool, resolvedSettings);
+  if (assigneeId === null) return null;
 
-  await db.update(conversationsTable)
+  const [updated] = await db.update(conversationsTable)
     .set({ assignedToId: assigneeId })
-    .where(and(eq(conversationsTable.id, conv.id), isNull(conversationsTable.assignedToId)));
+    .where(and(eq(conversationsTable.id, conv.id), isNull(conversationsTable.assignedToId)))
+    .returning({ id: conversationsTable.id });
+  if (!updated) return null; // lost the race — someone else already assigned it
 
   await saveLastRoundRobinUserId(assigneeId);
 
@@ -192,7 +236,7 @@ export async function assignStuckConversation(conv: StuckConversation, staffPool
   await dispatchNotification({
     event: "conversation.stuck_assigned",
     title: "Konuşma Otomatik Atandı",
-    body: `Uzun süredir yanıt bekleyen bir konuşma size atandı: ${conv.lastMessagePreview || "(mesaj yok)"}`,
+    body: `Size bir sohbet otomatik olarak atandı — inceleme gerek: ${conv.lastMessagePreview || "(mesaj yok)"}`,
     actionUrl: `/inbox?conversation=${conv.id}`,
     icon: "🤝",
     recipientUserIds: [assigneeId],
@@ -202,9 +246,49 @@ export async function assignStuckConversation(conv: StuckConversation, staffPool
   return assigneeId;
 }
 
+// Immediate handoff entry point: call this right after a conversation is
+// flipped to needsHuman=true (bot escalation). No-op if disabled, already
+// assigned, or no eligible staff — the periodic sweep will retry later in
+// the "leave_unassigned"/no-pool cases.
+export async function assignStuckConversationById(conversationId: number): Promise<{ assignedTo: number | null; reason: string }> {
+  try {
+    const settings = await getAssignSettings();
+    if (!settings.enabled) return { assignedTo: null, reason: "disabled" };
+
+    const [conv] = await db.select({
+      id: conversationsTable.id,
+      channel: conversationsTable.channel,
+      externalContactId: conversationsTable.externalContactId,
+      lastMessagePreview: conversationsTable.lastMessagePreview,
+      assignedToId: conversationsTable.assignedToId,
+      needsHuman: conversationsTable.needsHuman,
+      status: conversationsTable.status,
+    }).from(conversationsTable).where(eq(conversationsTable.id, conversationId));
+
+    if (!conv) return { assignedTo: null, reason: "not_found" };
+    if (conv.assignedToId) return { assignedTo: null, reason: "already_assigned" };
+    if (!conv.needsHuman) return { assignedTo: null, reason: "not_needs_human" };
+    if (conv.channel === "internal") return { assignedTo: null, reason: "internal_channel" };
+
+    const staffPool = await getEligibleStaffPool();
+    if (staffPool.length === 0) return { assignedTo: null, reason: "no_eligible_staff" };
+
+    const assigneeId = await assignStuckConversation(conv, staffPool, settings);
+    if (assigneeId) {
+      console.log(`[stuckConversationAssigner] Immediately assigned conversation #${conv.id} to user #${assigneeId}`);
+      return { assignedTo: assigneeId, reason: "assigned" };
+    }
+    return { assignedTo: null, reason: "queued_off_hours" };
+  } catch (err: any) {
+    console.error(`[stuckConversationAssigner] Immediate assignment failed for conversation #${conversationId}:`, err?.message || err);
+    return { assignedTo: null, reason: "error" };
+  }
+}
+
 export async function runStuckConversationSweep(): Promise<void> {
   try {
-    if (!(await isAutoAssignEnabled())) return;
+    const settings = await getAssignSettings();
+    if (!settings.enabled) return;
 
     const stuck = await findStuckConversations();
     if (stuck.length === 0) return;
@@ -217,7 +301,7 @@ export async function runStuckConversationSweep(): Promise<void> {
 
     for (const conv of stuck) {
       try {
-        const assigneeId = await assignStuckConversation(conv, staffPool);
+        const assigneeId = await assignStuckConversation(conv, staffPool, settings);
         if (assigneeId) {
           console.log(`[stuckConversationAssigner] Assigned conversation #${conv.id} to user #${assigneeId}`);
         }

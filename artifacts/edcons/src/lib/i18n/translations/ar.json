@@ -2257,7 +2257,15 @@
     "contractExpiryDesc": "حدّد عدد الأيام قبل تاريخ انتهاء عقد الوكيل التي سيُخطَر فيها المسؤول الأعلى ومالك الوكالة وموظفو المكتب المعنيون (داخل التطبيق + البريد الإلكتروني). يُطلق كل حد مرة واحدة فقط لكل عقد. أعداد أيام موجبة مفصولة بفواصل (مثال:",
     "autoAssignStuckConvTitle": "تعيين المحادثات العالقة تلقائيًا",
     "autoAssignStuckConvDesc": "تعيين محادثات البريد الوارد التي لم يتم الرد عليها تلقائيًا للموظفين المتاحين (تطابق ساعات العمل، ثم الدولة، ثم بالتناوب).",
-    "autoAssignStuckConvSaved": "تم حفظ إعداد التعيين التلقائي"
+    "autoAssignStuckConvSaved": "تم حفظ إعداد التعيين التلقائي",
+    "stuckAssignConsiderWorkingHoursTitle": "مراعاة ساعات العمل",
+    "stuckAssignConsiderWorkingHoursDesc": "تفضيل الموظفين المتواجدين حاليًا ضمن ساعات عملهم عند التعيين التلقائي.",
+    "stuckAssignConsiderCountryMatchTitle": "مراعاة تطابق الدولة",
+    "stuckAssignConsiderCountryMatchDesc": "تفضيل الموظفين الذين تتطابق دولهم المسندة مع دولة المحادثة.",
+    "stuckAssignOffHoursBehaviorTitle": "السلوك خارج ساعات العمل",
+    "stuckAssignOffHoursBehaviorDesc": "ماذا يحدث عندما لا يكون أحد ضمن ساعات العمل حاليًا.",
+    "stuckAssignOffHoursAssignAnyway": "تعيين على أي حال",
+    "stuckAssignOffHoursLeaveUnassigned": "ترك بدون تعيين (في الانتظار)"
   },
   "financePage": {
     "statusPotential": "محتمل",

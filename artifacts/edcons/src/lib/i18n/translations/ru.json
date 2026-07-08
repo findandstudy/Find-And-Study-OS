@@ -2257,7 +2257,15 @@
     "contractExpiryDesc": "Укажите, за сколько дней до окончания агентского договора будут уведомлены суперадминистратор, владелец агентства и назначенные сотрудники офиса (в приложении + эл. почта). Каждый порог срабатывает только один раз для договора. Положительные числа дней через запятую (например,",
     "autoAssignStuckConvTitle": "Автоназначение зависших переписок",
     "autoAssignStuckConvDesc": "Автоматически назначать необработанные переписки во входящих доступным сотрудникам (сначала рабочее время, затем страна, затем по очереди).",
-    "autoAssignStuckConvSaved": "Настройка автоназначения сохранена"
+    "autoAssignStuckConvSaved": "Настройка автоназначения сохранена",
+    "stuckAssignConsiderWorkingHoursTitle": "Учитывать рабочее время",
+    "stuckAssignConsiderWorkingHoursDesc": "Отдавать предпочтение сотрудникам, находящимся сейчас в рабочем времени, при автоназначении.",
+    "stuckAssignConsiderCountryMatchTitle": "Учитывать совпадение страны",
+    "stuckAssignConsiderCountryMatchDesc": "Отдавать предпочтение сотрудникам, чьи закреплённые страны совпадают со страной переписки.",
+    "stuckAssignOffHoursBehaviorTitle": "Поведение вне рабочего времени",
+    "stuckAssignOffHoursBehaviorDesc": "Что делать, если сейчас никто не находится в рабочем времени.",
+    "stuckAssignOffHoursAssignAnyway": "Назначить в любом случае",
+    "stuckAssignOffHoursLeaveUnassigned": "Оставить неназначенным (в очереди)"
   },
   "financePage": {
     "statusPotential": "Потенциальный",

@@ -2206,7 +2206,15 @@
     "contractExpiryDesc": "Define cuántos días antes de la fecha de fin del contrato del agente se notificará al superadministrador, al propietario de la agencia y al personal de oficina asignado (en la app + correo electrónico). Cada umbral se activa solo una vez por contrato. Cantidades de días positivas separadas por comas (p. ej.",
     "autoAssignStuckConvTitle": "Asignación automática de conversaciones atascadas",
     "autoAssignStuckConvDesc": "Asigna automáticamente las conversaciones de la bandeja de entrada sin atender al personal disponible (primero por horario laboral, luego por país, luego por turnos).",
-    "autoAssignStuckConvSaved": "Configuración de asignación automática guardada"
+    "autoAssignStuckConvSaved": "Configuración de asignación automática guardada",
+    "stuckAssignConsiderWorkingHoursTitle": "Considerar horario laboral",
+    "stuckAssignConsiderWorkingHoursDesc": "Priorizar al personal que actualmente esté dentro de su horario laboral al asignar automáticamente.",
+    "stuckAssignConsiderCountryMatchTitle": "Considerar coincidencia de país",
+    "stuckAssignConsiderCountryMatchDesc": "Priorizar al personal cuyos países asignados coincidan con el país de la conversación.",
+    "stuckAssignOffHoursBehaviorTitle": "Comportamiento fuera de horario",
+    "stuckAssignOffHoursBehaviorDesc": "Qué hacer cuando nadie está actualmente dentro de su horario laboral.",
+    "stuckAssignOffHoursAssignAnyway": "Asignar de todas formas",
+    "stuckAssignOffHoursLeaveUnassigned": "Dejar sin asignar (en espera)"
   },
   "financePage": {
     "statusPotential": "Potencial",

@@ -2206,7 +2206,15 @@
     "contractExpiryDesc": "Tetapkan berapa hari sebelum tanggal berakhir kontrak agen super admin, pemilik agensi, dan staf kantor yang ditugaskan akan diberi tahu (dalam aplikasi + email). Setiap ambang hanya aktif sekali per kontrak. Jumlah hari positif dipisahkan koma (mis.",
     "autoAssignStuckConvTitle": "Penugasan Otomatis Percakapan Terhenti",
     "autoAssignStuckConvDesc": "Menugaskan percakapan kotak masuk yang belum ditangani secara otomatis ke staf yang tersedia (kecocokan jam kerja, lalu negara, lalu bergiliran).",
-    "autoAssignStuckConvSaved": "Pengaturan penugasan otomatis disimpan"
+    "autoAssignStuckConvSaved": "Pengaturan penugasan otomatis disimpan",
+    "stuckAssignConsiderWorkingHoursTitle": "Pertimbangkan Jam Kerja",
+    "stuckAssignConsiderWorkingHoursDesc": "Prioritaskan staf yang sedang berada dalam jam kerja saat penugasan otomatis.",
+    "stuckAssignConsiderCountryMatchTitle": "Pertimbangkan Kecocokan Negara",
+    "stuckAssignConsiderCountryMatchDesc": "Prioritaskan staf yang negara tanggung jawabnya cocok dengan negara percakapan.",
+    "stuckAssignOffHoursBehaviorTitle": "Perilaku di Luar Jam Kerja",
+    "stuckAssignOffHoursBehaviorDesc": "Apa yang harus dilakukan jika saat ini tidak ada yang berada dalam jam kerja.",
+    "stuckAssignOffHoursAssignAnyway": "Tetap tugaskan",
+    "stuckAssignOffHoursLeaveUnassigned": "Biarkan tidak ditugaskan (antre)"
   },
   "financePage": {
     "statusPotential": "Potensial",

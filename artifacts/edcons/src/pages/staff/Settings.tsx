@@ -2673,35 +2673,67 @@ function AutoAssignStuckConversationsCard() {
     queryFn: () => customFetch("/api/settings"),
   });
   const [value, setValue] = useState<boolean>(false);
+  const [considerWorkingHours, setConsiderWorkingHours] = useState<boolean>(true);
+  const [considerCountryMatch, setConsiderCountryMatch] = useState<boolean>(true);
+  const [offHoursBehavior, setOffHoursBehavior] = useState<string>("assign_anyway");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (settings !== undefined) {
       setValue(settings?.autoAssignStuckConversationsEnabled === true);
+      setConsiderWorkingHours(settings?.stuckAssignConsiderWorkingHours !== false);
+      setConsiderCountryMatch(settings?.stuckAssignConsiderCountryMatch !== false);
+      setOffHoursBehavior(settings?.stuckAssignOffHoursBehavior || "assign_anyway");
       setLoaded(true);
     }
-  }, [settings?.autoAssignStuckConversationsEnabled, settings]);
+  }, [
+    settings?.autoAssignStuckConversationsEnabled,
+    settings?.stuckAssignConsiderWorkingHours,
+    settings?.stuckAssignConsiderCountryMatch,
+    settings?.stuckAssignOffHoursBehavior,
+    settings,
+  ]);
 
-  async function handleToggle(next: boolean) {
-    setValue(next);
+  async function patchField(field: string, patchValue: unknown, revert: () => void) {
     setSaving(true);
     try {
       await customFetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ autoAssignStuckConversationsEnabled: next }),
+        body: JSON.stringify({ [field]: patchValue }),
       });
       qc.invalidateQueries({ queryKey: ["/api/settings"] });
       toast({ title: t("settingsPage.autoAssignStuckConvSaved") });
     } catch (err: any) {
-      setValue(!next);
+      revert();
       toast({ title: t("settingsPage.saveFailed"), description: err?.message, variant: "destructive" });
     } finally { setSaving(false); }
   }
 
+  function handleToggle(next: boolean) {
+    setValue(next);
+    patchField("autoAssignStuckConversationsEnabled", next, () => setValue(!next));
+  }
+
+  function handleWorkingHoursToggle(next: boolean) {
+    setConsiderWorkingHours(next);
+    patchField("stuckAssignConsiderWorkingHours", next, () => setConsiderWorkingHours(!next));
+  }
+
+  function handleCountryMatchToggle(next: boolean) {
+    setConsiderCountryMatch(next);
+    patchField("stuckAssignConsiderCountryMatch", next, () => setConsiderCountryMatch(!next));
+  }
+
+  function handleOffHoursBehaviorChange(next: string) {
+    const prev = offHoursBehavior;
+    setOffHoursBehavior(next);
+    patchField("stuckAssignOffHoursBehavior", next, () => setOffHoursBehavior(prev));
+  }
+
   return (
-    <Card className="border shadow-sm p-6">
+    <Card className="border shadow-sm p-6 space-y-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="font-display font-semibold text-base">{t("settingsPage.autoAssignStuckConvTitle")}</h3>
@@ -2713,6 +2745,54 @@ function AutoAssignStuckConversationsCard() {
           disabled={!loaded || saving}
         />
       </div>
+
+      {value && (
+        <div className="pl-1 space-y-4 border-t pt-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">{t("settingsPage.stuckAssignConsiderWorkingHoursTitle")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("settingsPage.stuckAssignConsiderWorkingHoursDesc")}</p>
+            </div>
+            <Switch
+              checked={considerWorkingHours}
+              onCheckedChange={handleWorkingHoursToggle}
+              disabled={!loaded || saving}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">{t("settingsPage.stuckAssignConsiderCountryMatchTitle")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("settingsPage.stuckAssignConsiderCountryMatchDesc")}</p>
+            </div>
+            <Switch
+              checked={considerCountryMatch}
+              onCheckedChange={handleCountryMatchToggle}
+              disabled={!loaded || saving}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">{t("settingsPage.stuckAssignOffHoursBehaviorTitle")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("settingsPage.stuckAssignOffHoursBehaviorDesc")}</p>
+            </div>
+            <Select
+              value={offHoursBehavior}
+              onValueChange={handleOffHoursBehaviorChange}
+              disabled={!loaded || saving || !considerWorkingHours}
+            >
+              <SelectTrigger className="w-[220px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="assign_anyway">{t("settingsPage.stuckAssignOffHoursAssignAnyway")}</SelectItem>
+                <SelectItem value="leave_unassigned">{t("settingsPage.stuckAssignOffHoursLeaveUnassigned")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

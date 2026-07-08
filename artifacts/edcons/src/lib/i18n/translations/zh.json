@@ -2206,7 +2206,15 @@
     "contractExpiryDesc": "设置在代理合同结束日期前多少天通知超级管理员、机构所有者及指定办公室员工（应用内 + 邮件）。每个阈值对每份合同仅触发一次。以逗号分隔的正整数天数（例如",
     "autoAssignStuckConvTitle": "自动分配停滞对话",
     "autoAssignStuckConvDesc": "自动将长时间无人处理的收件箱对话分配给可用员工（先匹配工作时间，再匹配国家，最后轮询分配）。",
-    "autoAssignStuckConvSaved": "自动分配设置已保存"
+    "autoAssignStuckConvSaved": "自动分配设置已保存",
+    "stuckAssignConsiderWorkingHoursTitle": "考虑工作时间",
+    "stuckAssignConsiderWorkingHoursDesc": "自动分配时优先选择当前处于工作时间内的员工。",
+    "stuckAssignConsiderCountryMatchTitle": "考虑国家匹配",
+    "stuckAssignConsiderCountryMatchDesc": "优先选择所负责国家与对话所属国家匹配的员工。",
+    "stuckAssignOffHoursBehaviorTitle": "非工作时间行为",
+    "stuckAssignOffHoursBehaviorDesc": "当前没有人处于工作时间时该如何处理。",
+    "stuckAssignOffHoursAssignAnyway": "仍然分配",
+    "stuckAssignOffHoursLeaveUnassigned": "保持未分配（排队等待）"
   },
   "financePage": {
     "statusPotential": "潜在",
