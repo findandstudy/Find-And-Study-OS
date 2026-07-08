@@ -38,6 +38,7 @@ import {
   SEARCH_PROGRAMS_TOOL_NAME,
 } from "./programSearchTool";
 import { isProgramSearchToolEnabled } from "./knowledgeSources";
+import { retrieveKnowledgeChunks } from "./knowledgeRetrieval";
 
 // Faz 2 handoff hook: fire-and-forget so we never delay the webhook response
 // or the bot-reply flow on assignment work. Errors are logged, not thrown.
@@ -284,7 +285,8 @@ export async function runBotReplyTest(input: BotTestInput): Promise<BotTestResul
       model: config.model,
     };
   }
-  const systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase);
+  const ragChunks = await retrieveKnowledgeChunks(input.message);
+  const systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase, ragChunks);
   const turns = [
     ...(input.history ?? []),
     { direction: "inbound", content: input.message },
@@ -712,7 +714,8 @@ export async function maybeAutoReply(opts: {
   const history = recent.slice(-BOT_HISTORY_LIMIT);
 
   const language = detectLanguage(msg.content);
-  let systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase);
+  const ragChunks = await retrieveKnowledgeChunks(msg.content);
+  let systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase, ragChunks);
 
   // FAZ 3 — nudge the bot to collect any still-missing level-appropriate
   // documents for the captured lead/student.

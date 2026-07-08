@@ -61,6 +61,13 @@ import {
   getProgramScopeSource,
   writeProgramScopeSource,
 } from "../lib/inbox/knowledgeSources";
+import {
+  listRagSources,
+  createRagSource,
+  updateRagSource,
+  deleteRagSource,
+  reprocessRagSource,
+} from "../lib/inbox/knowledgeSourcesAdmin";
 
 const router: IRouter = Router();
 
@@ -2362,6 +2369,124 @@ router.put(
       enabled: source.scope.enabled,
     }, req.ip);
     res.json({ source: { isActive: source.isActive, scope: source.scope, lastSyncedAt: source.lastSyncedAt } });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// AI Agent Faz 2 — external knowledge sources (file/url/text) RAG CRUD
+// ---------------------------------------------------------------------------
+
+const createRagSourceSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("file"),
+    name: z.string().min(1).max(200),
+    objectPath: z.string().min(1),
+    fileName: z.string().min(1),
+    mimeType: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("url"),
+    name: z.string().min(1).max(200),
+    url: z.string().url(),
+  }),
+  z.object({
+    type: z.literal("text"),
+    name: z.string().min(1).max(200),
+    rawText: z.string().min(1).max(400_000),
+  }),
+]);
+const updateRagSourceSchema = z.object({
+  isActive: z.boolean().optional(),
+  name: z.string().min(1).max(200).optional(),
+});
+
+function ragSourceConfigFromInput(input: z.infer<typeof createRagSourceSchema>): Record<string, unknown> {
+  if (input.type === "file") return { objectPath: input.objectPath, fileName: input.fileName, mimeType: input.mimeType };
+  if (input.type === "url") return { url: input.url };
+  return { rawText: input.rawText };
+}
+
+// GET /inbox/knowledge-sources/rag — list all admin-managed file/url/text
+// knowledge sources with their processing status and chunk counts.
+router.get(
+  "/inbox/knowledge-sources/rag",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const sources = await listRagSources();
+    res.json({ sources });
+  },
+);
+
+// POST /inbox/knowledge-sources/rag — register a new file/url/text source and
+// kick off (async) extraction + chunking + embedding.
+router.post(
+  "/inbox/knowledge-sources/rag",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const parsed = createRagSourceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+    const source = await createRagSource({
+      type: parsed.data.type,
+      name: parsed.data.name,
+      config: ragSourceConfigFromInput(parsed.data),
+    });
+    logAudit(req.user!.id, "create_knowledge_source_rag", "integration", source.id, { type: source.type, name: source.name }, req.ip);
+    res.status(201).json({ source });
+  },
+);
+
+// PATCH /inbox/knowledge-sources/rag/:id — toggle active state or rename.
+router.patch(
+  "/inbox/knowledge-sources/rag/:id",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const parsed = updateRagSourceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      return;
+    }
+    const source = await updateRagSource(id, parsed.data);
+    if (!source) { res.status(404).json({ error: "Not found" }); return; }
+    logAudit(req.user!.id, "update_knowledge_source_rag", "integration", id, parsed.data, req.ip);
+    res.json({ source });
+  },
+);
+
+// POST /inbox/knowledge-sources/rag/:id/reprocess — re-run extraction+embedding.
+router.post(
+  "/inbox/knowledge-sources/rag/:id/reprocess",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const ok = await reprocessRagSource(id);
+    if (!ok) { res.status(404).json({ error: "Not found" }); return; }
+    logAudit(req.user!.id, "reprocess_knowledge_source_rag", "integration", id, {}, req.ip);
+    res.json({ success: true });
+  },
+);
+
+// DELETE /inbox/knowledge-sources/rag/:id — remove a source and its chunks.
+router.delete(
+  "/inbox/knowledge-sources/rag/:id",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const ok = await deleteRagSource(id);
+    if (!ok) { res.status(404).json({ error: "Not found" }); return; }
+    logAudit(req.user!.id, "delete_knowledge_source_rag", "integration", id, {}, req.ip);
+    res.json({ success: true });
   },
 );
 

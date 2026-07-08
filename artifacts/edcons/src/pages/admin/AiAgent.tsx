@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import KnowledgeSourcesRag from "@/components/admin/KnowledgeSourcesRag";
 import {
   Select,
   SelectContent,
@@ -537,6 +538,9 @@ export default function AiAgent() {
           )}
         </CardContent>
       </Card>
+
+      {/* Knowledge Sources — external RAG (FAZ 2) */}
+      <KnowledgeSourcesRag />
 
       {/* Escalation keywords */}
       <Card>

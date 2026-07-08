@@ -1845,6 +1845,39 @@ async function seedClaudeIntegration() {
     console.error("[migrate] knowledge_sources:", err);
   }
 
+  // Step 2b17: knowledge_chunks — AI Agent Faz 2 RAG pipeline. Requires the
+  // pgvector extension (`vector` type) for embedding storage + cosine-distance
+  // search (`<=>` operator). Idempotent CREATE EXTENSION/TABLE/INDEX.
+  try {
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS knowledge_chunks (
+        id SERIAL PRIMARY KEY,
+        source_id INTEGER NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        embedding vector(1536),
+        token_count INTEGER NOT NULL DEFAULT 0,
+        chunk_index INTEGER NOT NULL DEFAULT 0,
+        metadata JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS knowledge_chunks_source_id_idx ON knowledge_chunks (source_id)`);
+    // IVFFlat index accelerates cosine-distance search; harmless no-op cost on
+    // small tables, needed once a source library grows beyond a few thousand
+    // chunks. Wrapped separately so a pgvector version without ivfflat support
+    // doesn't block the table/extension creation above.
+    try {
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS knowledge_chunks_embedding_idx ON knowledge_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)`,
+      );
+    } catch (idxErr) {
+      console.error("[migrate] knowledge_chunks ivfflat index (non-fatal):", idxErr);
+    }
+  } catch (err) {
+    console.error("[migrate] knowledge_chunks:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
