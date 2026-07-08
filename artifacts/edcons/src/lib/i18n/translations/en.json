@@ -3226,6 +3226,7 @@
       "profile": "Profile & Contact",
       "schedule": "Work Hours",
       "languages": "Languages",
+      "countries": "Handled Countries",
       "documents": "Documents"
     },
     "filters": {
@@ -3297,6 +3298,10 @@
       "native": "Native",
       "add": "Add language",
       "empty": "No languages added yet"
+    },
+    "countries": {
+      "hint": "Countries this staff member handles. Used for automatic conversation assignment.",
+      "placeholder": "Select countries..."
     },
     "documents": {
       "type": "Document type",

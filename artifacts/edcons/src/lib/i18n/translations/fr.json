@@ -3480,7 +3480,8 @@
       "profile": "Profil et contact",
       "schedule": "Heures de travail",
       "languages": "Langues",
-      "documents": "Documents"
+      "documents": "Documents",
+      "countries": "Pays gérés"
     },
     "filters": {
       "search": "Rechercher…",
@@ -3624,7 +3625,11 @@
       "confirmed": "Confirmé",
       "pending": "En attente"
     },
-    "tzVsAdmin": "vs admin"
+    "tzVsAdmin": "vs admin",
+    "countries": {
+      "hint": "Pays gérés par ce membre du personnel. Utilisé pour l'assignation automatique des conversations.",
+      "placeholder": "Sélectionner des pays..."
+    }
   },
   "notificationRules": {
     "failedToLoad": "Échec du chargement des règles de notification",

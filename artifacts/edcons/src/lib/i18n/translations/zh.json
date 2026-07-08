@@ -3429,7 +3429,8 @@
       "profile": "资料与联系方式",
       "schedule": "工作时间",
       "languages": "语言",
-      "documents": "文件"
+      "documents": "文件",
+      "countries": "负责的国家"
     },
     "filters": {
       "search": "搜索…",
@@ -3573,7 +3574,11 @@
       "confirmed": "已确认",
       "pending": "待处理"
     },
-    "tzVsAdmin": "相对管理员"
+    "tzVsAdmin": "相对管理员",
+    "countries": {
+      "hint": "该员工负责的国家。用于对话自动分配。",
+      "placeholder": "选择国家..."
+    }
   },
   "notificationRules": {
     "failedToLoad": "加载通知规则失败",

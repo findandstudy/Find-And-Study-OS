@@ -3429,7 +3429,8 @@
       "profile": "Perfil y contacto",
       "schedule": "Horario laboral",
       "languages": "Idiomas",
-      "documents": "Documentos"
+      "documents": "Documentos",
+      "countries": "Países atendidos"
     },
     "filters": {
       "search": "Buscar…",
@@ -3573,7 +3574,11 @@
       "confirmed": "Confirmado",
       "pending": "Pendiente"
     },
-    "tzVsAdmin": "vs administrador"
+    "tzVsAdmin": "vs administrador",
+    "countries": {
+      "hint": "Países que atiende este miembro del personal. Se usa para la asignación automática de conversaciones.",
+      "placeholder": "Seleccionar países..."
+    }
   },
   "notificationRules": {
     "failedToLoad": "Error al cargar las reglas de notificación",

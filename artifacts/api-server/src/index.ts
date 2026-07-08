@@ -889,6 +889,24 @@ async function seedClaudeIntegration() {
     console.error("[migrate] portal_account_universities table:", err);
   }
 
+  // Staff Faz 1: "İlgilendiği Ülkeler" (handled countries) — additive table,
+  // mirrors staff_languages exactly. Foundation for Faz 2 conversation
+  // auto-assignment (country-priority matching); no behavior change yet.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS staff_countries (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        country TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS staff_countries_user_country_idx ON staff_countries(user_id, country)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS staff_countries_user_idx ON staff_countries(user_id)`);
+  } catch (err) {
+    console.error("[migrate] staff_countries table:", err);
+  }
+
   // Step 2b2d: Finance Sprint Phase 1 — staff commission fields on commissions +
   // new staff_commission_payouts table.
   // Mirrors lib/db migration 0014_finance_staff_columns. Idempotent (IF NOT EXISTS /

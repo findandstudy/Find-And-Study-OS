@@ -31,6 +31,16 @@ export const staffLanguagesTable = pgTable("staff_languages", {
   index("staff_languages_user_idx").on(table.userId),
 ]);
 
+export const staffCountriesTable = pgTable("staff_countries", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  country: text("country").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("staff_countries_user_country_idx").on(table.userId, table.country),
+  index("staff_countries_user_idx").on(table.userId),
+]);
+
 export const staffDocumentsTable = pgTable("staff_documents", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
@@ -89,12 +99,14 @@ export const staffCommissionsTable = pgTable("staff_commissions", {
 
 export const insertStaffWorkScheduleSchema = createInsertSchema(staffWorkSchedulesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertStaffLanguageSchema = createInsertSchema(staffLanguagesTable).omit({ id: true, createdAt: true });
+export const insertStaffCountrySchema = createInsertSchema(staffCountriesTable).omit({ id: true, createdAt: true });
 export const insertStaffDocumentSchema = createInsertSchema(staffDocumentsTable).omit({ id: true, uploadedAt: true, deletedAt: true });
 export const insertStaffSalaryPaymentSchema = createInsertSchema(staffSalaryPaymentsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertStaffCommissionSchema = createInsertSchema(staffCommissionsTable).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type StaffWorkSchedule = typeof staffWorkSchedulesTable.$inferSelect;
 export type StaffLanguage = typeof staffLanguagesTable.$inferSelect;
+export type StaffCountry = typeof staffCountriesTable.$inferSelect;
 export type StaffDocument = typeof staffDocumentsTable.$inferSelect;
 export type StaffSalaryPayment = typeof staffSalaryPaymentsTable.$inferSelect;
 export type StaffCommission = typeof staffCommissionsTable.$inferSelect;

@@ -3429,7 +3429,8 @@
       "profile": "Profil & Kontak",
       "schedule": "Jam Kerja",
       "languages": "Bahasa",
-      "documents": "Dokumen"
+      "documents": "Dokumen",
+      "countries": "Negara yang Ditangani"
     },
     "filters": {
       "search": "Cari…",
@@ -3573,7 +3574,11 @@
       "confirmed": "Dikonfirmasi",
       "pending": "Tertunda"
     },
-    "tzVsAdmin": "vs admin"
+    "tzVsAdmin": "vs admin",
+    "countries": {
+      "hint": "Negara yang ditangani oleh staf ini. Digunakan untuk penugasan percakapan otomatis.",
+      "placeholder": "Pilih negara..."
+    }
   },
   "notificationRules": {
     "failedToLoad": "Gagal memuat aturan notifikasi",

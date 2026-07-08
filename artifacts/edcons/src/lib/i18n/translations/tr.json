@@ -3167,7 +3167,8 @@
       "profile": "Profil & İletişim",
       "schedule": "Çalışma Saatleri",
       "languages": "Diller",
-      "documents": "Belgeler"
+      "documents": "Belgeler",
+      "countries": "İlgilendiği Ülkeler"
     },
     "filters": {
       "search": "Ara…",
@@ -3312,7 +3313,11 @@
       "confirmed": "Onaylandı",
       "pending": "Beklemede"
     },
-    "tzVsAdmin": "yöneticiye göre"
+    "tzVsAdmin": "yöneticiye göre",
+    "countries": {
+      "hint": "Bu personelin ilgilendiği ülkeler. Otomatik sohbet atama için kullanılır.",
+      "placeholder": "Ülke seçin..."
+    }
   },
   "docTypes": {
     "passport": "Pasaport",

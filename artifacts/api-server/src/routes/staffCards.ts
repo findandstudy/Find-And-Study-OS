@@ -9,6 +9,7 @@ import {
   agencyAssignedStaffTable,
   staffWorkSchedulesTable,
   staffLanguagesTable,
+  staffCountriesTable,
   staffDocumentsTable,
   staffSalaryPaymentsTable,
   staffCommissionsTable,
@@ -126,6 +127,9 @@ router.get("/staff-cards/:userId", requireAuth, requireStaffCardAdmin, async (re
   const languages = await db.select().from(staffLanguagesTable)
     .where(eq(staffLanguagesTable.userId, userId));
 
+  const countries = await db.select().from(staffCountriesTable)
+    .where(eq(staffCountriesTable.userId, userId));
+
   const documents = await db.select({
     id: staffDocumentsTable.id,
     docType: staffDocumentsTable.docType,
@@ -194,6 +198,7 @@ router.get("/staff-cards/:userId", requireAuth, requireStaffCardAdmin, async (re
     user: safeUser,
     schedules,
     languages,
+    countries,
     documents,
     assignedAgents,
     assignedStudents,
@@ -296,6 +301,37 @@ router.put("/staff-cards/:userId/languages", requireAuth, requireStaffCardAdmin,
     }
   });
   logAudit(req.user!.id, "staff_card.languages.update", "user", userId, { count: parsed.data.languages.length }, req.ip);
+  res.json({ success: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// İlgilendiği ülkeler (Faz 1 — otomatik sohbet atama motorunun veri temeli)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/staff-cards/:userId/countries", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
+  const userId = parseInt(String(req.params.userId), 10);
+  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const rows = await db.select({ country: staffCountriesTable.country }).from(staffCountriesTable)
+    .where(eq(staffCountriesTable.userId, userId));
+  res.json({ data: rows.map(r => r.country) });
+});
+
+router.put("/staff-cards/:userId/countries", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
+  const userId = parseInt(String(req.params.userId), 10);
+  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const parsed = z.object({
+    countries: z.array(z.string().trim().min(1).max(100)),
+  }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const deduped = Array.from(new Set(parsed.data.countries));
+  await db.transaction(async (tx) => {
+    await tx.delete(staffCountriesTable).where(eq(staffCountriesTable.userId, userId));
+    if (deduped.length > 0) {
+      await tx.insert(staffCountriesTable).values(
+        deduped.map(country => ({ userId, country }))
+      );
+    }
+  });
+  logAudit(req.user!.id, "staff_card.countries.update", "user", userId, { count: deduped.length }, req.ip);
   res.json({ success: true });
 });
 

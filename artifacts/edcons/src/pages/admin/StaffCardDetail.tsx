@@ -14,6 +14,8 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { useCountrySearch } from "@/hooks/use-countries";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { CountryFlag } from "@/components/CountryFlag";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +32,7 @@ type CardData = {
   user: any;
   schedules: Array<{ id: number; weekday: number; startMinutes: number; endMinutes: number }>;
   languages: Array<{ id: number; language: string; proficiency: string | null }>;
+  countries: Array<{ id: number; country: string }>;
   documents: Array<{ id: number; docType: string; filename: string; sizeBytes: number; mimeType: string; uploadedAt: string }>;
   assignedAgents: Array<{ id: number; firstName: string | null; lastName: string | null; companyName: string | null; businessName: string | null; email: string | null; isPrimary: boolean }>;
   assignedStudents: Array<{ id: number; firstName: string | null; lastName: string | null; email: string | null; status: string | null; season: string | null }>;
@@ -133,6 +136,12 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
               <AccordionTrigger className="px-4 py-3 hover:no-underline">{t("staffCards.section.languages")} <span className="ml-2 text-xs text-muted-foreground">({data.languages.length})</span></AccordionTrigger>
               <AccordionContent className="px-1 pb-1">
                 <LanguagesSection languages={data.languages} userId={userId} onSaved={refresh} />
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="countries" className="border rounded-md bg-card">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline">{t("staffCards.section.countries")} <span className="ml-2 text-xs text-muted-foreground">({data.countries.length})</span></AccordionTrigger>
+              <AccordionContent className="px-1 pb-1">
+                <CountriesSection countries={data.countries} userId={userId} onSaved={refresh} />
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="documents" className="border rounded-md bg-card">
@@ -343,6 +352,43 @@ function LanguagesSection({ languages, userId, onSaved }: { languages: any[]; us
       ))}
       <div className="flex justify-between">
         <Button variant="outline" size="sm" onClick={addRow}><Plus className="h-4 w-4 mr-1" />{t("staffCards.languages.add")}</Button>
+        <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}{t("common.save")}</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Section: Countries ─────────────────────────────────────────────────────
+function CountriesSection({ countries, userId, onSaved }: { countries: Array<{ id: number; country: string }>; userId: number; onSaved: () => void }) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const { data: catalog } = useCountrySearch("");
+  const [selected, setSelected] = useState<string[]>(countries.map(c => c.country));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setSelected(countries.map(c => c.country)); }, [countries]);
+
+  const options = useMemo(() => (catalog || []).map(c => ({ value: c.name, label: c.name })), [catalog]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await customFetch(`/api/staff-cards/${userId}/countries`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ countries: selected }) });
+      toast({ title: t("staffCards.saved") }); onSaved();
+    } catch (err: any) { toast({ title: t("common.error"), description: String(err.message || err), variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <p className="text-xs text-muted-foreground">{t("staffCards.countries.hint")}</p>
+      <MultiSelectFilter
+        values={selected}
+        onChange={setSelected}
+        options={options}
+        placeholder={t("staffCards.countries.placeholder")}
+        className="max-w-md"
+      />
+      <div className="flex justify-end">
         <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}{t("common.save")}</Button>
       </div>
     </div>

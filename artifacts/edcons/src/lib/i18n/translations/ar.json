@@ -3480,7 +3480,8 @@
       "profile": "الملف وجهات الاتصال",
       "schedule": "ساعات العمل",
       "languages": "اللغات",
-      "documents": "المستندات"
+      "documents": "المستندات",
+      "countries": "الدول التي يتعامل معها"
     },
     "filters": {
       "search": "بحث…",
@@ -3624,7 +3625,11 @@
       "confirmed": "مؤكد",
       "pending": "معلق"
     },
-    "tzVsAdmin": "مقارنةً بالمسؤول"
+    "tzVsAdmin": "مقارنةً بالمسؤول",
+    "countries": {
+      "hint": "الدول التي يتعامل معها هذا الموظف. تُستخدم للتخصيص التلقائي للمحادثات.",
+      "placeholder": "اختر الدول..."
+    }
   },
   "notificationRules": {
     "failedToLoad": "فشل تحميل قواعد الإشعارات",
