@@ -33,6 +33,7 @@ export const SIT_ALLOWLIST: readonly string[] = [
   "İstanbul Kent Üniversitesi",
   "Fenerbahçe Üniversitesi",
   "İstanbul Kültür Üniversitesi",
+  "İstanbul Gelişim Üniversitesi",
   "TED Üniversitesi",
 ] as const;
 
