@@ -154,6 +154,15 @@ export interface SubmitProfile {
   programSynonyms?: string[][];
   /** Country name/adjective (lowercase) → portal label. Merged over country maps. */
   countryOverrides?: Record<string, string>;
+  /**
+   * { CRM programId (string) → portal program id } — explicit ADMIN override.
+   * Unlike programNameMap, this targets a catalog entry by raw id and is
+   * consulted BEFORE any language filter or fuzzy matching — a deliberate
+   * admin decision to route a specific CRM program to a specific portal
+   * program regardless of language mismatch (e.g. routing an English-applied
+   * student to a Turkish-medium program when no English option exists).
+   */
+  programIdOverrides?: Record<string, string>;
   // ---------------------------------------------------------------------------
   // Document URLs — for portals whose CREATE step is a webhook that fetches
   // files by URL (e.g. SIT), rather than uploading local files. Populated by

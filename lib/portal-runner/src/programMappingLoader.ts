@@ -25,10 +25,19 @@ export interface ProgramMappingData {
   programSynonyms?: string[][];
   /** Country name/adjective (lowercase) → portal label — General ∪ uni (uni wins). */
   countryOverrides?: Record<string, string>;
+  /**
+   * { CRM programId (string) → portal program id } — explicit ADMIN override,
+   * General ∪ uni (uni wins). Unlike programNameMap, this is a raw catalog id
+   * (not a name), consulted by adapters BEFORE any language filter or fuzzy
+   * matcher — it is a deliberate admin decision to route a specific CRM
+   * program to a specific portal program regardless of language mismatch.
+   */
+  programIdOverrides?: Record<string, string>;
 }
 
 interface MappingRow {
   mappings: Record<string, string> | null;
+  programOverrides: Record<string, string> | null;
   synonyms: string[][] | null;
   countryOverrides: Record<string, string> | null;
 }
@@ -55,6 +64,7 @@ export async function loadProgramMapping(
     const [generalRow] = await db
       .select({
         mappings:         portalProgramMappingTable.mappings,
+        programOverrides: portalProgramMappingTable.programOverrides,
         synonyms:         portalProgramMappingTable.synonyms,
         countryOverrides: portalProgramMappingTable.countryOverrides,
       })
@@ -75,6 +85,7 @@ export async function loadProgramMapping(
     const [uniRow] = await db
       .select({
         mappings:         portalProgramMappingTable.mappings,
+        programOverrides: portalProgramMappingTable.programOverrides,
         synonyms:         portalProgramMappingTable.synonyms,
         countryOverrides: portalProgramMappingTable.countryOverrides,
       })
@@ -122,6 +133,13 @@ function mergeTiers(
     ...(uni?.countryOverrides ?? {}),
   };
   if (Object.keys(country).length > 0) out.countryOverrides = country;
+
+  const programIdOverrides = {
+    ...(general?.programOverrides ?? {}),
+    ...(uni?.programOverrides ?? {}),
+  };
+  if (Object.keys(programIdOverrides).length > 0)
+    out.programIdOverrides = programIdOverrides;
 
   return out;
 }

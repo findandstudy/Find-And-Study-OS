@@ -808,50 +808,78 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    // Exact program match (language-compatible, confidence-gated).
-    const langFiltered = catalog.filter((c) =>
-      isLanguageCompatible(profile.programName, c.name),
-    );
-    // NEVER fall back to the full catalog when language filtering removes every
-    // candidate — that would let a language-mismatched program (e.g. desired
-    // English while only Turkish is offered) be fuzzy-matched and submitted,
-    // creating a wrong application. isLanguageCompatible only drops a candidate
-    // when BOTH the desired and candidate languages are detected AND differ, so
-    // a non-empty catalog with an empty compatible set means no safe match
-    // exists — report programMissing instead of guessing.
-    if (langFiltered.length === 0) {
+    // --- Explicit admin override (BEFORE language filter / fuzzy matcher) ---
+    // programIdOverrides maps a CRM programId directly to a SIT catalog
+    // program id. This is a deliberate admin decision (e.g. routing an
+    // English-applied student to a Turkish-medium program when no English
+    // option exists) and must bypass isLanguageCompatible + matchProgram
+    // entirely — it targets the FULL catalog, not the language-filtered pool.
+    const overrideTargetId = profile.programIdOverrides?.[profile.programId];
+    const overrideMatch = overrideTargetId
+      ? catalog.find((c) => c.id === overrideTargetId)
+      : undefined;
+    if (overrideTargetId && !overrideMatch) {
       logger.warn(
-        `[sit] program dil uyumsuz: "${profile.programName}" — ${catalog.length} adayın hiçbiri dil uyumlu değil`,
+        `[sit] açık override hedefi katalogda bulunamadı: programId=${profile.programId} → v=${overrideTargetId} — normal eşleşmeye devam ediliyor`,
       );
-      logProgramPoolDiagnostic("dil uyumsuz", profile.programName, catalog);
-      return {
-        ...base,
-        programMissing: true,
-        detail: `Program bulunamadı: "${profile.programName}" — dil uyumlu aday yok (${catalog.length} aday farklı dilde)`,
-      };
     }
-    const pool = langFiltered;
-    const match = matchProgram(profile.programName, pool, {
-      nameMap: profile.programNameMap,
-      nameMapGeneral: profile.programNameMapGeneral,
-      synonyms: profile.programSynonyms,
-    });
 
-    if (!match) {
-      logger.warn(
-        `[sit] program eşleşmedi: "${profile.programName}" (${pool.length} aday)`,
+    let matched: ProgramCandidate;
+    let match: { match: ProgramCandidate; conf: number };
+
+    if (overrideMatch) {
+      matched = overrideMatch;
+      match = { match: overrideMatch, conf: 1.0 };
+      logger.info(
+        `[sit] program açık override ile seçildi: "${overrideMatch.name}" (v=${overrideMatch.id}) — dil-filtresi atlandı`,
       );
-      logProgramPoolDiagnostic("eşleşmedi", profile.programName, pool);
-      return {
-        ...base,
-        programMissing: true,
-        detail: `Program bulunamadı: "${profile.programName}" — ${pool.length} aday arasında güvenli eşleşme yok`,
-      };
+    } else {
+      // Exact program match (language-compatible, confidence-gated).
+      const langFiltered = catalog.filter((c) =>
+        isLanguageCompatible(profile.programName, c.name),
+      );
+      // NEVER fall back to the full catalog when language filtering removes every
+      // candidate — that would let a language-mismatched program (e.g. desired
+      // English while only Turkish is offered) be fuzzy-matched and submitted,
+      // creating a wrong application. isLanguageCompatible only drops a candidate
+      // when BOTH the desired and candidate languages are detected AND differ, so
+      // a non-empty catalog with an empty compatible set means no safe match
+      // exists — report programMissing instead of guessing.
+      if (langFiltered.length === 0) {
+        logger.warn(
+          `[sit] program dil uyumsuz: "${profile.programName}" — ${catalog.length} adayın hiçbiri dil uyumlu değil`,
+        );
+        logProgramPoolDiagnostic("dil uyumsuz", profile.programName, catalog);
+        return {
+          ...base,
+          programMissing: true,
+          detail: `Program bulunamadı: "${profile.programName}" — dil uyumlu aday yok (${catalog.length} aday farklı dilde)`,
+        };
+      }
+      const pool = langFiltered;
+      const found = matchProgram(profile.programName, pool, {
+        nameMap: profile.programNameMap,
+        nameMapGeneral: profile.programNameMapGeneral,
+        synonyms: profile.programSynonyms,
+      });
+
+      if (!found) {
+        logger.warn(
+          `[sit] program eşleşmedi: "${profile.programName}" (${pool.length} aday)`,
+        );
+        logProgramPoolDiagnostic("eşleşmedi", profile.programName, pool);
+        return {
+          ...base,
+          programMissing: true,
+          detail: `Program bulunamadı: "${profile.programName}" — ${pool.length} aday arasında güvenli eşleşme yok`,
+        };
+      }
+      match = found;
+      matched = found.match;
+      logger.info(
+        `[sit] program eşleşti: "${matched.name}" (id=${matched.id}, güven=${match.conf.toFixed(2)})`,
+      );
     }
-    const matched = match.match;
-    logger.info(
-      `[sit] program eşleşti: "${matched.name}" (id=${matched.id}, güven=${match.conf.toFixed(2)})`,
-    );
 
     // --- DRY: student + program resolved → stop before any write ---
     if (!doSubmit) {
