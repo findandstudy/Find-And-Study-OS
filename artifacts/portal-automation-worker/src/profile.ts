@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { db, portalSubmissionsTable, applicationsTable, studentsTable, documentsTable } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, docFetchUrl } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 
 // ---------------------------------------------------------------------------
@@ -33,6 +33,14 @@ export interface StudentProfileResult {
    * to produce a local file. Empty when all slots resolved cleanly.
    */
   downloadErrors: Record<string, string>;
+  /**
+   * True when the student has at least one content-bearing document row
+   * (fileUrl/fileKey/fileData) in the CRM, regardless of whether any local
+   * file was actually resolved. Distinguishes "document-bearing student with
+   * a broken download pipeline" (must block submit) from "student genuinely
+   * has zero CRM documents" (existing behaviour, must NOT be blocked).
+   */
+  hasContentBearingDocs: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -197,8 +205,11 @@ export async function buildStudentProfile(
     return ac - bc;
   });
 
+  const hasContentBearingDocs = docs.some(hasContent);
+
   const files: SubmitFiles = {};
   const downloadErrors: Record<string, string> = {};
+  const docKeyStatus: Record<string, "ok" | "no-content" | "docKey-null" | "err"> = {};
 
   await Promise.all(
     sortedDocs.map(async (doc) => {
@@ -209,22 +220,37 @@ export async function buildStudentProfile(
 
       if (files[docKey]) return; // first-wins — already resolved by a content-bearing record
 
-      // Skip empty stubs entirely (no content in any storage field)
-      if (!doc.fileUrl && !doc.fileKey && !doc.fileData) return;
+      // Skip empty stubs entirely (no content in any storage field) — genuinely
+      // no document was ever attached to this row.
+      if (!doc.fileUrl && !doc.fileKey && !doc.fileData) {
+        docKeyStatus[docKey] = docKeyStatus[docKey] ?? "no-content";
+        return;
+      }
 
       try {
-        // --- path A: URL download (fileUrl preferred, fileKey as fallback) ---
-        const url = doc.fileUrl ?? doc.fileKey;
+        // --- path A: signed URL download (same resolution SIT uses) ----------
+        // Never trust a raw fileUrl/fileKey path directly — the api-server
+        // serves the SPA shell for unknown /objects/... paths (200 text/html),
+        // so all local-file resolution must go through docFetchUrl(), which
+        // produces either the doc's own public URL or the signed
+        // /api/documents/:id/file path — same primitive SIT's proven working
+        // photo/document webhooks already use.
+        const url = docFetchUrl(doc);
         if (url) {
           try {
             const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "bin";
             const dest = path.join(tempDir, `${docKey}.${ext}`);
             await downloadFile(url, dest);
             files[docKey] = dest;
+            docKeyStatus[docKey] = "ok";
             return;
-          } catch {
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            downloadErrors[docKey] = `type=${doc.type}: ${msg}`;
             // Fall through to base64 fallback
           }
+        } else {
+          docKeyStatus[docKey] = docKeyStatus[docKey] ?? "docKey-null";
         }
 
         // --- path B: base64 fileData fallback --------------------------------
@@ -236,11 +262,13 @@ export async function buildStudentProfile(
           const buf = Buffer.from(doc.fileData, "base64");
           await fs.writeFile(dest, buf);
           files[docKey] = dest;
+          docKeyStatus[docKey] = "ok";
           return;
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         downloadErrors[docKey] = `type=${doc.type}: ${msg}`;
+        docKeyStatus[docKey] = "err";
         console.warn(
           `[portal-profile] #${submissionId} doc download failed` +
           ` — slot=${docKey} type=${doc.type}: ${msg}`,
@@ -254,9 +282,13 @@ export async function buildStudentProfile(
 
   const missingDetail =
     missingSlots.length > 0
-      ? missingSlots.map((s) =>
-          downloadErrors[s] ? `${s}(err: ${downloadErrors[s]})` : `${s}(no-record)`,
-        ).join(", ")
+      ? missingSlots.map((s) => {
+          if (downloadErrors[s]) return `${s}(err: ${downloadErrors[s]})`;
+          const status = docKeyStatus[s];
+          if (status === "no-content") return `${s}(no-content)`;
+          if (status === "docKey-null") return `${s}(docKey-null)`;
+          return `${s}(no-record)`;
+        }).join(", ")
       : "";
 
   console.log(
@@ -264,7 +296,7 @@ export async function buildStudentProfile(
     (missingSlots.length > 0 ? ` | missing: [${missingDetail}]` : " | all 4 filled"),
   );
 
-  return { profile, files, tempDir, filledSlots, missingSlots, downloadErrors };
+  return { profile, files, tempDir, filledSlots, missingSlots, downloadErrors, hasContentBearingDocs };
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +312,37 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} downloading ${absUrl}`);
   }
+
+  // A 200 alone is not proof of success: unknown /objects/... paths (and any
+  // other unmatched route) fall through to the SPA's index.html, which is
+  // also served as 200. Reject anything that looks like the app shell rather
+  // than real file content — by content-type first, then by body-sniffing a
+  // few tell-tale HTML/SPA markers as a fallback for mislabeled responses.
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("text/html") || contentType.includes("application/xhtml+xml")) {
+    throw new Error(`refusing HTML response (content-type: ${contentType || "unknown"}) from ${absUrl} — likely SPA fallback, not the file`);
+  }
+
   const buf = Buffer.from(await res.arrayBuffer());
+
+  if (looksLikeHtmlShell(buf)) {
+    throw new Error(`refusing HTML/SPA-shell body from ${absUrl} — not real file content`);
+  }
+
   await fs.writeFile(dest, buf);
+}
+
+/**
+ * Body-sniff fallback for when a misconfigured route serves the SPA shell
+ * with a non-HTML content-type. Only inspects a small leading slice — real
+ * binary/document files (PDF, JPEG, PNG, DOCX/zip, etc.) never start with
+ * these markers.
+ */
+function looksLikeHtmlShell(buf: Buffer): boolean {
+  const head = buf.subarray(0, 512).toString("utf8").trimStart().toLowerCase();
+  return (
+    head.startsWith("<!doctype html") ||
+    head.startsWith("<html") ||
+    (head.includes("<head") && head.includes("<script") && head.includes("id=\"root\""))
+  );
 }

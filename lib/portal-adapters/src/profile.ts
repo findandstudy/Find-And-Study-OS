@@ -122,7 +122,7 @@ function publicDocUrl(r: RawDocumentRow): string | undefined {
  * Returns undefined only for empty stubs, or when signing has no id / no
  * signing secret configured — the caller then skips the row (best-effort).
  */
-function docFetchUrl(r: RawDocumentRow): string | undefined {
+export function docFetchUrl(r: RawDocumentRow): string | undefined {
   const direct = publicDocUrl(r);
   if (direct) return direct;
   const hasContent = !!(r.fileKey?.trim() || r.fileData?.trim() || r.fileUrl?.trim());

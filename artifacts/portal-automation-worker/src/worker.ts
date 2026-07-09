@@ -24,6 +24,7 @@ import {
   handleNeedsFallback,
   resolveAdapterKey,
 } from "@workspace/portal-runner";
+import { isSitFamilyKey } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "./credResolver.js";
 
 // ---------------------------------------------------------------------------
@@ -169,6 +170,29 @@ async function tick(): Promise<void> {
     // null and adapterKey === universityKey, so behaviour is unchanged.
     const { adapterKey, routedVia } = await resolveAdapterKey(sub.universityKey);
     const creds = await resolvePortalCreds(routedVia ?? sub.universityKey, adapterKey);
+
+    // Guard: browser-upload adapters (everything except "sit", which submits
+    // via a create-webhook + URL references, not a local-file upload widget)
+    // must never proceed with zero filled document slots when the student
+    // genuinely has CRM documents — that means the download pipeline broke
+    // (e.g. a raw fileKey path resolving to the SPA shell instead of the real
+    // file) and a browser submit would go through with empty upload fields.
+    // Students who truly have zero CRM documents are NOT blocked here — that
+    // is separate, pre-existing behaviour (including SIT's own zero-doc
+    // guard, which this does not touch).
+    if (
+      !isSitFamilyKey(adapterKey) &&
+      profileResult.hasContentBearingDocs &&
+      profileResult.filledSlots.length === 0
+    ) {
+      const reason =
+        `document-bearing student has 0 filled upload slots for adapter=${adapterKey}` +
+        ` (uni=${sub.universityKey}) — refusing to submit with empty document fields;` +
+        ` missing=[${profileResult.missingSlots.join(", ")}]`;
+      console.error(`[portal-worker] Submission #${sub.id} blocked: ${reason}`);
+      await writebackResult(sub.id, null, reason);
+      return;
+    }
 
     runResult = await runSubmission(
       sub,

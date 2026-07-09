@@ -56,6 +56,7 @@ export {
   REQUIRED_DOCS,
   extractStudentDocumentRefs,
   selectPriorSchoolName,
+  docFetchUrl,
   type DocType,
   type RawDocumentRow,
 } from "./profile.js";
@@ -72,6 +73,7 @@ export {
   adapterMetadata,
   declarativeAdapterKeys,
   isExperimentalAdapterKey,
+  isSitFamilyKey,
 } from "./registry.js";
 
 // Declarative adapter engine

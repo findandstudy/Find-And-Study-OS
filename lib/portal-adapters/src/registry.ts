@@ -89,6 +89,17 @@ export function isExperimentalAdapterKey(adapterKey: string): boolean {
   return EXPERIMENTAL_FAMILIES.has(resolveFamily(adapterKey));
 }
 
+/**
+ * True when the given adapter key resolves to the "sit" family — the only
+ * adapter that submits via a create-webhook + URL references instead of a
+ * real browser upload from local temp files. All other families (metronic,
+ * salesforce, united, okan, emu, altinbas, declarative) drive a real browser
+ * upload widget and therefore require locally-downloaded document files.
+ */
+export function isSitFamilyKey(adapterKey: string): boolean {
+  return resolveFamily(adapterKey) === "sit";
+}
+
 // ---------------------------------------------------------------------------
 // adapterMetadata — lightweight summary safe for API / logging
 // Returns NO credentials.

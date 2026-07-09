@@ -28,7 +28,7 @@ import {
   documentsTable,
 } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, docFetchUrl } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 
 const execFileP = promisify(execFile);
@@ -51,6 +51,15 @@ export interface StudentProfileResult {
    * to produce a local file. Empty when all slots resolved cleanly.
    */
   downloadErrors: Record<string, string>;
+  /**
+   * True when the student has at least one content-bearing document row
+   * (fileUrl/fileKey/fileData) in the CRM, regardless of whether any local
+   * file was actually resolved. Distinguishes "document-bearing student with
+   * a broken download pipeline" (must block submit for browser adapters)
+   * from "student genuinely has zero CRM documents" (existing behaviour,
+   * must NOT be blocked).
+   */
+  hasContentBearingDocs: boolean;
 }
 
 type StudentRow = typeof studentsTable.$inferSelect;
@@ -108,6 +117,8 @@ interface DownloadedDocs {
   photoUrl?: string;
   /** Document URLs for URL-fetching create webhooks (e.g. SIT). */
   documentRefs: StudentDocumentRef[];
+  /** See StudentProfileResult.hasContentBearingDocs. */
+  hasContentBearingDocs: boolean;
 }
 
 /**
@@ -459,6 +470,8 @@ async function downloadStudentDocuments(
 
   const files: SubmitFiles = {};
   const downloadErrors: Record<string, string> = {};
+  const docKeyStatus: Record<string, "ok" | "no-content" | "docKey-null" | "err"> = {};
+  const hasContentBearingDocs = docs.some(hasContent);
 
   await Promise.all(
     sortedDocs.map(async (doc) => {
@@ -469,19 +482,29 @@ async function downloadStudentDocuments(
 
       if (files[docKey]) return; // first-wins — already resolved by a content-bearing record
 
-      // Skip empty stubs entirely (no content in any storage field)
-      if (!doc.fileUrl && !doc.fileKey && !doc.fileData) return;
+      // Skip empty stubs entirely (no content in any storage field) —
+      // genuinely no document was ever attached to this row.
+      if (!doc.fileUrl && !doc.fileKey && !doc.fileData) {
+        docKeyStatus[docKey] = docKeyStatus[docKey] ?? "no-content";
+        return;
+      }
 
       try {
-        // --- path A: URL download (fileUrl preferred, fileKey as fallback) ---
-        const url = doc.fileUrl ?? doc.fileKey;
+        // --- path A: signed URL download (same resolution SIT already uses) --
+        // Never trust a raw fileUrl/fileKey path directly — unknown
+        // /objects/... paths are served the SPA shell (200 text/html), not the
+        // file. docFetchUrl() resolves either the doc's own public URL or the
+        // signed /api/documents/:id/file path.
+        const url = docFetchUrl(doc);
         if (url) {
           const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "bin";
           const dest = path.join(tempDir, `${docKey}.${ext}`);
           await downloadFile(url, dest);
           files[docKey] = await ensureUploadFormat(dest, docKey, logLabel);
+          docKeyStatus[docKey] = "ok";
           return;
         }
+        docKeyStatus[docKey] = docKeyStatus[docKey] ?? "docKey-null";
 
         // --- path B: base64 fileData fallback --------------------------------
         if (doc.fileData) {
@@ -489,11 +512,13 @@ async function downloadStudentDocuments(
           const dest = path.join(tempDir, `${docKey}.bin`);
           await fs.writeFile(dest, buf);
           files[docKey] = await ensureUploadFormat(dest, docKey, logLabel);
+          docKeyStatus[docKey] = "ok";
           return;
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         downloadErrors[docKey] = `type=${doc.type}: ${msg}`;
+        docKeyStatus[docKey] = "err";
         console.warn(
           `[portal-profile] ${logLabel} doc download failed` +
           ` — slot=${docKey} type=${doc.type}: ${msg}`,
@@ -507,7 +532,13 @@ async function downloadStudentDocuments(
 
   const missingDetail =
     missingSlots.length > 0
-      ? missingSlots.map((s) => downloadErrors[s] ? `${s}(err: ${downloadErrors[s]})` : `${s}(no-record)`).join(", ")
+      ? missingSlots.map((s) => {
+          if (downloadErrors[s]) return `${s}(err: ${downloadErrors[s]})`;
+          const status = docKeyStatus[s];
+          if (status === "no-content") return `${s}(no-content)`;
+          if (status === "docKey-null") return `${s}(docKey-null)`;
+          return `${s}(no-record)`;
+        }).join(", ")
       : "";
 
   console.log(
@@ -531,7 +562,7 @@ async function downloadStudentDocuments(
     (documentRefs.length ? ` [${documentRefs.map((d) => d.type).join(", ")}]` : ""),
   );
 
-  return { files, tempDir, filledSlots, missingSlots, downloadErrors, photoUrl, documentRefs };
+  return { files, tempDir, filledSlots, missingSlots, downloadErrors, photoUrl, documentRefs, hasContentBearingDocs };
 }
 
 // ---------------------------------------------------------------------------
@@ -659,10 +690,46 @@ export async function buildProfileFromApplication(
 // ---------------------------------------------------------------------------
 
 async function downloadFile(url: string, dest: string): Promise<void> {
-  const res = await fetch(url);
+  // Relative /api/documents/... or /objects/... URLs must be absolutized —
+  // fetch() cannot parse relative URLs. The api-server serves both on its own
+  // origin.
+  const base = (process.env.OBJECT_BASE_URL || `http://127.0.0.1:${process.env.PORT || "5057"}`).replace(/\/$/, "");
+  const absUrl = /^https?:\/\//i.test(url) ? url : base + (url.startsWith("/") ? url : "/" + url);
+  const res = await fetch(absUrl);
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} downloading ${url}`);
+    throw new Error(`HTTP ${res.status} downloading ${absUrl}`);
   }
+
+  // A 200 alone is not proof of success: unknown /objects/... paths (and any
+  // other unmatched route) fall through to the SPA's index.html, which is
+  // also served as 200. Reject anything that looks like the app shell rather
+  // than real file content — by content-type first, then by body-sniffing a
+  // few tell-tale HTML/SPA markers as a fallback for mislabeled responses.
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("text/html") || contentType.includes("application/xhtml+xml")) {
+    throw new Error(`refusing HTML response (content-type: ${contentType || "unknown"}) from ${absUrl} — likely SPA fallback, not the file`);
+  }
+
   const buf = Buffer.from(await res.arrayBuffer());
+
+  if (looksLikeHtmlShell(buf)) {
+    throw new Error(`refusing HTML/SPA-shell body from ${absUrl} — not real file content`);
+  }
+
   await fs.writeFile(dest, buf);
+}
+
+/**
+ * Body-sniff fallback for when a misconfigured route serves the SPA shell
+ * with a non-HTML content-type. Only inspects a small leading slice — real
+ * binary/document files (PDF, JPEG, PNG, DOCX/zip, etc.) never start with
+ * these markers.
+ */
+function looksLikeHtmlShell(buf: Buffer): boolean {
+  const head = buf.subarray(0, 512).toString("utf8").trimStart().toLowerCase();
+  return (
+    head.startsWith("<!doctype html") ||
+    head.startsWith("<html") ||
+    (head.includes("<head") && head.includes("<script") && head.includes("id=\"root\""))
+  );
 }
