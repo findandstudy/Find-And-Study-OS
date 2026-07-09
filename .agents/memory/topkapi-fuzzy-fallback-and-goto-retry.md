@@ -41,3 +41,21 @@ synonym dictionary locally in the adapter was rejected as a drift risk.
 **How to apply**: if another adapter needs a similar noise-tolerant fallback
 matcher, reuse this same pattern (local fallback function + additive exports
 from `programMatch.ts`) rather than forking the synonym dictionary.
+
+## Follow-up: portal switched country selects to English-only
+
+Topkapı's `resolveCountry()` always returns a **Turkish** country name (the
+portal used to be Turkish-only). At some point the countryOfBirth/
+nationality/addressCountry AND the Step-3 `applicationEducationInformation
+Country[]` selects switched to **English-only** option text — matching the
+Turkish name against them silently fails (value stays `"0"`), and Topkapı's
+Step-2 "Next" rejects the whole step with a generic "Please check field(s)"
+jconfirm (no per-field detail). Fix: translate the Turkish name to English
+(`TR_TO_EN_COUNTRY` dict + `normalizeTr` fold, keyed to cover every possible
+`resolveCountry()` output) and pass `[countryEn, country]` as ordered
+candidates into the existing `selectByCandidatesVerified()` (exact-fold match
+first, then substring, verified read-back, retries, clear "tried X vs
+options Y" log) — reused as-is rather than writing new select/verify logic.
+**Why:** the portal's language for a given field can drift over time (it has
+before), so trying English first with Turkish as a same-call fallback is
+more robust than hardcoding one language.

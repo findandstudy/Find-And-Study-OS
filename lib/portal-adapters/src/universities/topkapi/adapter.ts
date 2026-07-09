@@ -134,6 +134,95 @@ const COUNTRY_NAME_MAP: Record<string, string> = {
   yemen: "Yemen",
 };
 
+// ---------------------------------------------------------------------------
+// Turkish → English country name translation (Topkapi-only).
+//
+// resolveCountry() above always returns a TURKISH country name (portal used
+// to be Turkish-only). The Step-2/Step-3 country <select>s now carry ONLY
+// English option text ("Afghanistan", "Turkey", …) — matching the Turkish
+// name against them fails, the field stays at value="0", and the wizard
+// rejects the whole step with "Please check field(s)". Translate the
+// Turkish name to English right before matching against select options; the
+// Turkish name itself (from resolveCountry) is kept as a same-call fallback
+// candidate in case a given select ever reverts to Turkish text.
+// ---------------------------------------------------------------------------
+function normalizeTr(s: string): string {
+  return s
+    .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
+    .replace(/Ş/g, "s").replace(/ş/g, "s")
+    .replace(/Ğ/g, "g").replace(/ğ/g, "g")
+    .replace(/Ü/g, "u").replace(/ü/g, "u")
+    .replace(/Ö/g, "o").replace(/ö/g, "o")
+    .replace(/Ç/g, "c").replace(/ç/g, "c")
+    .toLowerCase()
+    .trim();
+}
+
+const TR_TO_EN_COUNTRY: Record<string, string> = {
+  turkiye: "Turkey",
+  afganistan: "Afghanistan",
+  kazakistan: "Kazakhstan",
+  ozbekistan: "Uzbekistan",
+  turkmenistan: "Turkmenistan",
+  azerbaycan: "Azerbaijan",
+  nijerya: "Nigeria",
+  misir: "Egypt",
+  suriye: "Syria",
+  irak: "Iraq",
+  iran: "Iran",
+  urdun: "Jordan",
+  filistin: "Palestine",
+  fas: "Morocco",
+  cezayir: "Algeria",
+  tunus: "Tunisia",
+  libya: "Libya",
+  sudan: "Sudan",
+  somali: "Somalia",
+  etiyopya: "Ethiopia",
+  kenya: "Kenya",
+  gana: "Ghana",
+  kamerun: "Cameroon",
+  kirgizistan: "Kyrgyzstan",
+  tacikistan: "Tajikistan",
+  hindistan: "India",
+  bangladesh: "Bangladesh",
+  endonezya: "Indonesia",
+  malezya: "Malaysia",
+  filipinler: "Philippines",
+  pakistan: "Pakistan",
+  yemen: "Yemen",
+  rusya: "Russia",
+  ukrayna: "Ukraine",
+  almanya: "Germany",
+  fransa: "France",
+  ingiltere: "United Kingdom",
+  cin: "China",
+  "guney afrika": "South Africa",
+  mogolistan: "Mongolia",
+  nepal: "Nepal",
+  arnavutluk: "Albania",
+  kosova: "Kosovo",
+  // Additional Turkish names resolveCountry() can already produce, so every
+  // possible output of resolveCountry() has an English translation here.
+  bahreyn: "Bahrain",
+  "birlesik krallik": "United Kingdom",
+  "amerika birlesik devletleri": "United States",
+  "birlesik arap emirlikleri": "United Arab Emirates",
+  kuveyt: "Kuwait",
+  lubnan: "Lebanon",
+  umman: "Oman",
+  katar: "Qatar",
+  "suudi arabistan": "Saudi Arabia",
+  tanzanya: "Tanzania",
+};
+
+/** Translate a resolveCountry() Turkish country name to English; returns the
+ *  original (unchanged) name when no mapping exists, so callers can still
+ *  fall back to it. */
+function toEnglishCountryName(name: string): string {
+  return TR_TO_EN_COUNTRY[normalizeTr(name)] ?? name;
+}
+
 function resolveCountry(
   nationality: string,
   overrides?: Record<string, string>,
@@ -1499,7 +1588,8 @@ export const topkapiAdapter: UniversityAdapter = {
     doSubmit = true,
   ): Promise<SubmitResult> {
     const { page } = session;
-    const country  = resolveCountry(profile.nationality, profile.countryOverrides);
+    const country   = resolveCountry(profile.nationality, profile.countryOverrides);
+    const countryEn = toEnglishCountryName(country);
     const eduLevel = mapEduLevel(profile.level, profile.programName);
     const screenshots: string[] = [];
 
@@ -1631,38 +1721,28 @@ export const topkapiAdapter: UniversityAdapter = {
     await page.fill("input[name=mothersName]", profile.motherName || "-");
 
     await page.waitForFunction(() => { const s = document.querySelector("select[name=countryOfBirth]"); return !!s && s.options.length > 1; }, { timeout: 30000 }).catch(() => {});
-    await selectByBest(page, "select[name=countryOfBirth]", country);
-    await selectByBest(page, "select[name=nationality]",    country);
-    await selectByBest(page, "select[name=addressCountry]", country);
-    await page.evaluate(() => { ["countryOfBirth","nationality","addressCountry"].forEach((n) => { const e = document.querySelector("select[name=" + n + "]"); if (e) { e.dispatchEvent(new Event("change", { bubbles: true })); const w = window; if (w.jQuery) { w.jQuery(e).trigger("change"); } } }); });
 
-    // Verify each country dropdown actually stuck; retry via jQuery path if still placeholder.
-    // Topkapı fires "Please check fields" (jconfirm) on Step 2 Next when any of these are empty.
+    // Country <select>s now carry ONLY English option text (the portal used
+    // to be Turkish-only) — try the English translation FIRST, Turkish name
+    // as a fallback candidate, exact-fold match before substring, verified +
+    // retried by selectByCandidatesVerified (logs "sent"/tried candidates vs
+    // real options when nothing sticks, per field).
     for (const field of ["countryOfBirth", "nationality", "addressCountry"]) {
-      const choice = await readSelectChoice(page, `select[name=${field}]`);
-      if (!isPlaceholderChoice(choice.value, choice.text)) continue;
-      logger.warn(`[topkapi] Step 2: ${field} not set (value="${choice.value}") — retrying via setSelectByValue`);
-      const opts = await readSelectOptions(page, `select[name=${field}]`);
-      const cf = fold(country);
-      const found = opts.find((o, i) => {
-        if (i === 0 || !o.value || o.value === "0") return false;
-        const ft = fold(o.text);
-        return ft.includes(cf) || cf.includes(ft);
-      });
-      if (found) {
-        await setSelectByValue(page, `select[name=${field}]`, found.value);
-        await syncChange(page, `select[name=${field}]`);
-        const rc = await readSelectChoice(page, `select[name=${field}]`);
-        logger.info(`[topkapi] Step 2: ${field} retry OK — value="${rc.value}" text="${rc.text}"`);
-      } else {
+      const text = await selectByCandidatesVerified(
+        page,
+        `select[name=${field}]`,
+        [countryEn, country],
+        field,
+        logger,
+      );
+      if (!text) {
         logger.warn(
-          `[topkapi] Step 2: ${field} — no match for "${country}" in options ` +
-          `[${opts.slice(0, 10).map((o) => o.text).join(", ")}]`,
+          `[topkapi] Step 2: ${field} not set — sent="${country}" normalized="${normalizeTr(country)}" english="${countryEn}"`,
         );
       }
     }
 
-    logger.info("[topkapi] DBG country=" + country + " natl=" + (profile.nationality || ""));
+    logger.info("[topkapi] DBG country=" + country + " countryEn=" + countryEn + " natl=" + (profile.nationality || ""));
     logger.info("[topkapi] DBG cob=" + JSON.stringify(await page.evaluate(() => { const s = document.querySelector("select[name=countryOfBirth]"); return s ? { n: s.options.length, sel: s.value, sample: Array.from(s.options).slice(0, 6).map((o) => o.value + "::" + o.text) } : "NO"; })));
     await page.fill("input[name=address]", profile.address || "-");
     try { await page.fill("input[name=addressCity]", "-"); } catch { /* field optional */ }
@@ -1819,7 +1899,7 @@ export const topkapiAdapter: UniversityAdapter = {
     await selectByCandidatesVerified(
       page,
       'select[name="applicationEducationInformationCountry[]"], select[name="country[]"]',
-      [country],
+      [countryEn, country],
       "country",
       logger,
     );
