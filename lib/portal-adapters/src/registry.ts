@@ -22,12 +22,12 @@ const _declarativeAdapters: UniversityAdapter[] =
 // ---------------------------------------------------------------------------
 export const adapters: UniversityAdapter[] = [
   topkapiAdapter,
+  altinbasAdapter,
   ...salesforceAdapters,
   sitAdapter,
   unitedAdapter,
   okanAdapter,
   emuAdapter,
-  altinbasAdapter,
   ..._declarativeAdapters,
 ];
 

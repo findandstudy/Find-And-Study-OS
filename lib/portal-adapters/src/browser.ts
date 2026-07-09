@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { chromium } from "playwright-core";
 import { execSync } from "node:child_process";
 import type { Page, BrowserContext, Browser } from "playwright-core";
@@ -95,7 +96,7 @@ export async function launchPortal(opts: LaunchOpts = {}): Promise<AdapterSessio
   });
 
   const context: BrowserContext = await browser.newContext(
-    storagePath
+    (storagePath && existsSync(storagePath))
       ? { storageState: storagePath, ignoreHTTPSErrors: true }
       : { ignoreHTTPSErrors: true },
   );
