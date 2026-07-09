@@ -238,7 +238,7 @@ export async function buildStudentProfile(
         const url = docFetchUrl(doc);
         if (url) {
           try {
-            const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "bin";
+            const ext = safeDocExt(doc.mimeType, doc.name);
             const dest = path.join(tempDir, `${docKey}.${ext}`);
             await downloadFile(url, dest);
             files[docKey] = dest;
@@ -255,9 +255,7 @@ export async function buildStudentProfile(
 
         // --- path B: base64 fileData fallback --------------------------------
         if (doc.fileData) {
-          const rawName = doc.name ?? `${docKey}`;
-          const extMatch = rawName.match(/\.([a-z0-9]+)$/i);
-          const ext = extMatch ? extMatch[1].toLowerCase() : "bin";
+          const ext = safeDocExt(doc.mimeType, doc.name);
           const dest = path.join(tempDir, `${docKey}.${ext}`);
           const buf = Buffer.from(doc.fileData, "base64");
           await fs.writeFile(dest, buf);
@@ -297,6 +295,40 @@ export async function buildStudentProfile(
   );
 
   return { profile, files, tempDir, filledSlots, missingSlots, downloadErrors, hasContentBearingDocs };
+}
+
+// ---------------------------------------------------------------------------
+// Internal: destination filename extension resolution
+// ---------------------------------------------------------------------------
+
+// Never derive the destination extension from the download URL — the fetch
+// URL may be the signed `/api/documents/:id/file` endpoint (no dot, has
+// slashes), which would produce a malformed dest path like
+// `photo./api/documents/6358/file` and fail the write with ENOENT even
+// though the download itself succeeded. Always resolve from the document's
+// own declared mimeType/name instead.
+const MIME_EXT_MAP: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "image/heif": "heic",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+};
+
+function safeDocExt(mimeType?: string | null, name?: string | null): string {
+  const fromMime = mimeType ? MIME_EXT_MAP[mimeType.toLowerCase().trim()] : undefined;
+  if (fromMime) return fromMime;
+
+  if (name) {
+    const raw = path.extname(name).replace(/^\./, "").toLowerCase();
+    if (/^[a-z0-9]{1,5}$/.test(raw)) return raw;
+  }
+
+  return "bin";
 }
 
 // ---------------------------------------------------------------------------
