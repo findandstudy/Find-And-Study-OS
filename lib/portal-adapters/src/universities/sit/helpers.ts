@@ -24,7 +24,7 @@ import { fold } from "../../programMatch.js";
 // ---------------------------------------------------------------------------
 export const SIT_ALLOWLIST: readonly string[] = [
   "Haliç Üniversitesi",
-  "Atlas Üniversitesi",
+  "İstanbul Atlas Üniversitesi",
   "Ankara Medipol Üniversitesi",
   "Galata Üniversitesi",
   "Beykoz Üniversitesi",
