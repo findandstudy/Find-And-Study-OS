@@ -608,8 +608,11 @@ export const altinbasAdapter: UniversityAdapter = {
       // Already logged in?
       const url: string = page.url();
       if (url.includes("/partner/s/") && !url.includes("/login") && !url.includes("/Login")) {
-        logger.info("[altinbas] login: session reused (already authenticated)");
-        return session;
+        await page.goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+      await page.waitForTimeout(SF_HYDRATION_MS);
+      const _stale = page.url().toLowerCase().includes("login") || (await page.locator("input[type=password]").first().isVisible().catch(() => false));
+      if (!_stale) { logger.info("[altinbas] login: session reused (already authenticated)"); return session; }
+      logger.info("[altinbas] login: stored session stale - re-authenticating via form");
       }
 
       // Fill email
