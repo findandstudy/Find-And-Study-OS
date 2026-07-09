@@ -26,7 +26,8 @@ import type {
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
-import { fold } from "../../programMatch.js";
+import { fold, matchProgram } from "../../programMatch.js";
+import type { ProgramCandidate } from "../../programMatch.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -294,6 +295,395 @@ async function pickCombobox(
 }
 
 // ---------------------------------------------------------------------------
+// Faz-2: wizard stage handlers (Term → Degree → Program → Personal →
+// Educational → Questionnaire → Documents → Completed)
+//
+// Portal country dropdowns/typeaheads use plain ENGLISH names ("Pakistan",
+// "United Kingdom") — profile.nationality is expected to already be an
+// English adjective/name; this map only normalises common adjective forms
+// to the noun the portal expects.
+// ---------------------------------------------------------------------------
+const COUNTRY_EN_MAP: Record<string, string> = {
+  afghan: "Afghanistan", algerian: "Algeria", azerbaijani: "Azerbaijan",
+  bahraini: "Bahrain", bangladeshi: "Bangladesh", british: "United Kingdom",
+  chinese: "China", egyptian: "Egypt", emirati: "United Arab Emirates",
+  french: "France", german: "Germany", indian: "India", iranian: "Iran",
+  iraqi: "Iraq", jordanian: "Jordan", kazakh: "Kazakhstan", kenyan: "Kenya",
+  kuwaiti: "Kuwait", kyrgyz: "Kyrgyzstan", lebanese: "Lebanon",
+  libyan: "Libya", moroccan: "Morocco", nigerian: "Nigeria", omani: "Oman",
+  pakistani: "Pakistan", palestinian: "Palestine", qatari: "Qatar",
+  russian: "Russia", saudi: "Saudi Arabia", somali: "Somalia",
+  sudanese: "Sudan", syrian: "Syria", tajik: "Tajikistan",
+  tunisian: "Tunisia", turk: "Turkey", turkish: "Turkey",
+  turkmen: "Turkmenistan", ukrainian: "Ukraine", uzbek: "Uzbekistan",
+  yemeni: "Yemen",
+};
+
+/** Normalise a nationality string to the English country name the portal expects. */
+function mapCountry(nationality?: string): string {
+  if (!nationality) return "";
+  const lower = nationality.trim().toLowerCase();
+  return COUNTRY_EN_MAP[lower] || nationality.trim();
+}
+
+/** "1999-04-15" (ISO) → "15 Apr 1999" (Altınbaş lightning-date-picker format). */
+function fmtAltDate(iso?: string): string {
+  if (!iso) return "";
+  const dt = new Date(iso);
+  if (Number.isNaN(+dt)) return "";
+  return `${String(dt.getDate()).padStart(2, "0")} ${dt.toLocaleString("en-US", { month: "short" })} ${dt.getFullYear()}`;
+}
+
+/** Type a value into a lightning date-picker text input found by label. Never throws. */
+async function typeDate(page: any, labelPattern: RegExp, value: string): Promise<void> {
+  if (!value) return;
+  try {
+    const el = page.getByLabel(labelPattern).first();
+    if (!(await el.count().catch(() => 0))) return;
+    await el.click().catch(() => {});
+    await el.fill("").catch(() => {});
+    await el.pressSequentially(value, { delay: 40 }).catch(() => {});
+    await el.press("Escape").catch(() => {});
+  } catch {
+    /* never block the flow */
+  }
+}
+
+/** Fill a typeahead combobox found by label and pick the best-matching option. Never throws. */
+async function typeahead(page: any, labelPattern: RegExp, value: string): Promise<boolean> {
+  if (!value) return false;
+  try {
+    const cb = page.getByRole("combobox", { name: labelPattern }).first();
+    const target = (await cb.count().catch(() => 0)) ? cb : page.getByLabel(labelPattern).first();
+    if (!(await target.count().catch(() => 0))) return false;
+    await target.click().catch(() => {});
+    await target.fill(value).catch(() => {});
+    await page.waitForTimeout(1200);
+    const opt = page.getByRole("option", { name: value }).first();
+    if (await opt.count().catch(() => 0)) {
+      await opt.click({ timeout: 4000 }).catch(() => {});
+      return true;
+    }
+    logger.info(`[altinbas] typeahead: no option match for "${value}" (${labelPattern})`);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Fill a plain text field by label if it has a value to set. Never throws. */
+async function fillIfPresent(page: any, labelPattern: RegExp, value?: string): Promise<void> {
+  if (!value) return;
+  try {
+    const el = page.getByLabel(labelPattern).first();
+    if (await el.count().catch(() => 0)) await el.fill(value).catch(() => {});
+  } catch {
+    /* never block the flow */
+  }
+}
+
+/**
+ * LWC number/spinbutton field (GPA) — the critical Faz-2 risk. The native
+ * input reports checkValidity()=true but the LWC's internal @change model
+ * ignores synthetic `fill()`/dispatchEvent alone, leaving aria-invalid=true
+ * and blocking Save. Use a real keystroke sequence (pressSequentially),
+ * verify aria-invalid, then fall back to a native-setter dispatch.
+ */
+async function fillLwcNumber(page: any, locator: any, value: string): Promise<boolean> {
+  try {
+    await locator.scrollIntoViewIfNeeded().catch(() => {});
+    await locator.click();
+    await locator.press("End").catch(() => {});
+    for (let i = 0; i < 12; i++) await locator.press("Backspace").catch(() => {});
+    await locator.pressSequentially(value, { delay: 60 }).catch(() => {});
+    await locator.blur().catch(() => {});
+    await page.waitForTimeout(300);
+    let invalid = await locator.getAttribute("aria-invalid").catch(() => null);
+    if (invalid === "true") {
+      logger.info("[altinbas] GPA: pressSequentially left aria-invalid=true, trying native-setter fallback");
+      await locator.evaluate((el: HTMLInputElement, v: string) => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+        setter.call(el, ""); el.dispatchEvent(new Event("input", { bubbles: true }));
+        setter.call(el, v);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        el.dispatchEvent(new Event("blur", { bubbles: true }));
+      }, value).catch(() => {});
+      await page.waitForTimeout(300);
+      invalid = await locator.getAttribute("aria-invalid").catch(() => null);
+    }
+    logger.info(`[altinbas] GPA doldurma sonucu aria-invalid=${invalid}`);
+    return invalid !== "true";
+  } catch (e) {
+    logger.warn("[altinbas] fillLwcNumber error:", e);
+    return false;
+  }
+}
+
+/** GPA scale is not tracked on SubmitProfile — infer 4-point vs 100-point from magnitude. */
+function inferGpaTypeLabel(gpa?: number): { label: string; value: string } {
+  const n = typeof gpa === "number" && Number.isFinite(gpa) ? gpa : undefined;
+  if (n !== undefined && n > 4) {
+    return { label: "GRADING SYSTEM OUT OF 100", value: n.toFixed(2) };
+  }
+  return { label: "GRADING SYSTEM OUT OF 4", value: (n ?? 3.0).toFixed(2) };
+}
+
+function monthName(m?: number): string | undefined {
+  if (!m || m < 1 || m > 12) return undefined;
+  return new Date(2000, m - 1, 1).toLocaleString("en-US", { month: "long" });
+}
+
+/** Term Selection: only one active term is currently offered; select the first radio card. */
+async function stageTerm(page: any): Promise<boolean> {
+  const term = page.getByRole("radio").first();
+  if (await term.count().catch(() => 0)) {
+    await term.check({ timeout: 5000 }).catch(async () => {
+      await term.click().catch(() => {});
+    });
+  } else {
+    logger.warn("[altinbas] stageTerm: no term radio found");
+  }
+  logger.info("[altinbas] Term seçildi");
+  await clickNext(page);
+  return true;
+}
+
+/** Degree Selection: Master vs PhD radio, driven by profile.level (Bachelor is guarded out upstream). */
+async function stageDegree(page: any, profile: SubmitProfile): Promise<boolean> {
+  const wantPhd = /phd|doctor|doktora/i.test(profile.level || "");
+  const name = wantPhd ? /^phd$/i : /^master$/i;
+  const label = wantPhd ? "PhD" : "Master";
+  const r = page.getByRole("radio", { name }).first();
+  if (await r.count().catch(() => 0)) {
+    await r.check({ timeout: 5000 }).catch(async () => {
+      await r.click().catch(() => {});
+    });
+  } else {
+    logger.warn(`[altinbas] stageDegree: radio "${label}" not found`);
+  }
+  logger.info(`[altinbas] Degree seçildi: ${label}`);
+  await clickNext(page);
+  return true;
+}
+
+/**
+ * Program Selection: search the catalog, scrape visible "+ Select" cards
+ * into ProgramCandidate[], pick the best match via the shared matchProgram
+ * fuzzy matcher (reused across adapters — thesis/language variant aware),
+ * click its Select button, Next → "Selected Programs" modal → Save and Next.
+ */
+async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean> {
+  const query = profile.programName || "";
+  try {
+    const search = page.getByRole("searchbox").first();
+    const box = (await search.count().catch(() => 0)) ? search : page.getByPlaceholder(/search program/i).first();
+    if (await box.count().catch(() => 0)) {
+      await box.click().catch(() => {});
+      await box.fill(query).catch(() => {});
+      await page.waitForTimeout(1500);
+    } else {
+      logger.warn("[altinbas] stageProgram: search box not found — using full catalog list");
+    }
+  } catch {
+    /* proceed with whatever cards are already visible */
+  }
+
+  const selectBtns = page.getByRole("button", { name: /^\s*Select\s*$/i });
+  const count = await selectBtns.count().catch(() => 0);
+  if (!count) {
+    logger.warn(`[altinbas] stageProgram: no "+ Select" cards found for "${query}"`);
+    return false;
+  }
+
+  const candidates: ProgramCandidate[] = [];
+  for (let i = 0; i < count; i++) {
+    const btn = selectBtns.nth(i);
+    const card = btn.locator(
+      "xpath=ancestor::*[self::article or self::li or self::div][1]",
+    );
+    const text = ((await card.innerText().catch(() => "")) || (await btn.innerText().catch(() => ""))).trim();
+    if (text) candidates.push({ id: String(i), name: text.replace(/\s+/g, " ").slice(0, 200) });
+  }
+
+  const result = matchProgram(query, candidates);
+  const pickIdx = result ? Number(result.match.id) : 0;
+  if (!result) {
+    logger.warn(`[altinbas] stageProgram: no confident match for "${query}" among ${candidates.length} cards — picking first as a last resort`);
+  } else {
+    logger.info(`[altinbas] stageProgram: matched "${result.match.name.slice(0, 80)}" (conf=${result.conf})`);
+  }
+
+  await selectBtns.nth(pickIdx).click({ timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(800);
+  await clickNext(page);
+  await page.waitForTimeout(SF_HYDRATION_MS);
+  await dismissSfError(page);
+  const saveNext = page.getByRole("button", { name: /save and next/i }).first();
+  if (await saveNext.count().catch(() => 0)) {
+    await saveNext.click({ timeout: 8000 }).catch(() => {});
+  }
+  logger.info("[altinbas] Program seçildi + Save and Next");
+  return true;
+}
+
+/** Personal Information — most fields already carried from Basic Info; fill the rest, never throw. */
+async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean> {
+  await page
+    .getByLabel(/gender/i)
+    .first()
+    .selectOption({ label: /f/i.test((profile.gender || "").charAt(0)) ? "Female" : "Male" })
+    .catch(() => {});
+
+  await typeDate(page, /date of birth/i, fmtAltDate(profile.dateOfBirth));
+  await typeahead(page, /country of birth/i, mapCountry(profile.nationality));
+  await typeahead(page, /^citizenship/i, mapCountry(profile.nationality));
+  await typeahead(page, /passport issuing country/i, mapCountry(profile.nationality));
+  await typeDate(page, /passport date of issue/i, fmtAltDate(profile.passportIssueDate));
+  await typeDate(page, /passport date of expiry/i, fmtAltDate(profile.passportExpiryDate));
+  await fillIfPresent(page, /^email/i, profile.email);
+  await fillIfPresent(page, /mobile/i, profile.phone);
+  await fillIfPresent(page, /father name/i, profile.fatherName);
+  await fillIfPresent(page, /mother name/i, profile.motherName);
+
+  // Address: SubmitProfile only carries a single free-text `address` field —
+  // best-effort split, never blocking on missing structured data.
+  const addrParts = (profile.address || "").split(",").map((s) => s.trim()).filter(Boolean);
+  await typeahead(page, /address:?\s*country/i, mapCountry(profile.nationality));
+  await fillIfPresent(page, /address:?\s*city/i, addrParts[addrParts.length - 1] || "N/A");
+  await fillIfPresent(page, /address:?\s*street/i, addrParts[0] || profile.address || "N/A");
+  await fillIfPresent(page, /address:?\s*zip/i, "00000");
+
+  await clickNext(page);
+  logger.info("[altinbas] Personal Information dolduruldu");
+  return true;
+}
+
+/**
+ * Educational Information — at least one Bachelor (prior-degree) record is
+ * required. Opens the "Education" add-modal, fills native <select>s +
+ * pressSequentially GPA spinbutton, Saves, then advances.
+ */
+async function stageEducational(page: any, profile: SubmitProfile): Promise<boolean> {
+  const addBtn = page
+    .getByText("Education", { exact: true })
+    .locator("xpath=following::button[1]")
+    .first();
+  if (await addBtn.count().catch(() => 0)) {
+    await addBtn.click({ timeout: 8000 }).catch(() => {});
+  } else {
+    logger.warn("[altinbas] stageEducational: Education add-button not found");
+    return false;
+  }
+  await page.waitForTimeout(1500);
+
+  await fillIfPresent(page, /name of school/i, profile.schoolName || "University");
+  await page.getByLabel(/^country$/i).first().selectOption({ label: mapCountry(profile.nationality) }).catch(() => {});
+  await page.getByLabel(/^degree$/i).first().selectOption({ label: "Bachelor" }).catch(() => {});
+  await page.waitForTimeout(1000);
+  await fillIfPresent(page, /field of study/i, profile.programName || "General");
+
+  const gradYear = profile.graduationYear || new Date().getFullYear();
+  await page.getByLabel(/begin month/i).first().selectOption({ label: "September" }).catch(() => {});
+  await page.getByLabel(/begin year/i).first().selectOption({ label: String(gradYear - 4) }).catch(() => {});
+  await page.getByLabel(/graduation month/i).first().selectOption({ label: "June" }).catch(() => {});
+  await page.getByLabel(/graduation year/i).first().selectOption({ label: String(gradYear) }).catch(() => {});
+
+  const { label: gpaType, value: gpaVal } = inferGpaTypeLabel(profile.gpa);
+  await page.getByLabel(/gpa type/i).first().selectOption({ label: gpaType }).catch(() => {});
+  const gpaOk = await fillLwcNumber(page, page.getByLabel(/^gpa$/i).first(), gpaVal);
+  if (!gpaOk) logger.warn("[altinbas] Educational: GPA aria-invalid kaldı — Save başarısız olabilir");
+
+  await page.getByRole("button", { name: /^save$/i }).first().click({ timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(2000);
+  await dismissSfError(page);
+  await clickNext(page);
+  logger.info("[altinbas] Educational (Bachelor) kaydı eklendi + Next");
+  return true;
+}
+
+/**
+ * Questionnaire — not yet mapped from a live dry-run (Faz-2.1). Self-capture
+ * (handled by the caller before this runs) already logs the field inventory;
+ * here we just pick a reasonable default per control and advance so later
+ * stages remain reachable for capture.
+ */
+async function stageQuestionnaire(page: any): Promise<boolean> {
+  try {
+    const radios = page.getByRole("radio");
+    const n = await radios.count().catch(() => 0);
+    for (let i = 0; i < n; i++) {
+      const isChecked = await radios.nth(i).isChecked().catch(() => true);
+      if (!isChecked) {
+        await radios.nth(i).check({ timeout: 2000 }).catch(() => {});
+      }
+    }
+  } catch {
+    /* best-effort only */
+  }
+  logger.info("[altinbas] Questionnaire: default seçimlerle geçiliyor (Faz-2.1'de haritalanacak)");
+  await clickNext(page);
+  return true;
+}
+
+/**
+ * Documents — upload the already-downloaded local files by matching each
+ * file input's nearby label text to a document type. Self-capture (caller)
+ * already logs which slots are present; this best-effort maps by keyword.
+ */
+async function stageDocuments(page: any, files: SubmitFiles): Promise<boolean> {
+  const slots: Array<[RegExp, string | undefined]> = [
+    [/photo/i, files.photo],
+    [/passport/i, files.passport],
+    [/transcript/i, files.transcript],
+    [/diploma/i, files.diploma],
+  ];
+
+  const fileInputs = page.locator("input[type=file]");
+  const n = await fileInputs.count().catch(() => 0);
+  logger.info(`[altinbas] stageDocuments: ${n} file input(s) found on Documents stage`);
+
+  for (let i = 0; i < n; i++) {
+    const input = fileInputs.nth(i);
+    const label = ((await input.getAttribute("aria-label").catch(() => "")) || "").toLowerCase();
+    const container = input.locator("xpath=ancestor::*[self::div or self::fieldset][1]");
+    const nearbyText = ((await container.innerText().catch(() => "")) || "").toLowerCase();
+    const haystack = `${label} ${nearbyText}`;
+    const match = slots.find(([re]) => re.test(haystack));
+    if (match?.[1]) {
+      await input.setInputFiles(match[1]).catch((e: unknown) =>
+        logger.warn(`[altinbas] stageDocuments: setInputFiles failed for slot ${i}:`, e),
+      );
+    } else {
+      logger.info(`[altinbas] stageDocuments: file input ${i} did not match a known doc type (haystack="${haystack.slice(0, 80)}")`);
+    }
+  }
+
+  await page.waitForTimeout(1500);
+  await clickNext(page);
+  logger.info("[altinbas] Documents: yükleme denendi + Next");
+  return true;
+}
+
+/** Dispatch the recognised stage name to its handler; unrecognised stages fall back to generic capture+Next. */
+async function handleStage(
+  page: any,
+  stageName: string,
+  profile: SubmitProfile,
+  files: SubmitFiles,
+): Promise<boolean> {
+  const s = stageName.toLowerCase();
+  if (s.includes("term")) return stageTerm(page);
+  if (s.includes("degree")) return stageDegree(page, profile);
+  if (s.includes("program")) return stageProgram(page, profile);
+  if (s.includes("personal")) return stagePersonal(page, profile);
+  if (s.includes("educational")) return stageEducational(page, profile);
+  if (s.includes("questionnaire")) return stageQuestionnaire(page);
+  if (s.includes("document")) return stageDocuments(page, files);
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Application-form navigation helper
 //
 // Salesforce Experience Cloud SPA: a cold goto(application-form) is
@@ -489,6 +879,8 @@ async function handleUnknownStep(
   stepIdx: number,
   dryRun: boolean,
   screenshots: string[],
+  profile: SubmitProfile,
+  files: SubmitFiles,
 ): Promise<"advanced" | "final_reached" | "stuck">{
   await dismissSfError(page);
 
@@ -540,7 +932,10 @@ async function handleUnknownStep(
     .catch(() => "");
 
   // Detect final Completed/Submit screen
-  if (/review and submit|not submitted yet|please review|submit application/i.test(txt)) {
+  if (
+    /completed/i.test(stageName || "") ||
+    /review and submit|not submitted yet|please review|submit application/i.test(txt)
+  ) {
     logger.info(`[altinbas] Step ${stepIdx}: FINAL stage reached (${stageName ?? "Completed"})`);
     if (dryRun) {
       logger.info("[altinbas] FINAL stage reached (dry-run: stop before submit)");
@@ -550,11 +945,25 @@ async function handleUnknownStep(
     return "final_reached";
   }
 
+  // Faz-2: dispatch to a stage-specific handler (Term/Degree/Program/
+  // Personal/Educational/Questionnaire/Documents) when the stage name is
+  // recognised — it fills the real fields and clicks Next/Save itself.
+  // Unrecognised stages fall back to the generic capture+Next below.
+  if (stageName) {
+    const handled = await handleStage(page, stageName, profile, files).catch((e) => {
+      logger.warn(`[altinbas] handleStage error for "${stageName}":`, e);
+      return false;
+    });
+    if (handled) {
+      await dismissSfError(page);
+      return "advanced";
+    }
+  }
+
   // Try a generic Next click to advance (self-capture navigation). Some
   // stages (Term/Degree/Program selection) require a selection before Next
-  // will actually advance — Faz-1 intentionally does not select anything,
-  // so getting "stuck" here (after logging the inventory + screenshot) is
-  // expected and acceptable for this phase.
+  // will actually advance — getting "stuck" here (after logging the
+  // inventory + screenshot) is expected for genuinely unmapped stages.
   const advanced = await clickNext(page);
   logger.info(`[altinbas] Step ${stepIdx} (${stageName ?? "unknown"}): clickNext → advanced=${advanced}`);
   await dismissSfError(page);
@@ -776,7 +1185,7 @@ export const altinbasAdapter: UniversityAdapter = {
         break;
       }
 
-      const outcome = await handleUnknownStep(page, step, dryRun, screenshots);
+      const outcome = await handleUnknownStep(page, step, dryRun, screenshots, profile, files);
 
       if (outcome === "final_reached") {
         finalReached = true;
