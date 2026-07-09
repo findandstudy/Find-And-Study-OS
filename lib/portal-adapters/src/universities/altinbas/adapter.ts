@@ -190,109 +190,6 @@ async function captureCurrentStep(page: any, stepTag: string): Promise<string | 
 // Salesforce LWC field helpers
 // ---------------------------------------------------------------------------
 
-/** Type text into a visible input (tries fill; falls back to pressSequentially on mismatch). */
-async function sfFill(page: any, sel: string, value: string | undefined): Promise<void> {
-  if (!value) return;
-  try {
-    const loc = page.locator(sel);
-    const n = await loc.count();
-    for (let i = 0; i < n; i++) {
-      const el = loc.nth(i);
-      if (!(await el.isVisible().catch(() => false))) continue;
-      await el.fill(value).catch(() => {});
-      const got = await el.inputValue().catch(() => "");
-      if (got !== value) {
-        await el.click().catch(() => {});
-        await el.fill("").catch(() => {});
-        await el.pressSequentially(value, { delay: 50 }).catch(() => {});
-      }
-      await el.press("Tab").catch(() => {});
-      return;
-    }
-  } catch {/* ignore */}
-}
-
-/**
- * Fill a Salesforce lookup/combobox field:
- *   1. Find the visible input inside the lightning-input-field / c-lookup.
- *   2. Type the search term, wait for the dropdown, click the first option.
- *   3. Returns true on success.
- */
-async function sfLookup(
-  page: any,
-  labelPattern: RegExp,
-  searchTerm: string,
-  timeoutMs = 30000,
-): Promise<boolean> {
-  logger.info(`[altinbas] sfLookup: label=${labelPattern} search="${searchTerm}"`);
-  try {
-    // Find label → nearest input/combobox
-    const labelLoc = page.getByLabel(labelPattern).first();
-    const comboLoc = page.locator(`[aria-label=${JSON.stringify(searchTerm)}], input[role=combobox], input[aria-autocomplete=list], input[aria-autocomplete=both]`);
-
-    // Try getByLabel first (most reliable on standard LWC)
-    if ((await labelLoc.count()) && (await labelLoc.isVisible().catch(() => false))) {
-      await labelLoc.click().catch(() => {});
-      await labelLoc.fill("").catch(() => {});
-      await labelLoc.fill(searchTerm).catch(() => {});
-    } else {
-      // Fall back: find empty visible combobox inputs
-      const inputs = page.locator("input[role=combobox], input[aria-autocomplete=list], input[aria-autocomplete=both]");
-      const cnt = await inputs.count();
-      let found = false;
-      for (let i = 0; i < cnt; i++) {
-        const el = inputs.nth(i);
-        if (!(await el.isVisible().catch(() => false))) continue;
-        if ((await el.inputValue().catch(() => "x")) !== "") continue;
-        await el.click().catch(() => {});
-        await el.fill(searchTerm).catch(() => {});
-        found = true;
-        break;
-      }
-      if (!found) {
-        logger.warn(`[altinbas] sfLookup: no empty combobox found for "${searchTerm}"`);
-        return false;
-      }
-    }
-
-    // Wait for dropdown options to appear
-    const optSel = "[role=option], lightning-base-combobox-item, .slds-listbox__option, li[role=option]";
-    await page.waitForSelector(optSel, { timeout: timeoutMs }).catch(() => {});
-    await page.waitForTimeout(600);
-
-    // Pick the best matching option (or first)
-    const opts = page.locator(optSel);
-    const optCount = await opts.count();
-    if (!optCount) {
-      logger.warn(`[altinbas] sfLookup: no options appeared for "${searchTerm}"`);
-      return false;
-    }
-
-    const searchFold = fold(searchTerm);
-    let clicked = false;
-    for (let i = 0; i < optCount; i++) {
-      const txt = ((await opts.nth(i).innerText().catch(() => "")) || "").trim();
-      if (fold(txt).includes(searchFold) || searchFold.includes(fold(txt))) {
-        await opts.nth(i).click({ timeout: 5000 }).catch(() => {});
-        clicked = true;
-        break;
-      }
-    }
-    if (!clicked) {
-      // Fall back to first option
-      await opts.first().click({ timeout: 5000 }).catch(() => {});
-      clicked = true;
-    }
-
-    await page.waitForTimeout(700);
-    logger.info(`[altinbas] sfLookup: picked option for "${searchTerm}" (clicked=${clicked})`);
-    return clicked;
-  } catch (e) {
-    logger.warn(`[altinbas] sfLookup error for "${searchTerm}":`, e);
-    return false;
-  }
-}
-
 /** Click the Next / Continue button. Returns true if found + clicked. */
 async function clickNext(page: any): Promise<boolean> {
   const btn = page.getByRole("button", {
@@ -305,70 +202,160 @@ async function clickNext(page: any): Promise<boolean> {
   return false;
 }
 
+/**
+ * Salesforce Experience Cloud occasionally shows a "Sorry to interrupt" /
+ * "CSS Error" dialog (static-resource hiccup). Dismiss it without ever
+ * blocking the flow: prefer "Refresh" (reloads application-form?nocache=…),
+ * else "Cancel and close". Always wrapped so callers can fire-and-forget.
+ */
+async function dismissSfError(page: any): Promise<void> {
+  try {
+    const dialog = page.getByRole("dialog").filter({
+      hasText: /sorry to interrupt|css error/i,
+    });
+    if (!(await dialog.count().catch(() => 0))) return;
+
+    logger.info("[altinbas] dismissSfError: Salesforce error dialog detected");
+    const refreshBtn = dialog.getByRole("button", { name: /refresh/i }).first();
+    if (await refreshBtn.count().catch(() => 0)) {
+      await refreshBtn.click({ timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(3000);
+      return;
+    }
+
+    const closeBtn = dialog
+      .getByRole("button", { name: /cancel and close|close/i })
+      .first();
+    if (await closeBtn.count().catch(() => 0)) {
+      await closeBtn.click({ timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+  } catch {
+    /* never block the flow on this */
+  }
+}
+
+/**
+ * Fill a Salesforce Experience Cloud combobox/typeahead field by visible
+ * label, then pick the best-matching option from the resulting listbox.
+ * Used for Citizenship on the Basic Info step.
+ */
+async function pickCombobox(
+  page: any,
+  labelPattern: RegExp,
+  searchTerm: string,
+): Promise<boolean> {
+  if (!searchTerm) return false;
+  try {
+    let box = page.getByLabel(labelPattern).first();
+    if (!(await box.count().catch(() => 0))) {
+      // Fallback: nearby role=combobox / typeahead input
+      box = page
+        .locator("input[role=combobox], input[aria-autocomplete=list], input[aria-autocomplete=both]")
+        .first();
+    }
+    if (!(await box.count().catch(() => 0))) {
+      logger.warn(`[altinbas] pickCombobox: no input found for ${labelPattern}`);
+      return false;
+    }
+
+    await box.click({ timeout: 8000 }).catch(() => {});
+    await box.fill("").catch(() => {});
+    await box.fill(searchTerm).catch(() => {});
+    await page.waitForTimeout(1500);
+
+    const optSel = "[role=option], lightning-base-combobox-item, .slds-listbox__option, li[role=option]";
+    await page.waitForSelector(optSel, { timeout: 8000 }).catch(() => {});
+    const opts = page.locator(optSel);
+    const optCount = await opts.count().catch(() => 0);
+    if (!optCount) {
+      logger.warn(`[altinbas] pickCombobox: no options appeared for "${searchTerm}"`);
+      return false;
+    }
+
+    const searchFold = fold(searchTerm);
+    for (let i = 0; i < optCount; i++) {
+      const txt = ((await opts.nth(i).innerText().catch(() => "")) || "").trim();
+      const optFold = fold(txt);
+      if (optFold === searchFold || optFold.startsWith(searchFold) || optFold.includes(searchFold)) {
+        await opts.nth(i).click({ timeout: 5000 }).catch(() => {});
+        logger.info(`[altinbas] pickCombobox: picked "${txt}" for "${searchTerm}"`);
+        await page.waitForTimeout(500);
+        return true;
+      }
+    }
+
+    logger.warn(`[altinbas] pickCombobox: no matching option for "${searchTerm}" (options seen: ${optCount})`);
+    return false;
+  } catch (e) {
+    logger.warn(`[altinbas] pickCombobox error for "${searchTerm}":`, e);
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Application-form navigation helper
 //
-// Salesforce Screen Flow SPA: a cold goto(application-form) is redirected
-// by the route-guard to Home. We must boot on Home first, then follow the
-// APPLY NOW link (or do a warmed goto). Retry up to 3×.
+// Salesforce Experience Cloud SPA: a cold goto(application-form) is
+// redirected by the route-guard back to Home — hard-goto to the deep route
+// must NEVER be used. The only reliable path is a click-through SPA
+// navigation: Home → "APPLY NOW" (client nav) → Basic Info form.
 // ---------------------------------------------------------------------------
-async function navigateToAppForm(page: any): Promise<void> {
-  const FORM_FIELD_SEL = [
-    "input[name='First_Name']",
-    "input[name='Last_Name']",
-    "input[name='Passport_Number']",
-    "input[name*=Passport]",
-    "input[type=email]",
-    "input[role=combobox]",
-    "lightning-input",
-    "c-lookup",
-  ].join(", ");
 
-  const onWizard = async (): Promise<boolean> => {
-    try {
-      const loc = page.locator(FORM_FIELD_SEL);
-      const n = await loc.count();
-      for (let i = 0; i < Math.min(n, 12); i++) {
-        if (await loc.nth(i).isVisible().catch(() => false)) return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  };
-
-  const tryGoto = async (): Promise<void> => {
-    // Boot on portal home first
-    await page
-      .goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 60000 })
-      .catch(() => {});
-    await page.waitForTimeout(SF_HYDRATION_MS);
-
-    // Try clicking APPLY NOW / application-form link
-    const applyLink = page
-      .locator('a[href*="application-form"], button:has-text("APPLY NOW"), a:has-text("APPLY NOW")')
-      .first();
-    if (await applyLink.count().catch(() => 0)) {
-      await applyLink.scrollIntoViewIfNeeded().catch(() => {});
-      await applyLink.click({ timeout: 8000 }).catch(() => {});
-      await page.waitForTimeout(4000);
-    }
-
-    // Fall back to direct goto
-    if (!(await onWizard())) {
-      await page
-        .goto(APP_FORM_URL, { waitUntil: "domcontentloaded", timeout: 60000 })
-        .catch(() => {});
-      // Poll up to 30s for wizard fields
-      for (let t = 0; t < 30 && !(await onWizard()); t++) {
-        await page.waitForTimeout(1000);
-      }
-    }
-  };
-
-  for (let attempt = 0; attempt < 3 && !(await onWizard()); attempt++) {
-    await tryGoto();
+/** True once the Basic Info ("Application Form") screen has hydrated. */
+async function onWizard(page: any): Promise<boolean> {
+  try {
+    // "Applicant Email" is unique to the Basic Info form — the most
+    // reliable anchor for this Salesforce Experience Cloud screen.
+    const emailBox = page.getByLabel(/applicant email/i);
+    return (await emailBox.count().catch(() => 0)) > 0;
+  } catch {
+    return false;
   }
+}
+
+async function tryGoto(page: any): Promise<void> {
+  // Boot on portal Home first.
+  await page
+    .goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 60000 })
+    .catch(() => {});
+  await page.waitForTimeout(SF_HYDRATION_MS);
+  await dismissSfError(page);
+
+  if (await onWizard(page)) return;
+
+  // Click "APPLY NOW" (SPA nav) — try role=button, then role=link, then a
+  // generic text-match fallback. Hard goto(APP_FORM_URL) is intentionally
+  // NOT used here: it gets bounced back to Home by the route guard.
+  const candidates = [
+    page.getByRole("button", { name: /apply now/i }),
+    page.getByRole("link", { name: /apply now/i }),
+    page.locator("button, a, [role=button]").filter({ hasText: /apply now/i }),
+  ];
+
+  for (const cand of candidates) {
+    const loc = cand.first();
+    if (await loc.count().catch(() => 0)) {
+      await loc.scrollIntoViewIfNeeded().catch(() => {});
+      await loc.click({ timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(4000);
+      await dismissSfError(page);
+      break;
+    }
+  }
+
+  // Poll up to 30s for the Basic Info form to appear.
+  for (let t = 0; t < 30 && !(await onWizard(page)); t++) {
+    await page.waitForTimeout(1000);
+  }
+}
+
+async function navigateToAppForm(page: any): Promise<void> {
+  for (let attempt = 0; attempt < 3 && !(await onWizard(page)); attempt++) {
+    logger.info(`[altinbas] navigateToAppForm: attempt ${attempt + 1}/3`);
+    await tryGoto(page);
+  }
+  logger.info(`[altinbas] navigateToAppForm: onWizard=${await onWizard(page)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -377,62 +364,111 @@ async function navigateToAppForm(page: any): Promise<void> {
 // Fields seen: First Name*, Last Name*, Citizenship* (lookup), Passport Number*, Applicant Email*
 // ---------------------------------------------------------------------------
 async function fillStep1(page: any, profile: SubmitProfile): Promise<void> {
-  logger.info("[altinbas] Step 1: filling Basic Information");
+  logger.info("[altinbas] Step 1 (Basic Info): filling label-based fields");
+  await dismissSfError(page);
 
-  // Wait for a Step 1 anchor (passport or email or first name)
-  await page
-    .waitForSelector(
-      "input[name='First_Name'], input[name='Passport_Number'], input[type=email], input[role=combobox]",
-      { timeout: 30000 },
-    )
-    .catch(() => {});
-
-  await page.waitForTimeout(1500);
+  // Wait for the Basic Info anchor field to hydrate.
+  await page.getByLabel(/applicant email/i).first().waitFor({ timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(1000);
 
   // First Name
-  await sfFill(page, "input[name='First_Name']", profile.firstName);
-  // Fallback: any visible input with label matching "first"
-  if (!(await page.locator("input[name='First_Name']").first().inputValue().catch(() => ""))) {
-    const lbl = page.getByLabel(/first\s*name/i).first();
-    if (await lbl.count()) await lbl.fill(profile.firstName).catch(() => {});
+  const firstNameBox = page.getByLabel(/^first name/i).first();
+  if (await firstNameBox.count().catch(() => 0)) {
+    await firstNameBox.fill(profile.firstName).catch(() => {});
+  } else {
+    logger.warn("[altinbas] Step 1: First Name field not found");
   }
 
   // Last Name
-  await sfFill(page, "input[name='Last_Name']", profile.lastName);
-  if (!(await page.locator("input[name='Last_Name']").first().inputValue().catch(() => ""))) {
-    const lbl = page.getByLabel(/last\s*name|surname/i).first();
-    if (await lbl.count()) await lbl.fill(profile.lastName).catch(() => {});
+  const lastNameBox = page.getByLabel(/^last name/i).first();
+  if (await lastNameBox.count().catch(() => 0)) {
+    await lastNameBox.fill(profile.lastName).catch(() => {});
+  } else {
+    logger.warn("[altinbas] Step 1: Last Name field not found");
   }
 
-  // Citizenship lookup (Salesforce typeahead)
-  await sfLookup(page, /citizenship|vatanda[sş]/i, profile.nationality || "Turkey");
-
   // Passport Number
-  await sfFill(page, "input[name='Passport_Number']", profile.passportNumber);
-  // Fallback by label
-  if (!(await page.locator("input[name='Passport_Number']").first().inputValue().catch(() => ""))) {
-    const lbl = page.getByLabel(/passport\s*(number)?/i).first();
-    if (await lbl.count()) await lbl.fill(profile.passportNumber).catch(() => {});
+  const passportBox = page.getByLabel(/passport number/i).first();
+  if (await passportBox.count().catch(() => 0)) {
+    await passportBox.fill(profile.passportNumber).catch(() => {});
+  } else {
+    logger.warn("[altinbas] Step 1: Passport Number field not found");
   }
 
   // Applicant Email
-  await sfFill(page, "input[type=email]", profile.email);
-  // Fallback by label
-  if (!(await page.locator("input[type=email]").first().inputValue().catch(() => ""))) {
-    const lbl = page.getByLabel(/applicant\s*email|e-?mail/i).first();
-    if (await lbl.count()) await lbl.fill(profile.email).catch(() => {});
+  const emailBox = page.getByLabel(/applicant email/i).first();
+  if (await emailBox.count().catch(() => 0)) {
+    await emailBox.fill(profile.email).catch(() => {});
+  } else {
+    logger.warn("[altinbas] Step 1: Applicant Email field not found");
   }
 
-  // Verify fills
-  logger.info("[altinbas] Step 1 field values (for verification):", {
-    firstName: await page.locator("input[name='First_Name']").first().inputValue().catch(() => "?"),
-    lastName:  await page.locator("input[name='Last_Name']").first().inputValue().catch(() => "?"),
-    passport:  await page.locator("input[name='Passport_Number']").first().inputValue().catch(() => "?"),
-    email:     await page.locator("input[type=email]").first().inputValue().catch(() => "?"),
-  });
+  // Citizenship combobox (Salesforce typeahead)
+  const citizenshipOk = await pickCombobox(
+    page,
+    /citizenship/i,
+    profile.nationality || "Turkey",
+  );
+  if (!citizenshipOk) {
+    logger.warn("[altinbas] Step 1: Citizenship combobox did not resolve a match — required field may block Next");
+  }
+
+  await page.waitForTimeout(800);
+  logger.info(
+    "[altinbas] Step1 filled: first/last/passport/email/citizenship",
+    {
+      firstName: await firstNameBox.inputValue().catch(() => "?"),
+      lastName:  await lastNameBox.inputValue().catch(() => "?"),
+      passport:  await passportBox.inputValue().catch(() => "?"),
+      email:     await emailBox.inputValue().catch(() => "?"),
+      citizenshipOk,
+    },
+  );
 
   logger.info("[altinbas] Step 1: clicking Next");
-  await clickNext(page);
+  const nextBtn = page.getByRole("button", { name: /^next$/i }).first();
+  if (await nextBtn.count().catch(() => 0)) {
+    await nextBtn.click({ timeout: 10000 }).catch(() => {});
+  } else {
+    await clickNext(page);
+  }
+  await page.waitForTimeout(3000);
+}
+
+/**
+ * Student summary screen (post Step-1 Next): click "Create New Application"
+ * to enter the multi-stage wizard. Returns true on success.
+ */
+async function clickCreateNewApplication(page: any): Promise<boolean> {
+  await dismissSfError(page);
+  const createBtn = page.getByRole("button", { name: /create new application/i }).first();
+  if (!(await createBtn.count().catch(() => 0))) {
+    logger.warn("[altinbas] Create New Application button not found on student summary screen");
+    return false;
+  }
+  await createBtn.scrollIntoViewIfNeeded().catch(() => {});
+  await createBtn.click({ timeout: 10000 }).catch(() => {});
+  await page.waitForTimeout(3000);
+  logger.info("[altinbas] clicked Create New Application — wizard should be starting");
+  return true;
+}
+
+/**
+ * Read the currently active wizard stage name from the stage bar. Options
+ * are rendered with text like "<Stage> - Current Stage" / "Stage Complete" /
+ * "Stage Not Started".
+ */
+async function readActiveStageName(page: any): Promise<string | null> {
+  try {
+    const cur = page.locator("[role=option]").filter({ hasText: /current stage/i }).first();
+    if (await cur.count().catch(() => 0)) {
+      const txt = ((await cur.innerText().catch(() => "")) || "").trim();
+      return txt.replace(/-\s*current stage.*/i, "").trim() || txt;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -447,28 +483,74 @@ async function handleUnknownStep(
   dryRun: boolean,
   screenshots: string[],
 ): Promise<"advanced" | "final_reached" | "stuck">{
-  const tag = `step${stepIdx}`;
-  const shot = await captureCurrentStep(page, tag);
-  if (shot) screenshots.push(shot);
+  await dismissSfError(page);
+
+  const stageName = await readActiveStageName(page);
+  logger.info(`[altinbas] STAGE: ${stageName ?? "(unknown — stage bar not detected)"} (step ${stepIdx})`);
+
+  const tag = `step${stepIdx}-${(stageName || "unknown").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+  const shot = await captureScreen(page, tag);
+  if (shot) {
+    screenshots.push(shot);
+    logger.info(`[altinbas] stage screenshot: ${shot}`);
+  }
+
+  // Role-based field inventory of the current stage (labels + interactive
+  // elements — combos/radios/checkboxes/cards/buttons need role-based
+  // enumeration since Salesforce LWC controls carry no name attribute).
+  try {
+    const [textboxes, radios, checkboxes, comboboxes, buttons] = await Promise.all([
+      page.getByRole("textbox").evaluateAll((els: Element[]) =>
+        els.map((e) => (e as HTMLElement).getAttribute("aria-label") || (e as HTMLElement).textContent || "").filter(Boolean).slice(0, 40),
+      ).catch(() => [] as string[]),
+      page.getByRole("radio").evaluateAll((els: Element[]) =>
+        els.map((e) => (e as HTMLElement).getAttribute("aria-label") || (e as HTMLElement).textContent || "").filter(Boolean).slice(0, 40),
+      ).catch(() => [] as string[]),
+      page.getByRole("checkbox").evaluateAll((els: Element[]) =>
+        els.map((e) => (e as HTMLElement).getAttribute("aria-label") || (e as HTMLElement).textContent || "").filter(Boolean).slice(0, 40),
+      ).catch(() => [] as string[]),
+      page.getByRole("combobox").evaluateAll((els: Element[]) =>
+        els.map((e) => (e as HTMLElement).getAttribute("aria-label") || (e as HTMLElement).textContent || "").filter(Boolean).slice(0, 40),
+      ).catch(() => [] as string[]),
+      page.getByRole("button").evaluateAll((els: Element[]) =>
+        els.map((e) => (e.textContent || "").trim()).filter(Boolean).slice(0, 40),
+      ).catch(() => [] as string[]),
+    ]);
+
+    logger.info(`[altinbas] STAGE field inventory (${stageName ?? "unknown"}):`, {
+      textboxes,
+      radios,
+      checkboxes,
+      comboboxes,
+      buttons: [...new Set(buttons)],
+    });
+  } catch (e) {
+    logger.warn(`[altinbas] STAGE field inventory failed (${stageName ?? "unknown"}):`, e);
+  }
 
   const txt: string = await page
     .evaluate(() => (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 800))
     .catch(() => "");
 
-  // Detect final review/submit screen
+  // Detect final Completed/Submit screen
   if (/review and submit|not submitted yet|please review|submit application/i.test(txt)) {
-    logger.info(`[altinbas] Step ${stepIdx}: FINAL REVIEW screen reached`);
+    logger.info(`[altinbas] Step ${stepIdx}: FINAL stage reached (${stageName ?? "Completed"})`);
     if (dryRun) {
-      logger.info("[altinbas] dry-run: stopping before Submit (final review reached)");
-      return "final_reached";
+      logger.info("[altinbas] FINAL stage reached (dry-run: stop before submit)");
     }
-    // Real submit — handled in main loop
+    // Real submit is intentionally NOT implemented yet (Faz-5) — handled by
+    // the caller regardless of dryRun so a real run never reaches Completed.
     return "final_reached";
   }
 
-  // Try a generic Next click to advance (self-capture navigation)
+  // Try a generic Next click to advance (self-capture navigation). Some
+  // stages (Term/Degree/Program selection) require a selection before Next
+  // will actually advance — Faz-1 intentionally does not select anything,
+  // so getting "stuck" here (after logging the inventory + screenshot) is
+  // expected and acceptable for this phase.
   const advanced = await clickNext(page);
-  logger.info(`[altinbas] Step ${stepIdx}: clickNext → advanced=${advanced}`);
+  logger.info(`[altinbas] Step ${stepIdx} (${stageName ?? "unknown"}): clickNext → advanced=${advanced}`);
+  await dismissSfError(page);
   return advanced ? "advanced" : "stuck";
 }
 
@@ -653,7 +735,19 @@ export const altinbasAdapter: UniversityAdapter = {
       return { ...result, screenshots };
     }
 
-    // ── Steps 2-N: self-capture loop ──────────────────────────────────────
+    // ── Student summary → Create New Application ───────────────────────────
+    const createdApp = await clickCreateNewApplication(page);
+    if (!createdApp) {
+      logger.warn("[altinbas] could not click Create New Application — capturing student summary screen and aborting");
+      const stuckShot = await captureScreen(page, "student-summary-stuck");
+      if (stuckShot) screenshots.push(stuckShot);
+      (result as any).stuckStep = 1;
+      return { ...result, screenshots };
+    }
+    await page.waitForTimeout(2000);
+
+    // ── Steps 2-N: self-capture loop (Application Type → Term → Degree →
+    //    Program → Personal → Educational → Questionnaire → Documents) ──────
     // Each iteration: capture the current screen, try to advance.
     // The loop exits when:
     //   - Final review/submit screen is reached (handle real submit or stop for dryRun)
@@ -688,39 +782,17 @@ export const altinbasAdapter: UniversityAdapter = {
       await page.waitForTimeout(2500);
     }
 
-    // ── Final submit (real run only) ──────────────────────────────────────
-    if (finalReached && !dryRun) {
-      logger.info("[altinbas] clicking final Submit");
-      const submitBtn = page
-        .getByRole("button", { name: /^\s*(submit|complete|tamamla|gönder|finish|onayla)\s*$/i })
-        .first();
-      const nextCnt = await page
-        .getByRole("button", { name: /^\s*(next|continue|ileri|sonraki|devam)\s*$/i })
-        .count();
-      if ((await submitBtn.count()) && !nextCnt) {
-        await submitBtn.click({ timeout: 15000 }).catch(() => {});
-        await page.waitForTimeout(8000);
-
-        const afterTxt: string = await page
-          .evaluate(() => (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 600))
-          .catch(() => "");
-        logger.info("[altinbas] post-submit body:", afterTxt.slice(0, 300));
-
-        if (/already an application|already exists|duplicate/i.test(afterTxt)) {
-          result.alreadyExists = true;
-        } else {
-          result.submitted = true;
-
-          // Try to capture external ref (application number)
-          const appNumMatch = afterTxt.match(/\b[A-Z]{2,3}\d{6,}\b/);
-          if (appNumMatch) result.externalRef = appNumMatch[0];
-        }
-
-        const finalShot = await captureScreen(page, "post-submit");
-        if (finalShot) screenshots.push(finalShot);
-      } else {
-        logger.warn("[altinbas] submit button not found on final screen");
-      }
+    // ── Final submit — NOT IMPLEMENTED YET (Faz-5) ──────────────────────────
+    // Faz-1 scope stops at self-capturing every wizard stage. Real Submit
+    // (Completed screen) is deliberately unimplemented in BOTH dry-run and
+    // real (doSubmit=true) modes so a live run can never accidentally
+    // submit an application before Faz-5 lands the reviewed submit logic.
+    if (finalReached) {
+      const msg = dryRun
+        ? "Altınbaş: dry-run — FINAL stage reached, stopping before Submit"
+        : "Altınbaş: final Submit not implemented yet (Faz-5) — stopping before Completed/Submit";
+      logger.info(`[altinbas] ${msg}`);
+      result.detail = msg;
     }
 
     if (screenshots.length) result.screenshots = screenshots;
