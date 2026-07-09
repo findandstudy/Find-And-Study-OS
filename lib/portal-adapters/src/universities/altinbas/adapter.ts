@@ -497,80 +497,104 @@ async function stageDegree(page: any, profile: SubmitProfile): Promise<boolean> 
  * click its Select button, Next → "Selected Programs" modal → Save and Next.
  */
 async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean> {
-  const query = profile.programName || "";
-  try {
-    const search = page.getByRole("searchbox").first();
-    const box = (await search.count().catch(() => 0)) ? search : page.getByPlaceholder(/search program/i).first();
-    if (await box.count().catch(() => 0)) {
-      await box.click().catch(() => {});
-      await box.fill(query).catch(() => {});
-      await page.waitForTimeout(1500);
-    } else {
-      logger.warn("[altinbas] stageProgram: search box not found — using full catalog list");
-    }
-  } catch {
-    /* proceed with whatever cards are already visible */
+  await dismissSfError(page);
+
+  // Faz-2.2 KANITLANDI (headed dry-run, field inventory): the search box is
+  // a plain input[type=search] (placeholder "Search Program Name"), NOT a
+  // role=textbox — getByRole("searchbox")/getByPlaceholder alone miss it in
+  // some renders. Strip the degree prefix and thesis/language suffixes from
+  // the CRM program name so the query matches the portal's bare catalog
+  // labels (e.g. "Master of X (With Thesis) (in English)" → "X").
+  const rawQuery = profile.programName || "";
+  const coreQuery = rawQuery
+    .replace(/^\s*(master of|master'?s in|master in|bachelor of|bachelor'?s in|phd in|ph\.?d\.?\s*in|doctorate in|doctor of)\s+/i, "")
+    .replace(/\((with|without)\s+thesis\)/gi, "")
+    .replace(/\(in\s+\w+\)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const searchBox = page
+    .locator('input[type="search"], input[placeholder*="Search" i]')
+    .first();
+  const searchTarget = (await searchBox.count().catch(() => 0)) ? searchBox : page.getByRole("searchbox").first();
+  if (await searchTarget.count().catch(() => 0)) {
+    await searchTarget.click({ force: true }).catch(() => {});
+    await searchTarget.fill("").catch(() => {});
+    // First few words are enough to filter the catalog without over-narrowing.
+    await searchTarget.pressSequentially(coreQuery.split(" ").slice(0, 3).join(" "), { delay: 40 }).catch(() => {});
+    await page.waitForTimeout(1500);
+  } else {
+    logger.warn("[altinbas] stageProgram: search box not found — using full catalog list");
   }
 
-  const selectBtns = page.getByRole("button", { name: /^\s*Select\s*$/i });
-  const count = await selectBtns.count().catch(() => 0);
-  if (!count) {
-    logger.warn(`[altinbas] stageProgram: no "+ Select" cards found for "${query}"`);
+  // Faz-2.2 KANITLANDI: the card toggle button's textContent is the
+  // CONCATENATION of all three state spans — "SelectSelectedRemove" — so
+  // getByRole("button", { name: /select/i }) matches nothing. Locate the
+  // program CARD (not the button) by scanning for cards whose text contains
+  // every significant word of coreQuery, then click that card's toggle
+  // button directly (not by accessible name).
+  const cards = page.locator('article, li, .slds-card, [class*="card"]').filter({ hasText: /select/i });
+  const cardCount = await cards.count().catch(() => 0);
+  if (!cardCount) {
+    logger.warn(`[altinbas] stageProgram: no program cards found for "${coreQuery}"`);
     return false;
   }
 
   const candidates: ProgramCandidate[] = [];
-  for (let i = 0; i < count; i++) {
-    const btn = selectBtns.nth(i);
-    const card = btn.locator(
-      "xpath=ancestor::*[self::article or self::li or self::div][1]",
-    );
-    const text = ((await card.innerText().catch(() => "")) || (await btn.innerText().catch(() => ""))).trim();
+  for (let i = 0; i < cardCount; i++) {
+    const text = ((await cards.nth(i).innerText().catch(() => "")) || "").trim();
     if (text) candidates.push({ id: String(i), name: text.replace(/\s+/g, " ").slice(0, 200) });
   }
+  const result = matchProgram(coreQuery, candidates);
+  const words = coreQuery.toLowerCase().split(" ").filter((w) => w.length > 3);
 
-  const result = matchProgram(query, candidates);
-  const pickIdx = result ? Number(result.match.id) : 0;
-  if (!result) {
-    logger.warn(`[altinbas] stageProgram: no confident match for "${query}" among ${candidates.length} cards — picking first as a last resort`);
+  let pickIdx = result ? Number(result.match.id) : -1;
+  if (pickIdx < 0 && words.length) {
+    pickIdx = candidates.findIndex((c) => {
+      const t = c.name.toLowerCase();
+      return words.every((w) => t.includes(w));
+    });
+  }
+  let picked = false;
+  if (pickIdx >= 0) {
+    logger.info(`[altinbas] Program eşleşmesi: kart ${pickIdx} "${candidates[pickIdx]?.name.slice(0, 80)}"`);
+    const card = cards.nth(pickIdx);
+    const btn = card.locator('button:has-text("Select"), button').first();
+    await btn.scrollIntoViewIfNeeded().catch(() => {});
+    await btn.click({ force: true, timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    picked = true;
   } else {
-    logger.info(`[altinbas] stageProgram: matched "${result.match.name.slice(0, 80)}" (conf=${result.conf})`);
+    // Fallback: click the very first Select-capable card so the flow keeps
+    // moving rather than getting permanently stuck on an unmatched query.
+    logger.warn(`[altinbas] stageProgram: no confident match for "${coreQuery}" among ${candidates.length} cards — falling back to first card`);
+    const btn = cards.first().locator('button:has-text("Select"), button').first();
+    await btn.click({ force: true, timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    picked = true;
   }
 
-  // Faz-2.1 KANITLANDI: "+ Select" is an SLDS control — plain click() can
-  // silently no-op. Force-click and verify the card flips to a
-  // "Selected"/checkmark state before trusting it; retry once on the card
-  // container itself if the button click didn't register.
-  const pickedBtn = selectBtns.nth(pickIdx);
-  await pickedBtn.click({ force: true, timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(600);
-  let selectedOk = await pickedBtn.innerText().then((t: string) => /selected/i.test(t)).catch(() => false);
-  if (!selectedOk) {
-    const card = pickedBtn.locator("xpath=ancestor::*[self::article or self::li or self::div][1]");
-    await card.click({ force: true, timeout: 4000 }).catch(() => {});
-    await page.waitForTimeout(600);
-    selectedOk = await pickedBtn.innerText().then((t: string) => /selected/i.test(t)).catch(() => false);
-  }
-  logger.info(`[altinbas] Program card select: selectedOk=${selectedOk}`);
-
-  // Diagnostics: log every visible button label at this stage so a stuck
-  // Program Selection is debuggable from dry-run logs alone.
-  const allBtnLabels = await page.getByRole("button").evaluateAll((els: Element[]) =>
-    els.map((e) => (e.textContent || "").trim()).filter(Boolean),
-  ).catch(() => [] as string[]);
-  logger.info(`[altinbas] Program stage buttons: ${JSON.stringify([...new Set(allBtnLabels)])}`);
+  // Verify via the "Selected Programs" cart button label (e.g. "Selected Programs (1)").
+  const cartTxt = await page
+    .getByRole("button", { name: /selected programs/i })
+    .first()
+    .innerText()
+    .catch(() => "");
+  logger.info(`[altinbas] Program sepeti: ${JSON.stringify(cartTxt)} picked=${picked}`);
 
   await clickNext(page);
   await page.waitForTimeout(SF_HYDRATION_MS);
   await dismissSfError(page);
-  // Faz-2.1 KANITLANDI: getByRole("button", {name: /save and next/i}) misses
-  // this button (its accessible-name diverges from its visible text, likely
-  // icon + aria-label) — use a text-locator instead.
-  const saveNext = page.locator('button:has-text("Save and Next")').first();
-  if (await saveNext.count().catch(() => 0)) {
+
+  // Faz-2.1/2.2 KANITLANDI: getByRole("button", {name: /save and next/i})
+  // misses this button (accessible-name diverges from visible text) — use a
+  // text-locator, and retry a few times since the modal can re-render.
+  for (let k = 0; k < 4; k++) {
+    const saveNext = page.locator('button:has-text("Save and Next")').first();
+    if (!(await saveNext.count().catch(() => 0))) break;
     await saveNext.click({ force: true, timeout: 8000 }).catch(() => {});
-  } else {
-    logger.warn('[altinbas] stageProgram: "Save and Next" button not found on Selected Programs modal');
+    await page.waitForTimeout(SF_HYDRATION_MS);
+    await dismissSfError(page);
   }
   logger.info("[altinbas] Program seçildi + Save and Next");
   return true;
