@@ -32,6 +32,7 @@ import type {
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds, type ResolvedCreds } from "../../portalCreds.js";
 import { fold, matchProgram, type ProgramCandidate } from "../../programMatch.js";
+import { db, portalProgramCacheTable } from "@workspace/db";
 import {
   SIT_URLS,
   SIT_LOGIN,
@@ -223,6 +224,81 @@ async function clickButton(page: Page, nameRe: RegExp): Promise<boolean> {
 // ---------------------------------------------------------------------------
 // Login internals.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Diagnostic helper — closest-N scored candidates by simple token overlap.
+//
+// Used only to log WHY a match failed (name difference vs. threshold), never
+// to decide a match. Independent of programMatch's internal scorer (which is
+// not exported) so this stays a pure diagnostic with no behavioral coupling.
+// ---------------------------------------------------------------------------
+function simpleTokens(s: string): Set<string> {
+  return new Set(fold(s).split(" ").filter(Boolean));
+}
+
+function simpleOverlapScore(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+function closestCandidates(
+  queryName: string,
+  pool: ProgramCandidate[],
+  topN: number = 5,
+): { name: string; score: number }[] {
+  const qt = simpleTokens(queryName);
+  return pool
+    .map((c) => ({ name: c.name, score: simpleOverlapScore(qt, simpleTokens(c.name)) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topN);
+}
+
+function logProgramPoolDiagnostic(
+  contextLabel: string,
+  queryName: string,
+  pool: ProgramCandidate[],
+): void {
+  logger.warn(
+    `[sit] program havuzu (${pool.length}) [${contextLabel}]: ` +
+      pool.map((p) => p.name).join(" | "),
+  );
+  const closest = closestCandidates(queryName, pool, 5);
+  logger.warn(
+    `[sit] en yakın [${contextLabel}]: ` +
+      closest.map((c) => `"${c.name}" score=${c.score.toFixed(2)}`).join(", "),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic helper — persist the fetched (live) program pool to
+// portal_program_cache for offline inspection (psql). Best-effort: never
+// throws, never blocks the submission flow on a cache-write failure.
+// ---------------------------------------------------------------------------
+async function persistFetchedProgramPool(
+  universityKey: string,
+  level: string,
+  catalog: ProgramCandidate[],
+): Promise<void> {
+  try {
+    const options = catalog.map((c) => ({ v: c.id, t: c.name }));
+    await db
+      .insert(portalProgramCacheTable)
+      .values({ universityKey, level, options })
+      .onConflictDoUpdate({
+        target: [
+          portalProgramCacheTable.universityKey,
+          portalProgramCacheTable.level,
+        ],
+        set: { options, fetchedAt: new Date() },
+      });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(`[sit] program havuzu cache'e yazılamadı: ${msg}`);
+  }
+}
+
 function resolveCreds(opts?: LoginOpts): ResolvedCreds {
   return opts?.credentials ?? portalCreds(PORTAL_KEY);
 }
@@ -713,6 +789,14 @@ export const sitAdapter: SitAdapter = {
     // entirely in code — no UI "Add Application" dialog is involved.
     const level = mapEducationLevel(profile.level);
     const catalog = await fetchProgramCatalog(page, allowedUni, level);
+
+    // Diagnostic: persist the freshly-fetched live catalog so it can be
+    // inspected offline (psql) without re-triggering a login/scrape. Never
+    // gates the flow — a cache-write failure is logged and swallowed.
+    if (catalog.length > 0) {
+      await persistFetchedProgramPool(`sit:${allowedUni}`, level, catalog);
+    }
+
     if (catalog.length === 0) {
       logger.warn(
         `[sit] katalog boş: "${allowedUni}" için aktif program bulunamadı`,
@@ -739,6 +823,7 @@ export const sitAdapter: SitAdapter = {
       logger.warn(
         `[sit] program dil uyumsuz: "${profile.programName}" — ${catalog.length} adayın hiçbiri dil uyumlu değil`,
       );
+      logProgramPoolDiagnostic("dil uyumsuz", profile.programName, catalog);
       return {
         ...base,
         programMissing: true,
@@ -756,6 +841,7 @@ export const sitAdapter: SitAdapter = {
       logger.warn(
         `[sit] program eşleşmedi: "${profile.programName}" (${pool.length} aday)`,
       );
+      logProgramPoolDiagnostic("eşleşmedi", profile.programName, pool);
       return {
         ...base,
         programMissing: true,
