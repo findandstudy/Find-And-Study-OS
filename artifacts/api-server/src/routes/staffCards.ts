@@ -27,6 +27,8 @@ import { and, eq, gte, lt, lte, sql, desc, isNull, ilike, or, inArray } from "dr
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { userHasPermission } from "../lib/permissions";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import { recompressStoredObjectIfNeeded } from "../lib/documentBytes";
+import { UploadTooLargeError } from "../lib/uploads/processUpload";
 import { Readable } from "stream";
 
 const router: IRouter = Router();
@@ -370,8 +372,24 @@ router.post("/staff-cards/:userId/documents", requireAuth, requireStaffCardAdmin
     res.status(400).json({ error: `Object path must use prefix ${expectedPrefix}` });
     return;
   }
+  let finalSizeBytes = sizeBytes;
+  let finalMimeType = mimeType;
+  try {
+    const recompressed = await recompressStoredObjectIfNeeded(objectPath, mimeType);
+    if (recompressed?.recompressed) {
+      finalSizeBytes = recompressed.sizeBytes;
+      finalMimeType = recompressed.mimeType;
+    }
+  } catch (err) {
+    if (err instanceof UploadTooLargeError) {
+      res.status(413).json({ error: err.message });
+      return;
+    }
+    console.error("[STAFF-CARDS] recompressStoredObjectIfNeeded failed, keeping original:", err);
+  }
+
   const [doc] = await db.insert(staffDocumentsTable).values({
-    userId, docType, filename, objectPath, sizeBytes, mimeType,
+    userId, docType, filename, objectPath, sizeBytes: finalSizeBytes, mimeType: finalMimeType,
     uploadedBy: req.user!.id,
   }).returning();
   logAudit(req.user!.id, "staff_card.document.upload", "user", userId, { docType, filename, sizeBytes }, req.ip);

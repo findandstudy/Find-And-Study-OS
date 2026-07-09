@@ -1,3 +1,4 @@
+- [System-wide document size policy](document-size-policy.md) — processUpload() chokepoint (sharp/ghostscript) compresses uploads >2MB; two wiring patterns (inline vs recompress-after-write); WA media bytes never stored (known pre-existing gap).
 - [buildProfile HARD vs SOFT required fields](profile-hard-soft-required-fields.md) — soft CRM fields (address/phone/parent names/gender) degrade to a logged fallback, never throw and kill the whole submission.
 - [SIT asset URL signing, zero-doc guard, already_exists doc gap](sit-asset-url-signing-and-doc-guard.md) — fileKey isn't a URL; sign or reject self-referential fileUrl; no SIT update-webhook exists to backfill docs on existing students.
 - [AI Agent Faz 2 RAG pipeline](ai-agent-rag-pipeline.md) — extract→chunk→embed→retrieve into bot prompt; NO pgvector (Hostinger prod lacks it) — jsonb embeddings + Node-side cosine; pdf-parse v2 uses PDFParse class not default export.

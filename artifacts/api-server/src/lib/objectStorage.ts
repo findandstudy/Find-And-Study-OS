@@ -394,6 +394,42 @@ export class ObjectStorageService {
     return objectFile as unknown as ObjectFileHandle;
   }
 
+  // ── overwriteObjectBuffer ─────────────────────────────────────────────────
+  // Replaces the bytes at an already-existing object path in place (same
+  // key). Used by the upload-time compression chokepoint (processUpload) to
+  // shrink a file that was already written via a signed PUT URL, without
+  // changing the fileKey any caller has already persisted.
+
+  async overwriteObjectBuffer(objectPath: string, buffer: Buffer, contentType: string): Promise<void> {
+    if (!objectPath.startsWith("/objects/")) {
+      throw new ObjectNotFoundError();
+    }
+
+    if (isLocalDriver()) {
+      const relPath = objectPath.slice("/objects/".length);
+      if (relPath.includes("..") || relPath.includes("\\")) {
+        throw new ObjectNotFoundError();
+      }
+      const localDir = getLocalStorageDir();
+      const localPath = nodePath.join(localDir, relPath);
+      await fsPromises.mkdir(nodePath.dirname(localPath), { recursive: true });
+      await fsPromises.writeFile(localPath, buffer);
+      await fsPromises.writeFile(`${localPath}.ct`, contentType);
+      return;
+    }
+
+    const parts = objectPath.slice(1).split("/");
+    if (parts.length < 2) throw new ObjectNotFoundError();
+    const entityId = parts.slice(1).join("/");
+    let entityDir = this.getPrivateObjectDir();
+    if (!entityDir.endsWith("/")) entityDir = `${entityDir}/`;
+    const objectEntityPath = `${entityDir}${entityId}`;
+    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
+    const bucket = getGcsClient().bucket(bucketName);
+    const file = bucket.file(objectName);
+    await file.save(buffer, { metadata: { contentType }, resumable: false, timeout: UPLOAD_TIMEOUT_MS });
+  }
+
   // ── normalizeObjectEntityPath ─────────────────────────────────────────────
 
   normalizeObjectEntityPath(rawPath: string): string {

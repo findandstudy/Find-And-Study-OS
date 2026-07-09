@@ -1,6 +1,7 @@
 import type { Response } from "express";
 import { Readable } from "stream";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { processUpload, UploadTooLargeError, type ProcessUploadMeta } from "./uploads/processUpload";
 
 export interface DocBytesSource {
   fileKey?: string | null;
@@ -15,6 +16,60 @@ function normalizeFileKey(fileKey: string): string {
   if (fileKey.startsWith("objects/")) return `/${fileKey}`;
   if (fileKey.startsWith("/")) return `/objects${fileKey}`;
   return `/objects/${fileKey}`;
+}
+
+export interface RecompressResult {
+  recompressed: boolean;
+  sizeBytes: number;
+  mimeType: string;
+  meta?: ProcessUploadMeta;
+}
+
+/**
+ * System-wide document size policy chokepoint for objects already written to
+ * storage via a client-side signed PUT URL (GCS driver) — the server never
+ * saw the bytes at upload time, so registration (POST /api/documents,
+ * staff-card uploads, stage-documents) is where we get a first look and can
+ * shrink anything over the portal-ready target in place, same key. A no-op
+ * (fast path) when the file is already <= target.
+ *
+ * Local-driver uploads are already compressed inline at PUT time
+ * (`/api/storage/local-upload/:encoded`), so this is naturally a no-op there.
+ */
+export async function recompressStoredObjectIfNeeded(
+  fileKey: string,
+  declaredMimeType: string | null | undefined,
+): Promise<RecompressResult | null> {
+  const normalized = normalizeFileKey(fileKey);
+  let file;
+  try {
+    file = await objectStorageService.getObjectEntityFile(normalized);
+  } catch (err) {
+    if (err instanceof ObjectNotFoundError) return null;
+    throw err;
+  }
+
+  const [metadata] = await file.getMetadata();
+  const mime = declaredMimeType || metadata.contentType || "application/octet-stream";
+  const [buffer] = await file.download();
+
+  try {
+    const processed = await processUpload(buffer, "document", mime);
+    if (!processed.meta.compressed) {
+      return { recompressed: false, sizeBytes: buffer.length, mimeType: mime };
+    }
+    await objectStorageService.overwriteObjectBuffer(normalized, processed.buffer, processed.mime);
+    return {
+      recompressed: true,
+      sizeBytes: processed.buffer.length,
+      mimeType: processed.mime,
+      meta: processed.meta,
+    };
+  } catch (err) {
+    if (err instanceof UploadTooLargeError) throw err;
+    console.error(`[recompressStoredObjectIfNeeded] failed for ${normalized}:`, err);
+    return { recompressed: false, sizeBytes: buffer.length, mimeType: mime };
+  }
 }
 
 /**

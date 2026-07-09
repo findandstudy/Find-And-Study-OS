@@ -8,7 +8,8 @@ import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
-import { loadDocumentBytes, streamDocumentToResponse } from "../lib/documentBytes";
+import { loadDocumentBytes, streamDocumentToResponse, recompressStoredObjectIfNeeded } from "../lib/documentBytes";
+import { UploadTooLargeError } from "../lib/uploads/processUpload";
 import { verifyDocumentSignature } from "@workspace/portal-adapters";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
@@ -123,7 +124,8 @@ router.get("/documents", requireAuth, requireAgentStaffPermission("documents"), 
 router.post("/documents", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileKey, mimeType, sizeBytes, notes, originalFileName, respondingToNoteId } = req.body;
+  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileKey, notes, originalFileName, respondingToNoteId } = req.body;
+  let { mimeType, sizeBytes } = req.body;
   if (req.body.fileData) {
     res.status(400).json({ error: "fileData uploads are no longer accepted. Upload via /storage/uploads/request-url and pass fileKey." });
     return;
@@ -265,6 +267,25 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
       const httpStatus = bufferError.type === "size_exceeded" ? 413 : 400;
       res.status(httpStatus).json({ error: bufferError.message });
       return;
+    }
+
+    // System-wide document size policy: shrink anything over the
+    // portal-ready target in place before it's ever registered, so every
+    // stored document is already small enough for portal upload widgets.
+    // No-op when the file is already <= target (e.g. local driver already
+    // compressed it at PUT time).
+    try {
+      const recompressed = await recompressStoredObjectIfNeeded(fileKey, mimeType);
+      if (recompressed?.recompressed) {
+        mimeType = recompressed.mimeType;
+        sizeBytes = recompressed.sizeBytes;
+      }
+    } catch (err) {
+      if (err instanceof UploadTooLargeError) {
+        res.status(413).json({ error: err.message });
+        return;
+      }
+      console.error("[DOCUMENTS] recompressStoredObjectIfNeeded failed, keeping original:", err);
     }
   }
 

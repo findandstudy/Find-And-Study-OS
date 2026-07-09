@@ -8,6 +8,7 @@ import { requireAuth } from "../lib/auth";
 import { canAccessGenericObject, recordObjectOwner } from "../lib/objectAuthz";
 import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
 import { validateUploadedFile } from "../lib/fileUploadValidation";
+import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
 
 const RequestUploadUrlBody = z.object({
   name: z.string(),
@@ -151,11 +152,28 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
     for await (const chunk of req) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
     }
-    const body = Buffer.concat(chunks);
-    await fsPromises.writeFile(localPath, body);
-
+    const rawBody = Buffer.concat(chunks);
     const contentType = (req.headers["content-type"] ?? "application/octet-stream").split(";")[0].trim();
-    await fsPromises.writeFile(`${localPath}.ct`, contentType);
+
+    // Single chokepoint: any file above the portal-ready target is
+    // compressed here before it ever touches disk, so everything downstream
+    // (portal adapters, /api/documents/:id/file) sees an already-small file.
+    let body: Buffer = rawBody;
+    let finalContentType = contentType;
+    try {
+      const processed = await processUpload(rawBody, nodePath.basename(relPath), contentType);
+      body = Buffer.from(processed.buffer);
+      finalContentType = processed.mime;
+    } catch (err) {
+      if (err instanceof UploadTooLargeError) {
+        res.status(413).json({ error: err.message });
+        return;
+      }
+      console.error("[local-upload] processUpload failed, storing original:", err);
+    }
+
+    await fsPromises.writeFile(localPath, body);
+    await fsPromises.writeFile(`${localPath}.ct`, finalContentType);
 
     res.status(200).json({ ok: true });
   } catch (error) {

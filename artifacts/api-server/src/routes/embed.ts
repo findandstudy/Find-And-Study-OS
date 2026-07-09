@@ -6,6 +6,7 @@ import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
 import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
@@ -1175,6 +1176,21 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     if (validationError) {
       documentWarnings.push(`${label}: ${validationError.message}`);
       continue;
+    }
+    // System-wide document size policy chokepoint: shrink anything over the
+    // portal-ready target before it's stored as base64 in documentsTable.
+    try {
+      const processed = await processUpload(buffer, syntheticFileName, mime);
+      if (processed.meta.compressed) {
+        doc.data = processed.buffer.toString("base64");
+        doc.mediaType = processed.mime;
+      }
+    } catch (err) {
+      if (err instanceof UploadTooLargeError) {
+        documentWarnings.push(`${label}: ${err.message}`);
+        continue;
+      }
+      console.error("[EMBED-APPLY] processUpload failed, keeping original:", err);
     }
     validDocs.push(doc);
   }

@@ -9,6 +9,7 @@ import { STAFF_ROLES, ADMIN_ROLES, isAgentRole, isStaffRole } from "../lib/roles
 import { canUploadStageDocument } from "../lib/stagePermissions";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
+import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 
@@ -121,7 +122,8 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
   const hasAccess = await verifyApplicationAccess(req, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
-  const { stage, fileName, fileData, fileUrl, mimeType, sizeBytes, validUntil, documentNameOverride } = req.body;
+  const { stage, fileName, fileUrl, validUntil, documentNameOverride } = req.body;
+  let { fileData, mimeType, sizeBytes } = req.body;
 
   if (!stage || !fileName) {
     res.status(400).json({ error: "stage and fileName are required" });
@@ -199,6 +201,23 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
       const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
       res.status(httpStatus).json({ error: validationError.message });
       return;
+    }
+
+    // System-wide document size policy chokepoint: shrink anything over the
+    // portal-ready target before it's persisted as base64 fileData.
+    try {
+      const processed = await processUpload(buffer, safeName, mimeType);
+      if (processed.meta.compressed) {
+        fileData = processed.buffer.toString("base64");
+        mimeType = processed.mime;
+        sizeBytes = processed.buffer.length;
+      }
+    } catch (err) {
+      if (err instanceof UploadTooLargeError) {
+        res.status(413).json({ error: err.message });
+        return;
+      }
+      console.error("[STAGE-DOC] processUpload failed, keeping original:", err);
     }
   }
 

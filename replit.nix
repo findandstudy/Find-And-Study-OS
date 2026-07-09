@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.ghostscript
     pkgs.chromium
     pkgs.xorg.libxcb
     pkgs.xorg.libXrandr

@@ -25,16 +25,21 @@ export const ALLOWED_EXTENSIONS = [
 
 export const ACCEPT_ATTRIBUTE = ".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
 
-export const PDF_MAX_SIZE = 10 * 1024 * 1024;
-export const IMAGE_MAX_SIZE = 5 * 1024 * 1024;
+// Pre-flight size gate on `/storage/uploads/request-url`. Raw scans (student
+// passports/diplomas) commonly land in the 3-8MB range; these limits admit
+// them so `processUpload()` (server-side, on registration) can compress down
+// to the ≤2MB portal-ready target instead of rejecting them outright. Only
+// genuinely oversized files should hit the hard cap.
+export const PDF_MAX_SIZE = 15 * 1024 * 1024;
+export const IMAGE_MAX_SIZE = 15 * 1024 * 1024;
 export const OFFICE_MAX_SIZE = 20 * 1024 * 1024;
 
-export const PDF_MAX_SIZE_MB = 10;
-export const IMAGE_MAX_SIZE_MB = 5;
+export const PDF_MAX_SIZE_MB = 15;
+export const IMAGE_MAX_SIZE_MB = 15;
 export const OFFICE_MAX_SIZE_MB = 20;
 
 export const FILE_UPLOAD_HELP_TEXT =
-  "PDF (maks. 10 MB), JPG/PNG (maks. 5 MB), Word/Excel/PowerPoint (maks. 20 MB)";
+  "PDF (maks. 15 MB), JPG/PNG (maks. 15 MB), Word/Excel/PowerPoint (maks. 20 MB)";
 
 const OFFICE_MIME_TYPES = new Set<string>([
   "application/msword",
