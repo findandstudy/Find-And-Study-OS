@@ -1,5 +1,6 @@
 import { fold } from "./programMatch.js";
 import { buildSignedDocumentPath } from "./documentSigning.js";
+import { logger } from "./browser.js";
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -192,12 +193,22 @@ export function extractStudentDocumentRefs(rows: RawDocumentRow[]): {
 // ---------------------------------------------------------------------------
 // buildProfile — construct a SubmitProfile from a plain CRM-agnostic record
 // ---------------------------------------------------------------------------
-const REQUIRED_FIELDS = [
+// HARD_REQUIRED fields have no reasonable fallback — a portal submission is
+// meaningless without them, so a missing one still throws (with a clear,
+// actionable message) and the whole build fails.
+const HARD_REQUIRED_FIELDS = [
   "email", "passportNumber", "firstName", "lastName",
-  "dateOfBirth", "gender", "fatherName", "motherName",
-  "nationality", "address", "phone", "level",
-  "programName", "programId",
+  "dateOfBirth", "nationality", "level", "programName", "programId",
 ] as const;
+
+// SOFT fields are commonly blank in real CRM data (address/phone/parent
+// names/gender) and must NEVER crash the whole build — a missing one degrades
+// to a logged, reasonable fallback instead (same philosophy as GPA/graduation
+// year below: a soft field's absence reports as a portal-side gap, not a
+// dropped submission).
+const SOFT_FIELDS = ["gender", "fatherName", "motherName", "address", "phone"] as const;
+
+const REQUIRED_FIELDS = [...HARD_REQUIRED_FIELDS, ...SOFT_FIELDS] as const;
 
 type RequiredField = (typeof REQUIRED_FIELDS)[number];
 
@@ -263,14 +274,42 @@ function firstFiniteNumber(raw: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function isBlank(v: unknown): boolean {
+  return v == null || v === "";
+}
+
 export function buildProfile(data: Record<string, unknown>): SubmitProfile {
-  for (const key of REQUIRED_FIELDS) {
-    if (data[key] == null || data[key] === "") {
-      throw new Error(`buildProfile: missing required field "${key}"`);
+  for (const key of HARD_REQUIRED_FIELDS) {
+    if (isBlank(data[key])) {
+      throw new Error(
+        `buildProfile: eksik veri: ${key} — profili tamamlayın (missing required field "${key}")`,
+      );
     }
   }
 
   const str = (k: RequiredField) => String(data[k]);
+
+  // SOFT fallbacks — never throw. Each substitution is logged so the gap is
+  // visible without killing the whole build (mirrors the GPA/graduation-year
+  // degrade-gracefully philosophy above).
+  const gender = isBlank(data.gender) ? "" : str("gender");
+  if (isBlank(data.gender)) logger.warn('buildProfile: gender boş — "" ile devam');
+
+  const fatherName = isBlank(data.fatherName) ? "" : str("fatherName");
+  if (isBlank(data.fatherName)) logger.warn('buildProfile: fatherName boş — "" ile devam');
+
+  const motherName = isBlank(data.motherName) ? "" : str("motherName");
+  if (isBlank(data.motherName)) logger.warn('buildProfile: motherName boş — "" ile devam');
+
+  const phone = isBlank(data.phone) ? "" : str("phone");
+  if (isBlank(data.phone)) logger.warn('buildProfile: phone boş — "" ile devam');
+
+  let address = isBlank(data.address) ? "" : str("address");
+  if (isBlank(data.address)) {
+    const fallback = !isBlank(data.nationality) ? str("nationality") : "-";
+    address = fallback;
+    logger.warn(`buildProfile: address boş — fallback olarak "${fallback}" kullanıldı`);
+  }
 
   return {
     email:          str("email"),
@@ -278,12 +317,12 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
     firstName:      str("firstName"),
     lastName:       str("lastName"),
     dateOfBirth:    str("dateOfBirth"),
-    gender:         str("gender"),
-    fatherName:     str("fatherName"),
-    motherName:     str("motherName"),
+    gender,
+    fatherName,
+    motherName,
     nationality:    str("nationality"),
-    address:        str("address"),
-    phone:          str("phone"),
+    address,
+    phone,
     level:          str("level"),
     programName:    str("programName"),
     programId:      str("programId"),

@@ -459,6 +459,30 @@ async function gotoAndWait(
 }
 
 // ---------------------------------------------------------------------------
+// gotoWithRetry — plain navigation (no readySelector) with the same
+// domcontentloaded/60s + 1-retry resilience as gotoAndWait, for call sites
+// (login) that don't have a single obvious ready-selector to wait on.
+// ---------------------------------------------------------------------------
+async function gotoWithRetry(
+  page: Page,
+  url: string,
+  log: typeof import("../../browser.js").logger = logger,
+): Promise<void> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      return;
+    } catch (err) {
+      if (attempt === 2) throw err;
+      log.warn(
+        `[topkapi] goto("${url}") attempt ${attempt} failed (${(err as Error).message}) — retrying`,
+      );
+      await page.waitForTimeout(1000);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Select <option> by value first, then exact label, then partial label
 // ---------------------------------------------------------------------------
 async function selectByBest(
@@ -1452,9 +1476,14 @@ async function ensureEnglishLanguage(
   ];
   for (const url of localeUrls) {
     try {
-      await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+      // domcontentloaded/60s (not networkidle/30s): this SPA's slow AJAX
+      // polling can keep the network non-idle well past 30s even on a normal
+      // load, which was surfacing as spurious "page.goto Timeout 30000ms"
+      // failures. The candidate-URL loop above/below already gives this a
+      // natural retry across `localeUrls` on failure.
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
       if (returnTo) {
-        await page.goto(returnTo, { waitUntil: "networkidle", timeout: 30000 });
+        await page.goto(returnTo, { waitUntil: "domcontentloaded", timeout: 60000 });
       }
       if (await isEnglishUI(page).catch(() => false)) {
         logger.info(
@@ -1481,8 +1510,8 @@ async function ensureEnglishLanguage(
   // Non-fatal (login pre-warm): restore a stable page so later navigation works.
   try {
     await page.goto(returnTo ?? `${PORTAL_URL}/panel`, {
-      waitUntil: "networkidle",
-      timeout: 30000,
+      waitUntil: "domcontentloaded",
+      timeout: 60000,
     });
   } catch { /* ignore */ }
 }
@@ -1544,11 +1573,11 @@ export const topkapiAdapter: UniversityAdapter = {
     const { page } = session;
 
     logger.info("[topkapi] login — navigating to panel");
-    await page.goto(`${PORTAL_URL}/panel`, { waitUntil: "networkidle" });
+    await gotoWithRetry(page, `${PORTAL_URL}/panel`);
 
     if (page.url().includes("/login")) {
       logger.info("[topkapi] login redirect — filling credentials");
-      await page.goto(`${PORTAL_URL}/panel/login`, { waitUntil: "networkidle" });
+      await gotoWithRetry(page, `${PORTAL_URL}/panel/login`);
       await page.fill("input[name=email]",    user);
       await page.fill("input[name=password]", password);
       await page.click("button[type=submit]");
