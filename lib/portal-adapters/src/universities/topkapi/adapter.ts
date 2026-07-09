@@ -10,7 +10,14 @@ import type {
 import type { Page, Locator } from "playwright-core";
 import { launchPortal, saveState, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
-import { matchProgram, fold } from "../../programMatch.js";
+import {
+  matchProgram,
+  fold,
+  parseTrack,
+  hasThesisMarker,
+  hasNonThesisMarker,
+  expandProgramTokens,
+} from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
 import { detectExclusiveRegion } from "../../exclusiveRegion.js";
 import {
@@ -162,6 +169,122 @@ function toTrDate(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Fuzzy program-label fallback matching (Topkapi-only).
+//
+// The shared matchProgram() (used by SIT/United/Altınbaş too — never edited
+// here) already handles exact/name-map matches plus a thesis/language hard
+// filter + token-Jaccard score. It still misses labels like "Master of Cyber
+// Security (Non-Thesis) (Turkish)" against a terse portal option like "Siber
+// Güvenlik Tezsiz (Türkçe)": the query-only filler tokens ("master", "of",
+// "non", "thesis", "turkish") inflate the Jaccard union while only the
+// subject words actually overlap (via synonyms), sinking the score below the
+// shared 0.6 threshold. Rather than touching the shared matcher, Topkapi runs
+// this LOCAL fallback pass only when matchProgram() returns null: strip
+// degree-prefix noise ("Master of ", "Bachelor in ", …) and parenthetical /
+// inline variant annotations (Thesis/Non-Thesis/Turkish/English + Turkish
+// equivalents) from both sides, keep the same thesis/language hard filter
+// (evaluated on the UN-stripped folded name, so the variant markers still
+// gate the pool), then score by token overlap (Jaccard ∪ containment) with
+// its own confidence threshold + margin gate.
+// ---------------------------------------------------------------------------
+const FUZZY_CONF_THRESHOLD = 0.5;
+const FUZZY_MARGIN_THRESHOLD = 0.1;
+
+const DEGREE_PREFIX_RE =
+  /^(master'?s?\s+(?:of|in|degree\s+in)|bachelor'?s?\s+(?:of|in|degree\s+in)|phd\s+in|doctorate\s+(?:of|in)|doctor\s+of\s+philosophy\s+in|associate\s+(?:of|in)|msc\s+in|ba\s+in|bs\s+in)\s+/i;
+
+const VARIANT_WORD_RE =
+  /\b(non[\s-]?thesis|nonthesis|thesis|tezsiz|tezli|turkish|turkce|türkçe|english|ingilizce|i̇ngilizce)\b/gi;
+
+/** Strip degree-prefix noise + variant-annotation words, then fold to tokens. */
+function normalizeForFuzzyMatch(raw: string): string {
+  const noPrefix  = raw.replace(DEGREE_PREFIX_RE, "");
+  const noParens  = noPrefix.replace(/\([^)]*\)/g, " ");
+  const noVariant = noParens.replace(VARIANT_WORD_RE, " ");
+  return fold(noVariant).replace(/\s+/g, " ").trim();
+}
+
+/** Split a normalized label into a folded token set (matches programMatch's tokenize). */
+function fuzzyTokenize(norm: string): Set<string> {
+  return new Set(norm.split(" ").filter((t) => t.length > 1));
+}
+
+/**
+ * Jaccard over SYNONYM-EXPANDED token sets (reuses the shared EN↔TR
+ * dictionary via expandProgramTokens so "cyber"↔"siber" / "security"↔
+ * "guvenlik" still bridge), rewarded when one label's tokens are fully
+ * contained in the other's (common when the portal drops a leading
+ * "Master of" or an "and"-joined subtitle).
+ */
+function tokenOverlapConf(
+  aNorm: string,
+  bNorm: string,
+  synonyms?: readonly (readonly string[])[],
+): number {
+  const at = expandProgramTokens(fuzzyTokenize(aNorm), synonyms);
+  const bt = expandProgramTokens(fuzzyTokenize(bNorm), synonyms);
+  if (at.size === 0 || bt.size === 0) return 0;
+  let inter = 0;
+  for (const t of at) if (bt.has(t)) inter++;
+  const union = at.size + bt.size - inter;
+  const jaccardConf = union === 0 ? 0 : inter / union;
+  const containmentConf = inter / Math.min(at.size, bt.size);
+  return Math.max(jaccardConf, containmentConf * 0.85);
+}
+
+/**
+ * Local last-resort fuzzy match: contains/token-overlap (synonym-aware) over
+ * normalized (noise-stripped) labels, respecting the same thesis/language
+ * variant as a hard pre-filter (reusing the shared markers/parseTrack so
+ * behaviour stays identical to matchProgram's own hard filter). Returns null
+ * (never throws) when no candidate clears the confidence + margin gate — the
+ * caller reports a clear "skipped: program eşleşmedi" result.
+ */
+function fuzzyFallbackMatch(
+  programName: string,
+  options: ProgramCandidate[],
+  synonyms?: readonly (readonly string[])[],
+): { match: ProgramCandidate; conf: number } | null {
+  if (options.length === 0) return null;
+
+  const qFolded = fold(programName);
+  let pool = options;
+
+  if (hasThesisMarker(qFolded)) {
+    const f = pool.filter((o) => hasThesisMarker(fold(o.name)));
+    if (f.length > 0) pool = f;
+  } else if (hasNonThesisMarker(qFolded)) {
+    const f = pool.filter((o) => hasNonThesisMarker(fold(o.name)));
+    if (f.length > 0) pool = f;
+  }
+
+  const qTrack = parseTrack(programName);
+  if (qTrack) {
+    const opposite = qTrack === "en" ? "tr" : "en";
+    const same = pool.filter((o) => parseTrack(o.name) === qTrack);
+    pool = same.length > 0 ? same : pool.filter((o) => parseTrack(o.name) !== opposite);
+  }
+  if (pool.length === 0) return null;
+
+  const qNorm = normalizeForFuzzyMatch(programName);
+  if (!qNorm) return null;
+
+  const scored = pool
+    .map((o) => ({
+      match: o,
+      conf: tokenOverlapConf(qNorm, normalizeForFuzzyMatch(o.name), synonyms),
+    }))
+    .filter((s) => s.conf >= FUZZY_CONF_THRESHOLD)
+    .sort((a, b) => b.conf - a.conf);
+
+  if (scored.length === 0) return null;
+  if (scored.length === 1) return scored[0];
+
+  const margin = scored[0].conf - scored[1].conf;
+  return margin >= FUZZY_MARGIN_THRESHOLD ? scored[0] : null;
+}
+
+// ---------------------------------------------------------------------------
 // Dismiss any open jconfirm dialog via direct DOM click (bypasses overlay).
 // Logs the dialog text + all button labels for debugging.
 // ---------------------------------------------------------------------------
@@ -213,6 +336,37 @@ async function clickNext(page: Page, logger: typeof import("../../browser.js").l
     await page.waitForSelector(".jconfirm.jconfirm-open", { timeout: 3000 });
     await dismissJconfirm(page, logger);
   } catch { /* no modal — continue */ }
+}
+
+// ---------------------------------------------------------------------------
+// gotoAndWait — navigate with a resilient wait strategy.
+//
+// The application form is a heavy SPA page; "networkidle"/"load" can exceed
+// the default 30s action timeout even after a successful login (slow AJAX
+// polling never lets the network go fully idle). "domcontentloaded" fires as
+// soon as the DOM is parsed, so we pair it with an explicit waitForSelector
+// for the element the caller actually needs, and retry once on timeout
+// before giving up — a single transient slow load should not fail the run.
+// ---------------------------------------------------------------------------
+async function gotoAndWait(
+  page: Page,
+  url: string,
+  readySelector: string,
+  log: typeof import("../../browser.js").logger = logger,
+): Promise<void> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      await page.waitForSelector(readySelector, { timeout: 60000 });
+      return;
+    } catch (err) {
+      if (attempt === 2) throw err;
+      log.warn(
+        `[topkapi] goto("${url}") attempt ${attempt} failed (${(err as Error).message}) — retrying`,
+      );
+      await page.waitForTimeout(1000);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1359,9 +1513,12 @@ export const topkapiAdapter: UniversityAdapter = {
     // cause spurious failures (the previous 8 s was too short for AJAX renders).
     page.setDefaultTimeout(30000);
 
-    await page.goto(`${PORTAL_URL}/panel/applications/add`, {
-      waitUntil: "networkidle",
-    });
+    await gotoAndWait(
+      page,
+      `${PORTAL_URL}/panel/applications/add`,
+      "input[name=email]",
+      logger,
+    );
 
     // Enforce English ON the form page — a fresh /add URL reverts to the account
     // default (Turkish), which hides/renames English-track programs in Step 4.
@@ -1874,11 +2031,25 @@ export const topkapiAdapter: UniversityAdapter = {
     // Matching is fully NAME-based — CRM program IDs are never consulted, so a
     // catalog re-sync (which renumbers IDs) can no longer break a mapping. The
     // name map is reverse-resolved inside matchProgram (conf 1.0) before fuzzy.
-    const matchResult = matchProgram(profile.programName, programOptions, {
+    let matchResult = matchProgram(profile.programName, programOptions, {
       nameMap: profile.programNameMap,
       nameMapGeneral: profile.programNameMapGeneral,
       synonyms: profile.programSynonyms,
     });
+
+    // Local fuzzy fallback (Topkapi-only, see fuzzyFallbackMatch above): the
+    // shared matcher's Jaccard score can be diluted by degree-prefix/variant
+    // filler words the portal's terse labels omit. Only engaged when the
+    // shared matcher found nothing — never overrides a real match.
+    if (!matchResult) {
+      const fuzzy = fuzzyFallbackMatch(profile.programName, programOptions, profile.programSynonyms);
+      if (fuzzy) {
+        logger.info(
+          `[topkapi] Fuzzy fallback matched "${profile.programName}" → "${fuzzy.match.name}" (conf=${fuzzy.conf.toFixed(2)})`,
+        );
+        matchResult = fuzzy;
+      }
+    }
 
     if (!matchResult) {
       logger.warn(
@@ -1908,7 +2079,7 @@ export const topkapiAdapter: UniversityAdapter = {
           name: o.name,
           enabled: !o.disabled,
         })),
-        detail: `Program "${profile.programName}" not found in dropdown (${programOptions.length} option(s) available)`,
+        detail: `skipped: program eşleşmedi — "${profile.programName}" not found in dropdown (${programOptions.length} option(s) available)`,
         screenshots,
       };
     }
@@ -2153,9 +2324,12 @@ export const topkapiAdapter: UniversityAdapter = {
     logger.info("[topkapi] listPrograms — level:", level ?? "(default)", "→", eduLevel);
 
     page.setDefaultTimeout(30000);
-    await page.goto(`${PORTAL_URL}/panel/applications/add`, {
-      waitUntil: "networkidle",
-    });
+    await gotoAndWait(
+      page,
+      `${PORTAL_URL}/panel/applications/add`,
+      "input[name=email]",
+      logger,
+    );
 
     // Enforce English ON the form page before probing Step-4 programs — a fresh
     // /add URL reverts to the account default (Turkish), which hides/renames

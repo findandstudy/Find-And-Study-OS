@@ -382,6 +382,30 @@ function hasTez(f: string): boolean {
   return /\btezli\b/.test(f) || /\bthesis\b/.test(f);
 }
 
+// Re-exported (read-only, behaviour-unchanged) so adapter-local fallback
+// matchers — e.g. Topkapi's noise-stripped fuzzy fallback — can reuse the
+// SAME thesis-marker + synonym-expansion logic as the primary matcher instead
+// of duplicating/drifting from this dictionary. Never called differently
+// here; purely additive exports.
+export const hasThesisMarker    = hasTez;
+export const hasNonThesisMarker = hasTezsiz;
+
+/**
+ * Expand a folded-token set with the built-in EN↔TR synonym dictionary
+ * (optionally extended with panel-managed DB groups), for callers that need
+ * synonym-aware overlap scoring outside of matchProgram()'s own pipeline.
+ */
+export function expandProgramTokens(
+  tokens: Set<string>,
+  extraSynonyms?: readonly (readonly string[])[],
+): Set<string> {
+  const synonymMap =
+    extraSynonyms && extraSynonyms.length > 0
+      ? buildSynonymMap([...SYNONYM_GROUPS, ...extraSynonyms])
+      : _synonymMap;
+  return expandTokens(tokens, synonymMap);
+}
+
 // ---------------------------------------------------------------------------
 // parseTrack — extract the language-of-instruction "track" from a program label
 //

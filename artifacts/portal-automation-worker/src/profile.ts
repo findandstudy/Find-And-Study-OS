@@ -101,6 +101,20 @@ export async function buildStudentProfile(
   if (!student.motherName?.trim())
     console.warn(`[portal-profile] #${submissionId} motherName missing or empty — using "-" fallback`);
 
+  // Guard address: buildProfile requires a non-empty value and throws if
+  // blank, crashing the whole submission. Prefer the student's own address;
+  // if absent, fall back to nationality (best available location proxy —
+  // students table has no separate city field); as a last resort use "-" so
+  // the portal still receives a valid form value.
+  const addressVal =
+    student.address?.trim() ||
+    (student.nationality?.trim() ? student.nationality.trim() : "") ||
+    "-";
+  if (!student.address?.trim())
+    console.warn(
+      `[portal-profile] #${submissionId} address missing or empty — using fallback "${addressVal}"`,
+    );
+
   const profile: SubmitProfile = buildProfile({
     email:          student.email         ?? "",
     passportNumber: student.passportNumber ?? "",
@@ -111,7 +125,7 @@ export async function buildStudentProfile(
     fatherName:     fatherNameVal,
     motherName:     motherNameVal,
     nationality:    student.nationality ?? "",
-    address:        student.address     ?? "",
+    address:        addressVal,
     phone:          student.phone          ?? "",
     level:          app.level              ?? "",
     programName:    app.programName        ?? "",
