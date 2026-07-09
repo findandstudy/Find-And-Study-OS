@@ -434,13 +434,37 @@ function monthName(m?: number): string | undefined {
   return new Date(2000, m - 1, 1).toLocaleString("en-US", { month: "long" });
 }
 
+/**
+ * Faz-2.1 (KANITLANDI headed dry-run): this SF Experience Cloud LWC portal
+ * covers every real `<input>` radio/checkbox with an invisible SLDS
+ * faux-control span, so Playwright's normal actionability check silently
+ * fails on `.check()/.click()`. EVERY interactive control on this portal
+ * must be force-clicked, with a faux-label fallback + verification.
+ */
+async function forceCheckRadio(page: any, locator: any): Promise<boolean> {
+  await locator.check({ force: true, timeout: 5000 }).catch(async () => {
+    await locator.click({ force: true, timeout: 5000 }).catch(() => {});
+  });
+  await locator.dispatchEvent("change").catch(() => {});
+  let checked = await locator.isChecked().catch(() => false);
+  if (!checked) {
+    const faux = locator.locator(
+      "xpath=ancestor::*[self::td or self::div or self::label][1]//*[contains(@class,'slds-radio_faux') or contains(@class,'slds-radio__label')]",
+    ).first();
+    if (await faux.count().catch(() => 0)) {
+      await faux.click({ force: true, timeout: 4000 }).catch(() => {});
+      checked = await locator.isChecked().catch(() => false);
+    }
+  }
+  return checked;
+}
+
 /** Term Selection: only one active term is currently offered; select the first radio card. */
 async function stageTerm(page: any): Promise<boolean> {
   const term = page.getByRole("radio").first();
   if (await term.count().catch(() => 0)) {
-    await term.check({ timeout: 5000 }).catch(async () => {
-      await term.click().catch(() => {});
-    });
+    const ok = await forceCheckRadio(page, term);
+    logger.info(`[altinbas] Term radio checked=${ok}`);
   } else {
     logger.warn("[altinbas] stageTerm: no term radio found");
   }
@@ -456,9 +480,8 @@ async function stageDegree(page: any, profile: SubmitProfile): Promise<boolean> 
   const label = wantPhd ? "PhD" : "Master";
   const r = page.getByRole("radio", { name }).first();
   if (await r.count().catch(() => 0)) {
-    await r.check({ timeout: 5000 }).catch(async () => {
-      await r.click().catch(() => {});
-    });
+    const ok = await forceCheckRadio(page, r);
+    logger.info(`[altinbas] Degree radio "${label}" checked=${ok}`);
   } else {
     logger.warn(`[altinbas] stageDegree: radio "${label}" not found`);
   }
@@ -514,14 +537,40 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
     logger.info(`[altinbas] stageProgram: matched "${result.match.name.slice(0, 80)}" (conf=${result.conf})`);
   }
 
-  await selectBtns.nth(pickIdx).click({ timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(800);
+  // Faz-2.1 KANITLANDI: "+ Select" is an SLDS control — plain click() can
+  // silently no-op. Force-click and verify the card flips to a
+  // "Selected"/checkmark state before trusting it; retry once on the card
+  // container itself if the button click didn't register.
+  const pickedBtn = selectBtns.nth(pickIdx);
+  await pickedBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(600);
+  let selectedOk = await pickedBtn.innerText().then((t: string) => /selected/i.test(t)).catch(() => false);
+  if (!selectedOk) {
+    const card = pickedBtn.locator("xpath=ancestor::*[self::article or self::li or self::div][1]");
+    await card.click({ force: true, timeout: 4000 }).catch(() => {});
+    await page.waitForTimeout(600);
+    selectedOk = await pickedBtn.innerText().then((t: string) => /selected/i.test(t)).catch(() => false);
+  }
+  logger.info(`[altinbas] Program card select: selectedOk=${selectedOk}`);
+
+  // Diagnostics: log every visible button label at this stage so a stuck
+  // Program Selection is debuggable from dry-run logs alone.
+  const allBtnLabels = await page.getByRole("button").evaluateAll((els: Element[]) =>
+    els.map((e) => (e.textContent || "").trim()).filter(Boolean),
+  ).catch(() => [] as string[]);
+  logger.info(`[altinbas] Program stage buttons: ${JSON.stringify([...new Set(allBtnLabels)])}`);
+
   await clickNext(page);
   await page.waitForTimeout(SF_HYDRATION_MS);
   await dismissSfError(page);
-  const saveNext = page.getByRole("button", { name: /save and next/i }).first();
+  // Faz-2.1 KANITLANDI: getByRole("button", {name: /save and next/i}) misses
+  // this button (its accessible-name diverges from its visible text, likely
+  // icon + aria-label) — use a text-locator instead.
+  const saveNext = page.locator('button:has-text("Save and Next")').first();
   if (await saveNext.count().catch(() => 0)) {
-    await saveNext.click({ timeout: 8000 }).catch(() => {});
+    await saveNext.click({ force: true, timeout: 8000 }).catch(() => {});
+  } else {
+    logger.warn('[altinbas] stageProgram: "Save and Next" button not found on Selected Programs modal');
   }
   logger.info("[altinbas] Program seçildi + Save and Next");
   return true;
@@ -615,7 +664,8 @@ async function stageQuestionnaire(page: any): Promise<boolean> {
     for (let i = 0; i < n; i++) {
       const isChecked = await radios.nth(i).isChecked().catch(() => true);
       if (!isChecked) {
-        await radios.nth(i).check({ timeout: 2000 }).catch(() => {});
+        // Faz-2.1 KANITLANDI: SLDS radios reject non-force clicks on this portal.
+        await forceCheckRadio(page, radios.nth(i));
       }
     }
   } catch {
@@ -838,13 +888,38 @@ async function fillStep1(page: any, profile: SubmitProfile): Promise<void> {
  */
 async function clickCreateNewApplication(page: any): Promise<boolean> {
   await dismissSfError(page);
+
+  // Faz-2.1 KANITLANDI (headed dry-run): after Basic Info → Next, the screen
+  // is often a student-search GRID (columns Full Name/Email/Passport, footer
+  // "Go To Applicant Detail Page") rather than the student summary directly.
+  // The row radio is an SLDS faux-control — plain check()/click() silently
+  // no-ops (checked stays false) and "Go To Applicant Detail Page" is then a
+  // no-op too. Force-select the first row and force-click through.
+  const gotoDetail = page.getByRole("button", { name: /go to applicant detail page/i }).first();
+  if (await gotoDetail.count().catch(() => 0)) {
+    const row = page.locator('input[type="radio"]').first();
+    if (await row.count().catch(() => 0)) {
+      const checked = await forceCheckRadio(page, row);
+      logger.info(`[altinbas] grid row radio checked=${checked}`);
+    }
+    await page.waitForTimeout(800);
+    await gotoDetail.click({ force: true, timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(SF_HYDRATION_MS);
+    await dismissSfError(page);
+    logger.info("[altinbas] clicked Go To Applicant Detail Page");
+  }
+
+  // Create New Application can be below the fold on the detail page.
+  await page.mouse.wheel(0, 4000).catch(() => {});
+  await page.waitForTimeout(1200);
+
   const createBtn = page.getByRole("button", { name: /create new application/i }).first();
   if (!(await createBtn.count().catch(() => 0))) {
     logger.warn("[altinbas] Create New Application button not found on student summary screen");
     return false;
   }
   await createBtn.scrollIntoViewIfNeeded().catch(() => {});
-  await createBtn.click({ timeout: 10000 }).catch(() => {});
+  await createBtn.click({ force: true, timeout: 10000 }).catch(() => {});
   await page.waitForTimeout(3000);
   logger.info("[altinbas] clicked Create New Application — wizard should be starting");
   return true;
