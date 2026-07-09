@@ -109,15 +109,21 @@ export async function enqueuePortalSubmissions(opts: {
         mode: opts.mode,
         status: "queued",
         enqueuedBy: opts.userId,
-        ...(target
-          ? {
-              meta: {
+        // manual:true marks this row as a deliberate user-selected submission
+        // (Applications bulk "Run" action / admin Manual Submit dialog — the
+        // only two callers of this shared enqueue loop). claimNext() uses this
+        // flag to bypass the trigger-stage and autoProcess claim gates, which
+        // exist only to scope AUTOMATIC/scheduled processing.
+        meta: {
+          manual: true,
+          ...(target
+            ? {
                 targetCatalogUniversityId: target.catalogUniversityId,
                 targetUniversityName: target.universityName,
                 routedViaAggregator: portalUni.universityKey,
-              },
-            }
-          : {}),
+              }
+            : {}),
+        },
       })
       .returning({ id: portalSubmissionsTable.id });
 

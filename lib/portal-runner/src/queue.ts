@@ -85,6 +85,15 @@ const CLAIM_COLS = `
  *   candidate selection. `undefined` skips the stage filter entirely (used by
  *   the manual "process all queued" path, which must not be stage-gated).
  *
+ * Manual bypass: rows enqueued via the user-facing "Run" action (Applications
+ * bulk Run / admin Manual Submit dialog) are marked `meta.manual = true` at
+ * enqueue time (see portalManualEnqueue.ts). Such rows are ALWAYS claimable —
+ * both the `universityKeys` (autoProcess) and `triggerStages` gates are
+ * bypassed for them, because the user already made an explicit, one-off
+ * decision to submit that application regardless of its current stage or the
+ * university's autoProcess toggle. The gates still apply in full to every
+ * other (automatic/scheduled) row.
+ *
  * Returns null when the queue is empty or all rows are locked by other workers.
  */
 export async function claimNext(
@@ -98,15 +107,18 @@ export async function claimNext(
 
     const conds: string[] = ["status = 'queued'", "deleted_at IS NULL"];
     const params: unknown[] = [];
+    const isManualCond = `(meta->>'manual')::boolean IS TRUE`;
+
+    const gatedConds: string[] = [];
 
     if (universityKeys && universityKeys.length > 0) {
       params.push(universityKeys);
-      conds.push(`university_key = ANY($${params.length}::text[])`);
+      gatedConds.push(`university_key = ANY($${params.length}::text[])`);
     }
 
     if (triggerStages !== undefined) {
       params.push(triggerStages);
-      conds.push(
+      gatedConds.push(
         `EXISTS (
           SELECT 1 FROM applications a
           WHERE a.id = portal_submissions.application_id
@@ -114,6 +126,10 @@ export async function claimNext(
             AND a.stage = ANY($${params.length}::text[])
         )`,
       );
+    }
+
+    if (gatedConds.length > 0) {
+      conds.push(`(${isManualCond} OR (${gatedConds.join(" AND ")}))`);
     }
 
     const sel = await client.query<ClaimedSubmission>(
