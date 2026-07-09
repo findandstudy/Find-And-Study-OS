@@ -351,6 +351,13 @@ async function tryGoto(page: any): Promise<void> {
 }
 
 async function navigateToAppForm(page: any): Promise<void> {
+  // With a valid session the wizard loads directly; APPLY NOW is absent on Home in automated sessions. direct goto to the wizard.
+  for (let d = 0; d < 3 && !(await onWizard(page)); d++) {
+    await page.goto(APP_FORM_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+    await page.waitForTimeout(SF_HYDRATION_MS);
+    await dismissSfError(page);
+  }
+  if (await onWizard(page)) return;
   for (let attempt = 0; attempt < 3 && !(await onWizard(page)); attempt++) {
     logger.info(`[altinbas] navigateToAppForm: attempt ${attempt + 1}/3`);
     await tryGoto(page);
@@ -372,7 +379,7 @@ async function fillStep1(page: any, profile: SubmitProfile): Promise<void> {
   await page.waitForTimeout(1000);
 
   // First Name
-  const firstNameBox = page.getByLabel(/^first name/i).first();
+  const firstNameBox = page.getByLabel(/first name/i).first();
   if (await firstNameBox.count().catch(() => 0)) {
     await firstNameBox.fill(profile.firstName).catch(() => {});
   } else {
@@ -380,7 +387,7 @@ async function fillStep1(page: any, profile: SubmitProfile): Promise<void> {
   }
 
   // Last Name
-  const lastNameBox = page.getByLabel(/^last name/i).first();
+  const lastNameBox = page.getByLabel(/last name/i).first();
   if (await lastNameBox.count().catch(() => 0)) {
     await lastNameBox.fill(profile.lastName).catch(() => {});
   } else {
