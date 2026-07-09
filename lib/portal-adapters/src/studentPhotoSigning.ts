@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { getAssetSigningSecret } from "./assetSigningSecret.js";
 
 // ---------------------------------------------------------------------------
 // Signed, auth-free student-photo URLs
@@ -16,9 +17,9 @@ import crypto from "node:crypto";
 // is configured, signing returns null and the caller simply omits the photo
 // (it is always optional; create must never be blocked on it).
 
-/** Shared signing secret. Returns "" when neither env var is configured. */
+/** Shared signing secret. Returns "" when no signing env var is configured. */
 function photoSigningSecret(): string {
-  return (process.env.SESSION_SECRET || process.env.EMBED_TOKEN_SECRET || "").trim();
+  return getAssetSigningSecret();
 }
 
 /** Default validity window for a signed photo URL (7 days). */

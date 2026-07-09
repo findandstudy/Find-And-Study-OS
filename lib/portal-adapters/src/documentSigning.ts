@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { getAssetSigningSecret } from "./assetSigningSecret.js";
 
 // ---------------------------------------------------------------------------
 // Signed, auth-free student-document URLs
@@ -16,9 +17,9 @@ import crypto from "node:crypto";
 // already relies on — so no new production env var is required. When no secret
 // is configured, signing returns null and the caller simply omits the document.
 
-/** Shared signing secret. Returns "" when neither env var is configured. */
+/** Shared signing secret. Returns "" when no signing env var is configured. */
 function documentSigningSecret(): string {
-  return (process.env.SESSION_SECRET || process.env.EMBED_TOKEN_SECRET || "").trim();
+  return getAssetSigningSecret();
 }
 
 /** Default validity window for a signed document URL (7 days). */

@@ -403,8 +403,27 @@ export const sitAdapter: SitAdapter = {
       };
     }
     if (existing.status === "found") {
+      // Recovery for an already-existing Zoho student: we deliberately do NOT
+      // resend createStudentViaWebhook here. It is a plain "create" webhook
+      // with no documented upsert/idempotency contract on the Zoho side, so
+      // resubmitting for an existing student risks creating a DUPLICATE
+      // record rather than attaching the missing photo/documents to the
+      // existing one. SIT exposes no "update student" / "attach document"
+      // webhook we could call instead (checked graphql.ts — only
+      // createStudentViaWebhook and createApplicationViaWebhook exist).
+      // What we CAN and DO still do for a recovered student: proceed to
+      // createApplication below via submit() when no application has been
+      // submitted yet (idempotent, dedup-guarded) — that path already runs
+      // unconditionally on `alreadyExists`. Photo/document backfill onto an
+      // existing Zoho student is a known gap until SIT provides such a
+      // webhook; logged clearly so it is never silently lost.
+      const hasAssetsToBackfill =
+        !!profile.photoUrl?.trim() || (profile.studentDocuments?.length ?? 0) > 0;
       logger.info(
-        `[sit] mevcut öğrenci bulundu (id=${existing.ref.id}) — yeniden kullanılıyor`,
+        `[sit] mevcut öğrenci bulundu (id=${existing.ref.id}) — yeniden kullanılıyor` +
+          (hasAssetsToBackfill
+            ? " (NOT: foto/belge güncellemesi için SIT'te update webhook yok — sadece başvuru adımı denenecek)"
+            : ""),
       );
       return { studentId: existing.ref.id, created: false, alreadyExists: true };
     }
@@ -574,6 +593,25 @@ export const sitAdapter: SitAdapter = {
         "[sit] UYARI: HighSchool transcript belgesi yok — SIT create için gerekli (yine de denenecek)",
       );
 
+    // GUARD: never POST a create with zero fetchable assets. Historically an
+    // unsigned/self-referential asset URL silently produced a student with no
+    // photo/documents in Zoho (the webhook's URL fetch 401/403'd, but the
+    // create itself still "succeeded"). Now that URLs are always genuine
+    // public links or signed endpoint links (see profile.ts / prepareAssetUrl
+    // above), zero assets means the student genuinely has nothing uploaded —
+    // skip explicitly with a clear detail rather than create an empty record.
+    if (!photoUrl && sitDocuments.length === 0) {
+      logger.warn(
+        "[sit] öğrenci ATLANDI: photo_url ve documents boş — sıfır belgeli SIT create engellendi",
+      );
+      return {
+        studentId: null,
+        created: false,
+        alreadyExists: false,
+        detail: "öğrenci oluşturulamadı: fotoğraf/belge yok (sıfır-belge koruması)",
+      };
+    }
+
     const payload: SitStudentWebhookPayload = {
       user_id: identity.userId,
       agency_id: identity.agencyId,
@@ -592,10 +630,10 @@ export const sitAdapter: SitAdapter = {
       mother_name: profile.motherName || undefined,
       // Webhook types these as String — send lowercase "no"/"yes" (a boolean
       // makes the panel read them as truthy "Yes"). apply has no such data → "no".
-      transfer_student: "",
-      have_tc: "",
+      transfer_student: "no",
+      have_tc: "no",
       tc_number: "",
-      blue_card: "",
+      blue_card: "no",
       // Residence country is a zoho_countries ROW ID (same dropdown contract as
       // nationality); apply has no explicit residence, so fall back to nationality.
       country_of_residence: nationalityId ?? undefined,

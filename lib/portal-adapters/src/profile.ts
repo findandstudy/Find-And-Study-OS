@@ -77,25 +77,55 @@ export function selectPriorSchoolName(
   return hs;
 }
 
-/** A row's PUBLIC url: fileUrl preferred, fileKey fallback, else undefined. */
+/**
+ * True when `u`'s path is one of OUR OWN session-gated asset routes
+ * (`/api/documents/:id/file`, `/api/students/:id/photo`) with no signature —
+ * i.e. it looks like an absolute/relative URL but an external, session-less
+ * fetcher (an n8n create webhook) would get a 401/403 from it. A handful of
+ * legacy rows store exactly this kind of self-referential path in `fileUrl`
+ * (it's a perfectly good URL for an authenticated browser, just not for an
+ * external system), so it must never be handed to an external webhook as-is.
+ */
+function isSelfReferentialAssetPath(u: string): boolean {
+  try {
+    const path = new URL(u, "http://internal").pathname;
+    return /^\/api\/(documents\/\d+\/file|students\/\d+\/photo)\/?$/.test(path);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A row's genuinely PUBLIC, externally-fetchable url — i.e. an absolute
+ * http(s) URL that is NOT one of our own session-gated asset routes.
+ *
+ * `fileKey` is deliberately excluded: it is an object-storage KEY (e.g.
+ * "documents/abc123.pdf"), not a fetchable URL, so treating it as one used to
+ * silently hand external webhooks a broken/unreachable link.
+ */
 function publicDocUrl(r: RawDocumentRow): string | undefined {
-  const u = (r.fileUrl && r.fileUrl.trim()) || (r.fileKey && r.fileKey.trim());
-  return u ? u : undefined;
+  const u = r.fileUrl?.trim();
+  if (!u || !/^https?:\/\//i.test(u) || isSelfReferentialAssetPath(u)) return undefined;
+  return u;
 }
 
 /**
  * A row's fetchable URL for a URL-fetching create webhook.
  *
- * Order: public fileUrl → public fileKey → for base64 `fileData`-only rows, a
- * signed, auth-free document-endpoint path (`/api/documents/:id/file?exp=&sig=`)
- * the external webhook can fetch. Returns undefined only for empty stubs, or
- * when a base64 row cannot be signed (no id / no signing secret) — the caller
- * then skips the row (documents are best-effort).
+ * Order: genuine public fileUrl (see `publicDocUrl`) → for any row that has
+ * content but no genuine public URL (object-storage `fileKey`, base64
+ * `fileData`, or a self-referential/relative `fileUrl`), a signed, auth-free
+ * document-endpoint path (`/api/documents/:id/file?exp=&sig=`) the external
+ * webhook can fetch — the signed endpoint serves ALL storage backends
+ * uniformly, so this single fallback covers fileKey and fileData alike.
+ * Returns undefined only for empty stubs, or when signing has no id / no
+ * signing secret configured — the caller then skips the row (best-effort).
  */
 function docFetchUrl(r: RawDocumentRow): string | undefined {
   const direct = publicDocUrl(r);
   if (direct) return direct;
-  if (r.fileData && String(r.fileData).trim() && r.id != null) {
+  const hasContent = !!(r.fileKey?.trim() || r.fileData?.trim() || r.fileUrl?.trim());
+  if (hasContent && r.id != null) {
     const signed = buildSignedDocumentPath(r.id);
     if (signed) return signed;
   }
@@ -106,13 +136,17 @@ function docFetchUrl(r: RawDocumentRow): string | undefined {
  * Extracts a student's photo URL + document URLs from their raw CRM `documents`
  * rows, for portals whose create webhook fetches files by URL (e.g. SIT).
  *
- * - `photoUrl`: the FIRST content-bearing photo/photograph row that has a PUBLIC
- *   url (callers pass rows newest-first). Base64-only photos have no public url,
- *   so `hasPhotoDoc` is set instead and the caller falls back to a signed
- *   student-photo endpoint URL. The photo is excluded from `documents`.
- * - `documents`: every other non-deleted row that has a fetchable URL — public
- *   (fileUrl/fileKey) OR, for base64 `fileData`-only rows, a signed, auth-free
- *   document-endpoint URL the external webhook can fetch.
+ * - `photoUrl`: the FIRST content-bearing photo/photograph row that has a
+ *   GENUINE public url (an absolute http(s) URL that is not one of our own
+ *   session-gated asset routes — see `publicDocUrl`). Rows without one
+ *   (base64-only, object-storage `fileKey`-only, or a self-referential
+ *   `fileUrl`) have no public url, so `hasPhotoDoc` is set instead and the
+ *   caller falls back to a signed student-photo endpoint URL. The photo is
+ *   excluded from `documents`.
+ * - `documents`: every other non-deleted row that has a fetchable URL —
+ *   genuine public `fileUrl`, OR (for `fileKey`/`fileData`/self-referential
+ *   `fileUrl` rows) a signed, auth-free document-endpoint URL the external
+ *   webhook can fetch.
  *
  * Only empty stubs (no content in any field) are skipped. URLs are passed
  * through as stored (not validated here); the consuming adapter logs any

@@ -1,3 +1,4 @@
+- [SIT asset URL signing, zero-doc guard, already_exists doc gap](sit-asset-url-signing-and-doc-guard.md) — fileKey isn't a URL; sign or reject self-referential fileUrl; no SIT update-webhook exists to backfill docs on existing students.
 - [AI Agent Faz 2 RAG pipeline](ai-agent-rag-pipeline.md) — extract→chunk→embed→retrieve into bot prompt; NO pgvector (Hostinger prod lacks it) — jsonb embeddings + Node-side cosine; pdf-parse v2 uses PDFParse class not default export.
 - [notifications table cascade-delete timeout](notifications-table-cascade-delete-timeout.md) — deleting users times out via FK cascade (only partial index on user_id); pre-existing, unrelated to whatever feature touched users.
 - [Aggregator dynamic membership + auto-drain gating](aggregator-dynamic-membership-gating.md) — DB member list unions with (never replaces) static allowlist; blanket experimental-family auto-drain exclusion is redundant once enqueue already scopes by DB membership.
