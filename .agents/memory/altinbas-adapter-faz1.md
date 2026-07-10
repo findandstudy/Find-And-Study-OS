@@ -80,12 +80,18 @@ The two former blockers were resolved by watching the live portal interactively 
    - **Faz-3.1 calibration: the worker viewport is ACTUALLY 1280x720** (proven by dry-run
      screenshots — an earlier setViewportSize(1568x900) did NOT take effect and was removed; do not
      re-add it). "+ Select" sits BELOW the 720 fold → `page.mouse.wheel(0,450)` + wait BEFORE
-     clicking, and capture a "program-postsearch" screenshot for coordinate evidence. Candidate
+     clicking, and capture a "program-preclick" screenshot for coordinate evidence. Candidate
      points are calibrated for 1280x720 (button right side ~x900-950); never change viewport or
-     coordinates independently — recalibrate from the post-search screenshot.
-   - Filters default to English / With Thesis when the CRM name carries no "(in turkish)" /
-     "(without thesis)" hint; unhinted dimensions get bounded fallback combinations (default set
-     always tried first) so hint-less Turkish/Without-Thesis programs aren't deterministically lost.
+     coordinates independently — recalibrate from the pre-click screenshot.
+   - **Faz-3.2 filter rule: apply ONLY the language filter, with ONE language** (default English;
+     Turkish only on an explicit "(in turkish)" hint). Do NOT loop language/thesis combinations —
+     dry-run proof: Turkish sets return 0 cards for English programs and the empty rounds increase
+     the stuck-modal risk.
+   - **Faz-3.2 stuck-modal rule**: a coordinate click can land on the "Selected Programs" cart
+     button instead of "+ Select", opening an EMPTY modal that BLOCKS the cards for all later
+     attempts. Close any open dialog (Escape + role=dialog X button) at stage start AND before
+     EVERY coordinate click; take the clean "program-preclick" screenshot only after confirming
+     the modal is closed.
    - The cart "Selected Programs (N)" button and the cart modal are standard DOM — role/`has-text`
      locators DO work for them. Open the modal via the cart button, NOT the footer Next; success =
      ≥1 "Save and Next" click AND the button disappearing.

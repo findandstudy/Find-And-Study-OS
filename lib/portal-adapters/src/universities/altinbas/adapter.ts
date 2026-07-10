@@ -629,14 +629,38 @@ async function setSfCombobox(page: any, labelPattern: RegExp, optionName: RegExp
  * koordinat-tabanlı GERÇEK fare tıklaması (page.mouse.click = trusted event).
  *
  * Reçete (Faz-3.1: worker viewport GERÇEKTE 1280x720 — dry-run ekran
- * görüntüsüyle doğrulandı, viewport DEĞİŞTİRİLMEZ): TEK-KELİME arama →
- * Language/Thesis filtreleriyle listeyi 1 karta indir → "+ Select" 720
- * foldunun ALTINDA kaldığı için önce scroll (wheel 0,450) → post-search
- * ekran görüntüsü → aday koordinatlarla tıkla, HER denemeden sonra sepeti
- * doğrula → sepet butonu → modal → "Save and Next" (footer Next DEĞİL).
+ * görüntüsüyle doğrulandı, viewport DEĞİŞTİRİLMEZ; Faz-3.2: takılı boş
+ * "Selected Programs" modalı kartları bloke eder → stage başında ve her
+ * koordinat tıklamasından önce Escape/X ile kapat; filtre = SADECE tek
+ * doğru dil, kombinasyon dönülmez): TEK-KELİME arama → dil filtresi →
+ * "+ Select" 720 foldunun ALTINDA kaldığı için scroll (wheel 0,450) →
+ * modal-kapalı TEMİZ "program-preclick" ekran görüntüsü → aday
+ * koordinatlarla tıkla, HER denemeden sonra sepeti doğrula → sepet butonu →
+ * modal → "Save and Next" (footer Next DEĞİL).
  */
 async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean> {
   await dismissSfError(page);
+  // Faz-3.2 dry-run kanıtı: koordinat denemelerinden biri kartın "+ Select"i
+  // yerine "Selected Programs" sepet butonuna denk gelip BOŞ modal açabiliyor
+  // ve açık modal sonraki denemelerde kartları BLOKE ediyor. Escape + varsa
+  // dialog kapatma (X) butonu ile temizle — stage başında VE her koordinat
+  // tıklamasından önce çağrılır. Best-effort, asla throw etmez.
+  const closeStuckModal = async (): Promise<void> => {
+    await page.keyboard.press("Escape").catch(() => {});
+    await page.waitForTimeout(300);
+    const dlg = page.getByRole("dialog").first();
+    if (await dlg.count().catch(() => 0)) {
+      const closeBtn = dlg
+        .getByRole("button", { name: /close|cancel|kapat|×/i })
+        .first()
+        .or(dlg.locator('button.slds-modal__close, button[title*="close" i]').first());
+      if (await closeBtn.count().catch(() => 0)) {
+        await closeBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(300);
+      }
+    }
+  };
+  await closeStuckModal();
 
   // Strip the CRM degree prefix + thesis/language suffixes so matching works
   // against the portal's bare catalog labels.
@@ -672,32 +696,16 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
 
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
-  // 2) Language / Thesis filtreleri — liste İDEALİ 1 karta insin (koordinat
-  //    tıklamasının güvenilirliği için kritik). Canlı reçete: hint yoksa
-  //    VARSAYILAN English / With Thesis uygula (uluslararası Master başvuru
-  //    profili). Ama hint'siz CRM adları için varsayılan set geçerli
-  //    Türkçe/Tezsiz programı dışlayabilir → hint'in SABİTLEMEDİĞİ
-  //    boyutlarda sınırlı fallback kombinasyonları denenir (varsayılan set
-  //    her zaman İLK). Filtre dropdown'u yoksa setSfCombobox false döner,
-  //    geçilir. Not: /with\s+thesis/i "Without Thesis"i YAKALAYAMAZ
-  //    ("with"ten sonra "out" gelir, boşluk değil).
-  const hasLangHint = /\(in\s+\w+\)/i.test(rawQuery);
-  const hasThesisHint = /\((with|without)\s+thesis\)/i.test(rawQuery);
+  // 2) Filtre — Faz-3.2: SADECE dil filtresi ve TEK doğru dil (varsayılan
+  //    English; "(in turkish)" hint'i varsa Turkish). Dil/tez kombinasyonları
+  //    DÖNÜLMEZ: dry-run kanıtı — İngilizce program için Turkish setleri 0
+  //    kart döndürüyor, boş turlar da takılı-modal riskini artırıyor.
+  //    Filtre dropdown'u yoksa setSfCombobox false döner, geçilir.
   const wantTurkish = /\(in\s+turkish\)/i.test(rawQuery);
-  const wantWithoutThesis = /\(without\s+thesis\)/i.test(rawQuery);
-  const langChoices = hasLangHint ? [wantTurkish] : [false, true];       // English önce
-  const thesisChoices = hasThesisHint ? [wantWithoutThesis] : [false, true]; // With Thesis önce
-  const filterSets: Array<[boolean, boolean]> = [];
-  for (const l of langChoices) for (const t of thesisChoices) filterSets.push([l, t]);
-
-  const applyFilters = async (turkish: boolean, withoutThesis: boolean): Promise<void> => {
-    const langOk = await setSfCombobox(page, /language/i, turkish ? /turkish/i : /english/i);
-    logger.info(`[altinbas] Language filtresi (${turkish ? "Turkish" : "English"}): ${langOk ? "uygulandı" : "bulunamadı, geçildi"}`);
-    if (langOk) await page.waitForTimeout(1000);
-    const thesisOk = await setSfCombobox(page, /thesis/i, withoutThesis ? /without\s+thesis/i : /with\s+thesis/i);
-    logger.info(`[altinbas] Thesis filtresi (${withoutThesis ? "Without" : "With"} Thesis): ${thesisOk ? "uygulandı" : "bulunamadı, geçildi"}`);
-    if (thesisOk) await page.waitForTimeout(1400);
-  };
+  const langName = wantTurkish ? "Turkish" : "English";
+  const langOk = await setSfCombobox(page, /language/i, wantTurkish ? /turkish/i : /english/i);
+  logger.info(`[altinbas] Language filtresi (${langName}): ${langOk ? "uygulandı" : "bulunamadı, geçildi"}`);
+  if (langOk) await page.waitForTimeout(1000);
 
   // Faz-3 CANLI TEŞHİS (kesin): kartlar iframe + KAPALI LWC shadow-DOM'da.
   // Playwright locator, frames-arası getByText VE page.evaluate derin
@@ -717,6 +725,9 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   ];
   const tryCoordinateSelect = async (): Promise<string | null> => {
     for (const [x, y] of coordCandidates) {
+      // Faz-3.2: önceki deneme sepet butonuna denk gelip boş modal açtıysa
+      // kartlar bloke — HER tıklamadan önce takılı modalı kapat.
+      await closeStuckModal();
       await page.mouse.click(x, y).catch(() => {});
       await page.waitForTimeout(900);
       await dismissSfError(page);
@@ -725,24 +736,18 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
     return null;
   };
 
-  let selectedAt: string | null = null;
-  for (const [turkish, withoutThesis] of filterSets) {
-    const setName = `${turkish ? "Turkish" : "English"} / ${withoutThesis ? "Without" : "With"} Thesis`;
-    await applyFilters(turkish, withoutThesis);
-    // Faz-3.1: "+ Select" fold altında — koordinat click'ten ÖNCE scroll +
-    // post-search ekran görüntüsü (koordinat kalibrasyonu için kanıt).
-    await page.mouse.wheel(0, 450).catch(() => {});
-    await page.waitForTimeout(600);
-    await captureScreen(page, "program-postsearch");
-    selectedAt = await tryCoordinateSelect();
-    if (selectedAt) {
-      logger.info(`[altinbas] program secildi @ ${selectedAt} (filtre seti: ${setName})`);
-      break;
-    }
-    logger.warn(`[altinbas] Program: filtre seti "${setName}" ile sepet dolmadı — ${filterSets.length > 1 ? "sıradaki set denenecek" : "aday noktalar tükendi"}`);
-  }
-  if (!selectedAt) {
-    logger.warn("[altinbas] Program: koordinat click sepete kaydolmadi (tüm filtre setleri + aday noktalar tükendi) — stage fail");
+  // Faz-3.1: "+ Select" fold altında — koordinat click'ten ÖNCE scroll.
+  await page.mouse.wheel(0, 450).catch(() => {});
+  await page.waitForTimeout(600);
+  // Faz-3.2: modal kapalıyken TEMİZ pre-click ekran görüntüsü (koordinat
+  // kalibrasyonu için kanıt) — İLK koordinat tıklamasından hemen önce.
+  await closeStuckModal();
+  await captureScreen(page, "program-preclick");
+  const selectedAt = await tryCoordinateSelect();
+  if (selectedAt) {
+    logger.info(`[altinbas] program secildi @ ${selectedAt} (dil filtresi: ${langName})`);
+  } else {
+    logger.warn("[altinbas] Program: koordinat click sepete kaydolmadi (aday noktalar tukendi) — stage fail");
     await captureScreen(page, "program-coord-fail");
     return false;
   }
