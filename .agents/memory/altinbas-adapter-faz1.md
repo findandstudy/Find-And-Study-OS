@@ -49,20 +49,33 @@ A dry-run (`ALTINBAS_DRYRUN=1` or `PORTAL_DRYRUN=1` or `doSubmit=false`) navigat
 
 ## Faz-2 status update (2026-07-10)
 
-Confirmed via repeated headed dry-run (app 2263/HASNAIN): login→Basic Info→student grid→Create New
-Application→Term→Degree→**Program Selection (Save and Next)**→Personal Information all work reliably in
-git (commits through 446c954). Every SLDS control needs `{force:true}`; card/button text is unreliable for
+Confirmed via repeated headed dry-run: login→Basic Info→student grid→Create New
+Application→Term→Degree→**Program Selection (Save and Next)**→Personal Information all work reliably.
+Every SLDS control needs `{force:true}`; card/button text is unreliable for
 accessible-name matching (e.g. "SelectSelectedRemove") — use `button:has-text()` / content-based card lookup.
 
-Two open blockers — do NOT blindly re-iterate a fix, they need an interactive live-portal session:
-1. **Personal Information country typeaheads** (Country of Birth/Citizenship/Passport Issuing/Address
-   Country) never open a dropdown in automated/xvfb sessions (fill/pressSequentially/force-click all fail;
-   works fine under real human-driven Chrome). Diagnosing the real open/select event requires watching the
-   live DOM interactively, not another blind Playwright attempt.
-2. **Program "Save and Next"** is non-deterministic — identical code sometimes advances to Personal,
-   sometimes gets stuck on the Selected Programs modal (CSS-Error dialog + hydration race). A retry loop
-   exists but isn't 100% reliable.
+## Faz-2.4 — full wizard mapped live (interactive session, all techniques proven)
 
-**Why it matters**: this portal (SF Experience Cloud LWC) is unusually automation-resistant; before adding
-more blind selector tweaks, prefer an interactive session (real Chrome, watch DOM/events live) or fall back
-to a semi-manual flow (adapter drives Basic Info→Program selection, human completes Personal/Documents).
+The two former blockers were resolved by watching the live portal interactively (real Chrome):
+1. **Country typeaheads** (Country of Birth/Citizenship/Passport Issuing/Address Country): the LWC listbox
+   only renders on REAL keystrokes — natural click (NOT force) → `pressSequentially(value, {delay:80})` →
+   click `role=option` (ArrowDown+Enter fallback). `fill()` never opens the dropdown.
+2. **Program "Save and Next"**: verify cart shows "Selected Programs (1)" BEFORE Next (re-click Select once
+   if empty); dismiss the CSS-Error dialog BEFORE each of up to 4 Save-and-Next retries; confirm the modal
+   actually closed.
+
+Other live-proven portal rules:
+- **GPA spinbutton rejects decimals even from a real keyboard** — send an INTEGER string only
+  (`String(Math.max(1, Math.round(gpa)))`); "3.20" is refused, "3" is accepted.
+- **Personal stage requires Email** — it was the silent blocker in earlier automated runs; fill explicitly.
+- **Questionnaire** = one "Do you need Visa Support?" button-combobox → option "Yes".
+- **Documents** = 4 required file rows (Passport, Bachelor Diploma, Bachelor Transcript, Personal Picture):
+  `setInputFiles` → "Upload Files" progress modal → click **Done** → row flips to "( Uploaded )".
+- **The final submit is the Documents footer's "Submit Application" button** (no Next, no separate
+  Completed action). Dry-run must stop before it; the generic final-screen detector must NOT fire on the
+  Documents stage (its footer text contains "Submit Application") — guard by stage name AND file-input
+  presence.
+
+**Why it matters**: this portal (SF Experience Cloud LWC) is unusually automation-resistant; every rule
+above was disproven/proven empirically on the live portal — don't "simplify" them back to standard
+Playwright patterns.

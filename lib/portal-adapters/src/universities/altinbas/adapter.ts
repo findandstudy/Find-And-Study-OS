@@ -847,7 +847,7 @@ async function stageDocuments(
   page: any,
   files: SubmitFiles,
   dryRun: boolean,
-): Promise<"final_dry" | "final_submitted" | boolean> {
+): Promise<"final_dry" | "final_submitted" | "final_nosubmit" | boolean> {
   // Portal row order (live): Passport, Bachelor Diploma, Bachelor Transcript, Personal Picture.
   const docMap: Array<{ label: RegExp; file: string | undefined; tag: string }> = [
     { label: /passport/i,                          file: files.passport,   tag: "Passport" },
@@ -925,7 +925,7 @@ async function handleStage(
   profile: SubmitProfile,
   files: SubmitFiles,
   dryRun: boolean,
-): Promise<"final_dry" | "final_submitted" | boolean> {
+): Promise<"final_dry" | "final_submitted" | "final_nosubmit" | boolean> {
   const s = stageName.toLowerCase();
   if (s.includes("term")) return stageTerm(page);
   if (s.includes("degree")) return stageDegree(page, profile);
@@ -1242,7 +1242,7 @@ async function handleUnknownStep(
       logger.warn(`[altinbas] handleStage error for "${stageName}":`, e);
       return false as const;
     });
-    if (handled === "final_dry") return "final_reached";
+    if (handled === "final_dry" || handled === "final_nosubmit") return "final_reached";
     if (handled === "final_submitted") return "submitted";
     if (handled) {
       await dismissSfError(page);
