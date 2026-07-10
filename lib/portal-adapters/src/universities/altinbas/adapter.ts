@@ -627,23 +627,34 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
 
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
-  // 3) Collect the narrowed cards and pick the best match.
-  // Faz-2.2 KANITLANDI: the toggle button's textContent is the concatenation
-  // "SelectSelectedRemove", so accessible-name matching fails — locate the
-  // CARD by content and click its Select button directly.
-  const cards = page
-    .locator('article, li, .slds-card, [class*="card"]')
-    .filter({ has: page.locator('button:has-text("Select")') });
-  const n = await cards.count().catch(() => 0);
-  logger.info(`[altinbas] Program kart sayısı (daraltılmış liste): ${n}`);
+  // 3) Collect candidates keyed by EXACT-"Select" action buttons.
+  // Faz-2.7 KÖK NEDEN: 'button:has-text("Select")' also matches the
+  // "Selected Programs" cart button, so the "card" filter picked up the
+  // wizard STEPPER container ("Application Type - Stage Complete ...") and
+  // all 4 click strategies hit the wrong element. Base everything on
+  // buttons whose accessible name is exactly "Select" (optionally with a
+  // leading "+") so the stepper/cart containers are never candidates.
+  const selectBtns = page.getByRole("button", { name: /^\s*\+?\s*select\s*$/i });
+  const n = await selectBtns.count().catch(() => 0);
+  logger.info(`[altinbas] Exact-Select buton sayısı (daraltılmış liste): ${n}`);
   if (!n) {
-    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç kart yok`);
+    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç exact-Select butonu yok`);
     return false;
   }
 
+  // For each Select button, resolve its owning card (ancestor article → li →
+  // 3-levels-up container) and read the card text as the candidate name.
   const candidates: ProgramCandidate[] = [];
   for (let i = 0; i < n; i++) {
-    const text = ((await cards.nth(i).innerText().catch(() => "")) || "").trim();
+    const b = selectBtns.nth(i);
+    let text = "";
+    for (const anc of ["xpath=ancestor::article[1]", "xpath=ancestor::li[1]", "xpath=../../.."]) {
+      const container = b.locator(anc).first();
+      if (await container.count().catch(() => 0)) {
+        text = ((await container.innerText().catch(() => "")) || "").trim();
+        if (text) break;
+      }
+    }
     candidates.push({ id: String(i), name: text.replace(/\s+/g, " ").slice(0, 200) });
   }
   const result = matchProgram(coreQuery, candidates.filter((c) => c.name));
@@ -654,11 +665,13 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
       return words.every((w) => t.includes(w));
     });
   }
+  // Search already narrowed the list — no match just means label noise;
+  // fall back to the FIRST exact-Select button.
   if (pickIdx < 0) pickIdx = 0;
   logger.info(`[altinbas] Program eşleşmesi: kart ${pickIdx} "${candidates[pickIdx]?.name.slice(0, 80)}"`);
 
   // Multi-strategy Select click — verify the cart after EVERY attempt.
-  const btn = cards.nth(pickIdx).locator('button:has-text("Select")').first();
+  const btn = selectBtns.nth(pickIdx);
   await btn.scrollIntoViewIfNeeded().catch(() => {});
   const strategies: Array<[string, () => Promise<void>]> = [
     ["normal click", async () => { await btn.click({ timeout: 5000 }); }],

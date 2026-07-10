@@ -68,6 +68,10 @@ The two former blockers were resolved by watching the live portal interactively 
    - Do NOT rely on pagination: the pager button's accessible name is "Next" (not ">"), and a generic
      /next/ locator collides with the footer Next — browsing pages proved fragile; prefer
      single-word search + the Language/Thesis SLDS dropdown filters to narrow the list.
+   - NEVER locate candidates via 'button:has-text("Select")' — it also matches the "Selected
+     Programs" cart button, so container filters pick up the wizard STEPPER (clicks hit the wrong
+     element). Key candidates on buttons whose accessible name is EXACTLY "Select"
+     (/^\s*\+?\s*select\s*$/i), resolve each button's card via ancestor xpath (article → li → 3-up).
    - The card "+ Select" click doesn't reliably register with any single strategy — use
      multi-strategy (normal → force → DOM .click() → dispatchEvent) and verify the
      "Selected Programs (N)" cart text after EVERY attempt; fail visibly if the cart stays empty.
