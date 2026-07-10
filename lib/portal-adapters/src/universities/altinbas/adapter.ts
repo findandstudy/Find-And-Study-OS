@@ -627,23 +627,32 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
 
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
-  // 3) Collect candidates keyed by EXACT-"Select" action buttons.
-  // Faz-2.7 KÖK NEDEN: 'button:has-text("Select")' also matches the
-  // "Selected Programs" cart button, so the "card" filter picked up the
-  // wizard STEPPER container ("Application Type - Stage Complete ...") and
-  // all 4 click strategies hit the wrong element. Base everything on
-  // buttons whose accessible name is exactly "Select" (optionally with a
-  // leading "+") so the stepper/cart containers are never candidates.
-  const selectBtns = page.getByRole("button", { name: /^\s*\+?\s*select\s*$/i });
+  // 3) Collect candidates keyed by the program-card TOGGLE buttons.
+  // Faz-2.7/2.8 KÖK NEDEN zinciri: 'button:has-text("Select")' also matches
+  // the "Selected Programs" cart button (stepper container got picked), but
+  // exact name "Select" matches NOTHING because the card toggle button's
+  // accessible name is the CONCATENATION "SelectSelectedRemove" (Select +
+  // Selected + Remove spans — Faz-2.2 field inventory). So: match buttons
+  // whose name CONTAINS "select" but EXCLUDE the cart ("Selected Programs
+  // (N)"), footer ("Save and Next" / "Cancel and close") AND stepper items
+  // ("Program Selection" / "Term Selection" — "selection" matches /select/i
+  // but never appears in the card toggle's "SelectSelectedRemove" name).
+  const selectBtns = page
+    .getByRole("button", { name: /select/i })
+    .filter({ hasNotText: /selection|programs|save and next|cancel and close/i });
   const n = await selectBtns.count().catch(() => 0);
-  logger.info(`[altinbas] Exact-Select buton sayısı (daraltılmış liste): ${n}`);
+  logger.info(`[altinbas] kart-select buton sayısı: ${n}`);
   if (!n) {
-    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç exact-Select butonu yok`);
+    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç kart-select butonu yok`);
     return false;
   }
 
   // For each Select button, resolve its owning card (ancestor article → li →
   // 3-levels-up container) and read the card text as the candidate name.
+  // Fail-safe: a resolved container whose text carries stepper markers
+  // ("... - Stage Complete") is navigation, not a program card — blank its
+  // name so it can never win matching nor the first-button fallback.
+  const isStepperText = (t: string) => /stage\s*(complete|in\s*progress|not\s*started)/i.test(t);
   const candidates: ProgramCandidate[] = [];
   for (let i = 0; i < n; i++) {
     const b = selectBtns.nth(i);
@@ -655,18 +664,20 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
         if (text) break;
       }
     }
-    candidates.push({ id: String(i), name: text.replace(/\s+/g, " ").slice(0, 200) });
+    const clean = text.replace(/\s+/g, " ").slice(0, 200);
+    candidates.push({ id: String(i), name: isStepperText(clean) ? "" : clean });
   }
   const result = matchProgram(coreQuery, candidates.filter((c) => c.name));
   let pickIdx = result ? Number(result.match.id) : -1;
   if (pickIdx < 0 && words.length) {
     pickIdx = candidates.findIndex((c) => {
       const t = c.name.toLowerCase();
-      return words.every((w) => t.includes(w));
+      return c.name !== "" && words.every((w) => t.includes(w));
     });
   }
   // Search already narrowed the list — no match just means label noise;
-  // fall back to the FIRST exact-Select button.
+  // fall back to the FIRST non-stepper card button (then absolute first).
+  if (pickIdx < 0) pickIdx = candidates.findIndex((c) => c.name !== "");
   if (pickIdx < 0) pickIdx = 0;
   logger.info(`[altinbas] Program eşleşmesi: kart ${pickIdx} "${candidates[pickIdx]?.name.slice(0, 80)}"`);
 
