@@ -50,6 +50,24 @@ Term→FINISH screens.
   `actions[]`; FINISH additionally requires `state:SUCCESS` before
   submitted=true (HTML login/edge pages must fail visibly, never fake success).
 
+## Self-duplicate (FIX-6, 2026-07-10) — commit creates the record the guard flags
+
+- commit1 CREATES the application record; the duplicate-guard subflow can then
+  flag that just-created record as "passport already exists" even for fresh
+  students (human flow excludes it as current application). Self vs real must
+  be distinguished or every student is falsely skipped.
+- Ownership evidence = explicit "applicationId" key ids ∪ a02 record ids that
+  FIRST appear in commit responses (baseline snapshot taken after Program NEXT,
+  before first commit). NEVER use rt.ids.applicationId for ownership — the a02
+  prefix fallback is polluted by boot availability records.
+- Classification: no owned ids this run → real; foreign a02 within ±800 chars
+  of the message → real; else (with ownership proof) → self → WARN + continue.
+  Continuing on ambiguity is fail-safe: the portal hard-blocks real duplicates
+  at Submit/FINISH visibly; dry stops before Submit.
+- ÇİFT-CREATE ŞÜPHESİ warn fires if a 2nd commit creates another app id
+  (hypothesis: adapter sends more commits than the human flow — compare with
+  ALTINBAS_CAPTURE).
+
 ## Duplicate detection (FIX-5, 2026-07-10) — match the MESSAGE, not config names
 
 - "Prevent_Duplicate_Passport" is the flow's subflow CONFIG name
