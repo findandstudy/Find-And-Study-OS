@@ -89,15 +89,17 @@ The two former blockers were resolved by watching the live portal interactively 
      cards to a few); log the card count after search (best-effort "N items" regex over frame
      body innerText, "?" if it stays inside the closed LWC shadow). setSfCombobox stays in the
      file unused (GPA-Type stage walker uses its own copy pattern; keep for future fallback).
-   - **Faz-3.5 Personal email rule**: the Email input is inside CLOSED shadow like the program
-     cards (Personal field inventory textboxes come back empty) — getByLabel AND the open-shadow
-     walker both fail. It sits in the "Contact Information" sub-section at the BOTTOM of the page.
-     Recipe (runs AFTER all other Personal fields are filled, right before Next): wheel(0,500)
-     until "Contact Information" visible (max 6) → capture "personal-contact" screenshot
-     (calibration) → selector chain (label / placeholder / type=email / label-anchored
-     following::input) → coordinate fallback: click below the "Email" text's boundingBox (or
-     fixed point) + trusted keyboard.type; value can't be verified in closed shadow. Program
-     stage confirmed solved on app 2590 dry-run (single-word search = 4 cards, selected @ 915,290).
+   - **Faz-3.6 Personal Contact rules (dry7 screenshot evidence)**: (a) EMAIL is NOT a blocker —
+     the field comes PRE-FILLED and READ-ONLY (grey, account email); the old "Email alanı
+     bulunamadı (zorunlu!)" warn was a false alarm that looped Personal forever. Check
+     getByDisplayValue(profile.email) first, best-effort selector fill only if empty, ALWAYS
+     continue. (b) The REAL blocker is the Mobile phone: the country chip wrongly lands on
+     "Germany (49)" and "49" leaks into the number field ("Phone number can only contain
+     digits"). Recipe (after wheel-scrolling to "Contact Information", right before Next):
+     chip via shadow-select walker VERIFIED against the country name, else coordinate fallback
+     (click chip left of Mobile field, type first 4 letters, click option); then CLEAR the
+     number field (click + Ctrl+A + Delete) before typing the trunk-0-less national number.
+     Program stage confirmed solved on app 2590 dry-run (search = 4 cards, selected @ 915,290).
    - **Faz-3.2 stuck-modal rule**: a coordinate click can land on the "Selected Programs" cart
      button instead of "+ Select", opening an EMPTY modal that BLOCKS the cards for all later
      attempts. Close any open dialog (Escape + role=dialog X button) at stage start AND before

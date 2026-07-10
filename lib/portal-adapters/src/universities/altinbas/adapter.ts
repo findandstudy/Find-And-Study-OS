@@ -847,20 +847,6 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
   await typeDate(page, /passport date of issue/i, fmtAltDate(profile.passportIssueDate));
   await typeDate(page, /passport date of expiry/i, fmtAltDate(profile.passportExpiryDate));
 
-  // Telefon — Faz-3 CANLI KANIT: portal ülke chip'i + trunk-0'sız ULUSAL
-  // numara ister ("+930798546789" ham hali "0798..." olarak REDDEDİLDİ;
-  // doğru giriş chip(+93) + "798546789"). Chip'i shadow-select walker ile
-  // ülke adına göre set et; dial code'u chip metninden (+93) ya da
-  // DIAL_CODES haritasından al, ulusal numarayı ondan türet.
-  if (profile.phone) {
-    const countryEsc = country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const chipText = country ? await setShadowSelectByOption(page, countryEsc) : null;
-    if (chipText) logger.info(`[altinbas] Personal: telefon ülke chip'i set edildi: "${chipText.slice(0, 40)}"`);
-    const chipDial = /\+\s*(\d{1,4})/.exec(chipText || "")?.[1] || DIAL_CODES[country] || "";
-    const national = toNationalNoTrunk(profile.phone, chipDial);
-    logger.info(`[altinbas] Personal: mobile ulusal numara="${national}" (dial=${chipDial || "?"})`);
-    await fillIfPresent(page, /mobile/i, national || profile.phone);
-  }
   await fillIfPresent(page, /father name/i, profile.fatherName);
   await fillIfPresent(page, /mother name/i, profile.motherName);
 
@@ -872,13 +858,8 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
   await fillIfPresent(page, /address:?\s*street/i, addrParts[0] || profile.address || "N/A");
   await fillIfPresent(page, /address:?\s*zip/i, "00000");
 
-  // Email is REQUIRED and was the silent blocker. Faz-3.5 (app 2590 dry-run
-  // kanıtı): email input, Program kartları gibi KAPALI shadow içinde
-  // (Personal field inventory textboxes boş) — getByLabel VE open-shadow
-  // walker ulaşamadı. Email "Contact Information" alt-bölümünde, sayfanın
-  // ALTINDA: diğer alanlar dolduktan SONRA oraya scroll + kalibrasyon için
-  // "personal-contact" ekran görüntüsü; sonra sağlam selector zinciri;
-  // hiçbiri tutmazsa koordinat click + trusted keyboard.type fallback.
+  // Contact Information alt-bölümü sayfanın ALTINDA — scroll + kalibrasyon
+  // ekran görüntüsü (personal-contact). Faz-3.6 dry7 kanıtı burada okundu.
   {
     const contactHdr = page.getByText(/contact information/i).first();
     for (let i = 0; i < 6; i++) {
@@ -889,47 +870,93 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
     await page.waitForTimeout(400);
     await captureScreen(page, "personal-contact");
   }
-  const fillEmailBySelectors = async (): Promise<boolean> => {
-    if (!profile.email) return false;
-    const candidates = [
-      page.getByLabel(/^e-?mail/i).first(),
-      page.getByPlaceholder(/mail/i).first(),
-      page.locator('input[type="email"]').first(),
-      // "Email" yazan label'in hemen SONRASINDAKİ input (label-anchored).
-      page.locator('label:has-text("Email")').first().locator("xpath=following::input[1]"),
-    ];
-    for (const box of candidates) {
-      if (await box.count().catch(() => 0)) {
-        const ok = await box.fill(profile.email).then(() => true).catch(() => false);
-        if (ok) return true;
+
+  // EMAIL — Faz-3.6 (dry7 personal-contact kanıtı): alan ZATEN DOLU ve
+  // READ-ONLY (gri/pasif, hesap emailiyle pre-filled). Önceki "Email alanı
+  // bulunamadı (zorunlu!)" logu YANLIŞ ALARMDI ve Personal'ı sonsuz döngüye
+  // soktu. Email ASLA blocker değil: display-value ile doluluk kontrolü,
+  // boş VE fillable ise best-effort doldur, her durumda devam et.
+  {
+    const prefilled = profile.email
+      ? (await page.getByDisplayValue(profile.email).first().count().catch(() => 0)) > 0
+      : false;
+    if (prefilled) {
+      logger.info("[altinbas] Personal: email zaten dolu (read-only pre-filled) — geçildi");
+    } else if (profile.email) {
+      const candidates = [
+        page.getByLabel(/^e-?mail/i).first(),
+        page.getByPlaceholder(/mail/i).first(),
+        page.locator('input[type="email"]').first(),
+      ];
+      let filled = false;
+      for (const box of candidates) {
+        if (await box.count().catch(() => 0)) {
+          filled = await box.fill(profile.email).then(() => true).catch(() => false);
+          if (filled) break;
+        }
+      }
+      logger.info(`[altinbas] Personal: email ${filled ? "dolduruldu" : "fillable degil (buyuk olasilikla read-only pre-filled) — blocker DEGIL, devam"}`);
+    }
+  }
+
+  // TELEFON — Faz-3.6 dry7 kanıtı: GERÇEK blocker bu. Chip yanlışlıkla
+  // "Germany (49)" seçiliyor ve numara alanında "49" kalıyor ("Phone number
+  // can only contain digits" hatası). Doğrusu: chip = profil ülkesi
+  // (örn. Afghanistan +93), numara = trunk-0'sız TAM ulusal numara.
+  // 1) Chip: shadow-select walker; tutmazsa/yanlış ülkeyse koordinat
+  //    fallback (chip pikseline tıkla → ülke adının ilk 4 harfini yaz →
+  //    açılan option'a tıkla). 2) Numara: alana tıkla → Control+A + Delete
+  //    ile TEMİZLE → ulusal numarayı yaz.
+  if (profile.phone) {
+    const countryEsc = country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const countryRe = new RegExp(countryEsc, "i");
+    let chipText = country ? await setShadowSelectByOption(page, countryEsc) : null;
+    let chipOk = !!chipText && countryRe.test(chipText || "");
+    if (!chipOk && country) {
+      // Koordinat fallback: chip, "Mobile" etiketinin altında SOLDA.
+      const mobLbl = await page.getByText(/mobile/i).first().boundingBox().catch(() => null);
+      if (mobLbl) {
+        await page.mouse.click(mobLbl.x + 40, mobLbl.y + mobLbl.height + 25).catch(() => {});
+        await page.waitForTimeout(500);
+        await page.keyboard.type(country.slice(0, 4), { delay: 80 }).catch(() => {});
+        await page.waitForTimeout(700);
+        const opt = page.getByText(countryRe).last();
+        if (await opt.count().catch(() => 0)) {
+          await opt.click().catch(() => {});
+          chipText = country;
+          chipOk = true;
+        } else {
+          await page.keyboard.press("Enter").catch(() => {});
+        }
+        await page.waitForTimeout(400);
       }
     }
-    return false;
-  };
-  let emailFilled = await fillEmailBySelectors();
-  if (!emailFilled && profile.email) {
-    // Koordinat fallback: "Email" metninin kutusu bulunabiliyorsa hemen
-    // ALTINA (input bölgesi), bulunamıyorsa Contact Information'da olası
-    // ilk alan bölgesine trusted click + keyboard.type (kapalı shadow'a
-    // page.mouse/keyboard ulaşır — Program kartlarıyla kanıtlandı).
-    const lblBox = await page.getByText(/^e-?mail\b/i).first().boundingBox().catch(() => null);
-    const [cx, cy]: [number, number] = lblBox
-      ? [lblBox.x + Math.max(20, lblBox.width / 2), lblBox.y + lblBox.height + 25]
-      : [420, 380];
-    await page.mouse.click(cx, cy).catch(() => {});
-    await page.waitForTimeout(300);
-    await page.keyboard.press("Control+A").catch(() => {});
-    await page.keyboard.type(profile.email, { delay: 40 }).catch(() => {});
-    await page.waitForTimeout(300);
-    // Kapalı shadow'da değer okunamaz → selector zincirini bir kez daha dene
-    // (pozitif kanıt varsa yakala); yoksa yazım best-effort kabul edilir.
-    emailFilled = await fillEmailBySelectors().catch(() => false) || false;
-    logger.info(`[altinbas] Personal: email koordinat fallback @ (${Math.round(cx)},${Math.round(cy)})${lblBox ? " (label-anchored)" : " (sabit nokta)"}`);
-  }
-  if (emailFilled) {
-    logger.info("[altinbas] Personal: email dolduruldu");
-  } else {
-    logger.warn("[altinbas] Personal: email bulunamadi — contact screenshot alindi (personal-contact, kalibrasyon icin)");
+    logger.info(`[altinbas] Personal: telefon ülke chip'i: ${chipOk ? `"${(chipText || "").slice(0, 40)}"` : "SET EDİLEMEDİ (koordinat dahil)"}`);
+    const chipDial = /(\d{1,4})/.exec(chipText || "")?.[1] || DIAL_CODES[country] || "";
+    const national = toNationalNoTrunk(profile.phone, chipDial);
+    logger.info(`[altinbas] Personal: mobile ulusal numara="${national}" (dial=${chipDial || "?"})`);
+    const numVal = national || profile.phone;
+    const numBox = page.getByLabel(/mobile/i).first();
+    if (await numBox.count().catch(() => 0)) {
+      await numBox.click().catch(() => {});
+      await page.keyboard.press("Control+A").catch(() => {});
+      await page.keyboard.press("Delete").catch(() => {});
+      await numBox.pressSequentially(numVal, { delay: 40 }).catch(() => {});
+      logger.info("[altinbas] Personal: mobile numara temizlenip yazıldı (selector)");
+    } else {
+      // Koordinat fallback: numara input'u chip'in SAĞINDA aynı satırda.
+      const mobLbl = await page.getByText(/mobile/i).first().boundingBox().catch(() => null);
+      if (mobLbl) {
+        await page.mouse.click(mobLbl.x + 260, mobLbl.y + mobLbl.height + 25).catch(() => {});
+        await page.waitForTimeout(300);
+        await page.keyboard.press("Control+A").catch(() => {});
+        await page.keyboard.press("Delete").catch(() => {});
+        await page.keyboard.type(numVal, { delay: 40 }).catch(() => {});
+        logger.info("[altinbas] Personal: mobile numara temizlenip yazıldı (koordinat)");
+      } else {
+        logger.warn("[altinbas] Personal: Mobile alanı bulunamadı (selector + koordinat)");
+      }
+    }
   }
 
   await clickNext(page);
