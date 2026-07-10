@@ -60,9 +60,16 @@ The two former blockers were resolved by watching the live portal interactively 
 1. **Country typeaheads** (Country of Birth/Citizenship/Passport Issuing/Address Country): the LWC listbox
    only renders on REAL keystrokes — natural click (NOT force) → `pressSequentially(value, {delay:80})` →
    click `role=option` (ArrowDown+Enter fallback). `fill()` never opens the dropdown.
-2. **Program "Save and Next"**: verify cart shows "Selected Programs (1)" BEFORE Next (re-click Select once
-   if empty); dismiss the CSS-Error dialog BEFORE each of up to 4 Save-and-Next retries; confirm the modal
-   actually closed.
+2. **Program "Save and Next"**: verify cart shows "Selected Programs (1)" BEFORE proceeding; dismiss the
+   CSS-Error dialog BEFORE each of up to 4 Save-and-Next retries; confirm the modal actually closed.
+   **Faz-2.5 (second live debug) found the REAL root causes of "non-deterministic" Program stage**:
+   - The search box is BROKEN for multi-word queries ("Political Science" → "0 items • Page 0/0" even
+     though the program exists). NEVER search — clear the box and BROWSE/PAGINATE the full catalog
+     (~8 pages max), matching card text per page.
+   - The card "+ Select" button needs a **NORMAL click** (force-click is harmful here — unlike SLDS
+     radios which DO need force).
+   - Open the modal via the **"Selected Programs (N)" cart button**, NOT the footer Next.
+   Proven live: normal Select → cart "(1)" → cart button → modal → Save and Next → Personal Information.
 
 Other live-proven portal rules:
 - **GPA spinbutton rejects decimals even from a real keyboard** — send an INTEGER string only
