@@ -73,12 +73,16 @@ The two former blockers were resolved by watching the live portal interactively 
      all 0 hits even for the program NAME after a working search), and the page.evaluate DEEP
      WALKER also FAILS (closed shadow ⇒ `el.shadowRoot === null`, the walker never sees the
      cards). Do NOT retry selector strategies AND do NOT reintroduce the walker for the cards.
-   - The ONLY live-proven access: **fixed viewport 1568x900 + single-word search + Language/Thesis
-     filters to narrow the list to ~1 card, then coordinate-based trusted `page.mouse.click` on
-     empirical candidate points**, verifying the cart ("Selected Programs (N)", /\(\s*[1-9]/) after
-     EVERY click; `dismissSfError` between attempts; fail visibly + screenshot if the cart stays
-     empty. Coordinates are calibrated to that exact viewport — never change viewport without
-     recalibrating.
+   - The ONLY live-proven access: single-word search + Language/Thesis filters to narrow the list
+     to ~1 card, then coordinate-based trusted `page.mouse.click` on empirical candidate points,
+     verifying the cart ("Selected Programs (N)", /\(\s*[1-9]/) after EVERY click; `dismissSfError`
+     between attempts; fail visibly + screenshot if the cart stays empty.
+   - **Faz-3.1 calibration: the worker viewport is ACTUALLY 1280x720** (proven by dry-run
+     screenshots — an earlier setViewportSize(1568x900) did NOT take effect and was removed; do not
+     re-add it). "+ Select" sits BELOW the 720 fold → `page.mouse.wheel(0,450)` + wait BEFORE
+     clicking, and capture a "program-postsearch" screenshot for coordinate evidence. Candidate
+     points are calibrated for 1280x720 (button right side ~x900-950); never change viewport or
+     coordinates independently — recalibrate from the post-search screenshot.
    - Filters default to English / With Thesis when the CRM name carries no "(in turkish)" /
      "(without thesis)" hint; unhinted dimensions get bounded fallback combinations (default set
      always tried first) so hint-less Turkish/Without-Thesis programs aren't deterministically lost.

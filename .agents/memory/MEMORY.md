@@ -138,4 +138,4 @@
 - [Topkapi fuzzy program-match fallback + goto retry](topkapi-fuzzy-fallback-and-goto-retry.md) — local noise-stripped fallback reuses programMatch.ts synonym dict via new additive (behavior-unchanged) exports, never edits matchProgram() itself.
 - [Local storage public-objects mismatch](local-storage-public-objects-mismatch.md) — local driver has no "public/" subfolder; outbound senders must resolve keys via shared searchPublicObject, not hand-rolled URL parsing.
 - [Topkapi GPA scale + parent-name guard](topkapi-gpa-parent-name.md) — topkapiGpaTo100 converts normalizeGpaRange output to 0-100; fatherName/motherName use "-" fallback (not "") in both profile builders.
-- [Altınbaş adapter](altinbas-adapter-faz1.md) — SF Experience Cloud, CLOSED LWC shadow: program pick ONLY via 1568x900 viewport + single-word search + coordinate mouse.click + cart verify; walker/locators fail.
+- [Altınbaş adapter](altinbas-adapter-faz1.md) — SF Experience Cloud, CLOSED LWC shadow: program pick ONLY via single-word search + scroll past fold + coordinate mouse.click (1280x720 worker viewport) + cart verify; walker/locators fail.

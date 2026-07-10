@@ -628,14 +628,14 @@ async function setSfCombobox(page: any, labelPattern: RegExp, optionName: RegExp
  * shadow'a el.shadowRoot null döner). CANLI KANITLANAN TEK ÇÖZÜM:
  * koordinat-tabanlı GERÇEK fare tıklaması (page.mouse.click = trusted event).
  *
- * Reçete: sabit viewport 1568x900 → TEK-KELİME arama → Language/Thesis
- * filtreleriyle listeyi 1 karta indir → "+ Select" pikseline aday
- * koordinatlarla tıkla, HER denemeden sonra sepeti doğrula → sepet butonu →
- * modal → "Save and Next" (footer Next DEĞİL).
+ * Reçete (Faz-3.1: worker viewport GERÇEKTE 1280x720 — dry-run ekran
+ * görüntüsüyle doğrulandı, viewport DEĞİŞTİRİLMEZ): TEK-KELİME arama →
+ * Language/Thesis filtreleriyle listeyi 1 karta indir → "+ Select" 720
+ * foldunun ALTINDA kaldığı için önce scroll (wheel 0,450) → post-search
+ * ekran görüntüsü → aday koordinatlarla tıkla, HER denemeden sonra sepeti
+ * doğrula → sepet butonu → modal → "Save and Next" (footer Next DEĞİL).
  */
 async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean> {
-  // Koordinat kararlılığı ŞART: sabit viewport (canlı kalibrasyon 1568x900).
-  await page.setViewportSize({ width: 1568, height: 900 }).catch(() => {});
   await dismissSfError(page);
 
   // Strip the CRM degree prefix + thesis/language suffixes so matching works
@@ -705,13 +705,15 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   // başarısız. CANLI KANITLANAN TEK ÇÖZÜM: koordinat-tabanlı GERÇEK fare
   // tıklaması (page.mouse.click = trusted event, kapalı shadow'a ulaşır).
   // Arama+filtre listeyi 1-2 karta indirdiği için "+ Select" ilk kart
-  // satırında sağ tarafta; 1568x900 viewport'ta ampirik aday koordinatlar
-  // sırayla denenir ve HER denemeden sonra sepet doğrulanır (POZİTİF kanıt:
-  // "Selected Programs (N)", N>=1). Yanlış noktaya tıklama istenmeyen panel
-  // açabilir → her deneme arasında dismissSfError.
+  // satırında sağ tarafta; 1280x720 worker viewport'unda (Faz-3.1 dry-run
+  // ekran görüntüsüyle doğrulandı) buton sağda ~x900-950 bandında ve 720
+  // foldunun ALTINDA → tıklamadan önce scroll şart. Ampirik aday
+  // koordinatlar sırayla denenir ve HER denemeden sonra sepet doğrulanır
+  // (POZİTİF kanıt: "Selected Programs (N)", N>=1). Yanlış noktaya tıklama
+  // istenmeyen panel açabilir → her deneme arasında dismissSfError.
   const coordCandidates: Array<[number, number]> = [
-    [1120, 300], [1120, 330], [1080, 300], [1150, 300], [1120, 360], // ilk kart "+ Select" bölgesi
-    [1120, 430], [1120, 500],                                        // 2. kart olası konumları
+    [915, 250], [915, 290], [915, 330], [740, 260], [740, 300], // ilk kart "+ Select" bölgesi (scroll sonrası)
+    [915, 210], [915, 370], [915, 450],                          // kenar/2. kart olası konumları
   ];
   const tryCoordinateSelect = async (): Promise<string | null> => {
     for (const [x, y] of coordCandidates) {
@@ -727,6 +729,11 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   for (const [turkish, withoutThesis] of filterSets) {
     const setName = `${turkish ? "Turkish" : "English"} / ${withoutThesis ? "Without" : "With"} Thesis`;
     await applyFilters(turkish, withoutThesis);
+    // Faz-3.1: "+ Select" fold altında — koordinat click'ten ÖNCE scroll +
+    // post-search ekran görüntüsü (koordinat kalibrasyonu için kanıt).
+    await page.mouse.wheel(0, 450).catch(() => {});
+    await page.waitForTimeout(600);
+    await captureScreen(page, "program-postsearch");
     selectedAt = await tryCoordinateSelect();
     if (selectedAt) {
       logger.info(`[altinbas] program secildi @ ${selectedAt} (filtre seti: ${setName})`);
