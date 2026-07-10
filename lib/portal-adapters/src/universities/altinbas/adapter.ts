@@ -349,23 +349,58 @@ async function typeDate(page: any, labelPattern: RegExp, value: string): Promise
   }
 }
 
-/** Fill a typeahead combobox found by label and pick the best-matching option. Never throws. */
+/**
+ * Fill a typeahead combobox found by label and pick the best-matching option.
+ * Never throws.
+ *
+ * Faz-2.4 KANITLANDI (canlı ortak seans, gerçek Chrome): the LWC country
+ * typeaheads (Country of Birth / Citizenship / Passport Issuing / Address
+ * Country) only render their listbox on REAL keystrokes — `fill()` never
+ * opens the dropdown (opts:[] boxes:[] in shadow-DOM dumps). The exact
+ * proven sequence is: natural click (NOT force) → pressSequentially(value,
+ * delay 80) → wait → click the matching role=option; if no option node is
+ * reachable, ArrowDown+Enter as a keyboard fallback.
+ */
 async function typeahead(page: any, labelPattern: RegExp, value: string): Promise<boolean> {
   if (!value) return false;
   try {
     const cb = page.getByRole("combobox", { name: labelPattern }).first();
     const target = (await cb.count().catch(() => 0)) ? cb : page.getByLabel(labelPattern).first();
     if (!(await target.count().catch(() => 0))) return false;
-    await target.click().catch(() => {});
-    await target.fill(value).catch(() => {});
-    await page.waitForTimeout(1200);
-    const opt = page.getByRole("option", { name: value }).first();
+    await target.click().catch(() => {}); // natural focus/open — NOT force
+    await target.pressSequentially(value, { delay: 80 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    const opt = page.getByRole("option", { name: value }).first()
+      .or(page.locator('[role="option"]').filter({ hasText: value }).first());
     if (await opt.count().catch(() => 0)) {
       await opt.click({ timeout: 4000 }).catch(() => {});
+      await page.waitForTimeout(400);
+      logger.info(`[altinbas] typeahead: "${value}" seçildi (${labelPattern})`);
       return true;
     }
-    logger.info(`[altinbas] typeahead: no option match for "${value}" (${labelPattern})`);
+    // Keyboard fallback: highlight first suggestion and commit.
+    await target.press("ArrowDown").catch(() => {});
+    await target.press("Enter").catch(() => {});
+    logger.info(`[altinbas] typeahead: option node bulunamadı, ArrowDown+Enter fallback ("${value}", ${labelPattern})`);
+    return true;
+  } catch {
     return false;
+  }
+}
+
+/** typeahead(), but skipped when the field already carries a value (e.g. Citizenship copied from Basic Info). */
+async function typeaheadIfEmpty(page: any, labelPattern: RegExp, value: string): Promise<boolean> {
+  if (!value) return false;
+  try {
+    const cb = page.getByRole("combobox", { name: labelPattern }).first();
+    const target = (await cb.count().catch(() => 0)) ? cb : page.getByLabel(labelPattern).first();
+    if (!(await target.count().catch(() => 0))) return false;
+    const existing = ((await target.inputValue().catch(() => "")) || "").trim();
+    if (existing) {
+      logger.info(`[altinbas] typeaheadIfEmpty: alan zaten dolu ("${existing.slice(0, 40)}"), atlanıyor (${labelPattern})`);
+      return true;
+    }
+    return await typeahead(page, labelPattern, value);
   } catch {
     return false;
   }
@@ -420,13 +455,21 @@ async function fillLwcNumber(page: any, locator: any, value: string): Promise<bo
   }
 }
 
-/** GPA scale is not tracked on SubmitProfile — infer 4-point vs 100-point from magnitude. */
+/**
+ * GPA scale is not tracked on SubmitProfile — infer 4-point vs 100-point from
+ * magnitude.
+ *
+ * Faz-2.4 KANITLANDI (canlı, gerçek klavye ile test edildi): this LWC GPA
+ * spinbutton REJECTS decimals even from real keystrokes — "3.20" was refused,
+ * only the decimal-free "3" was accepted and turned the Bachelor banner green.
+ * Always send an INTEGER string (Math.round, min 1).
+ */
 function inferGpaTypeLabel(gpa?: number): { label: string; value: string } {
   const n = typeof gpa === "number" && Number.isFinite(gpa) ? gpa : undefined;
   if (n !== undefined && n > 4) {
-    return { label: "GRADING SYSTEM OUT OF 100", value: n.toFixed(2) };
+    return { label: "GRADING SYSTEM OUT OF 100", value: String(Math.max(1, Math.round(n))) };
   }
-  return { label: "GRADING SYSTEM OUT OF 4", value: (n ?? 3.0).toFixed(2) };
+  return { label: "GRADING SYSTEM OUT OF 4", value: String(Math.max(1, Math.round(n ?? 3))) };
 }
 
 function monthName(m?: number): string | undefined {
@@ -574,12 +617,25 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
     picked = true;
   }
 
-  // Verify via the "Selected Programs" cart button label (e.g. "Selected Programs (1)").
-  const cartTxt = await page
-    .getByRole("button", { name: /selected programs/i })
-    .first()
-    .innerText()
-    .catch(() => "");
+  // Faz-2.4 SAĞLAMLAŞTIRMA: verify the cart really shows a selection
+  // ("Selected Programs (1)") BEFORE Next — if it still reads (0)/empty,
+  // re-click the chosen card's toggle once (hydration race observed live).
+  const readCart = async (): Promise<string> =>
+    (await page
+      .getByRole("button", { name: /selected programs/i })
+      .first()
+      .innerText()
+      .catch(() => "")) as string;
+
+  let cartTxt = await readCart();
+  if (!/\(\s*[1-9]/.test(cartTxt)) {
+    logger.warn(`[altinbas] Program sepeti boş görünüyor (${JSON.stringify(cartTxt)}) — seçim tekrar deneniyor`);
+    const retryCard = pickIdx >= 0 ? cards.nth(pickIdx) : cards.first();
+    const retryBtn = retryCard.locator('button:has-text("Select"), button').first();
+    await retryBtn.click({ force: true, timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    cartTxt = await readCart();
+  }
   logger.info(`[altinbas] Program sepeti: ${JSON.stringify(cartTxt)} picked=${picked}`);
 
   await clickNext(page);
@@ -588,19 +644,40 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
 
   // Faz-2.1/2.2 KANITLANDI: getByRole("button", {name: /save and next/i})
   // misses this button (accessible-name diverges from visible text) — use a
-  // text-locator, and retry a few times since the modal can re-render.
+  // text-locator. Faz-2.4: "Save and Next" is NON-DETERMINISTIC live (modal
+  // sometimes survives the click: portal + CSS-Error + hydration race) —
+  // dismiss any SF error BEFORE each attempt and retry until the modal
+  // actually closes, up to 4 times.
+  let saveNextDone = false;
   for (let k = 0; k < 4; k++) {
+    await dismissSfError(page);
     const saveNext = page.locator('button:has-text("Save and Next")').first();
-    if (!(await saveNext.count().catch(() => 0))) break;
+    if (!(await saveNext.count().catch(() => 0))) {
+      saveNextDone = true;
+      break;
+    }
+    logger.info(`[altinbas] Save and Next denemesi ${k + 1}/4`);
     await saveNext.click({ force: true, timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(SF_HYDRATION_MS);
     await dismissSfError(page);
   }
-  logger.info("[altinbas] Program seçildi + Save and Next");
+  if (!saveNextDone) {
+    saveNextDone = !(await page.locator('button:has-text("Save and Next")').first().count().catch(() => 0));
+  }
+  if (!saveNextDone) {
+    logger.warn("[altinbas] Program: Save and Next 4 denemede de modalı kapatmadı — stage yeniden okunacak");
+  }
+  logger.info(`[altinbas] Program seçildi + Save and Next (kapandı=${saveNextDone})`);
   return true;
 }
 
-/** Personal Information — most fields already carried from Basic Info; fill the rest, never throw. */
+/**
+ * Personal Information — Faz-2.4 (canlı haritalandı). Required: First/Last
+ * (carried), Gender, Date of Birth, Country of Birth, Citizenship (may be
+ * carried from Basic Info → typeaheadIfEmpty), Passport Issuing Country,
+ * Passport Issue/Expiry, EMAIL (was missing in earlier automation runs!),
+ * Mobile, Address Country/City/Street/Zip. Never throws.
+ */
 async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean> {
   await page
     .getByLabel(/gender/i)
@@ -608,13 +685,23 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
     .selectOption({ label: /f/i.test((profile.gender || "").charAt(0)) ? "Female" : "Male" })
     .catch(() => {});
 
+  const country = mapCountry(profile.nationality);
   await typeDate(page, /date of birth/i, fmtAltDate(profile.dateOfBirth));
-  await typeahead(page, /country of birth/i, mapCountry(profile.nationality));
-  await typeahead(page, /^citizenship/i, mapCountry(profile.nationality));
-  await typeahead(page, /passport issuing country/i, mapCountry(profile.nationality));
+  await typeahead(page, /country of birth/i, country);
+  await typeaheadIfEmpty(page, /^citizenship/i, country);
+  await typeahead(page, /passport issuing country/i, country);
   await typeDate(page, /passport date of issue/i, fmtAltDate(profile.passportIssueDate));
   await typeDate(page, /passport date of expiry/i, fmtAltDate(profile.passportExpiryDate));
-  await fillIfPresent(page, /^email/i, profile.email);
+
+  // Email is REQUIRED here and was the silent blocker in earlier automated
+  // runs — fill it explicitly (not fillIfPresent gating on a maybe-value).
+  const emailBox = page.getByLabel(/^e-?mail/i).first();
+  if (await emailBox.count().catch(() => 0)) {
+    await emailBox.fill(profile.email).catch(() => {});
+  } else {
+    logger.warn("[altinbas] Personal: Email alanı bulunamadı (zorunlu!)");
+  }
+
   await fillIfPresent(page, /mobile/i, profile.phone);
   await fillIfPresent(page, /father name/i, profile.fatherName);
   await fillIfPresent(page, /mother name/i, profile.motherName);
@@ -622,7 +709,7 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
   // Address: SubmitProfile only carries a single free-text `address` field —
   // best-effort split, never blocking on missing structured data.
   const addrParts = (profile.address || "").split(",").map((s) => s.trim()).filter(Boolean);
-  await typeahead(page, /address:?\s*country/i, mapCountry(profile.nationality));
+  await typeahead(page, /address:?\s*country/i, country);
   await fillIfPresent(page, /address:?\s*city/i, addrParts[addrParts.length - 1] || "N/A");
   await fillIfPresent(page, /address:?\s*street/i, addrParts[0] || profile.address || "N/A");
   await fillIfPresent(page, /address:?\s*zip/i, "00000");
@@ -676,67 +763,159 @@ async function stageEducational(page: any, profile: SubmitProfile): Promise<bool
 }
 
 /**
- * Questionnaire — not yet mapped from a live dry-run (Faz-2.1). Self-capture
- * (handled by the caller before this runs) already logs the field inventory;
- * here we just pick a reasonable default per control and advance so later
- * stages remain reachable for capture.
+ * Questionnaire — Faz-2.4 (canlı haritalandı). Single question: "Do you need
+ * Visa Support?" — the Answer control is an SLDS button-combobox that opens a
+ * listbox with Yes / No. International applicants → "Yes". If more questions
+ * appear in the future, every Answer combobox gets the same default.
  */
 async function stageQuestionnaire(page: any): Promise<boolean> {
   try {
-    const radios = page.getByRole("radio");
-    const n = await radios.count().catch(() => 0);
+    const answers = page.getByRole("combobox", { name: /answer/i });
+    let n = await answers.count().catch(() => 0);
+    if (!n) {
+      // Fallback: any open-able combobox on the stage.
+      n = await page.getByRole("combobox").count().catch(() => 0);
+    }
     for (let i = 0; i < n; i++) {
-      const isChecked = await radios.nth(i).isChecked().catch(() => true);
-      if (!isChecked) {
-        // Faz-2.1 KANITLANDI: SLDS radios reject non-force clicks on this portal.
-        await forceCheckRadio(page, radios.nth(i));
+      const ans = (await answers.count().catch(() => 0))
+        ? answers.nth(i)
+        : page.getByRole("combobox").nth(i);
+      await ans.click().catch(() => {});
+      await page.waitForTimeout(800);
+      const yes = page.getByRole("option", { name: /^yes$/i }).first();
+      if (await yes.count().catch(() => 0)) {
+        await yes.click({ timeout: 4000 }).catch(() => {});
+        logger.info(`[altinbas] Questionnaire: soru ${i + 1} → Yes`);
+      } else {
+        const anyOpt = page.locator('[role="option"]').first();
+        if (await anyOpt.count().catch(() => 0)) {
+          await anyOpt.click({ timeout: 4000 }).catch(() => {});
+          logger.info(`[altinbas] Questionnaire: soru ${i + 1} → ilk seçenek (Yes bulunamadı)`);
+        }
       }
+      await page.waitForTimeout(500);
+    }
+
+    // Legacy fallback: any unchecked radios (older questionnaire layouts).
+    const radios = page.getByRole("radio");
+    const rn = await radios.count().catch(() => 0);
+    for (let i = 0; i < rn; i++) {
+      const isChecked = await radios.nth(i).isChecked().catch(() => true);
+      if (!isChecked) await forceCheckRadio(page, radios.nth(i));
     }
   } catch {
     /* best-effort only */
   }
-  logger.info("[altinbas] Questionnaire: default seçimlerle geçiliyor (Faz-2.1'de haritalanacak)");
+  logger.info("[altinbas] Questionnaire tamamlandı (Visa Support=Yes)");
   await clickNext(page);
   return true;
 }
 
 /**
- * Documents — upload the already-downloaded local files by matching each
- * file input's nearby label text to a document type. Self-capture (caller)
- * already logs which slots are present; this best-effort maps by keyword.
+ * Wait for the "Upload Files" progress modal that appears after
+ * setInputFiles, then click its Done button. Faz-2.4 KANITLANDI (canlı elle
+ * test): setInputFiles(local) → modal (progress bar → yeşil tik → "1 of 1
+ * file uploaded") → Done → row flips to "( Uploaded )" with Preview + chip.
  */
-async function stageDocuments(page: any, files: SubmitFiles): Promise<boolean> {
-  const slots: Array<[RegExp, string | undefined]> = [
-    [/photo/i, files.photo],
-    [/passport/i, files.passport],
-    [/transcript/i, files.transcript],
-    [/diploma/i, files.diploma],
+async function clickUploadDone(page: any): Promise<boolean> {
+  const doneBtn = page.getByRole("button", { name: /^done$/i }).first()
+    .or(page.locator('button:has-text("Done")').first());
+  for (let k = 0; k < 6; k++) {
+    const present = await doneBtn.count().catch(() => 0);
+    const enabled = present ? await doneBtn.isEnabled().catch(() => false) : false;
+    if (present && enabled) {
+      await doneBtn.click({ force: true }).catch(() => {});
+      return true;
+    }
+    await page.waitForTimeout(1000);
+  }
+  return false;
+}
+
+/**
+ * Documents — Faz-2.4 (canlı ELLE test edildi, upload akışı doğrulandı).
+ * 4 required rows, each with its own input[type=file]: Passport, Bachelor
+ * Diploma, Bachelor Transcript, Personal Picture. Per row: locate the row
+ * container by heading text → setInputFiles → "Upload Files" modal → Done.
+ * Falls back to positional nth(index) when text-matching finds no row.
+ *
+ * This is the LAST stage before Submit Application (footer button — there is
+ * no Next here). Returns "final_dry" (dry-run: stop before Submit) or
+ * "final_submitted" (real run: Submit Application clicked).
+ */
+async function stageDocuments(
+  page: any,
+  files: SubmitFiles,
+  dryRun: boolean,
+): Promise<"final_dry" | "final_submitted" | boolean> {
+  // Portal row order (live): Passport, Bachelor Diploma, Bachelor Transcript, Personal Picture.
+  const docMap: Array<{ label: RegExp; file: string | undefined; tag: string }> = [
+    { label: /passport/i,                          file: files.passport,   tag: "Passport" },
+    { label: /diploma/i,                           file: files.diploma,    tag: "Bachelor Diploma" },
+    { label: /transcript/i,                        file: files.transcript, tag: "Bachelor Transcript" },
+    { label: /personal picture|photo|picture/i,    file: files.photo,      tag: "Personal Picture" },
   ];
 
   const fileInputs = page.locator("input[type=file]");
   const n = await fileInputs.count().catch(() => 0);
   logger.info(`[altinbas] stageDocuments: ${n} file input(s) found on Documents stage`);
 
-  for (let i = 0; i < n; i++) {
-    const input = fileInputs.nth(i);
-    const label = ((await input.getAttribute("aria-label").catch(() => "")) || "").toLowerCase();
-    const container = input.locator("xpath=ancestor::*[self::div or self::fieldset][1]");
-    const nearbyText = ((await container.innerText().catch(() => "")) || "").toLowerCase();
-    const haystack = `${label} ${nearbyText}`;
-    const match = slots.find(([re]) => re.test(haystack));
-    if (match?.[1]) {
-      await input.setInputFiles(match[1]).catch((e: unknown) =>
-        logger.warn(`[altinbas] stageDocuments: setInputFiles failed for slot ${i}:`, e),
-      );
-    } else {
-      logger.info(`[altinbas] stageDocuments: file input ${i} did not match a known doc type (haystack="${haystack.slice(0, 80)}")`);
+  for (let idx = 0; idx < docMap.length; idx++) {
+    const d = docMap[idx]!;
+    if (!d.file) {
+      logger.info(`[altinbas] belge yok, atlanıyor: ${d.tag}`);
+      continue;
     }
+
+    // Prefer the row container matched by heading text; fall back to the
+    // positional input (portal row order is stable).
+    let input = page
+      .locator("tr, li, .slds-grid, div")
+      .filter({ hasText: d.label })
+      .locator('input[type="file"]')
+      .first();
+    if (!(await input.count().catch(() => 0))) {
+      input = fileInputs.nth(Math.min(idx, Math.max(0, n - 1)));
+    }
+    if (!(await input.count().catch(() => 0))) {
+      logger.warn(`[altinbas] stageDocuments: input bulunamadı: ${d.tag}`);
+      continue;
+    }
+
+    await input.setInputFiles(d.file).catch((e: unknown) =>
+      logger.warn(`[altinbas] stageDocuments: setInputFiles hata (${d.tag}):`, e),
+    );
+
+    const done = await clickUploadDone(page);
+    await page.waitForTimeout(1500);
+    logger.info(`[altinbas] belge yüklendi: ${d.tag} (Done=${done})`);
   }
 
   await page.waitForTimeout(1500);
-  await clickNext(page);
-  logger.info("[altinbas] Documents: yükleme denendi + Next");
-  return true;
+
+  // Faz-2.4: the Documents footer button is "Submit Application" (not Next).
+  if (dryRun) {
+    await captureScreen(page, "documents-ready");
+    logger.info("[altinbas] Documents hazır — dry-run: Submit Application'a BASILMADI");
+    return "final_dry";
+  }
+
+  const submitBtn = page.getByRole("button", { name: /submit application/i }).first()
+    .or(page.locator('button:has-text("Submit Application")').first());
+  if (!(await submitBtn.count().catch(() => 0))) {
+    // Fail-visible terminal state: never let this degrade to a generic
+    // "advanced" — the loop would keep walking with submitted:false and no
+    // explanation. "final_nosubmit" surfaces the explicit detail message.
+    logger.warn("[altinbas] stageDocuments: Submit Application butonu bulunamadı");
+    await captureScreen(page, "documents-no-submit-button");
+    return "final_nosubmit";
+  }
+  await submitBtn.click({ timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(SF_HYDRATION_MS);
+  await dismissSfError(page);
+  await captureScreen(page, "after-submit");
+  logger.info("[altinbas] Submit Application tıklandı (GERÇEK gönderim)");
+  return "final_submitted";
 }
 
 /** Dispatch the recognised stage name to its handler; unrecognised stages fall back to generic capture+Next. */
@@ -745,7 +924,8 @@ async function handleStage(
   stageName: string,
   profile: SubmitProfile,
   files: SubmitFiles,
-): Promise<boolean> {
+  dryRun: boolean,
+): Promise<"final_dry" | "final_submitted" | boolean> {
   const s = stageName.toLowerCase();
   if (s.includes("term")) return stageTerm(page);
   if (s.includes("degree")) return stageDegree(page, profile);
@@ -753,7 +933,7 @@ async function handleStage(
   if (s.includes("personal")) return stagePersonal(page, profile);
   if (s.includes("educational")) return stageEducational(page, profile);
   if (s.includes("questionnaire")) return stageQuestionnaire(page);
-  if (s.includes("document")) return stageDocuments(page, files);
+  if (s.includes("document")) return stageDocuments(page, files, dryRun);
   return false;
 }
 
@@ -980,7 +1160,7 @@ async function handleUnknownStep(
   screenshots: string[],
   profile: SubmitProfile,
   files: SubmitFiles,
-): Promise<"advanced" | "final_reached" | "stuck">{
+): Promise<"advanced" | "final_reached" | "stuck" | "submitted">{
   await dismissSfError(page);
 
   const stageName = await readActiveStageName(page);
@@ -1030,10 +1210,19 @@ async function handleUnknownStep(
     .evaluate(() => (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 800))
     .catch(() => "");
 
-  // Detect final Completed/Submit screen
+  // Detect final Completed/Submit screen.
+  // Faz-2.4: the DOCUMENTS footer contains "Submit Application" — that must
+  // NOT trigger the final detector or documents would never be uploaded;
+  // stageDocuments itself owns the Submit/dry-stop decision for that stage.
+  // Guard by stage NAME and by DOM signal (file inputs present) — the stage
+  // bar can fail to parse (stageName null), and misfiring here would skip
+  // uploads entirely.
+  const hasFileInputs = ((await page.locator("input[type=file]").count().catch(() => 0)) as number) > 0;
+  const isDocumentsStage = /document/i.test(stageName || "") || (!stageName && hasFileInputs);
   if (
-    /completed/i.test(stageName || "") ||
-    /review and submit|not submitted yet|please review|submit application/i.test(txt)
+    !isDocumentsStage &&
+    (/completed/i.test(stageName || "") ||
+      /review and submit|not submitted yet|please review|submit application/i.test(txt))
   ) {
     logger.info(`[altinbas] Step ${stepIdx}: FINAL stage reached (${stageName ?? "Completed"})`);
     if (dryRun) {
@@ -1049,10 +1238,12 @@ async function handleUnknownStep(
   // recognised — it fills the real fields and clicks Next/Save itself.
   // Unrecognised stages fall back to the generic capture+Next below.
   if (stageName) {
-    const handled = await handleStage(page, stageName, profile, files).catch((e) => {
+    const handled = await handleStage(page, stageName, profile, files, dryRun).catch((e) => {
       logger.warn(`[altinbas] handleStage error for "${stageName}":`, e);
-      return false;
+      return false as const;
     });
+    if (handled === "final_dry") return "final_reached";
+    if (handled === "final_submitted") return "submitted";
     if (handled) {
       await dismissSfError(page);
       return "advanced";
@@ -1290,6 +1481,13 @@ export const altinbasAdapter: UniversityAdapter = {
         finalReached = true;
         break;
       }
+      if (outcome === "submitted") {
+        // Faz-2.4: stageDocuments clicked "Submit Application" (real run).
+        finalReached = true;
+        result.submitted = true;
+        result.detail = "Altınbaş: Submit Application tıklandı (Documents aşamasından)";
+        break;
+      }
       if (outcome === "stuck") {
         logger.warn(`[altinbas] stuck at step ${step}, aborting`);
         (result as any).stuckStep = step;
@@ -1300,15 +1498,17 @@ export const altinbasAdapter: UniversityAdapter = {
       await page.waitForTimeout(2500);
     }
 
-    // ── Final submit — NOT IMPLEMENTED YET (Faz-5) ──────────────────────────
-    // Faz-1 scope stops at self-capturing every wizard stage. Real Submit
-    // (Completed screen) is deliberately unimplemented in BOTH dry-run and
-    // real (doSubmit=true) modes so a live run can never accidentally
-    // submit an application before Faz-5 lands the reviewed submit logic.
-    if (finalReached) {
+    // ── Final submit ────────────────────────────────────────────────────────
+    // Faz-2.4: the REAL "Submit Application" click lives inside
+    // stageDocuments (the button is on the Documents footer, there is no
+    // separate Completed/Submit screen action). When it fires, the loop
+    // already set result.submitted + detail via the "submitted" outcome.
+    // Dry-run NEVER reaches that click — stageDocuments stops with
+    // "final_dry" before touching Submit Application.
+    if (finalReached && !result.submitted) {
       const msg = dryRun
         ? "Altınbaş: dry-run — FINAL stage reached, stopping before Submit"
-        : "Altınbaş: final Submit not implemented yet (Faz-5) — stopping before Completed/Submit";
+        : "Altınbaş: final stage reached but Submit Application was not clicked (button not found or non-Documents final screen)";
       logger.info(`[altinbas] ${msg}`);
       result.detail = msg;
     }
