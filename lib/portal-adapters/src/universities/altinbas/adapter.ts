@@ -628,33 +628,31 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
   // 3) Collect candidates keyed by the program-card TOGGLE buttons.
-  // Faz-2.7..2.10 KÖK NEDEN zinciri: 'button:has-text("Select")' also
-  // matches the "Selected Programs" cart button; accessible-NAME matching
-  // finds nothing; and Faz-2.10 KESİN VERİ — the page has only 8
-  // role=buttons (FILTERS, Clear, Selected Programs, Available Programs,
-  // Previous, Next, 0, Logout): the card "+ Select" control is NOT a
-  // role=button at all (likely <a>/lightning-button/clickable span). So
-  // target the VISIBLE LABEL TEXT instead of a role: elements whose own
-  // text is exactly "Select" / "+ Select". "Selected Programs" can't match
-  // (contains "Programs"); the sibling "Selected" span can't match either
-  // (trailing "ed").
-  const selectEls = page.getByText(/^\s*\+?\s*select\s*$/i);
+  // Faz-2.7..2.11 KÖK NEDEN zinciri: the card select control is NOT a
+  // role=button (page has only 8 role=buttons); and NO descendant element
+  // has the bare text "Select" either — the card's select control renders
+  // the CONCATENATED three-state text "SelectSelectedRemove" in ONE element
+  // (Select + Selected + Remove states, CSS shows one; Faz-2.2 field
+  // inventory + Faz-2.10 CARD-HTML dump: LWC shadow-DOM accordion + slot).
+  // So target the COMPOSITE signature text directly.
+  const selectEls = page.getByText(/select\s*selected\s*remove/i);
   const n = await selectEls.count().catch(() => 0);
-  logger.info(`[altinbas] kart-select label sayisi: ${n}`);
+  logger.info(`[altinbas] kart-select composite sayisi: ${n}`);
   if (!n) {
-    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç kart-select label'ı yok`);
-    // TEŞHİS: dump the DOM around the "Available Programs" list so the next
-    // run has structural data (first 2500 chars of outerHTML).
-    const listAnchor = page.getByText(/available programs/i).first();
-    if (await listAnchor.count().catch(() => 0)) {
-      const html = ((await listAnchor
-        .locator("xpath=ancestor::div[3]")
+    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç composite select elemanı yok`);
+    // TEŞHİS: dump the real program-card DOM structure via a text anchor
+    // from the search results (first 3000 chars of ancestor outerHTML).
+    const anchorRe = new RegExp(searchWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const progAnchor = page.getByText(anchorRe).first();
+    if (await progAnchor.count().catch(() => 0)) {
+      const html = ((await progAnchor
+        .locator("xpath=ancestor::*[5]")
         .first()
         .evaluate((el: any) => (el as HTMLElement).outerHTML)
         .catch(() => "")) || "") as string;
-      logger.warn(`[altinbas] CARD-HTML: ${html.slice(0, 2500)}`);
+      logger.warn(`[altinbas] PROG-CARD-HTML: ${html.slice(0, 3000)}`);
     } else {
-      logger.warn("[altinbas] CARD-HTML: 'Available Programs' anchor bulunamadı");
+      logger.warn(`[altinbas] PROG-CARD-HTML: "${searchWord}" text anchor bulunamadı`);
     }
     return false;
   }
@@ -699,7 +697,7 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   const strategies: Array<[string, () => Promise<void>]> = [
     ["normal click", async () => { await btn.click({ timeout: 5000 }); }],
     ["force click", async () => { await btn.click({ force: true, timeout: 5000 }); }],
-    ["DOM .click()", async () => { await btn.evaluate((e: any) => { const c = (e.closest('a, button, [role="button"]') || e) as HTMLElement; c.click(); }); }],
+    ["DOM .click()", async () => { await btn.evaluate((e: any) => { const c = (e.closest('a, button, [role="button"], [class*="button"]') || e) as HTMLElement; c.click(); }); }],
     ["dispatchEvent", async () => { await btn.dispatchEvent("click"); }],
   ];
   let selected = false;

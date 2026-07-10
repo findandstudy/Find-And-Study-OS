@@ -69,13 +69,14 @@ The two former blockers were resolved by watching the live portal interactively 
      /next/ locator collides with the footer Next — browsing pages proved fragile; prefer
      single-word search + the Language/Thesis SLDS dropdown filters to narrow the list.
    - The card "+ Select" control is NOT a role=button AT ALL (live-proven: the whole page exposes
-     only 8 role=buttons — FILTERS/Clear/Selected Programs/Available Programs/Previous/Next/0/
-     Logout); every button-based locator (has-text, accessible-name, role+hasText) found 0 or the
-     wrong element. Locate by VISIBLE LABEL TEXT: getByText(/^\s*\+?\s*select\s*$/i) — "Selected
-     Programs" (contains Programs) and the sibling "Selected" span (trailing "ed") can't match.
+     only 8 role=buttons) AND no descendant has bare text "Select" either — the list is an LWC
+     shadow-DOM accordion+slot and the select control renders the CONCATENATED three-state text
+     "SelectSelectedRemove" in ONE element (CSS shows one state). Locate by the COMPOSITE
+     signature: getByText(/select\s*selected\s*remove/i). Exact-text, accessible-name and
+     role-based locators all found 0 or the wrong element.
      Resolve the owning card via el.closest('[class*="card"], article, li'); BLANK any candidate
      whose container text has stepper markers (/stage (complete|in progress|not started)/i); click
-     strategy 3 must climb to closest('a,button,[role=button]') before the DOM click.
+     strategy 3 must climb to closest('a,button,[role=button],[class*=button]') before DOM click.
    - The card "+ Select" click doesn't reliably register with any single strategy — use
      multi-strategy (normal → force → DOM .click() → dispatchEvent) and verify the
      "Selected Programs (N)" cart text after EVERY attempt; fail visibly if the cart stays empty.
