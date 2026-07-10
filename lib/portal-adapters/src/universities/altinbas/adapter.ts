@@ -326,8 +326,9 @@ function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
   }
 
   if (!states.length) {
-    // Regex fallback: JSON parse edilemeyen gövdeden serializedState çek.
-    const re = /"serializedState"\s*:\s*"((?:[^"\\]|\\.){200,}?)"/g;
+    // Regex fallback: JSON parse edilemeyen / string içine gömülü (escaped)
+    // gövdeden serializedState çek — `\"serializedState\":\"...\"` varyantı dahil.
+    const re = /\\?"serializedState\\?"\s*:\s*\\?"((?:[^"\\]|\\.){200,}?)\\?"/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(raw)) !== null) {
       try {
@@ -370,13 +371,39 @@ function setupFlowInterceptor(page: any, rt: FlowRuntime): void {
       // SADECE FlowRuntimeConnectController trafiğinden — arka plan Aura
       // çağrıları zincirlenmiş state'i/template'i bozamasın.
       captureDump("browser-request", url, post);
-      if (!post.includes("FlowRuntimeConnectController")) return;
+      if (!post.includes("FlowRuntimeConnectController") && !url.includes("FlowRuntimeConnect")) return;
       const p = new URLSearchParams(post);
       const context = p.get("aura.context") || "";
       const token = p.get("aura.token") || "";
       const pageURI = p.get("aura.pageURI") || "/partner/s/application-form";
       if (context && token) {
         rt.template = { origin: new URL(url).origin, context, token, pageURI };
+      }
+      // FIX-1: initial serializedState navigateFlow REQUEST gövdesinde gelir
+      // (message=<urlenc JSON> → actions[0].params.request.serializedState).
+      // Yanıt-state'i her zaman daha günceldir; request-state SADECE seed olarak
+      // (rt.state boşken) kullanılır.
+      if (!rt.state) {
+        const msgStr = p.get("message") || "";
+        if (msgStr.includes("serializedState")) {
+          try {
+            const msg = JSON.parse(msgStr) as {
+              actions?: Array<{ params?: { request?: { serializedState?: unknown } } }>;
+            };
+            for (const a of msg.actions ?? []) {
+              const ss = a?.params?.request?.serializedState;
+              if (typeof ss === "string" && ss.length > 200) {
+                rt.state = ss;
+                logger.info(
+                  `[altinbas] flow boot yakalandı (REQUEST gövdesinden) serializedState len=${ss.length}`,
+                );
+                break;
+              }
+            }
+          } catch {
+            /* message parse edilemedi — yanıt tarafı yakalayabilir */
+          }
+        }
       }
     } catch {
       /* interceptor asla akışı kırmaz */
@@ -393,7 +420,7 @@ function setupFlowInterceptor(page: any, rt: FlowRuntime): void {
         if (!raw) return;
         captureDump("browser-response", url, raw);
         // Yalnız flow-controller yanıtları state'e sindirilir.
-        if (!reqPost.includes("FlowRuntimeConnectController")) return;
+        if (!reqPost.includes("FlowRuntimeConnectController") && !url.includes("FlowRuntimeConnect")) return;
         ingestFlowResponse(rt, raw);
       } catch {
         /* interceptor asla akışı kırmaz */
@@ -436,6 +463,24 @@ function auraActionSucceeded(raw: string): boolean {
   return /"state"\s*:\s*"SUCCESS"/.test(raw);
 }
 
+/**
+ * Ekran sırası rank'i: Term=0 → Degree=1 → Program=2 → Personal=3 →
+ * Educational=4 → Questionnaire=5 → Documents=6. Okunamayan stage = -1
+ * (bilinmiyor — adım atlama YAPILMAZ, baştan başlanır).
+ */
+function stageRank(stage: string | null): number {
+  if (!stage) return -1;
+  const s = stage.toLowerCase();
+  if (/document|upload/.test(s)) return 6;
+  if (/question/.test(s)) return 5;
+  if (/educat/.test(s)) return 4;
+  if (/personal/.test(s)) return 3;
+  if (/program/.test(s)) return 2;
+  if (/degree/.test(s)) return 1;
+  if (/term/.test(s)) return 0;
+  return -1;
+}
+
 /** Duplicate-passport guard mesajı (SKIPPED_DUPLICATE — fail DEĞİL). */
 function isDuplicatePassport(raw: string): boolean {
   return /application with this passport|passport number already|already an application|Prevent_Duplicate_Passport/i.test(raw);
@@ -474,7 +519,8 @@ async function postNavigateFlow(
   params.set("aura.pageURI", rt.template.pageURI);
   params.set("aura.token", rt.template.token);
 
-  const url = `${rt.template.origin}/partner/s/sfsites/aura?r=${rt.reqCounter}&other.FlowRuntimeConnectController.navigateFlow=1`;
+  // Canlı yakalanan gerçek endpoint formatı: ...aura?r=<n>&aura.FlowRuntimeConnect.navigateFlow=1
+  const url = `${rt.template.origin}/partner/s/sfsites/aura?r=${rt.reqCounter}&aura.FlowRuntimeConnect.navigateFlow=1`;
   captureDump("replay-request", url, params.toString());
 
   const resp: { status: number; text: string } = await page.evaluate(
@@ -652,10 +698,37 @@ async function runFlowReplay(
   result: SubmitResult,
   screenshots: string[],
 ): Promise<void> {
-  // 1) Flow boot'unu bekle: Create New Application yanıtı ilk serializedState'i getirir.
-  for (let t = 0; t < 45 && (!rt.state || !rt.template); t++) {
+  // 1) Flow boot'unu bekle: serializedState ya startFlow/navigateFlow yanıtından
+  //    ya da ilk navigateFlow REQUEST gövdesinden (FIX-1) yakalanır.
+  for (let t = 0; t < 12 && (!rt.state || !rt.template); t++) {
     await page.waitForTimeout(1000);
   }
+
+  // FIX-1 boot seed: Create New Application sonrası Term ekranı render olur ama
+  // sayfa kendiliğinden navigateFlow atmayabilir. Term ekranında Next'e BİR KEZ
+  // UI'dan tıkla → ilk gerçek navigateFlow tetiklenir → request interceptor
+  // template + initial serializedState'i yakalar; sonrası tamamen replay.
+  if (!rt.state || !rt.template) {
+    logger.info(
+      "[altinbas] flow boot henüz yakalanmadı — Term ekranında UI Next ile ilk navigateFlow tetikleniyor (boot seed)",
+    );
+    try {
+      // Yalnız GÖRÜNÜR ve tam "Next" metinli footer butonu (SLDS varyantlarına
+      // karşı dar filtre); kaç aday bulunduğu teşhis için loglanır.
+      const nextBtns = page
+        .locator("button:visible")
+        .filter({ hasText: /^\s*Next\s*$/i });
+      const n = await nextBtns.count().catch(() => 0);
+      logger.info(`[altinbas] boot-seed: görünür "Next" buton adayı=${n}`);
+      if (n > 0) await nextBtns.last().click({ force: true, timeout: 8000 });
+    } catch (e) {
+      logger.warn(`[altinbas] boot-seed Next tıklanamadı: ${(e as Error).message?.slice(0, 200)}`);
+    }
+    for (let t = 0; t < 20 && (!rt.state || !rt.template); t++) {
+      await page.waitForTimeout(1000);
+    }
+  }
+
   if (!rt.state || !rt.template) {
     result.detail =
       "Altınbaş: flow boot yakalanamadı — serializedState/template yok (Create New Application flow'u başlatmadı mı?)";
@@ -685,67 +758,118 @@ async function runFlowReplay(
     return false;
   };
 
-  // 2) TERM (NEXT)
-  const term = pickTermOption(rt);
-  if (!term) {
-    logger.warn("[altinbas] Term kaydı bulunamadı — TermSelector alansız NEXT deneniyor (default term varsayımı)");
-  } else {
-    logger.info(`[altinbas] Term: "${term.label}" (${term.id})`);
+  // Stage-aware başlangıç: boot-seed UI Next tıklaması ekranı ilerletmiş
+  // olabilir (örn. Term default'la Degree'ye geçti). Okunabilen boot stage'e
+  // göre geçilmiş adımlar ATLANIR; stage okunamıyorsa (-1) Term'den başlanır.
+  let curRank = stageRank(readStageFromRaw(rt.lastRaw));
+  if (curRank > 0) {
+    logger.info(`[altinbas] boot stage rank=${curRank} — önceki adımlar atlanacak`);
+  } else if (curRank === -1) {
+    logger.info("[altinbas] boot stage OKUNAMADI — replay Term'den başlıyor (ilk yanıt stage'i hizalar)");
   }
-  let raw = await postNavigateFlow(page, rt, "NEXT", term ? buildTermFields(term) : [], "term");
-  if (guard(raw, "Term")) return;
+
+  /**
+   * Stage geri gittiyse (desync) fail-visible. Aynı rank tolere edilir
+   * (commit döngüsü stage'i değiştirmeyebilir); okunamayan stage tolere edilir.
+   */
+  const noteStage = (r: string, tag: string): boolean => {
+    const nr = stageRank(readStageFromRaw(r));
+    if (nr >= 0 && curRank >= 0 && nr < curRank) {
+      result.detail = `Altınbaş: flow DESYNC @${tag} — stage geri gitti (rank ${curRank}→${nr}, stage="${readStageFromRaw(r)}")`;
+      logger.warn(`[altinbas] ${result.detail}`);
+      return true;
+    }
+    if (nr >= 0) curRank = nr;
+    return false;
+  };
+
+  let raw = rt.lastRaw;
+
+  // 2) TERM (NEXT)
+  if (curRank <= 0) {
+    const term = pickTermOption(rt);
+    if (!term) {
+      logger.warn("[altinbas] Term kaydı bulunamadı — TermSelector alansız NEXT deneniyor (default term varsayımı)");
+    } else {
+      logger.info(`[altinbas] Term: "${term.label}" (${term.id})`);
+    }
+    raw = await postNavigateFlow(page, rt, "NEXT", term ? buildTermFields(term) : [], "term");
+    if (guard(raw, "Term") || noteStage(raw, "Term")) return;
+  } else {
+    logger.info("[altinbas] Term adımı atlandı (boot stage ilerisinde)");
+  }
 
   // 3) DEGREE (NEXT)
-  const degree = pickDegreeOption(rt, profile.level || "");
-  if (!degree) {
-    result.detail = `Altınbaş: Degree seçeneği bulunamadı (level="${profile.level}") — flow kayıtlarında Master/PhD etiketi yok`;
-    logger.warn(`[altinbas] ${result.detail}`);
-    return;
+  if (curRank <= 1) {
+    const degree = pickDegreeOption(rt, profile.level || "");
+    if (!degree) {
+      result.detail = `Altınbaş: Degree seçeneği bulunamadı (level="${profile.level}") — flow kayıtlarında Master/PhD etiketi yok`;
+      logger.warn(`[altinbas] ${result.detail}`);
+      return;
+    }
+    logger.info(`[altinbas] Degree: "${degree.label}" (${degree.id})`);
+    raw = await postNavigateFlow(page, rt, "NEXT", buildDegreeFields(degree), "degree");
+    if (guard(raw, "Degree") || noteStage(raw, "Degree")) return;
+  } else {
+    logger.info("[altinbas] Degree adımı atlandı (boot stage ilerisinde)");
   }
-  logger.info(`[altinbas] Degree: "${degree.label}" (${degree.id})`);
-  raw = await postNavigateFlow(page, rt, "NEXT", buildDegreeFields(degree), "degree");
-  if (guard(raw, "Degree")) return;
 
   // 4) PROGRAM (NEXT) — eligible listeden eşle
-  const { record: prog, candidates } = pickProgramRecord(rt, profile);
-  if (!prog) {
-    result.programMissing = true;
-    result.detail = `Altınbaş: program eligible listede bulunamadı: "${profile.programName}"`;
-    if (candidates.length) {
-      result.resolution = "not_in_dropdown";
-      result.availablePrograms = candidates;
-      result.requestedProgram = { name: profile.programName };
-    }
-    return;
-  }
-  raw = await postNavigateFlow(page, rt, "NEXT", buildProgramFields(prog), "program");
-  if (guard(raw, "Program")) return;
-
   // 5) CONTINUE_AFTER_COMMIT (×N, fields:[]) — başvuru kaydı burada OLUŞUR.
-  for (let i = 0; i < 4 && !/Personal Information/i.test(raw); i++) {
-    raw = await postNavigateFlow(page, rt, "CONTINUE_AFTER_COMMIT", [], `commit${i + 1}`);
-    if (guard(raw, `commit${i + 1}`)) return;
-  }
-  if (!/Personal Information/i.test(raw)) {
-    logger.warn(
-      `[altinbas] commit sonrası Personal Information görünmedi (stage=${readStageFromRaw(raw) ?? "?"}) — yine de devam ediliyor`,
-    );
-  }
-  if (rt.ids.applicationId) {
-    logger.info(`[altinbas] applicationId=${rt.ids.applicationId} applicantId=${rt.ids.applicantId ?? "?"}`);
+  if (curRank <= 2) {
+    const { record: prog, candidates } = pickProgramRecord(rt, profile);
+    if (!prog) {
+      result.programMissing = true;
+      result.detail = `Altınbaş: program eligible listede bulunamadı: "${profile.programName}"`;
+      if (candidates.length) {
+        result.resolution = "not_in_dropdown";
+        result.availablePrograms = candidates;
+        result.requestedProgram = { name: profile.programName };
+      }
+      return;
+    }
+    raw = await postNavigateFlow(page, rt, "NEXT", buildProgramFields(prog), "program");
+    if (guard(raw, "Program") || noteStage(raw, "Program")) return;
+
+    for (let i = 0; i < 4 && !/Personal Information/i.test(raw); i++) {
+      raw = await postNavigateFlow(page, rt, "CONTINUE_AFTER_COMMIT", [], `commit${i + 1}`);
+      if (guard(raw, `commit${i + 1}`) || noteStage(raw, `commit${i + 1}`)) return;
+    }
+    if (!/Personal Information/i.test(raw)) {
+      logger.warn(
+        `[altinbas] commit sonrası Personal Information görünmedi (stage=${readStageFromRaw(raw) ?? "?"}) — yine de devam ediliyor`,
+      );
+    }
+    if (rt.ids.applicationId) {
+      logger.info(`[altinbas] applicationId=${rt.ids.applicationId} applicantId=${rt.ids.applicantId ?? "?"}`);
+    }
+  } else {
+    logger.info("[altinbas] Program+commit adımları atlandı (boot stage ilerisinde)");
   }
 
   // 6) PERSONAL (NEXT) — 46 alan; ISO tarih + 3'lü ülke picklist + kod-prefix telefon
-  raw = await postNavigateFlow(page, rt, "NEXT", buildPersonalFields(profile), "personal");
-  if (guard(raw, "Personal")) return;
+  if (curRank <= 3) {
+    raw = await postNavigateFlow(page, rt, "NEXT", buildPersonalFields(profile), "personal");
+    if (guard(raw, "Personal") || noteStage(raw, "Personal")) return;
+  } else {
+    logger.info("[altinbas] Personal adımı atlandı (boot stage ilerisinde)");
+  }
 
   // 7) EDUCATIONAL (NEXT) — boş listeler + ID binding'leri
-  raw = await postNavigateFlow(page, rt, "NEXT", buildEducationalFields(rt.ids), "educational");
-  if (guard(raw, "Educational")) return;
+  if (curRank <= 4) {
+    raw = await postNavigateFlow(page, rt, "NEXT", buildEducationalFields(rt.ids), "educational");
+    if (guard(raw, "Educational") || noteStage(raw, "Educational")) return;
+  } else {
+    logger.info("[altinbas] Educational adımı atlandı (boot stage ilerisinde)");
+  }
 
   // 8) QUESTIONNAIRE (NEXT) — cevap şekli henüz yakalanmadı; boş dene.
-  raw = await postNavigateFlow(page, rt, "NEXT", buildQuestionnaireFields(), "questionnaire");
-  if (guard(raw, "Questionnaire")) return;
+  if (curRank <= 5) {
+    raw = await postNavigateFlow(page, rt, "NEXT", buildQuestionnaireFields(), "questionnaire");
+    if (guard(raw, "Questionnaire") || noteStage(raw, "Questionnaire")) return;
+  } else {
+    logger.info("[altinbas] Questionnaire adımı atlandı (boot stage ilerisinde)");
+  }
 
   // 9) DOCUMENTS (NEXT) — ContentVersion upload HENÜZ yakalanmadı; belgesiz geç.
   const wanted: Array<[string, string | undefined]> = [
@@ -763,7 +887,7 @@ async function runFlowReplay(
   );
   if (missing.length) result.missingDocuments = missing;
   raw = await postNavigateFlow(page, rt, "NEXT", buildDocumentsFields(), "documents");
-  if (guard(raw, "Documents")) return;
+  if (guard(raw, "Documents") || noteStage(raw, "Documents")) return;
 
   // 10) FINISH — dry-run'da GÖNDERİLMEZ.
   if (dryRun) {
@@ -772,7 +896,7 @@ async function runFlowReplay(
     return;
   }
   raw = await postNavigateFlow(page, rt, "FINISH", [], "finish");
-  if (guard(raw, "FINISH")) return;
+  if (guard(raw, "FINISH") || noteStage(raw, "FINISH")) return;
 
   // FINISH başarı kanıtı: HTTP 2xx + aura JSON (postNavigateFlow garanti eder)
   // YETMEZ — aura action state:SUCCESS da şart. Aksi halde fail-visible.
