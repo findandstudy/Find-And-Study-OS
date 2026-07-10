@@ -68,16 +68,14 @@ The two former blockers were resolved by watching the live portal interactively 
    - Do NOT rely on pagination: the pager button's accessible name is "Next" (not ">"), and a generic
      /next/ locator collides with the footer Next — browsing pages proved fragile; prefer
      single-word search + the Language/Thesis SLDS dropdown filters to narrow the list.
-   - Card toggle button is findable ONLY by TEXTCONTENT: its accessible name has no "select"
-     (icon/empty) so getByRole name= matches NOTHING; its textContent is the concatenation
-     "SelectSelectedRemove". Also 'button:has-text("Select")' inside a container filter matches the
-     "Selected Programs" cart button (stepper container gets picked). Correct locator:
-     getByRole('button').filter({hasText:/select/i}) + hasNotText
-     /selection|programs|save and next|cancel and close/i ("selection" excludes stepper items
-     "Program Selection"/"Term Selection" which a plural-only /programs/ filter misses);
-     resolve each button's card via ancestor xpath (article → li → 3-up) and BLANK any candidate
-     whose container text has stepper markers (/stage (complete|in progress|not started)/i) so it
-     can't win matching or the first-card fallback.
+   - The card "+ Select" control is NOT a role=button AT ALL (live-proven: the whole page exposes
+     only 8 role=buttons — FILTERS/Clear/Selected Programs/Available Programs/Previous/Next/0/
+     Logout); every button-based locator (has-text, accessible-name, role+hasText) found 0 or the
+     wrong element. Locate by VISIBLE LABEL TEXT: getByText(/^\s*\+?\s*select\s*$/i) — "Selected
+     Programs" (contains Programs) and the sibling "Selected" span (trailing "ed") can't match.
+     Resolve the owning card via el.closest('[class*="card"], article, li'); BLANK any candidate
+     whose container text has stepper markers (/stage (complete|in progress|not started)/i); click
+     strategy 3 must climb to closest('a,button,[role=button]') before the DOM click.
    - The card "+ Select" click doesn't reliably register with any single strategy — use
      multi-strategy (normal → force → DOM .click() → dispatchEvent) and verify the
      "Selected Programs (N)" cart text after EVERY attempt; fail visibly if the cart stays empty.

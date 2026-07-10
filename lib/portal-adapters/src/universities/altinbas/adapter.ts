@@ -628,51 +628,52 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
   // 3) Collect candidates keyed by the program-card TOGGLE buttons.
-  // Faz-2.7/2.8/2.9 KÖK NEDEN zinciri: 'button:has-text("Select")' also
-  // matches the "Selected Programs" cart button (stepper container got
-  // picked); accessible-NAME matching finds NOTHING at all — the card
-  // toggle button's accessible name does NOT contain "select" (icon/empty),
-  // only its TEXTCONTENT is the concatenation "SelectSelectedRemove"
-  // (Faz-2.2 field inventory). So: take ALL role=button and filter by
-  // TEXTCONTENT (hasText looks at textContent, unlike getByRole name=),
-  // excluding the cart ("Selected Programs (N)"), footer ("Save and Next" /
-  // "Cancel and close") and stepper items ("Program Selection" / "Term
-  // Selection" — "selection" never appears in "SelectSelectedRemove").
-  const selectBtns = page
-    .getByRole("button")
-    .filter({ hasText: /select/i })
-    .filter({ hasNotText: /selection|programs|save and next|cancel and close/i });
-  const n = await selectBtns.count().catch(() => 0);
-  logger.info(`[altinbas] kart-select buton sayısı: ${n}`);
+  // Faz-2.7..2.10 KÖK NEDEN zinciri: 'button:has-text("Select")' also
+  // matches the "Selected Programs" cart button; accessible-NAME matching
+  // finds nothing; and Faz-2.10 KESİN VERİ — the page has only 8
+  // role=buttons (FILTERS, Clear, Selected Programs, Available Programs,
+  // Previous, Next, 0, Logout): the card "+ Select" control is NOT a
+  // role=button at all (likely <a>/lightning-button/clickable span). So
+  // target the VISIBLE LABEL TEXT instead of a role: elements whose own
+  // text is exactly "Select" / "+ Select". "Selected Programs" can't match
+  // (contains "Programs"); the sibling "Selected" span can't match either
+  // (trailing "ed").
+  const selectEls = page.getByText(/^\s*\+?\s*select\s*$/i);
+  const n = await selectEls.count().catch(() => 0);
+  logger.info(`[altinbas] kart-select label sayisi: ${n}`);
   if (!n) {
-    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç kart-select butonu yok`);
-    // Diagnostic for the next live run: dump the first 8 role=button texts.
-    const allBtns = page.getByRole("button");
-    const total = await allBtns.count().catch(() => 0);
-    for (let i = 0; i < Math.min(total, 8); i++) {
-      const t = ((await allBtns.nth(i).innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
-      logger.warn(`[altinbas] role=button[${i}] textContent: "${t.slice(0, 120)}"`);
+    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç kart-select label'ı yok`);
+    // TEŞHİS: dump the DOM around the "Available Programs" list so the next
+    // run has structural data (first 2500 chars of outerHTML).
+    const listAnchor = page.getByText(/available programs/i).first();
+    if (await listAnchor.count().catch(() => 0)) {
+      const html = ((await listAnchor
+        .locator("xpath=ancestor::div[3]")
+        .first()
+        .evaluate((el: any) => (el as HTMLElement).outerHTML)
+        .catch(() => "")) || "") as string;
+      logger.warn(`[altinbas] CARD-HTML: ${html.slice(0, 2500)}`);
+    } else {
+      logger.warn("[altinbas] CARD-HTML: 'Available Programs' anchor bulunamadı");
     }
     return false;
   }
 
-  // For each Select button, resolve its owning card (ancestor article → li →
-  // 3-levels-up container) and read the card text as the candidate name.
+  // For each Select label, resolve its owning card (closest card-ish
+  // container) and read the card text as the candidate name.
   // Fail-safe: a resolved container whose text carries stepper markers
   // ("... - Stage Complete") is navigation, not a program card — blank its
-  // name so it can never win matching nor the first-button fallback.
+  // name so it can never win matching nor the first-label fallback.
   const isStepperText = (t: string) => /stage\s*(complete|in\s*progress|not\s*started)/i.test(t);
   const candidates: ProgramCandidate[] = [];
   for (let i = 0; i < n; i++) {
-    const b = selectBtns.nth(i);
-    let text = "";
-    for (const anc of ["xpath=ancestor::article[1]", "xpath=ancestor::li[1]", "xpath=../../.."]) {
-      const container = b.locator(anc).first();
-      if (await container.count().catch(() => 0)) {
-        text = ((await container.innerText().catch(() => "")) || "").trim();
-        if (text) break;
-      }
-    }
+    const text = ((await selectEls
+      .nth(i)
+      .evaluate((e: any) => {
+        const c = e.closest('[class*="card"], article, li');
+        return c ? ((c as HTMLElement).innerText || c.textContent || "") : "";
+      })
+      .catch(() => "")) || "").trim();
     const clean = text.replace(/\s+/g, " ").slice(0, 200);
     candidates.push({ id: String(i), name: isStepperText(clean) ? "" : clean });
   }
@@ -685,18 +686,20 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
     });
   }
   // Search already narrowed the list — no match just means label noise;
-  // fall back to the FIRST non-stepper card button (then absolute first).
+  // fall back to the FIRST non-stepper card label (then absolute first).
   if (pickIdx < 0) pickIdx = candidates.findIndex((c) => c.name !== "");
   if (pickIdx < 0) pickIdx = 0;
   logger.info(`[altinbas] Program eşleşmesi: kart ${pickIdx} "${candidates[pickIdx]?.name.slice(0, 80)}"`);
 
-  // Multi-strategy Select click — verify the cart after EVERY attempt.
-  const btn = selectBtns.nth(pickIdx);
+  // Multi-strategy click on the Select LABEL — verify the cart after EVERY
+  // attempt. Strategy 3 climbs to the nearest clickable ancestor
+  // (a / button / [role=button]) before firing the DOM click.
+  const btn = selectEls.nth(pickIdx);
   await btn.scrollIntoViewIfNeeded().catch(() => {});
   const strategies: Array<[string, () => Promise<void>]> = [
     ["normal click", async () => { await btn.click({ timeout: 5000 }); }],
     ["force click", async () => { await btn.click({ force: true, timeout: 5000 }); }],
-    ["DOM .click()", async () => { await btn.evaluate((el: any) => ((el.closest("button") || el) as HTMLElement).click()); }],
+    ["DOM .click()", async () => { await btn.evaluate((e: any) => { const c = (e.closest('a, button, [role="button"]') || e) as HTMLElement; c.click(); }); }],
     ["dispatchEvent", async () => { await btn.dispatchEvent("click"); }],
   ];
   let selected = false;
