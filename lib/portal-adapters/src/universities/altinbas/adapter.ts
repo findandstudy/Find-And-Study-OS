@@ -501,54 +501,32 @@ function stageRank(stage: string | null): number {
 }
 
 /**
- * Duplicate-passport guard mesajı (SKIPPED_DUPLICATE — fail DEĞİL).
- * FIX-5: SADECE dolu GERÇEK hata mesajı eşleşir. "Prevent_Duplicate_Passport"
- * flow'un subflow CONFIG adıdır (CheckDuplicateValidation.subflowToRun) ve
- * duplicate olsun olmasın HER Personal/commit state'inde geçer — onu (ve
- * "already an application" gibi genel ifadeleri) eşleştirmek her öğrenciyi
- * yanlış-pozitif SKIPPED_DUPLICATE yapıyordu. Gerçek duplicate'te
- * CheckDuplicateValidation.errorMessage dolar ve bu metin gelir.
+ * CheckDuplicateValidation passport mesajı — FIX-7: bu mesaj commit/Personal'da
+ * commit1'in AZ ÖNCE OLUŞTURDUĞU kaydı self-referans olarak işaretler ve HER
+ * taze öğrencide belirir (2214 kanıtı: Program dup=false → commit2/Personal
+ * dup=true). STOP sebebi DEĞİLDİR — sadece teşhis logunda (dupIgnored) kullanılır.
+ * Gerçek duplicate zaten Program adımında AlreadyApplicationError ile,
+ * kayıt OLUŞTURULMADAN ÖNCE yakalanır.
  */
 function isDuplicatePassport(raw: string): boolean {
   return /an application with this passport number already exists|you cannot submit a new application using the same passport/i.test(raw);
 }
 
 /**
- * FIX-6: duplicate'i SELF (commit'in az önce oluşturduğu kendi kaydımız) ile
- * GERÇEK (başka bir başvuru) olarak ayır. commit1 başvuru kaydını yaratır;
- * duplicate-guard subflow bu YENİ kaydı "aynı passport'ta başvuru var" diye
- * işaretleyebiliyor (insan akışında yeni kayıt current-application olarak
- * hariç tutulur). Ayrım: mesajın ±800 karakter penceresindeki a02 Id'leri bu
- * run'da oluşturduğumuz explicitAppIds ile karşılaştır — YABANCI a02 varsa
- * gerçek duplicate; yoksa/da hepsi bizimse self. Bu run'da hiç başvuru
- * OLUŞTURMADIYSAK (commit atlanmış) duplicate self olamaz → gerçek.
+ * FIX-7: GERÇEK duplicate kontrolü = SADECE Program adımı.
+ * Öğrenci bu programa daha önce başvurduysa Program NEXT yanıtında
+ * AlreadyApplicationError.message DOLAR (oluşturmadan önce çalışan kontrol).
+ * Escaped-JSON toleranslı: AlreadyApplicationError'ı izleyen ±300 karakter
+ * içinde DOLU bir message alanı arar; null/"" eşleşmez.
  */
-function classifyDuplicate(own: ReadonlySet<string>, raw: string): "none" | "self" | "real" {
-  if (!isDuplicatePassport(raw)) return "none";
-  // own = SADECE bu run'da oluşturulduğu KANITLI Id'ler (explicit applicationId
-  // anahtarı ∪ commit yanıtlarında İLK KEZ görülen a02 kayıtları). rt.ids.
-  // applicationId buraya DAHİL DEĞİL — a02 prefix fallback'i boot'taki
-  // availability kayıtlarıyla kirlenebilir ve "self"i yanlış genişletirdi.
-  if (own.size === 0) return "real"; // bu run'da kayıt oluşturmadıysak self olamaz
-
-  const msgRe = /an application with this passport number already exists|you cannot submit a new application using the same passport/gi;
-  const foreign = new Set<string>();
+function isAlreadyAppliedProgram(raw: string): boolean {
+  if (/already applied for this program/i.test(raw)) return true;
+  const re = /AlreadyApplicationError[\s\S]{0,300}?\\?"message\\?"\s*:\s*\\?"((?:[^"\\]|\\.){4,}?)\\?"/g;
   let m: RegExpExecArray | null;
-  while ((m = msgRe.exec(raw)) !== null) {
-    const win = raw.slice(Math.max(0, m.index - 800), m.index + m[0].length + 800);
-    const idRe = /\ba02[a-zA-Z0-9]{12,15}\b/g;
-    let im: RegExpExecArray | null;
-    while ((im = idRe.exec(win)) !== null) {
-      if (!own.has(im[0])) foreign.add(im[0]);
-    }
+  while ((m = re.exec(raw)) !== null) {
+    if (m[1].trim().length > 0) return true;
   }
-  if (foreign.size > 0) {
-    logger.warn(
-      `[altinbas] duplicate GERÇEK görünüyor — mesaj penceresinde yabancı a02 Id: ${[...foreign].join(",")} (bizim: ${[...own].join(",")})`,
-    );
-    return "real";
-  }
-  return "self";
+  return false;
 }
 
 /**
@@ -628,7 +606,7 @@ async function postNavigateFlow(
 
   const stage = readStageFromRaw(raw);
   logger.info(
-    `[altinbas] navigateFlow[${tag}] action=${action} nf=${fields.length} → status=${resp.status} stage=${stage ?? "?"} err=${flowHasError(raw)} dup=${isDuplicatePassport(raw)} len=${raw.length} newStateLen=${rt.state.length}`,
+    `[altinbas] navigateFlow[${tag}] action=${action} nf=${fields.length} → status=${resp.status} stage=${stage ?? "?"} err=${flowHasError(raw)} ${tag === "program" ? `dup=${isAlreadyAppliedProgram(raw)}` : `dupIgnored=${isDuplicatePassport(raw)}`} len=${raw.length} newStateLen=${rt.state.length}`,
   );
   return raw;
 }
@@ -881,35 +859,22 @@ async function runFlowReplay(
   dumpRecords(rt, "boot");
 
   /**
-   * Yanıtı denetle: (checkDup ise) duplicate → SKIPPED_DUPLICATE; ERROR →
-   * fail-visible detail. true = DUR. FIX-5: duplicate-subflow Personal
-   * adımından ÇIKARKEN çalışır (errorMessage orada dolar) — commit1/2 dahil
-   * diğer adımlarda duplicate DENETLENMEZ (checkDup=false).
+   * Yanıtı denetle: ERROR → fail-visible detail. true = DUR.
+   * FIX-7: duplicate-STOP burada YOK. Gerçek duplicate SADECE Program
+   * adımında (AlreadyApplicationError, kayıt oluşmadan ÖNCE) yakalanır;
+   * commit/Personal'daki CheckDuplicateValidation "already exists" mesajı
+   * commit1'in az önce oluşturduğu kaydın self-referansıdır (her taze
+   * öğrencide belirir) → YOK SAYILIR, sadece dupIgnored diye loglanır.
    */
-  // FIX-6: bu run'da oluşturulduğu KANITLI başvuru Id'leri — explicit
-  // "applicationId" anahtarı + commit yanıtlarında İLK KEZ görülen a02 kayıtları.
+  // FIX-6 teşhis: bu run'da oluşturulduğu kanıtlı başvuru Id'leri — explicit
+  // "applicationId" anahtarı + commit yanıtlarında İLK KEZ görülen a02 kayıtları
+  // (çift-create şüphesi uyarısı için).
   const runCreatedAppIds = new Set<string>();
   const ownAppIds = (): Set<string> => new Set([...rt.explicitAppIds, ...runCreatedAppIds]);
 
-  const guard = (raw: string, tag: string, checkDup = false): boolean => {
-    if (checkDup) {
-      // FIX-6: self-duplicate (commit'in az önce yarattığı KENDİ kaydımız)
-      // duruş sebebi DEĞİL — akışa devam. Sadece GERÇEK duplicate durdurur.
-      // Kalan risk: gerçek duplicate'te pencerede yabancı a02 yoksa self'e
-      // düşebilir — o durumda REAL modda FINISH portalın sert guard'ında
-      // görünür şekilde patlar (sessiz yanlış submit yok); dry zaten durur.
-      const dupKind = classifyDuplicate(ownAppIds(), raw);
-      if (dupKind === "self") {
-        logger.warn(
-          `[altinbas] SELF-DUPLICATE @${tag} — duplicate mesajı bu run'da oluşturulan kayda işaret ediyor (ownIds=${[...ownAppIds()].join(",") || "?"}); akışa DEVAM ediliyor`,
-        );
-      } else if (dupKind === "real") {
-        result.alreadyExists = true;
-        result.detail =
-          "Altınbaş: SKIPPED_DUPLICATE — aynı passport+term+degree ile başvuru zaten var (portal duplicate guard)";
-        logger.info(`[altinbas] ${result.detail} (@${tag})`);
-        return true;
-      }
+  const guard = (raw: string, tag: string): boolean => {
+    if (isDuplicatePassport(raw)) {
+      logger.info(`[altinbas] dupIgnored=true @${tag} — self-referans passport mesajı YOK SAYILDI (FIX-7)`);
     }
     if (flowHasError(raw)) {
       result.detail = `Altınbaş flow ERROR @${tag}: ${raw.replace(/\s+/g, " ").slice(0, 500)}`;
@@ -992,6 +957,15 @@ async function runFlowReplay(
       return;
     }
     raw = await postNavigateFlow(page, rt, "NEXT", buildProgramFields(prog), "program");
+    // FIX-7: GERÇEK duplicate kontrolü SADECE burada — AlreadyApplicationError
+    // kayıt oluşturulmadan ÖNCE dolar (öğrenci bu programa gerçekten başvurmuş).
+    if (isAlreadyAppliedProgram(raw)) {
+      result.alreadyExists = true;
+      result.detail =
+        "Altınbaş: SKIPPED_DUPLICATE — öğrenci bu programa daha önce başvurmuş (Program adımı AlreadyApplicationError)";
+      logger.info(`[altinbas] ${result.detail}`);
+      return;
+    }
     if (guard(raw, "Program") || noteStage(raw, "Program")) return;
 
     // FIX-6: commit ÖNCESİ görülen a02 kayıtları (boot/program availability'leri)
@@ -1029,8 +1003,8 @@ async function runFlowReplay(
   // 6) PERSONAL (NEXT) — 46 alan; ISO tarih + 3'lü ülke picklist + kod-prefix telefon
   if (curRank <= 3) {
     raw = await postNavigateFlow(page, rt, "NEXT", buildPersonalFields(profile), "personal");
-    // FIX-5: gerçek duplicate-subflow burada çalışır → duplicate denetimi SADECE Personal yanıtında.
-    if (guard(raw, "Personal", true) || noteStage(raw, "Personal")) return;
+    // FIX-7: Personal'daki "already exists" self-referanstır — duplicate-stop YOK.
+    if (guard(raw, "Personal") || noteStage(raw, "Personal")) return;
   } else {
     logger.info("[altinbas] Personal adımı atlandı (boot stage ilerisinde)");
   }

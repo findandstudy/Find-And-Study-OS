@@ -50,7 +50,27 @@ Term→FINISH screens.
   `actions[]`; FINISH additionally requires `state:SUCCESS` before
   submitted=true (HTML login/edge pages must fail visibly, never fake success).
 
-## Self-duplicate (FIX-6, 2026-07-10) — commit creates the record the guard flags
+## Duplicate = Program step ONLY (FIX-7, 2026-07-10) — supersedes FIX-5/FIX-6 stop logic
+
+- TWO separate portal duplicate checks exist. (1) Program step
+  `AlreadyApplicationError` — runs BEFORE any record is created; its `message`
+  populates only for a student who really applied → the ONLY valid
+  SKIPPED_DUPLICATE trigger. (2) commit/Personal `CheckDuplicateValidation`
+  "passport already exists" — runs AFTER commit1 created the record and flags
+  our OWN just-created record on EVERY fresh student (proof: fresh student run,
+  Program dup=false, commit2+Personal dup=true) → NEVER a stop reason; log-only
+  (`dupIgnored=true`) and continue to Educational.
+- FIX-6's a02-window ownership heuristic (classifyDuplicate) could not reliably
+  separate self vs real and was REMOVED; the ÇİFT-CREATE diagnostic
+  (runCreatedAppIds baseline vs commit responses) is kept as evidence only.
+- isAlreadyAppliedProgram: /already applied for this program/i OR
+  AlreadyApplicationError followed within ≤300 chars by a POPULATED (≥4-char,
+  trimmed) escaped-JSON-tolerant `message` value; null/"" must not match.
+- Real-duplicate safety net: portal hard-blocks duplicates at Submit/FINISH
+  visibly; dry stops before Submit — ignoring self-referential messages cannot
+  cause a silent wrong submit.
+
+## Self-duplicate (FIX-6, 2026-07-10, SUPERSEDED by FIX-7) — commit creates the record the guard flags
 
 - commit1 CREATES the application record; the duplicate-guard subflow can then
   flag that just-created record as "passport already exists" even for fresh
