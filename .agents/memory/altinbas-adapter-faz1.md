@@ -91,12 +91,14 @@ The two former blockers were resolved by watching the live portal interactively 
      file unused (GPA-Type stage walker uses its own copy pattern; keep for future fallback).
    - **Faz-3.6 Personal Contact rules (dry7 screenshot evidence)**: (a) EMAIL is NOT a blocker —
      the field comes PRE-FILLED and READ-ONLY (grey, account email); the old "Email alanı
-     bulunamadı (zorunlu!)" warn was a false alarm that looped Personal forever. Check
-     getByDisplayValue(profile.email) first, best-effort selector fill only if empty, ALWAYS
-     continue. (b) The REAL blocker is the Mobile phone: the country chip wrongly lands on
+     bulunamadı (zorunlu!)" warn was a false alarm that looped Personal forever. Skip the email
+     step entirely (no verification, no fill, just an info log) — NEVER a blocker.
+     (b) The REAL blocker is the Mobile phone: the country chip wrongly lands on
      "Germany (49)" and "49" leaks into the number field ("Phone number can only contain
-     digits"). Recipe (after wheel-scrolling to "Contact Information", right before Next):
-     chip via shadow-select walker VERIFIED against the country name, else coordinate fallback
+     digits"). Faz-3.7: skip email entirely — page.getByDisplayValue does NOT exist in
+     Playwright (Testing Library only); calling it threw TypeError, crashed stagePersonal and
+     the phone fix never ran. Recipe (after wheel-scrolling to "Contact Information", right
+     before Next): chip via shadow-select walker VERIFIED against the country name, else coordinate fallback
      (click chip left of Mobile field, type first 4 letters, click option); then CLEAR the
      number field (click + Ctrl+A + Delete) before typing the trunk-0-less national number.
      Program stage confirmed solved on app 2590 dry-run (search = 4 cards, selected @ 915,290).

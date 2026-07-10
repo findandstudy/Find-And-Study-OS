@@ -871,33 +871,12 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
     await captureScreen(page, "personal-contact");
   }
 
-  // EMAIL — Faz-3.6 (dry7 personal-contact kanıtı): alan ZATEN DOLU ve
-  // READ-ONLY (gri/pasif, hesap emailiyle pre-filled). Önceki "Email alanı
-  // bulunamadı (zorunlu!)" logu YANLIŞ ALARMDI ve Personal'ı sonsuz döngüye
-  // soktu. Email ASLA blocker değil: display-value ile doluluk kontrolü,
-  // boş VE fillable ise best-effort doldur, her durumda devam et.
-  {
-    const prefilled = profile.email
-      ? (await page.getByDisplayValue(profile.email).first().count().catch(() => 0)) > 0
-      : false;
-    if (prefilled) {
-      logger.info("[altinbas] Personal: email zaten dolu (read-only pre-filled) — geçildi");
-    } else if (profile.email) {
-      const candidates = [
-        page.getByLabel(/^e-?mail/i).first(),
-        page.getByPlaceholder(/mail/i).first(),
-        page.locator('input[type="email"]').first(),
-      ];
-      let filled = false;
-      for (const box of candidates) {
-        if (await box.count().catch(() => 0)) {
-          filled = await box.fill(profile.email).then(() => true).catch(() => false);
-          if (filled) break;
-        }
-      }
-      logger.info(`[altinbas] Personal: email ${filled ? "dolduruldu" : "fillable degil (buyuk olasilikla read-only pre-filled) — blocker DEGIL, devam"}`);
-    }
-  }
+  // EMAIL — Faz-3.7: alan ZATEN DOLU ve READ-ONLY (dry7 kanıtı: gri/pasif,
+  // hesap emailiyle pre-filled) → hiçbir şey YAPMA. Faz-3.6'daki
+  // page.getByDisplayValue Playwright'ta YOK (Testing Library metodu) —
+  // TypeError fırlatıp stagePersonal'ı çökertti ve telefon-fix hiç
+  // çalışamadı (dry8 kanıtı). Email adımı komple atlanır, asla blocker olmaz.
+  logger.info("[altinbas] Personal: email read-only pre-filled — adım atlandı");
 
   // TELEFON — Faz-3.6 dry7 kanıtı: GERÇEK blocker bu. Chip yanlışlıkla
   // "Germany (49)" seçiliyor ve numara alanında "49" kalıyor ("Phone number
