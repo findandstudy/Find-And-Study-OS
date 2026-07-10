@@ -610,64 +610,86 @@ function dumpRecords(rt: FlowRuntime, tag: string): void {
 }
 
 /**
- * Term seçimi: flow yanıtlarından toplanan kayıtlar içinden "Fall 2026 - 2027"
- * benzeri etiketliyi bul, EN YÜKSEK yılı seç. a0C prefix'li kayıtlar tercih
- * edilir ama şart değil (record şekli portal sürümüne göre değişebiliyor).
- * Hiçbiri yoksa captured fallback.
+ * FIX-3: Term/Degree'de CAPTURED CONSTANT ÖNCELİKLİ (bu cycle stabil).
+ * FIX-2'nin gevşek dinamik parse'ı YANLIŞ record tipini seçti: "2026-2027"
+ * etiketli a02 (application/availability) kayıtlarını Term sandı → flow
+ * interviewStatus:"Error" ile Term'i reddetti. Salesforce Id prefix haritası
+ * (yakalanan): a0C=Term/Degree seçenekleri, a02=başvuru/availability,
+ * a0A=Program Availability, a0B=Program.
+ * Dinamik parse artık SADECE fallback (PhD gibi constant'ı olmayanlar) ve
+ * record-tipi filtreli: Id a0C zorunlu + label pattern'i zorunlu.
  */
-function pickTermOption(rt: FlowRuntime): { label: string; id: string } | null {
-  const YEAR_RANGE = /(?:fall|spring|summer|güz|bahar|yaz)?\s*\d{4}\s*-\s*\d{4}/i;
-  const cands: Array<{ label: string; id: string; year: number; a0c: boolean }> = [];
-  for (const [id, r] of rt.records) {
-    for (const v of Object.values(r)) {
-      if (typeof v === "string" && YEAR_RANGE.test(v)) {
-        const years = v.match(/\d{4}/g) || [];
-        const year = Math.max(...years.map(Number), 0);
-        cands.push({ label: v.trim(), id, year, a0c: id.startsWith("a0C") });
-        break;
-      }
-    }
+
+/** ALTINBAS_CAPTURE=1 iken aday record'un TAM şeklini dök (filtre teşhisi). */
+function dumpCandidate(rt: FlowRuntime, id: string, what: string): void {
+  if (!CAPTURE) return;
+  try {
+    const r = rt.records.get(id);
+    logger.info(`[altinbas][capture] ${what} aday ${id} :: ${JSON.stringify(r).slice(0, 1500)}`);
+  } catch {
+    /* diagnostic asla akışı kırmaz */
   }
-  if (!cands.length) {
-    logger.warn(
-      `[altinbas] term dinamik eşleme BOŞ (records=${rt.records.size}) — captured fallback kullanılıyor: "${FALLBACK_TERM.label}" (${FALLBACK_TERM.id})`,
-    );
-    return FALLBACK_TERM;
-  }
-  cands.sort((a, b) => (Number(b.a0c) - Number(a.a0c)) || (b.year - a.year));
-  logger.info(`[altinbas] term adayları: ${cands.map((c) => `${c.label}(${c.id})`).join(", ")}`);
-  return { label: cands[0].label, id: cands[0].id };
 }
 
 /**
- * Degree seçimi: kayıtlar içinden profile.level'e göre Master ya da
- * PhD/Doctorate etiketlisini bul (a0C prefix tercih, şart değil).
- * Master için captured fallback var; PhD Id'si henüz yakalanmadı.
+ * Term seçimi: captured constant ÖNCE (FALLBACK_TERM). Dinamik parse yalnız
+ * teşhis + constant'sız gelecekteki cycle'lar için: Id a0C ZORUNLU ve label
+ * sezon kelimesi içermeli (year-only "2026-2027" a02 kayıtları Term DEĞİL).
  */
-function pickDegreeOption(rt: FlowRuntime, level: string): { label: string; id: string } | null {
-  const wantPhd = /phd|doctor|doktora/i.test(level);
-  const re = wantPhd ? /^(phd|doctorate|ph\.?\s*d)/i : /^(master|yüksek\s*lisans)/i;
-  const hits: Array<{ label: string; id: string; a0c: boolean }> = [];
+function pickTermOption(rt: FlowRuntime): { label: string; id: string } {
+  const TERM_LABEL = /(fall|spring|summer|güz|bahar|yaz)[^,]*\d{4}\s*-\s*\d{4}/i;
+  const cands: Array<{ label: string; id: string; year: number }> = [];
   for (const [id, r] of rt.records) {
+    if (!id.startsWith("a0C")) continue;
     for (const v of Object.values(r)) {
-      if (typeof v === "string" && re.test(v.trim())) {
-        hits.push({ label: v.trim(), id, a0c: id.startsWith("a0C") });
+      if (typeof v === "string" && TERM_LABEL.test(v)) {
+        const years = v.match(/\d{4}/g) || [];
+        cands.push({ label: v.trim(), id, year: Math.max(...years.map(Number), 0) });
+        dumpCandidate(rt, id, "term");
         break;
       }
     }
   }
-  if (hits.length) {
-    hits.sort((a, b) => Number(b.a0c) - Number(a.a0c));
-    return { label: hits[0].label, id: hits[0].id };
+  if (cands.length) {
+    cands.sort((a, b) => b.year - a.year);
+    logger.info(
+      `[altinbas] term dinamik adaylar (a0C+sezon filtreli): ${cands.map((c) => `${c.label}(${c.id})`).join(", ")}`,
+    );
   }
+  // Captured constant öncelikli — dinamik liste sadece constant yoksa devreye girer.
+  if (FALLBACK_TERM.id) {
+    logger.info(`[altinbas] Term captured constant kullanılıyor: "${FALLBACK_TERM.label}" (${FALLBACK_TERM.id})`);
+    return FALLBACK_TERM;
+  }
+  return cands.length ? { label: cands[0].label, id: cands[0].id } : FALLBACK_TERM;
+}
+
+/**
+ * Degree seçimi: Master → captured constant. PhD → constant henüz yok, filtreli
+ * dinamik parse'a düş (Id a0C ZORUNLU + label PhD/Doctorate); o da boşsa null
+ * (fail-visible, ilk PhD ALTINBAS_CAPTURE run'ında Id yakalanacak).
+ */
+function pickDegreeOption(rt: FlowRuntime, level: string): { label: string; id: string } | null {
+  const wantPhd = /phd|doctor|doktora/i.test(level);
   if (!wantPhd) {
-    logger.warn(
-      `[altinbas] degree dinamik eşleme BOŞ (records=${rt.records.size}) — captured fallback kullanılıyor: "${FALLBACK_DEGREE_MASTER.label}" (${FALLBACK_DEGREE_MASTER.id})`,
+    logger.info(
+      `[altinbas] Degree captured constant kullanılıyor: "${FALLBACK_DEGREE_MASTER.label}" (${FALLBACK_DEGREE_MASTER.id})`,
     );
     return FALLBACK_DEGREE_MASTER;
   }
+  const re = /^(phd|doctorate|ph\.?\s*d|doktora)/i;
+  for (const [id, r] of rt.records) {
+    if (!id.startsWith("a0C")) continue;
+    for (const v of Object.values(r)) {
+      if (typeof v === "string" && re.test(v.trim())) {
+        dumpCandidate(rt, id, "degree");
+        logger.info(`[altinbas] PhD degree dinamik bulundu: "${v.trim()}" (${id})`);
+        return { label: v.trim(), id };
+      }
+    }
+  }
   logger.warn(
-    "[altinbas] PhD degree Id'si dinamik bulunamadı ve captured fallback HENÜZ yok — ilk PhD ALTINBAS_CAPTURE=1 run'ında yakalanacak",
+    "[altinbas] PhD degree Id'si dinamik bulunamadı (a0C+label filtreli) ve captured constant HENÜZ yok — ilk PhD ALTINBAS_CAPTURE=1 run'ında yakalanacak",
   );
   return null;
 }
@@ -684,7 +706,7 @@ function pickProgramRecord(
 ): { record: Record<string, unknown> | null; candidates: PortalProgramOption[] } {
   const cands: Array<{ record: Record<string, unknown>; id: string }> = [];
   for (const [id, r] of rt.records) {
-    if (id.startsWith("a0A") || typeof r["eduhub__Program__c"] === "string") {
+    if (id.startsWith("a0A") || id.startsWith("a0B") || typeof r["eduhub__Program__c"] === "string") {
       cands.push({ record: r, id });
     }
   }
@@ -830,11 +852,14 @@ async function runFlowReplay(
 
   let raw = rt.lastRaw;
 
-  // 2) TERM (NEXT) — nf=0 YASAK: dinamik eşleme boşsa captured fallback gider.
+  // 2) TERM (NEXT) — nf=0 YASAK; captured constant öncelikli (FIX-3).
   if (curRank <= 0) {
-    const term = pickTermOption(rt) ?? FALLBACK_TERM;
+    const term = pickTermOption(rt);
     logger.info(`[altinbas] Term: "${term.label}" (${term.id})`);
     raw = await postNavigateFlow(page, rt, "NEXT", buildTermFields(term), "term");
+    if (flowHasError(raw)) {
+      logger.warn(`[altinbas] Term REDDEDİLDİ — sent term=${term.id} label="${term.label}"`);
+    }
     if (guard(raw, "Term") || noteStage(raw, "Term")) return;
   } else {
     logger.info("[altinbas] Term adımı atlandı (boot stage ilerisinde)");
@@ -850,6 +875,9 @@ async function runFlowReplay(
     }
     logger.info(`[altinbas] Degree: "${degree.label}" (${degree.id})`);
     raw = await postNavigateFlow(page, rt, "NEXT", buildDegreeFields(degree), "degree");
+    if (flowHasError(raw)) {
+      logger.warn(`[altinbas] Degree REDDEDİLDİ — sent degree=${degree.id} label="${degree.label}"`);
+    }
     if (guard(raw, "Degree") || noteStage(raw, "Degree")) return;
   } else {
     logger.info("[altinbas] Degree adımı atlandı (boot stage ilerisinde)");

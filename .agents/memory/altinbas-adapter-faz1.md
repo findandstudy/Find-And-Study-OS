@@ -50,18 +50,22 @@ Term→FINISH screens.
   `actions[]`; FINISH additionally requires `state:SUCCESS` before
   submitted=true (HTML login/edge pages must fail visibly, never fake success).
 
-## Option matching (FIX-2, 2026-07-10)
+## Option matching (FIX-2/FIX-3, 2026-07-10)
 
 - Term/Degree/Program selectable options come from the navigateFlow RESPONSE
   records themselves (boot carried 11) — there is NO separate Apex options call.
   Never send a screen with `fields:[]` (nf=0): the flow silently advances with
   no selection and the NEXT screen fails ("Degree seçeneği bulunamadı").
-- Match dynamically from the ingested records map (refreshed on every response);
-  do NOT hard-require the `a0C` Id prefix — record shapes vary, prefer-a0C via
-  sort instead. Captured fallbacks (WARN when used) for the current cycle:
+- FIX-3 lesson: loose label-only dynamic parse picks the WRONG record type —
+  year-only "2026-2027" labels live on a02 (application/availability) records
+  and the flow REJECTS them (interviewStatus:"Error"). Dynamic candidates MUST
+  be filtered by Id prefix AND label pattern (Term: a0C + season word; Degree:
+  a0C + Master/PhD/Doctorate/Doktora; Program: a0A/a0B/eduhub__Program__c).
+- Captured constants are PRIMARY for Term+Master (this cycle stable):
   Term "Fall 2026 - 2027"→a0CQ30000AVvpaEMQR, Degree "Master"→a0CQ30000AVvqKTMQZ;
-  PhD Id unknown → fail-visible until captured on a PhD ALTINBAS_CAPTURE run.
+  PhD Id unknown → filtered dynamic, else fail-visible (capture on a PhD run).
 - Term fields must include `TermSelector.maxSelections=3` + `uniMaxSelection=3`.
+- On flow ERROR at a selection screen, log the exact sent id+label.
 
 ## Still unknown (pending first live ALTINBAS_CAPTURE=1 run)
 
