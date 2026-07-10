@@ -68,26 +68,20 @@ The two former blockers were resolved by watching the live portal interactively 
    - Do NOT rely on pagination: the pager button's accessible name is "Next" (not ">"), and a generic
      /next/ locator collides with the footer Next — browsing pages proved fragile; prefer
      single-word search + the Language/Thesis SLDS dropdown filters to narrow the list.
-   - The card "+ Select" control is NOT a role=button AT ALL (live-proven: the whole page exposes
-     only 8 role=buttons) AND no descendant has bare text "Select" either — the list is an LWC
-     shadow-DOM accordion+slot and the select control renders the CONCATENATED three-state text
-     "SelectSelectedRemove" in ONE element (CSS shows one state). Locate by the COMPOSITE
-     signature: getByText(/select\s*selected\s*remove/i). Exact-text, accessible-name and
-     role-based locators all found 0 or the wrong element.
-   - After search, even the PROGRAM-NAME text can be invisible to Playwright (search filters the
-     light DOM but the card list stays hidden) — likely the collapsed "Available Programs"
-     accordion or a frame. Before hunting select controls: log a frame diagnostic (iframe count +
-     per-frame text hits), then open the accordion IDEMPOTENTLY (probe program-name count first;
-     click text locator, re-probe; only try the role-button alternate if still 0 — two blind
-     sequential clicks on the same toggle re-collapse it). If the name appears, click the card's
-     /select/i control (hasNotText /programs/i) via the shared 4-strategy click; else fall through
-     to the composite path + AKORDEON-HTML/PROG-CARD-HTML dumps.
-     Resolve the owning card via el.closest('[class*="card"], article, li'); BLANK any candidate
-     whose container text has stepper markers (/stage (complete|in progress|not started)/i); click
-     strategy 3 must climb to closest('a,button,[role=button],[class*=button]') before DOM click.
-   - The card "+ Select" click doesn't reliably register with any single strategy — use
-     multi-strategy (normal → force → DOM .click() → dispatchEvent) and verify the
-     "Selected Programs (N)" cart text after EVERY attempt; fail visibly if the cart stays empty.
+   - FINAL diagnosis (empirically closed): the program cards live inside iframe + LWC Lightning
+     shadow-DOM — NO Playwright locator can reach them (getByText/getByRole/frames all 0 hits even
+     for the program NAME after a working search; accordion already aria-expanded=true; page
+     exposes only 8 role=buttons; select control renders concatenated three-state text
+     "SelectSelectedRemove" in one element). Do NOT retry selector strategies.
+   - The ONLY working access is a DEEP WALKER inside page.evaluate: recurse collect() through
+     el.shadowRoot and same-origin IFRAME.contentDocument (try/catch cross-origin). Select
+     control filter: own textContent /select/, NOT /programs|save and next|cancel/, len<40
+     (catches the composite). Card match: climb parentElement OR getRootNode().host (crosses
+     shadow boundaries) up to 8 levels checking all significant program words; fall back to the
+     first select. Click closest('button,a,[role=button],lightning-button')||self.
+   - Cart read / Save-and-Next also need the walker as fallback (same shadow problem); the
+     "Selected Programs (N)" cart IS one of the 8 real role=buttons (role locator works for it).
+     Verify the cart /\(\s*[1-9]/ after EVERY click attempt; fail visibly if it stays empty.
    - Open the modal via the **"Selected Programs (N)" cart button**, NOT the footer Next; success =
      ≥1 Save-and-Next click AND the button disappearing.
 

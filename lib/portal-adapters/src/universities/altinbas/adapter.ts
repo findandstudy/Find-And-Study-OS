@@ -26,8 +26,7 @@ import type {
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
-import { fold, matchProgram } from "../../programMatch.js";
-import type { ProgramCandidate } from "../../programMatch.js";
+import { fold } from "../../programMatch.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -627,165 +626,159 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
 
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
-  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const anchorRe = new RegExp(escapeRe(searchWord), "i");
-  const progRe = new RegExp(escapeRe(coreQuery), "i");
+  // Faz-3 KESİN TEŞHİS: program kartları iframe + LWC Lightning shadow-DOM
+  // içinde — Playwright locator/getByText/getByRole HİÇBİRİ ulaşamıyor
+  // ("political" her iki frame'de de 0; akordeon zaten aria-expanded=true).
+  // Selector denemeleri bitti. Yeni teknik: page.evaluate içinde DERİN
+  // shadow+iframe YÜRÜYÜCÜSÜ — shadowRoot ve erişilebilir iframe
+  // contentDocument sınırlarını aşarak eleman toplar. Seçim tıklaması,
+  // sepet okuma ve Save-and-Next için de aynı yürüyücü kullanılır.
 
-  // Shared 4-strategy click with cart verification after EVERY attempt.
-  // Strategy 3 climbs to the nearest clickable ancestor before DOM click.
-  const tryClickStrategies = async (target: any, label: string): Promise<boolean> => {
-    await target.scrollIntoViewIfNeeded().catch(() => {});
-    const strategies: Array<[string, () => Promise<void>]> = [
-      ["normal click", async () => { await target.click({ timeout: 5000 }); }],
-      ["force click", async () => { await target.click({ force: true, timeout: 5000 }); }],
-      ["DOM .click()", async () => { await target.evaluate((e: any) => { const c = (e.closest('a, button, [role="button"], [class*="button"]') || e) as HTMLElement; c.click(); }); }],
-      ["dispatchEvent", async () => { await target.dispatchEvent("click"); }],
-    ];
-    for (const [name, run] of strategies) {
-      await run().catch(() => {});
-      await page.waitForTimeout(1000);
-      if (await cartHasItem()) {
-        logger.info(`[altinbas] program secildi (${name}): ${label.slice(0, 80)}`);
-        return true;
+  // Deep-click: hedef programın kartındaki select kontrolünü bul ve tıkla.
+  const deepClickSelect = async (): Promise<string | null> =>
+    (await page.evaluate((want: string) => {
+      const words = want.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+      function collect(root: any, out: any[]) {
+        let nodes: any;
+        try { nodes = root.querySelectorAll("*"); } catch (e) { return; }
+        for (const el of nodes) {
+          out.push(el);
+          if (el.shadowRoot) collect(el.shadowRoot, out);
+          if (el.tagName === "IFRAME") {
+            try { if (el.contentDocument) collect(el.contentDocument, out); } catch (e) { /* cross-origin */ }
+          }
+        }
       }
-      logger.warn(`[altinbas] Select stratejisi tutmadı: ${name} — sepet hâlâ boş`);
-    }
-    return false;
-  };
+      const all: any[] = [];
+      collect(document, all);
+      // Geçerli program seç-kontrolleri: metni "select" içeren,
+      // "programs"/"save and next"/"cancel" içermeyen, kısa metinli
+      // elemanlar (composite "SelectSelectedRemove" da yakalanır).
+      const selects = all.filter((el: any) => {
+        const t = ((el.textContent || "") as string).trim().toLowerCase();
+        return /select/.test(t) && !/programs|save and next|cancel/.test(t) && t.length > 0 && t.length < 40;
+      });
+      // Hedef program kartını metinle bul: shadow sınırında
+      // getRootNode().host üzerinden yukarı tırmanarak kart metnini kontrol
+      // et; eşleşme yoksa İLK select'e düş.
+      let best: any = null;
+      for (const s of selects) {
+        let card: any = s;
+        for (let up = 0; up < 8 && card; up++) {
+          const ct = ((card.textContent || "") as string).toLowerCase();
+          if (words.length && words.every((w: string) => ct.includes(w))) { best = s; break; }
+          card = card.parentElement || (card.getRootNode && (card.getRootNode() as any).host) || null;
+        }
+        if (best) break;
+      }
+      const target = best || selects[0];
+      if (!target) return null;
+      const clickable = target.closest ? (target.closest("button,a,[role=button],lightning-button") || target) : target;
+      (clickable as HTMLElement).click();
+      return ((target.textContent || "") as string).trim().slice(0, 60);
+    }, coreQuery)) as string | null;
 
-  // Faz-2.12 TEŞHİS: search filters the light DOM (works) but the program
-  // cards are unreachable even by program-name text — either the list lives
-  // in a frame, or the "Available Programs" ACCORDION is COLLAPSED (Faz-2.10
-  // CARD-HTML showed part=accordion + empty <slot>).
-  // (1) Frame diagnostic.
-  const iframeCount = (await page.locator("iframe").count().catch(() => 0)) as number;
-  const frames = page.frames();
-  const perFrame: number[] = [];
-  for (const f of frames) {
-    perFrame.push((await f.getByText(anchorRe).count().catch(() => 0)) as number);
-  }
-  logger.info(`[altinbas] FRAME-DIAG: iframes=${iframeCount} frames=${frames.length} "${searchWord}"InFrames=[${perFrame.join(",")}]`);
+  // Deep-read: sepet ("Selected Programs (N)") metnini aynı yürüyücüyle oku
+  // (en kısa eşleşen metin = butonun kendisi, kapsayıcılar değil).
+  const deepReadCart = async (): Promise<string> =>
+    (await page.evaluate(() => {
+      function collect(root: any, out: any[]) {
+        let nodes: any;
+        try { nodes = root.querySelectorAll("*"); } catch (e) { return; }
+        for (const el of nodes) {
+          out.push(el);
+          if (el.shadowRoot) collect(el.shadowRoot, out);
+          if (el.tagName === "IFRAME") {
+            try { if (el.contentDocument) collect(el.contentDocument, out); } catch (e) { /* cross-origin */ }
+          }
+        }
+      }
+      const all: any[] = [];
+      collect(document, all);
+      const texts = all
+        .map((el: any) => ((el.textContent || "") as string).replace(/\s+/g, " ").trim())
+        .filter((t: string) => /selected programs/i.test(t) && t.length < 60);
+      texts.sort((a: string, b: string) => a.length - b.length);
+      return texts[0] || "";
+    })) as string;
 
-  // (2) Open the "Available Programs" accordion IDEMPOTENTLY: click ONE
-  //     locator, verify the content signal (program-name anchor appears),
-  //     and only try the alternate locator if the list is still hidden.
-  //     Two blind sequential clicks on the same toggle would immediately
-  //     re-collapse what the first opened.
-  const countProg = async (): Promise<number> =>
-    (await page.getByText(progRe).count().catch(() => 0)) as number;
-  let n1 = await countProg();
-  if (n1 === 0) {
-    await page.getByText(/available programs/i).first().click({ timeout: 3000 }).catch(() => {});
-    await page.waitForTimeout(1500);
-    n1 = await countProg();
-  }
-  if (n1 === 0) {
-    await page.getByRole("button", { name: /available programs/i }).first().click({ timeout: 3000 }).catch(() => {});
-    await page.waitForTimeout(1500);
-    n1 = await countProg();
-  }
+  // Deep-count / deep-click by exact-ish short text (Save and Next da aynı
+  // shadow sorununu yaşarsa fallback olarak kullanılır).
+  const deepCountText = async (pattern: string): Promise<number> =>
+    (await page.evaluate((p: string) => {
+      const rx = new RegExp(p, "i");
+      function collect(root: any, out: any[]) {
+        let nodes: any;
+        try { nodes = root.querySelectorAll("*"); } catch (e) { return; }
+        for (const el of nodes) {
+          out.push(el);
+          if (el.shadowRoot) collect(el.shadowRoot, out);
+          if (el.tagName === "IFRAME") {
+            try { if (el.contentDocument) collect(el.contentDocument, out); } catch (e) { /* cross-origin */ }
+          }
+        }
+      }
+      const all: any[] = [];
+      collect(document, all);
+      return all.filter((el: any) => {
+        const t = ((el.textContent || "") as string).trim();
+        return rx.test(t) && t.length < 40;
+      }).length;
+    }, pattern)) as number;
 
-  // (3) Program-name anchor count after the accordion-open attempts.
-  logger.info(`[altinbas] akordeon-sonrasi "${coreQuery}" eslesen=${n1}`);
+  const deepClickText = async (pattern: string): Promise<boolean> =>
+    (await page.evaluate((p: string) => {
+      const rx = new RegExp(p, "i");
+      function collect(root: any, out: any[]) {
+        let nodes: any;
+        try { nodes = root.querySelectorAll("*"); } catch (e) { return; }
+        for (const el of nodes) {
+          out.push(el);
+          if (el.shadowRoot) collect(el.shadowRoot, out);
+          if (el.tagName === "IFRAME") {
+            try { if (el.contentDocument) collect(el.contentDocument, out); } catch (e) { /* cross-origin */ }
+          }
+        }
+      }
+      const all: any[] = [];
+      collect(document, all);
+      const hits = all.filter((el: any) => {
+        const t = ((el.textContent || "") as string).trim();
+        return rx.test(t) && t.length < 40;
+      });
+      hits.sort((a: any, b: any) =>
+        ((a.textContent || "") as string).trim().length - ((b.textContent || "") as string).trim().length);
+      const target = hits[0];
+      if (!target) return false;
+      const clickable = target.closest ? (target.closest("button,a,[role=button],lightning-button") || target) : target;
+      (clickable as HTMLElement).click();
+      return true;
+    }, pattern)) as boolean;
 
+  // Deep-click the program's select control; verify the cart after EVERY
+  // attempt (up to 2 — LWC bazen ilk tıklamayı yutuyor). POSITIVE evidence:
+  // cart must show "( N )" with N>=1; otherwise fail visibly.
   let selected = false;
   let selectedLabel = "";
-  if (n1 > 0) {
-    // (4) Resolve the card owning the program title, find its select control
-    //     (text /select/i, excluding "Programs" buttons) and click it.
-    const card = page.getByText(progRe).first().locator("xpath=ancestor::*[3]");
-    const ctl = card.getByText(/select/i).filter({ hasNotText: /programs/i }).first();
-    if (await ctl.count().catch(() => 0)) {
-      selected = await tryClickStrategies(ctl, coreQuery);
-      if (selected) selectedLabel = coreQuery;
-    } else {
-      logger.warn(`[altinbas] akordeon-sonrasi kart bulundu ama içinde select kontrolü yok ("${coreQuery}")`);
+  for (let attempt = 1; attempt <= 2 && !selected; attempt++) {
+    const clickedName = (await deepClickSelect().catch(() => null)) as string | null;
+    logger.info(`[altinbas] deep-click sonucu (deneme ${attempt}): ${JSON.stringify(clickedName)}`);
+    if (clickedName === null) {
+      logger.warn("[altinbas] stageProgram: deep-walker hiç select kontrolü bulamadı — program seçilemedi");
+      return false;
     }
-  } else {
-    // (5) Still 0 — dump the opened accordion body for the next iteration.
-    const accAnchor = page.getByText(/available programs/i).first();
-    if (await accAnchor.count().catch(() => 0)) {
-      const html = ((await accAnchor
-        .locator("xpath=ancestor::*[3]")
-        .first()
-        .evaluate((el: any) => (el as HTMLElement).outerHTML)
-        .catch(() => "")) || "") as string;
-      logger.warn(`[altinbas] AKORDEON-HTML: ${html.slice(0, 3000)}`);
-    } else {
-      logger.warn("[altinbas] AKORDEON-HTML: 'Available Programs' başlığı bulunamadı");
+    await page.waitForTimeout(1200);
+    let cartText = (await deepReadCart().catch(() => "")) as string;
+    if (!/\(\s*[1-9]/.test(cartText)) cartText = await readCart();
+    logger.info(`[altinbas] deep-click sepet="${cartText.replace(/\s+/g, " ").slice(0, 60)}"`);
+    if (/\(\s*[1-9]/.test(cartText)) {
+      selected = true;
+      selectedLabel = clickedName;
     }
   }
-
   if (!selected) {
-  // 3) Collect candidates keyed by the program-card TOGGLE buttons.
-  // Faz-2.7..2.11 KÖK NEDEN zinciri: the card select control is NOT a
-  // role=button (page has only 8 role=buttons); and NO descendant element
-  // has the bare text "Select" either — the card's select control renders
-  // the CONCATENATED three-state text "SelectSelectedRemove" in ONE element
-  // (Select + Selected + Remove states, CSS shows one; Faz-2.2 field
-  // inventory + Faz-2.10 CARD-HTML dump: LWC shadow-DOM accordion + slot).
-  // So target the COMPOSITE signature text directly.
-  const selectEls = page.getByText(/select\s*selected\s*remove/i);
-  const n = await selectEls.count().catch(() => 0);
-  logger.info(`[altinbas] kart-select composite sayisi: ${n}`);
-  if (!n) {
-    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç composite select elemanı yok`);
-    // TEŞHİS: dump the real program-card DOM structure via a text anchor
-    // from the search results (first 3000 chars of ancestor outerHTML).
-    const progAnchor = page.getByText(anchorRe).first();
-    if (await progAnchor.count().catch(() => 0)) {
-      const html = ((await progAnchor
-        .locator("xpath=ancestor::*[5]")
-        .first()
-        .evaluate((el: any) => (el as HTMLElement).outerHTML)
-        .catch(() => "")) || "") as string;
-      logger.warn(`[altinbas] PROG-CARD-HTML: ${html.slice(0, 3000)}`);
-    } else {
-      logger.warn(`[altinbas] PROG-CARD-HTML: "${searchWord}" text anchor bulunamadı`);
-    }
+    logger.warn("[altinbas] stageProgram: deep-click sonrası sepet dolmadı — program seçilemedi");
     return false;
-  }
-
-  // For each Select label, resolve its owning card (closest card-ish
-  // container) and read the card text as the candidate name.
-  // Fail-safe: a resolved container whose text carries stepper markers
-  // ("... - Stage Complete") is navigation, not a program card — blank its
-  // name so it can never win matching nor the first-label fallback.
-  const isStepperText = (t: string) => /stage\s*(complete|in\s*progress|not\s*started)/i.test(t);
-  const candidates: ProgramCandidate[] = [];
-  for (let i = 0; i < n; i++) {
-    const text = ((await selectEls
-      .nth(i)
-      .evaluate((e: any) => {
-        const c = e.closest('[class*="card"], article, li');
-        return c ? ((c as HTMLElement).innerText || c.textContent || "") : "";
-      })
-      .catch(() => "")) || "").trim();
-    const clean = text.replace(/\s+/g, " ").slice(0, 200);
-    candidates.push({ id: String(i), name: isStepperText(clean) ? "" : clean });
-  }
-  const result = matchProgram(coreQuery, candidates.filter((c) => c.name));
-  let pickIdx = result ? Number(result.match.id) : -1;
-  if (pickIdx < 0 && words.length) {
-    pickIdx = candidates.findIndex((c) => {
-      const t = c.name.toLowerCase();
-      return c.name !== "" && words.every((w) => t.includes(w));
-    });
-  }
-  // Search already narrowed the list — no match just means label noise;
-  // fall back to the FIRST non-stepper card label (then absolute first).
-  if (pickIdx < 0) pickIdx = candidates.findIndex((c) => c.name !== "");
-  if (pickIdx < 0) pickIdx = 0;
-  logger.info(`[altinbas] Program eşleşmesi: kart ${pickIdx} "${candidates[pickIdx]?.name.slice(0, 80)}"`);
-
-  // Multi-strategy click on the composite Select element — verify the cart
-  // after EVERY attempt (shared helper).
-  selected = await tryClickStrategies(selectEls.nth(pickIdx), candidates[pickIdx]?.name || "");
-  if (selected) selectedLabel = candidates[pickIdx]?.name || "";
-  if (!selected) {
-    logger.warn("[altinbas] stageProgram: 4 stratejide de sepet dolmadı — program seçilemedi");
-    return false;
-  }
   }
   logger.info(`[altinbas] Sepet doğrulandı, seçilen: "${selectedLabel.slice(0, 80)}"`);
 
@@ -801,17 +794,29 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
     page.getByRole("button", { name: /save and next/i }).first()
       .or(page.locator('button:has-text("Save and Next")').first());
 
+  // Save and Next may ALSO live behind the same shadow/iframe boundary —
+  // presence = locator count OR deep-walker count; clicks fall back to the
+  // deep walker when the locator can't see the button.
+  const saveNextVisible = async (): Promise<boolean> => {
+    if ((await saveNextLocator().count().catch(() => 0)) > 0) return true;
+    return ((await deepCountText("^save and next$").catch(() => 0)) as number) > 0;
+  };
+
   // POSITIVE evidence required: the modal (its Save and Next button) must
   // actually appear after opening the cart. "Button absent" before any
   // click is a FAILURE (cart click missed / modal never opened), not
-  // success — retry the cart click once, then fail visibly.
-  let modalSeen = (await saveNextLocator().count().catch(() => 0)) > 0;
+  // success — retry the cart click once (deep fallback), then fail visibly.
+  let modalSeen = await saveNextVisible();
   if (!modalSeen) {
     logger.warn("[altinbas] Program: sepet tıklandı ama modal görünmedi — sepet bir kez daha tıklanıyor");
     await dismissSfError(page);
-    await cartBtn.click().catch(() => {});
+    if (await cartBtn.count().catch(() => 0)) {
+      await cartBtn.click().catch(() => {});
+    } else {
+      await deepClickText("selected programs\\s*\\(").catch(() => false);
+    }
     await page.waitForTimeout(1500);
-    modalSeen = (await saveNextLocator().count().catch(() => 0)) > 0;
+    modalSeen = await saveNextVisible();
   }
   if (!modalSeen) {
     logger.warn("[altinbas] Program: Selected Programs modalı açılamadı (Save and Next hiç görünmedi)");
@@ -824,19 +829,24 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   let saveNextDone = false;
   for (let k = 0; k < 4; k++) {
     await dismissSfError(page);
-    const saveNext = saveNextLocator();
-    if (!(await saveNext.count().catch(() => 0))) {
+    const locCount = (await saveNextLocator().count().catch(() => 0)) as number;
+    if (!locCount && !(await saveNextVisible())) {
       saveNextDone = clickedOnce;
       break;
     }
-    logger.info(`[altinbas] Save and Next denemesi ${k + 1}/4 (${k % 2 === 0 ? "normal" : "force"})`);
-    await saveNext.click(k % 2 === 0 ? { timeout: 8000 } : { force: true, timeout: 8000 }).catch(() => {});
+    if (locCount) {
+      logger.info(`[altinbas] Save and Next denemesi ${k + 1}/4 (${k % 2 === 0 ? "normal" : "force"})`);
+      await saveNextLocator().click(k % 2 === 0 ? { timeout: 8000 } : { force: true, timeout: 8000 }).catch(() => {});
+    } else {
+      logger.info(`[altinbas] Save and Next denemesi ${k + 1}/4 (deep-walker)`);
+      await deepClickText("^save and next$").catch(() => false);
+    }
     clickedOnce = true;
     await page.waitForTimeout(SF_HYDRATION_MS);
     await dismissSfError(page);
   }
   if (!saveNextDone && clickedOnce) {
-    saveNextDone = !(await saveNextLocator().count().catch(() => 0));
+    saveNextDone = !(await saveNextVisible());
   }
   if (!saveNextDone) {
     logger.warn("[altinbas] Program: Save and Next modalı kapatmadı — stage yeniden okunacak");
