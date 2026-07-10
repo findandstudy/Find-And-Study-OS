@@ -325,6 +325,69 @@ function mapCountry(nationality?: string): string {
   return COUNTRY_EN_MAP[lower] || nationality.trim();
 }
 
+/**
+ * Dial codes for the COUNTRY_EN_MAP countries — used to strip the country
+ * code from profile.phone before typing the NATIONAL number (Faz-3 canlı
+ * kanıt: portal telefon alanı ülke chip'i + trunk-0'sız ulusal numara ister;
+ * "+930798546789" → chip(+93) + "798546789").
+ */
+const DIAL_CODES: Record<string, string> = {
+  Afghanistan: "93", Algeria: "213", Azerbaijan: "994", Bahrain: "973",
+  Bangladesh: "880", "United Kingdom": "44", China: "86", Egypt: "20",
+  "United Arab Emirates": "971", France: "33", Germany: "49", India: "91",
+  Iran: "98", Iraq: "964", Jordan: "962", Kazakhstan: "7", Kenya: "254",
+  Kuwait: "965", Kyrgyzstan: "996", Lebanon: "961", Libya: "218",
+  Morocco: "212", Nigeria: "234", Oman: "968", Pakistan: "92",
+  Palestine: "970", Qatar: "974", Russia: "7", "Saudi Arabia": "966",
+  Somalia: "252", Sudan: "249", Syria: "963", Tajikistan: "992",
+  Tunisia: "216", Turkey: "90", Turkmenistan: "993", Ukraine: "380",
+  Uzbekistan: "998", Yemen: "967",
+};
+
+/** "+930798546789" + "93" → "798546789" (ülke kodu + baştaki trunk 0'lar atılır — portal 0'lı numarayı REDDEDİYOR). */
+function toNationalNoTrunk(phone: string, dialCode: string): string {
+  let n = (phone || "").replace(/[^\d]/g, "");
+  const dc = (dialCode || "").replace(/[^\d]/g, "");
+  if (dc && n.startsWith(dc)) n = n.slice(dc.length);
+  n = n.replace(/^0+/, "");
+  return n;
+}
+
+/**
+ * Shadow-nested native <select> setter (Faz-3 canlı kanıt: Educational "GPA
+ * Type" ve telefon ülke chip'i AÇIK shadow içinde — getByLabel bazen
+ * ulaşamıyor). Open-shadow walker ile option metnine göre SELECT'i bulur,
+ * value set eder ve input+change dispatch eder. Birden çok aday select
+ * varsa "+ işareti içeren option'lı" olan tercih edilir (telefon chip'i).
+ * Returns the matched option's text, or null. Never throws.
+ */
+async function setShadowSelectByOption(page: any, optionPattern: string): Promise<string | null> {
+  try {
+    return (await page.evaluate((p: string) => {
+      const re = new RegExp(p, "i");
+      const all: any[] = [];
+      (function walk(root: any) {
+        let ns: any;
+        try { ns = root.querySelectorAll("*"); } catch (e) { return; }
+        for (const el of ns) { all.push(el); if (el.shadowRoot) walk(el.shadowRoot); }
+      })(document);
+      const cands = all.filter((e: any) => e.tagName === "SELECT" &&
+        Array.from(e.options || []).some((o: any) => re.test(((o.textContent || "") as string))));
+      if (!cands.length) return null;
+      const sel = cands.find((e: any) =>
+        Array.from(e.options || []).some((o: any) => re.test(((o.textContent || "") as string)) && /\+/.test(((o.textContent || "") as string)))) || cands[0];
+      const opt = Array.from((sel as any).options).find((o: any) => re.test(((o.textContent || "") as string)));
+      if (!opt) return null;
+      (sel as any).value = (opt as any).value;
+      sel.dispatchEvent(new Event("input", { bubbles: true }));
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      return (((opt as any).textContent || "") as string).trim();
+    }, optionPattern)) as string | null;
+  } catch {
+    return null;
+  }
+}
+
 /** "1999-04-15" (ISO) → "15 Apr 1999" (Altınbaş lightning-date-picker format). */
 function fmtAltDate(iso?: string): string {
   if (!iso) return "";
@@ -352,13 +415,13 @@ async function typeDate(page: any, labelPattern: RegExp, value: string): Promise
  * Fill a typeahead combobox found by label and pick the best-matching option.
  * Never throws.
  *
- * Faz-2.4 KANITLANDI (canlı ortak seans, gerçek Chrome): the LWC country
- * typeaheads (Country of Birth / Citizenship / Passport Issuing / Address
- * Country) only render their listbox on REAL keystrokes — `fill()` never
- * opens the dropdown (opts:[] boxes:[] in shadow-DOM dumps). The exact
- * proven sequence is: natural click (NOT force) → pressSequentially(value,
- * delay 80) → wait → click the matching role=option; if no option node is
- * reachable, ArrowDown+Enter as a keyboard fallback.
+ * Faz-3 CANLI KANITLI (2026-07-10): the LWC country typeaheads (Country of
+ * Birth / Citizenship / Passport Issuing / Address Country) only render
+ * their listbox on REAL keystrokes — `fill()` never opens the dropdown.
+ * Canlı reçete: alanı ÖNCE TEMİZLE (ControlOrMeta+A → Backspace), sonra
+ * yalnızca İLK 3 HARFİ yaz ("Afg") → açılan dropdown'da TAM ülke adını
+ * taşıyan option'a TIKLA (sadece yazmak YETMEZ, option seçilmeli); option
+ * node'a ulaşılamazsa ArrowDown+Enter klavye fallback'i.
  */
 async function typeahead(page: any, labelPattern: RegExp, value: string): Promise<boolean> {
   if (!value) return false;
@@ -367,10 +430,13 @@ async function typeahead(page: any, labelPattern: RegExp, value: string): Promis
     const target = (await cb.count().catch(() => 0)) ? cb : page.getByLabel(labelPattern).first();
     if (!(await target.count().catch(() => 0))) return false;
     await target.click().catch(() => {}); // natural focus/open — NOT force
-    await target.pressSequentially(value, { delay: 80 }).catch(() => {});
-    await page.waitForTimeout(1500);
-    const opt = page.getByRole("option", { name: value }).first()
-      .or(page.locator('[role="option"]').filter({ hasText: value }).first());
+    await target.press("ControlOrMeta+A").catch(() => {}); // clear any carried value
+    await target.press("Backspace").catch(() => {});
+    await target.pressSequentially(value.slice(0, 3), { delay: 80 }).catch(() => {});
+    await page.waitForTimeout(1200);
+    const valueRe = new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const opt = page.getByRole("option", { name: valueRe }).first()
+      .or(page.locator('[role="option"]').filter({ hasText: valueRe }).first());
     if (await opt.count().catch(() => 0)) {
       await opt.click({ timeout: 4000 }).catch(() => {});
       await page.waitForTimeout(400);
@@ -554,23 +620,22 @@ async function setSfCombobox(page: any, labelPattern: RegExp, optionName: RegExp
 }
 
 /**
- * Program Selection — Faz-2.6.
+ * Program Selection — Faz-3 CANLI KANITLI (2026-07-10, AU260143535).
  *
- * Faz-2.5 dry-run stuck root causes: (a) the pager button is named "Next",
- * not ">" — pagination never advanced past page 1; (b) a single click
- * strategy on the card "Select" button doesn't reliably register in the
- * cart. New approach — no browsing/pagination at all:
- * 1. SEARCH with the SINGLE first significant word only (multi-word queries
- *    return 0 results; single-word filters correctly).
- * 2. Narrow further via the Language / Thesis SLDS dropdown filters when the
- *    CRM program name carries those hints (skip silently when absent).
- * 3. Pick the best card (matchProgram → all-words → first) and click its
- *    Select button MULTI-STRATEGY (normal → force → DOM .click() →
- *    dispatchEvent), verifying the cart after EVERY attempt; if no strategy
- *    lands, fail visibly (return false).
- * 4. Cart button → modal → "Save and Next" (footer Next is NOT used).
+ * KÖK NEDEN (kesin): program kartları iframe + KAPALI LWC shadow-DOM içinde.
+ * Üç DOM tekniği de canlıda başarısız: (a) Playwright locator, (b) frame'ler
+ * arası getByText, (c) page.evaluate derin shadow+iframe yürüyücüsü (kapalı
+ * shadow'a el.shadowRoot null döner). CANLI KANITLANAN TEK ÇÖZÜM:
+ * koordinat-tabanlı GERÇEK fare tıklaması (page.mouse.click = trusted event).
+ *
+ * Reçete: sabit viewport 1568x900 → TEK-KELİME arama → Language/Thesis
+ * filtreleriyle listeyi 1 karta indir → "+ Select" pikseline aday
+ * koordinatlarla tıkla, HER denemeden sonra sepeti doğrula → sepet butonu →
+ * modal → "Save and Next" (footer Next DEĞİL).
  */
 async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean> {
+  // Koordinat kararlılığı ŞART: sabit viewport (canlı kalibrasyon 1568x900).
+  await page.setViewportSize({ width: 1568, height: 900 }).catch(() => {});
   await dismissSfError(page);
 
   // Strip the CRM degree prefix + thesis/language suffixes so matching works
@@ -598,25 +663,6 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
     logger.warn("[altinbas] stageProgram: arama kutusu bulunamadı — tam liste üzerinde eşleştirilecek");
   }
 
-  // 2) Narrow via the Language / Thesis dropdown filters when the CRM name
-  //    carries those hints.
-  const langMatch = /\(in\s+(english|turkish)\)/i.exec(rawQuery);
-  if (langMatch) {
-    const lang = langMatch[1]!.toLowerCase() === "turkish" ? /turkish/i : /english/i;
-    const ok = await setSfCombobox(page, /language/i, lang);
-    logger.info(`[altinbas] Language filtresi (${langMatch[1]}): ${ok ? "uygulandı" : "bulunamadı, geçildi"}`);
-    if (ok) await page.waitForTimeout(1000);
-  }
-  const thesisMatch = /\((with|without)\s+thesis\)/i.exec(rawQuery);
-  if (thesisMatch) {
-    // Note: /with\s+thesis/i can NOT accidentally match "Without Thesis"
-    // ("with" is followed by "out", not whitespace).
-    const thesis = thesisMatch[1]!.toLowerCase() === "without" ? /without\s+thesis/i : /with\s+thesis/i;
-    const ok = await setSfCombobox(page, /thesis/i, thesis);
-    logger.info(`[altinbas] Thesis filtresi (${thesisMatch[1]} Thesis): ${ok ? "uygulandı" : "bulunamadı, geçildi"}`);
-    if (ok) await page.waitForTimeout(1000);
-  }
-
   const readCart = async (): Promise<string> =>
     (await page
       .getByRole("button", { name: /selected programs/i })
@@ -626,161 +672,74 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
 
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
-  // Faz-3 KESİN TEŞHİS: program kartları iframe + LWC Lightning shadow-DOM
-  // içinde — Playwright locator/getByText/getByRole HİÇBİRİ ulaşamıyor
-  // ("political" her iki frame'de de 0; akordeon zaten aria-expanded=true).
-  // Selector denemeleri bitti. Yeni teknik: page.evaluate içinde DERİN
-  // shadow+iframe YÜRÜYÜCÜSÜ — shadowRoot ve erişilebilir iframe
-  // contentDocument sınırlarını aşarak eleman toplar. Seçim tıklaması,
-  // sepet okuma ve Save-and-Next için de aynı yürüyücü kullanılır.
+  // 2) Language / Thesis filtreleri — liste İDEALİ 1 karta insin (koordinat
+  //    tıklamasının güvenilirliği için kritik). Canlı reçete: hint yoksa
+  //    VARSAYILAN English / With Thesis uygula (uluslararası Master başvuru
+  //    profili). Ama hint'siz CRM adları için varsayılan set geçerli
+  //    Türkçe/Tezsiz programı dışlayabilir → hint'in SABİTLEMEDİĞİ
+  //    boyutlarda sınırlı fallback kombinasyonları denenir (varsayılan set
+  //    her zaman İLK). Filtre dropdown'u yoksa setSfCombobox false döner,
+  //    geçilir. Not: /with\s+thesis/i "Without Thesis"i YAKALAYAMAZ
+  //    ("with"ten sonra "out" gelir, boşluk değil).
+  const hasLangHint = /\(in\s+\w+\)/i.test(rawQuery);
+  const hasThesisHint = /\((with|without)\s+thesis\)/i.test(rawQuery);
+  const wantTurkish = /\(in\s+turkish\)/i.test(rawQuery);
+  const wantWithoutThesis = /\(without\s+thesis\)/i.test(rawQuery);
+  const langChoices = hasLangHint ? [wantTurkish] : [false, true];       // English önce
+  const thesisChoices = hasThesisHint ? [wantWithoutThesis] : [false, true]; // With Thesis önce
+  const filterSets: Array<[boolean, boolean]> = [];
+  for (const l of langChoices) for (const t of thesisChoices) filterSets.push([l, t]);
 
-  // Deep-click: hedef programın kartındaki select kontrolünü bul ve tıkla.
-  const deepClickSelect = async (): Promise<string | null> =>
-    (await page.evaluate((want: string) => {
-      const words = want.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
-      function collect(root: any, out: any[]) {
-        let nodes: any;
-        try { nodes = root.querySelectorAll("*"); } catch (e) { return; }
-        for (const el of nodes) {
-          out.push(el);
-          if (el.shadowRoot) collect(el.shadowRoot, out);
-          if (el.tagName === "IFRAME") {
-            try { if (el.contentDocument) collect(el.contentDocument, out); } catch (e) { /* cross-origin */ }
-          }
-        }
-      }
-      const all: any[] = [];
-      collect(document, all);
-      // Geçerli program seç-kontrolleri: metni "select" içeren,
-      // "programs"/"save and next"/"cancel" içermeyen, kısa metinli
-      // elemanlar (composite "SelectSelectedRemove" da yakalanır).
-      const selects = all.filter((el: any) => {
-        const t = ((el.textContent || "") as string).trim().toLowerCase();
-        return /select/.test(t) && !/programs|save and next|cancel/.test(t) && t.length > 0 && t.length < 40;
-      });
-      // Hedef program kartını metinle bul: shadow sınırında
-      // getRootNode().host üzerinden yukarı tırmanarak kart metnini kontrol
-      // et; eşleşme yoksa İLK select'e düş.
-      let best: any = null;
-      for (const s of selects) {
-        let card: any = s;
-        for (let up = 0; up < 8 && card; up++) {
-          const ct = ((card.textContent || "") as string).toLowerCase();
-          if (words.length && words.every((w: string) => ct.includes(w))) { best = s; break; }
-          card = card.parentElement || (card.getRootNode && (card.getRootNode() as any).host) || null;
-        }
-        if (best) break;
-      }
-      const target = best || selects[0];
-      if (!target) return null;
-      const clickable = target.closest ? (target.closest("button,a,[role=button],lightning-button") || target) : target;
-      (clickable as HTMLElement).click();
-      return ((target.textContent || "") as string).trim().slice(0, 60);
-    }, coreQuery)) as string | null;
+  const applyFilters = async (turkish: boolean, withoutThesis: boolean): Promise<void> => {
+    const langOk = await setSfCombobox(page, /language/i, turkish ? /turkish/i : /english/i);
+    logger.info(`[altinbas] Language filtresi (${turkish ? "Turkish" : "English"}): ${langOk ? "uygulandı" : "bulunamadı, geçildi"}`);
+    if (langOk) await page.waitForTimeout(1000);
+    const thesisOk = await setSfCombobox(page, /thesis/i, withoutThesis ? /without\s+thesis/i : /with\s+thesis/i);
+    logger.info(`[altinbas] Thesis filtresi (${withoutThesis ? "Without" : "With"} Thesis): ${thesisOk ? "uygulandı" : "bulunamadı, geçildi"}`);
+    if (thesisOk) await page.waitForTimeout(1400);
+  };
 
-  // Deep-read: sepet ("Selected Programs (N)") metnini aynı yürüyücüyle oku
-  // (en kısa eşleşen metin = butonun kendisi, kapsayıcılar değil).
-  const deepReadCart = async (): Promise<string> =>
-    (await page.evaluate(() => {
-      function collect(root: any, out: any[]) {
-        let nodes: any;
-        try { nodes = root.querySelectorAll("*"); } catch (e) { return; }
-        for (const el of nodes) {
-          out.push(el);
-          if (el.shadowRoot) collect(el.shadowRoot, out);
-          if (el.tagName === "IFRAME") {
-            try { if (el.contentDocument) collect(el.contentDocument, out); } catch (e) { /* cross-origin */ }
-          }
-        }
-      }
-      const all: any[] = [];
-      collect(document, all);
-      const texts = all
-        .map((el: any) => ((el.textContent || "") as string).replace(/\s+/g, " ").trim())
-        .filter((t: string) => /selected programs/i.test(t) && t.length < 60);
-      texts.sort((a: string, b: string) => a.length - b.length);
-      return texts[0] || "";
-    })) as string;
-
-  // Deep-count / deep-click by exact-ish short text (Save and Next da aynı
-  // shadow sorununu yaşarsa fallback olarak kullanılır).
-  const deepCountText = async (pattern: string): Promise<number> =>
-    (await page.evaluate((p: string) => {
-      const rx = new RegExp(p, "i");
-      function collect(root: any, out: any[]) {
-        let nodes: any;
-        try { nodes = root.querySelectorAll("*"); } catch (e) { return; }
-        for (const el of nodes) {
-          out.push(el);
-          if (el.shadowRoot) collect(el.shadowRoot, out);
-          if (el.tagName === "IFRAME") {
-            try { if (el.contentDocument) collect(el.contentDocument, out); } catch (e) { /* cross-origin */ }
-          }
-        }
-      }
-      const all: any[] = [];
-      collect(document, all);
-      return all.filter((el: any) => {
-        const t = ((el.textContent || "") as string).trim();
-        return rx.test(t) && t.length < 40;
-      }).length;
-    }, pattern)) as number;
-
-  const deepClickText = async (pattern: string): Promise<boolean> =>
-    (await page.evaluate((p: string) => {
-      const rx = new RegExp(p, "i");
-      function collect(root: any, out: any[]) {
-        let nodes: any;
-        try { nodes = root.querySelectorAll("*"); } catch (e) { return; }
-        for (const el of nodes) {
-          out.push(el);
-          if (el.shadowRoot) collect(el.shadowRoot, out);
-          if (el.tagName === "IFRAME") {
-            try { if (el.contentDocument) collect(el.contentDocument, out); } catch (e) { /* cross-origin */ }
-          }
-        }
-      }
-      const all: any[] = [];
-      collect(document, all);
-      const hits = all.filter((el: any) => {
-        const t = ((el.textContent || "") as string).trim();
-        return rx.test(t) && t.length < 40;
-      });
-      hits.sort((a: any, b: any) =>
-        ((a.textContent || "") as string).trim().length - ((b.textContent || "") as string).trim().length);
-      const target = hits[0];
-      if (!target) return false;
-      const clickable = target.closest ? (target.closest("button,a,[role=button],lightning-button") || target) : target;
-      (clickable as HTMLElement).click();
-      return true;
-    }, pattern)) as boolean;
-
-  // Deep-click the program's select control; verify the cart after EVERY
-  // attempt (up to 2 — LWC bazen ilk tıklamayı yutuyor). POSITIVE evidence:
-  // cart must show "( N )" with N>=1; otherwise fail visibly.
-  let selected = false;
-  let selectedLabel = "";
-  for (let attempt = 1; attempt <= 2 && !selected; attempt++) {
-    const clickedName = (await deepClickSelect().catch(() => null)) as string | null;
-    logger.info(`[altinbas] deep-click sonucu (deneme ${attempt}): ${JSON.stringify(clickedName)}`);
-    if (clickedName === null) {
-      logger.warn("[altinbas] stageProgram: deep-walker hiç select kontrolü bulamadı — program seçilemedi");
-      return false;
+  // Faz-3 CANLI TEŞHİS (kesin): kartlar iframe + KAPALI LWC shadow-DOM'da.
+  // Playwright locator, frames-arası getByText VE page.evaluate derin
+  // yürüyücüsü (kapalı shadow'a el.shadowRoot null döner) — üçü de canlıda
+  // başarısız. CANLI KANITLANAN TEK ÇÖZÜM: koordinat-tabanlı GERÇEK fare
+  // tıklaması (page.mouse.click = trusted event, kapalı shadow'a ulaşır).
+  // Arama+filtre listeyi 1-2 karta indirdiği için "+ Select" ilk kart
+  // satırında sağ tarafta; 1568x900 viewport'ta ampirik aday koordinatlar
+  // sırayla denenir ve HER denemeden sonra sepet doğrulanır (POZİTİF kanıt:
+  // "Selected Programs (N)", N>=1). Yanlış noktaya tıklama istenmeyen panel
+  // açabilir → her deneme arasında dismissSfError.
+  const coordCandidates: Array<[number, number]> = [
+    [1120, 300], [1120, 330], [1080, 300], [1150, 300], [1120, 360], // ilk kart "+ Select" bölgesi
+    [1120, 430], [1120, 500],                                        // 2. kart olası konumları
+  ];
+  const tryCoordinateSelect = async (): Promise<string | null> => {
+    for (const [x, y] of coordCandidates) {
+      await page.mouse.click(x, y).catch(() => {});
+      await page.waitForTimeout(900);
+      await dismissSfError(page);
+      if (await cartHasItem()) return `(${x},${y})`;
     }
-    await page.waitForTimeout(1200);
-    let cartText = (await deepReadCart().catch(() => "")) as string;
-    if (!/\(\s*[1-9]/.test(cartText)) cartText = await readCart();
-    logger.info(`[altinbas] deep-click sepet="${cartText.replace(/\s+/g, " ").slice(0, 60)}"`);
-    if (/\(\s*[1-9]/.test(cartText)) {
-      selected = true;
-      selectedLabel = clickedName;
+    return null;
+  };
+
+  let selectedAt: string | null = null;
+  for (const [turkish, withoutThesis] of filterSets) {
+    const setName = `${turkish ? "Turkish" : "English"} / ${withoutThesis ? "Without" : "With"} Thesis`;
+    await applyFilters(turkish, withoutThesis);
+    selectedAt = await tryCoordinateSelect();
+    if (selectedAt) {
+      logger.info(`[altinbas] program secildi @ ${selectedAt} (filtre seti: ${setName})`);
+      break;
     }
+    logger.warn(`[altinbas] Program: filtre seti "${setName}" ile sepet dolmadı — ${filterSets.length > 1 ? "sıradaki set denenecek" : "aday noktalar tükendi"}`);
   }
-  if (!selected) {
-    logger.warn("[altinbas] stageProgram: deep-click sonrası sepet dolmadı — program seçilemedi");
+  if (!selectedAt) {
+    logger.warn("[altinbas] Program: koordinat click sepete kaydolmadi (tüm filtre setleri + aday noktalar tükendi) — stage fail");
+    await captureScreen(page, "program-coord-fail");
     return false;
   }
-  logger.info(`[altinbas] Sepet doğrulandı, seçilen: "${selectedLabel.slice(0, 80)}"`);
+  logger.info(`[altinbas] Sepet doğrulandı ${selectedAt}: ${JSON.stringify((await readCart()).replace(/\s+/g, " ").slice(0, 60))}`);
 
   // 3) CART BUTTON → modal → "Save and Next" (footer Next is NOT used).
   const cartBtn = page.getByRole("button", { name: /selected programs/i }).first();
@@ -794,29 +753,19 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
     page.getByRole("button", { name: /save and next/i }).first()
       .or(page.locator('button:has-text("Save and Next")').first());
 
-  // Save and Next may ALSO live behind the same shadow/iframe boundary —
-  // presence = locator count OR deep-walker count; clicks fall back to the
-  // deep walker when the locator can't see the button.
-  const saveNextVisible = async (): Promise<boolean> => {
-    if ((await saveNextLocator().count().catch(() => 0)) > 0) return true;
-    return ((await deepCountText("^save and next$").catch(() => 0)) as number) > 0;
-  };
-
   // POSITIVE evidence required: the modal (its Save and Next button) must
   // actually appear after opening the cart. "Button absent" before any
   // click is a FAILURE (cart click missed / modal never opened), not
-  // success — retry the cart click once (deep fallback), then fail visibly.
-  let modalSeen = await saveNextVisible();
+  // success — retry the cart click once, then fail visibly. (Canlı kanıt:
+  // modal ve Save-and-Next STANDART DOM'da — locator çalışır; kapalı-shadow
+  // sorunu yalnızca program kartlarındaydı.)
+  let modalSeen = (await saveNextLocator().count().catch(() => 0)) > 0;
   if (!modalSeen) {
     logger.warn("[altinbas] Program: sepet tıklandı ama modal görünmedi — sepet bir kez daha tıklanıyor");
     await dismissSfError(page);
-    if (await cartBtn.count().catch(() => 0)) {
-      await cartBtn.click().catch(() => {});
-    } else {
-      await deepClickText("selected programs\\s*\\(").catch(() => false);
-    }
+    await cartBtn.click().catch(() => {});
     await page.waitForTimeout(1500);
-    modalSeen = await saveNextVisible();
+    modalSeen = (await saveNextLocator().count().catch(() => 0)) > 0;
   }
   if (!modalSeen) {
     logger.warn("[altinbas] Program: Selected Programs modalı açılamadı (Save and Next hiç görünmedi)");
@@ -829,24 +778,19 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   let saveNextDone = false;
   for (let k = 0; k < 4; k++) {
     await dismissSfError(page);
-    const locCount = (await saveNextLocator().count().catch(() => 0)) as number;
-    if (!locCount && !(await saveNextVisible())) {
+    const saveNext = saveNextLocator();
+    if (!(await saveNext.count().catch(() => 0))) {
       saveNextDone = clickedOnce;
       break;
     }
-    if (locCount) {
-      logger.info(`[altinbas] Save and Next denemesi ${k + 1}/4 (${k % 2 === 0 ? "normal" : "force"})`);
-      await saveNextLocator().click(k % 2 === 0 ? { timeout: 8000 } : { force: true, timeout: 8000 }).catch(() => {});
-    } else {
-      logger.info(`[altinbas] Save and Next denemesi ${k + 1}/4 (deep-walker)`);
-      await deepClickText("^save and next$").catch(() => false);
-    }
+    logger.info(`[altinbas] Save and Next denemesi ${k + 1}/4 (${k % 2 === 0 ? "normal" : "force"})`);
+    await saveNext.click(k % 2 === 0 ? { timeout: 8000 } : { force: true, timeout: 8000 }).catch(() => {});
     clickedOnce = true;
     await page.waitForTimeout(SF_HYDRATION_MS);
     await dismissSfError(page);
   }
   if (!saveNextDone && clickedOnce) {
-    saveNextDone = !(await saveNextVisible());
+    saveNextDone = !(await saveNextLocator().count().catch(() => 0));
   }
   if (!saveNextDone) {
     logger.warn("[altinbas] Program: Save and Next modalı kapatmadı — stage yeniden okunacak");
@@ -887,7 +831,20 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
     logger.warn("[altinbas] Personal: Email alanı bulunamadı (zorunlu!)");
   }
 
-  await fillIfPresent(page, /mobile/i, profile.phone);
+  // Telefon — Faz-3 CANLI KANIT: portal ülke chip'i + trunk-0'sız ULUSAL
+  // numara ister ("+930798546789" ham hali "0798..." olarak REDDEDİLDİ;
+  // doğru giriş chip(+93) + "798546789"). Chip'i shadow-select walker ile
+  // ülke adına göre set et; dial code'u chip metninden (+93) ya da
+  // DIAL_CODES haritasından al, ulusal numarayı ondan türet.
+  if (profile.phone) {
+    const countryEsc = country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const chipText = country ? await setShadowSelectByOption(page, countryEsc) : null;
+    if (chipText) logger.info(`[altinbas] Personal: telefon ülke chip'i set edildi: "${chipText.slice(0, 40)}"`);
+    const chipDial = /\+\s*(\d{1,4})/.exec(chipText || "")?.[1] || DIAL_CODES[country] || "";
+    const national = toNationalNoTrunk(profile.phone, chipDial);
+    logger.info(`[altinbas] Personal: mobile ulusal numara="${national}" (dial=${chipDial || "?"})`);
+    await fillIfPresent(page, /mobile/i, national || profile.phone);
+  }
   await fillIfPresent(page, /father name/i, profile.fatherName);
   await fillIfPresent(page, /mother name/i, profile.motherName);
 
@@ -936,6 +893,12 @@ async function stageEducational(page: any, profile: SubmitProfile): Promise<bool
 
   const { label: gpaType, value: gpaVal } = inferGpaTypeLabel(profile.gpa);
   await page.getByLabel(/gpa type/i).first().selectOption({ label: gpaType }).catch(() => {});
+  // Faz-3 CANLI KANIT: GPA Type select'i shadow-nested — getByLabel bazen
+  // ulaşamıyor; walker ile option metnine göre set + input/change dispatch
+  // (aynı değeri tekrar set etmek idempotent, ilk yol çalıştıysa zararsız).
+  const gpaTypePattern = gpaType.includes("100") ? "OUT OF 100" : "OUT OF 4\\s*$";
+  const gpaTypeSet = await setShadowSelectByOption(page, gpaTypePattern);
+  logger.info(`[altinbas] Educational: GPA Type walker sonucu: ${JSON.stringify(gpaTypeSet)}`);
   const gpaOk = await fillLwcNumber(page, page.getByLabel(/^gpa$/i).first(), gpaVal);
   if (!gpaOk) logger.warn("[altinbas] Educational: GPA aria-invalid kaldı — Save başarısız olabilir");
 
@@ -993,6 +956,17 @@ async function stageQuestionnaire(page: any): Promise<boolean> {
   }
   logger.info("[altinbas] Questionnaire tamamlandı (Visa Support=Yes)");
   await clickNext(page);
+  await page.waitForTimeout(2500);
+  await dismissSfError(page);
+  // Faz-3 CANLI KANIT: seçim sonrası ekranda kalan "Complete this field."
+  // yazısı BAYAT — Next'i engellemez. İlk Next validate eder, İKİNCİ Next
+  // ilerletir. Hâlâ Questionnaire'deysek (Answer combobox görünüyorsa) bir
+  // kez daha Next bas.
+  const stillHere = await page.getByRole("combobox", { name: /answer/i }).count().catch(() => 0);
+  if (stillHere) {
+    logger.info("[altinbas] Questionnaire: ilk Next ilerletmedi (bayat validasyon) — ikinci Next");
+    await clickNext(page);
+  }
   return true;
 }
 
@@ -1041,9 +1015,9 @@ async function stageDocuments(
     { label: /personal picture|photo|picture/i,    file: files.photo,      tag: "Personal Picture" },
   ];
 
-  const fileInputs = page.locator("input[type=file]");
-  const n = await fileInputs.count().catch(() => 0);
-  logger.info(`[altinbas] stageDocuments: ${n} file input(s) found on Documents stage`);
+  logger.info(
+    `[altinbas] stageDocuments: ${await page.locator("input[type=file]").count().catch(() => 0)} file input(s) found on Documents stage`,
+  );
 
   for (let idx = 0; idx < docMap.length; idx++) {
     const d = docMap[idx]!;
@@ -1052,8 +1026,12 @@ async function stageDocuments(
       continue;
     }
 
-    // Prefer the row container matched by heading text; fall back to the
-    // positional input (portal row order is stable).
+    // Faz-3 CANLI KANIT: DOM her upload sonrası RE-RENDER oluyor — input
+    // locator'ı ve sayısı HER belge için yeniden çözülmeli (stale ref
+    // kullanma). Prefer the row container matched by heading text; fall
+    // back to the positional input (portal row order is stable).
+    const fileInputs = page.locator("input[type=file]");
+    const n = await fileInputs.count().catch(() => 0);
     let input = page
       .locator("tr, li, .slds-grid, div")
       .filter({ hasText: d.label })

@@ -68,30 +68,46 @@ The two former blockers were resolved by watching the live portal interactively 
    - Do NOT rely on pagination: the pager button's accessible name is "Next" (not ">"), and a generic
      /next/ locator collides with the footer Next — browsing pages proved fragile; prefer
      single-word search + the Language/Thesis SLDS dropdown filters to narrow the list.
-   - FINAL diagnosis (empirically closed): the program cards live inside iframe + LWC Lightning
-     shadow-DOM — NO Playwright locator can reach them (getByText/getByRole/frames all 0 hits even
-     for the program NAME after a working search; accordion already aria-expanded=true; page
-     exposes only 8 role=buttons; select control renders concatenated three-state text
-     "SelectSelectedRemove" in one element). Do NOT retry selector strategies.
-   - The ONLY working access is a DEEP WALKER inside page.evaluate: recurse collect() through
-     el.shadowRoot and same-origin IFRAME.contentDocument (try/catch cross-origin). Select
-     control filter: own textContent /select/, NOT /programs|save and next|cancel/, len<40
-     (catches the composite). Card match: climb parentElement OR getRootNode().host (crosses
-     shadow boundaries) up to 8 levels checking all significant program words; fall back to the
-     first select. Click closest('button,a,[role=button],lightning-button')||self.
-   - Cart read / Save-and-Next also need the walker as fallback (same shadow problem); the
-     "Selected Programs (N)" cart IS one of the 8 real role=buttons (role locator works for it).
-     Verify the cart /\(\s*[1-9]/ after EVERY click attempt; fail visibly if it stays empty.
-   - Open the modal via the **"Selected Programs (N)" cart button**, NOT the footer Next; success =
-     ≥1 Save-and-Next click AND the button disappearing.
+   - FINAL diagnosis (Faz-3, live end-to-end success): the program cards live inside iframe +
+     **CLOSED** LWC shadow-DOM — NO Playwright locator can reach them (getByText/getByRole/frames
+     all 0 hits even for the program NAME after a working search), and the page.evaluate DEEP
+     WALKER also FAILS (closed shadow ⇒ `el.shadowRoot === null`, the walker never sees the
+     cards). Do NOT retry selector strategies AND do NOT reintroduce the walker for the cards.
+   - The ONLY live-proven access: **fixed viewport 1568x900 + single-word search + Language/Thesis
+     filters to narrow the list to ~1 card, then coordinate-based trusted `page.mouse.click` on
+     empirical candidate points**, verifying the cart ("Selected Programs (N)", /\(\s*[1-9]/) after
+     EVERY click; `dismissSfError` between attempts; fail visibly + screenshot if the cart stays
+     empty. Coordinates are calibrated to that exact viewport — never change viewport without
+     recalibrating.
+   - Filters default to English / With Thesis when the CRM name carries no "(in turkish)" /
+     "(without thesis)" hint; unhinted dimensions get bounded fallback combinations (default set
+     always tried first) so hint-less Turkish/Without-Thesis programs aren't deterministically lost.
+   - The cart "Selected Programs (N)" button and the cart modal are standard DOM — role/`has-text`
+     locators DO work for them. Open the modal via the cart button, NOT the footer Next; success =
+     ≥1 "Save and Next" click AND the button disappearing.
 
 Other live-proven portal rules:
+- **Country typeaheads must be CLEARED first** (ControlOrMeta+A → Backspace), then type only the
+  first ~3 chars and CLICK the full-name option — typing alone never commits the value.
+- **Phone** = country chip (shadow-nested native select; set via open-shadow walker preferring the
+  select whose option contains "+") + **national number without trunk 0** ("+930798546789" →
+  chip(+93) + "798546789"); "Phone number can only contain digits" ⇒ leading 0 left in.
+- **Dates** = "DD Mon YYYY" (e.g. `31 May 2001`); "05/31/2001" is REJECTED.
 - **GPA spinbutton rejects decimals even from a real keyboard** — send an INTEGER string only
-  (`String(Math.max(1, Math.round(gpa)))`); "3.20" is refused, "3" is accepted.
+  (`String(Math.max(1, Math.round(gpa)))`); "3.20" is refused, "3" is accepted; write via native
+  value setter + input/change/blur dispatch.
+- **GPA Type** (Grading System) is a shadow-nested native `<select>` — set via open-shadow walker
+  (option text "OUT OF 100"/"OUT OF 4") + input/change dispatch; getByLabel alone is unreliable.
 - **Personal stage requires Email** — it was the silent blocker in earlier automated runs; fill explicitly.
-- **Questionnaire** = one "Do you need Visa Support?" button-combobox → option "Yes".
+- **Questionnaire** = one "Do you need Visa Support?" button-combobox → option "Yes". The leftover
+  "Complete this field." text after selecting is STALE — first Next validates, SECOND Next advances
+  (double-Next if the Answer combobox is still present).
 - **Documents** = 4 required file rows (Passport, Bachelor Diploma, Bachelor Transcript, Personal Picture):
   `setInputFiles` → "Upload Files" progress modal → click **Done** → row flips to "( Uploaded )".
+  DOM re-renders after EVERY upload — re-resolve the file-input locator/count per document (no stale refs).
+- Live success verification: Applications list shows Stage "Evaluation" + green ✓ + "View
+  Application"; "Signed Up"/"Complete Application" = half-finished. Post-submit the session may drop
+  to agency login (normal).
 - **The final submit is the Documents footer's "Submit Application" button** (no Next, no separate
   Completed action). Dry-run must stop before it; the generic final-screen detector must NOT fire on the
   Documents stage (its footer text contains "Submit Application") — guard by stage name AND file-input
