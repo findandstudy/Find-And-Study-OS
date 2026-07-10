@@ -89,6 +89,11 @@ The two former blockers were resolved by watching the live portal interactively 
      cards to a few); log the card count after search (best-effort "N items" regex over frame
      body innerText, "?" if it stays inside the closed LWC shadow). setSfCombobox stays in the
      file unused (GPA-Type stage walker uses its own copy pattern; keep for future fallback).
+   - **Faz-3.4 Personal email rule**: getByLabel(/^e-?mail/i) alone missed the required Email
+     field (Personal looped, Next never advanced). Lookup order: label → input[type=email] →
+     placeholder*="mail" → open-shadow walker (same pattern as GPA Type) writing via native
+     value setter + input/change/blur dispatch. Program stage confirmed solved on app 2590
+     dry-run (single-word search = 4 cards, selected @ 915,290).
    - **Faz-3.2 stuck-modal rule**: a coordinate click can land on the "Selected Programs" cart
      button instead of "+ Select", opening an EMPTY modal that BLOCKS the cards for all later
      attempts. Close any open dialog (Escape + role=dialog X button) at stage start AND before

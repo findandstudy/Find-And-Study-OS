@@ -848,10 +848,53 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
   await typeDate(page, /passport date of expiry/i, fmtAltDate(profile.passportExpiryDate));
 
   // Email is REQUIRED here and was the silent blocker in earlier automated
-  // runs — fill it explicitly (not fillIfPresent gating on a maybe-value).
-  const emailBox = page.getByLabel(/^e-?mail/i).first();
-  if (await emailBox.count().catch(() => 0)) {
-    await emailBox.fill(profile.email).catch(() => {});
+  // runs. Faz-3.4 (app 2590 dry-run: "Email alanı bulunamadı (zorunlu!)" →
+  // Next ilerlemedi, Personal döngüye girdi): alanı SAĞLAM bul — sırayla
+  // getByLabel(email), input[type=email], placeholder*="mail"; hiçbiri
+  // tutmazsa GPA'daki gibi open-shadow walker ile tüm shadowRoot'ları gezip
+  // type=email VEYA name/id/aria-label/placeholder içinde "mail" geçen
+  // input'u bul, native value setter ile yaz + input/change/blur dispatch et.
+  const fillEmailRobust = async (): Promise<boolean> => {
+    if (!profile.email) return false;
+    const candidates = [
+      page.getByLabel(/^e-?mail/i).first(),
+      page.locator('input[type="email"]').first(),
+      page.locator('input[placeholder*="mail" i]').first(),
+    ];
+    for (const box of candidates) {
+      if (await box.count().catch(() => 0)) {
+        const ok = await box.fill(profile.email).then(() => true).catch(() => false);
+        if (ok) return true;
+      }
+    }
+    // Open-shadow walker fallback (kapalı shadow'a ulaşamaz; Personal
+    // form alanları AÇIK shadow'da — GPA Type/telefon chip ile aynı durum).
+    try {
+      return (await page.evaluate((val: string) => {
+        const all: any[] = [];
+        (function walk(root: any) {
+          let ns: any;
+          try { ns = root.querySelectorAll("*"); } catch (e) { return; }
+          for (const el of ns) { all.push(el); if (el.shadowRoot) walk(el.shadowRoot); }
+        })(document);
+        const hit = all.find((e: any) => e.tagName === "INPUT" && (
+          ((e.type || "") as string).toLowerCase() === "email" ||
+          /mail/i.test(`${e.name || ""} ${e.id || ""} ${e.getAttribute("aria-label") || ""} ${e.getAttribute("placeholder") || ""}`)
+        ));
+        if (!hit) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        if (setter) setter.call(hit, val); else hit.value = val;
+        hit.dispatchEvent(new Event("input", { bubbles: true }));
+        hit.dispatchEvent(new Event("change", { bubbles: true }));
+        hit.dispatchEvent(new Event("blur", { bubbles: true }));
+        return true;
+      }, profile.email)) as boolean;
+    } catch {
+      return false;
+    }
+  };
+  if (await fillEmailRobust()) {
+    logger.info("[altinbas] Personal: email dolduruldu");
   } else {
     logger.warn("[altinbas] Personal: Email alanı bulunamadı (zorunlu!)");
   }
