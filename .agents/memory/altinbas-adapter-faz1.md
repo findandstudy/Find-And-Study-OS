@@ -68,10 +68,11 @@ The two former blockers were resolved by watching the live portal interactively 
    - Do NOT rely on pagination: the pager button's accessible name is "Next" (not ">"), and a generic
      /next/ locator collides with the footer Next — browsing pages proved fragile; prefer
      single-word search + the Language/Thesis SLDS dropdown filters to narrow the list.
-   - NEVER locate candidates via 'button:has-text("Select")' (also matches the "Selected Programs"
-     cart button → stepper container gets picked) AND exact name "Select" matches NOTHING (the card
-     toggle button's accessible name is the concatenation "SelectSelectedRemove"). Correct locator:
-     getByRole button name /select/i + filter hasNotText
+   - Card toggle button is findable ONLY by TEXTCONTENT: its accessible name has no "select"
+     (icon/empty) so getByRole name= matches NOTHING; its textContent is the concatenation
+     "SelectSelectedRemove". Also 'button:has-text("Select")' inside a container filter matches the
+     "Selected Programs" cart button (stepper container gets picked). Correct locator:
+     getByRole('button').filter({hasText:/select/i}) + hasNotText
      /selection|programs|save and next|cancel and close/i ("selection" excludes stepper items
      "Program Selection"/"Term Selection" which a plural-only /programs/ filter misses);
      resolve each button's card via ancestor xpath (article → li → 3-up) and BLANK any candidate

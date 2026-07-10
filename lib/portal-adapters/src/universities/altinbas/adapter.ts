@@ -628,22 +628,31 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
   // 3) Collect candidates keyed by the program-card TOGGLE buttons.
-  // Faz-2.7/2.8 KÖK NEDEN zinciri: 'button:has-text("Select")' also matches
-  // the "Selected Programs" cart button (stepper container got picked), but
-  // exact name "Select" matches NOTHING because the card toggle button's
-  // accessible name is the CONCATENATION "SelectSelectedRemove" (Select +
-  // Selected + Remove spans — Faz-2.2 field inventory). So: match buttons
-  // whose name CONTAINS "select" but EXCLUDE the cart ("Selected Programs
-  // (N)"), footer ("Save and Next" / "Cancel and close") AND stepper items
-  // ("Program Selection" / "Term Selection" — "selection" matches /select/i
-  // but never appears in the card toggle's "SelectSelectedRemove" name).
+  // Faz-2.7/2.8/2.9 KÖK NEDEN zinciri: 'button:has-text("Select")' also
+  // matches the "Selected Programs" cart button (stepper container got
+  // picked); accessible-NAME matching finds NOTHING at all — the card
+  // toggle button's accessible name does NOT contain "select" (icon/empty),
+  // only its TEXTCONTENT is the concatenation "SelectSelectedRemove"
+  // (Faz-2.2 field inventory). So: take ALL role=button and filter by
+  // TEXTCONTENT (hasText looks at textContent, unlike getByRole name=),
+  // excluding the cart ("Selected Programs (N)"), footer ("Save and Next" /
+  // "Cancel and close") and stepper items ("Program Selection" / "Term
+  // Selection" — "selection" never appears in "SelectSelectedRemove").
   const selectBtns = page
-    .getByRole("button", { name: /select/i })
+    .getByRole("button")
+    .filter({ hasText: /select/i })
     .filter({ hasNotText: /selection|programs|save and next|cancel and close/i });
   const n = await selectBtns.count().catch(() => 0);
   logger.info(`[altinbas] kart-select buton sayısı: ${n}`);
   if (!n) {
     logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç kart-select butonu yok`);
+    // Diagnostic for the next live run: dump the first 8 role=button texts.
+    const allBtns = page.getByRole("button");
+    const total = await allBtns.count().catch(() => 0);
+    for (let i = 0; i < Math.min(total, 8); i++) {
+      const t = ((await allBtns.nth(i).innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
+      logger.warn(`[altinbas] role=button[${i}] textContent: "${t.slice(0, 120)}"`);
+    }
     return false;
   }
 
