@@ -50,6 +50,18 @@ Term→FINISH screens.
   `actions[]`; FINISH additionally requires `state:SUCCESS` before
   submitted=true (HTML login/edge pages must fail visibly, never fake success).
 
+## State chaining (FIX-4, 2026-07-10) — response key is DIFFERENT
+
+- Flow RESPONSES return the new state under `serializedEncodedState`;
+  `serializedState` is the REQUEST-side key. Ingest must accept both
+  (encoded preferred when an object carries both) or the chain silently
+  sticks on the tiny (~3KB) boot-request state and the flow rejects the
+  2nd NEXT with interviewStatus:"Error" even when field data is correct.
+- Real interview state is tens of thousands of chars — a <5KB state before
+  send is a broken-chain signal (WARN); log newStateLen after every ingest.
+- interviewStatus:"Error" is a flow-error signal alongside state:ERROR /
+  exceptionEvent / errors[] (match escaped-JSON variants too).
+
 ## Option matching (FIX-2/FIX-3, 2026-07-10)
 
 - Term/Degree/Program selectable options come from the navigateFlow RESPONSE

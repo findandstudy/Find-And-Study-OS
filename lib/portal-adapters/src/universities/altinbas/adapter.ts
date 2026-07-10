@@ -299,8 +299,17 @@ function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
     }
     if (n && typeof n === "object") {
       const o = n as Record<string, unknown>;
-      const ss = o["serializedState"];
-      if (typeof ss === "string" && ss.length > 200) states.push(ss);
+      // FIX-4: yanıtlar yeni state'i "serializedEncodedState" anahtarıyla döndürür
+      // ("serializedState" REQUEST tarafının anahtarı). İkisini de kabul et —
+      // aksi halde state 3048'lik boot-request state'inde takılı kalır ve flow
+      // ikinci NEXT'te interviewStatus:"Error" verir (response-chaining şart).
+      const enc = o["serializedEncodedState"];
+      if (typeof enc === "string" && enc.length > 200) {
+        states.push(enc);
+      } else {
+        const ss = o["serializedState"];
+        if (typeof ss === "string" && ss.length > 200) states.push(ss);
+      }
 
       const id = o["Id"];
       if (typeof id === "string" && /^[a-zA-Z0-9]{15,18}$/.test(id)) {
@@ -327,8 +336,8 @@ function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
 
   if (!states.length) {
     // Regex fallback: JSON parse edilemeyen / string içine gömülü (escaped)
-    // gövdeden serializedState çek — `\"serializedState\":\"...\"` varyantı dahil.
-    const re = /\\?"serializedState\\?"\s*:\s*\\?"((?:[^"\\]|\\.){200,}?)\\?"/g;
+    // gövdeden serialized(Encoded)State çek — `\"...\":\"...\"` varyantı dahil.
+    const re = /\\?"serialized(?:Encoded)?State\\?"\s*:\s*\\?"((?:[^"\\]|\\.){200,}?)\\?"/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(raw)) !== null) {
       try {
@@ -455,7 +464,7 @@ function isAuraResponse(raw: string): boolean {
 
 /** Aura/flow hata sinyali (state:ERROR, exceptionEvent, errors[]). */
 function flowHasError(raw: string): boolean {
-  return /"state"\s*:\s*"ERROR"|"exceptionEvent"\s*:\s*true|"errors"\s*:\s*\[\s*\{/.test(raw);
+  return /"state"\s*:\s*"ERROR"|"exceptionEvent"\s*:\s*true|"errors"\s*:\s*\[\s*\{|\\?"interviewStatus\\?"\s*:\s*\\?"Error\\?"/.test(raw);
 }
 
 /** Aura action state:SUCCESS içeriyor mu? (FINISH başarı kanıtının parçası.) */
@@ -500,6 +509,13 @@ async function postNavigateFlow(
 ): Promise<string> {
   if (!rt.template) throw new Error("[altinbas] flow template yok — hiç aura request yakalanmadı");
   if (!rt.state) throw new Error("[altinbas] serializedState yok — flow boot yanıtı yakalanamadı");
+  // FIX-4 sanity: gerçek interview state ~onbinlerce karakter; çok küçük state
+  // muhtemelen boot-REQUEST'in erken state'i (yanıt zinciri kopmuş demektir).
+  if (rt.state.length < 5000) {
+    logger.warn(
+      `[altinbas] navigateFlow[${tag}] stateLen=${rt.state.length} ŞÜPHELİ KÜÇÜK (<5000) — yanıt zinciri (serializedEncodedState) yakalanamamış olabilir`,
+    );
+  }
 
   rt.reqCounter += 1;
   const message = JSON.stringify({
@@ -556,7 +572,7 @@ async function postNavigateFlow(
 
   const stage = readStageFromRaw(raw);
   logger.info(
-    `[altinbas] navigateFlow[${tag}] action=${action} nf=${fields.length} → status=${resp.status} stage=${stage ?? "?"} err=${flowHasError(raw)} dup=${isDuplicatePassport(raw)} len=${raw.length}`,
+    `[altinbas] navigateFlow[${tag}] action=${action} nf=${fields.length} → status=${resp.status} stage=${stage ?? "?"} err=${flowHasError(raw)} dup=${isDuplicatePassport(raw)} len=${raw.length} newStateLen=${rt.state.length}`,
   );
   return raw;
 }
