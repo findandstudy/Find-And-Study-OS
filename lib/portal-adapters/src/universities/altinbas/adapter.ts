@@ -847,58 +847,6 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
   await typeDate(page, /passport date of issue/i, fmtAltDate(profile.passportIssueDate));
   await typeDate(page, /passport date of expiry/i, fmtAltDate(profile.passportExpiryDate));
 
-  // Email is REQUIRED here and was the silent blocker in earlier automated
-  // runs. Faz-3.4 (app 2590 dry-run: "Email alanı bulunamadı (zorunlu!)" →
-  // Next ilerlemedi, Personal döngüye girdi): alanı SAĞLAM bul — sırayla
-  // getByLabel(email), input[type=email], placeholder*="mail"; hiçbiri
-  // tutmazsa GPA'daki gibi open-shadow walker ile tüm shadowRoot'ları gezip
-  // type=email VEYA name/id/aria-label/placeholder içinde "mail" geçen
-  // input'u bul, native value setter ile yaz + input/change/blur dispatch et.
-  const fillEmailRobust = async (): Promise<boolean> => {
-    if (!profile.email) return false;
-    const candidates = [
-      page.getByLabel(/^e-?mail/i).first(),
-      page.locator('input[type="email"]').first(),
-      page.locator('input[placeholder*="mail" i]').first(),
-    ];
-    for (const box of candidates) {
-      if (await box.count().catch(() => 0)) {
-        const ok = await box.fill(profile.email).then(() => true).catch(() => false);
-        if (ok) return true;
-      }
-    }
-    // Open-shadow walker fallback (kapalı shadow'a ulaşamaz; Personal
-    // form alanları AÇIK shadow'da — GPA Type/telefon chip ile aynı durum).
-    try {
-      return (await page.evaluate((val: string) => {
-        const all: any[] = [];
-        (function walk(root: any) {
-          let ns: any;
-          try { ns = root.querySelectorAll("*"); } catch (e) { return; }
-          for (const el of ns) { all.push(el); if (el.shadowRoot) walk(el.shadowRoot); }
-        })(document);
-        const hit = all.find((e: any) => e.tagName === "INPUT" && (
-          ((e.type || "") as string).toLowerCase() === "email" ||
-          /mail/i.test(`${e.name || ""} ${e.id || ""} ${e.getAttribute("aria-label") || ""} ${e.getAttribute("placeholder") || ""}`)
-        ));
-        if (!hit) return false;
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-        if (setter) setter.call(hit, val); else hit.value = val;
-        hit.dispatchEvent(new Event("input", { bubbles: true }));
-        hit.dispatchEvent(new Event("change", { bubbles: true }));
-        hit.dispatchEvent(new Event("blur", { bubbles: true }));
-        return true;
-      }, profile.email)) as boolean;
-    } catch {
-      return false;
-    }
-  };
-  if (await fillEmailRobust()) {
-    logger.info("[altinbas] Personal: email dolduruldu");
-  } else {
-    logger.warn("[altinbas] Personal: Email alanı bulunamadı (zorunlu!)");
-  }
-
   // Telefon — Faz-3 CANLI KANIT: portal ülke chip'i + trunk-0'sız ULUSAL
   // numara ister ("+930798546789" ham hali "0798..." olarak REDDEDİLDİ;
   // doğru giriş chip(+93) + "798546789"). Chip'i shadow-select walker ile
@@ -923,6 +871,66 @@ async function stagePersonal(page: any, profile: SubmitProfile): Promise<boolean
   await fillIfPresent(page, /address:?\s*city/i, addrParts[addrParts.length - 1] || "N/A");
   await fillIfPresent(page, /address:?\s*street/i, addrParts[0] || profile.address || "N/A");
   await fillIfPresent(page, /address:?\s*zip/i, "00000");
+
+  // Email is REQUIRED and was the silent blocker. Faz-3.5 (app 2590 dry-run
+  // kanıtı): email input, Program kartları gibi KAPALI shadow içinde
+  // (Personal field inventory textboxes boş) — getByLabel VE open-shadow
+  // walker ulaşamadı. Email "Contact Information" alt-bölümünde, sayfanın
+  // ALTINDA: diğer alanlar dolduktan SONRA oraya scroll + kalibrasyon için
+  // "personal-contact" ekran görüntüsü; sonra sağlam selector zinciri;
+  // hiçbiri tutmazsa koordinat click + trusted keyboard.type fallback.
+  {
+    const contactHdr = page.getByText(/contact information/i).first();
+    for (let i = 0; i < 6; i++) {
+      if (await contactHdr.isVisible().catch(() => false)) break;
+      await page.mouse.wheel(0, 500).catch(() => {});
+      await page.waitForTimeout(400);
+    }
+    await page.waitForTimeout(400);
+    await captureScreen(page, "personal-contact");
+  }
+  const fillEmailBySelectors = async (): Promise<boolean> => {
+    if (!profile.email) return false;
+    const candidates = [
+      page.getByLabel(/^e-?mail/i).first(),
+      page.getByPlaceholder(/mail/i).first(),
+      page.locator('input[type="email"]').first(),
+      // "Email" yazan label'in hemen SONRASINDAKİ input (label-anchored).
+      page.locator('label:has-text("Email")').first().locator("xpath=following::input[1]"),
+    ];
+    for (const box of candidates) {
+      if (await box.count().catch(() => 0)) {
+        const ok = await box.fill(profile.email).then(() => true).catch(() => false);
+        if (ok) return true;
+      }
+    }
+    return false;
+  };
+  let emailFilled = await fillEmailBySelectors();
+  if (!emailFilled && profile.email) {
+    // Koordinat fallback: "Email" metninin kutusu bulunabiliyorsa hemen
+    // ALTINA (input bölgesi), bulunamıyorsa Contact Information'da olası
+    // ilk alan bölgesine trusted click + keyboard.type (kapalı shadow'a
+    // page.mouse/keyboard ulaşır — Program kartlarıyla kanıtlandı).
+    const lblBox = await page.getByText(/^e-?mail\b/i).first().boundingBox().catch(() => null);
+    const [cx, cy]: [number, number] = lblBox
+      ? [lblBox.x + Math.max(20, lblBox.width / 2), lblBox.y + lblBox.height + 25]
+      : [420, 380];
+    await page.mouse.click(cx, cy).catch(() => {});
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Control+A").catch(() => {});
+    await page.keyboard.type(profile.email, { delay: 40 }).catch(() => {});
+    await page.waitForTimeout(300);
+    // Kapalı shadow'da değer okunamaz → selector zincirini bir kez daha dene
+    // (pozitif kanıt varsa yakala); yoksa yazım best-effort kabul edilir.
+    emailFilled = await fillEmailBySelectors().catch(() => false) || false;
+    logger.info(`[altinbas] Personal: email koordinat fallback @ (${Math.round(cx)},${Math.round(cy)})${lblBox ? " (label-anchored)" : " (sabit nokta)"}`);
+  }
+  if (emailFilled) {
+    logger.info("[altinbas] Personal: email dolduruldu");
+  } else {
+    logger.warn("[altinbas] Personal: email bulunamadi — contact screenshot alindi (personal-contact, kalibrasyon icin)");
+  }
 
   await clickNext(page);
   logger.info("[altinbas] Personal Information dolduruldu");
