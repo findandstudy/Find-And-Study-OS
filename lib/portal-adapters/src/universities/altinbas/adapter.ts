@@ -552,6 +552,7 @@ async function postNavigateFlow(
   }
 
   ingestFlowResponse(rt, raw);
+  dumpRecords(rt, tag);
 
   const stage = readStageFromRaw(raw);
   logger.info(
@@ -587,44 +588,87 @@ function recordDisplayName(r: Record<string, unknown>): string {
 }
 
 /**
- * Term seçimi: flow'a önceden yüklü Term kayıtları (Id prefix a0C) içinden
- * "Fall 2026 - 2027" benzeri etiketli olanları bul, EN YÜKSEK yılı seç.
+ * FIX-2 captured FALLBACK'ler: dinamik record parse boş kalırsa canlı yakalanmış
+ * cycle ID'leri kullanılır (Fall 2026-2027 cycle'ı). Fallback kullanımı WARN loglanır.
+ * PhD degree Id'si HENÜZ bilinmiyor — ilk PhD dry-run'ında ALTINBAS_CAPTURE=1 ile
+ * yakalanıp eklenecek (TODO).
+ */
+const FALLBACK_TERM = { label: "Fall 2026 - 2027", id: "a0CQ30000AVvpaEMQR" };
+const FALLBACK_DEGREE_MASTER = { label: "Master", id: "a0CQ30000AVvqKTMQZ" };
+
+/** ALTINBAS_CAPTURE=1 iken flow record havuzunu dök — option eşleme teşhisi. */
+function dumpRecords(rt: FlowRuntime, tag: string): void {
+  if (!CAPTURE) return;
+  try {
+    const entries = [...rt.records.entries()].map(([id, r]) => ({ id, r }));
+    logger.info(
+      `[altinbas][capture] records@${tag} n=${entries.length} :: ${JSON.stringify(entries).slice(0, 4000)}`,
+    );
+  } catch {
+    /* diagnostic asla akışı kırmaz */
+  }
+}
+
+/**
+ * Term seçimi: flow yanıtlarından toplanan kayıtlar içinden "Fall 2026 - 2027"
+ * benzeri etiketliyi bul, EN YÜKSEK yılı seç. a0C prefix'li kayıtlar tercih
+ * edilir ama şart değil (record şekli portal sürümüne göre değişebiliyor).
+ * Hiçbiri yoksa captured fallback.
  */
 function pickTermOption(rt: FlowRuntime): { label: string; id: string } | null {
   const YEAR_RANGE = /(?:fall|spring|summer|güz|bahar|yaz)?\s*\d{4}\s*-\s*\d{4}/i;
-  const cands: Array<{ label: string; id: string; year: number }> = [];
+  const cands: Array<{ label: string; id: string; year: number; a0c: boolean }> = [];
   for (const [id, r] of rt.records) {
-    if (!id.startsWith("a0C")) continue;
     for (const v of Object.values(r)) {
       if (typeof v === "string" && YEAR_RANGE.test(v)) {
         const years = v.match(/\d{4}/g) || [];
         const year = Math.max(...years.map(Number), 0);
-        cands.push({ label: v.trim(), id, year });
+        cands.push({ label: v.trim(), id, year, a0c: id.startsWith("a0C") });
         break;
       }
     }
   }
-  if (!cands.length) return null;
-  cands.sort((a, b) => b.year - a.year);
+  if (!cands.length) {
+    logger.warn(
+      `[altinbas] term dinamik eşleme BOŞ (records=${rt.records.size}) — captured fallback kullanılıyor: "${FALLBACK_TERM.label}" (${FALLBACK_TERM.id})`,
+    );
+    return FALLBACK_TERM;
+  }
+  cands.sort((a, b) => (Number(b.a0c) - Number(a.a0c)) || (b.year - a.year));
   logger.info(`[altinbas] term adayları: ${cands.map((c) => `${c.label}(${c.id})`).join(", ")}`);
   return { label: cands[0].label, id: cands[0].id };
 }
 
 /**
- * Degree seçimi: a0C kayıtları içinden profile.level'e göre Master ya da
- * PhD/Doctorate etiketlisini bul.
+ * Degree seçimi: kayıtlar içinden profile.level'e göre Master ya da
+ * PhD/Doctorate etiketlisini bul (a0C prefix tercih, şart değil).
+ * Master için captured fallback var; PhD Id'si henüz yakalanmadı.
  */
 function pickDegreeOption(rt: FlowRuntime, level: string): { label: string; id: string } | null {
   const wantPhd = /phd|doctor|doktora/i.test(level);
-  const re = wantPhd ? /^(phd|doctorate|ph\.?\s*d)/i : /^master/i;
+  const re = wantPhd ? /^(phd|doctorate|ph\.?\s*d)/i : /^(master|yüksek\s*lisans)/i;
+  const hits: Array<{ label: string; id: string; a0c: boolean }> = [];
   for (const [id, r] of rt.records) {
-    if (!id.startsWith("a0C")) continue;
     for (const v of Object.values(r)) {
       if (typeof v === "string" && re.test(v.trim())) {
-        return { label: v.trim(), id };
+        hits.push({ label: v.trim(), id, a0c: id.startsWith("a0C") });
+        break;
       }
     }
   }
+  if (hits.length) {
+    hits.sort((a, b) => Number(b.a0c) - Number(a.a0c));
+    return { label: hits[0].label, id: hits[0].id };
+  }
+  if (!wantPhd) {
+    logger.warn(
+      `[altinbas] degree dinamik eşleme BOŞ (records=${rt.records.size}) — captured fallback kullanılıyor: "${FALLBACK_DEGREE_MASTER.label}" (${FALLBACK_DEGREE_MASTER.id})`,
+    );
+    return FALLBACK_DEGREE_MASTER;
+  }
+  logger.warn(
+    "[altinbas] PhD degree Id'si dinamik bulunamadı ve captured fallback HENÜZ yok — ilk PhD ALTINBAS_CAPTURE=1 run'ında yakalanacak",
+  );
   return null;
 }
 
@@ -740,6 +784,7 @@ async function runFlowReplay(
   logger.info(
     `[altinbas] flow boot OK: stateLen=${rt.state.length} records=${rt.records.size} bootStage=${readStageFromRaw(rt.lastRaw) ?? "?"}`,
   );
+  dumpRecords(rt, "boot");
 
   /** Yanıtı denetle: duplicate → SKIPPED_DUPLICATE; ERROR → fail-visible detail. true = DUR. */
   const guard = (raw: string, tag: string): boolean => {
@@ -785,15 +830,11 @@ async function runFlowReplay(
 
   let raw = rt.lastRaw;
 
-  // 2) TERM (NEXT)
+  // 2) TERM (NEXT) — nf=0 YASAK: dinamik eşleme boşsa captured fallback gider.
   if (curRank <= 0) {
-    const term = pickTermOption(rt);
-    if (!term) {
-      logger.warn("[altinbas] Term kaydı bulunamadı — TermSelector alansız NEXT deneniyor (default term varsayımı)");
-    } else {
-      logger.info(`[altinbas] Term: "${term.label}" (${term.id})`);
-    }
-    raw = await postNavigateFlow(page, rt, "NEXT", term ? buildTermFields(term) : [], "term");
+    const term = pickTermOption(rt) ?? FALLBACK_TERM;
+    logger.info(`[altinbas] Term: "${term.label}" (${term.id})`);
+    raw = await postNavigateFlow(page, rt, "NEXT", buildTermFields(term), "term");
     if (guard(raw, "Term") || noteStage(raw, "Term")) return;
   } else {
     logger.info("[altinbas] Term adımı atlandı (boot stage ilerisinde)");
@@ -803,7 +844,7 @@ async function runFlowReplay(
   if (curRank <= 1) {
     const degree = pickDegreeOption(rt, profile.level || "");
     if (!degree) {
-      result.detail = `Altınbaş: Degree seçeneği bulunamadı (level="${profile.level}") — flow kayıtlarında Master/PhD etiketi yok`;
+      result.detail = `Altınbaş: Degree seçeneği bulunamadı (level="${profile.level}") — PhD Id'si dinamik bulunamadı ve captured fallback henüz yok (ilk PhD ALTINBAS_CAPTURE run'ında yakalanacak)`;
       logger.warn(`[altinbas] ${result.detail}`);
       return;
     }

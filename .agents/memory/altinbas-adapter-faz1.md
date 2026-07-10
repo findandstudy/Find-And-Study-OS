@@ -50,6 +50,19 @@ Term→FINISH screens.
   `actions[]`; FINISH additionally requires `state:SUCCESS` before
   submitted=true (HTML login/edge pages must fail visibly, never fake success).
 
+## Option matching (FIX-2, 2026-07-10)
+
+- Term/Degree/Program selectable options come from the navigateFlow RESPONSE
+  records themselves (boot carried 11) — there is NO separate Apex options call.
+  Never send a screen with `fields:[]` (nf=0): the flow silently advances with
+  no selection and the NEXT screen fails ("Degree seçeneği bulunamadı").
+- Match dynamically from the ingested records map (refreshed on every response);
+  do NOT hard-require the `a0C` Id prefix — record shapes vary, prefer-a0C via
+  sort instead. Captured fallbacks (WARN when used) for the current cycle:
+  Term "Fall 2026 - 2027"→a0CQ30000AVvpaEMQR, Degree "Master"→a0CQ30000AVvqKTMQZ;
+  PhD Id unknown → fail-visible until captured on a PhD ALTINBAS_CAPTURE run.
+- Term fields must include `TermSelector.maxSelections=3` + `uniMaxSelection=3`.
+
 ## Still unknown (pending first live ALTINBAS_CAPTURE=1 run)
 
 - FINISH exact payload and Documents upload (Salesforce ContentVersion base64

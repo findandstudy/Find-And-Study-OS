@@ -88,6 +88,8 @@ export function buildTermFields(term: { label: string; id: string }): FlowField[
     { field: "pathLWC.currentStage", value: "Term Selection", isVisible: true },
     { field: "TermSelector.selectedOption", value: term.label, isVisible: true },
     { field: "TermSelector.selectedOptionId", value: term.id, isVisible: true },
+    { field: "TermSelector.maxSelections", value: 3, isVisible: true },
+    { field: "TermSelector.uniMaxSelection", value: 3, isVisible: true },
   ];
 }
 
