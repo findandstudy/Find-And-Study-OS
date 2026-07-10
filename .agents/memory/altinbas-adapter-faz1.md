@@ -50,6 +50,24 @@ Term→FINISH screens.
   `actions[]`; FINISH additionally requires `state:SUCCESS` before
   submitted=true (HTML login/edge pages must fail visibly, never fake success).
 
+## Educational ID bindings need provenance (FIX-8, 2026-07-10)
+
+- Educational NEXT with correct field SHAPE (contract-identical nf=19) can still
+  fail as an empty-errorCode client validation if list bindings
+  (EducationalInformationList/Exam/Experience/Reference .applicationId/.applicantId
+  + SetCookie.accountId/contactId) carry stale ids.
+- rt.ids is polluted by first-seen prefix fallback (003/001/a02 — a02 hits
+  boot/program availability rows). Bindings must use DETERMINISTIC provenance:
+  applicationId = run-proven (explicit "applicationId" key ∪ first-seen-in-commit
+  a02) > explicit > prefix-fallback; other three = last EXPLICIT key value >
+  prefix-fallback. FlowRuntime.explicitIds tracks last explicit value per key.
+- Log provenance per key (run-proven|explicit|prefix-fallback|YOK) + full
+  Educational REQUEST fields JSON (ids+constants only, no PII) so the next
+  ALTINBAS_CAPTURE run can be diffed 1:1 against the human contract.
+- Sub-records (GPA/school rows) are optional — human flow passed empty lists;
+  only add real education rows if validation persists WITH correct ids
+  (field names to be captured first).
+
 ## Duplicate = Program step ONLY (FIX-7, 2026-07-10) — supersedes FIX-5/FIX-6 stop logic
 
 - TWO separate portal duplicate checks exist. (1) Program step

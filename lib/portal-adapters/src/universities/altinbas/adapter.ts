@@ -260,6 +260,12 @@ interface FlowRuntime {
    * da yakaladığı için güvenilmez — self-duplicate ayrımı BU set üzerinden.
    */
   explicitAppIds: Set<string>;
+  /**
+   * FIX-8: dört binding anahtarının EXPLICIT anahtar adıyla görülen SON değeri.
+   * rt.ids prefix-fallback'le kirlenebilir (ilk görülen 003/001/a02) — Educational
+   * binding'lerinde explicit değer varsa o kazanır (deterministik kaynak seçimi).
+   */
+  explicitIds: FlowIds;
 }
 
 function newFlowRuntime(): FlowRuntime {
@@ -271,6 +277,7 @@ function newFlowRuntime(): FlowRuntime {
     ids: {},
     reqCounter: 100,
     explicitAppIds: new Set(),
+    explicitIds: {},
   };
 }
 
@@ -327,6 +334,7 @@ function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
         const v = o[key];
         if (typeof v === "string" && /^[a-zA-Z0-9]{15,18}$/.test(v)) {
           rt.ids[key] = v;
+          rt.explicitIds[key] = v; // FIX-8: explicit anahtar > prefix fallback
           if (key === "applicationId") rt.explicitAppIds.add(v); // FIX-6: bizim oluşturduğumuz
         }
       }
@@ -1011,7 +1019,48 @@ async function runFlowReplay(
 
   // 7) EDUCATIONAL (NEXT) — boş listeler + ID binding'leri
   if (curRank <= 4) {
-    raw = await postNavigateFlow(page, rt, "NEXT", buildEducationalFields(rt.ids), "educational");
+    // FIX-8: liste binding'leri BU RUN'ın gerçek başvuru Id'sini taşımalı.
+    // rt.ids.applicationId a02 prefix fallback'iyle boot/program availability
+    // kaydına kirlenebilir (FIX-6 dersi) — bu run'da oluşturulduğu KANITLI Id
+    // (explicit "applicationId" anahtarı > commit'te ilk görülen a02) varsa onu bağla.
+    const provenAppId = [...rt.explicitAppIds].at(-1) ?? [...runCreatedAppIds].at(-1);
+    if (provenAppId && rt.ids.applicationId !== provenAppId) {
+      logger.info(
+        `[altinbas] FIX-8: applicationId düzeltildi ${rt.ids.applicationId ?? "?"} → ${provenAppId} (bu run'da oluşturulan kayıt)`,
+      );
+      rt.ids.applicationId = provenAppId;
+    }
+    // FIX-8: dört binding'in TAMAMI için deterministik kaynak seçimi —
+    // explicit anahtar (yanıtlarda "contactId":"003..." gibi) > prefix fallback
+    // (ilk görülen 003/001/a02, kirlenebilir). applicationId'de run-kanıtlı Id önce.
+    const idKeys = ["applicantId", "applicationId", "accountId", "contactId"] as const;
+    const effIds: FlowIds = {};
+    const provenance: string[] = [];
+    for (const k of idKeys) {
+      const explicit = rt.explicitIds[k];
+      const v = k === "applicationId" ? (provenAppId ?? explicit ?? rt.ids[k]) : (explicit ?? rt.ids[k]);
+      effIds[k] = v;
+      const src =
+        k === "applicationId" && provenAppId
+          ? "run-proven"
+          : explicit
+            ? "explicit"
+            : rt.ids[k]
+              ? "prefix-fallback"
+              : "YOK";
+      provenance.push(`${k}=${v ?? "?"}[${src}]`);
+    }
+    logger.info(`[altinbas] Educational ID provenance: ${provenance.join(" ")}`);
+    const missingIds = idKeys.filter((k) => !effIds[k]);
+    if (missingIds.length) {
+      logger.warn(
+        `[altinbas] Educational ID binding EKSİK: ${missingIds.join(",")} — validation hatası olası (kaynak: flow yanıtlarında bu anahtar/prefix hiç görülmedi)`,
+      );
+    }
+    const eduFields = buildEducationalFields(effIds);
+    // Capture karşılaştırması için TAM istek alanları (sadece Id/sabit — PII yok).
+    logger.info(`[altinbas] Educational REQUEST fields (nf=${eduFields.length}): ${JSON.stringify(eduFields)}`);
+    raw = await postNavigateFlow(page, rt, "NEXT", eduFields, "educational");
     if (guard(raw, "Educational") || noteStage(raw, "Educational")) return;
   } else {
     logger.info("[altinbas] Educational adımı atlandı (boot stage ilerisinde)");
