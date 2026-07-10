@@ -631,8 +631,9 @@ async function setSfCombobox(page: any, labelPattern: RegExp, optionName: RegExp
  * Reçete (Faz-3.1: worker viewport GERÇEKTE 1280x720 — dry-run ekran
  * görüntüsüyle doğrulandı, viewport DEĞİŞTİRİLMEZ; Faz-3.2: takılı boş
  * "Selected Programs" modalı kartları bloke eder → stage başında ve her
- * koordinat tıklamasından önce Escape/X ile kapat; filtre = SADECE tek
- * doğru dil, kombinasyon dönülmez): TEK-KELİME arama → dil filtresi →
+ * koordinat tıklamasından önce Escape/X ile kapat; Faz-3.3: Language/Thesis
+ * filtreleri listeyi "0 items"a SIFIRLIYOR → filtre YOK, sadece tek-kelime
+ * arama ile daralt + kart sayısını logla): TEK-KELİME arama →
  * "+ Select" 720 foldunun ALTINDA kaldığı için scroll (wheel 0,450) →
  * modal-kapalı TEMİZ "program-preclick" ekran görüntüsü → aday
  * koordinatlarla tıkla, HER denemeden sonra sepeti doğrula → sepet butonu →
@@ -696,23 +697,35 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
 
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
-  // 2) Filtre — Faz-3.2: SADECE dil filtresi ve TEK doğru dil (varsayılan
-  //    English; "(in turkish)" hint'i varsa Turkish). Dil/tez kombinasyonları
-  //    DÖNÜLMEZ: dry-run kanıtı — İngilizce program için Turkish setleri 0
-  //    kart döndürüyor, boş turlar da takılı-modal riskini artırıyor.
-  //    Filtre dropdown'u yoksa setSfCombobox false döner, geçilir.
-  const wantTurkish = /\(in\s+turkish\)/i.test(rawQuery);
-  const langName = wantTurkish ? "Turkish" : "English";
-  const langOk = await setSfCombobox(page, /language/i, wantTurkish ? /turkish/i : /english/i);
-  logger.info(`[altinbas] Language filtresi (${langName}): ${langOk ? "uygulandı" : "bulunamadı, geçildi"}`);
-  if (langOk) await page.waitForTimeout(1000);
+  // 2) Faz-3.3: Language/Thesis filtreleri KALDIRILDI — dry-run3 temiz
+  //    preclick screenshot kanıtı: filtre uygulanınca liste "Available
+  //    Programs 0 items Page 0/0"a SIFIRLANIYOR ve tıklanacak kart kalmıyor.
+  //    SADECE tek-kelime arama ile daraltılır (arama tek başına 54 karttan
+  //    aza düşürüyordu). Kart sayısı best-effort loglanır ("arama sonrasi
+  //    kart: N"): sayaç metni ("N items") frame gövde metinlerinden regex
+  //    ile okunur; kapalı LWC shadow içinde kalırsa "?" loglanır.
+  const readCardCount = async (): Promise<string> => {
+    try {
+      for (const frame of page.frames() as Array<{ evaluate: (fn: () => string) => Promise<string> }>) {
+        const text: string = await frame
+          .evaluate(() => (document.body ? document.body.innerText : ""))
+          .catch(() => "");
+        const m = /(\d+)\s*items?\b/i.exec(text);
+        if (m) return m[1];
+      }
+    } catch {
+      /* best-effort */
+    }
+    return "?";
+  };
+  logger.info(`[altinbas] arama sonrasi kart: ${await readCardCount()}`);
 
   // Faz-3 CANLI TEŞHİS (kesin): kartlar iframe + KAPALI LWC shadow-DOM'da.
   // Playwright locator, frames-arası getByText VE page.evaluate derin
   // yürüyücüsü (kapalı shadow'a el.shadowRoot null döner) — üçü de canlıda
   // başarısız. CANLI KANITLANAN TEK ÇÖZÜM: koordinat-tabanlı GERÇEK fare
   // tıklaması (page.mouse.click = trusted event, kapalı shadow'a ulaşır).
-  // Arama+filtre listeyi 1-2 karta indirdiği için "+ Select" ilk kart
+  // Tek-kelime arama listeyi az karta indirdiği için "+ Select" ilk kart
   // satırında sağ tarafta; 1280x720 worker viewport'unda (Faz-3.1 dry-run
   // ekran görüntüsüyle doğrulandı) buton sağda ~x900-950 bandında ve 720
   // foldunun ALTINDA → tıklamadan önce scroll şart. Ampirik aday
@@ -745,7 +758,7 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   await captureScreen(page, "program-preclick");
   const selectedAt = await tryCoordinateSelect();
   if (selectedAt) {
-    logger.info(`[altinbas] program secildi @ ${selectedAt} (dil filtresi: ${langName})`);
+    logger.info(`[altinbas] program secildi @ ${selectedAt} (arama: "${searchWord}")`);
   } else {
     logger.warn("[altinbas] Program: koordinat click sepete kaydolmadi (aday noktalar tukendi) — stage fail");
     await captureScreen(page, "program-coord-fail");

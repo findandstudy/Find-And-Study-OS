@@ -83,10 +83,12 @@ The two former blockers were resolved by watching the live portal interactively 
      clicking, and capture a "program-preclick" screenshot for coordinate evidence. Candidate
      points are calibrated for 1280x720 (button right side ~x900-950); never change viewport or
      coordinates independently — recalibrate from the pre-click screenshot.
-   - **Faz-3.2 filter rule: apply ONLY the language filter, with ONE language** (default English;
-     Turkish only on an explicit "(in turkish)" hint). Do NOT loop language/thesis combinations —
-     dry-run proof: Turkish sets return 0 cards for English programs and the empty rounds increase
-     the stuck-modal risk.
+   - **Faz-3.3 filter rule: NO Language/Thesis filters at all** — dry-run3 clean preclick
+     screenshot proof: applying them zeroes the list ("Available Programs 0 items Page 0/0"), so
+     no card is left to click. Narrow ONLY via the single-word search (search alone drops 54
+     cards to a few); log the card count after search (best-effort "N items" regex over frame
+     body innerText, "?" if it stays inside the closed LWC shadow). setSfCombobox stays in the
+     file unused (GPA-Type stage walker uses its own copy pattern; keep for future fallback).
    - **Faz-3.2 stuck-modal rule**: a coordinate click can land on the "Selected Programs" cart
      button instead of "+ Select", opening an EMPTY modal that BLOCKS the cards for all later
      attempts. Close any open dialog (Escape + role=dialog X button) at stage start AND before
