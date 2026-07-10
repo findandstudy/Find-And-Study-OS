@@ -50,6 +50,19 @@ Term→FINISH screens.
   `actions[]`; FINISH additionally requires `state:SUCCESS` before
   submitted=true (HTML login/edge pages must fail visibly, never fake success).
 
+## Duplicate detection (FIX-5, 2026-07-10) — match the MESSAGE, not config names
+
+- "Prevent_Duplicate_Passport" is the flow's subflow CONFIG name
+  (CheckDuplicateValidation.subflowToRun) and appears in EVERY ~1MB state —
+  matching it (or generic phrases like "already an application") marks every
+  student SKIPPED_DUPLICATE. Only match the real populated error text
+  ("an application with this passport number already exists" / "you cannot
+  submit a new application using the same passport").
+- The duplicate subflow runs when LEAVING Personal (errorMessage fills there),
+  not at commit — duplicate is checked ONLY on the Personal response
+  (guard checkDup flag); all steps still check flowHasError. Dup check runs
+  before flow-error check so real duplicates classify as SKIPPED_DUPLICATE.
+
 ## State chaining (FIX-4, 2026-07-10) — response key is DIFFERENT
 
 - Flow RESPONSES return the new state under `serializedEncodedState`;

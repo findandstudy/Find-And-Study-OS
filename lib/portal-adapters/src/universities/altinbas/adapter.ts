@@ -490,9 +490,17 @@ function stageRank(stage: string | null): number {
   return -1;
 }
 
-/** Duplicate-passport guard mesajı (SKIPPED_DUPLICATE — fail DEĞİL). */
+/**
+ * Duplicate-passport guard mesajı (SKIPPED_DUPLICATE — fail DEĞİL).
+ * FIX-5: SADECE dolu GERÇEK hata mesajı eşleşir. "Prevent_Duplicate_Passport"
+ * flow'un subflow CONFIG adıdır (CheckDuplicateValidation.subflowToRun) ve
+ * duplicate olsun olmasın HER Personal/commit state'inde geçer — onu (ve
+ * "already an application" gibi genel ifadeleri) eşleştirmek her öğrenciyi
+ * yanlış-pozitif SKIPPED_DUPLICATE yapıyordu. Gerçek duplicate'te
+ * CheckDuplicateValidation.errorMessage dolar ve bu metin gelir.
+ */
 function isDuplicatePassport(raw: string): boolean {
-  return /application with this passport|passport number already|already an application|Prevent_Duplicate_Passport/i.test(raw);
+  return /an application with this passport number already exists|you cannot submit a new application using the same passport/i.test(raw);
 }
 
 /**
@@ -824,9 +832,14 @@ async function runFlowReplay(
   );
   dumpRecords(rt, "boot");
 
-  /** Yanıtı denetle: duplicate → SKIPPED_DUPLICATE; ERROR → fail-visible detail. true = DUR. */
-  const guard = (raw: string, tag: string): boolean => {
-    if (isDuplicatePassport(raw)) {
+  /**
+   * Yanıtı denetle: (checkDup ise) duplicate → SKIPPED_DUPLICATE; ERROR →
+   * fail-visible detail. true = DUR. FIX-5: duplicate-subflow Personal
+   * adımından ÇIKARKEN çalışır (errorMessage orada dolar) — commit1/2 dahil
+   * diğer adımlarda duplicate DENETLENMEZ (checkDup=false).
+   */
+  const guard = (raw: string, tag: string, checkDup = false): boolean => {
+    if (checkDup && isDuplicatePassport(raw)) {
       result.alreadyExists = true;
       result.detail =
         "Altınbaş: SKIPPED_DUPLICATE — aynı passport+term+degree ile başvuru zaten var (portal duplicate guard)";
@@ -935,7 +948,8 @@ async function runFlowReplay(
   // 6) PERSONAL (NEXT) — 46 alan; ISO tarih + 3'lü ülke picklist + kod-prefix telefon
   if (curRank <= 3) {
     raw = await postNavigateFlow(page, rt, "NEXT", buildPersonalFields(profile), "personal");
-    if (guard(raw, "Personal") || noteStage(raw, "Personal")) return;
+    // FIX-5: gerçek duplicate-subflow burada çalışır → duplicate denetimi SADECE Personal yanıtında.
+    if (guard(raw, "Personal", true) || noteStage(raw, "Personal")) return;
   } else {
     logger.info("[altinbas] Personal adımı atlandı (boot stage ilerisinde)");
   }
