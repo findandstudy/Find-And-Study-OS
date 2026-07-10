@@ -534,18 +534,42 @@ async function stageDegree(page: any, profile: SubmitProfile): Promise<boolean> 
 }
 
 /**
- * Program Selection — Faz-2.5 KESİN FIX (canlı debug ile kanıtlandı).
+ * SLDS combobox (button-style dropdown): force-open, then force-click the
+ * matching role=option. Returns false (non-throwing) when the combobox or
+ * the option isn't present — callers treat that as "filter unavailable".
+ */
+async function setSfCombobox(page: any, labelPattern: RegExp, optionName: RegExp): Promise<boolean> {
+  const combo = page.getByRole("combobox", { name: labelPattern }).first();
+  if (!(await combo.count().catch(() => 0))) return false;
+  await combo.click({ force: true, timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(700);
+  const opt = page.getByRole("option", { name: optionName }).first();
+  if (!(await opt.count().catch(() => 0))) {
+    // close the dropdown so it doesn't block later interactions
+    await page.keyboard.press("Escape").catch(() => {});
+    return false;
+  }
+  await opt.click({ force: true, timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(700);
+  return true;
+}
+
+/**
+ * Program Selection — Faz-2.6.
  *
- * Gerçek kök nedenler (live):
- * 1. The search box is UNRELIABLE — multi-word queries return "0 items •
- *    Page 0/0" even when the program exists in the catalog. NEVER rely on
- *    search: CLEAR it and BROWSE/PAGINATE the full list instead.
- * 2. The card "+ Select" button responds to a NORMAL click (force-click is
- *    unnecessary/harmful here — unlike the SLDS radios, which DO need force).
- * 3. The "Selected Programs (N)" CART BUTTON opens the modal directly — the
- *    footer "Next" is not needed.
- * Proven sequence: normal-click Select → cart "(1)" → cart button → modal
- * (program + Remove + Save and Next) → Save and Next → Personal Information.
+ * Faz-2.5 dry-run stuck root causes: (a) the pager button is named "Next",
+ * not ">" — pagination never advanced past page 1; (b) a single click
+ * strategy on the card "Select" button doesn't reliably register in the
+ * cart. New approach — no browsing/pagination at all:
+ * 1. SEARCH with the SINGLE first significant word only (multi-word queries
+ *    return 0 results; single-word filters correctly).
+ * 2. Narrow further via the Language / Thesis SLDS dropdown filters when the
+ *    CRM program name carries those hints (skip silently when absent).
+ * 3. Pick the best card (matchProgram → all-words → first) and click its
+ *    Select button MULTI-STRATEGY (normal → force → DOM .click() →
+ *    dispatchEvent), verifying the cart after EVERY attempt; if no strategy
+ *    lands, fail visibly (return false).
+ * 4. Cart button → modal → "Save and Next" (footer Next is NOT used).
  */
 async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean> {
   await dismissSfError(page);
@@ -561,13 +585,38 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
     .trim();
   const words = coreQuery.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
 
-  // 1) DON'T trust the search box — clear it so the FULL catalog is listed.
-  const clearBtn = page.getByRole("button", { name: /clear/i }).first()
-    .or(page.locator('button[title="Clear"]').first());
-  if (await clearBtn.count().catch(() => 0)) await clearBtn.click().catch(() => {});
+  // 1) Search with the SINGLE first significant word (Faz-2.6: multi-word
+  //    queries return "0 items"; a single word filters correctly).
+  const searchWord = words[0] || coreQuery.split(/\s+/)[0] || "";
   const searchBox = page.locator('input[type="search"], input[placeholder*="Search" i]').first();
-  if (await searchBox.count().catch(() => 0)) await searchBox.fill("").catch(() => {});
-  await page.waitForTimeout(1000);
+  if ((await searchBox.count().catch(() => 0)) && searchWord) {
+    await searchBox.click().catch(() => {});
+    await searchBox.fill("").catch(() => {});
+    await searchBox.pressSequentially(searchWord, { delay: 60 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    logger.info(`[altinbas] Program arama: tek kelime "${searchWord}"`);
+  } else {
+    logger.warn("[altinbas] stageProgram: arama kutusu bulunamadı — tam liste üzerinde eşleştirilecek");
+  }
+
+  // 2) Narrow via the Language / Thesis dropdown filters when the CRM name
+  //    carries those hints.
+  const langMatch = /\(in\s+(english|turkish)\)/i.exec(rawQuery);
+  if (langMatch) {
+    const lang = langMatch[1]!.toLowerCase() === "turkish" ? /turkish/i : /english/i;
+    const ok = await setSfCombobox(page, /language/i, lang);
+    logger.info(`[altinbas] Language filtresi (${langMatch[1]}): ${ok ? "uygulandı" : "bulunamadı, geçildi"}`);
+    if (ok) await page.waitForTimeout(1000);
+  }
+  const thesisMatch = /\((with|without)\s+thesis\)/i.exec(rawQuery);
+  if (thesisMatch) {
+    // Note: /with\s+thesis/i can NOT accidentally match "Without Thesis"
+    // ("with" is followed by "out", not whitespace).
+    const thesis = thesisMatch[1]!.toLowerCase() === "without" ? /without\s+thesis/i : /with\s+thesis/i;
+    const ok = await setSfCombobox(page, /thesis/i, thesis);
+    logger.info(`[altinbas] Thesis filtresi (${thesisMatch[1]} Thesis): ${ok ? "uygulandı" : "bulunamadı, geçildi"}`);
+    if (ok) await page.waitForTimeout(1000);
+  }
 
   const readCart = async (): Promise<string> =>
     (await page
@@ -578,81 +627,59 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
 
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
+  // 3) Collect the narrowed cards and pick the best match.
   // Faz-2.2 KANITLANDI: the toggle button's textContent is the concatenation
   // "SelectSelectedRemove", so accessible-name matching fails — locate the
-  // CARD by content and click its Select button with a NORMAL click.
-  const cardsLocator = () =>
-    page.locator('article, li, .slds-card, [class*="card"]').filter({ has: page.locator('button:has-text("Select")') });
-
-  // 2) BROWSE the pages (catalog is paginated, e.g. 55 programs / 6 pages),
-  //    match the card text, NORMAL-click its Select, verify via the cart.
-  let selected = false;
-  for (let pageIdx = 0; pageIdx < 8 && !selected; pageIdx++) {
-    const cards = cardsLocator();
-    const n = await cards.count().catch(() => 0);
-    logger.info(`[altinbas] Program sayfa ${pageIdx + 1}: ${n} kart`);
-
-    const candidates: ProgramCandidate[] = [];
-    for (let i = 0; i < n; i++) {
-      const text = ((await cards.nth(i).innerText().catch(() => "")) || "").trim();
-      candidates.push({ id: String(i), name: text.replace(/\s+/g, " ").slice(0, 200) });
-    }
-
-    // Prefer the shared fuzzy matcher (thesis/language variant aware), fall
-    // back to all-significant-words inclusion.
-    const result = matchProgram(coreQuery, candidates.filter((c) => c.name));
-    let pickIdx = result ? Number(result.match.id) : -1;
-    if (pickIdx < 0 && words.length) {
-      pickIdx = candidates.findIndex((c) => {
-        const t = c.name.toLowerCase();
-        return words.every((w) => t.includes(w));
-      });
-    }
-
-    if (pickIdx >= 0) {
-      logger.info(`[altinbas] Program eşleşmesi: kart ${pickIdx} "${candidates[pickIdx]?.name.slice(0, 80)}"`);
-      const btn = cards.nth(pickIdx).locator('button:has-text("Select")').first();
-      await btn.scrollIntoViewIfNeeded().catch(() => {});
-      await btn.click().catch(() => {}); // NORMAL click (NOT force) — Faz-2.5 canlı kanıt
-      await page.waitForTimeout(1000);
-      if (await cartHasItem()) {
-        selected = true;
-        logger.info(`[altinbas] program secildi: ${candidates[pickIdx]?.name.slice(0, 80)}`);
-        break;
-      }
-      logger.warn("[altinbas] Select tıklandı ama sepet hâlâ boş — sonraki sayfaya geçilmeden bir kez daha denenecek");
-      await btn.click().catch(() => {});
-      await page.waitForTimeout(1000);
-      if (await cartHasItem()) {
-        selected = true;
-        break;
-      }
-    }
-
-    // Next page (">" pager button)
-    const nextPage = page.getByRole("button", { name: /^>$|next page/i }).first();
-    if (await nextPage.count().catch(() => 0)) {
-      await nextPage.click().catch(() => {});
-      await page.waitForTimeout(1500);
-    } else {
-      break;
-    }
+  // CARD by content and click its Select button directly.
+  const cards = page
+    .locator('article, li, .slds-card, [class*="card"]')
+    .filter({ has: page.locator('button:has-text("Select")') });
+  const n = await cards.count().catch(() => 0);
+  logger.info(`[altinbas] Program kart sayısı (daraltılmış liste): ${n}`);
+  if (!n) {
+    logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç kart yok`);
+    return false;
   }
 
+  const candidates: ProgramCandidate[] = [];
+  for (let i = 0; i < n; i++) {
+    const text = ((await cards.nth(i).innerText().catch(() => "")) || "").trim();
+    candidates.push({ id: String(i), name: text.replace(/\s+/g, " ").slice(0, 200) });
+  }
+  const result = matchProgram(coreQuery, candidates.filter((c) => c.name));
+  let pickIdx = result ? Number(result.match.id) : -1;
+  if (pickIdx < 0 && words.length) {
+    pickIdx = candidates.findIndex((c) => {
+      const t = c.name.toLowerCase();
+      return words.every((w) => t.includes(w));
+    });
+  }
+  if (pickIdx < 0) pickIdx = 0;
+  logger.info(`[altinbas] Program eşleşmesi: kart ${pickIdx} "${candidates[pickIdx]?.name.slice(0, 80)}"`);
+
+  // Multi-strategy Select click — verify the cart after EVERY attempt.
+  const btn = cards.nth(pickIdx).locator('button:has-text("Select")').first();
+  await btn.scrollIntoViewIfNeeded().catch(() => {});
+  const strategies: Array<[string, () => Promise<void>]> = [
+    ["normal click", async () => { await btn.click({ timeout: 5000 }); }],
+    ["force click", async () => { await btn.click({ force: true, timeout: 5000 }); }],
+    ["DOM .click()", async () => { await btn.evaluate((el: any) => ((el.closest("button") || el) as HTMLElement).click()); }],
+    ["dispatchEvent", async () => { await btn.dispatchEvent("click"); }],
+  ];
+  let selected = false;
+  for (const [name, run] of strategies) {
+    await run().catch(() => {});
+    await page.waitForTimeout(1000);
+    if (await cartHasItem()) {
+      selected = true;
+      logger.info(`[altinbas] program secildi (${name}): ${candidates[pickIdx]?.name.slice(0, 80)}`);
+      break;
+    }
+    logger.warn(`[altinbas] Select stratejisi tutmadı: ${name} — sepet hâlâ boş`);
+  }
   if (!selected) {
-    // Fallback: first Select-capable card so the flow never dead-ends.
-    logger.warn(`[altinbas] stageProgram: "${coreQuery}" hiçbir sayfada eşleşmedi — ilk kart seçiliyor (fallback)`);
-    const anySelect = page.locator('button:has-text("Select")').first();
-    if (await anySelect.count().catch(() => 0)) {
-      await anySelect.click().catch(() => {});
-      await page.waitForTimeout(1000);
-      selected = await cartHasItem();
-      if (selected) logger.info("[altinbas] program fallback: ilk kart secildi");
-    }
-    if (!selected) {
-      logger.warn("[altinbas] stageProgram: hiçbir program seçilemedi (sepet boş)");
-      return false;
-    }
+    logger.warn("[altinbas] stageProgram: 4 stratejide de sepet dolmadı — program seçilemedi");
+    return false;
   }
 
   // 3) CART BUTTON → modal → "Save and Next" (footer Next is NOT used).
@@ -695,8 +722,8 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
       saveNextDone = clickedOnce;
       break;
     }
-    logger.info(`[altinbas] Save and Next denemesi ${k + 1}/4`);
-    await saveNext.click({ timeout: 8000 }).catch(() => {});
+    logger.info(`[altinbas] Save and Next denemesi ${k + 1}/4 (${k % 2 === 0 ? "normal" : "force"})`);
+    await saveNext.click(k % 2 === 0 ? { timeout: 8000 } : { force: true, timeout: 8000 }).catch(() => {});
     clickedOnce = true;
     await page.waitForTimeout(SF_HYDRATION_MS);
     await dismissSfError(page);
