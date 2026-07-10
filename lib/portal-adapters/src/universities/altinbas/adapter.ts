@@ -266,6 +266,27 @@ interface FlowRuntime {
    * binding'lerinde explicit değer varsa o kazanır (deterministik kaynak seçimi).
    */
   explicitIds: FlowIds;
+  /**
+   * FIX-9: explicitIds'teki her değerin kaynağı — "flow" (FlowRuntimeConnect-
+   * Controller yanıtı, güvenilir) | "aura" (flow-dışı trafik, seçim-sonrası
+   * kabul edilir ama flow-explicit'i ASLA ezemez). Provenance loguna yansır.
+   */
+  explicitIdSource: Partial<Record<keyof FlowIds, "flow" | "aura">>;
+  /**
+   * FIX-9: TÜM ham gövdelerde (flow + flow-dışı aura) regex ile görülen a02
+   * Id evreni — commit'te İLK KEZ beliren başvuru Id'sini JSON parse edilemese
+   * de yakalamak için (2199 kanıtı: walk hiç çalışmadı, 4 Id de YOK kaldı).
+   */
+  seenA02: Set<string>;
+  /**
+   * FIX-9: ham taramadan görülen 003/001 (Contact/Account) — son çare
+   * fallback. SADECE applicant seçiminden SONRA dolar (applicantSelected):
+   * seçim öncesi trafik portal/oturum bağlamı taşır (yanlış Contact riski);
+   * seçim SONRASI ilk trafik = applicant-detay yüklemesi = seçilen öğrenci.
+   */
+  scanIds: FlowIds;
+  /** FIX-9: applicant grid'inde öğrenci seçildi mi — scanIds doldurma kapısı. */
+  applicantSelected: boolean;
 }
 
 function newFlowRuntime(): FlowRuntime {
@@ -278,7 +299,61 @@ function newFlowRuntime(): FlowRuntime {
     reqCounter: 100,
     explicitAppIds: new Set(),
     explicitIds: {},
+    explicitIdSource: {},
+    seenA02: new Set(),
+    scanIds: {},
+    applicantSelected: false,
   };
+}
+
+/**
+ * FIX-9: ham gövdeden Id topla — JSON parse edilemese de çalışır (escaped
+ * varyantlar dahil). walk'a bağımlılığı kaldırır: 2199 run'ında yanıtlar parse
+ * edilemeyince 4 Educational Id'si de boş gitmişti.
+ *  - Explicit anahtarlar (applicantId/applicationId/accountId/contactId +
+ *    Salesforce büyük-harf AccountId/ContactId) → rt.explicitIds/rt.ids.
+ *    applicationId explicit'i SADECE flow-controller yanıtlarından (source=
+ *    "flow") toplanır — flow-dışı trafik (applicant-detay'daki ESKİ taslaklar)
+ *    explicitAppIds/provenAppId'yi kirletemez.
+ *  - a02 evreni → rt.seenA02 (commit baseline kaynağı; her kaynaktan).
+ *  - 003/001 → rt.scanIds (son çare fallback) — YALNIZ applicant seçiminden
+ *    sonra (rt.applicantSelected), seçim-sonrası ilk görülen kazanır
+ *    (= applicant-detay yüklemesi = seçilen öğrenci).
+ */
+function scanIdsFromRaw(rt: FlowRuntime, raw: string, source: "flow" | "aura"): void {
+  const keyRe =
+    /\\?"(applicantId|applicationId|accountId|contactId|AccountId|ContactId)\\?"\s*:\s*\\?"([a-zA-Z0-9]{15,18})\\?"/g;
+  let m: RegExpExecArray | null;
+  while ((m = keyRe.exec(raw)) !== null) {
+    const k = (m[1].charAt(0).toLowerCase() + m[1].slice(1)) as keyof FlowIds;
+    if (source !== "flow") {
+      // Flow-dışı trafikten: applicationId ASLA (eski taslak kirliliği);
+      // diğerleri YALNIZ applicant seçiminden sonra (oturum/portal bağlamındaki
+      // yanlış Contact/Account explicit'leri seçim öncesi kabul edilmez) ve
+      // flow-explicit bir değeri ASLA ezemez.
+      if (k === "applicationId") continue;
+      if (!rt.applicantSelected) continue;
+      if (rt.explicitIdSource[k] === "flow") continue;
+    }
+    rt.explicitIds[k] = m[2];
+    rt.explicitIdSource[k] = source;
+    rt.ids[k] = m[2];
+    if (k === "applicationId") rt.explicitAppIds.add(m[2]);
+  }
+  const idRe = /\b(?:a02|003|001)[a-zA-Z0-9]{12,15}\b/g;
+  while ((m = idRe.exec(raw)) !== null) {
+    const id = m[0];
+    if (id.startsWith("a02")) {
+      rt.seenA02.add(id);
+    } else if (rt.applicantSelected) {
+      if (id.startsWith("003")) {
+        rt.scanIds.contactId ??= id;
+        rt.scanIds.applicantId ??= id;
+      } else {
+        rt.scanIds.accountId ??= id;
+      }
+    }
+  }
 }
 
 /** ALTINBAS_CAPTURE=1 dump — logger (kırpılmış) + /tmp/altinbas-capture.json (tam). */
@@ -342,6 +417,9 @@ function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
       for (const v of Object.values(o)) walk(v);
     }
   };
+
+  // FIX-9: Id taraması walk'tan BAĞIMSIZ her gövdede çalışır (parse edilemese de).
+  scanIdsFromRaw(rt, raw, "flow");
 
   const start = raw.indexOf("{");
   if (start >= 0) {
@@ -447,7 +525,13 @@ function setupFlowInterceptor(page: any, rt: FlowRuntime): void {
         if (!raw) return;
         captureDump("browser-response", url, raw);
         // Yalnız flow-controller yanıtları state'e sindirilir.
-        if (!reqPost.includes("FlowRuntimeConnectController") && !url.includes("FlowRuntimeConnect")) return;
+        if (!reqPost.includes("FlowRuntimeConnectController") && !url.includes("FlowRuntimeConnect")) {
+          // FIX-9: flow-dışı aura yanıtlarından SADECE Id taranır (state'e
+          // ASLA dokunulmaz — zincir bozulmaz). Applicant-detay sayfası
+          // Contact(003)/Account(001) Id'lerini burada taşır.
+          scanIdsFromRaw(rt, raw, "aura");
+          return;
+        }
         ingestFlowResponse(rt, raw);
       } catch {
         /* interceptor asla akışı kırmaz */
@@ -979,12 +1063,24 @@ async function runFlowReplay(
     // FIX-6: commit ÖNCESİ görülen a02 kayıtları (boot/program availability'leri)
     // baseline — commit yanıtlarında İLK KEZ beliren a02'ler bu run'da OLUŞAN
     // başvuru kayıtlarıdır (self-duplicate ayrımının kanıt kaynağı).
-    const a02Before = new Set([...rt.records.keys()].filter((id) => id.startsWith("a02")));
+    // FIX-9: baseline rt.records'a EK olarak ham-tarama a02 evrenini (seenA02)
+    // da kapsar — yanıt JSON parse edilemese bile commit'te İLK KEZ beliren
+    // başvuru Id'si yakalanır (2199'da walk hiç çalışmamış, Id'ler boş gitmişti).
+    const a02Before = new Set([
+      ...[...rt.records.keys()].filter((id) => id.startsWith("a02")),
+      ...rt.seenA02,
+    ]);
     for (let i = 0; i < 4 && !/Personal Information/i.test(raw); i++) {
       const ownBefore = ownAppIds();
       raw = await postNavigateFlow(page, rt, "CONTINUE_AFTER_COMMIT", [], `commit${i + 1}`);
       for (const id of rt.records.keys()) {
         if (id.startsWith("a02") && !a02Before.has(id)) runCreatedAppIds.add(id);
+      }
+      // FIX-9: JSON parse edilemese de commit YANITININ KENDİ gövdesinde ilk
+      // kez görülen a02'ler run-created sayılır (global seenA02 diff'i DEĞİL —
+      // eşzamanlı flow-dışı trafikteki a02'ler yanlış atfedilmesin).
+      for (const id of raw.match(/\ba02[a-zA-Z0-9]{12,15}\b/g) ?? []) {
+        if (!a02Before.has(id)) runCreatedAppIds.add(id);
       }
       // FIX-6 teşhis (hipotez 1: çift-create): bu commit YENİ bir başvuru Id'si
       // yarattıysa ve öncesinde zaten bir tane vardıysa yüksek sesle uyar.
@@ -1023,7 +1119,10 @@ async function runFlowReplay(
     // rt.ids.applicationId a02 prefix fallback'iyle boot/program availability
     // kaydına kirlenebilir (FIX-6 dersi) — bu run'da oluşturulduğu KANITLI Id
     // (explicit "applicationId" anahtarı > commit'te ilk görülen a02) varsa onu bağla.
-    const provenAppId = [...rt.explicitAppIds].at(-1) ?? [...runCreatedAppIds].at(-1);
+    // FIX-9 (review sertleştirmesi): öncelik run-proven (commit-diff) > explicit.
+    // explicitAppIds yalnız flow-controller yanıtlarından dolar ama yine de
+    // ESKİ taslak Id'leri taşıyabilir; commit'te doğduğu KANITLI Id her zaman önce.
+    const provenAppId = [...runCreatedAppIds].at(-1) ?? [...rt.explicitAppIds].at(-1);
     if (provenAppId && rt.ids.applicationId !== provenAppId) {
       logger.info(
         `[altinbas] FIX-8: applicationId düzeltildi ${rt.ids.applicationId ?? "?"} → ${provenAppId} (bu run'da oluşturulan kayıt)`,
@@ -1038,18 +1137,52 @@ async function runFlowReplay(
     const provenance: string[] = [];
     for (const k of idKeys) {
       const explicit = rt.explicitIds[k];
-      const v = k === "applicationId" ? (provenAppId ?? explicit ?? rt.ids[k]) : (explicit ?? rt.ids[k]);
+      // FIX-9: son çare = ham-tarama (flow-dışı aura trafiği dahil; applicant-
+      // detay sayfası Contact/Account Id'lerini taşır). applicationId'de
+      // raw-scan fallback YOK — a02 evreni availability kayıtlarıyla kirli,
+      // yalnız run-kanıtlı (commit diff) veya explicit değer bağlanır.
+      const rawScan = k === "applicationId" ? undefined : rt.scanIds[k];
+      const v =
+        k === "applicationId" ? (provenAppId ?? explicit ?? rt.ids[k]) : (explicit ?? rt.ids[k] ?? rawScan);
       effIds[k] = v;
       const src =
         k === "applicationId" && provenAppId
           ? "run-proven"
           : explicit
-            ? "explicit"
+            ? `explicit(${rt.explicitIdSource[k] ?? "flow"})`
             : rt.ids[k]
               ? "prefix-fallback"
-              : "YOK";
+              : rawScan
+                ? "raw-scan"
+                : "YOK";
       provenance.push(`${k}=${v ?? "?"}[${src}]`);
+      // FIX-9: flow yanıtıyla doğrulanmamış (aura-explicit/raw-scan) binding'i
+      // yine de bağlarız (elimizdeki en iyi veri) ama yüksek sesle işaretleriz.
+      if (v && (src === "explicit(aura)" || src === "raw-scan")) {
+        logger.warn(
+          `[altinbas] Educational ${k}=${v} kaynağı ${src} — flow yanıtında doğrulanmadı (applicant-detay trafiğinden, seçim-sonrası)`,
+        );
+      }
     }
+    // FIX-9: bariz yanlış-prefix'li Id'yi bağlama (spec uyarısı: 003... bir
+    // Contact'tır, accountId'ye bağlanamaz) — düşür, WARN'la.
+    const prefixOf: Record<(typeof idKeys)[number], string> = {
+      applicantId: "003",
+      applicationId: "a02",
+      accountId: "001",
+      contactId: "003",
+    };
+    for (const k of idKeys) {
+      const v = effIds[k];
+      if (v && !v.startsWith(prefixOf[k])) {
+        logger.warn(`[altinbas] Educational ${k}=${v} beklenen prefix '${prefixOf[k]}' değil — bağlanmadı`);
+        effIds[k] = undefined;
+      }
+    }
+    // FIX-9: contactId ve applicantId AYNI Contact'tır (spec) — biri doluysa
+    // diğerini ondan tamamla.
+    if (!effIds.contactId && effIds.applicantId) effIds.contactId = effIds.applicantId;
+    if (!effIds.applicantId && effIds.contactId) effIds.applicantId = effIds.contactId;
     logger.info(`[altinbas] Educational ID provenance: ${provenance.join(" ")}`);
     const missingIds = idKeys.filter((k) => !effIds[k]);
     if (missingIds.length) {
@@ -1269,7 +1402,7 @@ async function fillStep1(page: any, profile: SubmitProfile): Promise<void> {
  * to enter the Screen Flow. Bu tıklama flow'u BOOT eder — serializedState
  * applicant context'ini buradan kazanır. Returns true on success.
  */
-async function clickCreateNewApplication(page: any): Promise<boolean> {
+async function clickCreateNewApplication(page: any, rt: FlowRuntime): Promise<boolean> {
   await dismissSfError(page);
 
   // Faz-2.1 KANITLANDI (headed dry-run): after Basic Info → Next, the screen
@@ -1286,11 +1419,16 @@ async function clickCreateNewApplication(page: any): Promise<boolean> {
       logger.info(`[altinbas] grid row radio checked=${checked}`);
     }
     await page.waitForTimeout(800);
+    // FIX-9: seçim yapıldı — bundan sonraki aura trafiği seçilen öğrencinin
+    // detay yüklemesidir; scanIds (003/001 son-çare fallback) artık dolabilir.
+    rt.applicantSelected = true;
     await gotoDetail.click({ force: true, timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(SF_HYDRATION_MS);
     await dismissSfError(page);
     logger.info("[altinbas] clicked Go To Applicant Detail Page");
   }
+  // Grid çıkmadıysa doğrudan detay sayfasındayız — seçim kapısını yine aç.
+  rt.applicantSelected = true;
 
   // Create New Application can be below the fold on the detail page.
   await page.mouse.wheel(0, 4000).catch(() => {});
@@ -1504,7 +1642,7 @@ export const altinbasAdapter: UniversityAdapter = {
     }
 
     // ── Student summary → Create New Application (flow BOOT) ──────────────
-    const createdApp = await clickCreateNewApplication(page);
+    const createdApp = await clickCreateNewApplication(page, rt);
     if (!createdApp) {
       logger.warn("[altinbas] could not click Create New Application — capturing student summary screen and aborting");
       const stuckShot = await captureScreen(page, "student-summary-stuck");

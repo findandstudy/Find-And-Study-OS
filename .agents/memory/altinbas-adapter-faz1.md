@@ -50,6 +50,28 @@ Term→FINISH screens.
   `actions[]`; FINISH additionally requires `state:SUCCESS` before
   submitted=true (HTML login/edge pages must fail visibly, never fake success).
 
+## Id extraction must not depend on JSON.parse (FIX-9, 2026-07-10)
+
+- Proven failure: aura response bodies frequently fail JSON.parse → the walk
+  never runs → NO ids/records collected → all 4 Educational bindings empty.
+  Id scanning must be an escaped-tolerant regex over EVERY raw body,
+  independent of parse success (explicit keys incl. Salesforce AccountId/
+  ContactId capitalized variants; 15-18 alnum values).
+- Non-flow aura traffic (applicant-detail page load) is the ONLY carrier of
+  the selected student's Contact(003)/Account(001) when flow responses lack
+  them — scan it for ids ONLY (never state), with three gates:
+  applicationId NEVER from non-flow (old-draft pollution); other keys only
+  AFTER applicant selection (pre-selection traffic = session context, wrong
+  actor); aura-explicit never overwrites flow-explicit (source registry).
+- applicationId precedence: run-proven (commit-response-body a02 diff vs
+  pre-commit baseline incl. raw-scanned a02 universe) > flow-explicit >
+  prefix. Commit attribution must diff the commit RESPONSE body itself, not
+  a global seen-set (concurrent traffic mis-attributes).
+- Bind aura-explicit/raw-scan fallbacks with a WARN (fail-operational: empty
+  binding = guaranteed validation error); contactId↔applicantId cross-fill
+  (same Contact); drop obviously wrong-prefix values (003 is a Contact, never
+  an accountId) before binding.
+
 ## Educational ID bindings need provenance (FIX-8, 2026-07-10)
 
 - Educational NEXT with correct field SHAPE (contract-identical nf=19) can still
