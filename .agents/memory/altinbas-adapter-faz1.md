@@ -50,6 +50,33 @@ Term→FINISH screens.
   `actions[]`; FINISH additionally requires `state:SUCCESS` before
   submitted=true (HTML login/edge pages must fail visibly, never fake success).
 
+## Raw-regex Id candidates are diagnostic only — trust tiers (FIX-10, 2026-07-10)
+
+- Proven failure: the loose commit-body regex (`a02[a-zA-Z0-9]{12,15}` = variable
+  13-18 len) matched a token FRAGMENT (`a02Q3107ut6nun1`, no `0000` padding) and
+  bound it as "run-proven" applicationId → Educational validation err=true even
+  with all 4 ids filled.
+- Rules now enforced (architect 3 rounds):
+  - Shape is the only HARD gate: exactly 15 or 18 alnum chars at every ingress
+    (explicit keyRe, prefix scan, walk records pool, walk explicit keys).
+  - `0000` padding is a SOFT ranking signal only (not a Salesforce guarantee —
+    never hard-reject on it): padded candidates preferred everywhere (provenAppId
+    tiers, scanIds upgrade, records prefix-fallback two-pass), unpadded selection
+    always WARNs.
+  - Raw-regex-scanned a02s go to a diagnostic-only set (`rawCommitA02`) and can
+    NEVER bind directly. Bindable applicationId candidates: parsed rt.records
+    commit diff (`runCreatedAppIds`) ∪ (raw ∩ explicit-key corroborated) ∪
+    explicit. Weak-only candidates → loud "BAĞLANMADI" WARN + capture guidance.
+  - Precedence: padded commitTrusted > padded explicit > unpadded commitTrusted
+    > unpadded explicit (commit>explicit is the FIX-9 stale-draft decision).
+  - seenA02 baseline stays BROAD (unpadded included) — broader baseline can only
+    prevent mis-attribution, never cause it.
+- Educational payload shape (nf=19: path1.currentStage + 4 lists ×
+  applicantId/applicationId/cvType/language + SetCookie.accountId/contactId)
+  already equals the human-flow minimal form — if err=true persists with a REAL
+  applicationId, next step is the human Educational navigateFlow payload diff
+  (manual capture), not payload guessing.
+
 ## Id extraction must not depend on JSON.parse (FIX-9, 2026-07-10)
 
 - Proven failure: aura response bodies frequently fail JSON.parse → the walk

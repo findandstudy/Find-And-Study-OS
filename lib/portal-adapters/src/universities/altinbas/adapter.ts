@@ -320,9 +320,30 @@ function newFlowRuntime(): FlowRuntime {
  *    sonra (rt.applicantSelected), seçim-sonrası ilk görülen kazanır
  *    (= applicant-detay yüklemesi = seçilen öğrenci).
  */
+/**
+ * FIX-10: makul Salesforce record Id kontrolü. 2199 kanıtı: gevşek regex
+ * (`a02[a-zA-Z0-9]{12,15}`) ham gövdedeki bir token PARÇASINI yakaladı
+ * (a02Q3107ut6nun1 — "00000" padding'i yok) ve Educational'a bağlanıp
+ * validation'ı düşürdü. Gerçek Id'ler 15 veya 18 karakter ve reserved
+ * sıfır-padding içerir (a02Q300000ODWYwIAP, 003Q300000ao3HJIAY, ...).
+ */
+function isSfIdShape(id: string): boolean {
+  return id.length === 15 || id.length === 18;
+}
+
+/**
+ * FIX-10 (review sertleştirmesi): "0000" reserved padding Salesforce garantisi
+ * DEĞİL — sert red yerine YUMUŞAK sıralama sinyali. Padding'li adaylar önce
+ * gelir; padding'siz aday yalnız başka seçenek yoksa (WARN ile) kullanılır.
+ */
+function hasSfPadding(id: string): boolean {
+  return /0{4}/.test(id);
+}
+
 function scanIdsFromRaw(rt: FlowRuntime, raw: string, source: "flow" | "aura"): void {
+  // FIX-10: değer uzunluğu TAM 15 veya 18 (16-17 char junk explicit bile olsa red).
   const keyRe =
-    /\\?"(applicantId|applicationId|accountId|contactId|AccountId|ContactId)\\?"\s*:\s*\\?"([a-zA-Z0-9]{15,18})\\?"/g;
+    /\\?"(applicantId|applicationId|accountId|contactId|AccountId|ContactId)\\?"\s*:\s*\\?"([a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?)\\?"/g;
   let m: RegExpExecArray | null;
   while ((m = keyRe.exec(raw)) !== null) {
     const k = (m[1].charAt(0).toLowerCase() + m[1].slice(1)) as keyof FlowIds;
@@ -335,22 +356,36 @@ function scanIdsFromRaw(rt: FlowRuntime, raw: string, source: "flow" | "aura"): 
       if (!rt.applicantSelected) continue;
       if (rt.explicitIdSource[k] === "flow") continue;
     }
+    // FIX-10: anahtar bağlamı güçlü kanıt — kabul, ama padding'siz format
+    // şüpheli olduğundan görünür kılınır (sert red YOK, gerçek Id kaybetmeyelim).
+    if (!hasSfPadding(m[2])) {
+      logger.warn(`[altinbas] explicit ${k}=${m[2]} 0000-padding'siz (şüpheli format) — yine de kabul`);
+    }
     rt.explicitIds[k] = m[2];
     rt.explicitIdSource[k] = source;
     rt.ids[k] = m[2];
     if (k === "applicationId") rt.explicitAppIds.add(m[2]);
   }
-  const idRe = /\b(?:a02|003|001)[a-zA-Z0-9]{12,15}\b/g;
+  // FIX-10: tam 15 veya 18 karakter (token parçası eleme). seenA02 BASELINE
+  // olduğundan padding'siz a02'ler de eklenir (geniş baseline = daha güvenli
+  // commit-diff, junk yanlışlıkla "run-created" sayılamaz). scanIds (son çare)
+  // için padding tercih sinyali: padding'li aday padding'siz olanı yükseltir.
+  const idRe = /\b(?:a02|003|001)[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?\b/g;
+  const setScan = (k: keyof FlowIds, id: string): void => {
+    const cur = rt.scanIds[k];
+    if (!cur) rt.scanIds[k] = id;
+    else if (!hasSfPadding(cur) && hasSfPadding(id)) rt.scanIds[k] = id;
+  };
   while ((m = idRe.exec(raw)) !== null) {
     const id = m[0];
     if (id.startsWith("a02")) {
       rt.seenA02.add(id);
     } else if (rt.applicantSelected) {
       if (id.startsWith("003")) {
-        rt.scanIds.contactId ??= id;
-        rt.scanIds.applicantId ??= id;
+        setScan("contactId", id);
+        setScan("applicantId", id);
       } else {
-        rt.scanIds.accountId ??= id;
+        setScan("accountId", id);
       }
     }
   }
@@ -401,15 +436,19 @@ function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
       }
 
       const id = o["Id"];
-      if (typeof id === "string" && /^[a-zA-Z0-9]{15,18}$/.test(id)) {
+      // FIX-10: records havuzu prefix-fallback'i beslediğinden şekil vetlenir
+      // (tam 15 veya 18 — 16/17 char junk havuza giremez).
+      if (typeof id === "string" && /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/.test(id)) {
         rt.records.set(id, o);
       }
 
       for (const key of ["applicantId", "applicationId", "accountId", "contactId"] as const) {
         const v = o[key];
-        if (typeof v === "string" && /^[a-zA-Z0-9]{15,18}$/.test(v)) {
+        // FIX-10: parse yolunda da tam 15/18 şekil şartı (padding sert red değil).
+        if (typeof v === "string" && /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/.test(v)) {
           rt.ids[key] = v;
           rt.explicitIds[key] = v; // FIX-8: explicit anahtar > prefix fallback
+          rt.explicitIdSource[key] = "flow";
           if (key === "applicationId") rt.explicitAppIds.add(v); // FIX-6: bizim oluşturduğumuz
         }
       }
@@ -444,11 +483,15 @@ function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
     }
   }
 
-  // Id prefix'lerinden applicant/application çıkarımı (003=Contact, 001=Account, a02=Application__c)
-  for (const id of rt.records.keys()) {
-    if (id.startsWith("003") && !rt.ids.contactId) { rt.ids.contactId = id; rt.ids.applicantId = rt.ids.applicantId ?? id; }
-    if (id.startsWith("001") && !rt.ids.accountId) rt.ids.accountId = id;
-    if (id.startsWith("a02") && !rt.ids.applicationId) rt.ids.applicationId = id;
+  // Id prefix'lerinden applicant/application çıkarımı (003=Contact, 001=Account, a02=Application__c).
+  // FIX-10: padding'li Id'ler önce (yumuşak sıralama) — havuz zaten şekil-vetli.
+  const recIds = [...rt.records.keys()];
+  for (const pass of [recIds.filter(hasSfPadding), recIds]) {
+    for (const id of pass) {
+      if (id.startsWith("003") && !rt.ids.contactId) { rt.ids.contactId = id; rt.ids.applicantId = rt.ids.applicantId ?? id; }
+      if (id.startsWith("001") && !rt.ids.accountId) rt.ids.accountId = id;
+      if (id.startsWith("a02") && !rt.ids.applicationId) rt.ids.applicationId = id;
+    }
   }
 
   if (states.length) {
@@ -962,6 +1005,11 @@ async function runFlowReplay(
   // "applicationId" anahtarı + commit yanıtlarında İLK KEZ görülen a02 kayıtları
   // (çift-create şüphesi uyarısı için).
   const runCreatedAppIds = new Set<string>();
+  // FIX-10 (round 2): SALT ham-regex kaynaklı a02'ler bağlanamaz — ayrı zayıf
+  // (teşhis) kümede tutulur; ancak explicit anahtar bağlamıyla doğrulanırsa
+  // commit-trusted'a yükselir. runCreatedAppIds artık YALNIZ parse-edilmiş
+  // rt.records diff'inden dolar (güvenilir katman).
+  const rawCommitA02 = new Set<string>();
   const ownAppIds = (): Set<string> => new Set([...rt.explicitAppIds, ...runCreatedAppIds]);
 
   const guard = (raw: string, tag: string): boolean => {
@@ -1079,8 +1127,19 @@ async function runFlowReplay(
       // FIX-9: JSON parse edilemese de commit YANITININ KENDİ gövdesinde ilk
       // kez görülen a02'ler run-created sayılır (global seenA02 diff'i DEĞİL —
       // eşzamanlı flow-dışı trafikteki a02'ler yanlış atfedilmesin).
-      for (const id of raw.match(/\ba02[a-zA-Z0-9]{12,15}\b/g) ?? []) {
-        if (!a02Before.has(id)) runCreatedAppIds.add(id);
+      // FIX-10 (round 2): ham-regex a02'ler tam 15/18 char (13-17 token parçası
+      // eleme — 2199'da a02Q3107ut6nun1 böyle doğmuştu) ama artık DOĞRUDAN
+      // bağlanabilir kümeye GİRMEZ: rawCommitA02 salt teşhis; bağlanma yalnız
+      // parse-edilmiş records diff'i (üstteki döngü) veya explicit anahtar
+      // bağlamıyla doğrulama üzerinden. Adaylar loglanır (capture diff'i).
+      const a02Candidates = [
+        ...new Set(raw.match(/\ba02[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?\b/g) ?? []),
+      ];
+      logger.info(
+        `[altinbas] commit${i + 1} yanıtı a02 adayları: padding'li=[${a02Candidates.filter(hasSfPadding).join(",") || "-"}] padding'siz=[${a02Candidates.filter((id) => !hasSfPadding(id)).join(",") || "-"}]`,
+      );
+      for (const id of a02Candidates) {
+        if (!a02Before.has(id)) rawCommitA02.add(id);
       }
       // FIX-6 teşhis (hipotez 1: çift-create): bu commit YENİ bir başvuru Id'si
       // yarattıysa ve öncesinde zaten bir tane vardıysa yüksek sesle uyar.
@@ -1122,7 +1181,45 @@ async function runFlowReplay(
     // FIX-9 (review sertleştirmesi): öncelik run-proven (commit-diff) > explicit.
     // explicitAppIds yalnız flow-controller yanıtlarından dolar ama yine de
     // ESKİ taslak Id'leri taşıyabilir; commit'te doğduğu KANITLI Id her zaman önce.
-    const provenAppId = [...runCreatedAppIds].at(-1) ?? [...rt.explicitAppIds].at(-1);
+    // FIX-10 (round 2): GÜVEN KATMANLARI. Bağlanabilir adaylar yalnız:
+    //  - commit-trusted: parse-edilmiş records diff'i (runCreatedAppIds) ∪
+    //    explicit anahtar bağlamıyla doğrulanmış ham commit adayları
+    //    (rawCommitA02 ∩ explicitAppIds — commit gövdesinde doğdu + key-context);
+    //  - explicit: flow yanıtlarında "applicationId":"..." anahtarıyla görülen.
+    // SALT ham-regex (zayıf) adaylar ASLA bağlanmaz (2199: a02Q3107ut6nun1
+    // böyle bağlanıp validation düşürmüştü) — yalnız WARN + capture yönlendirmesi.
+    // Padding yumuşak sıralama: padding'li commit > padding'li explicit >
+    // padding'siz commit > padding'siz explicit (commit>explicit FIX-9 kararı:
+    // explicit eski taslak taşıyabilir).
+    const commitTrusted = [
+      ...new Set([
+        ...runCreatedAppIds,
+        ...[...rawCommitA02].filter((id) => rt.explicitAppIds.has(id)),
+      ]),
+    ].filter(isSfIdShape);
+    const explicitAll = [...rt.explicitAppIds].filter(isSfIdShape);
+    const provenAppId =
+      commitTrusted.filter(hasSfPadding).at(-1) ??
+      explicitAll.filter(hasSfPadding).at(-1) ??
+      commitTrusted.at(-1) ??
+      explicitAll.at(-1);
+    const weakOnly = [...rawCommitA02].filter(
+      (id) => !runCreatedAppIds.has(id) && !rt.explicitAppIds.has(id),
+    );
+    if (weakOnly.length) {
+      logger.warn(
+        `[altinbas] SALT ham-taramada görülen a02 adayları BAĞLANMADI (zayıf kanıt): [${weakOnly.join(",")}] — gerçek Id için ALTINBAS_CAPTURE=1 commit dump'ına bakın`,
+      );
+    }
+    if (!provenAppId) {
+      logger.warn(
+        `[altinbas] Güvenilir applicationId adayı YOK (commitTrusted=[] explicit=[]) — prefix-fallback'e düşülecek; capture ile insan-payload diff önerilir`,
+      );
+    } else if (!hasSfPadding(provenAppId)) {
+      logger.warn(
+        `[altinbas] applicationId adayı 0000-padding'siz: ${provenAppId} (şüpheli format — padding'li aday yoktu; commit=[${commitTrusted.join(",") || "-"}] explicit=[${explicitAll.join(",") || "-"}])`,
+      );
+    }
     if (provenAppId && rt.ids.applicationId !== provenAppId) {
       logger.info(
         `[altinbas] FIX-8: applicationId düzeltildi ${rt.ids.applicationId ?? "?"} → ${provenAppId} (bu run'da oluşturulan kayıt)`,
@@ -1147,7 +1244,9 @@ async function runFlowReplay(
       effIds[k] = v;
       const src =
         k === "applicationId" && provenAppId
-          ? "run-proven"
+          ? commitTrusted.includes(provenAppId)
+            ? "commit-raw"
+            : "run-proven"
           : explicit
             ? `explicit(${rt.explicitIdSource[k] ?? "flow"})`
             : rt.ids[k]
