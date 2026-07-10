@@ -74,6 +74,14 @@ The two former blockers were resolved by watching the live portal interactively 
      "SelectSelectedRemove" in ONE element (CSS shows one state). Locate by the COMPOSITE
      signature: getByText(/select\s*selected\s*remove/i). Exact-text, accessible-name and
      role-based locators all found 0 or the wrong element.
+   - After search, even the PROGRAM-NAME text can be invisible to Playwright (search filters the
+     light DOM but the card list stays hidden) — likely the collapsed "Available Programs"
+     accordion or a frame. Before hunting select controls: log a frame diagnostic (iframe count +
+     per-frame text hits), then open the accordion IDEMPOTENTLY (probe program-name count first;
+     click text locator, re-probe; only try the role-button alternate if still 0 — two blind
+     sequential clicks on the same toggle re-collapse it). If the name appears, click the card's
+     /select/i control (hasNotText /programs/i) via the shared 4-strategy click; else fall through
+     to the composite path + AKORDEON-HTML/PROG-CARD-HTML dumps.
      Resolve the owning card via el.closest('[class*="card"], article, li'); BLANK any candidate
      whose container text has stepper markers (/stage (complete|in progress|not started)/i); click
      strategy 3 must climb to closest('a,button,[role=button],[class*=button]') before DOM click.

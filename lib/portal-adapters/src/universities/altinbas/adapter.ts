@@ -627,6 +627,96 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
 
   const cartHasItem = async (): Promise<boolean> => /\(\s*[1-9]/.test(await readCart());
 
+  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const anchorRe = new RegExp(escapeRe(searchWord), "i");
+  const progRe = new RegExp(escapeRe(coreQuery), "i");
+
+  // Shared 4-strategy click with cart verification after EVERY attempt.
+  // Strategy 3 climbs to the nearest clickable ancestor before DOM click.
+  const tryClickStrategies = async (target: any, label: string): Promise<boolean> => {
+    await target.scrollIntoViewIfNeeded().catch(() => {});
+    const strategies: Array<[string, () => Promise<void>]> = [
+      ["normal click", async () => { await target.click({ timeout: 5000 }); }],
+      ["force click", async () => { await target.click({ force: true, timeout: 5000 }); }],
+      ["DOM .click()", async () => { await target.evaluate((e: any) => { const c = (e.closest('a, button, [role="button"], [class*="button"]') || e) as HTMLElement; c.click(); }); }],
+      ["dispatchEvent", async () => { await target.dispatchEvent("click"); }],
+    ];
+    for (const [name, run] of strategies) {
+      await run().catch(() => {});
+      await page.waitForTimeout(1000);
+      if (await cartHasItem()) {
+        logger.info(`[altinbas] program secildi (${name}): ${label.slice(0, 80)}`);
+        return true;
+      }
+      logger.warn(`[altinbas] Select stratejisi tutmadı: ${name} — sepet hâlâ boş`);
+    }
+    return false;
+  };
+
+  // Faz-2.12 TEŞHİS: search filters the light DOM (works) but the program
+  // cards are unreachable even by program-name text — either the list lives
+  // in a frame, or the "Available Programs" ACCORDION is COLLAPSED (Faz-2.10
+  // CARD-HTML showed part=accordion + empty <slot>).
+  // (1) Frame diagnostic.
+  const iframeCount = (await page.locator("iframe").count().catch(() => 0)) as number;
+  const frames = page.frames();
+  const perFrame: number[] = [];
+  for (const f of frames) {
+    perFrame.push((await f.getByText(anchorRe).count().catch(() => 0)) as number);
+  }
+  logger.info(`[altinbas] FRAME-DIAG: iframes=${iframeCount} frames=${frames.length} "${searchWord}"InFrames=[${perFrame.join(",")}]`);
+
+  // (2) Open the "Available Programs" accordion IDEMPOTENTLY: click ONE
+  //     locator, verify the content signal (program-name anchor appears),
+  //     and only try the alternate locator if the list is still hidden.
+  //     Two blind sequential clicks on the same toggle would immediately
+  //     re-collapse what the first opened.
+  const countProg = async (): Promise<number> =>
+    (await page.getByText(progRe).count().catch(() => 0)) as number;
+  let n1 = await countProg();
+  if (n1 === 0) {
+    await page.getByText(/available programs/i).first().click({ timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    n1 = await countProg();
+  }
+  if (n1 === 0) {
+    await page.getByRole("button", { name: /available programs/i }).first().click({ timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    n1 = await countProg();
+  }
+
+  // (3) Program-name anchor count after the accordion-open attempts.
+  logger.info(`[altinbas] akordeon-sonrasi "${coreQuery}" eslesen=${n1}`);
+
+  let selected = false;
+  let selectedLabel = "";
+  if (n1 > 0) {
+    // (4) Resolve the card owning the program title, find its select control
+    //     (text /select/i, excluding "Programs" buttons) and click it.
+    const card = page.getByText(progRe).first().locator("xpath=ancestor::*[3]");
+    const ctl = card.getByText(/select/i).filter({ hasNotText: /programs/i }).first();
+    if (await ctl.count().catch(() => 0)) {
+      selected = await tryClickStrategies(ctl, coreQuery);
+      if (selected) selectedLabel = coreQuery;
+    } else {
+      logger.warn(`[altinbas] akordeon-sonrasi kart bulundu ama içinde select kontrolü yok ("${coreQuery}")`);
+    }
+  } else {
+    // (5) Still 0 — dump the opened accordion body for the next iteration.
+    const accAnchor = page.getByText(/available programs/i).first();
+    if (await accAnchor.count().catch(() => 0)) {
+      const html = ((await accAnchor
+        .locator("xpath=ancestor::*[3]")
+        .first()
+        .evaluate((el: any) => (el as HTMLElement).outerHTML)
+        .catch(() => "")) || "") as string;
+      logger.warn(`[altinbas] AKORDEON-HTML: ${html.slice(0, 3000)}`);
+    } else {
+      logger.warn("[altinbas] AKORDEON-HTML: 'Available Programs' başlığı bulunamadı");
+    }
+  }
+
+  if (!selected) {
   // 3) Collect candidates keyed by the program-card TOGGLE buttons.
   // Faz-2.7..2.11 KÖK NEDEN zinciri: the card select control is NOT a
   // role=button (page has only 8 role=buttons); and NO descendant element
@@ -642,7 +732,6 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
     logger.warn(`[altinbas] stageProgram: "${searchWord}" için hiç composite select elemanı yok`);
     // TEŞHİS: dump the real program-card DOM structure via a text anchor
     // from the search results (first 3000 chars of ancestor outerHTML).
-    const anchorRe = new RegExp(searchWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     const progAnchor = page.getByText(anchorRe).first();
     if (await progAnchor.count().catch(() => 0)) {
       const html = ((await progAnchor
@@ -689,32 +778,16 @@ async function stageProgram(page: any, profile: SubmitProfile): Promise<boolean>
   if (pickIdx < 0) pickIdx = 0;
   logger.info(`[altinbas] Program eşleşmesi: kart ${pickIdx} "${candidates[pickIdx]?.name.slice(0, 80)}"`);
 
-  // Multi-strategy click on the Select LABEL — verify the cart after EVERY
-  // attempt. Strategy 3 climbs to the nearest clickable ancestor
-  // (a / button / [role=button]) before firing the DOM click.
-  const btn = selectEls.nth(pickIdx);
-  await btn.scrollIntoViewIfNeeded().catch(() => {});
-  const strategies: Array<[string, () => Promise<void>]> = [
-    ["normal click", async () => { await btn.click({ timeout: 5000 }); }],
-    ["force click", async () => { await btn.click({ force: true, timeout: 5000 }); }],
-    ["DOM .click()", async () => { await btn.evaluate((e: any) => { const c = (e.closest('a, button, [role="button"], [class*="button"]') || e) as HTMLElement; c.click(); }); }],
-    ["dispatchEvent", async () => { await btn.dispatchEvent("click"); }],
-  ];
-  let selected = false;
-  for (const [name, run] of strategies) {
-    await run().catch(() => {});
-    await page.waitForTimeout(1000);
-    if (await cartHasItem()) {
-      selected = true;
-      logger.info(`[altinbas] program secildi (${name}): ${candidates[pickIdx]?.name.slice(0, 80)}`);
-      break;
-    }
-    logger.warn(`[altinbas] Select stratejisi tutmadı: ${name} — sepet hâlâ boş`);
-  }
+  // Multi-strategy click on the composite Select element — verify the cart
+  // after EVERY attempt (shared helper).
+  selected = await tryClickStrategies(selectEls.nth(pickIdx), candidates[pickIdx]?.name || "");
+  if (selected) selectedLabel = candidates[pickIdx]?.name || "";
   if (!selected) {
     logger.warn("[altinbas] stageProgram: 4 stratejide de sepet dolmadı — program seçilemedi");
     return false;
   }
+  }
+  logger.info(`[altinbas] Sepet doğrulandı, seçilen: "${selectedLabel.slice(0, 80)}"`);
 
   // 3) CART BUTTON → modal → "Save and Next" (footer Next is NOT used).
   const cartBtn = page.getByRole("button", { name: /selected programs/i }).first();
