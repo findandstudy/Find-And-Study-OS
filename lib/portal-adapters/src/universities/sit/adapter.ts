@@ -511,243 +511,93 @@ async function dismissInactivityModal(page: Page): Promise<void> {
 }
 
 /**
- * Set a Yes/No wizard toggle to a specific choice, targeting the radio/option by
- * the QUESTION heading (e.g. "Have T.C") so the right group is chosen even when
- * several Yes/No pairs share the same step. Tries, in order: an ARIA
- * radiogroup/group named by the heading, a custom combobox, then a DOM-proximity
- * scan (heading text → nearest Yes/No control). Verifies the choice actually
- * took (checked state) where it can. Best-effort; never throws.
+ * Set a Yes/No wizard toggle to a specific choice. The Step-1 questions are
+ * Radix RadioGroups: a `div[data-slot="form-item"]` wrapping a
+ * `label[data-slot="form-label"]` (the question, e.g. "Have T.C") and a
+ * `div[role="radiogroup"]` of `button[role="radio"][value="yes"|"no"]` controls
+ * (the visible "Yes"/"No" text lives in a SIBLING label, so the button itself
+ * has no text — earlier text/geometry targeting missed it). We click the Radix
+ * button by value, scoped to the labelled form-item, and verify via
+ * aria-checked / data-state. Tiers: (1) button[value] in the form-item,
+ * (2) stable id (#transfer-no / #tc-no / #bluecard-no), (3) the visible Yes/No
+ * text label inside the form-item. Best-effort; never throws.
  */
 async function setToggle(
   page: Page,
   headingRe: RegExp,
   value: "Yes" | "No",
+  idPrefixes: string[] = [],
 ): Promise<boolean> {
+  const v = value.toLowerCase(); // Radix `value` attr is lowercase: "yes"|"no".
   const valueRe =
     value === "No" ? /^\s*(no|hayır|hayir)\s*$/i : /^\s*(yes|evet)\s*$/i;
-  try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      // Locate the clickable Yes/No option for this heading's toggle group. The
-      // Step-1 radios carry NO attributes (name/id/aria all empty) and are
-      // controlled React inputs, so name/label/role targeting fails and clicking
-      // the raw <input> only sets DOM `checked` without firing React's onChange.
-      // We therefore resolve the VISIBLE label element and click it with a real
-      // Playwright ElementHandle click (trusted events the component handles).
-      const handle = await page.evaluateHandle(
-        (arg: { hSrc: string; vSrc: string }) => {
-          const hRe = new RegExp(arg.hSrc, "i");
-          const vRe = new RegExp(arg.vSrc, "i");
-          const vis = (el: Element): boolean =>
-            !!((el as HTMLElement).offsetParent !== null ||
-              el.getClientRects().length);
-          // 1) heading leaf = smallest visible element whose OWN text = heading.
-          let host: HTMLElement | null = null;
-          for (const el of Array.from(document.querySelectorAll("body *"))) {
-            if (!vis(el)) continue;
-            const own = Array.from(el.childNodes)
-              .filter((n) => n.nodeType === 3)
-              .map((n) => n.textContent || "")
-              .join(" ")
-              .trim();
-            if (own && hRe.test(own)) {
-              host = el as HTMLElement;
-              break;
-            }
-          }
-          if (!host) return null;
-          // 2) nearest ancestor that contains a radio = this group's container.
-          let container: HTMLElement | null = host;
-          while (
-            container &&
-            !container.querySelector('input[type="radio"], [role="radio"]')
-          ) {
-            container = container.parentElement;
-          }
-          if (!container) return null;
-          // 3) clickable option = the visible element whose text is exactly the
-          //    value AND is geometrically NEAREST the heading. Columns sit side
-          //    by side and may share one wide container, so document order alone
-          //    could grab a neighbour's "No" — proximity binds click to THIS
-          //    question's control.
-          const hr = host.getBoundingClientRect();
-          const hx = hr.left + hr.width / 2;
-          const hy = hr.top + hr.height / 2;
-          const dist = (el: Element): number => {
-            const r = el.getBoundingClientRect();
-            return Math.hypot(
-              r.left + r.width / 2 - hx,
-              r.top + r.height / 2 - hy,
-            );
-          };
-          let best: Element | null = null;
-          let bestD = Infinity;
-          for (const c of Array.from(
-            container.querySelectorAll("label, [role=radio], button, span, div"),
-          )) {
-            if (!vis(c)) continue;
-            if (!vRe.test((c.textContent || "").trim())) continue;
-            const d = dist(c);
-            if (d < bestD) {
-              bestD = d;
-              best = c;
-            }
-          }
-          if (best) return best;
-          // fallback: the value-matching radio nearest the heading (via label).
-          for (const r of Array.from(
-            container.querySelectorAll('input[type="radio"], [role="radio"]'),
-          )) {
-            const lab =
-              r.closest("label") ||
-              (r.id
-                ? document.querySelector(`label[for="${CSS.escape(r.id)}"]`)
-                : null);
-            const t = (
-              lab?.textContent ||
-              r.parentElement?.textContent ||
-              ""
-            ).trim();
-            if (!vRe.test(t)) continue;
-            const d = dist(lab || r);
-            if (d < bestD) {
-              bestD = d;
-              best = lab || r;
-            }
-          }
-          return best;
-        },
-        { hSrc: headingRe.source, vSrc: valueRe.source },
-      );
-      const el = handle.asElement();
-      let ok = false;
-      if (el) {
-        await el.scrollIntoViewIfNeeded().catch(() => {});
-        await el.click({ force: true, timeout: 3000 }).catch(() => {});
-        // VERIFY on the EXACT element we clicked — ties success to this question's
-        // control regardless of container breadth. everSet permanently skips a
-        // toggle once reported true, so an unverified click must not count.
-        ok = await el
-          .evaluate((node: Element) => {
-            const asRadio = (n: Element | null): Element | null => {
-              if (!n) return null;
-              if (n.matches('input[type="radio"], [role="radio"]')) return n;
-              const inside = n.querySelector('input[type="radio"], [role="radio"]');
-              if (inside) return inside;
-              const lab = n.closest("label");
-              if (lab) {
-                const li = lab.querySelector('input[type="radio"], [role="radio"]');
-                if (li) return li;
-                const forId = lab.getAttribute("for");
-                if (forId) return document.getElementById(forId);
-              }
-              return null;
-            };
-            const r = asRadio(node);
-            if (!r) return false;
-            return (
-              (r as HTMLInputElement).checked === true ||
-              r.getAttribute("aria-checked") === "true" ||
-              r.getAttribute("data-state") === "checked"
-            );
-          })
-          .catch(() => false);
-      }
-      await handle.dispose().catch(() => {});
-      if (ok) return true;
-      // Secondary check (in case React replaced the clicked node on re-render).
-      if (await isToggleSet(page, headingRe, valueRe)) return true;
-      await page.waitForTimeout(300).catch(() => {});
+  const item = page
+    .locator('div[data-slot="form-item"]')
+    .filter({
+      has: page.locator('label[data-slot="form-label"]', { hasText: headingRe }),
+    })
+    .first();
+
+  // Confirm the choice took: the item's Radix button, or any id-matched button,
+  // reports aria-checked="true" / data-state="checked".
+  const isSet = async (): Promise<boolean> => {
+    const cands = [
+      item
+        .locator(`div[role="radiogroup"] button[role="radio"][value="${v}"]`)
+        .first(),
+      ...idPrefixes.map((p) =>
+        page.locator(`button#${p}-${v}[role="radio"]`).first(),
+      ),
+    ];
+    for (const c of cands) {
+      if (!(await c.count().catch(() => 0))) continue;
+      const ac = await c.getAttribute("aria-checked").catch(() => null);
+      const ds = await c.getAttribute("data-state").catch(() => null);
+      if (ac === "true" || ds === "checked") return true;
     }
-    return await isToggleSet(page, headingRe, valueRe);
+    return false;
+  };
+
+  const clickAndVerify = async (target: import("playwright-core").Locator) => {
+    if (!(await target.count().catch(() => 0))) return false;
+    await target.scrollIntoViewIfNeeded().catch(() => {});
+    await target.click({ force: true, timeout: 3000 }).catch(() => {});
+    return isSet();
+  };
+
+  try {
+    // Tier 1: Radix button by value inside the labelled form-item's radiogroup
+    // (2 attempts). Scoping to div[role="radiogroup"] keeps the click on the
+    // real control and off any stray value-matching node.
+    const btn = item
+      .locator(`div[role="radiogroup"] button[role="radio"][value="${v}"]`)
+      .first();
+    if (await btn.count().catch(() => 0)) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (await clickAndVerify(btn)) return true;
+        await page.waitForTimeout(300).catch(() => {});
+      }
+    }
+    // Tier 2: stable ids (#transfer-no, #tc-no, #bluecard-no / #blue-card-no).
+    // Constrain to the Radix button so the click matches isSet()'s semantics.
+    for (const prefix of idPrefixes) {
+      if (
+        await clickAndVerify(
+          page.locator(`button#${prefix}-${v}[role="radio"]`).first(),
+        )
+      )
+        return true;
+    }
+    // Tier 3: click the visible Yes/No text label within the form-item.
+    const textLbl = item
+      .locator('label[data-slot="label"]')
+      .filter({ hasText: valueRe })
+      .first();
+    if (await clickAndVerify(textLbl)) return true;
+
+    return await isSet();
   } catch {
     /* best-effort — never fatal */
-    return false;
-  }
-}
-
-/**
- * Verify a Yes/No toggle is actually set to `valueRe`: locate the question
- * heading, scope to the nearest ancestor containing a radio, then confirm the
- * value-matching radio GEOMETRICALLY NEAREST the heading is checked (native
- * `checked`, ARIA `aria-checked`, or Radix `data-state=checked`). Proximity
- * binds the check to THIS question so a neighbouring column's "No" can't
- * false-verify. Keeps setToggle honest.
- */
-async function isToggleSet(
-  page: Page,
-  headingRe: RegExp,
-  valueRe: RegExp,
-): Promise<boolean> {
-  try {
-    return (await page.evaluate(
-      (arg: { hSrc: string; vSrc: string }) => {
-        const hRe = new RegExp(arg.hSrc, "i");
-        const vRe = new RegExp(arg.vSrc, "i");
-        const vis = (el: Element): boolean =>
-          !!((el as HTMLElement).offsetParent !== null ||
-            el.getClientRects().length);
-        let host: HTMLElement | null = null;
-        for (const el of Array.from(document.querySelectorAll("body *"))) {
-          if (!vis(el)) continue;
-          const own = Array.from(el.childNodes)
-            .filter((n) => n.nodeType === 3)
-            .map((n) => n.textContent || "")
-            .join(" ")
-            .trim();
-          if (own && hRe.test(own)) {
-            host = el as HTMLElement;
-            break;
-          }
-        }
-        if (!host) return false;
-        let container: HTMLElement | null = host;
-        while (
-          container &&
-          !container.querySelector('input[type="radio"], [role="radio"]')
-        ) {
-          container = container.parentElement;
-        }
-        if (!container) return false;
-        const hr = host.getBoundingClientRect();
-        const hx = hr.left + hr.width / 2;
-        const hy = hr.top + hr.height / 2;
-        let best: Element | null = null;
-        let bestD = Infinity;
-        for (const r of Array.from(
-          container.querySelectorAll('input[type="radio"], [role="radio"]'),
-        )) {
-          const lab =
-            r.closest("label") ||
-            (r.id
-              ? document.querySelector(`label[for="${CSS.escape(r.id)}"]`)
-              : null);
-          const t = (
-            lab?.textContent ||
-            r.parentElement?.textContent ||
-            r.getAttribute("aria-label") ||
-            ""
-          ).trim();
-          if (!vRe.test(t)) continue;
-          const rect = (lab || r).getBoundingClientRect();
-          const d = Math.hypot(
-            rect.left + rect.width / 2 - hx,
-            rect.top + rect.height / 2 - hy,
-          );
-          if (d < bestD) {
-            bestD = d;
-            best = r;
-          }
-        }
-        if (!best) return false;
-        return (
-          (best as HTMLInputElement).checked === true ||
-          best.getAttribute("aria-checked") === "true" ||
-          best.getAttribute("data-state") === "checked"
-        );
-      },
-      { hSrc: headingRe.source, vSrc: valueRe.source },
-    )) as boolean;
-  } catch {
     return false;
   }
 }
@@ -1516,18 +1366,24 @@ export const sitAdapter: SitAdapter = {
         name: string,
         headingRe: RegExp,
         value: "Yes" | "No",
+        idPrefixes: string[],
       ): Promise<void> => {
         if (everSet.has(name)) return;
-        if (await setToggle(page, headingRe, value)) {
+        if (await setToggle(page, headingRe, value, idPrefixes)) {
           everSet.add(name);
           stepLog.push(`${name}=${value}`);
         } else {
           stepLog.push(`${name}=BULUNAMADI`);
         }
       };
-      await setTog("transferStudent", SIT_TOGGLES.transferStudent, "No");
-      await setTog("haveTc", SIT_TOGGLES.haveTc, "No");
-      await setTog("blueCard", SIT_TOGGLES.blueCard, "No");
+      await setTog("transferStudent", SIT_TOGGLES.transferStudent, "No", [
+        "transfer",
+      ]);
+      await setTog("haveTc", SIT_TOGGLES.haveTc, "No", ["tc"]);
+      await setTog("blueCard", SIT_TOGGLES.blueCard, "No", [
+        "bluecard",
+        "blue-card",
+      ]);
 
       // Academics
       await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName);

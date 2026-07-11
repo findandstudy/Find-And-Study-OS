@@ -23,7 +23,3 @@ page is covered and redirect recovery re-seeds.
 düştü" despite correct create/guard/upload logic; the only missing piece was the
 browser session. Reuses the same injection the graphql probe page already relies
 on, which proves the shape authenticates the SPA.
-
-**Unrelated gotcha:** `test-sit.ts` AL1 asserts SIT_ALLOWLIST length == 11 but it
-grew to 12 (İstanbul Gelişim added by an earlier merge). Stale test count, not a
-code bug — don't attribute it to auth/session changes.
