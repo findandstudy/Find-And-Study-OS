@@ -30,10 +30,22 @@ not `<input>`s. Any input-only helper silently misses them.
   live option texts (`[sit] nationality opt eşleşmedi …`) instead of a silent fail.
 - Gender regexes must stay anchored (`^\s*(male|erkek)\s*$`) or `male` substring-
   matches `Female`.
-- **Dates are the open problem.** They are custom widgets; a form-item-scoped
-  `<input>` + trigger-open + popover-input best-effort is in place, but if the
-  widget is button/calendar-only it still can't be driven blind. `setDateField`
-  logs `[sit] DATEHTML <label>: <outerHTML>` on the miss — the NEXT live run's
-  DATEHTML output is required to implement deterministic calendar navigation
-  (open trigger → set month/year/day → verify reflected value). Do not guess the
-  calendar DOM before that log is captured.
+- **Dates = popover calendar, NOT inputs.** Each date field is a
+  `button[data-slot="popover-trigger"]` opening a shadcn Calendar
+  (react-day-picker). `setDateField` drives it via `fillPopoverDate`: open trigger
+  → set date by (a) writable popover input, (b) month/year `<select>` dropdowns +
+  day click, (c) chevron month-nav + day click → verify. Durable gotchas that
+  cost correctness here:
+  - **Scope the popover to the trigger that opened it**, never a global
+    `.first()` — Radix content is portaled to `<body>`, so resolve via the
+    trigger's `aria-controls` (then open-state content) or a stray popover hijacks
+    the fill.
+  - **Verify the day AND year, not just the year** — a wrong click within the
+    same year otherwise passes. Trigger-text format is unknown, so assert
+    word-boundary day + year tokens (format-agnostic).
+  - **Day-cell click is ambiguous in multi-month views** — filter outside/disabled
+    cells; if a day number still matches more than once, only click when full-date
+    metadata (aria-label/`data-day`) names the target month+year, else refuse.
+  - `[sit] DATEPOP <label>: <innerHTML>` is logged once on first open so the real
+    calendar shape (input vs dropdown vs chevron-only) is diagnosable live; the
+    first deploy run confirms which of a/b/c actually applies.

@@ -520,6 +520,269 @@ async function fillDateInput(
   return false;
 }
 
+const MONTHS_EN = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+];
+
+/**
+ * Click the day-cell whose visible number equals `day` inside an open
+ * react-day-picker calendar (for the given target month/year), skipping
+ * adjacent-month "outside" days and disabled days. When a single-month view
+ * shows the number once it is clicked directly; when several non-outside cells
+ * carry the same number (multi-month view) the click is only made if a cell's
+ * full-date metadata (aria-label / data-day) unambiguously names the target
+ * month+year — otherwise it refuses to guess. Returns true only when clicked.
+ */
+async function clickCalendarDay(
+  popover: Locator,
+  day: number,
+  monthIdx: number,
+  year: number,
+): Promise<boolean> {
+  const dayStr = String(day);
+  const loc = popover.locator(
+    'button[name="day"], [role="gridcell"] button, .rdp-day, .rdp-day_button, td button, [role="gridcell"]',
+  );
+  const n = await loc.count().catch(() => 0);
+  const matches: { idx: number; label: string }[] = [];
+  for (let i = 0; i < n; i++) {
+    const info = await loc
+      .nth(i)
+      .evaluate((el) => {
+        const cls = el.className || "";
+        const outside =
+          el.getAttribute("data-outside") != null ||
+          el.getAttribute("data-day-outside") != null ||
+          /outside/i.test(cls);
+        const disabled =
+          (el as HTMLButtonElement).disabled ||
+          el.getAttribute("aria-disabled") === "true" ||
+          el.getAttribute("data-disabled") != null ||
+          /disabled/i.test(cls);
+        const label =
+          (el.getAttribute("aria-label") || "") +
+          " " +
+          (el.getAttribute("data-day") || "");
+        return { text: (el.textContent || "").trim(), outside, disabled, label };
+      })
+      .catch(() => null);
+    if (!info || info.disabled || info.outside) continue;
+    if (info.text === dayStr) matches.push({ idx: i, label: info.label });
+  }
+  if (matches.length === 0) return false;
+
+  let pick = matches[0].idx;
+  if (matches.length > 1) {
+    // Ambiguous (multi-month view): only click a cell whose full-date metadata
+    // names the target month + year; refuse to guess otherwise.
+    const monthName = MONTHS_EN[monthIdx];
+    const iso = `${year}-${String(monthIdx + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const better = matches.find(
+      (m) =>
+        m.label.includes(iso) ||
+        (new RegExp(monthName, "i").test(m.label) && m.label.includes(String(year))),
+    );
+    if (better === undefined) return false;
+    pick = better.idx;
+  }
+  await loc.nth(pick).click({ timeout: 2000 }).catch(() => {});
+  return true;
+}
+
+/**
+ * Read the currently displayed month/year from a react-day-picker caption.
+ * Returns 0-indexed month + full year, or null when it can't be parsed.
+ */
+async function readCalendarCaption(
+  popover: Locator,
+): Promise<{ month: number; year: number } | null> {
+  const cap = popover
+    .locator('.rdp-caption_label, [class*="caption_label"], [class*="caption"]')
+    .first();
+  const raw = ((await cap.textContent().catch(() => "")) || "").toLowerCase();
+  const yr = (raw.match(/(\d{4})/) || [])[1];
+  const mi = MONTHS_EN.findIndex((mn) => raw.includes(mn));
+  if (mi >= 0 && yr) return { month: mi, year: parseInt(yr, 10) };
+  return null;
+}
+
+/**
+ * Drive a shadcn Calendar / react-day-picker popover date field. Opens the
+ * `button[data-slot="popover-trigger"]`, dumps the popover DOM once (DATEPOP —
+ * so the real structure is diagnosable), then sets the date via, in order:
+ *   a. a writable input inside the popover (fill),
+ *   b. month/year <select> dropdowns (captionLayout="dropdown") + day click,
+ *   c. chevron month-navigation to the target month + day click.
+ * Verifies by re-reading the trigger label (changed and contains the year).
+ * One retry. Best-effort; false on miss.
+ */
+async function fillPopoverDate(
+  page: Page,
+  item: Locator,
+  labelSrc: string,
+  isoForm: string,
+  dmy: string,
+): Promise<boolean> {
+  const [y, mo, d] = isoForm.split("-");
+  const year = y;
+  const monthNum = parseInt(mo, 10);
+  const day = parseInt(d, 10);
+
+  const trigger = item
+    .locator('button[data-slot="popover-trigger"], button, [role="button"], [role="combobox"]')
+    .first();
+  if (!(await trigger.count().catch(() => 0))) return false;
+
+  const initialText = ((await trigger.textContent().catch(() => "")) || "").trim();
+  const yearRe = new RegExp(`\\b${year}\\b`);
+  const dayRe = new RegExp(`\\b0?${day}\\b`);
+  const verify = async (): Promise<boolean> => {
+    await sleep(page, 250);
+    const t = ((await trigger.textContent().catch(() => "")) || "").trim();
+    // Require the trigger label to have changed AND to now carry both the
+    // target year and day, so a wrong-date click within the same year is
+    // rejected (format-agnostic: works for DD/MM/YYYY, "5 Jul 2026", etc.).
+    return t !== initialText && yearRe.test(t) && dayRe.test(t);
+  };
+
+  // Scope the popover to the one THIS trigger opened (Radix content is portaled
+  // to <body>, so it can't be found inside the form-item): prefer aria-controls,
+  // then the open-state popover, and only then a loose last() fallback.
+  const resolvePopover = async (): Promise<Locator> => {
+    const controls = await trigger.getAttribute("aria-controls").catch(() => null);
+    if (controls) {
+      const byId = page.locator(`[id="${controls}"]`);
+      if (await byId.count().catch(() => 0)) return byId.first();
+    }
+    const open = page.locator(
+      '[data-slot="popover-content"][data-state="open"], [role="dialog"][data-state="open"]',
+    );
+    if (await open.count().catch(() => 0)) return open.last();
+    return page
+      .locator(
+        '[data-slot="popover-content"], [data-radix-popper-content-wrapper], [role="dialog"], .rdp',
+      )
+      .last();
+  };
+
+  let dumped = false;
+  const attempt = async (): Promise<boolean> => {
+    await trigger.click({ timeout: 4000 }).catch(() => {});
+    await sleep(page, 500);
+    const popover = await resolvePopover();
+    await popover.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
+
+    // DISCOVERY (once) — dump the popover DOM so the real calendar structure
+    // (writable input? month/year dropdowns? chevrons only?) is diagnosable.
+    if (!dumped) {
+      dumped = true;
+      try {
+        const html = await popover.evaluate((el) =>
+          (el as HTMLElement).innerHTML.slice(0, 3000),
+        );
+        logger.info(`[sit] DATEPOP ${labelSrc}: ${html}`);
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    // a. Writable input inside the popover.
+    const popInput = popover.locator("input").first();
+    if (await popInput.count().catch(() => 0)) {
+      for (const v of [dmy, isoForm, dmy.replace(/\//g, ".")]) {
+        await popInput.click().catch(() => {});
+        await popInput.fill("").catch(() => {});
+        await popInput.type(v, { delay: 25 }).catch(() => {});
+        await page.keyboard.press("Enter").catch(() => {});
+        if (await verify()) return true;
+      }
+    }
+
+    // b. Month/Year <select> dropdowns (captionLayout="dropdown").
+    const selects = popover.locator("select");
+    const selCount = await selects.count().catch(() => 0);
+    if (selCount > 0) {
+      for (let i = 0; i < selCount; i++) {
+        const s = selects.nth(i);
+        const opts = await s
+          .evaluate((el) =>
+            Array.from((el as HTMLSelectElement).options).map((o) => ({
+              v: o.value,
+              t: (o.textContent || "").trim(),
+            })),
+          )
+          .catch(() => [] as { v: string; t: string }[]);
+        if (opts.length === 0) continue;
+        const hasYear = opts.some(
+          (o) => /^\d{4}$/.test(o.t) || /^\d{4}$/.test(o.v),
+        );
+        if (hasYear) {
+          const yo = opts.find((o) => o.t === year || o.v === year);
+          if (yo) {
+            await s.selectOption(yo.v).catch(() => {});
+            await sleep(page, 200);
+          }
+        } else {
+          // month select: value may be 0- or 1-indexed, or a month name.
+          const name = MONTHS_EN[monthNum - 1];
+          const mopt =
+            opts.find((o) => o.v === String(monthNum - 1)) ||
+            (opts.length <= 13 ? opts.find((o) => o.v === String(monthNum)) : undefined) ||
+            opts.find((o) => new RegExp(`^${name}`, "i").test(o.t));
+          if (mopt) {
+            await s.selectOption(mopt.v).catch(() => {});
+            await sleep(page, 200);
+          }
+        }
+      }
+      if (
+        (await clickCalendarDay(popover, day, monthNum - 1, parseInt(year, 10))) &&
+        (await verify())
+      ) {
+        return true;
+      }
+    }
+
+    // c. Chevron navigation to the target month, then click the day.
+    const target = parseInt(year, 10) * 12 + (monthNum - 1);
+    for (let i = 0; i < 240; i++) {
+      const cap = await readCalendarCaption(popover);
+      if (!cap) break;
+      const cur = cap.year * 12 + cap.month;
+      if (cur === target) break;
+      const btn =
+        cur < target
+          ? popover
+              .locator(
+                'button[name="next-month"], button[aria-label*="next" i], button[aria-label*="sonraki" i]',
+              )
+              .first()
+          : popover
+              .locator(
+                'button[name="previous-month"], button[aria-label*="previous" i], button[aria-label*="önceki" i]',
+              )
+              .first();
+      if (!(await btn.count().catch(() => 0))) break;
+      await btn.click({ timeout: 1500 }).catch(() => {});
+      await sleep(page, 120);
+    }
+    if (
+      (await clickCalendarDay(popover, day, monthNum - 1, parseInt(year, 10))) &&
+      (await verify())
+    ) {
+      return true;
+    }
+
+    await page.keyboard.press("Escape").catch(() => {});
+    return false;
+  };
+
+  if (await attempt()) return true;
+  if (await attempt()) return true; // one retry
+  return false;
+}
+
 async function setDateField(
   page: Page,
   labelRe: RegExp,
@@ -547,33 +810,14 @@ async function setDateField(
     ) {
       return true;
     }
-    // The field may be a button/trigger that reveals a text input or popover.
-    const trigger = item
-      .locator('button, [role="button"], [role="combobox"]')
-      .first();
-    if (await trigger.count().catch(() => 0)) {
-      await trigger.click({ timeout: 4000 }).catch(() => {});
-      await sleep(page, 600);
-      const revealed = item.locator("input").first();
-      if (
-        (await revealed.count().catch(() => 0)) &&
-        (await fillDateInput(page, revealed, isoForm, dmy))
-      ) {
-        return true;
-      }
-      const popoverInput = page
-        .locator('[role="dialog"] input, [data-radix-popper-content-wrapper] input')
-        .first();
-      if (
-        (await popoverInput.count().catch(() => 0)) &&
-        (await fillDateInput(page, popoverInput, isoForm, dmy))
-      ) {
-        return true;
-      }
-      await page.keyboard.press("Escape").catch(() => {});
+    // 3. Popover date-picker: the field is a
+    //    button[data-slot="popover-trigger"] → shadcn Calendar (react-day-picker)
+    //    (confirmed live via DATEHTML). Drive the calendar popover.
+    if (await fillPopoverDate(page, item, labelRe.source, isoForm, dmy)) {
+      return true;
     }
 
-    // 3. DISCOVERY — nothing filled: dump the form-item DOM so the next live
+    // 4. DISCOVERY — nothing filled: dump the form-item DOM so the next live
     //    run reveals the custom date-picker structure (calendar trigger /
     //    react-day-picker grid / month-year selects) needed to drive it.
     try {
