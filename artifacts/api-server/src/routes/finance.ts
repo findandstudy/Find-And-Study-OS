@@ -1078,6 +1078,21 @@ router.patch("/service-fees/:id", requireAuth, requireRole(...FINANCE_ROLES), as
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
 
+  for (const key of ["firstInstallmentPaidAt", "secondInstallmentPaidAt"] as const) {
+    if (updates[key] === undefined) continue;
+    const raw = updates[key];
+    if (raw === null || raw === "") {
+      updates[key] = null;
+      continue;
+    }
+    const parsed = new Date(raw as string | number | Date);
+    if (isNaN(parsed.getTime())) {
+      res.status(400).json({ error: `Invalid date for ${key}` });
+      return;
+    }
+    updates[key] = parsed;
+  }
+
   const existingArr = await db.select().from(serviceFeesTable).where(eq(serviceFeesTable.id, id));
   if (!existingArr[0]) { res.status(404).json({ error: "Service fee not found" }); return; }
   const existing = existingArr[0];
