@@ -100,6 +100,9 @@ function buildSubmitProfileFromRecords(
     }),
     gpa:            student.gpa             ?? undefined,
     graduationYear: student.graduationYear  ?? undefined,
+    languageScore:      student.languageScore != null ? Number(student.languageScore) : undefined,
+    passportIssueDate:  student.passportIssueDate ?? undefined,
+    passportExpiryDate: student.passportExpiry    ?? undefined,
   });
 }
 

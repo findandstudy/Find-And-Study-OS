@@ -14,7 +14,18 @@ CRM student+application, and they drift:
 **Rule:** any new Step-3 / education field (schoolName, gpa, graduationYear, …)
 must be mapped in BOTH builders, or one path silently fills "-"/undefined and the
 adapter's fail-visible verify/retry gate reports "empty after retry" despite real
-DB data.
+DB data. This drift has recurred multiple times (fix landed only in the
+`artifacts/portal-automation-worker` copy while the CANLI worker actually runs
+`lib/portal-runner/src/profile.ts`, so the fix "went to the wrong copy"). When a
+"data not filled" bug has real DB data, diff the TWO `buildProfile({...})` objects
+field-by-field first.
+
+**Field-name traps (DB column ≠ profile key):** `passportExpiryDate` (profile) ←
+`student.passportExpiry` (NOT `student.passportExpiryDate`, which doesn't exist);
+`passportIssueDate` ← `student.passportIssueDate`; `languageScore` ←
+`student.languageScore` (Number()-coerced, safe because `buildProfile`'s
+`firstFiniteNumber` degrades NaN→undefined). SIT create/add-student webhook sends
+these; empty passport dates/lang score = "bilgiler tam girilmemiş" on SIT.
 
 **GPA:** never `Number(data.gpa)` — CRM GPA is free-form ("2.8-3.0", "2,8 – 3,0",
 "3 to 3.5") → `Number()` yields NaN → "NaN"/"-" → portal rejects. Use the shared
