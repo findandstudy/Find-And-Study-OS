@@ -29,3 +29,21 @@ across steps.
 **How to apply:** gate phone as fill-once via `everSet` (add "phone" after the
 first successful fill; it is not a `critical`/`mark` name so no BULUNAMADI
 side effect). Same caution for any future unanchored contact label.
+
+## Id-less TEXT/TEL fields need form-item scoping too (not just selects)
+
+SIT's shadcn controls carry NO id and no `label[for=]`/wrapping-label, so
+`getByLabel`/`getByPlaceholder`/`resolveControl` all MISS them — this bites
+text/tel inputs, not only the selects. The Step-3 "Mobile" is an intl phone
+widget whose visible input has a *format-example* placeholder (not `/mobile/`),
+so it silently failed to fill while "Email" (matching placeholder) worked.
+
+**Fix:** `fillField` has a final fallback that scopes by `formItemByLabel` and
+fills `input[type=tel]` first, then the first visible text-like input, then a
+textarea; `.type()` covers widgets that ignore `.fill()`; verify `inputValue()`.
+
+**Why:** label association is unavailable, so only wrapper-scoping reliably
+reaches the control.
+
+**How to apply:** any "field didn't fill" on SIT (or a similar id-less shadcn
+form) → suspect label association, reach via the form-item wrapper, not by label.

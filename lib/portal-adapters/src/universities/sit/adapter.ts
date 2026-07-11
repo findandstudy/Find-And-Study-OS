@@ -343,6 +343,43 @@ async function fillField(
       /* best-effort */
     }
   }
+  // Final fallback: scope by the shadcn form-item wrapper. SIT controls carry NO
+  // id and no label[for=]/wrapping-label association (same reason the selects use
+  // formItemByLabel), so getByLabel/getByPlaceholder/resolveControl all miss —
+  // e.g. the Step-3 "Mobile" is an intl phone widget whose visible input has a
+  // format-example placeholder ("+90 5xx …"), not one matching /mobile|phone/.
+  // Prefer a tel input (phone widgets), then the first visible text-like input,
+  // then a textarea; .type() covers widgets that ignore .fill().
+  const item = formItemByLabel(page, labelRe);
+  if (await item.count().catch(() => 0)) {
+    const scoped: Locator[] = [
+      item.locator('input[type="tel"]').first(),
+      item
+        .locator(
+          'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="submit"]):not([type="button"])',
+        )
+        .first(),
+      item.locator("textarea").first(),
+    ];
+    for (const inp of scoped) {
+      if (
+        (await inp.count().catch(() => 0)) &&
+        (await inp.isVisible().catch(() => false))
+      ) {
+        await inp.click().catch(() => {});
+        await inp.fill(value).catch(() => {});
+        let got = await inp.inputValue().catch(() => "");
+        if (!got) {
+          await inp.type(value, { delay: 20 }).catch(() => {});
+          got = await inp.inputValue().catch(() => "");
+        }
+        if (got) {
+          await inp.press("Tab").catch(() => {});
+          return true;
+        }
+      }
+    }
+  }
   return false;
 }
 
@@ -1697,8 +1734,31 @@ export const sitAdapter: SitAdapter = {
           countryOptionRe,
           natEnCountry,
         );
-        if (!okCountrySelect) {
-          await fillField(page, SIT_STUDENT_FIELDS.country, natEnCountry);
+        const okCountryText = okCountrySelect
+          ? true
+          : await fillField(page, SIT_STUDENT_FIELDS.country, natEnCountry);
+        if (!okCountrySelect && !okCountryText) {
+          // Log live option texts so an unmapped residence country is diagnosable
+          // from the run log instead of a silent miss (mirrors nationality).
+          try {
+            const opts = await formItemByLabel(page, SIT_STUDENT_FIELDS.country)
+              .locator("select")
+              .first()
+              .evaluate((el) =>
+                Array.from((el as unknown as HTMLSelectElement).options)
+                  .map((o) => (o.textContent || "").trim())
+                  .filter(Boolean)
+                  .slice(0, 60)
+                  .join(" | "),
+              );
+            if (opts) {
+              logger.info(
+                `[sit] country opt eşleşmedi: aranan="${natEnCountry}" | opsiyonlar=${opts}`,
+              );
+            }
+          } catch {
+            /* diagnostic only */
+          }
         }
       }
 
