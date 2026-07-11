@@ -139,6 +139,20 @@ export interface SitStudentResult {
   studentId: string | null;
   created: boolean;
   alreadyExists: boolean;
+  /**
+   * True ONLY when the create webhook was actually fired for a NEW record in
+   * THIS run (precheck said "missing", we POSTed createStudentViaWebhook), even
+   * if the id was resolved afterwards via the async post-create poll. False on
+   * precheck-reuse ("found"), dry-run, and every failure path.
+   *
+   * This is the sole signal the document/photo upload guard should use — it is
+   * intentionally SEPARATE from `created` (which also drives the user-facing
+   * detail message) so a future change to `created`'s wording/semantics cannot
+   * silently disable the upload. Upload runs only on a fresh webhook create;
+   * reused/existing students are never re-uploaded (idempotency; SIT has no
+   * update webhook).
+   */
+  createdViaWebhook: boolean;
   detail?: string;
 }
 
@@ -771,6 +785,7 @@ export const sitAdapter: SitAdapter = {
         studentId: null,
         created: false,
         alreadyExists: false,
+        createdViaWebhook: false,
         detail: "öğrenci oluşturulamadı: mükerrer kontrolü doğrulanamadı",
       };
     }
@@ -797,7 +812,12 @@ export const sitAdapter: SitAdapter = {
             ? " (NOT: foto/belge güncellemesi için SIT'te update webhook yok — sadece başvuru adımı denenecek)"
             : ""),
       );
-      return { studentId: existing.ref.id, created: false, alreadyExists: true };
+      return {
+        studentId: existing.ref.id,
+        created: false,
+        alreadyExists: true,
+        createdViaWebhook: false,
+      };
     }
 
     // --- DRY: student does not exist → stop before any write ---
@@ -807,6 +827,7 @@ export const sitAdapter: SitAdapter = {
         studentId: null,
         created: false,
         alreadyExists: false,
+        createdViaWebhook: false,
         detail: "dry-run: öğrenci oluşturulmadı",
       };
     }
@@ -824,6 +845,7 @@ export const sitAdapter: SitAdapter = {
         studentId: null,
         created: false,
         alreadyExists: false,
+        createdViaWebhook: false,
         detail:
           "öğrenci oluşturulamadı: acente kimliği (user_id/agency_id/crm_id) çözülemedi",
       };
@@ -997,6 +1019,7 @@ export const sitAdapter: SitAdapter = {
         studentId: null,
         created: false,
         alreadyExists: false,
+        createdViaWebhook: false,
         detail: "öğrenci oluşturulamadı: fotoğraf/belge yok (sıfır-belge koruması)",
       };
     }
@@ -1060,7 +1083,12 @@ export const sitAdapter: SitAdapter = {
     const result = await createStudentViaWebhook(page, payload);
     if (result?.id) {
       logger.info(`[sit] öğrenci webhook ile oluşturuldu (id=${result.id})`);
-      return { studentId: result.id, created: true, alreadyExists: false };
+      return {
+        studentId: result.id,
+        created: true,
+        alreadyExists: false,
+        createdViaWebhook: true,
+      };
     }
 
     // The create webhook persists the student ASYNCHRONOUSLY in Zoho and its
@@ -1080,12 +1108,27 @@ export const sitAdapter: SitAdapter = {
     });
     if (polledId) {
       logger.info(`[sit] öğrenci create sonrası id çözüldü (id=${polledId})`);
-      return { studentId: polledId, created: true, alreadyExists: false };
+      // The create webhook DID fire for a brand-new record this run; the id was
+      // just resolved via the async post-create poll rather than the webhook's
+      // synchronous body. This is still a fresh create → createdViaWebhook=true
+      // so the document/photo upload runs (the whole point of the poll fix).
+      return {
+        studentId: polledId,
+        created: true,
+        alreadyExists: false,
+        createdViaWebhook: true,
+      };
     }
+    // The webhook fired but we never resolved an id (Zoho indexing lag beyond
+    // the poll budget). Without an id neither upload nor the application step
+    // can proceed → treat as a failed create. createdViaWebhook stays false per
+    // the contract (every failure path is false); the guard also requires a
+    // non-null studentId, so this could never trigger an upload regardless.
     return {
       studentId: null,
       created: false,
       alreadyExists: false,
+      createdViaWebhook: false,
       detail: "öğrenci oluşturulamadı: webhook create başarısız (id çözülemedi)",
     };
   },
@@ -1395,7 +1438,7 @@ export const sitAdapter: SitAdapter = {
     // depend on page URL). Fresh-create only (a just-created student has no docs,
     // so no duplicate risk) and never in DRY. Non-fatal: the student is already
     // created and the application step still runs; a failure is logged loudly.
-    if (effectiveSubmit && student.created && student.studentId) {
+    if (effectiveSubmit && student.createdViaWebhook && student.studentId) {
       try {
         await uploadStudentDocuments(
           session.page,
