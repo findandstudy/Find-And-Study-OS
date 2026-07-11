@@ -1014,7 +1014,7 @@ export default function AdminActivity({ userId }: { userId?: number }) {
   const [activeTab, setActiveTab] = useState<"panel" | "overview">("panel");
   const [staffId, setStaffId] = useState<number | undefined>(undefined);
 
-  const staffQuery = useListUsers({ limit: 200 });
+  const staffQuery = useListUsers({ roles: INTERNAL_STAFF_ROLES.join(","), limit: 200 } as any);
   const staffList = useMemo<StaffUser[]>(() => {
     const data = staffQuery.data as unknown;
     const arr = Array.isArray(data)

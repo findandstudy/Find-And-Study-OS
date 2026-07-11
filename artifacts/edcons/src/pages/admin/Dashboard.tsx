@@ -177,7 +177,7 @@ function UserActivityPanel({ range, currentUserId, isAdmin, expandable = false }
 
   useEffect(() => { setLocalRange(range); }, [range]);
 
-  const staffQuery = useListUsers({ limit: 200 });
+  const staffQuery = useListUsers({ roles: [...STAFF_ROLES_SET].join(","), limit: 200 } as any);
   const staffList = useMemo(() => {
     const d = staffQuery.data as any;
     const arr: any[] = Array.isArray(d) ? d : (d?.data ?? d?.items ?? []);
