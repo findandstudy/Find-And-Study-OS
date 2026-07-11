@@ -20,7 +20,7 @@
 // auto-submitted).
 // ---------------------------------------------------------------------------
 
-import type { Page, Locator } from "playwright-core";
+import type { Page, Locator, ElementHandle } from "playwright-core";
 import type {
   UniversityAdapter,
   AdapterSession,
@@ -250,23 +250,214 @@ async function bodyText(page: Page): Promise<string> {
   }
 }
 
-/** Fill a field located by accessible label or placeholder. */
+/** Escape a user string for safe use inside a RegExp. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Resolve a visible form control matching `labelRe` by scanning its associated
+ * <label> text, name, id, placeholder and aria-label. SIT's Personal Details
+ * inputs are not reliably reachable via getByLabel/getByPlaceholder (the live
+ * diagnostics showed every text/date/select field as BULUNAMADI), so this
+ * attribute/label scan is the multi-strategy fallback. Best-effort; null on
+ * miss. `tags` narrows to inputs/textareas (default) or "select".
+ */
+async function resolveControl(
+  page: Page,
+  labelRe: RegExp,
+  tags = "input, textarea",
+): Promise<ElementHandle<HTMLElement> | null> {
+  try {
+    const handles = (await page.$$(tags)) as ElementHandle<HTMLElement>[];
+    for (const h of handles) {
+      const meta = await h.evaluate((el) => {
+        const forLabel = el.id
+          ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`)
+          : null;
+        // Only trust an explicit association (wrapping <label> or label[for=id]);
+        // a loose sibling-label lookup can bind a neighbouring field's label in
+        // dense form groups and mis-fill the wrong control.
+        const label = (el.closest("label")?.textContent || forLabel?.textContent || "")
+          .trim()
+          .replace(/\s+/g, " ");
+        const input = el as HTMLInputElement;
+        const hay = [
+          label,
+          el.getAttribute("name"),
+          el.id,
+          input.placeholder,
+          el.getAttribute("aria-label"),
+        ]
+          .filter(Boolean)
+          .join(" ");
+        const visible = !!(el.offsetParent !== null || el.getClientRects().length);
+        return { hay, visible };
+      });
+      if (meta.visible && labelRe.test(meta.hay)) return h;
+    }
+  } catch {
+    /* best-effort */
+  }
+  return null;
+}
+
+/**
+ * Fill a text/email input matching `labelRe`. Tries (in order) getByLabel,
+ * getByPlaceholder, any caller-supplied CSS selectors, then the attribute/label
+ * scan. Verifies the value actually landed (reads it back) before reporting
+ * success, so a no-op fill is not counted as set.
+ */
 async function fillField(
   page: Page,
   labelRe: RegExp,
   value: string | undefined,
+  css: string[] = [],
 ): Promise<boolean> {
   if (!value) return false;
   const candidates: Locator[] = [
     page.getByLabel(labelRe).first(),
     page.getByPlaceholder(labelRe).first(),
+    ...css.map((sel) => page.locator(sel).first()),
   ];
   for (const loc of candidates) {
     if ((await loc.count()) && (await loc.isVisible().catch(() => false))) {
       await loc.fill(value).catch(() => {});
-      await loc.press("Tab").catch(() => {});
-      return true;
+      const got = await loc.inputValue().catch(() => "");
+      if (got) {
+        await loc.press("Tab").catch(() => {});
+        return true;
+      }
     }
+  }
+  // Fallback: attribute/label scan over raw handles.
+  const h = await resolveControl(page, labelRe);
+  if (h) {
+    try {
+      await h.fill(value);
+      const got = await h.evaluate((el) => (el as HTMLInputElement).value || "");
+      await h.press("Tab").catch(() => {});
+      return !!got;
+    } catch {
+      /* best-effort */
+    }
+  }
+  return false;
+}
+
+/**
+ * Select a value in a dropdown matching `labelRe`. Handles (in order) a native
+ * <select> (selectOption by option text matching `optionRe`), SIT's custom
+ * role=button combobox (open + click matching option), and a searchable
+ * combobox input (type `query`, then click the matching option). Verifies where
+ * possible. Best-effort; false on miss.
+ */
+async function selectField(
+  page: Page,
+  labelRe: RegExp,
+  optionRe: RegExp,
+  query?: string,
+): Promise<boolean> {
+  // 1. Native <select>
+  const sel = await resolveControl(page, labelRe, "select");
+  if (sel) {
+    try {
+      const value = await sel.evaluate((el, reSrc) => {
+        const s = el as unknown as HTMLSelectElement;
+        const re = new RegExp(reSrc, "i");
+        const opt = Array.from(s.options).find((o) => {
+          if (o.disabled) return false;
+          const txt = (o.textContent || "").trim();
+          // Skip empty/placeholder options ("", "Select...") that lack a value.
+          if (!o.value && !txt) return false;
+          return re.test(txt) || re.test(o.value);
+        });
+        return opt ? opt.value : null;
+      }, optionRe.source);
+      if (value != null) {
+        await sel.selectOption(value).catch(() => {});
+        // Assert the intended option is now selected (not merely non-empty).
+        const ok = await sel.evaluate(
+          (el, v) => (el as unknown as HTMLSelectElement).value === v,
+          value,
+        );
+        if (ok) return true;
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+  // 2. Custom role=button combobox (existing behaviour).
+  if (await selectCombo(page, labelRe, optionRe).catch(() => false)) return true;
+  // 3. Searchable combobox: type the query into the input, then pick the option.
+  if (query) {
+    const inp = await resolveControl(page, labelRe, "input");
+    if (inp) {
+      try {
+        await inp.click().catch(() => {});
+        await inp.fill(query).catch(() => {});
+        await sleep(page, 900);
+        let opt = page.getByRole("option", { name: optionRe }).first();
+        if (!(await opt.count())) {
+          opt = page
+            .locator("[role=option], li, [class*=option i]")
+            .filter({ hasText: optionRe })
+            .first();
+        }
+        if (await opt.count()) {
+          await opt.click({ timeout: 3000 }).catch(() => {});
+          await sleep(page, 900);
+          return true;
+        }
+        await page.keyboard.press("Escape").catch(() => {});
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Set a date field matching `labelRe` from an ISO date. A native
+ * input[type=date] takes the ISO form (YYYY-MM-DD); a text-mask / datepicker
+ * input takes the SIT display form (dd/mm/yyyy, with a dd.mm.yyyy retry).
+ * Verifies the value landed. The FORM DUMP log reveals the real input type so
+ * the format can be confirmed. Best-effort; false on miss.
+ */
+async function setDateField(
+  page: Page,
+  labelRe: RegExp,
+  iso: string | undefined,
+): Promise<boolean> {
+  const m = String(iso ?? "").match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return false;
+  const isoForm = `${m[1]}-${m[2]}-${m[3]}`;
+  const dmy = `${m[3]}/${m[2]}/${m[1]}`;
+  const h = await resolveControl(page, labelRe);
+  if (!h) return false;
+  try {
+    const type = (
+      await h.evaluate((el) => (el as HTMLInputElement).type || "")
+    ).toLowerCase();
+    const readBack = async (): Promise<string> =>
+      h.evaluate((el) => (el as HTMLInputElement).value || "").catch(() => "");
+    if (type === "date") {
+      await h.fill(isoForm).catch(() => {});
+      if (await readBack()) {
+        await h.press("Tab").catch(() => {});
+        return true;
+      }
+    }
+    for (const v of [dmy, dmy.replace(/\//g, ".")]) {
+      await h.click().catch(() => {});
+      await h.fill("").catch(() => {});
+      await h.type(v, { delay: 30 }).catch(() => {});
+      await page.keyboard.press("Escape").catch(() => {});
+      if (await readBack()) return true;
+    }
+  } catch {
+    /* best-effort */
   }
   return false;
 }
@@ -405,6 +596,54 @@ async function readInlineErrors(page: Page): Promise<string> {
     )) as string;
   } catch {
     return "";
+  }
+}
+
+/**
+ * Log a PII-free structural dump of every form control on the current wizard
+ * step (tag/type/name/id/placeholder/aria-label/label + a sample of <select>
+ * options). This reveals the REAL selectors + date input type + dropdown option
+ * text so field mapping can be confirmed from the worker log. No field VALUES
+ * are read — only control metadata. Best-effort; never throws.
+ */
+async function dumpWizardForm(page: Page, step: number): Promise<void> {
+  try {
+    const dump = await page.$$eval("input, select, textarea", (els) =>
+      els.slice(0, 60).map((e) => {
+        const input = e as HTMLInputElement;
+        const forLabel = e.id
+          ? document.querySelector(`label[for="${CSS.escape(e.id)}"]`)
+          : null;
+        const label = (
+          e.closest("label")?.textContent ||
+          forLabel?.textContent ||
+          e.parentElement?.querySelector("label")?.textContent ||
+          ""
+        )
+          .trim()
+          .replace(/\s+/g, " ")
+          .slice(0, 40);
+        return {
+          tag: e.tagName,
+          type: input.type || "",
+          name: e.getAttribute("name") || "",
+          id: e.id || "",
+          ph: input.placeholder || "",
+          aria: e.getAttribute("aria-label") || "",
+          label,
+          vis: !!(input.offsetParent !== null || e.getClientRects().length),
+          opts:
+            e.tagName === "SELECT"
+              ? Array.from((e as unknown as HTMLSelectElement).options)
+                  .slice(0, 6)
+                  .map((o) => (o.textContent || "").trim())
+              : undefined,
+        };
+      }),
+    );
+    logger.info(`[sit] wizard FORM DUMP adım=${step}: ${JSON.stringify(dump)}`);
+  } catch {
+    /* best-effort — never fatal */
   }
 }
 
@@ -896,7 +1135,10 @@ export const sitAdapter: SitAdapter = {
     const passportIssue = formatSitDate(profile.passportIssueDate);
     const passportExpiry = formatSitDate(profile.passportExpiryDate);
     const isFemale = /^f|kad|woman|kız|kiz/i.test(profile.gender || "");
-    const genderLabel = isFemale ? /female|kad/i : /male|erkek/i;
+    // Anchored so the male matcher does NOT substring-match "Female" (…male…).
+    const genderLabel = isFemale
+      ? /^\s*(female|kad[ıi]n?)\s*$/i
+      : /^\s*(male|erkek)\s*$/i;
 
     // Track which files actually landed so the completeness gate below can refuse
     // to save a partial record. Each file is attached once, even across re-fills.
@@ -947,19 +1189,39 @@ export const sitAdapter: SitAdapter = {
         else if (!everSet.has(name)) stepLog.push(`${name}=BULUNAMADI`);
       };
 
+      // FORM DUMP (diagnostics): on the first step, log the real control
+      // structure so exact selectors / date input type / dropdown options are
+      // visible in the worker log for confirming the field mapping.
+      if (step === 0) await dumpWizardForm(page, step + 1);
+
       // Personal
       await fillField(page, SIT_STUDENT_FIELDS.firstName, profile.firstName);
       await fillField(page, SIT_STUDENT_FIELDS.lastName, profile.lastName);
-      if (dob) mark("dob", await fillField(page, SIT_STUDENT_FIELDS.dateOfBirth, dob));
+      if (dob) {
+        mark(
+          "dob",
+          await setDateField(page, SIT_STUDENT_FIELDS.dateOfBirth, profile.dateOfBirth),
+        );
+      }
       mark(
         "gender",
-        await selectCombo(page, SIT_STUDENT_FIELDS.gender, genderLabel).catch(
-          () => false,
+        await selectField(
+          page,
+          SIT_STUDENT_FIELDS.gender,
+          genderLabel,
+          isFemale ? "female" : "male",
         ),
       );
 
       // Contact
-      mark("email", await fillField(page, SIT_STUDENT_FIELDS.email, profile.email));
+      mark(
+        "email",
+        await fillField(page, SIT_STUDENT_FIELDS.email, profile.email, [
+          "input[type=email]",
+          "input[name*=email i]",
+          "input[id*=email i]",
+        ]),
+      );
       await fillField(page, SIT_STUDENT_FIELDS.phone, profile.phone);
       await fillField(page, SIT_STUDENT_FIELDS.address, profile.address);
 
@@ -969,17 +1231,23 @@ export const sitAdapter: SitAdapter = {
 
       // Identity / passport
       if (profile.nationality) {
-        const okCombo = await selectCombo(
+        const natOptionRe = new RegExp(
+          escapeRe(profile.nationality.slice(0, 12)),
+          "i",
+        );
+        const okSelect = await selectField(
           page,
           SIT_STUDENT_FIELDS.nationality,
-          new RegExp(fold(profile.nationality).slice(0, 12), "i"),
-        ).catch(() => false);
-        const okText = await fillField(
-          page,
-          SIT_STUDENT_FIELDS.nationality,
+          natOptionRe,
           profile.nationality,
         );
-        mark("nationality", okCombo || okText);
+        const okText = okSelect
+          ? true
+          : await fillField(page, SIT_STUDENT_FIELDS.nationality, profile.nationality, [
+              "input[name*=nation i]",
+              "input[id*=nation i]",
+            ]);
+        mark("nationality", okSelect || okText);
       }
       mark(
         "passportNo",
@@ -987,21 +1255,26 @@ export const sitAdapter: SitAdapter = {
           page,
           SIT_STUDENT_FIELDS.passportNumber,
           profile.passportNumber,
+          ["input[name*=passport i]", "input[id*=passport i]"],
         ),
       );
       if (passportIssue) {
         mark(
           "issueDate",
-          await fillField(page, SIT_STUDENT_FIELDS.passportIssueDate, passportIssue),
+          await setDateField(
+            page,
+            SIT_STUDENT_FIELDS.passportIssueDate,
+            profile.passportIssueDate,
+          ),
         );
       }
       if (passportExpiry) {
         mark(
           "expiryDate",
-          await fillField(
+          await setDateField(
             page,
             SIT_STUDENT_FIELDS.passportExpiryDate,
-            passportExpiry,
+            profile.passportExpiryDate,
           ),
         );
       }
@@ -1088,6 +1361,9 @@ export const sitAdapter: SitAdapter = {
         // Zoho validation recovery: a banner means the step did not advance.
         if (SIT_ERRORS.validation.test(await bodyText(page))) {
           validationRetries++;
+          // Dump the stuck step's real control structure once (first failure) so
+          // the failing field's actual selector is visible even if it isn't step 1.
+          if (validationRetries === 1) await dumpWizardForm(page, step + 1);
           const inline = await readInlineErrors(page);
           const curHeading = (await readStepHeading(page)) || heading;
           logger.warn(
