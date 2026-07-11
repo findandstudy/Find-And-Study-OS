@@ -16,12 +16,31 @@ const targetSchema = z
   })
   .transform(arr => arr.join(","));
 
+// The frontend stores the uploaded logo as a ROOT-RELATIVE path
+// (`/api/storage/objects/...`, or `${BASE}/api/...` when the app is mounted
+// under a base path) — same as the working branding LogoUploader. A strict
+// `z.string().url()` rejects relative paths and produced the HTTP 400
+// "Validation failed" on save. Accept either an absolute http(s) URL (legacy
+// rows) or a root-relative path.
+const logoUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(
+    // Root-relative path (`/...`) but NOT protocol-relative (`//host` would
+    // resolve to an external origin), or an absolute http(s) URL.
+    v => (v.startsWith("/") && !v.startsWith("//")) || /^https?:\/\//i.test(v),
+    { message: "logoUrl must be an absolute http(s) URL or a root-relative path" },
+  )
+  .optional()
+  .nullable();
+
 const createQuickLinkBodySchema = z.object({
   title: z.string().trim().min(1),
   url: z.string().trim().min(1),
   target: targetSchema,
   icon: z.string().trim().optional().nullable(),
-  logoUrl: z.string().url().optional().nullable(),
+  logoUrl: logoUrlSchema,
   color: z.string().trim().optional().nullable(),
   sortOrder: z.number().int().optional().default(0),
 });
@@ -31,7 +50,7 @@ const patchQuickLinkBodySchema = z.object({
   url: z.string().trim().min(1).optional(),
   target: targetSchema.optional(),
   icon: z.string().trim().optional().nullable(),
-  logoUrl: z.string().url().optional().nullable(),
+  logoUrl: logoUrlSchema,
   color: z.string().trim().optional().nullable(),
   sortOrder: z.number().int().optional(),
   isActive: z.boolean().optional(),
