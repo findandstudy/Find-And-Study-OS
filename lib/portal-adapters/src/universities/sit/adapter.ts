@@ -1671,8 +1671,36 @@ export const sitAdapter: SitAdapter = {
           "input[id*=email i]",
         ]),
       );
-      await fillField(page, SIT_STUDENT_FIELDS.phone, profile.phone);
+      // Phone/mobile — fill ONCE. The phone label regex also matches a Family
+      // step "Father's / Mother's Mobile", so re-running it on later steps would
+      // leak the STUDENT's phone into a parent's mobile field. Fill only until it
+      // first lands, then leave the parent-mobile fields (no CRM data) untouched.
+      if (profile.phone && !everSet.has("phone")) {
+        if (await fillField(page, SIT_STUDENT_FIELDS.phone, profile.phone)) {
+          everSet.add("phone");
+        }
+      }
       await fillField(page, SIT_STUDENT_FIELDS.address, profile.address);
+      // Country (Contact & Location). The CRM has no residence-country field, so
+      // default to the applicant's nationality country (EN). Best-effort: only
+      // fills when a Country control is present on the current step. Mirrors the
+      // nationality select→text fallback.
+      if (profile.nationality) {
+        const natEnCountry = toEnglishCountryName(profile.nationality);
+        const countryOptionRe = new RegExp(
+          `^\\s*(${escapeRe(natEnCountry)}|${escapeRe(profile.nationality)})`,
+          "i",
+        );
+        const okCountrySelect = await selectField(
+          page,
+          SIT_STUDENT_FIELDS.country,
+          countryOptionRe,
+          natEnCountry,
+        );
+        if (!okCountrySelect) {
+          await fillField(page, SIT_STUDENT_FIELDS.country, natEnCountry);
+        }
+      }
 
       // Family
       await fillField(page, SIT_STUDENT_FIELDS.fatherName, profile.fatherName);

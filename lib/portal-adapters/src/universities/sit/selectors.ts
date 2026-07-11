@@ -74,6 +74,9 @@ export const SIT_STUDENT_FIELDS = {
   fatherName:     /father'?s?\s*name|baba ad/i,
   motherName:     /mother'?s?\s*name|anne ad/i,
   address:        /address|adres/i,
+  // Contact & Location "Country" (country of residence). Anchored so it never
+  // matches "Nationality" and excludes a phone "Country Code" control.
+  country:        /^\s*country\b(?!\s*code)|ikamet.*ülke|^\s*ülke\b/i,
   schoolName:     /school name|high school|lise|okul ad/i,
   gpa:            /\bgpa\b|grade point|not ortalama|diploma (notu|grade)/i,
   graduationYear: /graduation (year|date)|mezuniyet (yıl|tarih)/i,
