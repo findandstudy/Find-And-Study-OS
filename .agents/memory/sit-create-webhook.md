@@ -38,6 +38,18 @@ JSON to their dedicated webhook → `{status:true,id}`; the Zoho id is backend-a
   can retrieve them; localhost/relative → not fetchable. Need ≥1 Passport + ≥1 Transcript.
 - Body carries `first_name`/`last_name`/`email` — NEVER log the body; log only the
   masked response (`rawForLog`) + HTTP status.
+- **No language field in the student payload.** `SitStudentWebhookPayload`
+  (graphql.ts) has NO `language_score`/language column, so adding `languageScore`
+  to the profile builder does NOT reach SIT — passport dates DO (payload maps
+  `passport_issue_date`/`passport_expiry_date`). Don't invent a webhook language
+  field without the confirmed n8n contract (unknown key could be ignored or reject
+  the create). A pre-send one-line summary log (`[sit] CREATE payload → …`) sits
+  right before `createStudentViaWebhook`; it logs `profile.languageScore` for
+  diagnostics only, and passport number as presence (var/YOK), never the raw value.
+- **#67 documentless guard:** the ONLY hard block is zero-asset
+  (`!photoUrl && documents.length===0` → skip). Missing Passport/Transcript are
+  WARN-only by deliberate design (doc types are often mislabeled); do NOT convert
+  these warnings into blocks without evidence — it regresses working submissions.
 
 # SIT createApplication is a webhook replay, not UI automation
 

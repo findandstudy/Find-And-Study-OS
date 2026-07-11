@@ -724,6 +724,18 @@ export const sitAdapter: SitAdapter = {
       documents: JSON.stringify(sitDocuments),
     };
 
+    // Gönderim öncesi TEK-satır özet: create'ten önce foto/belge/pasaport/bilgi
+    // durumunu tek bakışta gör (canlı create doğrulaması — dry program adımında
+    // durduğu için bu log yalnız canlı gönderimde çıkar). NOT: SIT webhook
+    // payload'ında dil skoru alanı YOK; profile.languageScore yalnız teşhis için.
+    logger.info(
+      `[sit] CREATE payload → documents=${sitDocuments.length} ` +
+      `(passport=${hasPassport ? "var" : "YOK"}, transcript=${hasTranscript ? "var" : "YOK"}) ` +
+      `photo=${photoUrl ? "var" : "YOK"} ` +
+      `passportNo=${payload.passport_number ? "var" : "YOK"} ` +
+      `issue=${payload.passport_issue_date || "-"} expiry=${payload.passport_expiry_date || "-"} ` +
+      `lang=${profile.languageScore ?? "-"}`,
+    );
     logger.info("[sit] öğrenci webhook create başlatılıyor");
     const result = await createStudentViaWebhook(page, payload);
     if (!result) {
