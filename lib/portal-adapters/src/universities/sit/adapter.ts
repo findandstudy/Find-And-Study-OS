@@ -302,6 +302,7 @@ async function uploadViaChooser(
 async function openStudentDetail(
   page: Page,
   by: { email?: string; passportNumber?: string; studentId?: string },
+  reLogin?: () => Promise<void>,
 ): Promise<boolean> {
   const isOnDetailPage = (): boolean =>
     SIT_NAV.studentDetailUrl.test(page.url());
@@ -404,14 +405,27 @@ async function openStudentDetail(
       );
     }
 
-    // A mid-run redirect to /auth/login means the SIT session cookie expired —
-    // surface it distinctly so it isn't mistaken for an indexing delay. The
-    // caller established the session; we do not re-login here (would risk using
-    // stale credentials) — the retry re-navigates in case it was transient.
+    // A mid-run redirect to /auth/login means the SIT session cookie expired.
+    // Surface it distinctly (so it isn't mistaken for an indexing delay) and
+    // re-establish the session via the sanctioned helper before the next attempt.
+    // We do NOT re-login inline with raw creds — reLogin() delegates to
+    // ensureLoggedIn, which is token-first, uses the runner-injected portalCreds
+    // override, and honors the captcha cooldown (no login-form hammering).
     if (SIT_LOGIN.loginUrlMarker.test(page.url())) {
       logger.warn(
-        `[sit] wizard upload: detay açma sırasında oturum /auth/login'e düştü (deneme ${attempt}/${totalAttempts})`,
+        `[sit] wizard upload: detay açma sırasında oturum /auth/login'e düştü (deneme ${attempt}/${totalAttempts}) — oturum yenileniyor`,
       );
+      if (reLogin) {
+        try {
+          await reLogin();
+        } catch (err) {
+          logger.warn(
+            `[sit] wizard upload: oturum yenileme başarısız (deneme ${attempt}/${totalAttempts}) — ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      }
     }
 
     if (attempt < totalAttempts) {
@@ -464,6 +478,7 @@ async function uploadStudentDocuments(
   page: Page,
   by: { email?: string; passportNumber?: string; studentId?: string },
   files: SubmitFiles,
+  reLogin?: () => Promise<void>,
 ): Promise<void> {
   const attachments = [
     files.passport ? { label: "passport", path: files.passport } : null,
@@ -476,7 +491,7 @@ async function uploadStudentDocuments(
     return;
   }
 
-  const opened = await openStudentDetail(page, by);
+  const opened = await openStudentDetail(page, by, reLogin);
   if (!opened) {
     logger.warn(
       "[sit] wizard upload: öğrenci detay sayfası açılamadı — belge/foto YÜKLENEMEDİ " +
@@ -1500,6 +1515,7 @@ export const sitAdapter: SitAdapter = {
             studentId: student.studentId,
           },
           files,
+          () => this.ensureLoggedIn(session),
         );
       } catch (err) {
         logger.warn(
