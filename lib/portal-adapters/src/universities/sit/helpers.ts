@@ -100,6 +100,95 @@ export function formatSitDate(iso: string | undefined | null): string {
 }
 
 // ---------------------------------------------------------------------------
+// Turkish → English nationality/country name.
+//
+// The CRM stores nationality in Turkish ("Özbekistan"), but the SIT wizard's
+// Nationality <select> carries ONLY English option text ("Uzbekistan", …).
+// Matching the Turkish name against the English options fails and the required
+// field stays unset, so the step is rejected. Translate to English right before
+// matching; the raw name is kept as a same-call fallback candidate in case an
+// option ever reverts to Turkish.
+// ---------------------------------------------------------------------------
+function foldTr(s: string): string {
+  return s
+    .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
+    .replace(/Ş/g, "s").replace(/ş/g, "s")
+    .replace(/Ğ/g, "g").replace(/ğ/g, "g")
+    .replace(/Ü/g, "u").replace(/ü/g, "u")
+    .replace(/Ö/g, "o").replace(/ö/g, "o")
+    .replace(/Ç/g, "c").replace(/ç/g, "c")
+    .toLowerCase()
+    .trim();
+}
+
+const TR_TO_EN_COUNTRY: Readonly<Record<string, string>> = {
+  turkiye: "Turkey",
+  afganistan: "Afghanistan",
+  kazakistan: "Kazakhstan",
+  ozbekistan: "Uzbekistan",
+  turkmenistan: "Turkmenistan",
+  azerbaycan: "Azerbaijan",
+  nijerya: "Nigeria",
+  misir: "Egypt",
+  suriye: "Syria",
+  irak: "Iraq",
+  iran: "Iran",
+  urdun: "Jordan",
+  filistin: "Palestine",
+  fas: "Morocco",
+  cezayir: "Algeria",
+  tunus: "Tunisia",
+  libya: "Libya",
+  sudan: "Sudan",
+  somali: "Somalia",
+  etiyopya: "Ethiopia",
+  kenya: "Kenya",
+  gana: "Ghana",
+  kamerun: "Cameroon",
+  kirgizistan: "Kyrgyzstan",
+  tacikistan: "Tajikistan",
+  hindistan: "India",
+  bangladesh: "Bangladesh",
+  endonezya: "Indonesia",
+  malezya: "Malaysia",
+  filipinler: "Philippines",
+  pakistan: "Pakistan",
+  yemen: "Yemen",
+  rusya: "Russia",
+  ukrayna: "Ukraine",
+  almanya: "Germany",
+  fransa: "France",
+  ingiltere: "United Kingdom",
+  cin: "China",
+  "guney afrika": "South Africa",
+  mogolistan: "Mongolia",
+  nepal: "Nepal",
+  arnavutluk: "Albania",
+  kosova: "Kosovo",
+  bahreyn: "Bahrain",
+  "birlesik krallik": "United Kingdom",
+  "amerika birlesik devletleri": "United States",
+  "birlesik arap emirlikleri": "United Arab Emirates",
+  kuveyt: "Kuwait",
+  lubnan: "Lebanon",
+  umman: "Oman",
+  katar: "Qatar",
+  "suudi arabistan": "Saudi Arabia",
+  tanzanya: "Tanzania",
+};
+
+/**
+ * Translate a (possibly Turkish) nationality/country name to English. Returns
+ * the original name unchanged when no mapping exists, so a name that is already
+ * English (or unmapped) still falls through to the caller's own matching.
+ */
+export function toEnglishCountryName(name: string | undefined | null): string {
+  const raw = String(name ?? "").trim();
+  if (!raw) return "";
+  return TR_TO_EN_COUNTRY[foldTr(raw)] ?? raw;
+}
+
+// ---------------------------------------------------------------------------
 // Allowlist matching — exact token-set equality, IDOR-safe.
 //
 // An allowlist entry matches a query iff their DISTINCTIVE token sets are

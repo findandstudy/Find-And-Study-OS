@@ -55,6 +55,7 @@ import {
   isAllowedUniversity,
   isLanguageCompatible,
   distinctiveTokens,
+  toEnglishCountryName,
 } from "./helpers.js";
 import {
   findStudent,
@@ -346,6 +347,22 @@ async function fillField(
 }
 
 /**
+ * The SIT shadcn form-item wrapper for a field: a
+ * `div[data-slot="form-item"]` containing a `label[data-slot="form-label"]`
+ * whose text matches the question. Controls (select/date/input) live inside it,
+ * so scoping by the form-item works even when the control carries no id and
+ * label[for=] association is unavailable.
+ */
+function formItemByLabel(page: Page, labelRe: RegExp) {
+  return page
+    .locator('div[data-slot="form-item"]')
+    .filter({
+      has: page.locator('label[data-slot="form-label"]', { hasText: labelRe }),
+    })
+    .first();
+}
+
+/**
  * Select a value in a dropdown matching `labelRe`. Handles (in order) a native
  * <select> (selectOption by option text matching `optionRe`), SIT's custom
  * role=button combobox (open + click matching option), and a searchable
@@ -358,6 +375,38 @@ async function selectField(
   optionRe: RegExp,
   query?: string,
 ): Promise<boolean> {
+  // 0. Form-item-scoped native <select>. SIT's shadcn <select>s (Gender,
+  //    Nationality) carry NO id, so label[for=id]/wrapping-label association
+  //    fails and resolveControl can't find them — scope by the labelled
+  //    div[data-slot="form-item"] instead (same pattern the Radix toggles use).
+  const scopedSel = formItemByLabel(page, labelRe).locator("select").first();
+  if (await scopedSel.count().catch(() => 0)) {
+    try {
+      const value = await scopedSel.evaluate((el, reSrc) => {
+        const s = el as unknown as HTMLSelectElement;
+        const re = new RegExp(reSrc, "i");
+        const opt = Array.from(s.options).find((o) => {
+          if (o.disabled) return false;
+          const txt = (o.textContent || "").trim();
+          if (!o.value && !txt) return false; // skip empty placeholder
+          return re.test(txt) || re.test(o.value);
+        });
+        return opt ? opt.value : null;
+      }, optionRe.source);
+      if (value != null) {
+        await scopedSel.selectOption(value).catch(() => {});
+        const ok = await scopedSel
+          .evaluate(
+            (el, v) => (el as unknown as HTMLSelectElement).value === v,
+            value,
+          )
+          .catch(() => false);
+        if (ok) return true;
+      }
+    } catch {
+      /* best-effort — fall through to the other strategies */
+    }
+  }
   // 1. Native <select>
   const sel = await resolveControl(page, labelRe, "select");
   if (sel) {
@@ -425,17 +474,26 @@ async function selectField(
  * Verifies the value landed. The FORM DUMP log reveals the real input type so
  * the format can be confirmed. Best-effort; false on miss.
  */
-async function setDateField(
+/**
+ * Type an ISO date into a resolved <input> handle. Handles native type=date
+ * (ISO) and text/masked inputs (DD/MM/YYYY then DD.MM.YYYY). Returns true only
+ * when the value reads back non-empty.
+ */
+type DateHandle = {
+  evaluate: (fn: (el: HTMLInputElement) => string) => Promise<string>;
+  fill: (value: string) => Promise<void>;
+  click: () => Promise<void>;
+  type: (text: string, options?: { delay?: number }) => Promise<void>;
+  press: (key: string) => Promise<void>;
+};
+
+async function fillDateInput(
   page: Page,
-  labelRe: RegExp,
-  iso: string | undefined,
+  handle: Locator | ElementHandle<HTMLElement>,
+  isoForm: string,
+  dmy: string,
 ): Promise<boolean> {
-  const m = String(iso ?? "").match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return false;
-  const isoForm = `${m[1]}-${m[2]}-${m[3]}`;
-  const dmy = `${m[3]}/${m[2]}/${m[1]}`;
-  const h = await resolveControl(page, labelRe);
-  if (!h) return false;
+  const h = handle as unknown as DateHandle;
   try {
     const type = (
       await h.evaluate((el) => (el as HTMLInputElement).type || "")
@@ -458,6 +516,74 @@ async function setDateField(
     }
   } catch {
     /* best-effort */
+  }
+  return false;
+}
+
+async function setDateField(
+  page: Page,
+  labelRe: RegExp,
+  iso: string | undefined,
+): Promise<boolean> {
+  const m = String(iso ?? "").match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return false;
+  const isoForm = `${m[1]}-${m[2]}-${m[3]}`;
+  const dmy = `${m[3]}/${m[2]}/${m[1]}`;
+
+  // 1. Label-associated <input> (works when the date field is a plain input).
+  const h = await resolveControl(page, labelRe);
+  if (h && (await fillDateInput(page, h, isoForm, dmy))) return true;
+
+  // 2. Form-item-scoped <input>. SIT's date fields carry no id (like the
+  //    Gender/Nationality selects), so label[for=] association fails; look for
+  //    an input directly inside the labelled form-item. Also covers a masked
+  //    input revealed only after clicking the field's trigger button.
+  const item = formItemByLabel(page, labelRe);
+  if (await item.count().catch(() => 0)) {
+    const scopedInput = item.locator("input").first();
+    if (
+      (await scopedInput.count().catch(() => 0)) &&
+      (await fillDateInput(page, scopedInput, isoForm, dmy))
+    ) {
+      return true;
+    }
+    // The field may be a button/trigger that reveals a text input or popover.
+    const trigger = item
+      .locator('button, [role="button"], [role="combobox"]')
+      .first();
+    if (await trigger.count().catch(() => 0)) {
+      await trigger.click({ timeout: 4000 }).catch(() => {});
+      await sleep(page, 600);
+      const revealed = item.locator("input").first();
+      if (
+        (await revealed.count().catch(() => 0)) &&
+        (await fillDateInput(page, revealed, isoForm, dmy))
+      ) {
+        return true;
+      }
+      const popoverInput = page
+        .locator('[role="dialog"] input, [data-radix-popper-content-wrapper] input')
+        .first();
+      if (
+        (await popoverInput.count().catch(() => 0)) &&
+        (await fillDateInput(page, popoverInput, isoForm, dmy))
+      ) {
+        return true;
+      }
+      await page.keyboard.press("Escape").catch(() => {});
+    }
+
+    // 3. DISCOVERY — nothing filled: dump the form-item DOM so the next live
+    //    run reveals the custom date-picker structure (calendar trigger /
+    //    react-day-picker grid / month-year selects) needed to drive it.
+    try {
+      const html = await item.evaluate((el) =>
+        (el as HTMLElement).outerHTML.slice(0, 900),
+      );
+      logger.info(`[sit] DATEHTML ${labelRe.source}: ${html}`);
+    } catch {
+      /* discovery is best-effort */
+    }
   }
   return false;
 }
@@ -1310,22 +1436,49 @@ export const sitAdapter: SitAdapter = {
 
       // Identity / passport
       if (profile.nationality) {
+        // The CRM stores nationality in Turkish ("Özbekistan"); the wizard's
+        // Nationality <select> carries ONLY English option text ("Uzbekistan").
+        // Match the English name first (anchored at option start so "Samoa"
+        // never matches "American Samoa"), keeping the raw Turkish name as a
+        // fallback candidate in case an option ever reverts to Turkish.
+        const natEn = toEnglishCountryName(profile.nationality);
         const natOptionRe = new RegExp(
-          escapeRe(profile.nationality.slice(0, 12)),
+          `^\\s*(${escapeRe(natEn)}|${escapeRe(profile.nationality)})`,
           "i",
         );
         const okSelect = await selectField(
           page,
           SIT_STUDENT_FIELDS.nationality,
           natOptionRe,
-          profile.nationality,
+          natEn,
         );
         const okText = okSelect
           ? true
-          : await fillField(page, SIT_STUDENT_FIELDS.nationality, profile.nationality, [
+          : await fillField(page, SIT_STUDENT_FIELDS.nationality, natEn, [
               "input[name*=nation i]",
               "input[id*=nation i]",
             ]);
+        if (!okSelect && !okText) {
+          // Log the live option texts so an unmapped nationality is diagnosable
+          // from the run log instead of a silent BULUNAMADI.
+          try {
+            const opts = await formItemByLabel(page, SIT_STUDENT_FIELDS.nationality)
+              .locator("select")
+              .first()
+              .evaluate((el) =>
+                Array.from((el as unknown as HTMLSelectElement).options)
+                  .map((o) => (o.textContent || "").trim())
+                  .filter(Boolean)
+                  .slice(0, 60)
+                  .join(" | "),
+              );
+            logger.info(
+              `[sit] nationality opt eşleşmedi: aranan="${natEn}" | opsiyonlar=${opts}`,
+            );
+          } catch {
+            /* diagnostic only */
+          }
+        }
         mark("nationality", okSelect || okText);
       }
       mark(
