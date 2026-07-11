@@ -4,7 +4,7 @@ import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable,
 import { and, eq, gt, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import { hashToken } from "../lib/signingTokens";
-import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOLDER, toSignatureDataUrl, contractNumber, signedContractFilename } from "../lib/contractRenderer";
+import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOLDER, toSignatureDataUrl, contractNumber, signedContractFilename, documentShell } from "../lib/contractRenderer";
 
 import { ObjectStorageService } from "../lib/objectStorage";
 import { finalizeSign } from "../lib/signContract";
@@ -196,7 +196,13 @@ router.get("/public/sign/:token/preview", signLimiter, async (req, res): Promise
     });
     const rendered = renderTemplate(r.template.bodyHtml, ctx);
     const placeholder = SIG_PLACEHOLDER[r.template.language] || SIG_PLACEHOLDER.en;
-    const html = cleanupSignatureImages(rendered, placeholder);
+    // Wrap the rendered body in the SAME document shell used for the final PDF
+    // (contractPdf.ts also imports documentShell) so the review-step preview is
+    // a full, self-contained HTML document. The signing UI renders it inside a
+    // sandboxed <iframe>, which preserves the template's own <style> blocks and
+    // inline CSS instead of stripping them through the app's prose/DOMPurify
+    // pipeline — making the preview visually faithful to the signed PDF.
+    const html = documentShell(cleanupSignatureImages(rendered, placeholder));
     res.json({ data: { html, templateName: r.template.name } });
   } catch (err) {
     console.error("[public-sign] preview:", err);

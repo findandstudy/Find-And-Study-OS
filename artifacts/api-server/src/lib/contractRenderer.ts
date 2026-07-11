@@ -264,6 +264,62 @@ export function cleanupSignatureImages(html: string, placeholderText: string): s
 }
 
 /**
+ * Wrap author-designed contract markup in a complete, print-ready HTML
+ * document. Keeps the template's own `<style>` blocks, inline CSS, tables,
+ * colors and signature `<img>` placement intact — the templates are explicitly
+ * authored for browser-to-PDF rendering (CSS variables, flexbox,
+ * `print-color-adjust:exact`). The shell only supplies an A4 page box and a
+ * font fallback chain so Turkish/Cyrillic/Arabic glyphs resolve.
+ *
+ * SHARED by BOTH render paths so the on-screen signing preview and the final
+ * headless-Chromium PDF stay visually identical and can never drift:
+ *   - PDF: Playwright `page.pdf()` renders with PRINT media, so the `@page` box
+ *     and margins apply and the `@media screen` block below is ignored — the
+ *     final PDF output is unchanged by that block.
+ *   - Preview: the signing UI drops this same document into a sandboxed
+ *     `<iframe>` (screen media), where `@page` has no effect, so the
+ *     `@media screen` block reproduces the A4 page width + margins to mirror the
+ *     PDF layout.
+ */
+export function documentShell(innerHtml: string): string {
+  return `<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  @page { size: A4; margin: 14mm 10mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', 'DejaVu Sans', 'Noto Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+    color: #0f172a;
+    font-size: 12px;
+    line-height: 1.6;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  img { max-width: 100%; }
+  table { border-collapse: collapse; }
+  /* Screen-only: reproduce the A4 page box + margins for the in-browser
+     signing preview. Playwright page.pdf() emulates PRINT media, so this block
+     is ignored during PDF generation and the final PDF is left unchanged. */
+  @media screen {
+    html { background: #f1f5f9; }
+    body {
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 14mm 10mm;
+      background: #ffffff;
+    }
+  }
+</style>
+</head>
+<body>${innerHtml}</body>
+</html>`;
+}
+
+/**
  * THE single render path for a FINAL, post-signature contract. Every caller
  * that produces the legally-signed PDF — the sign-time delivery worker, the
  * legacy backfill sweep, and the admin force-regenerate — funnels its HTML

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import DOMPurify from "isomorphic-dompurify";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -489,10 +488,24 @@ export default function SignFlow({ token }: { token: string }) {
           </div>
         }
       >
-        <div
-          className="prose prose-sm dark:prose-invert max-w-none border rounded-lg p-6 bg-card max-h-[60vh] overflow-y-auto"
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }}
-        />
+        {/*
+          The preview is a complete HTML document (the server wraps the rendered
+          contract in the SAME document shell used for the final PDF). We render
+          it inside a sandboxed <iframe> via srcDoc so the template's own
+          <style> blocks and inline CSS are preserved and isolated from the
+          app's Tailwind/prose styles — making the preview visually faithful to
+          the signed PDF. sandbox="" blocks scripts/forms/same-origin, so the
+          rich HTML renders safely without being run through DOMPurify (which was
+          stripping the template styling and causing the mismatch).
+        */}
+        <div className="border rounded-lg overflow-hidden bg-white h-[65vh]">
+          <iframe
+            title={t("titleReview")}
+            sandbox=""
+            className="w-full h-full border-0"
+            srcDoc={previewHtml}
+          />
+        </div>
       </Shell>
     );
   }
