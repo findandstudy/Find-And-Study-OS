@@ -322,8 +322,9 @@ async function dismissInactivityModal(page: Page): Promise<void> {
 /**
  * Set a Yes/No field to "No" (apply has no TC / transfer-student data). Handles
  * both a radio group and a custom combobox rendering. Best-effort, non-fatal.
+ * Returns true when a "No" control was actually set (for diagnostic logging).
  */
-async function setToggleNo(page: Page, labelRe: RegExp): Promise<void> {
+async function setToggleNo(page: Page, labelRe: RegExp): Promise<boolean> {
   try {
     // Radio group named by the field label → click the "No" radio inside it.
     const group = page.getByRole("group", { name: labelRe }).first();
@@ -331,17 +332,94 @@ async function setToggleNo(page: Page, labelRe: RegExp): Promise<void> {
       const radio = group.getByRole("radio", { name: SIT_TOGGLES.noOption }).first();
       if (await radio.count()) {
         await radio.check({ timeout: 3000 }).catch(() => {});
-        return;
+        return true;
       }
     }
     // A stand-alone "No" radio labelled directly.
     const labelledNo = page.getByLabel(SIT_TOGGLES.noOption).first();
     if ((await labelledNo.count()) && (await labelledNo.isVisible().catch(() => false))) {
       await labelledNo.check({ timeout: 3000 }).catch(() => {});
-      return;
+      return true;
     }
     // Custom combobox rendering (role=button → role=option list).
-    await selectCombo(page, labelRe, SIT_TOGGLES.noOption).catch(() => {});
+    return await selectCombo(page, labelRe, SIT_TOGGLES.noOption).catch(() => false);
+  } catch {
+    /* best-effort — never fatal */
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Wizard diagnostics (VISIBILITY ONLY — these never change control flow).
+//
+// The Add Student wizard fails a step's Zoho validation silently: the generic
+// "doğrulama hatası" log doesn't say WHICH step/field. These helpers surface the
+// current step title, any inline error text, and a full-page screenshot so the
+// stuck step is diagnosable from the worker log alone. All are best-effort and
+// never throw (a diagnostic failure must not mask the real error).
+// ---------------------------------------------------------------------------
+
+/** Best-effort read of the wizard's current step title. "" when unknown. */
+async function readStepHeading(page: Page): Promise<string> {
+  try {
+    return (await page.evaluate(
+      "(() => {" +
+        "  const sels = ['[aria-current=step]','.step.active','.step-active'," +
+        "    '[class*=step i][class*=active i]','.wizard-step.active'," +
+        "    '.MuiStepLabel-active','h1','h2','h3','legend'];" +
+        "  for (const s of sels) {" +
+        "    const el = document.querySelector(s);" +
+        "    const t = el && el.textContent ? el.textContent.trim().replace(/\\s+/g,' ') : '';" +
+        "    if (t) return t.slice(0, 60);" +
+        "  }" +
+        "  return '';" +
+        "})()",
+    )) as string;
+  } catch {
+    return "";
+  }
+}
+
+/** Best-effort collection of visible inline validation error text(s). */
+async function readInlineErrors(page: Page): Promise<string> {
+  try {
+    return (await page.evaluate(
+      "(() => {" +
+        "  const out = []; const seen = new Set();" +
+        "  const sels = ['.error','[role=alert]','.invalid-feedback','.text-red-500'," +
+        "    '.text-red-600','.text-danger','[class*=error i]','[aria-invalid=true]'];" +
+        "  for (const s of sels) {" +
+        "    for (const el of Array.from(document.querySelectorAll(s))) {" +
+        "      const r = el.getBoundingClientRect ? el.getBoundingClientRect() : {width:1,height:1};" +
+        "      if (!r.width || !r.height) continue;" +
+        "      let t = (el.textContent || '').trim().replace(/\\s+/g,' ');" +
+        "      if (!t && el.getAttribute && el.getAttribute('aria-invalid') === 'true') {" +
+        "        t = (el.getAttribute('name') || el.getAttribute('id') || el.getAttribute('placeholder') || 'alan') + ': gecersiz';" +
+        "      }" +
+        "      if (t && t.length <= 160 && !seen.has(t)) { seen.add(t); out.push(t); }" +
+        "      if (out.length >= 6) return out.join(' | ');" +
+        "    }" +
+        "  }" +
+        "  return out.join(' | ');" +
+        "})()",
+    )) as string;
+  } catch {
+    return "";
+  }
+}
+
+/** Capture a full-page screenshot of the stuck/failed wizard to /tmp. */
+async function captureWizardFail(
+  page: Page,
+  idToken: string,
+  step: string,
+): Promise<void> {
+  try {
+    const safe =
+      (idToken || "na").replace(/[^a-z0-9]+/gi, "").slice(0, 24) || "na";
+    const p = `/tmp/sit-wizard-fail-${safe}-${step}-${Date.now()}.png`;
+    await page.screenshot({ path: p, fullPage: true });
+    logger.warn(`[sit] wizard ekran görüntüsü alındı: ${p}`);
   } catch {
     /* best-effort — never fatal */
   }
@@ -825,19 +903,63 @@ export const sitAdapter: SitAdapter = {
     const uploadedDocs = new Set<string>();
     let photoUploaded = false;
 
+    // --- Diagnostics (visibility only; no behavioral coupling) -------------
+    // Non-PII run nonce so a fail screenshot is traceable to this run without
+    // leaking email/passport into filenames or logs. createStudent has no
+    // submissionId in scope; a random+timestamp token is enough for triage.
+    const idToken = `${Date.now().toString(36)}${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    // Critical fields (those with a value) that never got successfully entered on
+    // ANY step — the most likely validation culprits; logged on failure.
+    const everSet = new Set<string>();
+    const critical: Record<string, boolean> = {
+      email: !!profile.email,
+      gender: !!(profile.gender || "").trim(),
+      dob: !!dob,
+      nationality: !!profile.nationality,
+      passportNo: !!profile.passportNumber,
+      issueDate: !!passportIssue,
+      expiryDate: !!passportExpiry,
+    };
+    let reachedDocuments = false;
+    // Consecutive same-step validation failures → cap in-step retries (item 5:
+    // 1-2 retries, then a clear FAIL + screenshot instead of 7× generic noise).
+    let validationRetries = 0;
+
     // --- Walk up to 6 wizard steps, filling whatever is on screen ---
     for (let step = 0; step < 6; step++) {
       await sleep(page, 1500);
       await dismissInactivityModal(page);
 
+      const heading = await readStepHeading(page);
+      logger.info(
+        `[sit] wizard adım=${step + 1}${heading ? ` (${heading})` : ""} — dolduruluyor`,
+      );
+      const stepLog: string[] = [];
+      const mark = (name: string, ok: boolean): void => {
+        if (ok) everSet.add(name);
+        if (!critical[name]) return;
+        // Fields are attempted on every iteration, so a field simply not present
+        // on THIS step is not a failure — only report BULUNAMADI when it has
+        // never been set on any step so far (avoids misleading repeat noise).
+        if (ok) stepLog.push(`${name}=ok`);
+        else if (!everSet.has(name)) stepLog.push(`${name}=BULUNAMADI`);
+      };
+
       // Personal
       await fillField(page, SIT_STUDENT_FIELDS.firstName, profile.firstName);
       await fillField(page, SIT_STUDENT_FIELDS.lastName, profile.lastName);
-      if (dob) await fillField(page, SIT_STUDENT_FIELDS.dateOfBirth, dob);
-      await selectCombo(page, SIT_STUDENT_FIELDS.gender, genderLabel).catch(() => {});
+      if (dob) mark("dob", await fillField(page, SIT_STUDENT_FIELDS.dateOfBirth, dob));
+      mark(
+        "gender",
+        await selectCombo(page, SIT_STUDENT_FIELDS.gender, genderLabel).catch(
+          () => false,
+        ),
+      );
 
       // Contact
-      await fillField(page, SIT_STUDENT_FIELDS.email, profile.email);
+      mark("email", await fillField(page, SIT_STUDENT_FIELDS.email, profile.email));
       await fillField(page, SIT_STUDENT_FIELDS.phone, profile.phone);
       await fillField(page, SIT_STUDENT_FIELDS.address, profile.address);
 
@@ -847,24 +969,48 @@ export const sitAdapter: SitAdapter = {
 
       // Identity / passport
       if (profile.nationality) {
-        await selectCombo(
+        const okCombo = await selectCombo(
           page,
           SIT_STUDENT_FIELDS.nationality,
           new RegExp(fold(profile.nationality).slice(0, 12), "i"),
-        ).catch(() => {});
+        ).catch(() => false);
+        const okText = await fillField(
+          page,
+          SIT_STUDENT_FIELDS.nationality,
+          profile.nationality,
+        );
+        mark("nationality", okCombo || okText);
       }
-      await fillField(page, SIT_STUDENT_FIELDS.nationality, profile.nationality);
-      await fillField(page, SIT_STUDENT_FIELDS.passportNumber, profile.passportNumber);
+      mark(
+        "passportNo",
+        await fillField(
+          page,
+          SIT_STUDENT_FIELDS.passportNumber,
+          profile.passportNumber,
+        ),
+      );
       if (passportIssue) {
-        await fillField(page, SIT_STUDENT_FIELDS.passportIssueDate, passportIssue);
+        mark(
+          "issueDate",
+          await fillField(page, SIT_STUDENT_FIELDS.passportIssueDate, passportIssue),
+        );
       }
       if (passportExpiry) {
-        await fillField(page, SIT_STUDENT_FIELDS.passportExpiryDate, passportExpiry);
+        mark(
+          "expiryDate",
+          await fillField(
+            page,
+            SIT_STUDENT_FIELDS.passportExpiryDate,
+            passportExpiry,
+          ),
+        );
       }
 
       // "Have TC?" / "Transfer student?" — apply has neither → default to "No".
-      await setToggleNo(page, SIT_TOGGLES.haveTc);
-      await setToggleNo(page, SIT_TOGGLES.transferStudent);
+      const okTc = await setToggleNo(page, SIT_TOGGLES.haveTc);
+      const okTransfer = await setToggleNo(page, SIT_TOGGLES.transferStudent);
+      if (okTc) stepLog.push("haveTc=No");
+      if (okTransfer) stepLog.push("transferStudent=No");
 
       // Academics
       await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName);
@@ -879,10 +1025,37 @@ export const sitAdapter: SitAdapter = {
         );
       }
 
-      // Documents — attach each local file once, into its own slot.
+      if (stepLog.length) {
+        logger.info(`[sit] wizard adım=${step + 1} alanlar: ${stepLog.join(", ")}`);
+      }
+
+      // Documents — attach each local file once, into its own slot. Track whether
+      // this step actually EXPOSED an upload affordance so a failure before the
+      // documents step is distinguishable from a failed upload.
+      const wantUploads = !!(
+        files.photo || files.passport || files.transcript || files.diploma
+      );
+      if (wantUploads && !reachedDocuments) {
+        const trigCount =
+          (await page
+            .getByRole("button", { name: SIT_UPLOAD.photoTrigger })
+            .first()
+            .count()
+            .catch(() => 0)) +
+          (await page
+            .getByRole("button", { name: SIT_UPLOAD.attachmentTrigger })
+            .first()
+            .count()
+            .catch(() => 0));
+        if (trigCount > 0) {
+          reachedDocuments = true;
+          logger.info(`[sit] wizard adım=${step + 1}: belge yükleme adımına ulaşıldı`);
+        }
+      }
       if (files.photo && !photoUploaded) {
         if (await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo)) {
           photoUploaded = true;
+          logger.info(`[sit] wizard adım=${step + 1} yükleme: foto=ok`);
         }
       }
       const docJobs: Array<[string, RegExp, string]> = [];
@@ -897,7 +1070,10 @@ export const sitAdapter: SitAdapter = {
       }
       for (const [key, trig, docPath] of docJobs) {
         if (uploadedDocs.has(key)) continue;
-        if (await uploadDocByType(page, trig, docPath)) uploadedDocs.add(key);
+        if (await uploadDocByType(page, trig, docPath)) {
+          uploadedDocs.add(key);
+          logger.info(`[sit] wizard adım=${step + 1} yükleme: ${key}=ok`);
+        }
       }
 
       // Advance — try Next first; on the last step the Save button appears.
@@ -909,11 +1085,35 @@ export const sitAdapter: SitAdapter = {
         await dismissInactivityModal(page);
         await clickButton(page, SIT_BUTTONS.next);
         await sleep(page, 1800);
-        // Zoho validation recovery: a banner means the step did not advance —
-        // the next loop iteration re-fills it.
+        // Zoho validation recovery: a banner means the step did not advance.
         if (SIT_ERRORS.validation.test(await bodyText(page))) {
-          logger.warn("[sit] doğrulama hatası — adım yeniden denenecek");
+          validationRetries++;
+          const inline = await readInlineErrors(page);
+          const curHeading = (await readStepHeading(page)) || heading;
+          logger.warn(
+            `[sit] wizard doğrulama hatası — adım=${step + 1}` +
+              `${curHeading ? ` (${curHeading})` : ""} mesaj: ` +
+              `"${inline || "(görünür inline hata bulunamadı)"}"`,
+          );
+          // Cap in-step retries: after 2 consecutive failures on a stuck step,
+          // screenshot + FAIL retryably (same terminal "failed" status as before,
+          // but earlier and with a clear cause) instead of re-looping silently.
+          if (validationRetries >= 2) {
+            await captureWizardFail(page, idToken, `step${step + 1}-validation`);
+            const unset = Object.keys(critical).filter(
+              (k) => critical[k] && !everSet.has(k),
+            );
+            throw new Error(
+              `SIT: wizard adım=${step + 1} doğrulamadan geçemedi` +
+                `${inline ? ` (${inline})` : ""}` +
+                `${unset.length ? ` — ayarlanamayan alanlar: ${unset.join(", ")}` : ""}` +
+                " — tekrar denenecek",
+            );
+          }
+          continue;
         }
+        // Step advanced cleanly → reset the in-step retry counter.
+        validationRetries = 0;
         continue;
       }
       break;
@@ -943,6 +1143,11 @@ export const sitAdapter: SitAdapter = {
     }
     if (files.diploma && !uploadedDocs.has("diploma")) missingUploads.push("diploma");
     if (missingUploads.length > 0) {
+      await captureWizardFail(page, idToken, "documents-missing");
+      logger.warn(
+        `[sit] wizard belge yükleme eksik — belge adımına ulaşıldı=` +
+          `${reachedDocuments ? "evet" : "HAYIR"}, eksik: ${missingUploads.join(", ")}`,
+      );
       throw new Error(
         `SIT: belge/foto wizard'a yüklenemedi (${missingUploads.join(", ")}) — ` +
           "eksik belgeli create engellendi, tekrar denenecek",
@@ -983,6 +1188,21 @@ export const sitAdapter: SitAdapter = {
         continue;
       }
       saved = true;
+    }
+
+    // Save neither succeeded nor hit a duplicate → capture the failed final
+    // state and surface any critical fields that were never entered, so the
+    // stuck field/step is diagnosable before the retry.
+    if (!saved && !duplicateSeen) {
+      await captureWizardFail(page, idToken, "save-failed");
+      const unset = Object.keys(critical).filter(
+        (k) => critical[k] && !everSet.has(k),
+      );
+      if (unset.length) {
+        logger.warn(
+          `[sit] wizard kaydedilemedi — ayarlanamayan alanlar: ${unset.join(", ")}`,
+        );
+      }
     }
 
     // --- Resolve the new student id (identity-verified GraphQL poll first) ---
