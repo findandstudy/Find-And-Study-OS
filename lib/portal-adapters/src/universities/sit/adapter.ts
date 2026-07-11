@@ -521,92 +521,144 @@ async function dismissInactivityModal(page: Page): Promise<void> {
 async function setToggle(
   page: Page,
   headingRe: RegExp,
-  choiceRe: RegExp,
+  value: "Yes" | "No",
 ): Promise<boolean> {
+  const valueRe =
+    value === "No" ? /^\s*(no|hayır|hayir)\s*$/i : /^\s*(yes|evet)\s*$/i;
   try {
-    // 1. ARIA radiogroup / group named by the question heading.
-    for (const role of ["radiogroup", "group"] as const) {
-      const grp = page.getByRole(role, { name: headingRe }).first();
-      if (await grp.count().catch(() => 0)) {
-        const radio = grp.getByRole("radio", { name: choiceRe }).first();
-        if (await radio.count().catch(() => 0)) {
-          await radio
-            .check({ timeout: 3000 })
-            .catch(() => radio.click({ timeout: 3000 }).catch(() => {}));
-          if (await radio.isChecked().catch(() => false)) return true;
-        }
-        // Label/text fallback inside the group (native radio behind a label).
-        const lbl = grp.getByText(choiceRe).first();
-        if (await lbl.count().catch(() => 0)) {
-          await lbl.click({ timeout: 3000 }).catch(() => {});
-          // VERIFY — a click that didn't check the radio must NOT report success
-          // (everSet would then permanently skip this required toggle).
-          if (await isToggleSet(page, headingRe, choiceRe)) return true;
-        }
-      }
-    }
-
-    // 2. Custom combobox rendering (role=button → role=option list). selectCombo
-    //    verifies the chosen option itself, so trust its result.
-    if (await selectCombo(page, headingRe, choiceRe).catch(() => false)) return true;
-
-    // 3. DOM proximity: find the smallest VISIBLE element whose OWN text is the
-    //    heading, walk up a few ancestors, and click the radio whose label
-    //    matches choice — then VERIFY the checked state before reporting success.
-    await page
-      .evaluate(
-        ({ hSrc, cSrc }) => {
-          const hRe = new RegExp(hSrc, "i");
-          const cRe = new RegExp(cSrc, "i");
-          const visible = (el: HTMLElement): boolean =>
-            !!(el.offsetParent !== null || el.getClientRects().length);
-          const nodes = Array.from(
-            document.querySelectorAll("body *"),
-          ) as HTMLElement[];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      // Locate the clickable Yes/No option for this heading's toggle group. The
+      // Step-1 radios carry NO attributes (name/id/aria all empty) and are
+      // controlled React inputs, so name/label/role targeting fails and clicking
+      // the raw <input> only sets DOM `checked` without firing React's onChange.
+      // We therefore resolve the VISIBLE label element and click it with a real
+      // Playwright ElementHandle click (trusted events the component handles).
+      const handle = await page.evaluateHandle(
+        (arg: { hSrc: string; vSrc: string }) => {
+          const hRe = new RegExp(arg.hSrc, "i");
+          const vRe = new RegExp(arg.vSrc, "i");
+          const vis = (el: Element): boolean =>
+            !!((el as HTMLElement).offsetParent !== null ||
+              el.getClientRects().length);
+          // 1) heading leaf = smallest visible element whose OWN text = heading.
           let host: HTMLElement | null = null;
-          for (const el of nodes) {
-            if (!visible(el)) continue;
+          for (const el of Array.from(document.querySelectorAll("body *"))) {
+            if (!vis(el)) continue;
             const own = Array.from(el.childNodes)
               .filter((n) => n.nodeType === 3)
               .map((n) => n.textContent || "")
               .join(" ")
               .trim();
             if (own && hRe.test(own)) {
-              host = el;
+              host = el as HTMLElement;
               break;
             }
           }
-          if (!host) return false;
-          let scope: HTMLElement = host;
-          for (let i = 0; i < 4 && scope; i++) {
-            const radios = Array.from(
-              scope.querySelectorAll('input[type="radio"], [role="radio"]'),
-            ) as HTMLElement[];
-            for (const r of radios) {
-              const id = r.id;
-              const labEl = id
-                ? document.querySelector(`label[for="${CSS.escape(id)}"]`)
-                : null;
-              const lab = (
-                labEl?.textContent ||
-                r.closest("label")?.textContent ||
-                r.getAttribute("aria-label") ||
-                ""
-              ).trim();
-              if (cRe.test(lab)) {
-                r.click();
-                return true;
-              }
-            }
-            if (!scope.parentElement) break;
-            scope = scope.parentElement;
+          if (!host) return null;
+          // 2) nearest ancestor that contains a radio = this group's container.
+          let container: HTMLElement | null = host;
+          while (
+            container &&
+            !container.querySelector('input[type="radio"], [role="radio"]')
+          ) {
+            container = container.parentElement;
           }
-          return false;
+          if (!container) return null;
+          // 3) clickable option = the visible element whose text is exactly the
+          //    value AND is geometrically NEAREST the heading. Columns sit side
+          //    by side and may share one wide container, so document order alone
+          //    could grab a neighbour's "No" — proximity binds click to THIS
+          //    question's control.
+          const hr = host.getBoundingClientRect();
+          const hx = hr.left + hr.width / 2;
+          const hy = hr.top + hr.height / 2;
+          const dist = (el: Element): number => {
+            const r = el.getBoundingClientRect();
+            return Math.hypot(
+              r.left + r.width / 2 - hx,
+              r.top + r.height / 2 - hy,
+            );
+          };
+          let best: Element | null = null;
+          let bestD = Infinity;
+          for (const c of Array.from(
+            container.querySelectorAll("label, [role=radio], button, span, div"),
+          )) {
+            if (!vis(c)) continue;
+            if (!vRe.test((c.textContent || "").trim())) continue;
+            const d = dist(c);
+            if (d < bestD) {
+              bestD = d;
+              best = c;
+            }
+          }
+          if (best) return best;
+          // fallback: the value-matching radio nearest the heading (via label).
+          for (const r of Array.from(
+            container.querySelectorAll('input[type="radio"], [role="radio"]'),
+          )) {
+            const lab =
+              r.closest("label") ||
+              (r.id
+                ? document.querySelector(`label[for="${CSS.escape(r.id)}"]`)
+                : null);
+            const t = (
+              lab?.textContent ||
+              r.parentElement?.textContent ||
+              ""
+            ).trim();
+            if (!vRe.test(t)) continue;
+            const d = dist(lab || r);
+            if (d < bestD) {
+              bestD = d;
+              best = lab || r;
+            }
+          }
+          return best;
         },
-        { hSrc: headingRe.source, cSrc: choiceRe.source },
-      )
-      .catch(() => false);
-    return await isToggleSet(page, headingRe, choiceRe);
+        { hSrc: headingRe.source, vSrc: valueRe.source },
+      );
+      const el = handle.asElement();
+      let ok = false;
+      if (el) {
+        await el.scrollIntoViewIfNeeded().catch(() => {});
+        await el.click({ force: true, timeout: 3000 }).catch(() => {});
+        // VERIFY on the EXACT element we clicked — ties success to this question's
+        // control regardless of container breadth. everSet permanently skips a
+        // toggle once reported true, so an unverified click must not count.
+        ok = await el
+          .evaluate((node: Element) => {
+            const asRadio = (n: Element | null): Element | null => {
+              if (!n) return null;
+              if (n.matches('input[type="radio"], [role="radio"]')) return n;
+              const inside = n.querySelector('input[type="radio"], [role="radio"]');
+              if (inside) return inside;
+              const lab = n.closest("label");
+              if (lab) {
+                const li = lab.querySelector('input[type="radio"], [role="radio"]');
+                if (li) return li;
+                const forId = lab.getAttribute("for");
+                if (forId) return document.getElementById(forId);
+              }
+              return null;
+            };
+            const r = asRadio(node);
+            if (!r) return false;
+            return (
+              (r as HTMLInputElement).checked === true ||
+              r.getAttribute("aria-checked") === "true" ||
+              r.getAttribute("data-state") === "checked"
+            );
+          })
+          .catch(() => false);
+      }
+      await handle.dispose().catch(() => {});
+      if (ok) return true;
+      // Secondary check (in case React replaced the clicked node on re-render).
+      if (await isToggleSet(page, headingRe, valueRe)) return true;
+      await page.waitForTimeout(300).catch(() => {});
+    }
+    return await isToggleSet(page, headingRe, valueRe);
   } catch {
     /* best-effort — never fatal */
     return false;
@@ -614,70 +666,86 @@ async function setToggle(
 }
 
 /**
- * Verify a Yes/No toggle is actually set to `choiceRe`: locate the question
- * heading, then confirm a radio whose label matches the choice is checked
- * (native `checked`, ARIA `aria-checked`, or Radix `data-state=checked`).
- * Used so setToggle's fallback clicks never report an unverified success.
+ * Verify a Yes/No toggle is actually set to `valueRe`: locate the question
+ * heading, scope to the nearest ancestor containing a radio, then confirm the
+ * value-matching radio GEOMETRICALLY NEAREST the heading is checked (native
+ * `checked`, ARIA `aria-checked`, or Radix `data-state=checked`). Proximity
+ * binds the check to THIS question so a neighbouring column's "No" can't
+ * false-verify. Keeps setToggle honest.
  */
 async function isToggleSet(
   page: Page,
   headingRe: RegExp,
-  choiceRe: RegExp,
+  valueRe: RegExp,
 ): Promise<boolean> {
   try {
     return (await page.evaluate(
-      ({ hSrc, cSrc }) => {
-        const hRe = new RegExp(hSrc, "i");
-        const cRe = new RegExp(cSrc, "i");
-        const visible = (el: HTMLElement): boolean =>
-          !!(el.offsetParent !== null || el.getClientRects().length);
-        const nodes = Array.from(
-          document.querySelectorAll("body *"),
-        ) as HTMLElement[];
+      (arg: { hSrc: string; vSrc: string }) => {
+        const hRe = new RegExp(arg.hSrc, "i");
+        const vRe = new RegExp(arg.vSrc, "i");
+        const vis = (el: Element): boolean =>
+          !!((el as HTMLElement).offsetParent !== null ||
+            el.getClientRects().length);
         let host: HTMLElement | null = null;
-        for (const el of nodes) {
-          if (!visible(el)) continue;
+        for (const el of Array.from(document.querySelectorAll("body *"))) {
+          if (!vis(el)) continue;
           const own = Array.from(el.childNodes)
             .filter((n) => n.nodeType === 3)
             .map((n) => n.textContent || "")
             .join(" ")
             .trim();
           if (own && hRe.test(own)) {
-            host = el;
+            host = el as HTMLElement;
             break;
           }
         }
         if (!host) return false;
-        let scope: HTMLElement = host;
-        for (let i = 0; i < 4 && scope; i++) {
-          const radios = Array.from(
-            scope.querySelectorAll('input[type="radio"], [role="radio"]'),
-          ) as HTMLElement[];
-          for (const r of radios) {
-            const id = r.id;
-            const labEl = id
-              ? document.querySelector(`label[for="${CSS.escape(id)}"]`)
-              : null;
-            const lab = (
-              labEl?.textContent ||
-              r.closest("label")?.textContent ||
-              r.getAttribute("aria-label") ||
-              ""
-            ).trim();
-            if (cRe.test(lab)) {
-              const checked =
-                (r as HTMLInputElement).checked === true ||
-                r.getAttribute("aria-checked") === "true" ||
-                r.getAttribute("data-state") === "checked";
-              if (checked) return true;
-            }
-          }
-          if (!scope.parentElement) break;
-          scope = scope.parentElement;
+        let container: HTMLElement | null = host;
+        while (
+          container &&
+          !container.querySelector('input[type="radio"], [role="radio"]')
+        ) {
+          container = container.parentElement;
         }
-        return false;
+        if (!container) return false;
+        const hr = host.getBoundingClientRect();
+        const hx = hr.left + hr.width / 2;
+        const hy = hr.top + hr.height / 2;
+        let best: Element | null = null;
+        let bestD = Infinity;
+        for (const r of Array.from(
+          container.querySelectorAll('input[type="radio"], [role="radio"]'),
+        )) {
+          const lab =
+            r.closest("label") ||
+            (r.id
+              ? document.querySelector(`label[for="${CSS.escape(r.id)}"]`)
+              : null);
+          const t = (
+            lab?.textContent ||
+            r.parentElement?.textContent ||
+            r.getAttribute("aria-label") ||
+            ""
+          ).trim();
+          if (!vRe.test(t)) continue;
+          const rect = (lab || r).getBoundingClientRect();
+          const d = Math.hypot(
+            rect.left + rect.width / 2 - hx,
+            rect.top + rect.height / 2 - hy,
+          );
+          if (d < bestD) {
+            bestD = d;
+            best = r;
+          }
+        }
+        if (!best) return false;
+        return (
+          (best as HTMLInputElement).checked === true ||
+          best.getAttribute("aria-checked") === "true" ||
+          best.getAttribute("data-state") === "checked"
+        );
       },
-      { hSrc: headingRe.source, cSrc: choiceRe.source },
+      { hSrc: headingRe.source, vSrc: valueRe.source },
     )) as boolean;
   } catch {
     return false;
@@ -1444,21 +1512,22 @@ export const sitAdapter: SitAdapter = {
       // step's "required" validation blocks Next. A foreign applicant defaults
       // all three to "No" (no transfer, not a T.C. citizen, no Blue Card).
       // Attempted on every step; the group simply isn't present on later steps.
-      if (!everSet.has("transferStudent")) {
-        mark(
-          "transferStudent",
-          await setToggle(page, SIT_TOGGLES.transferStudent, SIT_TOGGLES.noOption),
-        );
-      }
-      if (!everSet.has("haveTc")) {
-        mark("haveTc", await setToggle(page, SIT_TOGGLES.haveTc, SIT_TOGGLES.noOption));
-      }
-      if (!everSet.has("blueCard")) {
-        mark(
-          "blueCard",
-          await setToggle(page, SIT_TOGGLES.blueCard, SIT_TOGGLES.noOption),
-        );
-      }
+      const setTog = async (
+        name: string,
+        headingRe: RegExp,
+        value: "Yes" | "No",
+      ): Promise<void> => {
+        if (everSet.has(name)) return;
+        if (await setToggle(page, headingRe, value)) {
+          everSet.add(name);
+          stepLog.push(`${name}=${value}`);
+        } else {
+          stepLog.push(`${name}=BULUNAMADI`);
+        }
+      };
+      await setTog("transferStudent", SIT_TOGGLES.transferStudent, "No");
+      await setTog("haveTc", SIT_TOGGLES.haveTc, "No");
+      await setTog("blueCard", SIT_TOGGLES.blueCard, "No");
 
       // Academics
       await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName);
