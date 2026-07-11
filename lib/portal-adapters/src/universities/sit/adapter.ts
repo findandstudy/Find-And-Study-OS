@@ -334,6 +334,56 @@ async function performLogin(page: Page, creds: ResolvedCreds): Promise<void> {
   logger.info("[sit] login successful -> " + page.url());
 }
 
+/**
+ * Resolve the id of a JUST-CREATED SIT student. The create webhook persists the
+ * student ASYNCHRONOUSLY in Zoho and frequently responds before the record is
+ * queryable (or without the id at all), so a single post-create lookup returns
+ * nothing. Poll GraphQL with an increasing backoff (email-keyed search first,
+ * then passport-keyed) until the record is indexed. Returns the id on the first
+ * match, or null after all attempts (logged with attempt count + elapsed).
+ * This reuses `findStudent` — the same read-only lookup used for pre-create
+ * dedup — so it can never create a duplicate.
+ */
+async function resolveCreatedStudentId(
+  page: Page,
+  by: { email?: string; passportNumber?: string },
+): Promise<string | null> {
+  // ~1+2+3+3+4+5 = ~18s across 6 attempts — tolerant of Zoho indexing lag
+  // without stalling the worker on the submission hot path.
+  const backoffMs = [1000, 2000, 3000, 3000, 4000, 5000];
+  const started = Date.now();
+  for (let i = 0; i < backoffMs.length; i++) {
+    await sleep(page, backoffMs[i]);
+    const elapsedS = () => Math.round((Date.now() - started) / 1000);
+    if (by.email) {
+      const r = await findStudent(page, { email: by.email });
+      if (r.status === "found") {
+        logger.info(
+          `[sit] id poll: email ile bulundu (deneme=${i + 1}, ~${elapsedS()}s, id=${r.ref.id})`,
+        );
+        return r.ref.id;
+      }
+    }
+    if (by.passportNumber) {
+      const r = await findStudent(page, { passportNumber: by.passportNumber });
+      if (r.status === "found") {
+        logger.info(
+          `[sit] id poll: passport ile bulundu (deneme=${i + 1}, ~${elapsedS()}s, id=${r.ref.id})`,
+        );
+        return r.ref.id;
+      }
+    }
+  }
+  logger.warn(
+    `[sit] id çözümlenemedi (${backoffMs.length} deneme, ~${Math.round(
+      (Date.now() - started) / 1000,
+    )}s) — email=${by.email ? "var" : "yok"} passport=${
+      by.passportNumber ? "var" : "yok"
+    }`,
+  );
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // The adapter.
 // ---------------------------------------------------------------------------
@@ -738,16 +788,36 @@ export const sitAdapter: SitAdapter = {
     );
     logger.info("[sit] öğrenci webhook create başlatılıyor");
     const result = await createStudentViaWebhook(page, payload);
-    if (!result) {
-      return {
-        studentId: null,
-        created: false,
-        alreadyExists: false,
-        detail: "öğrenci oluşturulamadı: webhook create başarısız",
-      };
+    if (result?.id) {
+      logger.info(`[sit] öğrenci webhook ile oluşturuldu (id=${result.id})`);
+      return { studentId: result.id, created: true, alreadyExists: false };
     }
-    logger.info(`[sit] öğrenci webhook ile oluşturuldu (id=${result.id})`);
-    return { studentId: result.id, created: true, alreadyExists: false };
+
+    // The create webhook persists the student ASYNCHRONOUSLY in Zoho and its
+    // synchronous response frequently returns before the new id is queryable (or
+    // with a non-{status:true,id} body → createStudentViaWebhook returns null).
+    // Without the id the application step aborts ("öğrenci id çözümlenemedi") and
+    // the record is left half-created (student exists, no application, docs not
+    // attached). Poll GraphQL with an increasing backoff (same lookup used for
+    // pre-create dedup) to resolve the async-assigned id before giving up; on a
+    // match we continue as a successful create.
+    logger.warn(
+      "[sit] webhook create yanıtında id yok — Zoho async olabilir, id poll ediliyor",
+    );
+    const polledId = await resolveCreatedStudentId(page, {
+      email: profile.email,
+      passportNumber: profile.passportNumber,
+    });
+    if (polledId) {
+      logger.info(`[sit] öğrenci create sonrası id çözüldü (id=${polledId})`);
+      return { studentId: polledId, created: true, alreadyExists: false };
+    }
+    return {
+      studentId: null,
+      created: false,
+      alreadyExists: false,
+      detail: "öğrenci oluşturulamadı: webhook create başarısız (id çözülemedi)",
+    };
   },
 
   /**

@@ -50,6 +50,23 @@ JSON to their dedicated webhook → `{status:true,id}`; the Zoho id is backend-a
   (`!photoUrl && documents.length===0` → skip). Missing Passport/Transcript are
   WARN-only by deliberate design (doc types are often mislabeled); do NOT convert
   these warnings into blocks without evidence — it regresses working submissions.
+- **Create is ASYNC — id often absent in the webhook response.** The n8n create
+  webhook persists the student in Zoho asynchronously; its synchronous body
+  frequently returns without `id` (or a non-`{status:true,id}` shape →
+  `createStudentViaWebhook` returns null). A single post-create lookup finds
+  nothing, so `createStudent` used to report `created:false`/`studentId:null` and
+  `createApplication` aborted with "öğrenci id çözümlenemedi" — student left
+  half-created (exists in SIT, NO application). Fix: `resolveCreatedStudentId()`
+  polls `findStudent` (email-keyed then passport-keyed) with increasing backoff
+  (~18s over 6 tries) to resolve the async id, then continues as created. It
+  reuses the read-only `findStudent` (never a 2nd create) so no duplicate risk;
+  pre-create `findStudent` still gates the create for idempotency on re-process.
+- **Documents attach ONLY via the create payload — there is no attach/update
+  webhook.** For a FRESH student, `documents`+`photo_url` ride in the create body
+  and the webhook fetches the URLs. If SIT still shows Documents(0) on a fresh
+  create, the webhook could not fetch the URLs (403 / not public) — a URL-signing
+  concern, NOT a missing adapter step. An ALREADY-created student's docs can never
+  be backfilled (no update webhook); do NOT resend create (duplicates the student).
 
 # SIT createApplication is a webhook replay, not UI automation
 
