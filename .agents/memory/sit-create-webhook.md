@@ -61,12 +61,32 @@ JSON to their dedicated webhook → `{status:true,id}`; the Zoho id is backend-a
   (~18s over 6 tries) to resolve the async id, then continues as created. It
   reuses the read-only `findStudent` (never a 2nd create) so no duplicate risk;
   pre-create `findStudent` still gates the create for idempotency on re-process.
-- **Documents attach ONLY via the create payload — there is no attach/update
-  webhook.** For a FRESH student, `documents`+`photo_url` ride in the create body
-  and the webhook fetches the URLs. If SIT still shows Documents(0) on a fresh
-  create, the webhook could not fetch the URLs (403 / not public) — a URL-signing
-  concern, NOT a missing adapter step. An ALREADY-created student's docs can never
-  be backfilled (no update webhook); do NOT resend create (duplicates the student).
+- **The URL-based `documents`/`photo_url` webhook delivery is UNCONFIRMED and
+  likely a NO-OP on the n8n side.** git history is decisive: the ONLY mechanism
+  that ever actually delivered files was the OLD 6-step "Add Student" wizard's
+  browser file-chooser upload (`uploadViaChooser` + `SIT_UPLOAD`, Step 6 —
+  Documents). That wizard was fully removed when create became a webhook POST; the
+  replacement commit's OWN deviation note says: *"documents:[] + photo_url:"" — the
+  storage-upload path is not part of the captured student webhook contract."* The
+  `documents`(JSON string)/`photo_url` URL fields were added SPECULATIVELY days
+  later, assuming n8n would fetch the URLs — that fetch node was never confirmed to
+  exist. **Live proof it doesn't work:** the worker-generated signed URLs are
+  independently fetchable (`buildSignedDocumentPath`/`buildSignedStudentPhotoPath`
+  → curl 200, correct bytes) yet SIT still shows Documents(0)+no photo while ALL
+  inline scalar fields (passport dates, education, etc.) land → the webhook simply
+  does not ingest `documents`/`photo_url`. Only TWO n8n webhooks were ever captured
+  (student-create, application-create) — NO document/attachment webhook exists.
+  **Why:** the field shape was inferred from the wizard's localStorage draft, not
+  from a live create that actually attached files.
+  **Fix paths (all need SIT-side input the repo can't provide):** (a) live-capture
+  the SIT panel's real "add document to student" network request → mirror it as a
+  3rd webhook (cleanest, matches architecture); (b) re-implement UI file-chooser
+  upload after create (needs live selectors for an EXISTING student's upload UI —
+  the old `SIT_UPLOAD` were create-wizard selectors, may not apply); (c) SIT/n8n
+  team adds a URL-fetch node to the existing create webhook for the fields we
+  already send. An ALREADY-created student can't be backfilled; do NOT resend
+  create (duplicates the student). 302-vs-200 redirect is a red herring here —
+  the field isn't ingested at all, so response shape is moot.
 
 # SIT createApplication is a webhook replay, not UI automation
 
