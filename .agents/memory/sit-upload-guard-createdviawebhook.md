@@ -31,3 +31,21 @@ NEW record in THIS run (precheck said missing)".
 **Live symptom that motivated this:** a student was created + id resolved +
 application submitted (submitted=true) but NO `[sit] wizard upload:` log line —
 upload was skipped because the guard keyed off the wrong/ambiguous flag.
+
+## Webhook-created students aren't immediately visible in the SIT UI
+
+A student created via the SIT create webhook is persisted ASYNCHRONOUSLY in
+Zoho; the SIT list/detail SPA does not show the new record for several seconds
+(indexing lag + lazy render). So ANY Playwright UI action on a just-created
+student (opening the detail page to upload docs/photo) must RETRY with backoff
+— a single open+verify right after create fails and the identity guard then
+cancels the upload. `openStudentDetail` mirrors `resolveCreatedStudentId`'s
+"wait until it appears" poll (retry loop + content-poll verifyIdentity).
+
+**Why:** the old flow created the student via the UI wizard, so its detail was
+already open in-session with no indexing wait; moving create to the webhook
+introduced this delay.
+
+**How to apply:** never do one-shot open+verify on a fresh SIT record. Keep the
+identity guard strict (email/passport must appear on the card) — only add
+retries around it, never loosen it.

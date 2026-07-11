@@ -306,53 +306,69 @@ async function openStudentDetail(
   const isOnDetailPage = (): boolean =>
     SIT_NAV.studentDetailUrl.test(page.url());
 
+  // Identity check, tolerant of SPA async render: the detail page frequently
+  // renders its fields a beat AFTER navigation resolves, so a single
+  // page.content() read right after `goto` misses the email/passport even when
+  // we are on the correct record. Poll the rendered HTML for up to ~6s before
+  // giving up. Returns true ONLY when this student's email or passport is
+  // demonstrably present — never loosen this (uploading to the wrong row would
+  // cross-associate one student's documents with another's).
   const verifyIdentity = async (): Promise<boolean> => {
     if (!isOnDetailPage()) return false;
-    let body = "";
-    try {
-      body = (await page.content()).toLowerCase();
-    } catch {
-      return false;
+    const needleEmail = by.email?.toLowerCase() || "";
+    const needlePassport = by.passportNumber?.toLowerCase() || "";
+    if (!needleEmail && !needlePassport) return false;
+    const deadline = Date.now() + 6000;
+    for (;;) {
+      let body = "";
+      try {
+        body = (await page.content()).toLowerCase();
+      } catch {
+        body = "";
+      }
+      if (needleEmail && body.includes(needleEmail)) return true;
+      if (needlePassport && body.includes(needlePassport)) return true;
+      if (Date.now() >= deadline || !isOnDetailPage()) return false;
+      await sleep(page, 700);
     }
-    if (by.email && body.includes(by.email.toLowerCase())) return true;
-    if (
-      by.passportNumber &&
-      body.includes(by.passportNumber.toLowerCase())
-    ) {
-      return true;
-    }
-    return false;
   };
 
-  try {
-    // 1) Deterministic: navigate directly by the resolved id, then verify.
-    if (by.studentId) {
-      await page
-        .goto(
-          `${SIT_URLS.base}${SIT_URLS.studentsPath}/${by.studentId}`,
-          { waitUntil: "domcontentloaded", timeout: 30000 },
-        )
-        .catch(() => {});
-      await sleep(page, 2000);
-      if (await verifyIdentity()) return true;
-      logger.warn(
-        "[sit] wizard upload: doğrudan id ile detay doğrulanamadı — arama ile deneniyor",
-      );
-    }
+  // Bounded per-attempt navigation budget: the flow retries up to 8×, so a
+  // generous 30s goto per attempt could stack to minutes when SIT is unhealthy.
+  // domcontentloaded normally resolves in well under this; 20s keeps a slow-but-
+  // alive portal working while capping the pathological (unreachable) worst case.
+  const GOTO_TIMEOUT_MS = 20000;
 
-    // 2) Fallback: search by email, open the row, then verify identity.
-    await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
-      waitUntil: "domcontentloaded",
-      timeout: 30000,
-    });
+  // Strategy 1 — deterministic: navigate directly by the resolved id, verify.
+  const tryDirectId = async (): Promise<boolean> => {
+    if (!by.studentId) return false;
+    await page
+      .goto(`${SIT_URLS.base}${SIT_URLS.studentsPath}/${by.studentId}`, {
+        waitUntil: "domcontentloaded",
+        timeout: GOTO_TIMEOUT_MS,
+      })
+      .catch(() => {});
+    await sleep(page, 1500);
+    return verifyIdentity();
+  };
+
+  // Strategy 2 — fallback: search the list by email, open the row, verify.
+  const trySearch = async (): Promise<boolean> => {
+    if (!by.email) return false;
+    await page
+      .goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+        waitUntil: "domcontentloaded",
+        timeout: GOTO_TIMEOUT_MS,
+      })
+      .catch(() => {});
     await sleep(page, 1500);
 
-    if (by.email) {
-      const search = page.getByPlaceholder(SIT_NAV.searchPlaceholder).first();
-      if (await search.count()) {
-        await search.fill(by.email).catch(() => {});
-        await sleep(page, 2500);
-      }
+    const search = page.getByPlaceholder(SIT_NAV.searchPlaceholder).first();
+    if (await search.count()) {
+      // Clear any stale value from a previous attempt before re-searching.
+      await search.fill("").catch(() => {});
+      await search.fill(by.email).catch(() => {});
+      await sleep(page, 2500);
     }
 
     const info = page.locator(SIT_NAV.rowInfoSelector).first();
@@ -362,22 +378,58 @@ async function openStudentDetail(
         .waitForURL(SIT_NAV.studentDetailUrl, { timeout: 8000 })
         .catch(() => {});
     }
+    return verifyIdentity();
+  };
 
-    if (await verifyIdentity()) return true;
+  // The student was created via an ASYNCHRONOUS webhook (createdViaWebhook);
+  // Zoho/SIT can take several seconds to index the new record and the list/
+  // detail SPA renders it lazily. Uploading runs immediately after create, so
+  // the record is often not yet visible on the first attempt. Retry the whole
+  // open+verify flow with an increasing backoff (~2+3+4+5+5+6+6 ≈ 31s across 8
+  // attempts) — the same "wait until it appears" principle as
+  // resolveCreatedStudentId. We only add retries; the identity guard is
+  // unchanged, so a genuine mismatch still aborts the upload.
+  const backoffsMs = [2000, 3000, 4000, 5000, 5000, 6000, 6000];
+  const totalAttempts = backoffsMs.length + 1; // 8
+  const startedAt = Date.now();
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+    try {
+      if (await tryDirectId()) return true;
+      if (await trySearch()) return true;
+    } catch (err) {
+      logger.warn(
+        `[sit] öğrenci detay açma hatası (deneme ${attempt}/${totalAttempts}) — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
 
-    logger.warn(
-      "[sit] wizard upload: öğrenci kimliği doğrulanamadı (email/passport eşleşmedi) — " +
-        "yükleme İPTAL edildi (yanlış karta belge yazma riski)",
-    );
-    return false;
-  } catch (err) {
-    logger.warn(
-      `[sit] öğrenci detay açma hatası — ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
-    return false;
+    // A mid-run redirect to /auth/login means the SIT session cookie expired —
+    // surface it distinctly so it isn't mistaken for an indexing delay. The
+    // caller established the session; we do not re-login here (would risk using
+    // stale credentials) — the retry re-navigates in case it was transient.
+    if (SIT_LOGIN.loginUrlMarker.test(page.url())) {
+      logger.warn(
+        `[sit] wizard upload: detay açma sırasında oturum /auth/login'e düştü (deneme ${attempt}/${totalAttempts})`,
+      );
+    }
+
+    if (attempt < totalAttempts) {
+      const waitMs = backoffsMs[attempt - 1];
+      logger.info(
+        `[sit] wizard upload: detay açma denemesi ${attempt}/${totalAttempts} (id/email) — ` +
+          `henüz görünmüyor, ${waitMs}ms bekleniyor`,
+      );
+      await sleep(page, waitMs);
+    }
   }
+
+  logger.warn(
+    "[sit] wizard upload: öğrenci kimliği doğrulanamadı (email/passport eşleşmedi) — " +
+      `yükleme İPTAL edildi (yanlış karta belge yazma riski) — ${totalAttempts} deneme, ` +
+      `${Math.round((Date.now() - startedAt) / 1000)}s`,
+  );
+  return false;
 }
 
 /**
