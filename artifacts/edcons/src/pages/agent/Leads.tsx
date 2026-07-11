@@ -797,7 +797,7 @@ export default function AgentLeadsPage() {
   // ProtectedRoute (AGENT_ROLES + requiredPermission). Do NOT pass a narrower
   // role list here — ["agent","sub_agent"] excludes agent_staff and would
   // bounce permitted agent_staff users to "/" (→ /en).
-  const { user } = useAuth(true);
+  const { user, hasPermission } = useAuth(true);
   const canSeeRevenue = true;
 
   const { season } = useSeason();
@@ -806,16 +806,9 @@ export default function AgentLeadsPage() {
   const deleteLead = useDeleteLead();
   const queryClient = useQueryClient();
 
-  const { data: agentPermsData } = useQuery<{ agentCanChangeLeadStage: boolean; agentCanChangeStudentAppStage: boolean }>({
-    queryKey: ["agent-permissions"],
-    queryFn: async () => {
-      const r = await fetch(`${BASE_URL}/api/settings/agent-permissions`, { credentials: "include" });
-      if (!r.ok) return { agentCanChangeLeadStage: true, agentCanChangeStudentAppStage: false };
-      return r.json();
-    },
-    staleTime: 60_000,
-  });
-  const canChangLeadStage = agentPermsData?.agentCanChangeLeadStage !== false;
+  // Lead stage change is governed by the leads.change_stage permission
+  // (Task #564 — agents no longer use a separate Settings toggle).
+  const canChangLeadStage = hasPermission("leads.change_stage");
 
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
   const keyboardSensor = useSensor(KeyboardSensor);

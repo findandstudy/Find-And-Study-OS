@@ -2141,6 +2141,70 @@ async function seedClaudeIntegration() {
       console.error("[migrate] role stage permissions backfill:", err);
     }
 
+    // One-shot migration (Task #564): fold the two legacy agent stage Settings
+    // toggles (agentCanChangeLeadStage / agentCanChangeStudentAppStage) into the
+    // normal Roles & Permissions system. Gated by a system_flags marker so it
+    // runs exactly ONCE per environment — after it runs, admins manage these
+    // through the Roles editor and a re-run must never clobber their choices.
+    //   - leads.change_stage → mirrors the old agentCanChangeLeadStage toggle
+    //     onto the agent-family roles (agent / sub_agent / agent_staff).
+    //   - applications.change_student_app_stage → NEW combined key mirroring the
+    //     old agentCanChangeStudentAppStage toggle onto the agent-family roles,
+    //     and granted to the non-agent stage-changing roles by default so the
+    //     new permission is present (staff paths keep their existing keys, so
+    //     it is inert for them — staff/admin behavior is unchanged).
+    try {
+      const agentStageMig = await pool.query(
+        `INSERT INTO system_flags (key) VALUES ('agent_stage_perms_migrated_v1') ON CONFLICT DO NOTHING RETURNING key`
+      );
+      if (agentStageMig.rows.length > 0) {
+        // Grant the new combined key to the non-agent stage-changing roles.
+        await pool.query(`
+          UPDATE roles
+          SET permissions = (
+            SELECT jsonb_agg(DISTINCT elem)
+            FROM jsonb_array_elements_text(
+              permissions || '["applications.change_student_app_stage"]'::jsonb
+            ) AS elem
+          )
+          WHERE name IN ('super_admin', 'admin', 'manager', 'staff', 'consultant')
+        `);
+        // Read the live legacy toggle values (defaults: lead=true, student/app=false).
+        const settingsRes = await pool.query(
+          `SELECT agent_can_change_lead_stage AS lead, agent_can_change_student_app_stage AS sap FROM settings LIMIT 1`
+        );
+        const leadOn = settingsRes.rows.length === 0 ? true : settingsRes.rows[0].lead !== false;
+        const sapOn = settingsRes.rows.length === 0 ? false : settingsRes.rows[0].sap === true;
+        if (leadOn) {
+          await pool.query(`
+            UPDATE roles
+            SET permissions = (
+              SELECT jsonb_agg(DISTINCT elem)
+              FROM jsonb_array_elements_text(
+                permissions || '["leads.change_stage"]'::jsonb
+              ) AS elem
+            )
+            WHERE name IN ('agent', 'sub_agent', 'agent_staff')
+          `);
+        }
+        if (sapOn) {
+          await pool.query(`
+            UPDATE roles
+            SET permissions = (
+              SELECT jsonb_agg(DISTINCT elem)
+              FROM jsonb_array_elements_text(
+                permissions || '["applications.change_student_app_stage"]'::jsonb
+              ) AS elem
+            )
+            WHERE name IN ('agent', 'sub_agent', 'agent_staff')
+          `);
+        }
+        console.log(`[migrate] Migrated agent stage Settings toggles into role permissions (lead=${leadOn}, studentApp=${sapOn})`);
+      }
+    } catch (err) {
+      console.error("[migrate] agent stage perms migration:", err);
+    }
+
     // Backfill records.assign_button for staff/consultant roles (prod migration).
     try {
       const assignBtnBackfill = await pool.query(

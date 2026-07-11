@@ -906,10 +906,12 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     allowedFields = allowedFields.filter(f => f !== "stage");
   }
   // Agents normally have no patch fields, but governed action transitions
-  // need stage to be writable for them too — gated by system setting.
+  // need stage to be writable for them too — gated by the
+  // applications.change_student_app_stage permission (Task #564 — replaces the
+  // old agentCanChangeStudentAppStage Settings toggle).
   if (!isStaff && isAgentRole(user.role) && stageGovernedAllowed) {
-    const [settingsRow] = await db.select({ agentCanChangeStudentAppStage: settingsTable.agentCanChangeStudentAppStage }).from(settingsTable);
-    if (settingsRow?.agentCanChangeStudentAppStage === true) {
+    const agentPerms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    if (agentPerms.has("applications.change_student_app_stage")) {
       allowedFields = ["stage"];
     }
   }

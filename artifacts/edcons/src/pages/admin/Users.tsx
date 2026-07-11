@@ -122,6 +122,7 @@ const OVERRIDE_PERMISSION_KEYS: { key: string; label: string }[] = [
   { key: "leads.change_stage", label: "Change lead stage/status" },
   { key: "students.change_stage", label: "Change student stage/status" },
   { key: "applications.change_stage", label: "Change application stage" },
+  { key: "applications.change_student_app_stage", label: "Change student/application stage (agents)" },
   { key: "records.move_cards", label: "Move kanban cards" },
   { key: "records.assign_button", label: "Assign records (Assign button)" },
   { key: "records.change_assigned", label: "Reassign records to others" },

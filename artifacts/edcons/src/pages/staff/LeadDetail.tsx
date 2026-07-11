@@ -119,20 +119,9 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const isAgent = basePath === "/agent";
   const [noteTab, setNoteTab] = useState<"general" | "internal">("general");
 
-  // Agents change lead stage only when the agency setting allows it.
-  const { data: agentPermsData } = useQuery<{ agentCanChangeLeadStage: boolean }>({
-    queryKey: ["agent-permissions"],
-    queryFn: async () => {
-      const r = await fetch(`${BASE}/api/settings/agent-permissions`, { credentials: "include" });
-      if (!r.ok) return { agentCanChangeLeadStage: true };
-      return r.json();
-    },
-    enabled: isAgent,
-    staleTime: 60_000,
-  });
-  const canChangeStage = isAgent
-    ? agentPermsData?.agentCanChangeLeadStage !== false
-    : !!isAdmin || hasPermission("leads.change_stage");
+  // Lead stage change is governed by the leads.change_stage permission for all
+  // roles (Task #564 — agents no longer use a separate Settings toggle).
+  const canChangeStage = !!isAdmin || hasPermission("leads.change_stage");
 
   const { data: lead, isLoading } = useGetLead(id) as { data: any; isLoading: boolean };
   const [mainTab, setMainTab] = useState<"overview" | "documents">("overview");

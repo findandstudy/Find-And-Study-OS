@@ -734,9 +734,13 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   }
 
   let allowedFields = isAgent ? [...AGENT_LEAD_PATCH_FIELDS] : LEAD_PATCH_FIELDS;
+  // Lead stage change is governed by the leads.change_stage permission for all
+  // non-admin roles (Task #564 — replaces the old agentCanChangeLeadStage
+  // Settings toggle for agents). Agents resolve their effective permission set
+  // here since `perms` is intentionally empty for the agent branch above.
   if (isAgent && req.body.status !== undefined) {
-    const [settingsRow] = await db.select({ agentCanChangeLeadStage: settingsTable.agentCanChangeLeadStage }).from(settingsTable);
-    if (settingsRow?.agentCanChangeLeadStage === true) {
+    const agentPerms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    if (agentPerms.has("leads.change_stage")) {
       allowedFields = [...allowedFields, "status"];
     }
   }

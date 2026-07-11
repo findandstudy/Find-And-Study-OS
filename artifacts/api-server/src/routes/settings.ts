@@ -42,8 +42,6 @@ const SETTINGS_PATCH_FIELDS = [
   "defaultSigningDeadlineDays",
   "autoConvertLeadEnabled",
   "autoConvertStudentStageKey",
-  "agentCanChangeLeadStage",
-  "agentCanChangeStudentAppStage",
   "directStudentEnrollmentBonusRate",
   "suppressAutomationAppNotifications",
   "autoAssignStuckConversationsEnabled",
@@ -161,17 +159,6 @@ router.patch("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (req
     delete safe[f];
   }
   res.json(safe);
-});
-
-router.get("/settings/agent-permissions", requireAuth, async (req, res): Promise<void> => {
-  const [row] = await db.select({
-    agentCanChangeLeadStage: settingsTable.agentCanChangeLeadStage,
-    agentCanChangeStudentAppStage: settingsTable.agentCanChangeStudentAppStage,
-  }).from(settingsTable);
-  res.json({
-    agentCanChangeLeadStage: row?.agentCanChangeLeadStage ?? true,
-    agentCanChangeStudentAppStage: row?.agentCanChangeStudentAppStage ?? false,
-  });
 });
 
 router.get("/settings/available-years", requireAuth, async (req, res): Promise<void> => {

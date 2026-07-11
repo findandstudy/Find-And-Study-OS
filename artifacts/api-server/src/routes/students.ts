@@ -568,9 +568,13 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     : isAgent
     ? STUDENT_PATCH_FIELDS.filter(f => f !== "agentId" && f !== "userId" && f !== "assignedToId" && f !== "status")
     : STUDENT_PATCH_FIELDS;
+  // Agent student-status change is governed by the
+  // applications.change_student_app_stage permission (Task #564 — replaces the
+  // old agentCanChangeStudentAppStage Settings toggle). Agents resolve their
+  // effective permission set here since `perms` is empty for the agent branch.
   if (isAgent && req.body.status !== undefined) {
-    const [settingsRow] = await db.select({ agentCanChangeStudentAppStage: settingsTable.agentCanChangeStudentAppStage }).from(settingsTable);
-    if (settingsRow?.agentCanChangeStudentAppStage === true) {
+    const agentPerms = await getEffectivePermissionSet({ id: req.user!.id, role });
+    if (agentPerms.has("applications.change_student_app_stage")) {
       allowedFields = [...allowedFields, "status"];
     }
   }
