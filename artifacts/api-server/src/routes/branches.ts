@@ -12,6 +12,24 @@ import { getVisibleBranchIds } from "../lib/branchScope";
 // trips validation (Job D: "Branch save 400 on empty contactEmail/logoUrl").
 const emptyToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
 
+// Logos are uploaded to object storage and stored as a RELATIVE path
+// (/api/storage/objects/branding/...), not an absolute URL — so a strict
+// z.url() rejects every branch that carries a logo. Mirror the agents route's
+// isValidStorageUrl rule: accept a relative storage path or an absolute https
+// URL (empty/cleared already coerced to null by emptyToNull above).
+const isStorageUrl = (v: string): boolean =>
+  v.startsWith("/api/storage/objects/") || v.startsWith("https://");
+
+const logoUrlSchema = z.preprocess(
+  emptyToNull,
+  z
+    .string()
+    .trim()
+    .refine(isStorageUrl, { message: "Geçersiz logo adresi." })
+    .nullable()
+    .optional(),
+);
+
 const createBranchBodySchema = z.object({
   name: z.string().trim().min(1, "Şube adı zorunludur."),
   country: z.string().trim().optional().nullable(),
@@ -20,7 +38,7 @@ const createBranchBodySchema = z.object({
   contactEmail: z.preprocess(emptyToNull, z.string().trim().email().nullable().optional()),
   contactPhone: z.string().trim().optional().nullable(),
   contactUserId: z.number().int().optional().nullable(),
-  logoUrl: z.preprocess(emptyToNull, z.string().trim().url().nullable().optional()),
+  logoUrl: logoUrlSchema,
   notes: z.string().trim().optional().nullable(),
 });
 
@@ -32,7 +50,7 @@ const patchBranchBodySchema = z.object({
   contactEmail: z.preprocess(emptyToNull, z.string().trim().email().nullable().optional()),
   contactPhone: z.string().trim().optional().nullable(),
   contactUserId: z.number().int().optional().nullable(),
-  logoUrl: z.preprocess(emptyToNull, z.string().trim().url().nullable().optional()),
+  logoUrl: logoUrlSchema,
   notes: z.string().trim().optional().nullable(),
 });
 
