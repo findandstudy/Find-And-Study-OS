@@ -39,9 +39,11 @@ import {
   SIT_LOGIN,
   SIT_NAV,
   SIT_STUDENT_FIELDS,
+  SIT_TOGGLES,
   SIT_APP_FIELDS,
   SIT_BUTTONS,
   SIT_UPLOAD,
+  SIT_MODAL,
   SIT_ERRORS,
 } from "./selectors.js";
 import {
@@ -237,6 +239,114 @@ async function clickButton(page: Page, nameRe: RegExp): Promise<boolean> {
   return false;
 }
 
+/** Read document.body.innerText (best-effort; "" on failure). */
+async function bodyText(page: Page): Promise<string> {
+  try {
+    return (await page.evaluate(
+      "(() => document.body ? document.body.innerText : '')()",
+    )) as string;
+  } catch {
+    return "";
+  }
+}
+
+/** Fill a field located by accessible label or placeholder. */
+async function fillField(
+  page: Page,
+  labelRe: RegExp,
+  value: string | undefined,
+): Promise<boolean> {
+  if (!value) return false;
+  const candidates: Locator[] = [
+    page.getByLabel(labelRe).first(),
+    page.getByPlaceholder(labelRe).first(),
+  ];
+  for (const loc of candidates) {
+    if ((await loc.count()) && (await loc.isVisible().catch(() => false))) {
+      await loc.fill(value).catch(() => {});
+      await loc.press("Tab").catch(() => {});
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Open a SIT custom combobox (role=button trigger) and click the option whose
+ * text matches `valueRe`. Returns true when an option was clicked.
+ */
+async function selectCombo(
+  page: Page,
+  triggerRe: RegExp,
+  valueRe: RegExp,
+): Promise<boolean> {
+  const trigger = page.getByRole("button", { name: triggerRe }).first();
+  if (!(await trigger.count())) return false;
+  await trigger.click({ timeout: 6000 }).catch(() => {});
+  await sleep(page, 900);
+
+  let opt = page.getByRole("option", { name: valueRe }).first();
+  if (!(await opt.count())) {
+    opt = page
+      .locator("[role=option], li, [class*=option i]")
+      .filter({ hasText: valueRe })
+      .first();
+  }
+  if (await opt.count()) {
+    await opt.click({ timeout: 3000 }).catch(() => {});
+    await sleep(page, 1100);
+    return true;
+  }
+  // Close the dropdown to avoid blocking later interactions.
+  await page.keyboard.press("Escape").catch(() => {});
+  return false;
+}
+
+/**
+ * If SIT's "Session Inactivity Warning" modal is showing, click "Stay Logged
+ * In" so an idle wizard is not logged out mid-create. Best-effort, non-fatal.
+ */
+async function dismissInactivityModal(page: Page): Promise<void> {
+  try {
+    const stay = page.getByRole("button", { name: SIT_MODAL.stayLoggedIn }).first();
+    if ((await stay.count()) && (await stay.isVisible().catch(() => false))) {
+      await stay.click({ timeout: 4000 }).catch(() => {});
+      await sleep(page, 800);
+      logger.info("[sit] wizard: oturum uyarısı kapatıldı (Stay Logged In)");
+    }
+  } catch {
+    /* best-effort — never fatal */
+  }
+}
+
+/**
+ * Set a Yes/No field to "No" (apply has no TC / transfer-student data). Handles
+ * both a radio group and a custom combobox rendering. Best-effort, non-fatal.
+ */
+async function setToggleNo(page: Page, labelRe: RegExp): Promise<void> {
+  try {
+    // Radio group named by the field label → click the "No" radio inside it.
+    const group = page.getByRole("group", { name: labelRe }).first();
+    if (await group.count()) {
+      const radio = group.getByRole("radio", { name: SIT_TOGGLES.noOption }).first();
+      if (await radio.count()) {
+        await radio.check({ timeout: 3000 }).catch(() => {});
+        return;
+      }
+    }
+    // A stand-alone "No" radio labelled directly.
+    const labelledNo = page.getByLabel(SIT_TOGGLES.noOption).first();
+    if ((await labelledNo.count()) && (await labelledNo.isVisible().catch(() => false))) {
+      await labelledNo.check({ timeout: 3000 }).catch(() => {});
+      return;
+    }
+    // Custom combobox rendering (role=button → role=option list).
+    await selectCombo(page, labelRe, SIT_TOGGLES.noOption).catch(() => {});
+  } catch {
+    /* best-effort — never fatal */
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Post-create document/photo upload (restored file-chooser wizard step).
 //
@@ -289,269 +399,19 @@ async function uploadViaChooser(
 }
 
 /**
- * Navigate to THIS student's detail page and prove we are on the right record
- * before any upload. Two strategies, both identity-verified:
- *   1. Deterministic — direct URL from the resolved studentId, then verify.
- *   2. Fallback — list search by email + row-info click, then verify.
- *
- * Identity verification is MANDATORY: we only return true when the detail page
- * demonstrably belongs to this student (its email or passport is present on the
- * page). Otherwise we return false so the caller ABORTS the upload — uploading
- * to the wrong row would cross-associate one student's personal documents with
- * another's, which is far worse than a missing document.
+ * Upload one document to its own slot: try the type-specific trigger first, then
+ * fall back to the generic attachment trigger (uploadViaChooser also falls back
+ * to the hidden <input type=file>). Returns true when the file was pushed.
  */
-async function openStudentDetail(
+async function uploadDocByType(
   page: Page,
-  by: { email?: string; passportNumber?: string; studentId?: string },
-  reLogin?: () => Promise<void>,
+  typeTriggerRe: RegExp,
+  filePath: string,
 ): Promise<boolean> {
-  const isOnDetailPage = (): boolean =>
-    SIT_NAV.studentDetailUrl.test(page.url());
-
-  // Identity check, tolerant of SPA async render: the detail page frequently
-  // renders its fields a beat AFTER navigation resolves, so a single
-  // page.content() read right after `goto` misses the email/passport even when
-  // we are on the correct record. Poll the rendered HTML for up to ~6s before
-  // giving up. Returns true ONLY when this student's email or passport is
-  // demonstrably present — never loosen this (uploading to the wrong row would
-  // cross-associate one student's documents with another's).
-  const verifyIdentity = async (): Promise<boolean> => {
-    if (!isOnDetailPage()) return false;
-    const needleEmail = by.email?.toLowerCase() || "";
-    const needlePassport = by.passportNumber?.toLowerCase() || "";
-    if (!needleEmail && !needlePassport) return false;
-    const deadline = Date.now() + 6000;
-    for (;;) {
-      let body = "";
-      try {
-        body = (await page.content()).toLowerCase();
-      } catch {
-        body = "";
-      }
-      if (needleEmail && body.includes(needleEmail)) return true;
-      if (needlePassport && body.includes(needlePassport)) return true;
-      if (Date.now() >= deadline || !isOnDetailPage()) return false;
-      await sleep(page, 700);
-    }
-  };
-
-  // Bounded per-attempt navigation budget: the flow retries up to 8×, so a
-  // generous 30s goto per attempt could stack to minutes when SIT is unhealthy.
-  // domcontentloaded normally resolves in well under this; 20s keeps a slow-but-
-  // alive portal working while capping the pathological (unreachable) worst case.
-  const GOTO_TIMEOUT_MS = 20000;
-
-  // Strategy 1 — deterministic: navigate directly by the resolved id, verify.
-  const tryDirectId = async (): Promise<boolean> => {
-    if (!by.studentId) return false;
-    await page
-      .goto(`${SIT_URLS.base}${SIT_URLS.studentsPath}/${by.studentId}`, {
-        waitUntil: "domcontentloaded",
-        timeout: GOTO_TIMEOUT_MS,
-      })
-      .catch(() => {});
-    await sleep(page, 1500);
-    return verifyIdentity();
-  };
-
-  // Strategy 2 — fallback: search the list by email, open the row, verify.
-  const trySearch = async (): Promise<boolean> => {
-    if (!by.email) return false;
-    await page
-      .goto(SIT_URLS.base + SIT_URLS.studentsPath, {
-        waitUntil: "domcontentloaded",
-        timeout: GOTO_TIMEOUT_MS,
-      })
-      .catch(() => {});
-    await sleep(page, 1500);
-
-    const search = page.getByPlaceholder(SIT_NAV.searchPlaceholder).first();
-    if (await search.count()) {
-      // Clear any stale value from a previous attempt before re-searching.
-      await search.fill("").catch(() => {});
-      await search.fill(by.email).catch(() => {});
-      await sleep(page, 2500);
-    }
-
-    const info = page.locator(SIT_NAV.rowInfoSelector).first();
-    if (await info.count()) {
-      await info.click({ timeout: 6000 }).catch(() => {});
-      await page
-        .waitForURL(SIT_NAV.studentDetailUrl, { timeout: 8000 })
-        .catch(() => {});
-    }
-    return verifyIdentity();
-  };
-
-  // The student was created via an ASYNCHRONOUS webhook (createdViaWebhook);
-  // Zoho/SIT can take several seconds to index the new record and the list/
-  // detail SPA renders it lazily. Uploading runs immediately after create, so
-  // the record is often not yet visible on the first attempt. Retry the whole
-  // open+verify flow with an increasing backoff (~2+3+4+5+5+6+6 ≈ 31s across 8
-  // attempts) — the same "wait until it appears" principle as
-  // resolveCreatedStudentId. We only add retries; the identity guard is
-  // unchanged, so a genuine mismatch still aborts the upload.
-  const backoffsMs = [2000, 3000, 4000, 5000, 5000, 6000, 6000];
-  const totalAttempts = backoffsMs.length + 1; // 8
-  const startedAt = Date.now();
-  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
-    try {
-      if (await tryDirectId()) return true;
-      if (await trySearch()) return true;
-    } catch (err) {
-      logger.warn(
-        `[sit] öğrenci detay açma hatası (deneme ${attempt}/${totalAttempts}) — ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    }
-
-    // A mid-run redirect to /auth/login means the SIT session cookie expired.
-    // Surface it distinctly (so it isn't mistaken for an indexing delay) and
-    // re-establish the session via the sanctioned helper before the next attempt.
-    // We do NOT re-login inline with raw creds — reLogin() delegates to
-    // ensureLoggedIn, which is token-first, uses the runner-injected portalCreds
-    // override, and honors the captcha cooldown (no login-form hammering).
-    if (SIT_LOGIN.loginUrlMarker.test(page.url())) {
-      logger.warn(
-        `[sit] wizard upload: detay açma sırasında oturum /auth/login'e düştü (deneme ${attempt}/${totalAttempts}) — oturum yenileniyor`,
-      );
-      if (reLogin) {
-        try {
-          await reLogin();
-        } catch (err) {
-          logger.warn(
-            `[sit] wizard upload: oturum yenileme başarısız (deneme ${attempt}/${totalAttempts}) — ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
-        }
-      }
-    }
-
-    if (attempt < totalAttempts) {
-      const waitMs = backoffsMs[attempt - 1];
-      logger.info(
-        `[sit] wizard upload: detay açma denemesi ${attempt}/${totalAttempts} (id/email) — ` +
-          `henüz görünmüyor, ${waitMs}ms bekleniyor`,
-      );
-      await sleep(page, waitMs);
-    }
-  }
-
-  logger.warn(
-    "[sit] wizard upload: öğrenci kimliği doğrulanamadı (email/passport eşleşmedi) — " +
-      `yükleme İPTAL edildi (yanlış karta belge yazma riski) — ${totalAttempts} deneme, ` +
-      `${Math.round((Date.now() - startedAt) / 1000)}s`,
-  );
-  return false;
+  if (await uploadViaChooser(page, typeTriggerRe, filePath)) return true;
+  return uploadViaChooser(page, SIT_UPLOAD.attachmentTrigger, filePath);
 }
 
-/**
- * Best-effort: if the detail page hides uploads behind a "Documents" tab/section,
- * reveal it. Silent no-op when no such control exists.
- */
-async function revealDocumentsSection(page: Page): Promise<void> {
-  const sectionRe = /documents|belge|attachments|dosya|files/i;
-  try {
-    const tab = page.getByRole("tab", { name: sectionRe }).first();
-    if (await tab.count()) {
-      await tab.click({ timeout: 4000 }).catch(() => {});
-      await sleep(page, 1000);
-      return;
-    }
-    const btn = page.getByRole("button", { name: sectionRe }).first();
-    if (await btn.count()) {
-      await btn.click({ timeout: 4000 }).catch(() => {});
-      await sleep(page, 1000);
-    }
-  } catch {
-    /* best-effort — never fatal */
-  }
-}
-
-/**
- * Upload the locally-downloaded photo + attachment files to a freshly-created
- * SIT student's detail page. Best-effort, non-fatal; logs a clear
- * `[sit] wizard upload: N/M belge ok, foto=…` summary.
- */
-async function uploadStudentDocuments(
-  page: Page,
-  by: { email?: string; passportNumber?: string; studentId?: string },
-  files: SubmitFiles,
-  reLogin?: () => Promise<void>,
-): Promise<void> {
-  const attachments = [
-    files.passport ? { label: "passport", path: files.passport } : null,
-    files.transcript ? { label: "transcript", path: files.transcript } : null,
-    files.diploma ? { label: "diploma", path: files.diploma } : null,
-  ].filter((a): a is { label: string; path: string } => a !== null);
-
-  if (!files.photo && attachments.length === 0) {
-    logger.info("[sit] wizard upload: yerel belge/foto yok — atlanıyor");
-    return;
-  }
-
-  const opened = await openStudentDetail(page, by, reLogin);
-  if (!opened) {
-    logger.warn(
-      "[sit] wizard upload: öğrenci detay sayfası açılamadı — belge/foto YÜKLENEMEDİ " +
-        "(öğrenci+başvuru oluştu, belgeler eksik kaldı)",
-    );
-    return;
-  }
-
-  await revealDocumentsSection(page);
-
-  let ok = 0;
-  for (const a of attachments) {
-    try {
-      const done = await uploadViaChooser(page, SIT_UPLOAD.attachmentTrigger, a.path);
-      if (done) {
-        ok++;
-        logger.info(`[sit] wizard upload: ${a.label} yüklendi`);
-      } else {
-        logger.warn(
-          `[sit] wizard upload: ${a.label} için yükleme alanı bulunamadı`,
-        );
-      }
-      await sleep(page, 1200);
-    } catch (err) {
-      logger.warn(
-        `[sit] wizard upload: ${a.label} HATA — ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    }
-  }
-
-  let photoStr = "yok";
-  if (files.photo) {
-    try {
-      const done = await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo);
-      photoStr = done ? "ok" : "HATA";
-      await sleep(page, 1200);
-    } catch (err) {
-      photoStr = "HATA";
-      logger.warn(
-        `[sit] wizard upload: foto HATA — ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    }
-  }
-
-  // Best-effort save if the detail page requires an explicit save after uploads.
-  await clickButton(page, SIT_BUTTONS.saveStudent).catch(() => false);
-
-  logger.info(
-    `[sit] wizard upload: ${ok}/${attachments.length} belge ok, foto=${photoStr}`,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Login internals.
-// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Diagnostic helper — closest-N scored candidates by simple token overlap.
 //
@@ -898,200 +758,28 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    // --- DRY: student does not exist → stop before any write ---
-    if (!doSubmit) {
-      logger.info("[sit] DRY: öğrenci webhook create öncesi durduruldu");
-      return {
-        studentId: null,
-        created: false,
-        alreadyExists: false,
-        createdViaWebhook: false,
-        detail: "dry-run: öğrenci oluşturulmadı",
-      };
-    }
-
-    // --- REAL: create the student via the panel's true mechanism ---
-    // The SIT "Add Student" 6-step wizard (dropdowns/date-picker/filechooser) is
-    // automation-hostile; the panel's real student-create is a JSON POST to a
-    // dedicated n8n webhook that returns the Zoho-assigned id. We resolve the
-    // agency identity dynamically (never hardcoded) and POST the same fields the
-    // wizard used to fill.
-    const identity = await resolveSitIdentity(page);
-    if (!identity || !identity.agencyId || !identity.crmId) {
-      logger.warn("[sit] acente kimliği (user_id/agency_id/crm_id) çözülemedi");
-      return {
-        studentId: null,
-        created: false,
-        alreadyExists: false,
-        createdViaWebhook: false,
-        detail:
-          "öğrenci oluşturulamadı: acente kimliği (user_id/agency_id/crm_id) çözülemedi",
-      };
-    }
-
-    const appliedLevel = mapEducationLevel(profile.level);
-    const gpa = normalizeGpa(profile.gpa);
-    const gpaStr = gpa !== undefined ? String(gpa) : undefined;
-
-    // Nationality is a Zoho dropdown → the webhook expects the zoho_countries
-    // ROW ID, not the plain name ("Pakistan" alone → INVALID_DATA: Nationality1).
-    // Resolve name→id; if it can't be resolved we send it empty (undefined) and
-    // still attempt the create, logging the miss clearly so it isn't silent.
-    const nationalityId = await resolveCountryId(page, profile.nationality);
-    logger.info(
-      `[sit] nationality: ${
-        profile.nationality ? `"${profile.nationality}"` : "(boş)"
-      } → ${nationalityId ?? "NOT_FOUND"}`,
+    // --- Zero-doc guard (real submit only; mirrors the webhook-flow intent) ---
+    // SIT's student-detail Documents tab is READ-ONLY, so every file MUST be
+    // attached during create via the wizard's file-choosers (the whole reason
+    // for this rewrite). Refuse to create a student that would carry no docs.
+    const anyLocalFile = !!(
+      files.photo || files.passport || files.transcript || files.diploma
     );
-
-    // education_level is the zoho_degrees ROW ID of the APPLIED-FOR degree — a
-    // plain label makes the webhook reject the create with
-    // `INVALID_DATA: Student_will_apply_for`. Resolve the id from the degree
-    // label; on a miss we send it empty (never throw) and log clearly.
-    const degreeId = await resolveDegreeId(page, appliedLevel);
-    logger.info(
-      `[sit] apply-for degree: "${appliedLevel}" → ${degreeId ?? "NOT_FOUND"}`,
-    );
-
-    // Previous-education fields are keyed by the APPLIED level: an applicant for
-    // a Bachelor lists a high school, a Master applicant lists a bachelor, etc.
-    // The prior-school *_country is a zoho_countries ROW ID; the CRM does not
-    // capture where the prior school was, so we fall back to the student's
-    // nationality country (best available signal), else leave it empty.
-    const eduCountryId = nationalityId ?? undefined;
-    const priorSchool: Pick<
-      SitStudentWebhookPayload,
-      | "high_school_name"
-      | "high_school_gpa_percent"
-      | "high_school_country"
-      | "bachelor_school_name"
-      | "bachelor_gpa_percent"
-      | "bachelor_country"
-      | "master_school_name"
-      | "master_gpa_percent"
-      | "master_country"
-    > = {};
-    if (appliedLevel === "Master") {
-      priorSchool.bachelor_school_name = profile.schoolName;
-      priorSchool.bachelor_gpa_percent = gpaStr;
-      priorSchool.bachelor_country = eduCountryId;
-    } else if (appliedLevel === "PhD") {
-      priorSchool.master_school_name = profile.schoolName;
-      priorSchool.master_gpa_percent = gpaStr;
-      priorSchool.master_country = eduCountryId;
-    } else {
-      // Bachelor / Associate → the prior institution is a high school.
-      priorSchool.high_school_name = profile.schoolName;
-      priorSchool.high_school_gpa_percent = gpaStr;
-      priorSchool.high_school_country = eduCountryId;
-    }
-
-    logger.info(
-      `[sit] eğitim: level="${appliedLevel}" okul="${profile.schoolName ?? ""}"` +
-      ` gpa=${gpaStr ?? "(yok)"} ülke=${eduCountryId ?? "(yok)"}`,
-    );
-
-    // Photo + documents: the SIT create webhook fetches these by URL, so we send
-    // the student's CRM document URLs (carried on the profile by the profile
-    // builder, which has DB access). Local SubmitFiles paths are NOT usable here.
-    // Every source is logged (query string dropped so signed-URL tokens are never
-    // logged); missing/unfetchable data is logged but never blocks the create.
-    const redactUrl = (u: string): string => {
-      try {
-        const parsed = new URL(u);
-        return `${parsed.origin}${parsed.pathname}`;
-      } catch {
-        return u.split("?")[0];
+    const anyAssetIntent =
+      !!profile.photoUrl?.trim() || (profile.studentDocuments?.length ?? 0) > 0;
+    if (doSubmit && !anyLocalFile) {
+      if (anyAssetIntent) {
+        // The profile SHOULD carry documents but none were downloaded locally
+        // (transient upstream download failure). Do NOT create a doc-less
+        // student — throw so the submission is retried.
+        throw new Error(
+          "SIT: öğrenci belge/fotoğraf yerel dosyaları yok (indirilemedi) — " +
+            "sıfır belgeli create engellendi, tekrar denenecek",
+        );
       }
-    };
-    // Our own session-gated asset routes: fetchable by an external, cookie-less
-    // webhook ONLY when they carry a valid HMAC signature (?exp=&sig=). An
-    // UNSIGNED such URL 401/403's for the webhook (the exact reason documents /
-    // photo silently fail to land in SIT). We surface signed-ness explicitly so
-    // the true failure mode is visible in the worker log (redactUrl hides the
-    // sig value, so previously you could not tell signed from bare).
-    const isSessionGatedAssetRoute = (u: string): boolean =>
-      /\/api\/documents\/\d+\/file(?:$|[?#])/.test(u) ||
-      /\/api\/students\/\d+\/photo(?:$|[?#])/.test(u);
-    const isSignedAssetUrl = (u: string): boolean => /[?&]sig=/.test(u);
-    // Absolutize + validate a URL for the external fetcher, logging one clear
-    // diagnostic (redacted). Warns when the result is still non-http(s) (no
-    // public base configured), points at localhost (not reachable externally),
-    // or is an UNSIGNED session-gated route (webhook will 401/403).
-    const prepareAssetUrl = (label: string, raw: string): string => {
-      const abs = absolutizeAssetUrl(raw);
-      const signed = isSignedAssetUrl(abs);
-      let warn = "";
-      if (!/^https?:\/\//i.test(abs)) {
-        warn =
-          " (UYARI: mutlak http(s) URL yapılamadı — SIT_PUBLIC_ASSET_BASE ayarlayın; webhook çekemez)";
-      } else if (isLocalHostUrl(abs)) {
-        warn =
-          " (UYARI: localhost adresi — harici webhook erişemez; public base ayarlayın)";
-      } else if (isSessionGatedAssetRoute(abs) && !signed) {
-        warn =
-          " (UYARI: oturum-korumalı asset yolu İMZASIZ — webhook 401/403 alır; ASSET_URL_SIGNING_SECRET worker ve api-server'da AYNI olmalı)";
-      }
+      // Genuinely no documents at all → preserve the zero-doc guard intent.
       logger.info(
-        `[sit] ${label}: ${redactUrl(abs)} [imzalı=${signed ? "evet" : "hayır"}]${warn}`,
-      );
-      return abs;
-    };
-
-    const photoUrl = profile.photoUrl?.trim()
-      ? prepareAssetUrl("photo_url", profile.photoUrl.trim())
-      : "";
-    if (!photoUrl) logger.info("[sit] photo_url: (yok)");
-
-    const sitDocuments = (profile.studentDocuments ?? [])
-      .filter((d) => !!d.url)
-      .map((d) => {
-        const url = prepareAssetUrl(`belge type=${d.type}`, d.url);
-        const entry: Record<string, unknown> = {
-          attachment_type: d.type,
-          url,
-          size: d.size ?? 0,
-        };
-        if (d.name) entry.name = d.name;
-        if (d.mime) entry.mime_type = d.mime;
-        return entry;
-      });
-    // Both the wizard and the create webhook require at least one Passport and at
-    // least one HighSchool transcript. We cannot fabricate documents, so we log a
-    // clear warning when either is absent (never block the create).
-    const docTypesFolded = (profile.studentDocuments ?? []).map((d) =>
-      fold(d.type),
-    );
-    const hasPassport = docTypesFolded.some((t) => /passport|pasaport/.test(t));
-    const hasTranscript = docTypesFolded.some((t) =>
-      /transcript|marks|marksheet|result|grade|hsc/.test(t),
-    );
-    logger.info(
-      `[sit] documents: ${sitDocuments.length} adet` +
-      (sitDocuments.length
-        ? ` [${(profile.studentDocuments ?? []).map((d) => d.type).join(", ")}]`
-        : "") +
-      ` (passport=${hasPassport ? "var" : "YOK"}, transcript=${hasTranscript ? "var" : "YOK"})`,
-    );
-    if (!hasPassport)
-      logger.warn(
-        "[sit] UYARI: Passport belgesi yok — SIT create için gerekli (yine de denenecek)",
-      );
-    if (!hasTranscript)
-      logger.warn(
-        "[sit] UYARI: HighSchool transcript belgesi yok — SIT create için gerekli (yine de denenecek)",
-      );
-
-    // GUARD: never POST a create with zero fetchable assets. Historically an
-    // unsigned/self-referential asset URL silently produced a student with no
-    // photo/documents in Zoho (the webhook's URL fetch 401/403'd, but the
-    // create itself still "succeeded"). Now that URLs are always genuine
-    // public links or signed endpoint links (see profile.ts / prepareAssetUrl
-    // above), zero assets means the student genuinely has nothing uploaded —
-    // skip explicitly with a clear detail rather than create an empty record.
-    if (!photoUrl && sitDocuments.length === 0) {
-      logger.warn(
-        "[sit] öğrenci ATLANDI: photo_url ve documents boş — sıfır belgeli SIT create engellendi",
+        "[sit] öğrenci ATLANDI: yüklenecek yerel foto/belge yok — sıfır belgeli SIT create engellendi",
       );
       return {
         studentId: null,
@@ -1102,112 +790,250 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    const payload: SitStudentWebhookPayload = {
-      user_id: identity.userId,
-      agency_id: identity.agencyId,
-      crm_id: identity.crmId,
-      first_name: profile.firstName,
-      last_name: profile.lastName,
-      gender: profile.gender || undefined,
-      date_of_birth: isoDateOnly(profile.dateOfBirth),
-      nationality: nationalityId ?? undefined,
-      email: profile.email,
-      mobile: profile.phone || undefined,
-      passport_number: profile.passportNumber || undefined,
-      passport_issue_date: isoDateOnly(profile.passportIssueDate),
-      passport_expiry_date: isoDateOnly(profile.passportExpiryDate),
-      father_name: profile.fatherName || undefined,
-      mother_name: profile.motherName || undefined,
-      // Webhook types these as String — send lowercase "no"/"yes" (a boolean
-      // makes the panel read them as truthy "Yes"). apply has no such data → "no".
-      transfer_student: "no",
-      have_tc: "no",
-      tc_number: "",
-      blue_card: "no",
-      // Residence country is a zoho_countries ROW ID (same dropdown contract as
-      // nationality); apply has no explicit residence, so fall back to nationality.
-      country_of_residence: nationalityId ?? undefined,
-      education_level: degreeId ?? undefined,
-      education_level_name: appliedLevel,
-      ...priorSchool,
-      // Photo + documents are fetched by URL by the create webhook. When the
-      // student has no URL-bearing documents these are "" / "[]" and the create
-      // still succeeds (files can be attached later). `documents` is a JSON STRING
-      // ($documents: String) — a raw array can't be parsed by the webhook.
-      photo_url: photoUrl,
-      documents: JSON.stringify(sitDocuments),
-    };
-
-    // Gönderim öncesi TEK-satır özet: create'ten önce foto/belge/pasaport/bilgi
-    // durumunu tek bakışta gör (canlı create doğrulaması — dry program adımında
-    // durduğu için bu log yalnız canlı gönderimde çıkar). NOT: SIT webhook
-    // payload'ında dil skoru alanı YOK; profile.languageScore yalnız teşhis için.
-    // imza-secret: whether THIS (worker) process can HMAC-sign asset URLs. When
-    // "YOK", session-gated documents are dropped by the profile builder and the
-    // photo is left unsigned → SIT can't fetch them. When "var" but SIT still
-    // shows 0 documents/photo, the worker and api-server secrets DIFFER (verify
-    // fails) — align ASSET_URL_SIGNING_SECRET (or SESSION_SECRET) on both.
-    const assetSecretConfigured = getAssetSigningSecret().length > 0;
-    logger.info(
-      `[sit] CREATE payload → documents=${sitDocuments.length} ` +
-      `(passport=${hasPassport ? "var" : "YOK"}, transcript=${hasTranscript ? "var" : "YOK"}) ` +
-      `photo=${photoUrl ? "var" : "YOK"} ` +
-      `imza-secret=${assetSecretConfigured ? "var" : "YOK"} ` +
-      `passportNo=${payload.passport_number ? "var" : "YOK"} ` +
-      `issue=${payload.passport_issue_date || "-"} expiry=${payload.passport_expiry_date || "-"} ` +
-      `lang=${profile.languageScore ?? "-"}`,
-    );
-    logger.info("[sit] öğrenci webhook create başlatılıyor");
-    const result = await createStudentViaWebhook(page, payload);
-    if (result?.id) {
-      logger.info(`[sit] öğrenci webhook ile oluşturuldu (id=${result.id})`);
+    // --- REAL: create the student via the "Add Student" wizard ---
+    // SIT never ingested URL-based photo/documents through the create webhook, and
+    // the detail Documents tab is read-only post-create — so the ONLY way files
+    // reach the card is the wizard's browser file-choosers at create time. We walk
+    // the multi-step wizard, fill every field on screen, upload each local file
+    // into its own slot, then save. Session-seed auth is already live/verified.
+    await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    await sleep(page, 3500);
+    await dismissInactivityModal(page);
+    if (!(await clickButton(page, SIT_NAV.addStudentName))) {
       return {
-        studentId: result.id,
-        created: true,
+        studentId: null,
+        created: false,
         alreadyExists: false,
-        createdViaWebhook: true,
+        createdViaWebhook: false,
+        detail: "öğrenci oluşturulamadı: Add Student düğmesi bulunamadı",
+      };
+    }
+    await sleep(page, 2000);
+
+    const gpa = normalizeGpa(profile.gpa);
+    const dob = formatSitDate(profile.dateOfBirth);
+    const passportIssue = formatSitDate(profile.passportIssueDate);
+    const passportExpiry = formatSitDate(profile.passportExpiryDate);
+    const isFemale = /^f|kad|woman|kız|kiz/i.test(profile.gender || "");
+    const genderLabel = isFemale ? /female|kad/i : /male|erkek/i;
+
+    // Track which files actually landed so the completeness gate below can refuse
+    // to save a partial record. Each file is attached once, even across re-fills.
+    const uploadedDocs = new Set<string>();
+    let photoUploaded = false;
+
+    // --- Walk up to 6 wizard steps, filling whatever is on screen ---
+    for (let step = 0; step < 6; step++) {
+      await sleep(page, 1500);
+      await dismissInactivityModal(page);
+
+      // Personal
+      await fillField(page, SIT_STUDENT_FIELDS.firstName, profile.firstName);
+      await fillField(page, SIT_STUDENT_FIELDS.lastName, profile.lastName);
+      if (dob) await fillField(page, SIT_STUDENT_FIELDS.dateOfBirth, dob);
+      await selectCombo(page, SIT_STUDENT_FIELDS.gender, genderLabel).catch(() => {});
+
+      // Contact
+      await fillField(page, SIT_STUDENT_FIELDS.email, profile.email);
+      await fillField(page, SIT_STUDENT_FIELDS.phone, profile.phone);
+      await fillField(page, SIT_STUDENT_FIELDS.address, profile.address);
+
+      // Family
+      await fillField(page, SIT_STUDENT_FIELDS.fatherName, profile.fatherName);
+      await fillField(page, SIT_STUDENT_FIELDS.motherName, profile.motherName);
+
+      // Identity / passport
+      if (profile.nationality) {
+        await selectCombo(
+          page,
+          SIT_STUDENT_FIELDS.nationality,
+          new RegExp(fold(profile.nationality).slice(0, 12), "i"),
+        ).catch(() => {});
+      }
+      await fillField(page, SIT_STUDENT_FIELDS.nationality, profile.nationality);
+      await fillField(page, SIT_STUDENT_FIELDS.passportNumber, profile.passportNumber);
+      if (passportIssue) {
+        await fillField(page, SIT_STUDENT_FIELDS.passportIssueDate, passportIssue);
+      }
+      if (passportExpiry) {
+        await fillField(page, SIT_STUDENT_FIELDS.passportExpiryDate, passportExpiry);
+      }
+
+      // "Have TC?" / "Transfer student?" — apply has neither → default to "No".
+      await setToggleNo(page, SIT_TOGGLES.haveTc);
+      await setToggleNo(page, SIT_TOGGLES.transferStudent);
+
+      // Academics
+      await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName);
+      if (gpa !== undefined) {
+        await fillField(page, SIT_STUDENT_FIELDS.gpa, String(gpa));
+      }
+      if (profile.graduationYear !== undefined) {
+        await fillField(
+          page,
+          SIT_STUDENT_FIELDS.graduationYear,
+          String(profile.graduationYear),
+        );
+      }
+
+      // Documents — attach each local file once, into its own slot.
+      if (files.photo && !photoUploaded) {
+        if (await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo)) {
+          photoUploaded = true;
+        }
+      }
+      const docJobs: Array<[string, RegExp, string]> = [];
+      if (files.passport) {
+        docJobs.push(["passport", SIT_UPLOAD.passportTrigger, files.passport]);
+      }
+      if (files.transcript) {
+        docJobs.push(["transcript", SIT_UPLOAD.transcriptTrigger, files.transcript]);
+      }
+      if (files.diploma) {
+        docJobs.push(["diploma", SIT_UPLOAD.diplomaTrigger, files.diploma]);
+      }
+      for (const [key, trig, docPath] of docJobs) {
+        if (uploadedDocs.has(key)) continue;
+        if (await uploadDocByType(page, trig, docPath)) uploadedDocs.add(key);
+      }
+
+      // Advance — try Next first; on the last step the Save button appears.
+      const hasNext = await page
+        .getByRole("button", { name: SIT_BUTTONS.next })
+        .first()
+        .count();
+      if (hasNext) {
+        await dismissInactivityModal(page);
+        await clickButton(page, SIT_BUTTONS.next);
+        await sleep(page, 1800);
+        // Zoho validation recovery: a banner means the step did not advance —
+        // the next loop iteration re-fills it.
+        if (SIT_ERRORS.validation.test(await bodyText(page))) {
+          logger.warn("[sit] doğrulama hatası — adım yeniden denenecek");
+        }
+        continue;
+      }
+      break;
+    }
+
+    // --- DRY: wizard filled + uploads attempted → stop before the final save ---
+    if (!doSubmit) {
+      logger.info("[sit] DRY: öğrenci wizard dolduruldu, kaydetmeden durduruldu");
+      return {
+        studentId: null,
+        created: false,
+        alreadyExists: false,
+        createdViaWebhook: false,
+        detail: "dry-run: öğrenci kaydedilmedi",
       };
     }
 
-    // The create webhook persists the student ASYNCHRONOUSLY in Zoho and its
-    // synchronous response frequently returns before the new id is queryable (or
-    // with a non-{status:true,id} body → createStudentViaWebhook returns null).
-    // Without the id the application step aborts ("öğrenci id çözümlenemedi") and
-    // the record is left half-created (student exists, no application, docs not
-    // attached). Poll GraphQL with an increasing backoff (same lookup used for
-    // pre-create dedup) to resolve the async-assigned id before giving up; on a
-    // match we continue as a successful create.
-    logger.warn(
-      "[sit] webhook create yanıtında id yok — Zoho async olabilir, id poll ediliyor",
-    );
-    const polledId = await resolveCreatedStudentId(page, {
+    // --- Completeness gate: never save a student missing the docs it should
+    //     carry. A present-but-unuploaded file means the file-chooser step did
+    //     not take — fail retryably rather than create a partial record (the
+    //     detail Documents tab is read-only, so there is no post-create fixup). ---
+    const missingUploads: string[] = [];
+    if (files.photo && !photoUploaded) missingUploads.push("foto");
+    if (files.passport && !uploadedDocs.has("passport")) missingUploads.push("pasaport");
+    if (files.transcript && !uploadedDocs.has("transcript")) {
+      missingUploads.push("transkript");
+    }
+    if (files.diploma && !uploadedDocs.has("diploma")) missingUploads.push("diploma");
+    if (missingUploads.length > 0) {
+      throw new Error(
+        `SIT: belge/foto wizard'a yüklenemedi (${missingUploads.join(", ")}) — ` +
+          "eksik belgeli create engellendi, tekrar denenecek",
+      );
+    }
+
+    // --- Final save (with one retry). Only mark saved when the Save button was
+    //     actually clicked AND no error banner appeared — never optimistically
+    //     assume success, or the id-resolution below could report a phantom
+    //     create. ---
+    let saved = false;
+    let duplicateSeen = false;
+    for (let attempt = 0; attempt < 2 && !saved; attempt++) {
+      await dismissInactivityModal(page);
+      const clicked = await clickButton(page, SIT_BUTTONS.saveStudent);
+      if (!clicked) {
+        // Save button not present (not on the final step / overlay / selector
+        // drift) — this attempt did nothing, so do NOT treat it as a save.
+        logger.warn(
+          `[sit] Kaydet düğmesi bulunamadı (deneme ${attempt + 1})`,
+        );
+        await sleep(page, 1500);
+        continue;
+      }
+      await sleep(page, 5000);
+      const txt = await bodyText(page);
+      if (SIT_ERRORS.duplicate.test(txt)) {
+        logger.info("[sit] kayıt sırasında mükerrer tespit edildi");
+        duplicateSeen = true;
+        break;
+      }
+      if (SIT_ERRORS.serverError.test(txt)) {
+        logger.warn(`[sit] kayıt sunucu hatası (deneme ${attempt + 1})`);
+        continue;
+      }
+      if (SIT_ERRORS.validation.test(txt)) {
+        logger.warn(`[sit] kayıt doğrulama hatası (deneme ${attempt + 1})`);
+        continue;
+      }
+      saved = true;
+    }
+
+    // --- Resolve the new student id (identity-verified GraphQL poll first) ---
+    const resolvedId = await resolveCreatedStudentId(page, {
       email: profile.email,
       passportNumber: profile.passportNumber,
     });
-    if (polledId) {
-      logger.info(`[sit] öğrenci create sonrası id çözüldü (id=${polledId})`);
-      // The create webhook DID fire for a brand-new record this run; the id was
-      // just resolved via the async post-create poll rather than the webhook's
-      // synchronous body. This is still a fresh create → createdViaWebhook=true
-      // so the document/photo upload runs (the whole point of the poll fix).
+    if (resolvedId) {
+      logger.info(`[sit] öğrenci wizard ile oluşturuldu (id=${resolvedId})`);
       return {
-        studentId: polledId,
-        created: true,
-        alreadyExists: false,
-        createdViaWebhook: true,
+        studentId: resolvedId,
+        created: saved,
+        alreadyExists: !saved || duplicateSeen,
+        createdViaWebhook: false,
       };
     }
-    // The webhook fired but we never resolved an id (Zoho indexing lag beyond
-    // the poll budget). Without an id neither upload nor the application step
-    // can proceed → treat as a failed create. createdViaWebhook stays false per
-    // the contract (every failure path is false); the guard also requires a
-    // non-null studentId, so this could never trigger an upload regardless.
+
+    // Fallback: parse the id from the student-detail URL we landed on after save.
+    // Require at least one digit and reject wizard route words so a stray
+    // /students/new never masquerades as a created id. Left UNVERIFIED → logged.
+    const urlMatch = page.url().match(/\/students\/([0-9a-z][0-9a-z-]{5,})/i);
+    const urlId = urlMatch?.[1];
+    if (
+      saved &&
+      urlId &&
+      /[0-9]/.test(urlId) &&
+      !/^(new|create|add|edit)$/i.test(urlId)
+    ) {
+      logger.warn(
+        "[sit] öğrenci id GraphQL ile doğrulanamadı — detay URL'den alındı " +
+          `(id=${urlId}, DOĞRULANMADI)`,
+      );
+      return {
+        studentId: urlId,
+        created: saved,
+        alreadyExists: false,
+        createdViaWebhook: false,
+      };
+    }
+
+    logger.warn("[sit] öğrenci kaydedildi ancak id çözülemedi");
     return {
       studentId: null,
       created: false,
-      alreadyExists: false,
+      alreadyExists: duplicateSeen,
       createdViaWebhook: false,
-      detail: "öğrenci oluşturulamadı: webhook create başarısız (id çözülemedi)",
+      detail: duplicateSeen
+        ? "öğrenci zaten mevcut ancak id doğrulanamadı"
+        : saved
+          ? "öğrenci kaydedildi ancak id doğrulanamadı"
+          : "öğrenci kaydedilemedi",
     };
   },
 
@@ -1508,39 +1334,10 @@ export const sitAdapter: SitAdapter = {
       effectiveSubmit,
     );
 
-    // Attach the locally-downloaded photo + documents to the SIT student card.
-    // The create webhook does NOT ingest the `documents`/`photo_url` URL fields,
-    // so the ONLY way files reach the card is the browser file-chooser upload
-    // (restored from the removed wizard). Runs right after the student id is
-    // resolved and BEFORE createApplication (which is webhook-driven and does not
-    // depend on page URL). Fresh-create only (a just-created student has no docs,
-    // so no duplicate risk) and never in DRY. Non-fatal: the student is already
-    // created and the application step still runs; a failure is logged loudly.
-    if (effectiveSubmit && student.createdViaWebhook && student.studentId) {
-      try {
-        await uploadStudentDocuments(
-          session.page,
-          {
-            email: profile.email,
-            passportNumber: profile.passportNumber,
-            studentId: student.studentId,
-          },
-          files,
-          () => this.ensureLoggedIn(session),
-        );
-      } catch (err) {
-        logger.warn(
-          `[sit] wizard upload: beklenmeyen hata — belge/foto YÜKLENEMEDİ: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      }
-    } else if (effectiveSubmit && student.alreadyExists) {
-      logger.info(
-        "[sit] wizard upload: öğrenci zaten mevcut — belge/foto backfill atlandı " +
-          "(mükerrer belge riskine karşı; SIT'te update webhook yok, gerekirse manuel eklenir)",
-      );
-    }
+    // NOTE: photo + document uploads now happen INSIDE createStudent, at create
+    // time, via the "Add Student" wizard's file-choosers — SIT's detail Documents
+    // tab is read-only, so post-create upload is impossible. There is therefore
+    // no separate upload step here anymore.
 
     const app = await this.createApplication(
       session,

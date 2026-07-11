@@ -77,9 +77,25 @@ export const SIT_STUDENT_FIELDS = {
   schoolName:     /school name|high school|lise|okul ad/i,
   gpa:            /\bgpa\b|grade point|not ortalama|diploma (notu|grade)/i,
   graduationYear: /graduation (year|date)|mezuniyet (yıl|tarih)/i,
+  passportIssueDate:  /passport (issue|issued)|issue date|veriliş|düzenlen/i,
+  passportExpiryDate: /passport expiry|expiry date|expiration|son (geçerlilik|kullanma)|geçerlilik/i,
+  tcNumber:       /tc (number|no|kimlik (no|numaras))|t\.?c\.? (kimlik|no)|kimlik numaras/i,
 } as const;
 
 export type SitStudentFieldKey = keyof typeof SIT_STUDENT_FIELDS;
+
+// ---------------------------------------------------------------------------
+// Yes/No toggle fields (rendered as radios or a custom combobox). "apply" has
+// no TC / transfer-student data, so both default to "No".
+// ---------------------------------------------------------------------------
+export const SIT_TOGGLES = {
+  haveTc:          /have\s*tc|t\.?c\.?\s*(kimlik|var|numaras)|tc kimlik/i,
+  transferStudent: /transfer student|yatay geçiş|transfer öğrenci/i,
+  /** Affirmative option matcher (radio/option label). */
+  yesOption:       /^\s*(yes|evet)\s*$/i,
+  /** Negative option matcher (radio/option label). */
+  noOption:        /^\s*(no|hayır|hayir)\s*$/i,
+} as const;
 
 // ---------------------------------------------------------------------------
 // "Add Application" dialog — combobox trigger matchers.
@@ -119,8 +135,29 @@ export type SitButtonKey = keyof typeof SIT_BUTTONS;
 export const SIT_UPLOAD = {
   photoTrigger:      /upload (photo|image)|profile (photo|image)|fotoğraf|resim/i,
   attachmentTrigger: /upload|attach|browse|choose file|dosya|belge (ekle|yükle)/i,
+  /**
+   * Per-document upload triggers — the Documents step exposes a distinct
+   * file-chooser per attachment type. Tried before the generic attachmentTrigger
+   * so each local file lands in its own slot; falls back to the generic trigger
+   * (then the hidden input) when no type-specific button exists.
+   */
+  passportTrigger:   /passport|pasaport/i,
+  transcriptTrigger: /transcript|marks?\s*(sheet|card)?|result|grade|hsc|not döküm|transkript/i,
+  diplomaTrigger:    /diploma|degree|certificate|graduation|mezuniyet|sertifika/i,
   /** Generic hidden file input fallback if a filechooser does not appear. */
   fileInput: "input[type=file]",
+} as const;
+
+// ---------------------------------------------------------------------------
+// "Session Inactivity Warning" modal — SIT pops this after idle time while the
+// wizard is open. Left unattended it logs the session out mid-create; we detect
+// it and click "Stay Logged In" to keep the wizard alive.
+// ---------------------------------------------------------------------------
+export const SIT_MODAL = {
+  inactivityMarker:
+    /session (inactivity|timeout|expir)|inactiv|oturum (zaman aşımı|süresi|hareketsiz|sonland)/i,
+  stayLoggedIn:
+    /stay logged in|keep me (logged|signed)|continue session|stay signed in|oturumu (aç[ıi]k tut|sürdür|devam)|devam et/i,
 } as const;
 
 // ---------------------------------------------------------------------------
