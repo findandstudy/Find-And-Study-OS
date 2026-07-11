@@ -37,11 +37,40 @@ const cspDirectives = {
   formAction: ["'self'"],
 };
 
+// The public contract-review preview is served as its own HTML document
+// (text/html) that the signing SPA loads inside a sandboxed <iframe src>. A
+// document loaded via a real URL uses its OWN response CSP instead of
+// inheriting the parent page's, so this scoped policy must allow the contract
+// templates' inline <style> blocks and inline style="" attributes to render
+// (the global style-src 'self' would otherwise blank the whole document). It
+// still forbids all scripts (script-src 'none') so the sandboxed preview can
+// never execute template markup. Images come from our own storage ('self'),
+// signature data URLs (data:) and any https: asset the template references.
+const signPreviewCspDirectives = {
+  defaultSrc: ["'none'"],
+  styleSrc: ["'unsafe-inline'"],
+  imgSrc: ["'self'", "data:", "https:"],
+  fontSrc: ["'self'", "data:", "https:"],
+  scriptSrc: ["'none'"],
+  objectSrc: ["'none'"],
+  baseUri: ["'none'"],
+  formAction: ["'none'"],
+  // Only same-origin pages (the signing SPA) may frame this preview.
+  frameAncestors: ["'self'"],
+};
+
 app.use((req, res, next) => {
   const isEmbed = req.path.startsWith("/api/public/embed/");
   const isWidget = isEmbed && req.path.endsWith("/widget");
+  const isSignPreviewHtml =
+    req.path.startsWith("/api/public/sign/") && req.path.endsWith("/preview.html");
 
-  if (isEmbed) {
+  if (isSignPreviewHtml) {
+    helmet({
+      contentSecurityPolicy: { directives: signPreviewCspDirectives },
+      crossOriginEmbedderPolicy: false,
+    })(req, res, next);
+  } else if (isEmbed) {
     helmet({
       contentSecurityPolicy: isWidget ? false : { directives: cspDirectives },
       crossOriginEmbedderPolicy: false,

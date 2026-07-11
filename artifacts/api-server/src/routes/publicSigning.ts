@@ -210,6 +210,46 @@ router.get("/public/sign/:token/preview", signLimiter, async (req, res): Promise
   }
 });
 
+// HTML variant of the contract preview. The signing SPA loads this inside a
+// sandboxed <iframe src> on the review step. Unlike the JSON /preview endpoint
+// (whose HTML, when dropped into a srcDoc iframe, INHERITS the SPA's strict
+// style-src 'self' CSP and renders completely unstyled in production), a
+// document fetched from this real URL carries its OWN response CSP — the
+// scoped, inline-style-allowing, script-forbidding policy applied to
+// `.../preview.html` in app.ts — so the templates' inline styles render while
+// scripts stay blocked. Reuses the same token resolution, expiry checks, rate
+// limiting and shared documentShell renderer as the JSON endpoint above.
+router.get("/public/sign/:token/preview.html", signLimiter, async (req, res): Promise<void> => {
+  const esc = (s: string): string =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const sendPlain = (status: number, message: string): void => {
+    res.status(status).type("html").send(
+      `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>` +
+      `<body style="margin:0;padding:24px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#475569;font-size:14px;">` +
+      `${esc(message)}</body></html>`
+    );
+  };
+  try {
+    const r = await resolveByToken(String(req.params.token));
+    if ("error" in r) { sendPlain(r.status, r.error); return; }
+    if (r.expired) { sendPlain(410, "Link expired"); return; }
+    const ctx = buildAgentContext(r.agent, (r.session.intakeData as any) || null, {
+      signerEmail: r.session.signerEmail,
+      signerName: r.session.signerName || undefined,
+      number: contractNumber(r.session.id),
+    });
+    const rendered = renderTemplate(r.template.bodyHtml, ctx);
+    const placeholder = SIG_PLACEHOLDER[r.template.language] || SIG_PLACEHOLDER.en;
+    const html = documentShell(cleanupSignatureImages(rendered, placeholder));
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.send(html);
+  } catch (err) {
+    console.error("[public-sign] preview.html:", err);
+    sendPlain(500, "Failed to render contract preview");
+  }
+});
+
 // NOTE: /public/sign/:token/preview-pdf was removed. Headless-Chromium PDF
 // rendering on the synchronous request path OOM-kills the autoscale instance,
 // which makes the edge proxy return an opaque HTML "403 Forbidden". Use the

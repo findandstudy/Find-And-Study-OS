@@ -79,7 +79,6 @@ export default function SignFlow({ token }: { token: string }) {
   const [step, setStep] = useState<Step>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [session, setSession] = useState<SessionView | null>(null);
-  const [previewHtml, setPreviewHtml] = useState<string>("");
   const [intake, setIntake] = useState<Record<string, string>>({});
   const [signerName, setSignerName] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
@@ -199,7 +198,6 @@ export default function SignFlow({ token }: { token: string }) {
         if (data.status === "signed") { setStep("success"); return; }
         if (data.status === "revoked") { setStep("revoked"); return; }
         if (data.mode === "self_fill" && data.status === "intake_pending") { setStep("intake"); return; }
-        await loadPreview();
         setStep("review");
       } catch (err: any) {
         const status = err?.status || err?.response?.status;
@@ -214,10 +212,12 @@ export default function SignFlow({ token }: { token: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  async function loadPreview() {
-    const r: any = await customFetch(`/api/public/sign/${encodeURIComponent(token)}/preview`);
-    setPreviewHtml(r.data?.html || "");
-  }
+  // The contract preview is loaded directly into a sandboxed <iframe src> from
+  // a dedicated HTML endpoint so it carries its own (inline-style-allowing) CSP
+  // and renders styled in production. The server always renders fresh from the
+  // latest saved intake data, so navigating intake -> review remounts the
+  // iframe and re-fetches automatically (no separate JSON round-trip needed).
+  const previewUrl = `${BASE_URL}/api/public/sign/${encodeURIComponent(token)}/preview.html`;
 
   const fields = (session?.template.intakeSchema || []) as { key: string; label: string; type: string; required?: boolean; placeholder?: string }[];
   const nameLikeFields = fields.filter(isNameLikeField);
@@ -274,7 +274,6 @@ export default function SignFlow({ token }: { token: string }) {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ intake: intakePayload }),
       });
-      await loadPreview();
       setStep("review");
     } catch (err: any) {
       alert(err?.message || t("saveError"));
@@ -490,20 +489,22 @@ export default function SignFlow({ token }: { token: string }) {
       >
         {/*
           The preview is a complete HTML document (the server wraps the rendered
-          contract in the SAME document shell used for the final PDF). We render
-          it inside a sandboxed <iframe> via srcDoc so the template's own
-          <style> blocks and inline CSS are preserved and isolated from the
-          app's Tailwind/prose styles — making the preview visually faithful to
-          the signed PDF. sandbox="" blocks scripts/forms/same-origin, so the
-          rich HTML renders safely without being run through DOMPurify (which was
-          stripping the template styling and causing the mismatch).
+          contract in the SAME document shell used for the final PDF). We load it
+          from a dedicated HTML endpoint via the iframe's `src` (NOT srcDoc): a
+          srcDoc document INHERITS the parent page's CSP, so in production the
+          SPA's strict `style-src 'self'` blocked every inline style and the
+          contract rendered completely unstyled. A document fetched from a real
+          URL instead carries its OWN response CSP (scoped in the API server to
+          allow inline styles while forbidding scripts), so the template's
+          <style> blocks and inline CSS render faithfully. sandbox="" keeps the
+          preview isolated and prevents any scripts/forms from running.
         */}
         <div className="border rounded-lg overflow-hidden bg-white h-[65vh]">
           <iframe
             title={t("titleReview")}
             sandbox=""
             className="w-full h-full border-0"
-            srcDoc={previewHtml}
+            src={previewUrl}
           />
         </div>
       </Shell>
