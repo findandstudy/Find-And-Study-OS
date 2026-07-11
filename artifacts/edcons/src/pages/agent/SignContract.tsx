@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import DOMPurify from "isomorphic-dompurify";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -296,8 +295,9 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
           </div>
         ) : step === "review" ? (
           <>
-            <div className="prose prose-sm dark:prose-invert max-w-none border rounded-lg p-6 bg-card max-h-[60vh] overflow-y-auto"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.previewHtml || "") }} />
+            <div className="border rounded-lg overflow-hidden bg-white h-[60vh]">
+              <iframe title={t("agentOnboarding.sign.title") || "Contract preview"} sandbox="" className="w-full h-full border-0" srcDoc={data.previewHtml || ""} />
+            </div>
             <div className="flex justify-between mt-6">
               {intakeFields.length > 0 && isOnboarding ? (
                 <Button variant="outline" onClick={() => { setError(""); setStep("details"); }}>{t("common.back") || "Back"}</Button>

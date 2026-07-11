@@ -499,7 +499,7 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
   let previewHtml: string | null = null;
   if (template && (session.status === "review_pending" || session.status === "intake_pending")) {
     try {
-      const { renderTemplate, buildAgentContext, cleanupSignatureImages } = await import("../lib/contractRenderer");
+      const { renderTemplate, buildAgentContext, cleanupSignatureImages, documentShell } = await import("../lib/contractRenderer");
       const ctx = buildAgentContext(agent, (session.intakeData as any) || null, {
         signerEmail: session.signerEmail, signerName: session.signerName || undefined,
       });
@@ -510,7 +510,10 @@ router.get("/contracts/me", requireAuth, async (req: Request, res: Response): Pr
       // signature boxes before signing. Public signing routes already do
       // this; we mirror their behavior here. Empty placeholderText keeps
       // the signature boxes visually blank in the pre-sign preview.
-      previewHtml = cleanupSignatureImages(rendered, "");
+      // Wrap in the shared documentShell() so the preview carries the same
+      // template <style> blocks + A4 page framing the final signed PDF uses,
+      // rendered by the client in a sandboxed iframe (mirrors public signing).
+      previewHtml = documentShell(cleanupSignatureImages(rendered, ""));
     } catch (err) {
       console.error("[contracts/me] preview render failed:", err);
     }
@@ -813,11 +816,11 @@ router.get("/contracts/me/session/:id", requireAuth, async (req: Request, res: R
   let previewHtml: string | null = null;
   if (template && (session.status === "review_pending" || session.status === "intake_pending")) {
     try {
-      const { renderTemplate, buildAgentContext, cleanupSignatureImages } = await import("../lib/contractRenderer");
+      const { renderTemplate, buildAgentContext, cleanupSignatureImages, documentShell } = await import("../lib/contractRenderer");
       const ctx = buildAgentContext(agent, (session.intakeData as any) || null, {
         signerEmail: session.signerEmail, signerName: session.signerName || undefined,
       });
-      previewHtml = cleanupSignatureImages(renderTemplate(template.bodyHtml, ctx), "");
+      previewHtml = documentShell(cleanupSignatureImages(renderTemplate(template.bodyHtml, ctx), ""));
     } catch (err) {
       console.error("[contracts/me/session] preview render failed:", err);
     }
