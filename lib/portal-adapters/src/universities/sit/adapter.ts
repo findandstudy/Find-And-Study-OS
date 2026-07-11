@@ -30,6 +30,7 @@ import type {
   LoginOpts,
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
+import { getAssetSigningSecret } from "../../assetSigningSecret.js";
 import { portalCreds, type ResolvedCreds } from "../../portalCreds.js";
 import { fold, matchProgram, type ProgramCandidate } from "../../programMatch.js";
 import { db, portalProgramCacheTable } from "@workspace/db";
@@ -658,11 +659,23 @@ export const sitAdapter: SitAdapter = {
         return u.split("?")[0];
       }
     };
+    // Our own session-gated asset routes: fetchable by an external, cookie-less
+    // webhook ONLY when they carry a valid HMAC signature (?exp=&sig=). An
+    // UNSIGNED such URL 401/403's for the webhook (the exact reason documents /
+    // photo silently fail to land in SIT). We surface signed-ness explicitly so
+    // the true failure mode is visible in the worker log (redactUrl hides the
+    // sig value, so previously you could not tell signed from bare).
+    const isSessionGatedAssetRoute = (u: string): boolean =>
+      /\/api\/documents\/\d+\/file(?:$|[?#])/.test(u) ||
+      /\/api\/students\/\d+\/photo(?:$|[?#])/.test(u);
+    const isSignedAssetUrl = (u: string): boolean => /[?&]sig=/.test(u);
     // Absolutize + validate a URL for the external fetcher, logging one clear
     // diagnostic (redacted). Warns when the result is still non-http(s) (no
-    // public base configured) or points at localhost (not reachable externally).
+    // public base configured), points at localhost (not reachable externally),
+    // or is an UNSIGNED session-gated route (webhook will 401/403).
     const prepareAssetUrl = (label: string, raw: string): string => {
       const abs = absolutizeAssetUrl(raw);
+      const signed = isSignedAssetUrl(abs);
       let warn = "";
       if (!/^https?:\/\//i.test(abs)) {
         warn =
@@ -670,8 +683,13 @@ export const sitAdapter: SitAdapter = {
       } else if (isLocalHostUrl(abs)) {
         warn =
           " (UYARI: localhost adresi — harici webhook erişemez; public base ayarlayın)";
+      } else if (isSessionGatedAssetRoute(abs) && !signed) {
+        warn =
+          " (UYARI: oturum-korumalı asset yolu İMZASIZ — webhook 401/403 alır; ASSET_URL_SIGNING_SECRET worker ve api-server'da AYNI olmalı)";
       }
-      logger.info(`[sit] ${label}: ${redactUrl(abs)}${warn}`);
+      logger.info(
+        `[sit] ${label}: ${redactUrl(abs)} [imzalı=${signed ? "evet" : "hayır"}]${warn}`,
+      );
       return abs;
     };
 
@@ -778,10 +796,17 @@ export const sitAdapter: SitAdapter = {
     // durumunu tek bakışta gör (canlı create doğrulaması — dry program adımında
     // durduğu için bu log yalnız canlı gönderimde çıkar). NOT: SIT webhook
     // payload'ında dil skoru alanı YOK; profile.languageScore yalnız teşhis için.
+    // imza-secret: whether THIS (worker) process can HMAC-sign asset URLs. When
+    // "YOK", session-gated documents are dropped by the profile builder and the
+    // photo is left unsigned → SIT can't fetch them. When "var" but SIT still
+    // shows 0 documents/photo, the worker and api-server secrets DIFFER (verify
+    // fails) — align ASSET_URL_SIGNING_SECRET (or SESSION_SECRET) on both.
+    const assetSecretConfigured = getAssetSigningSecret().length > 0;
     logger.info(
       `[sit] CREATE payload → documents=${sitDocuments.length} ` +
       `(passport=${hasPassport ? "var" : "YOK"}, transcript=${hasTranscript ? "var" : "YOK"}) ` +
       `photo=${photoUrl ? "var" : "YOK"} ` +
+      `imza-secret=${assetSecretConfigured ? "var" : "YOK"} ` +
       `passportNo=${payload.passport_number ? "var" : "YOK"} ` +
       `issue=${payload.passport_issue_date || "-"} expiry=${payload.passport_expiry_date || "-"} ` +
       `lang=${profile.languageScore ?? "-"}`,
