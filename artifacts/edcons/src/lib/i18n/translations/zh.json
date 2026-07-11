@@ -2231,7 +2231,8 @@
     "stuckAssignOffHoursBehaviorTitle": "非工作时间行为",
     "stuckAssignOffHoursBehaviorDesc": "当前没有人处于工作时间时该如何处理。",
     "stuckAssignOffHoursAssignAnyway": "仍然分配",
-    "stuckAssignOffHoursLeaveUnassigned": "保持未分配（排队等待）"
+    "stuckAssignOffHoursLeaveUnassigned": "保持未分配（排队等待）",
+    "logoMissing": "徽标不可用 — 请重新上传以修复"
   },
   "financePage": {
     "statusPotential": "潜在",

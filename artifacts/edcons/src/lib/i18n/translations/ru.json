@@ -2282,7 +2282,8 @@
     "stuckAssignOffHoursBehaviorTitle": "Поведение вне рабочего времени",
     "stuckAssignOffHoursBehaviorDesc": "Что делать, если сейчас никто не находится в рабочем времени.",
     "stuckAssignOffHoursAssignAnyway": "Назначить в любом случае",
-    "stuckAssignOffHoursLeaveUnassigned": "Оставить неназначенным (в очереди)"
+    "stuckAssignOffHoursLeaveUnassigned": "Оставить неназначенным (в очереди)",
+    "logoMissing": "Логотип недоступен — загрузите заново, чтобы исправить"
   },
   "financePage": {
     "statusPotential": "Потенциальный",

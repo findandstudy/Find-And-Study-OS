@@ -2231,7 +2231,8 @@
     "stuckAssignOffHoursBehaviorTitle": "Perilaku di Luar Jam Kerja",
     "stuckAssignOffHoursBehaviorDesc": "Apa yang harus dilakukan jika saat ini tidak ada yang berada dalam jam kerja.",
     "stuckAssignOffHoursAssignAnyway": "Tetap tugaskan",
-    "stuckAssignOffHoursLeaveUnassigned": "Biarkan tidak ditugaskan (antre)"
+    "stuckAssignOffHoursLeaveUnassigned": "Biarkan tidak ditugaskan (antre)",
+    "logoMissing": "Logo tidak tersedia — unggah ulang untuk memperbaiki"
   },
   "financePage": {
     "statusPotential": "Potensial",

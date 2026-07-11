@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { QuickLinkLogo } from "@/components/QuickLinkLogo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -1606,6 +1607,7 @@ function QuickLinksTab() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({ title: "", url: "", logoUrl: "", color: "#6366f1", target: "agent" as string, sortOrder: 0 });
   const [logoUploading, setLogoUploading] = useState(false);
+  const [missingLogoIds, setMissingLogoIds] = useState<Set<number>>(new Set());
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
@@ -1614,6 +1616,8 @@ function QuickLinksTab() {
       const res = await fetch(`${BASE}/api/quick-links/admin`, { credentials: "include" });
       const data = await res.json();
       setLinks(data.data || []);
+      // Clear stale missing-logo flags; each rendered logo re-checks on load.
+      setMissingLogoIds(new Set());
     } catch {} finally {
       setLoading(false);
     }
@@ -1852,19 +1856,23 @@ function QuickLinksTab() {
                   link.isActive ? "bg-background border-border" : "bg-muted/50 border-border/50 opacity-60"
                 }`}
               >
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-white text-sm font-bold overflow-hidden"
-                  style={{ backgroundColor: link.logoUrl ? "transparent" : (link.color || "#6366f1") }}
-                >
-                  {link.logoUrl ? (
-                    <img src={link.logoUrl} alt={link.title} className="w-full h-full object-contain" />
-                  ) : (
-                    link.icon || link.title.charAt(0).toUpperCase()
-                  )}
-                </div>
+                <QuickLinkLogo
+                  logoUrl={link.logoUrl}
+                  title={link.title}
+                  icon={link.icon}
+                  color={link.color}
+                  className="w-10 h-10"
+                  onImageError={() => setMissingLogoIds(prev => (prev.has(link.id) ? prev : new Set(prev).add(link.id)))}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-sm text-foreground">{link.title}</p>
+                    {missingLogoIds.has(link.id) && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-500" title={t("settingsPage.logoMissing")}>
+                        <AlertTriangle className="w-3 h-3" />
+                        {t("settingsPage.logoMissing")}
+                      </span>
+                    )}
                     {(link.target || "").split(",").map((t: string) => (
                       <Badge key={t} className={`text-[10px] ${TARGET_COLORS[t] || "bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-300"}`}>
                         {TARGET_LABELS[t] || t}

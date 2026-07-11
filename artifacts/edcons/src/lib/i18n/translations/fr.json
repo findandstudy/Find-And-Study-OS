@@ -2282,7 +2282,8 @@
     "stuckAssignOffHoursBehaviorTitle": "Comportement en dehors des heures de travail",
     "stuckAssignOffHoursBehaviorDesc": "Que faire lorsque personne n'est actuellement dans ses heures de travail.",
     "stuckAssignOffHoursAssignAnyway": "Attribuer quand même",
-    "stuckAssignOffHoursLeaveUnassigned": "Laisser non attribué (en attente)"
+    "stuckAssignOffHoursLeaveUnassigned": "Laisser non attribué (en attente)",
+    "logoMissing": "Logo indisponible — réimportez pour corriger"
   },
   "financePage": {
     "statusPotential": "Potentiel",

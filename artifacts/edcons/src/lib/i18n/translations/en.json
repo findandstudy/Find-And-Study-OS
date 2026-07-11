@@ -2523,7 +2523,8 @@
     "stuckAssignOffHoursBehaviorTitle": "Off-Hours Behavior",
     "stuckAssignOffHoursBehaviorDesc": "What to do when nobody is currently within working hours.",
     "stuckAssignOffHoursAssignAnyway": "Assign anyway",
-    "stuckAssignOffHoursLeaveUnassigned": "Leave unassigned (queue)"
+    "stuckAssignOffHoursLeaveUnassigned": "Leave unassigned (queue)",
+    "logoMissing": "Logo unavailable — re-upload to fix"
   },
   "financePage": {
     "statusPotential": "Potential",

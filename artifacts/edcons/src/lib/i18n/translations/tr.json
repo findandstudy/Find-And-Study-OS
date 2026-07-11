@@ -2464,7 +2464,8 @@
     "stuckAssignOffHoursBehaviorTitle": "Mesai Dışı Davranışı",
     "stuckAssignOffHoursBehaviorDesc": "Şu anda mesaide kimse yoksa ne yapılacağı.",
     "stuckAssignOffHoursAssignAnyway": "Yine de ata",
-    "stuckAssignOffHoursLeaveUnassigned": "Atanmadan bırak (sırada bekle)"
+    "stuckAssignOffHoursLeaveUnassigned": "Atanmadan bırak (sırada bekle)",
+    "logoMissing": "Logo kullanılamıyor — düzeltmek için yeniden yükleyin"
   },
   "financePage": {
     "statusPotential": "Potansiyel",

@@ -2231,7 +2231,8 @@
     "stuckAssignOffHoursBehaviorTitle": "Comportamiento fuera de horario",
     "stuckAssignOffHoursBehaviorDesc": "Qué hacer cuando nadie está actualmente dentro de su horario laboral.",
     "stuckAssignOffHoursAssignAnyway": "Asignar de todas formas",
-    "stuckAssignOffHoursLeaveUnassigned": "Dejar sin asignar (en espera)"
+    "stuckAssignOffHoursLeaveUnassigned": "Dejar sin asignar (en espera)",
+    "logoMissing": "Logo no disponible — vuelve a subirlo para corregir"
   },
   "financePage": {
     "statusPotential": "Potencial",

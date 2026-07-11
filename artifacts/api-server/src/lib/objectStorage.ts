@@ -2,6 +2,7 @@ import { type File } from "@google-cloud/storage";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
 import * as fsPromises from "node:fs/promises";
+import { createReadStream as fsCreateReadStream } from "node:fs";
 import * as nodePath from "node:path";
 import {
   createGcsClient,
@@ -105,21 +106,17 @@ export class LocalStorageFile {
   }
 
   // Returns a proper Node.js Readable so callers can chain .on() the same way
-  // they do with GCS File.createReadStream().
+  // they do with GCS File.createReadStream(). Uses fs.createReadStream so a real
+  // stream is returned synchronously — Readable.from() cannot take a Promise and
+  // throws ERR_INVALID_ARG_TYPE, which previously broke every local-driver serve
+  // (e.g. quick-link logos returned HTTP 500 → broken image). fs.createReadStream
+  // treats `end` as inclusive, matching the GCS File.download({start,end})
+  // contract callers rely on.
   createReadStream(opts?: { start?: number; end?: number }): Readable {
-    return Readable.from(
-      fsPromises
-        .open(this.localPath, "r")
-        .then((fh) => fh.readFile({ encoding: null }))
-        .then((buf) => {
-          if (opts?.start !== undefined || opts?.end !== undefined) {
-            const s = opts.start ?? 0;
-            const e = opts.end !== undefined ? opts.end + 1 : buf.length;
-            return [buf.slice(s, e)];
-          }
-          return [buf];
-        })
-    );
+    const streamOpts: { start?: number; end?: number } = {};
+    if (opts?.start !== undefined) streamOpts.start = opts.start;
+    if (opts?.end !== undefined) streamOpts.end = opts.end;
+    return fsCreateReadStream(this.localPath, streamOpts);
   }
 
   // GCS File.download() compatibility — downloads the whole file (or a range)

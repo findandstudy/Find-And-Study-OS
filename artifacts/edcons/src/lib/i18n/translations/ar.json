@@ -2282,7 +2282,8 @@
     "stuckAssignOffHoursBehaviorTitle": "السلوك خارج ساعات العمل",
     "stuckAssignOffHoursBehaviorDesc": "ماذا يحدث عندما لا يكون أحد ضمن ساعات العمل حاليًا.",
     "stuckAssignOffHoursAssignAnyway": "تعيين على أي حال",
-    "stuckAssignOffHoursLeaveUnassigned": "ترك بدون تعيين (في الانتظار)"
+    "stuckAssignOffHoursLeaveUnassigned": "ترك بدون تعيين (في الانتظار)",
+    "logoMissing": "الشعار غير متاح — أعد الرفع للإصلاح"
   },
   "financePage": {
     "statusPotential": "محتمل",

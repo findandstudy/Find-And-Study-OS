@@ -2231,7 +2231,8 @@
     "stuckAssignOffHoursBehaviorTitle": "رفتار خارج از ساعات کاری",
     "stuckAssignOffHoursBehaviorDesc": "در صورتی که در حال حاضر کسی در ساعات کاری نباشد چه اتفاقی بیفتد.",
     "stuckAssignOffHoursAssignAnyway": "به هر حال تخصیص داده شود",
-    "stuckAssignOffHoursLeaveUnassigned": "بدون تخصیص باقی بماند (در صف)"
+    "stuckAssignOffHoursLeaveUnassigned": "بدون تخصیص باقی بماند (در صف)",
+    "logoMissing": "لوگو در دسترس نیست — برای رفع، دوباره بارگذاری کنید"
   },
   "financePage": {
     "statusPotential": "بالقوه",

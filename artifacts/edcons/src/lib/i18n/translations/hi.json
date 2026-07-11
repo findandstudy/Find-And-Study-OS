@@ -2231,7 +2231,8 @@
     "stuckAssignOffHoursBehaviorTitle": "गैर-कार्य समय व्यवहार",
     "stuckAssignOffHoursBehaviorDesc": "जब वर्तमान में कोई भी कार्य समय में न हो तो क्या किया जाए।",
     "stuckAssignOffHoursAssignAnyway": "फिर भी असाइन करें",
-    "stuckAssignOffHoursLeaveUnassigned": "असाइन न करें (कतार में रखें)"
+    "stuckAssignOffHoursLeaveUnassigned": "असाइन न करें (कतार में रखें)",
+    "logoMissing": "लोगो अनुपलब्ध — ठीक करने के लिए पुनः अपलोड करें"
   },
   "financePage": {
     "statusPotential": "संभावित",
