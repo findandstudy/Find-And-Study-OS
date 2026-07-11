@@ -223,6 +223,251 @@ async function clickButton(page: Page, nameRe: RegExp): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
+// Post-create document/photo upload (restored file-chooser wizard step).
+//
+// The SIT student is created via an n8n "create" webhook, which does NOT ingest
+// the `documents` / `photo_url` URL fields in its payload (only two webhooks
+// exist: student-create + application-create; no document webhook). The ONLY
+// mechanism that ever delivered files to the SIT student card is the browser
+// file-chooser upload that lived in the removed 6-step "Add Student" wizard.
+//
+// Since create no longer drives a wizard, we re-run that upload AFTER the
+// student id is resolved: navigate to the student's detail page and push the
+// locally-downloaded SubmitFiles (passport / transcript / diploma + photo)
+// through the same file-chooser affordance. This is best-effort and NEVER
+// fatal — the student + application are already created; a failed upload is
+// logged LOUDLY so it is never silently lost, but must not abort the flow.
+// ---------------------------------------------------------------------------
+
+/** Upload a file via the OS file chooser triggered by clicking `triggerRe`. */
+async function uploadViaChooser(
+  page: Page,
+  triggerRe: RegExp,
+  filePath: string,
+): Promise<boolean> {
+  const trigger = page.getByRole("button", { name: triggerRe }).first();
+  if (!(await trigger.count())) {
+    // Fallback: a hidden <input type=file>, set directly.
+    const input = page.locator(SIT_UPLOAD.fileInput).first();
+    if (await input.count()) {
+      await input.setInputFiles(filePath).catch(() => {});
+      return true;
+    }
+    return false;
+  }
+  try {
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout: 8000 }),
+      trigger.click({ timeout: 6000 }),
+    ]);
+    await chooser.setFiles(filePath);
+    await sleep(page, 1500);
+    return true;
+  } catch {
+    const input = page.locator(SIT_UPLOAD.fileInput).first();
+    if (await input.count()) {
+      await input.setInputFiles(filePath).catch(() => {});
+      return true;
+    }
+    return false;
+  }
+}
+
+/**
+ * Navigate to THIS student's detail page and prove we are on the right record
+ * before any upload. Two strategies, both identity-verified:
+ *   1. Deterministic — direct URL from the resolved studentId, then verify.
+ *   2. Fallback — list search by email + row-info click, then verify.
+ *
+ * Identity verification is MANDATORY: we only return true when the detail page
+ * demonstrably belongs to this student (its email or passport is present on the
+ * page). Otherwise we return false so the caller ABORTS the upload — uploading
+ * to the wrong row would cross-associate one student's personal documents with
+ * another's, which is far worse than a missing document.
+ */
+async function openStudentDetail(
+  page: Page,
+  by: { email?: string; passportNumber?: string; studentId?: string },
+): Promise<boolean> {
+  const isOnDetailPage = (): boolean =>
+    SIT_NAV.studentDetailUrl.test(page.url());
+
+  const verifyIdentity = async (): Promise<boolean> => {
+    if (!isOnDetailPage()) return false;
+    let body = "";
+    try {
+      body = (await page.content()).toLowerCase();
+    } catch {
+      return false;
+    }
+    if (by.email && body.includes(by.email.toLowerCase())) return true;
+    if (
+      by.passportNumber &&
+      body.includes(by.passportNumber.toLowerCase())
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  try {
+    // 1) Deterministic: navigate directly by the resolved id, then verify.
+    if (by.studentId) {
+      await page
+        .goto(
+          `${SIT_URLS.base}${SIT_URLS.studentsPath}/${by.studentId}`,
+          { waitUntil: "domcontentloaded", timeout: 30000 },
+        )
+        .catch(() => {});
+      await sleep(page, 2000);
+      if (await verifyIdentity()) return true;
+      logger.warn(
+        "[sit] wizard upload: doğrudan id ile detay doğrulanamadı — arama ile deneniyor",
+      );
+    }
+
+    // 2) Fallback: search by email, open the row, then verify identity.
+    await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
+    await sleep(page, 1500);
+
+    if (by.email) {
+      const search = page.getByPlaceholder(SIT_NAV.searchPlaceholder).first();
+      if (await search.count()) {
+        await search.fill(by.email).catch(() => {});
+        await sleep(page, 2500);
+      }
+    }
+
+    const info = page.locator(SIT_NAV.rowInfoSelector).first();
+    if (await info.count()) {
+      await info.click({ timeout: 6000 }).catch(() => {});
+      await page
+        .waitForURL(SIT_NAV.studentDetailUrl, { timeout: 8000 })
+        .catch(() => {});
+    }
+
+    if (await verifyIdentity()) return true;
+
+    logger.warn(
+      "[sit] wizard upload: öğrenci kimliği doğrulanamadı (email/passport eşleşmedi) — " +
+        "yükleme İPTAL edildi (yanlış karta belge yazma riski)",
+    );
+    return false;
+  } catch (err) {
+    logger.warn(
+      `[sit] öğrenci detay açma hatası — ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return false;
+  }
+}
+
+/**
+ * Best-effort: if the detail page hides uploads behind a "Documents" tab/section,
+ * reveal it. Silent no-op when no such control exists.
+ */
+async function revealDocumentsSection(page: Page): Promise<void> {
+  const sectionRe = /documents|belge|attachments|dosya|files/i;
+  try {
+    const tab = page.getByRole("tab", { name: sectionRe }).first();
+    if (await tab.count()) {
+      await tab.click({ timeout: 4000 }).catch(() => {});
+      await sleep(page, 1000);
+      return;
+    }
+    const btn = page.getByRole("button", { name: sectionRe }).first();
+    if (await btn.count()) {
+      await btn.click({ timeout: 4000 }).catch(() => {});
+      await sleep(page, 1000);
+    }
+  } catch {
+    /* best-effort — never fatal */
+  }
+}
+
+/**
+ * Upload the locally-downloaded photo + attachment files to a freshly-created
+ * SIT student's detail page. Best-effort, non-fatal; logs a clear
+ * `[sit] wizard upload: N/M belge ok, foto=…` summary.
+ */
+async function uploadStudentDocuments(
+  page: Page,
+  by: { email?: string; passportNumber?: string; studentId?: string },
+  files: SubmitFiles,
+): Promise<void> {
+  const attachments = [
+    files.passport ? { label: "passport", path: files.passport } : null,
+    files.transcript ? { label: "transcript", path: files.transcript } : null,
+    files.diploma ? { label: "diploma", path: files.diploma } : null,
+  ].filter((a): a is { label: string; path: string } => a !== null);
+
+  if (!files.photo && attachments.length === 0) {
+    logger.info("[sit] wizard upload: yerel belge/foto yok — atlanıyor");
+    return;
+  }
+
+  const opened = await openStudentDetail(page, by);
+  if (!opened) {
+    logger.warn(
+      "[sit] wizard upload: öğrenci detay sayfası açılamadı — belge/foto YÜKLENEMEDİ " +
+        "(öğrenci+başvuru oluştu, belgeler eksik kaldı)",
+    );
+    return;
+  }
+
+  await revealDocumentsSection(page);
+
+  let ok = 0;
+  for (const a of attachments) {
+    try {
+      const done = await uploadViaChooser(page, SIT_UPLOAD.attachmentTrigger, a.path);
+      if (done) {
+        ok++;
+        logger.info(`[sit] wizard upload: ${a.label} yüklendi`);
+      } else {
+        logger.warn(
+          `[sit] wizard upload: ${a.label} için yükleme alanı bulunamadı`,
+        );
+      }
+      await sleep(page, 1200);
+    } catch (err) {
+      logger.warn(
+        `[sit] wizard upload: ${a.label} HATA — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  let photoStr = "yok";
+  if (files.photo) {
+    try {
+      const done = await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo);
+      photoStr = done ? "ok" : "HATA";
+      await sleep(page, 1200);
+    } catch (err) {
+      photoStr = "HATA";
+      logger.warn(
+        `[sit] wizard upload: foto HATA — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  // Best-effort save if the detail page requires an explicit save after uploads.
+  await clickButton(page, SIT_BUTTONS.saveStudent).catch(() => false);
+
+  logger.info(
+    `[sit] wizard upload: ${ok}/${attachments.length} belge ok, foto=${photoStr}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Login internals.
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -1141,6 +1386,39 @@ export const sitAdapter: SitAdapter = {
       files,
       effectiveSubmit,
     );
+
+    // Attach the locally-downloaded photo + documents to the SIT student card.
+    // The create webhook does NOT ingest the `documents`/`photo_url` URL fields,
+    // so the ONLY way files reach the card is the browser file-chooser upload
+    // (restored from the removed wizard). Runs right after the student id is
+    // resolved and BEFORE createApplication (which is webhook-driven and does not
+    // depend on page URL). Fresh-create only (a just-created student has no docs,
+    // so no duplicate risk) and never in DRY. Non-fatal: the student is already
+    // created and the application step still runs; a failure is logged loudly.
+    if (effectiveSubmit && student.created && student.studentId) {
+      try {
+        await uploadStudentDocuments(
+          session.page,
+          {
+            email: profile.email,
+            passportNumber: profile.passportNumber,
+            studentId: student.studentId,
+          },
+          files,
+        );
+      } catch (err) {
+        logger.warn(
+          `[sit] wizard upload: beklenmeyen hata — belge/foto YÜKLENEMEDİ: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    } else if (effectiveSubmit && student.alreadyExists) {
+      logger.info(
+        "[sit] wizard upload: öğrenci zaten mevcut — belge/foto backfill atlandı " +
+          "(mükerrer belge riskine karşı; SIT'te update webhook yok, gerekirse manuel eklenir)",
+      );
+    }
 
     const app = await this.createApplication(
       session,

@@ -128,3 +128,27 @@ stop, then derives every id from GraphQL and POSTs.
   logged presence-only.
 - Failure on any missing required id (program ids / AY / semester / agency_id /
   crm_id / studentId) → abort with a field-specific detail, never a partial POST.
+
+## Document/photo delivery = restored file-chooser UPLOAD (not webhook)
+- The create webhook does NOT ingest `documents`/`photo_url` URL fields. The ONLY
+  mechanism that ever delivered files to the SIT student card is the browser
+  file-chooser upload from the removed 6-step wizard (Step 6).
+  **Why:** git-proven — files were dropped when create became a webhook; the URL
+  fields were added speculatively and are never processed by n8n.
+- **Fix:** after student create + id resolution, navigate to the student detail
+  page and re-run the file-chooser upload (uploadViaChooser: click role=button by
+  SIT_UPLOAD trigger → filechooser event → setFiles, fallback input[type=file]).
+  Runs in submit() BEFORE createApplication (webhook-driven, page-URL-independent).
+- **Identity verification is MANDATORY before any upload.** openStudentDetail
+  tries direct URL `/students/<id>` then falls back to list-search + row-info
+  click, but only returns true when the detail page's email/passport is present
+  on the page. Uploading to the wrong row cross-associates one student's PII docs
+  with another's — worse than a missing doc. Never upload to an unverified page.
+- **Fresh-create only** (`student.created`): a just-created student has no docs so
+  no duplicate risk; alreadyExists is skipped (no update webhook; manual backfill).
+  Upload is best-effort/non-fatal — logs `[sit] wizard upload: N/M belge ok,
+  foto=…`; create+application still succeed if upload fails.
+- **UNVERIFIED live:** detail-page upload-UI selectors reuse the wizard's
+  SIT_UPLOAD triggers but were never tested against the existing-student detail
+  page (no SIT creds in dev). If uploads fail live, the detail-page upload
+  affordance/tab selectors are the first suspect.
