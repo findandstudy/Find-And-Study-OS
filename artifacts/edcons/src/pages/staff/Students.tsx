@@ -2001,7 +2001,7 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
       <PopoverContent className="w-72 p-4 space-y-3 max-h-[70vh] overflow-y-auto" align="end">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Filter</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ ...DEFAULT_STU_FILTERS })}>Clear</Button>}
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => onChange({ ...DEFAULT_STU_FILTERS, assignment: "all" })}>Clear</Button>}
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Status</Label>
