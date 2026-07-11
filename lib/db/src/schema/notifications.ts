@@ -160,6 +160,8 @@ export const DEFAULT_NOTIFICATION_RULES = [
   { event: "inbox.send_failed", name: "Outbound Send Failed", category: "inbox", channels: ["in_app", "email"], recipientType: "role", recipientRoles: ["super_admin", "admin", "manager"] },
   { event: "university_contract.expiring", name: "University Contract Expiring", category: "agents", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "university_contract.expired", name: "University Contract Expired", category: "agents", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
+  { event: "company_contract.expiring", name: "Company Contract Expiring", category: "agents", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
+  { event: "company_contract.expired", name: "Company Contract Expired", category: "agents", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "mandatory_docs_missing", name: "Application Parked: Missing Mandatory Docs", category: "applications", channels: ["in_app"], recipientType: "assigned", recipientRoles: [] },
   { event: "mandatory_docs_missing_student", name: "Required Documents Missing (Student)", category: "applications", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
 ];

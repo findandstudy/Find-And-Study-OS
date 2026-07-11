@@ -779,16 +779,68 @@ async function seedClaudeIntegration() {
     // inbox after the link has been issued. Idempotent.
     await pool.query(`ALTER TABLE signing_sessions ADD COLUMN IF NOT EXISTS expected_email TEXT`);
 
-    // Backfill the new contract permissions for the default admin role.
+    // Company Contracts: externally-signed agreements with company
+    // counterparties. Mirrors university_contracts but the counterparty is
+    // stored inline (company_name NOT NULL, country nullable) since there is no
+    // company master entity. This boot DDL is the prod migration path (deploys
+    // run no Drizzle migrate step). Idempotent.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS company_contracts (
+        id SERIAL PRIMARY KEY,
+        company_name TEXT NOT NULL,
+        country TEXT,
+        year INTEGER,
+        effective_date TIMESTAMPTZ,
+        expiry_date TIMESTAMPTZ,
+        file_object_key TEXT,
+        file_name TEXT,
+        file_mime TEXT,
+        file_size INTEGER,
+        notes TEXT,
+        last_warning_30_sent_at TIMESTAMPTZ,
+        last_warning_14_sent_at TIMESTAMPTZ,
+        last_warning_7_sent_at TIMESTAMPTZ,
+        last_warning_1_sent_at TIMESTAMPTZ,
+        expiry_notice_sent_at TIMESTAMPTZ,
+        uploaded_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        assigned_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        deleted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS company_contracts_company_name_idx ON company_contracts(company_name)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS company_contracts_country_idx ON company_contracts(country)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS company_contracts_expiry_date_idx ON company_contracts(expiry_date)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS company_contracts_deleted_at_idx ON company_contracts(deleted_at)`);
+
+    // Backfill the contract permissions for the default admin roles. This block
+    // is scoped to admin/super_admin only — DO NOT add other roles here or they
+    // silently inherit the whole set (contract_templates/contracts/self_fill).
     const newPerms = [
       "contract_templates.view", "contract_templates.manage",
       "contracts.view", "contracts.manage",
       "self_fill_links.view", "self_fill_links.manage",
+      "company_contracts.view", "company_contracts.manage",
     ];
     const adminRoleRes = await pool.query(`SELECT id, permissions FROM roles WHERE name IN ('admin', 'super_admin')`);
     for (const row of adminRoleRes.rows) {
       const existing: string[] = Array.isArray(row.permissions) ? row.permissions : [];
       const merged = Array.from(new Set([...existing, ...newPerms]));
+      if (merged.length !== existing.length) {
+        await pool.query(`UPDATE roles SET permissions = $1::jsonb WHERE id = $2`, [JSON.stringify(merged), row.id]);
+      }
+    }
+
+    // Company Contracts recipients include the manager role (see
+    // universityContractChecker ADMIN_ROLES = super_admin/admin/manager), so
+    // grant manager ONLY the company_contracts perms — not the other contract
+    // perms above — to keep parity without over-expanding manager's access.
+    const companyContractPerms = ["company_contracts.view", "company_contracts.manage"];
+    const managerRoleRes = await pool.query(`SELECT id, permissions FROM roles WHERE name = 'manager'`);
+    for (const row of managerRoleRes.rows) {
+      const existing: string[] = Array.isArray(row.permissions) ? row.permissions : [];
+      const merged = Array.from(new Set([...existing, ...companyContractPerms]));
       if (merged.length !== existing.length) {
         await pool.query(`UPDATE roles SET permissions = $1::jsonb WHERE id = $2`, [JSON.stringify(merged), row.id]);
       }
@@ -2244,6 +2296,8 @@ async function seedClaudeIntegration() {
     startOfferExpiryChecker();
     const { startUniversityContractChecker } = await import("./lib/universityContractChecker");
     startUniversityContractChecker();
+    const { startCompanyContractChecker } = await import("./lib/companyContractChecker");
+    startCompanyContractChecker();
     const { startSignedContractDeliveryWorker } = await import("./lib/signedContractDelivery");
     startSignedContractDeliveryWorker();
     const { startAssignmentConsistencyChecker } = await import("./lib/assignmentConsistencyChecker");

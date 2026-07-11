@@ -36,6 +36,7 @@ export * from "./branches";
 export * from "./contracts";
 export * from "./apiTokens";
 export * from "./universityContracts";
+export * from "./companyContracts";
 export * from "./leadAssignmentRules";
 export * from "./agencyAssignedStaff";
 export * from "./staffCards";

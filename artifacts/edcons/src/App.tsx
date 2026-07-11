@@ -98,6 +98,7 @@ const AdminContractTemplates = lazyRetry(() => import("@/pages/admin/ContractTem
 const AdminContracts = lazyRetry(() => import("@/pages/admin/Contracts"));
 const AdminSelfFillLinks = lazyRetry(() => import("@/pages/admin/SelfFillLinks"));
 const AdminUniversityContracts = lazyRetry(() => import("@/pages/admin/UniversityContracts"));
+const AdminCompanyContracts = lazyRetry(() => import("@/pages/admin/CompanyContracts"));
 const AdminPortalAutomation = lazyRetry(() => import("@/pages/admin/PortalAutomation"));
 const AdminAiAgent = lazyRetry(() => import("@/pages/admin/AiAgent"));
 const AdminPortalCredentials = lazyRetry(() => import("@/pages/admin/PortalCredentials"));
@@ -372,6 +373,12 @@ function StaffAdminShell() {
           </Route>
           <Route path="/admin/university-contracts">
             <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "agent_staff"]} requiredPermission="university_contracts.view"><AdminUniversityContracts /></ProtectedRoute>
+          </Route>
+          <Route path="/admin/company-contracts/:id">
+            {(params) => <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "agent_staff"]} requiredPermission="company_contracts.view"><AdminCompanyContracts openId={Number(params.id)} /></ProtectedRoute>}
+          </Route>
+          <Route path="/admin/company-contracts">
+            <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "agent_staff"]} requiredPermission="company_contracts.view"><AdminCompanyContracts /></ProtectedRoute>
           </Route>
           <Route path="/admin/portal-automation">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminPortalAutomation /></ProtectedRoute>

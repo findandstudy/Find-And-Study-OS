@@ -171,6 +171,13 @@ export const PERMISSION_CATEGORIES = {
       "university_contracts.manage": "Manage University Contracts",
     },
   },
+  company_contracts: {
+    label: "Company Contracts",
+    permissions: {
+      "company_contracts.view": "View Company Contracts",
+      "company_contracts.manage": "Manage Company Contracts",
+    },
+  },
 } as const;
 
 export function getAllPermissions(): string[] {
