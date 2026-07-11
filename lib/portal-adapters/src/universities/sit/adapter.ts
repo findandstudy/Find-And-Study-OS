@@ -511,31 +511,175 @@ async function dismissInactivityModal(page: Page): Promise<void> {
 }
 
 /**
- * Set a Yes/No field to "No" (apply has no TC / transfer-student data). Handles
- * both a radio group and a custom combobox rendering. Best-effort, non-fatal.
- * Returns true when a "No" control was actually set (for diagnostic logging).
+ * Set a Yes/No wizard toggle to a specific choice, targeting the radio/option by
+ * the QUESTION heading (e.g. "Have T.C") so the right group is chosen even when
+ * several Yes/No pairs share the same step. Tries, in order: an ARIA
+ * radiogroup/group named by the heading, a custom combobox, then a DOM-proximity
+ * scan (heading text → nearest Yes/No control). Verifies the choice actually
+ * took (checked state) where it can. Best-effort; never throws.
  */
-async function setToggleNo(page: Page, labelRe: RegExp): Promise<boolean> {
+async function setToggle(
+  page: Page,
+  headingRe: RegExp,
+  choiceRe: RegExp,
+): Promise<boolean> {
   try {
-    // Radio group named by the field label → click the "No" radio inside it.
-    const group = page.getByRole("group", { name: labelRe }).first();
-    if (await group.count()) {
-      const radio = group.getByRole("radio", { name: SIT_TOGGLES.noOption }).first();
-      if (await radio.count()) {
-        await radio.check({ timeout: 3000 }).catch(() => {});
-        return true;
+    // 1. ARIA radiogroup / group named by the question heading.
+    for (const role of ["radiogroup", "group"] as const) {
+      const grp = page.getByRole(role, { name: headingRe }).first();
+      if (await grp.count().catch(() => 0)) {
+        const radio = grp.getByRole("radio", { name: choiceRe }).first();
+        if (await radio.count().catch(() => 0)) {
+          await radio
+            .check({ timeout: 3000 })
+            .catch(() => radio.click({ timeout: 3000 }).catch(() => {}));
+          if (await radio.isChecked().catch(() => false)) return true;
+        }
+        // Label/text fallback inside the group (native radio behind a label).
+        const lbl = grp.getByText(choiceRe).first();
+        if (await lbl.count().catch(() => 0)) {
+          await lbl.click({ timeout: 3000 }).catch(() => {});
+          // VERIFY — a click that didn't check the radio must NOT report success
+          // (everSet would then permanently skip this required toggle).
+          if (await isToggleSet(page, headingRe, choiceRe)) return true;
+        }
       }
     }
-    // A stand-alone "No" radio labelled directly.
-    const labelledNo = page.getByLabel(SIT_TOGGLES.noOption).first();
-    if ((await labelledNo.count()) && (await labelledNo.isVisible().catch(() => false))) {
-      await labelledNo.check({ timeout: 3000 }).catch(() => {});
-      return true;
-    }
-    // Custom combobox rendering (role=button → role=option list).
-    return await selectCombo(page, labelRe, SIT_TOGGLES.noOption).catch(() => false);
+
+    // 2. Custom combobox rendering (role=button → role=option list). selectCombo
+    //    verifies the chosen option itself, so trust its result.
+    if (await selectCombo(page, headingRe, choiceRe).catch(() => false)) return true;
+
+    // 3. DOM proximity: find the smallest VISIBLE element whose OWN text is the
+    //    heading, walk up a few ancestors, and click the radio whose label
+    //    matches choice — then VERIFY the checked state before reporting success.
+    await page
+      .evaluate(
+        ({ hSrc, cSrc }) => {
+          const hRe = new RegExp(hSrc, "i");
+          const cRe = new RegExp(cSrc, "i");
+          const visible = (el: HTMLElement): boolean =>
+            !!(el.offsetParent !== null || el.getClientRects().length);
+          const nodes = Array.from(
+            document.querySelectorAll("body *"),
+          ) as HTMLElement[];
+          let host: HTMLElement | null = null;
+          for (const el of nodes) {
+            if (!visible(el)) continue;
+            const own = Array.from(el.childNodes)
+              .filter((n) => n.nodeType === 3)
+              .map((n) => n.textContent || "")
+              .join(" ")
+              .trim();
+            if (own && hRe.test(own)) {
+              host = el;
+              break;
+            }
+          }
+          if (!host) return false;
+          let scope: HTMLElement = host;
+          for (let i = 0; i < 4 && scope; i++) {
+            const radios = Array.from(
+              scope.querySelectorAll('input[type="radio"], [role="radio"]'),
+            ) as HTMLElement[];
+            for (const r of radios) {
+              const id = r.id;
+              const labEl = id
+                ? document.querySelector(`label[for="${CSS.escape(id)}"]`)
+                : null;
+              const lab = (
+                labEl?.textContent ||
+                r.closest("label")?.textContent ||
+                r.getAttribute("aria-label") ||
+                ""
+              ).trim();
+              if (cRe.test(lab)) {
+                r.click();
+                return true;
+              }
+            }
+            if (!scope.parentElement) break;
+            scope = scope.parentElement;
+          }
+          return false;
+        },
+        { hSrc: headingRe.source, cSrc: choiceRe.source },
+      )
+      .catch(() => false);
+    return await isToggleSet(page, headingRe, choiceRe);
   } catch {
     /* best-effort — never fatal */
+    return false;
+  }
+}
+
+/**
+ * Verify a Yes/No toggle is actually set to `choiceRe`: locate the question
+ * heading, then confirm a radio whose label matches the choice is checked
+ * (native `checked`, ARIA `aria-checked`, or Radix `data-state=checked`).
+ * Used so setToggle's fallback clicks never report an unverified success.
+ */
+async function isToggleSet(
+  page: Page,
+  headingRe: RegExp,
+  choiceRe: RegExp,
+): Promise<boolean> {
+  try {
+    return (await page.evaluate(
+      ({ hSrc, cSrc }) => {
+        const hRe = new RegExp(hSrc, "i");
+        const cRe = new RegExp(cSrc, "i");
+        const visible = (el: HTMLElement): boolean =>
+          !!(el.offsetParent !== null || el.getClientRects().length);
+        const nodes = Array.from(
+          document.querySelectorAll("body *"),
+        ) as HTMLElement[];
+        let host: HTMLElement | null = null;
+        for (const el of nodes) {
+          if (!visible(el)) continue;
+          const own = Array.from(el.childNodes)
+            .filter((n) => n.nodeType === 3)
+            .map((n) => n.textContent || "")
+            .join(" ")
+            .trim();
+          if (own && hRe.test(own)) {
+            host = el;
+            break;
+          }
+        }
+        if (!host) return false;
+        let scope: HTMLElement = host;
+        for (let i = 0; i < 4 && scope; i++) {
+          const radios = Array.from(
+            scope.querySelectorAll('input[type="radio"], [role="radio"]'),
+          ) as HTMLElement[];
+          for (const r of radios) {
+            const id = r.id;
+            const labEl = id
+              ? document.querySelector(`label[for="${CSS.escape(id)}"]`)
+              : null;
+            const lab = (
+              labEl?.textContent ||
+              r.closest("label")?.textContent ||
+              r.getAttribute("aria-label") ||
+              ""
+            ).trim();
+            if (cRe.test(lab)) {
+              const checked =
+                (r as HTMLInputElement).checked === true ||
+                r.getAttribute("aria-checked") === "true" ||
+                r.getAttribute("data-state") === "checked";
+              if (checked) return true;
+            }
+          }
+          if (!scope.parentElement) break;
+          scope = scope.parentElement;
+        }
+        return false;
+      },
+      { hSrc: headingRe.source, cSrc: choiceRe.source },
+    )) as boolean;
+  } catch {
     return false;
   }
 }
@@ -606,8 +750,18 @@ async function readInlineErrors(page: Page): Promise<string> {
  * text so field mapping can be confirmed from the worker log. No field VALUES
  * are read — only control metadata. Best-effort; never throws.
  */
-async function dumpWizardForm(page: Page, step: number): Promise<void> {
+async function dumpWizardForm(
+  page: Page,
+  step: number,
+  heading: string = "",
+): Promise<void> {
   try {
+    // File-input presence per step: reveals WHERE (if anywhere) the wizard
+    // exposes a document/photo upload affordance.
+    const fileInputs = await page
+      .locator('input[type="file"]')
+      .count()
+      .catch(() => 0);
     const dump = await page.$$eval("input, select, textarea", (els) =>
       els.slice(0, 60).map((e) => {
         const input = e as HTMLInputElement;
@@ -641,7 +795,10 @@ async function dumpWizardForm(page: Page, step: number): Promise<void> {
         };
       }),
     );
-    logger.info(`[sit] wizard FORM DUMP adım=${step}: ${JSON.stringify(dump)}`);
+    logger.info(
+      `[sit] wizard FORM DUMP adım=${step}${heading ? ` (${heading})` : ""} ` +
+        `file-input=${fileInputs}: ${JSON.stringify(dump)}`,
+    );
   } catch {
     /* best-effort — never fatal */
   }
@@ -1156,6 +1313,10 @@ export const sitAdapter: SitAdapter = {
     // ANY step — the most likely validation culprits; logged on failure.
     const everSet = new Set<string>();
     const critical: Record<string, boolean> = {
+      // Step-1 Basic Info gate: all three Yes/No toggles are required.
+      transferStudent: true,
+      haveTc: true,
+      blueCard: true,
       email: !!profile.email,
       gender: !!(profile.gender || "").trim(),
       dob: !!dob,
@@ -1189,10 +1350,10 @@ export const sitAdapter: SitAdapter = {
         else if (!everSet.has(name)) stepLog.push(`${name}=BULUNAMADI`);
       };
 
-      // FORM DUMP (diagnostics): on the first step, log the real control
-      // structure so exact selectors / date input type / dropdown options are
-      // visible in the worker log for confirming the field mapping.
-      if (step === 0) await dumpWizardForm(page, step + 1);
+      // FORM DUMP (diagnostics): on EVERY step, log the real control structure +
+      // file-input presence so exact selectors / date input type / dropdown
+      // options / where uploads live are all visible in the worker log.
+      await dumpWizardForm(page, step + 1, heading);
 
       // Personal
       await fillField(page, SIT_STUDENT_FIELDS.firstName, profile.firstName);
@@ -1279,11 +1440,25 @@ export const sitAdapter: SitAdapter = {
         );
       }
 
-      // "Have TC?" / "Transfer student?" — apply has neither → default to "No".
-      const okTc = await setToggleNo(page, SIT_TOGGLES.haveTc);
-      const okTransfer = await setToggleNo(page, SIT_TOGGLES.transferStudent);
-      if (okTc) stepLog.push("haveTc=No");
-      if (okTransfer) stepLog.push("transferStudent=No");
+      // Step-1 Basic Info: THREE Yes/No questions must all be answered or the
+      // step's "required" validation blocks Next. A foreign applicant defaults
+      // all three to "No" (no transfer, not a T.C. citizen, no Blue Card).
+      // Attempted on every step; the group simply isn't present on later steps.
+      if (!everSet.has("transferStudent")) {
+        mark(
+          "transferStudent",
+          await setToggle(page, SIT_TOGGLES.transferStudent, SIT_TOGGLES.noOption),
+        );
+      }
+      if (!everSet.has("haveTc")) {
+        mark("haveTc", await setToggle(page, SIT_TOGGLES.haveTc, SIT_TOGGLES.noOption));
+      }
+      if (!everSet.has("blueCard")) {
+        mark(
+          "blueCard",
+          await setToggle(page, SIT_TOGGLES.blueCard, SIT_TOGGLES.noOption),
+        );
+      }
 
       // Academics
       await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName);
@@ -1318,6 +1493,11 @@ export const sitAdapter: SitAdapter = {
           (await page
             .getByRole("button", { name: SIT_UPLOAD.attachmentTrigger })
             .first()
+            .count()
+            .catch(() => 0)) +
+          // A visible/hidden <input type=file> also counts as an upload step.
+          (await page
+            .locator('input[type="file"]')
             .count()
             .catch(() => 0));
         if (trigCount > 0) {
@@ -1411,6 +1591,17 @@ export const sitAdapter: SitAdapter = {
     //     carry. A present-but-unuploaded file means the file-chooser step did
     //     not take — fail retryably rather than create a partial record (the
     //     detail Documents tab is read-only, so there is no post-create fixup). ---
+    // If the whole wizard was walked without ever exposing an upload affordance
+    // (no file input / no attachment or photo button on any step), the create
+    // form simply has no document step — documents/photo must be handled apart.
+    if (
+      (files.photo || files.passport || files.transcript || files.diploma) &&
+      !reachedDocuments
+    ) {
+      logger.warn(
+        "[sit] wizard: create formunda dosya-yükleme adımı YOK — belge/foto ayrı gerekiyor",
+      );
+    }
     const missingUploads: string[] = [];
     if (files.photo && !photoUploaded) missingUploads.push("foto");
     if (files.passport && !uploadedDocs.has("passport")) missingUploads.push("pasaport");

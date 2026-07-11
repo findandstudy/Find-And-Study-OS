@@ -89,8 +89,12 @@ export type SitStudentFieldKey = keyof typeof SIT_STUDENT_FIELDS;
 // no TC / transfer-student data, so both default to "No".
 // ---------------------------------------------------------------------------
 export const SIT_TOGGLES = {
-  haveTc:          /have\s*tc|t\.?c\.?\s*(kimlik|var|numaras)|tc kimlik/i,
+  // "Have T.C" renders with a dot, so `have\s*tc` never matched it — allow the
+  // optional dots/spaces between the letters.
+  haveTc:          /have\s*t\.?\s*c\.?|t\.?\s*c\.?\s*(kimlik|var|numaras)|tc kimlik/i,
   transferStudent: /transfer student|yatay geçiş|transfer öğrenci/i,
+  /** "Blue Card" residency question — foreign applicants default to No. */
+  blueCard:        /blue\s*card|mavi kart/i,
   /** Affirmative option matcher (radio/option label). */
   yesOption:       /^\s*(yes|evet)\s*$/i,
   /** Negative option matcher (radio/option label). */
