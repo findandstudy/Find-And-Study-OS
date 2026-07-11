@@ -64,8 +64,8 @@ const MEM_ARGS: string[] = [
 // ---------------------------------------------------------------------------
 export interface LaunchOpts {
   /**
-   * Ignored — browser is ALWAYS launched headless to minimise RAM usage.
-   * Kept in the interface for backwards-compat; callers need not change.
+   * Ignored — headed vs headless is decided by env (PW_HEADFUL + DISPLAY), not
+   * this field. Kept in the interface for backwards-compat; callers need not change.
    */
   headless?: boolean;
   /**
@@ -80,7 +80,12 @@ export interface LaunchOpts {
 // ---------------------------------------------------------------------------
 // launchPortal — open a browser and return an AdapterSession
 //
-// Browser is ALWAYS headless regardless of the opts.headless field.
+// Headed vs headless is ENV-DRIVEN (never patched via a deploy-time `sed`):
+//   - Default: headless (safe on a server with no X display).
+//   - Headed ONLY when PW_HEADFUL=1 AND a DISPLAY (real screen / Xvfb) exists.
+// If a headed launch fails because there is no X server we fall back to
+// headless instead of hard-crashing the worker — so the queue never stalls
+// even if Xvfb is down.
 // Each submission must open its own browser and close it via session.close()
 // in a finally block — never reuse a browser across submissions.
 // ---------------------------------------------------------------------------
@@ -89,11 +94,32 @@ export async function launchPortal(opts: LaunchOpts = {}): Promise<AdapterSessio
 
   const executablePath = resolveChromiumPath();
 
-  const browser: Browser = await chromium.launch({
-    headless: true,
+  const hasDisplay = !!process.env.DISPLAY;
+  const wantHeadful = process.env.PW_HEADFUL === "1";
+  // Default headless on a server; headed only when explicitly requested AND a
+  // display is available (Xvfb or a real screen).
+  let headless = !(wantHeadful && hasDisplay);
+
+  const launchArgs = {
     args: MEM_ARGS,
     ...(executablePath ? { executablePath } : {}),
-  });
+  };
+
+  let browser: Browser;
+  try {
+    browser = await chromium.launch({ headless, ...launchArgs });
+  } catch (err) {
+    const msg = String(err ?? "");
+    if (!headless && /Missing X server|XServer|\$DISPLAY|headed browser/i.test(msg)) {
+      logger.warn(
+        "[browser] headed launch başarısız (X server yok) → headless fallback",
+      );
+      headless = true;
+      browser = await chromium.launch({ headless: true, ...launchArgs });
+    } else {
+      throw err;
+    }
+  }
 
   const context: BrowserContext = await browser.newContext(
     (storagePath && existsSync(storagePath))

@@ -139,3 +139,4 @@
 - [Local storage public-objects mismatch](local-storage-public-objects-mismatch.md) — local driver has no "public/" subfolder; outbound senders must resolve keys via shared searchPublicObject, not hand-rolled URL parsing.
 - [Topkapi GPA scale + parent-name guard](topkapi-gpa-parent-name.md) — topkapiGpaTo100 converts normalizeGpaRange output to 0-100; fatherName/motherName use "-" fallback (not "") in both profile builders.
 - [Altınbaş adapter](altinbas-adapter-faz1.md) — Screen Flow navigateFlow REPLAY (serializedState server-chained, never hand-built); closed LWC shadow killed DOM automation past Step 1.
+- [Playwright headed needs a display (Xvfb)](playwright-headed-xvfb.md) — UI adapters crash "Missing X server" on the no-DISPLAY worker; headed/headless is ENV-only (PW_HEADFUL+DISPLAY) w/ headless fallback, never deploy `sed`.
