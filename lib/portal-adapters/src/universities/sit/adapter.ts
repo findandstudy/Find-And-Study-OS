@@ -59,6 +59,7 @@ import {
   fetchProgramCatalog,
   installSpaAuthCapture,
   mintSupabaseBearer,
+  seedSpaSession,
   sitCanAuthWithoutPage,
   fetchProgramIds,
   resolveAcademicYearId,
@@ -793,7 +794,14 @@ export const sitAdapter: SitAdapter = {
     const creds = portalCreds(PORTAL_KEY);
 
     // Token-first — reuse/refresh the cached session. Cache hit = no network.
-    if (await mintSupabaseBearer(page, creds).catch(() => false)) return;
+    if (await mintSupabaseBearer(page, creds).catch(() => false)) {
+      // Seed the minted Supabase session into the page's localStorage so the UI
+      // wizard (student-detail / document upload) boots authenticated instead of
+      // bouncing to the captcha'd /auth/login. This is the PRIMARY path to a
+      // usable SPA session — no form login, no captcha. Non-fatal.
+      await seedSpaSession(page, creds).catch(() => false);
+      return;
+    }
 
     // LAST RESORT — could not obtain a token; fall back to the UI login ONCE
     // (honoring the captcha cooldown), then re-mint.
@@ -822,6 +830,9 @@ export const sitAdapter: SitAdapter = {
       }
     }
     await mintSupabaseBearer(page, creds).catch(() => false);
+    // Seed the SPA session even on the last-resort UI-login path, so the wizard
+    // boots authenticated on subsequent navigations.
+    await seedSpaSession(page, creds).catch(() => false);
   },
 
   /**

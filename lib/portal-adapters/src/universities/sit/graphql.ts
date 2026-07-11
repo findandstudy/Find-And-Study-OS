@@ -566,6 +566,74 @@ export async function mintSupabaseBearer(
   return true;
 }
 
+// Tracks the last Supabase session value seeded into each page's localStorage,
+// so we only (re)install the init script when the session actually changes
+// (avoids stacking identical scripts on every ensureLoggedIn call).
+const spaSessionSeededByPage = new WeakMap<Page, string>();
+
+/**
+ * Seed the minted Supabase session into the PAGE's own localStorage so the SIT
+ * SPA boots already-authenticated instead of redirecting the UI wizard (student
+ * detail / document upload) to `/auth/login`.
+ *
+ * Why this is needed: the adapter authenticates GraphQL with a Supabase bearer
+ * minted via a token grant (getSitAccessToken) — it NEVER logs into the SPA, so
+ * the browser has no `sb-<ref>-auth-token` in localStorage. Any UI route the
+ * runner then opens (the wizard's student-detail page, required for the
+ * file-chooser document/photo upload) sees no SPA session and bounces to the
+ * captcha'd `/auth/login`, so the upload can never run. We already hold the full
+ * Supabase session (the grant body, refreshed in lockstep with the bearer); this
+ * writes it into localStorage in the exact gotrue-js v2 shape the SPA reads.
+ *
+ * Uses `page.addInitScript` (not `evaluate`) deliberately: the SPA reads the
+ * session on boot BEFORE its own scripts run, so the value must be present
+ * before the next navigation — addInitScript runs prior to every page load, so
+ * every subsequent `page.goto` (all the openStudentDetail attempts) boots
+ * authenticated. Idempotent per session value; non-fatal (returns false on any
+ * failure so the caller proceeds unchanged). Never logs the session/token.
+ */
+export async function seedSpaSession(
+  page: Page,
+  creds: { user: string; password: string },
+): Promise<boolean> {
+  // Ensure a fresh session is cached (cache hit = no network / no re-login).
+  const token = await getSitAccessToken(creds, page);
+  if (!token) return false;
+  const cached = sitSessionByAccount.get(creds.user.toLowerCase());
+  const raw = cached?.raw;
+  if (!raw) return false;
+
+  const key = `sb-${SUPABASE_PROJECT_REF}-auth-token`;
+  const value = JSON.stringify(raw);
+  // Already seeded this exact session on this page — nothing to do.
+  if (spaSessionSeededByPage.get(page) === value) return true;
+
+  try {
+    await page.addInitScript(
+      ([k, v]) => {
+        try {
+          window.localStorage.setItem(k as string, v as string);
+        } catch {
+          /* storage blocked — SPA will fall back to /auth/login */
+        }
+      },
+      [key, value] as [string, string],
+    );
+    spaSessionSeededByPage.set(page, value);
+    logger.info(
+      "[sit:auth] SPA oturumu localStorage'a seed edildi (sb-<ref>-auth-token) — UI wizard artık /auth/login'e düşmemeli",
+    );
+    return true;
+  } catch (e) {
+    logger.warn(
+      `[sit:auth] SPA oturumu seed edilemedi — ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // One-shot diagnostic — learn the route's REAL GraphQL query shape.
 //
