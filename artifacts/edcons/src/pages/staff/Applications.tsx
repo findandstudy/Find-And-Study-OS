@@ -1095,7 +1095,7 @@ function isDateInRange(dateStr: string, range: string): boolean {
   return true;
 }
 
-function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canViewOthers, canViewUnassigned, currentUserId }: {
+function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canViewOthers, canViewUnassigned, currentUserId, clearAssignedTo }: {
   stages: PipelineStage[];
   filters: AppFilters;
   onChange: (f: AppFilters) => void;
@@ -1104,10 +1104,11 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canVie
   canViewOthers: boolean;
   canViewUnassigned: boolean;
   currentUserId?: number;
+  clearAssignedTo: string;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const hasActive = Object.entries(filters).some(([k, v]) => v !== (DEFAULT_FILTERS as any)[k]);
+  const hasActive = Object.entries(filters).some(([k, v]) => v !== (k === "assignedTo" ? clearAssignedTo : (DEFAULT_FILTERS as any)[k]));
   const { data: allCountries = [] } = useCountries();
 
   const countriesInApps = useMemo(() => {
@@ -1140,7 +1141,7 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canVie
       <PopoverContent className="w-72 p-4 space-y-3 max-h-[70vh] overflow-y-auto" align="end">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Filters</p>
-          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ ...DEFAULT_FILTERS })}>Clear</Button>}
+          {hasActive && <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => onChange({ ...DEFAULT_FILTERS, assignedTo: clearAssignedTo })}>Clear</Button>}
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Stage</Label>
@@ -1466,10 +1467,15 @@ export default function ApplicationsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
+  // Role-based default for the "Assigned to" filter: admins/managers/super admins
+  // default to "all", every other role to the restricted value they are allowed to
+  // see. Shared between the persisted default and the filter panel's Clear action.
+  const roleBasedAssignedDefault =
+    (user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager") ? "all" : DEFAULT_FILTERS.assignedTo;
   // Persist the user's "Assigned to" choice locally (per user), like column prefs.
   const [persistedAssignedTo, setPersistedAssignedTo] = usePersistedFilterValue(
     "applications-table", "assignedTo_v2",
-    (user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager") ? "all" : DEFAULT_FILTERS.assignedTo,
+    roleBasedAssignedDefault,
     user?.id,
   );
   const [filters, setFilters] = useState<AppFilters>({ ...DEFAULT_FILTERS, assignedTo: persistedAssignedTo });
@@ -1902,7 +1908,7 @@ export default function ApplicationsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder={t("applicationsPage.searchApplications")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} staffUsersList={staffUsersList} canViewOthers={canViewOthers} canViewUnassigned={canViewUnassigned} currentUserId={user?.id} />
+            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} staffUsersList={staffUsersList} canViewOthers={canViewOthers} canViewUnassigned={canViewUnassigned} currentUserId={user?.id} clearAssignedTo={roleBasedAssignedDefault} />
             <div className="flex items-center border rounded-full overflow-hidden">
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
