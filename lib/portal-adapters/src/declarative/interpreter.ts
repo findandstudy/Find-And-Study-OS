@@ -35,6 +35,8 @@ import type {
   FailureSpec,
   ProgramSelection,
 } from "./schema.js";
+import type { InterpolateCtx } from "./interpolate.js";
+import { executeHttpLikeStep } from "./httpRunner.js";
 
 // ---------------------------------------------------------------------------
 // Page interface — MinimalPage plus the optional capabilities a spec may use.
@@ -181,6 +183,13 @@ export interface StepContext {
   documentSlots?: AdapterSpec["documents"];
   /** Whether jsHook steps may execute (trusted specs only). */
   allowJsHook: boolean;
+  /** Mutable interpolation context — updated in place by http/graphql/capture/setVar steps. */
+  vars: Record<string, unknown>;
+  captured: Record<string, unknown>;
+  /** Origins allowed for http/graphql steps (from spec.meta.allowedOrigins). */
+  allowedOrigins: string[];
+  /** Whether we are in dry-run mode (mutation steps are skipped). */
+  dryRun: boolean;
 }
 
 /** Resolves an upload step's slot to a concrete file path. */
@@ -188,6 +197,15 @@ function resolveSlotFile(slot: string, ctx: StepContext): string | undefined {
   const slotDef = ctx.documentSlots?.slots?.[slot];
   const field = (slotDef?.fileField ?? slot) as keyof SubmitFiles;
   return ctx.files[field];
+}
+
+/** Builds an InterpolateCtx from the mutable StepContext fields. */
+function toInterpolateCtx(ctx: StepContext): InterpolateCtx {
+  return {
+    profile: ctx.profile as unknown as Record<string, unknown>,
+    vars: ctx.vars,
+    captured: ctx.captured,
+  };
 }
 
 /** Executes a single spec step. Honors `optional` (errors are warned, not thrown). */
@@ -285,6 +303,19 @@ export async function executeSpecStep(
         break;
       }
 
+      case "http":
+      case "graphql":
+      case "capture":
+      case "setVar": {
+        await executeHttpLikeStep(
+          step,
+          toInterpolateCtx(ctx),
+          page as unknown as Parameters<typeof executeHttpLikeStep>[2],
+          { dryRun: ctx.dryRun, allowedOrigins: ctx.allowedOrigins },
+        );
+        break;
+      }
+
       default: {
         const _exhaustive: never = step;
         logger.warn(`[spec] unknown step: ${JSON.stringify(_exhaustive)}`);
@@ -312,6 +343,8 @@ export async function runSpecSteps(
       logger.warn(`[spec] DRY: skipping final step #${i + 1}`);
       continue;
     }
+    // http/graphql mutation steps are also skipped in dry-run (handled inside
+    // executeHttpLikeStep via ctx.dryRun, but log here for tracing).
     try {
       await executeSpecStep(page, step, ctx);
     } catch (err) {
@@ -359,10 +392,20 @@ export function createSpecAdapter(
       // The login steps reference credentials via a synthetic profile so the
       // same step machinery (fill/click/waitFor) drives the login form.
       const credProfile = { ...emptyProfile(), email: user, passportNumber: password } as SubmitProfile;
+      const loginVars: Record<string, unknown> = {};
+      const loginCaptured: Record<string, unknown> = {};
       await runSpecSteps(
         page,
         spec.auth.loginSteps,
-        { profile: credProfile, files: {}, allowJsHook },
+        {
+          profile: credProfile,
+          files: {},
+          allowJsHook,
+          vars: loginVars,
+          captured: loginCaptured,
+          allowedOrigins: spec.meta.allowedOrigins ?? [],
+          dryRun: false,
+        },
         false,
       );
       if (spec.auth.successUrlContains && typeof page.url === "function") {
@@ -385,10 +428,21 @@ export function createSpecAdapter(
       const dry = doSubmit === false || process.env.PORTAL_DRYRUN === "1";
       logger.info(`[${spec.meta.key}] submit — program: ${profile.programName} (dry=${dry})`);
 
+      const submitVars: Record<string, unknown> = {};
+      const submitCaptured: Record<string, unknown> = {};
       await runSpecSteps(
         page,
         spec.steps,
-        { profile, files, documentSlots: spec.documents, allowJsHook },
+        {
+          profile,
+          files,
+          documentSlots: spec.documents,
+          allowJsHook,
+          vars: submitVars,
+          captured: submitCaptured,
+          allowedOrigins: spec.meta.allowedOrigins ?? [],
+          dryRun: dry,
+        },
         dry,
       );
 

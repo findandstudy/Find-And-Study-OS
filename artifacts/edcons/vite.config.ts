@@ -84,9 +84,6 @@ export default defineConfig({
           if (id.includes("react-phone-number-input") || id.includes("libphonenumber-js")) {
             return "vendor-phone";
           }
-          if (id.includes("/recharts/") || id.includes("/d3-") || id.includes("/victory-vendor/")) {
-            return "vendor-charts";
-          }
           if (id.includes("/jspdf") || id.includes("/pdf-lib/")) return "vendor-pdf";
           if (id.includes("/xlsx/")) return "vendor-excel";
           if (id.includes("/framer-motion/")) return "vendor-motion";

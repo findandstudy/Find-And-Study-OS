@@ -153,6 +153,67 @@ const jsHookStep = z.object({
   optional: z.boolean().optional(),
 });
 
+// ---------------------------------------------------------------------------
+// New step schemas — http / graphql / capture / setVar
+// ---------------------------------------------------------------------------
+
+/**
+ * `http` — makes an out-of-band HTTP request via `page.request` (shares the
+ * Playwright session cookie jar). The URL must appear in `meta.allowedOrigins`.
+ * `mutation:true` steps are skipped in dry-run. Result text is stored in
+ * `captured[saveAs]` when `saveAs` is provided.
+ * NOTE: URL is NOT validated by safeUrlSchema here — the runtime SSRF guard
+ * (allowedOrigins exact-origin match in httpRunner.ts) is the security boundary.
+ */
+const httpStep = z.object({
+  action: z.literal("http"),
+  method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+  url: z.string().min(1),
+  headers: z.record(z.string()).optional(),
+  body: z.string().optional(),
+  json: z.record(z.unknown()).optional(),
+  saveAs: z.string().min(1).optional(),
+  mutation: z.boolean().optional(),
+  optional: z.boolean().optional(),
+});
+
+/**
+ * `graphql` — POSTs a GraphQL query to `url` via `page.request`.
+ * Same allowedOrigins + mutation-skip semantics as `http`.
+ */
+const graphqlStep = z.object({
+  action: z.literal("graphql"),
+  url: z.string().min(1),
+  query: z.string().min(1),
+  variables: z.record(z.unknown()).optional(),
+  saveAs: z.string().min(1).optional(),
+  mutation: z.boolean().optional(),
+  optional: z.boolean().optional(),
+});
+
+/**
+ * `capture` — reads a value from the current page state and stores it in
+ * `captured[name]`. Sources: lastResponse (the most recent http/graphql
+ * response body), cookie, localStorage, selectorText, or url.
+ */
+const captureStep = z.object({
+  action: z.literal("capture"),
+  from: z.enum(["lastResponse", "cookie", "localStorage", "selectorText", "url"]),
+  /** JSON dotpath into lastResponse, or cookie/localStorage key name. */
+  path: z.string().min(1).optional(),
+  name: z.string().min(1),
+});
+
+/**
+ * `setVar` — evaluates a (possibly interpolated) value and stores it in
+ * `vars[name]`, making it available to subsequent steps via `{{vars.name}}`.
+ */
+const setVarStep = z.object({
+  action: z.literal("setVar"),
+  name: z.string().min(1),
+  value: z.string(),
+});
+
 export const specStepSchema = z.discriminatedUnion("action", [
   navigateStep,
   fillStep,
@@ -164,6 +225,10 @@ export const specStepSchema = z.discriminatedUnion("action", [
   waitForStep,
   ajaxWaitStep,
   jsHookStep,
+  httpStep,
+  graphqlStep,
+  captureStep,
+  setVarStep,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -180,6 +245,12 @@ export const metaSchema = z.object({
   /** Lowercase substrings matched against the case-folded university name. */
   matches: z.array(z.string().min(1)).min(1),
   experimental: z.boolean().optional(),
+  /**
+   * Allowed URL origins for http/graphql steps (e.g. "https://api.example.com").
+   * Required when any step uses action "http" or "graphql". The runtime SSRF
+   * guard in httpRunner.ts performs an exact origin match at execution time.
+   */
+  allowedOrigins: z.array(z.string().url()).optional(),
 });
 
 export const authSchema = z.object({
@@ -280,6 +351,59 @@ export const adapterSpecSchema = z
     };
     checkFills(spec.steps, ["steps"]);
     checkFills(spec.auth.loginSteps, ["auth", "loginSteps"]);
+
+    // Require allowedOrigins when any step uses http or graphql.
+    const allSteps = [...spec.steps, ...spec.auth.loginSteps];
+    const hasHttpOrGraphql = allSteps.some(
+      (s) => s.action === "http" || s.action === "graphql",
+    );
+    if (hasHttpOrGraphql) {
+      if (!spec.meta.allowedOrigins || spec.meta.allowedOrigins.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["meta", "allowedOrigins"],
+          message:
+            "meta.allowedOrigins must be present and non-empty when any step uses action \"http\" or \"graphql\"",
+        });
+      } else {
+        // Parse-time: validate static (non-interpolated) http/graphql step URLs
+        // against allowedOrigins. Interpolated URLs (containing {{...}}) can
+        // only be validated at runtime by httpRunner.ts.
+        // Iterate the two step lists separately so error paths are precise.
+        const allowedOrigins = spec.meta.allowedOrigins;
+        const checkStepUrls = (
+          steps: typeof allSteps,
+          basePath: (string | number)[],
+        ) => {
+          steps.forEach((s, i) => {
+            if (s.action !== "http" && s.action !== "graphql") return;
+            const url = s.url;
+            // Skip interpolated URLs — runtime SSRF guard handles them.
+            if (url.includes("{{")) return;
+            let origin: string;
+            try {
+              origin = new URL(url).origin;
+            } catch {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: [...basePath, i, "url"],
+                message: `invalid URL: "${url}"`,
+              });
+              return;
+            }
+            if (!allowedOrigins.includes(origin)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: [...basePath, i, "url"],
+                message: `URL origin "${origin}" is not in meta.allowedOrigins`,
+              });
+            }
+          });
+        };
+        checkStepUrls(spec.steps, ["steps"]);
+        checkStepUrls(spec.auth.loginSteps, ["auth", "loginSteps"]);
+      }
+    }
   });
 
 // ---------------------------------------------------------------------------
@@ -326,6 +450,28 @@ export function specHasJsHook(spec: unknown): boolean {
   if (typeof spec !== "object" || spec === null) return false;
   const s = spec as { steps?: unknown; auth?: { loginSteps?: unknown } };
   return listHasJsHook(s.steps) || listHasJsHook(s.auth?.loginSteps);
+}
+
+const PRIVILEGED_ACTIONS = new Set(["http", "graphql", "jsHook"]);
+
+/**
+ * Returns true when a spec contains any privileged step (http, graphql, or
+ * jsHook). Privileged specs require super_admin approval
+ * (`privilegedApproved=true`) before they can be enabled. Accepts an untyped
+ * value so it can be called on raw DB rows without prior validation.
+ */
+export function specIsPrivileged(spec: unknown): boolean {
+  const listHasPrivileged = (steps: unknown): boolean =>
+    Array.isArray(steps) &&
+    steps.some(
+      (s) =>
+        typeof s === "object" &&
+        s !== null &&
+        PRIVILEGED_ACTIONS.has((s as { action?: unknown }).action as string),
+    );
+  if (typeof spec !== "object" || spec === null) return false;
+  const s = spec as { steps?: unknown; auth?: { loginSteps?: unknown } };
+  return listHasPrivileged(s.steps) || listHasPrivileged(s.auth?.loginSteps);
 }
 
 /**

@@ -38,6 +38,7 @@ import {
   clearCredsOverride,
   parseAdapterSpec,
   specHasJsHook,
+  specIsPrivileged,
   invalidateSpecAdapterCache,
   listSpecVersions,
   matchProgram,
@@ -3615,6 +3616,8 @@ const upsertSpecBodySchema = z.object({
   spec: rawSpecObjectSchema,
   enable: z.boolean().optional(),
   approveJsHook: z.boolean().optional(),
+  /** super_admin approval to allow enabling this privileged spec. */
+  approvePrivileged: z.boolean().optional(),
 });
 const patchSpecBodySchema = z
   .object({
@@ -3622,6 +3625,7 @@ const patchSpecBodySchema = z
     disable: z.boolean().optional(),
     rollbackTo: z.number().int().positive().optional(),
     jsHookApproved: z.boolean().optional(),
+    privilegedApproved: z.boolean().optional(),
   })
   .strict();
 
@@ -3786,7 +3790,7 @@ router.post(
   validate({ body: upsertSpecBodySchema }),
   async (req, res) => {
     const user = req.user!;
-    const { spec, enable, approveJsHook } = getValidated<{
+    const { spec, enable, approveJsHook, approvePrivileged } = getValidated<{
       body: typeof upsertSpecBodySchema;
     }>(req).body;
 
@@ -3804,8 +3808,24 @@ router.post(
     }
     // Approving jsHook execution is likewise super_admin-only.
     const jsHookApproved = approveJsHook === true && isSuperAdmin(user.role);
+    // Approving privileged-spec enabling is super_admin-only and independent of jsHookApproved.
+    const privilegedApproved = approvePrivileged === true && isSuperAdmin(user.role);
 
     const key = parsed.spec.meta.key;
+
+    // Privileged specs (http/graphql/jsHook steps) require explicit super_admin
+    // approval (approvePrivileged=true in the request body) before they may be
+    // enabled. Gate this before entering the transaction so we never return an
+    // undefined from db.transaction() and break destructuring below.
+    if (enable && specIsPrivileged(spec) && !privilegedApproved) {
+      res.status(403).json({
+        error: "PRIVILEGED_APPROVAL_REQUIRED",
+        message:
+          "This spec contains privileged steps (http, graphql, or jsHook). " +
+          "A super_admin must pass approvePrivileged=true to enable it.",
+      });
+      return;
+    }
 
     // Lock the key so the next-version computation, the insert, and the optional
     // enable all happen atomically — concurrent uploads can't collide on the
@@ -3829,6 +3849,7 @@ router.post(
           enabled: false,
           source: "uploaded",
           jsHookApproved,
+          privilegedApproved,
           createdBy: user.id,
         })
         .returning();
@@ -3844,7 +3865,7 @@ router.post(
       "upsert_adapter_spec",
       "portal_adapter_spec",
       created.id,
-      { key, version: nextVersion, enabled: enable === true, hasJsHook, jsHookApproved },
+      { key, version: nextVersion, enabled: enable === true, hasJsHook, jsHookApproved, privilegedApproved },
       req.ip,
     );
 
@@ -3888,12 +3909,36 @@ router.patch(
       invalidateSpecAdapterCache();
     }
 
+    // privilegedApproved toggle (super_admin only).
+    if (body.privilegedApproved !== undefined) {
+      if (!isSuperAdmin(user.role)) {
+        res.status(403).json({ error: "PRIVILEGED_APPROVAL_FORBIDDEN", message: "Only super_admin may approve privileged spec enabling." });
+        return;
+      }
+      await db
+        .update(portalAdapterSpecsTable)
+        .set({ privilegedApproved: body.privilegedApproved, updatedAt: new Date() })
+        .where(eq(portalAdapterSpecsTable.key, key));
+      invalidateSpecAdapterCache();
+    }
+
     const targetVersion = body.enableVersion ?? body.rollbackTo;
     if (body.disable) {
       await setEnabledSpecVersion(key, null);
     } else if (targetVersion !== undefined) {
       if (!versions.some((v) => v.version === targetVersion)) {
         res.status(404).json({ error: "VERSION_NOT_FOUND", message: `Version ${targetVersion} does not exist for ${key}.` });
+        return;
+      }
+      // Privileged specs require super_admin approval before they can be enabled.
+      const targetRow = versions.find((v) => v.version === targetVersion);
+      if (targetRow && specIsPrivileged(targetRow.spec) && !targetRow.privilegedApproved) {
+        res.status(403).json({
+          error: "PRIVILEGED_APPROVAL_REQUIRED",
+          message:
+            "This spec version contains privileged steps (http, graphql, or jsHook). " +
+            "A super_admin must set privilegedApproved=true before it can be enabled.",
+        });
         return;
       }
       await setEnabledSpecVersion(key, targetVersion);

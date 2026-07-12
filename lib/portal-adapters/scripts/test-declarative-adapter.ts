@@ -112,6 +112,10 @@ function ctx(over: Partial<StepContext> = {}): StepContext {
     files: TEST_FILES,
     documentSlots: { slots: { passport: { fileField: "passport" } } },
     allowJsHook: false,
+    vars: {},
+    captured: {},
+    allowedOrigins: [],
+    dryRun: false,
     ...over,
   };
 }

@@ -113,6 +113,7 @@ export {
   adapterSpecSchema,
   parseAdapterSpec,
   specHasJsHook,
+  specIsPrivileged,
   type AdapterSpec,
   type SpecStep,
   type SpecParseResult,

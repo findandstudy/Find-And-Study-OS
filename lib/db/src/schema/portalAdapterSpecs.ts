@@ -48,6 +48,12 @@ export const portalAdapterSpecsTable = pgTable(
     source: portalAdapterSpecSourceEnum("source").notNull().default("uploaded"),
     /** super_admin approval required before jsHook steps may execute. */
     jsHookApproved: boolean("js_hook_approved").notNull().default(false),
+    /**
+     * super_admin approval required before a privileged spec (containing
+     * http, graphql, or jsHook steps) may be enabled. Set via the PATCH
+     * endpoint by a super_admin; the enable endpoint enforces this gate.
+     */
+    privilegedApproved: boolean("privileged_approved").notNull().default(false),
     createdBy: integer("created_by").references(() => usersTable.id, {
       onDelete: "set null",
     }),
