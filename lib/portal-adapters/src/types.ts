@@ -133,6 +133,38 @@ export interface SubmitProfile {
   passportIssueDate?: string;
   passportExpiryDate?: string;
   // ---------------------------------------------------------------------------
+  // Additive fields — Altınbaş Faz-B (21 → 35). All optional strings.
+  // Derived by the profile builder from student/application records.
+  // ---------------------------------------------------------------------------
+  /** City of birth (from student record; falls back to addressCity when absent). */
+  cityOfBirth?: string;
+  /** Street part of the student's address (entire raw address string). */
+  addressStreet?: string;
+  /** City part of the student's address (text before the first comma). */
+  addressCity?: string;
+  /** Postal/zip code (empty string when not present in the address). */
+  addressZip?: string;
+  /** Country name derived from the E.164 phone dial code; falls back to nationality. */
+  phoneCountry?: string;
+  /** Education degree type of the student's completed education ("Bachelor", "Master", etc.). */
+  eduDegree?: string;
+  /** Field of study of the completed education (when available in the CRM). */
+  eduField?: string;
+  /** Month the education programme started, English full name ("September"). */
+  eduStartMonth?: string;
+  /** 4-digit year the education programme started. */
+  eduStartYear?: string;
+  /** Month the education programme ended / graduation month, English full name. */
+  eduEndMonth?: string;
+  /** 4-digit graduation year (from student.graduationYear). */
+  eduEndYear?: string;
+  /** GPA type hint ("percentage" for 0-100 scale, "4.0" for 0-4 scale, "letter" otherwise). */
+  eduGpaType?: string;
+  /** Visa support required: "Yes" for non-TR nationals, "No" for TR. */
+  visaSupport?: string;
+  /** Application intake term (e.g. "Fall 2026", "Spring 2026"). */
+  intakeTerm?: string;
+  // ---------------------------------------------------------------------------
   // Panel-managed mapping data (sourced from portal_program_mapping by the
   // runner, keyed by universityKey). All optional — when absent the adapter
   // falls back to its built-in code defaults (zero behaviour change). When

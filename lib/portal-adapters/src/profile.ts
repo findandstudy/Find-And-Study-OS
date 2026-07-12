@@ -194,6 +194,199 @@ export function extractStudentDocumentRefs(rows: RawDocumentRow[]): {
 }
 
 // ---------------------------------------------------------------------------
+// Additive pure helpers — Altınbaş Faz-B (derive new profile fields)
+// ---------------------------------------------------------------------------
+
+/**
+ * Splits a free-form address string into street / city / zip parts.
+ *
+ * Rules (additive, non-breaking):
+ *   - `street` = the entire raw address string (trimmed)
+ *   - `city`   = the text BEFORE the first comma (trimmed); equals `street`
+ *                when no comma is present
+ *   - `zip`    = empty string (no reliable zip extraction from free-form CRM
+ *                addresses; reserved for portal-specific overrides)
+ *
+ * Edge cases: blank / undefined address → all three parts are `""`.
+ */
+export function deriveAddressParts(address: string | undefined): {
+  street: string;
+  city: string;
+  zip: string;
+} {
+  const raw = address?.trim() ?? "";
+  if (!raw) return { street: "", city: "", zip: "" };
+  const commaIdx = raw.indexOf(",");
+  const city = commaIdx !== -1 ? raw.slice(0, commaIdx).trim() : raw;
+  return { street: raw, city, zip: "" };
+}
+
+/**
+ * Minimal E.164 dial-code → country-name lookup table (covers the nationalities
+ * most commonly seen in EduConsult CRM data). Sorted longest-prefix first so
+ * the first match is always the most specific.
+ */
+const DIAL_CODE_MAP: [string, string][] = [
+  ["+355", "Albania"],       ["+213", "Algeria"],      ["+376", "Andorra"],
+  ["+244", "Angola"],        ["+374", "Armenia"],       ["+994", "Azerbaijan"],
+  ["+973", "Bahrain"],       ["+880", "Bangladesh"],    ["+375", "Belarus"],
+  ["+501", "Belize"],        ["+229", "Benin"],         ["+975", "Bhutan"],
+  ["+591", "Bolivia"],       ["+387", "Bosnia and Herzegovina"],
+  ["+267", "Botswana"],      ["+55", "Brazil"],         ["+673", "Brunei"],
+  ["+359", "Bulgaria"],      ["+226", "Burkina Faso"],  ["+257", "Burundi"],
+  ["+855", "Cambodia"],      ["+237", "Cameroon"],      ["+1", "Canada"],
+  ["+236", "Central African Republic"],
+  ["+235", "Chad"],          ["+56", "Chile"],          ["+86", "China"],
+  ["+57", "Colombia"],       ["+242", "Congo"],         ["+506", "Costa Rica"],
+  ["+385", "Croatia"],       ["+53", "Cuba"],           ["+357", "Cyprus"],
+  ["+420", "Czech Republic"],
+  ["+45", "Denmark"],        ["+253", "Djibouti"],      ["+593", "Ecuador"],
+  ["+20", "Egypt"],          ["+503", "El Salvador"],   ["+240", "Equatorial Guinea"],
+  ["+291", "Eritrea"],       ["+372", "Estonia"],       ["+251", "Ethiopia"],
+  ["+358", "Finland"],       ["+33", "France"],         ["+241", "Gabon"],
+  ["+220", "Gambia"],        ["+995", "Georgia"],       ["+49", "Germany"],
+  ["+233", "Ghana"],         ["+30", "Greece"],         ["+502", "Guatemala"],
+  ["+224", "Guinea"],        ["+245", "Guinea-Bissau"], ["+592", "Guyana"],
+  ["+509", "Haiti"],         ["+504", "Honduras"],      ["+36", "Hungary"],
+  ["+354", "Iceland"],       ["+91", "India"],          ["+62", "Indonesia"],
+  ["+98", "Iran"],           ["+964", "Iraq"],          ["+353", "Ireland"],
+  ["+972", "Israel"],        ["+39", "Italy"],          ["+225", "Ivory Coast"],
+  ["+1876", "Jamaica"],      ["+81", "Japan"],          ["+962", "Jordan"],
+  ["+7", "Kazakhstan"],      ["+254", "Kenya"],         ["+965", "Kuwait"],
+  ["+996", "Kyrgyzstan"],    ["+856", "Laos"],          ["+371", "Latvia"],
+  ["+961", "Lebanon"],       ["+266", "Lesotho"],       ["+231", "Liberia"],
+  ["+218", "Libya"],         ["+370", "Lithuania"],     ["+352", "Luxembourg"],
+  ["+261", "Madagascar"],    ["+265", "Malawi"],        ["+60", "Malaysia"],
+  ["+960", "Maldives"],      ["+223", "Mali"],          ["+356", "Malta"],
+  ["+222", "Mauritania"],    ["+230", "Mauritius"],     ["+52", "Mexico"],
+  ["+373", "Moldova"],       ["+976", "Mongolia"],      ["+382", "Montenegro"],
+  ["+212", "Morocco"],       ["+258", "Mozambique"],    ["+95", "Myanmar"],
+  ["+264", "Namibia"],       ["+977", "Nepal"],         ["+31", "Netherlands"],
+  ["+64", "New Zealand"],    ["+505", "Nicaragua"],     ["+227", "Niger"],
+  ["+234", "Nigeria"],       ["+850", "North Korea"],   ["+47", "Norway"],
+  ["+968", "Oman"],          ["+92", "Pakistan"],       ["+507", "Panama"],
+  ["+675", "Papua New Guinea"],
+  ["+595", "Paraguay"],      ["+51", "Peru"],           ["+63", "Philippines"],
+  ["+48", "Poland"],         ["+351", "Portugal"],      ["+974", "Qatar"],
+  ["+40", "Romania"],        ["+7", "Russia"],          ["+250", "Rwanda"],
+  ["+966", "Saudi Arabia"],  ["+221", "Senegal"],       ["+381", "Serbia"],
+  ["+232", "Sierra Leone"],  ["+65", "Singapore"],      ["+421", "Slovakia"],
+  ["+386", "Slovenia"],      ["+252", "Somalia"],       ["+27", "South Africa"],
+  ["+82", "South Korea"],    ["+211", "South Sudan"],   ["+34", "Spain"],
+  ["+94", "Sri Lanka"],      ["+249", "Sudan"],         ["+597", "Suriname"],
+  ["+268", "Swaziland"],     ["+46", "Sweden"],         ["+41", "Switzerland"],
+  ["+963", "Syria"],         ["+886", "Taiwan"],        ["+992", "Tajikistan"],
+  ["+255", "Tanzania"],      ["+66", "Thailand"],       ["+228", "Togo"],
+  ["+216", "Tunisia"],       ["+90", "Turkey"],         ["+993", "Turkmenistan"],
+  ["+256", "Uganda"],        ["+380", "Ukraine"],       ["+971", "United Arab Emirates"],
+  ["+44", "United Kingdom"], ["+1", "United States"],   ["+598", "Uruguay"],
+  ["+998", "Uzbekistan"],    ["+58", "Venezuela"],      ["+84", "Vietnam"],
+  ["+967", "Yemen"],         ["+260", "Zambia"],        ["+263", "Zimbabwe"],
+  ["+93", "Afghanistan"],
+];
+
+/** Longest-prefix-first sorted copy (built once). */
+const DIAL_MAP_SORTED = [...DIAL_CODE_MAP].sort((a, b) => b[0].length - a[0].length);
+
+/**
+ * Derives the country name from an E.164 phone number.
+ *
+ * Tries each dial code longest-prefix-first so "+1876" matches Jamaica before "+1"
+ * matches Canada/US. Returns `undefined` when the phone has no recognisable dial
+ * code; falls back to `nationality` when the phone is absent or unrecognised.
+ *
+ * Edge cases: blank phone or no nationality → `undefined`.
+ */
+export function derivePhoneCountry(
+  phone: string | undefined,
+  nationality: string | undefined,
+): string | undefined {
+  const p = phone?.trim();
+  if (p && p.startsWith("+")) {
+    for (const [code, country] of DIAL_MAP_SORTED) {
+      if (p.startsWith(code)) return country;
+    }
+  }
+  const nat = nationality?.trim();
+  return nat || undefined;
+}
+
+const MONTHS_EN = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * Classifies a GPA numeric value as "percentage" (>10), "4.0" (≤4), or
+ * "letter" (4–10, ambiguous but closest to a 4-scale variant). Returns
+ * `undefined` when gpa is absent.
+ */
+function classifyGpaType(gpa: string | number | null | undefined): string | undefined {
+  if (gpa == null) return undefined;
+  const n = typeof gpa === "number" ? gpa : parseFloat(String(gpa).replace(",", "."));
+  if (!Number.isFinite(n)) return undefined;
+  if (n > 10) return "percentage";
+  if (n <= 4) return "4.0";
+  return "letter";
+}
+
+/**
+ * Derives education fields from a student-like plain record (Bachelor priority).
+ *
+ * Field derivation rules:
+ *   - `eduDegree`:    "Bachelor" when `universityBachelor` present; "Master" when
+ *                     `universityMaster` present; "High School" when `highSchool`
+ *                     present; `undefined` otherwise.
+ *   - `eduField`:     not available in the current CRM student schema → `undefined`.
+ *   - `eduStartMonth/Year`: not stored in the CRM → `undefined`.
+ *   - `eduEndMonth`:  not stored (graduation month absent) → `undefined`.
+ *   - `eduEndYear`:   from `graduationYear` (4-digit string); `undefined` if absent.
+ *   - `eduGpaType`:   "percentage" / "4.0" / "letter" derived from gpa scale.
+ *
+ * Accepts `unknown` so callers can pass the raw DB row without casting.
+ * Never throws.
+ */
+export function deriveEducation(student: unknown): {
+  eduDegree: string | undefined;
+  eduField: string | undefined;
+  eduStartMonth: string | undefined;
+  eduStartYear: string | undefined;
+  eduEndMonth: string | undefined;
+  eduEndYear: string | undefined;
+  eduGpaType: string | undefined;
+} {
+  const s = (student != null && typeof student === "object") ? student as Record<string, unknown> : {};
+
+  const hasBachelor = typeof s.universityBachelor === "string" && s.universityBachelor.trim().length > 0;
+  const hasMaster   = typeof s.universityMaster   === "string" && s.universityMaster.trim().length > 0;
+  const hasHS       = typeof s.highSchool         === "string" && s.highSchool.trim().length > 0;
+
+  let eduDegree: string | undefined;
+  if (hasBachelor)   eduDegree = "Bachelor";
+  else if (hasMaster) eduDegree = "Master";
+  else if (hasHS)    eduDegree = "High School";
+
+  const rawYear = s.graduationYear;
+  let eduEndYear: string | undefined;
+  if (rawYear != null) {
+    const n = Number(rawYear);
+    if (Number.isFinite(n) && n > 1900 && n < 2100) eduEndYear = String(n);
+  }
+
+  const gpaType = classifyGpaType(s.gpa as string | number | null | undefined);
+
+  return {
+    eduDegree,
+    eduField:     undefined,
+    eduStartMonth: undefined,
+    eduStartYear:  undefined,
+    eduEndMonth:   undefined,
+    eduEndYear,
+    eduGpaType:    gpaType,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // buildProfile — construct a SubmitProfile from a plain CRM-agnostic record
 // ---------------------------------------------------------------------------
 // HARD_REQUIRED fields have no reasonable fallback — a portal submission is
@@ -314,6 +507,22 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
     logger.warn(`buildProfile: address boş — fallback olarak "${fallback}" kullanıldı`);
   }
 
+  const nationality = str("nationality");
+  const addrParts = deriveAddressParts(address || undefined);
+  const edu = deriveEducation(data);
+
+  const cityOfBirthRaw = data.cityOfBirth != null ? String(data.cityOfBirth).trim() : "";
+  const cityOfBirth = cityOfBirthRaw || addrParts.city || undefined;
+
+  const isTurkish = /^(tr|tur|turk|turkish|türk|türkiye|turkey)$/i.test(nationality.trim());
+  const visaSupport =
+    data.visaSupport != null ? String(data.visaSupport) : (isTurkish ? "No" : "Yes");
+
+  const intakeTerm =
+    data.intakeTerm != null ? String(data.intakeTerm) :
+    data.term       != null ? String(data.term)       :
+    undefined;
+
   return {
     email:          str("email"),
     passportNumber: str("passportNumber"),
@@ -323,7 +532,7 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
     gender,
     fatherName,
     motherName,
-    nationality:    str("nationality"),
+    nationality,
     address,
     phone,
     level:          str("level"),
@@ -337,5 +546,15 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
     languageScore:   firstFiniteNumber(data.languageScore),
     passportIssueDate:  data.passportIssueDate  != null ? String(data.passportIssueDate)  : undefined,
     passportExpiryDate: data.passportExpiryDate != null ? String(data.passportExpiryDate) : undefined,
+
+    // Additive — Altınbaş Faz-B
+    cityOfBirth,
+    addressStreet: addrParts.street || undefined,
+    addressCity:   addrParts.city   || undefined,
+    addressZip:    addrParts.zip    || undefined,
+    phoneCountry:  derivePhoneCountry(phone || undefined, nationality || undefined),
+    ...edu,
+    visaSupport,
+    intakeTerm,
   };
 }

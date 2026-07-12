@@ -20,6 +20,11 @@ export const PROFILE_FIELDS = [
   "fatherName", "motherName", "nationality", "address", "phone", "level",
   "programName", "programId", "universityName", "schoolName", "gpa",
   "graduationYear", "languageScore", "passportIssueDate", "passportExpiryDate",
+  // Additive — Altınbaş Faz-B (do NOT reorder the 21 fields above)
+  "cityOfBirth", "addressStreet", "addressCity", "addressZip",
+  "phoneCountry", "eduDegree", "eduField",
+  "eduStartMonth", "eduStartYear", "eduEndMonth", "eduEndYear",
+  "eduGpaType", "visaSupport", "intakeTerm",
 ] as const;
 
 export const FILE_FIELDS = ["photo", "passport", "transcript", "diploma"] as const;

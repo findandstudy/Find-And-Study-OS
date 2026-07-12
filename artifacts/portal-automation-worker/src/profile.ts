@@ -149,6 +149,12 @@ export async function buildStudentProfile(
     languageScore:  student.languageScore   != null ? Number(student.languageScore)  : undefined,
     passportIssueDate:  student.passportIssueDate ?? undefined,
     passportExpiryDate: student.passportExpiry    ?? undefined,
+    // Additive — Altınbaş Faz-B: pass education/address data for new derive helpers
+    highSchool:         student.highSchool         ?? undefined,
+    universityBachelor: student.universityBachelor ?? undefined,
+    universityMaster:   student.universityMaster   ?? undefined,
+    // intakeTerm: application intake period first, season as fallback open-term
+    intakeTerm: app.intake ?? app.season ?? undefined,
   });
 
   // ----- 5. Download documents to temp dir ---------------------------------
