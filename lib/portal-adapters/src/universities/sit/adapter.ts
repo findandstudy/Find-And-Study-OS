@@ -1202,6 +1202,36 @@ async function uploadViaChooser(
  * fall back to the generic attachment trigger (uploadViaChooser also falls back
  * to the hidden <input type=file>). Returns true when the file was pushed.
  */
+function cleanPhone(raw: string): string {
+  if (!raw) return "";
+  let s = String(raw).trim().replace(/[^\d+]/g, "");
+  if (s.startsWith("00")) s = "+" + s.slice(2);
+  if (!s.startsWith("+")) return s;
+  // Ülke kodundan sonra yanlışlıkla kalan ulusal trunk hanesini düzelt.
+  // Yalnızca ulusal kısım tam olarak 1 hane fazlaysa VE bilinen trunk
+  // hanesiyle başlıyorsa devreye girer — geçerli bir numaraya asla dokunmaz.
+  const trunkFix: Array<[string, number, string]> = [
+    ["+998", 9, "8"], // Uzbekistan
+    ["+7", 10, "8"],  // Russia / Kazakhstan
+    ["+994", 9, "0"], // Azerbaijan
+    ["+996", 9, "0"], // Kyrgyzstan
+    ["+992", 9, "8"], // Tajikistan
+    ["+993", 8, "8"], // Turkmenistan
+    ["+380", 9, "0"], // Ukraine
+    ["+375", 9, "8"], // Belarus
+  ];
+  for (const [cc, natLen, trunk] of trunkFix) {
+    if (s.startsWith(cc)) {
+      const nat = s.slice(cc.length);
+      if (nat.length === natLen + 1 && nat.startsWith(trunk)) {
+        s = cc + nat.slice(1);
+      }
+      break;
+    }
+  }
+  return s;
+}
+
 async function uploadDocRow(
   page: any,
   key: string,
@@ -2005,7 +2035,14 @@ export const sitAdapter: SitAdapter = {
           }
           // Mobile — student's number, filled once on the Contact step (ignore everSet gate).
           const phoneVal =
-            profile.phone || (profile as any).mobile || (profile as any).whatsapp || "";
+            cleanPhone(
+      (profile as any).phoneE164 ||
+        (profile as any).phone_e164 ||
+        profile.phone ||
+        (profile as any).mobile ||
+        (profile as any).whatsapp ||
+        "",
+    );
           if (phoneVal) {
             telDbg = await page.evaluate((val: string) => {
               const el = document.querySelector(
