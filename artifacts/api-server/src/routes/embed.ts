@@ -3116,7 +3116,7 @@ function showDetailModal(){
     var pid=parseInt(applyBtn.getAttribute('data-apply'));
     closeDetailModal();
     formProgram=programs.find(function(p){return p.id===pid})||null;
-    formOpen=true;formSubmitted=false;formStep='personal';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;
+    formOpen=true;formSubmitted=false;formStep='personal';phoneError=false;uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;handleNextPersonalInFlight=false;
     showModal();
     loadProgramDocs(pid,function(){if(formOpen)showModal();});
   });
@@ -3239,7 +3239,9 @@ function wireNameAndPhoneNormalizers(scope){
         el.value=el.value.slice(0,start)+cleaned+el.value.slice(end);
         var np=start+cleaned.length;
         try{el.setSelectionRange(np,np);}catch(_){}
+        el.__ewInputProcessing=true;
         try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){}
+        el.__ewInputProcessing=false;
       }
     });
     el.addEventListener('paste',function(e){
@@ -3257,6 +3259,7 @@ function wireNameAndPhoneNormalizers(scope){
       }catch(_){}
     });
     el.addEventListener('input',function(){
+      if(el.__ewInputProcessing)return;
       var pos=null; try{pos=el.selectionStart;}catch(e){}
       var v=el.value; var nv=v.replace(/\\D/g,'');
       if(v!==nv){el.value=nv; var delta=v.length-nv.length; if(pos!=null){var np=Math.max(0,pos-delta);try{el.setSelectionRange(np,np);}catch(e){}}}
@@ -3318,6 +3321,9 @@ var savedFormData={};
 // duplicating) the existing "new" lead and can flip it to "converted".
 var leadId=null;
 var leadCreating=false;
+// True while handleNextPersonal is executing to prevent concurrent/double-click
+// invocations from firing multiple lead creates or racing showModal calls.
+var handleNextPersonalInFlight=false;
 // True when the early basics-only lead fired without a phone number; the
 // next fully-valid Continue re-fires once so the deduped row gains the phone.
 var leadPhonePending=false;
@@ -3543,6 +3549,10 @@ function ewFireEarlyLead(){
 // the documents step. Validates the small set of required basics. Used by
 // the "Continue" button on step 1 in both the modal and the inline view.
 function handleNextPersonal(scope){
+  // Idempotency guard: a double-click or rapid re-entry must not fire
+  // multiple lead-create fetches or race showModal/render calls.
+  if(handleNextPersonalInFlight)return;
+  handleNextPersonalInFlight=true;
   var form=scope?$('#ew-personal-form',scope):$('#ew-personal-form');
   if(form){
     new FormData(form).forEach(function(v,k){savedFormData[k]=v});
@@ -3558,10 +3568,12 @@ function handleNextPersonal(scope){
       leadPhonePending=true;
       ewFireEarlyLead();
     }
+    handleNextPersonalInFlight=false;
     alert('Please fill in all required fields, including the phone country code.');
     return;
   }
   if(ewFirstNonLatinName()){
+    handleNextPersonalInFlight=false;
     alert('Names must use Latin letters only. Please remove non-Latin characters (e.g. Arabic, Cyrillic).');
     return;
   }
@@ -3583,6 +3595,7 @@ function handleNextPersonal(scope){
       formStep='documents';
       if(formOpen)showModal();else render(false);
     }
+    handleNextPersonalInFlight=false;
     return;
   }
   leadCreating=true;
@@ -3596,6 +3609,7 @@ function handleNextPersonal(scope){
     return r.json().then(function(d){return {ok:r.ok,data:d}});
   }).then(function(res){
     leadCreating=false;
+    handleNextPersonalInFlight=false;
     if(res.ok&&res.data&&res.data.leadId)leadId=res.data.leadId;
     if(MODE==='lead_form'){
       // Lead-form widgets only collect contact info — show success now.
@@ -3609,6 +3623,7 @@ function handleNextPersonal(scope){
     if(formOpen)showModal();else render(false);
   }).catch(function(){
     leadCreating=false;
+    handleNextPersonalInFlight=false;
     if(MODE==='lead_form'){
       formLoading=false;
       alert('Submission failed. Please try again.');
@@ -3784,7 +3799,7 @@ function bindEvents(){
     btn.addEventListener('click',function(){
       var pid=parseInt(btn.getAttribute('data-apply'));
       formProgram=programs.find(function(p){return p.id===pid})||null;
-      formOpen=true;formSubmitted=false;formStep='personal';phoneError=false;uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;
+      formOpen=true;formSubmitted=false;formStep='personal';phoneError=false;uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;handleNextPersonalInFlight=false;
       loadProgramDocs(pid,function(){if(formOpen)showModal();else render(false);});
       showModal();
     });
