@@ -414,6 +414,148 @@ async function runAutoConvertDisabledFlow(slug: string): Promise<Section> {
   return { name: "(d) Auto-convert disabled branch", ok, details };
 }
 
+/**
+ * (e) UK national-trunk-0 phone flow.
+ *
+ * Verifies the end-to-end behavior introduced by the pn() trunk-0 fix:
+ *   - Early-lead step stores the trunk-stripped phone in the phone column
+ *     (not the trunk-retained pre-fix form)
+ *   - Final /apply with a libphonenumber-valid UK number returns 201
+ *     (no 422 phone.invalid)
+ *   - The exact example from the task description (07700900000 + "+44"):
+ *     phone column = "+447700900000", NOT "+4407700900000"
+ *   - Step-1 leniency: missing/empty phone still produces 201 on /lead
+ *
+ * Note on 07700900000: this is a fictional Ofcom number that libphonenumber
+ * does NOT consider valid, so phoneE164 is null and /apply would correctly
+ * 422 it. The regression assertion is purely on the phone column value.
+ * For the /apply success assertion we use 07911123456 (a valid UK mobile range).
+ */
+async function runUkPhoneFlow(slug: string): Promise<Section> {
+  const details: string[] = [];
+  let ok = true;
+
+  // --- Sub-scenario A: task-example number (07700900000 + "+44") ---
+  // Asserts phone column stores the trunk-stripped form "+447700900000",
+  // not the old pre-fix form "+4407700900000". phoneE164 is null because
+  // the 07700 range is fictional (libphonenumber-invalid).
+  const emailA = `t135-ukphone-a-${RUN_ID}@test.local`;
+  const rA = await postJson(`${BASE}/api/public/embed/${slug}/lead`, {
+    firstName: "UkTaskEx",
+    lastName: "Lead",
+    email: emailA,
+    phone: "07700900000",
+    countryCode: "+44",
+  });
+  const leadIdA = readNumber(rA.data, "leadId");
+  ok = assert(rA.status === 201 && leadIdA !== null, `07700 /lead returns 201 with leadId (got ${rA.status})`, details) && ok;
+  if (leadIdA !== null) {
+    const [leadA] = await db.select().from(leadsTable).where(eq(leadsTable.id, leadIdA));
+    ok = assert(!!leadA, "07700 lead row exists", details) && ok;
+    if (leadA) {
+      ok = assert(
+        leadA.phone === "+447700900000",
+        `07700 lead.phone stored as trunk-stripped "+447700900000" (got "${leadA.phone}")`,
+        details,
+      ) && ok;
+      ok = assert(
+        leadA.phone !== "+4407700900000",
+        `07700 lead.phone NOT the old trunk-retained form "+4407700900000"`,
+        details,
+      ) && ok;
+      // phoneE164 is null: 07700 is not a valid number in libphonenumber
+      ok = assert(
+        leadA.phoneE164 === null,
+        `07700 lead.phoneE164 is null (fictional range, libphonenumber-invalid) (got "${leadA.phoneE164}")`,
+        details,
+      ) && ok;
+    }
+  }
+
+  // --- Sub-scenario B: valid UK mobile (07911123456 + "+44") ---
+  // Uses a libphonenumber-verified valid range so both phone and phoneE164
+  // store clean E.164, and /apply returns 201 (not 422 phone.invalid).
+  const email = `t135-ukphone-${RUN_ID}@test.local`;
+  const UK_PHONE_RAW = "07911123456";
+  const UK_DIAL = "+44";
+  const UK_E164 = "+447911123456";
+
+  const r1 = await postJson(`${BASE}/api/public/embed/${slug}/lead`, {
+    firstName: "UkFirst",
+    lastName: "UkLast",
+    email,
+    phone: UK_PHONE_RAW,
+    countryCode: UK_DIAL,
+  });
+  const leadId = readNumber(r1.data, "leadId");
+  ok = assert(r1.status === 201 && leadId !== null, `UK /lead returns 201 with leadId (got ${r1.status})`, details) && ok;
+
+  if (leadId !== null) {
+    const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, leadId));
+    ok = assert(!!lead, "lead row exists", details) && ok;
+    if (lead) {
+      ok = assert(
+        lead.phone === UK_E164,
+        `lead.phone stored as trunk-stripped E.164 "${UK_E164}" (got "${lead.phone}")`,
+        details,
+      ) && ok;
+      ok = assert(
+        lead.phoneE164 === UK_E164,
+        `lead.phoneE164 stored as "${UK_E164}" (got "${lead.phoneE164}")`,
+        details,
+      ) && ok;
+      ok = assert(
+        lead.phone !== "+4407911123456",
+        `lead.phone is NOT the old trunk-retained form "+4407911123456"`,
+        details,
+      ) && ok;
+    }
+  }
+
+  const r2 = await postJson(`${BASE}/api/public/embed/${slug}/apply`, {
+    firstName: "UkFirst",
+    lastName: "UkLast",
+    email,
+    phone: UK_PHONE_RAW,
+    countryCode: UK_DIAL,
+    nationality: "United Kingdom",
+    desiredLevel: "Bachelor",
+    leadId,
+    passportNumber: `T135UK${Date.now().toString(36).slice(-5).toUpperCase()}`,
+  });
+  ok = assert(
+    r2.status === 201,
+    `/apply with UK national phone returns 201, not 422 phone.invalid (got ${r2.status})`,
+    details,
+  ) && ok;
+  if (r2.status === 422 && (r2.data as any)?.code === "phone.invalid") {
+    details.push("  => phone.invalid 422 means trunk-0 was NOT stripped — regression detected");
+  }
+
+  // Step 3: leniency — missing phone on /lead still returns 201.
+  const emailNoPhone = `t135-ukphone-noph-${RUN_ID}@test.local`;
+  const r3 = await postJson(`${BASE}/api/public/embed/${slug}/lead`, {
+    firstName: "NoPhone",
+    lastName: "Lead",
+    email: emailNoPhone,
+    // phone intentionally omitted
+  });
+  ok = assert(r3.status === 201, `/lead without phone returns 201 (got ${r3.status}) — leniency preserved`, details) && ok;
+
+  // Step 4: leniency — empty-string phone on /lead still returns 201.
+  const emailEmptyPhone = `t135-ukphone-emph-${RUN_ID}@test.local`;
+  const r4 = await postJson(`${BASE}/api/public/embed/${slug}/lead`, {
+    firstName: "EmptyPhone",
+    lastName: "Lead",
+    email: emailEmptyPhone,
+    phone: "",
+    countryCode: "+44",
+  });
+  ok = assert(r4.status === 201, `/lead with empty phone returns 201 (got ${r4.status}) — leniency preserved`, details) && ok;
+
+  return { name: "(e) UK trunk-0 phone: early-lead stores clean E.164, /apply succeeds, leniency intact", ok, details };
+}
+
 async function waitForServer(): Promise<boolean> {
   for (let i = 0; i < 15; i++) {
     try {
@@ -446,6 +588,10 @@ async function main() {
     `t135-gn-${RUN_ID}-FEMALE@test.local`,
     `t135-gn-${RUN_ID}-bad@test.local`,
     `t135-noconv-${RUN_ID}@test.local`,
+    `t135-ukphone-a-${RUN_ID}@test.local`,
+    `t135-ukphone-${RUN_ID}@test.local`,
+    `t135-ukphone-noph-${RUN_ID}@test.local`,
+    `t135-ukphone-emph-${RUN_ID}@test.local`,
   ];
   const sections: Section[] = [];
   try {
@@ -453,6 +599,7 @@ async function main() {
     sections.push(await runPublicApplyFlow(fx.progId));
     sections.push(await runGenderNormalizationFlow(fx.slug));
     sections.push(await runAutoConvertDisabledFlow(fx.slug));
+    sections.push(await runUkPhoneFlow(fx.slug));
   } finally {
     await teardownFixtures(fx, usedEmails);
   }
