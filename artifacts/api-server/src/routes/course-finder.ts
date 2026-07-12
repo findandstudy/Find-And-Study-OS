@@ -189,18 +189,18 @@ export function buildProgramFacetConditions(
   const conditions = [eq(programsTable.isActive, true)];
   if (excludeKey !== "country" && params.country) {
     const vals = params.country.split(",").map(s => s.trim()).filter(Boolean);
-    if (vals.length === 1) conditions.push(eq(universitiesTable.country, vals[0]));
-    else if (vals.length > 1) conditions.push(inArray(universitiesTable.country, vals));
+    if (vals.length === 1) conditions.push(ilike(universitiesTable.country, vals[0]));
+    else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(universitiesTable.country, v)))!);
   }
   if (excludeKey !== "city" && params.city) {
     const vals = params.city.split(",").map(s => s.trim()).filter(Boolean);
-    if (vals.length === 1) conditions.push(eq(universitiesTable.city, vals[0]));
-    else if (vals.length > 1) conditions.push(inArray(universitiesTable.city, vals));
+    if (vals.length === 1) conditions.push(ilike(universitiesTable.city, vals[0]));
+    else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(universitiesTable.city, v)))!);
   }
   if (excludeKey !== "universityType" && params.universityType) {
     const vals = params.universityType.split(",").map(s => s.trim()).filter(Boolean);
-    if (vals.length === 1) conditions.push(eq(universitiesTable.universityType, vals[0]));
-    else if (vals.length > 1) conditions.push(inArray(universitiesTable.universityType, vals));
+    if (vals.length === 1) conditions.push(ilike(universitiesTable.universityType, vals[0]));
+    else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(universitiesTable.universityType, v)))!);
   }
   if (excludeKey !== "universityId" && params.universityId) {
     const vals = params.universityId.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));

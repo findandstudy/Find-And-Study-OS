@@ -23,7 +23,7 @@ const MAX_RESULTS = 8;
 export const searchProgramsToolDefinition = {
   name: SEARCH_PROGRAMS_TOOL_NAME,
   description:
-    "Search the live, currently-active university program catalog. Use this whenever the student asks about specific programs, universities, countries, tuition fees, or availability — never invent program names, prices, or availability from memory. Returns at most a handful of the best-matching real programs. If it returns no results, tell the student you could not find a matching program and ask a clarifying question instead of guessing.",
+    "Search the live, currently-active university program catalog. Use this whenever the student asks about specific programs, universities, countries, tuition, discounted, deposit and language-course fees, intake dates, duration, or availability — never invent program names, prices, or availability from memory. Returns at most a handful of the best-matching real programs. If it returns no results, tell the student you could not find a matching program and ask a clarifying question instead of guessing.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -84,6 +84,8 @@ export interface SearchProgramsResultRow {
   duration: string | null;
   tuitionFee: number | null;
   discountedFee: number | null;
+  depositFee: number | null;
+  languageFee: number | null;
   currency: string | null;
   scholarship: number | null;
   intakes: string | null;
@@ -141,6 +143,8 @@ export async function executeSearchProgramsTool(
       duration: programsTable.duration,
       tuitionFee: programsTable.tuitionFee,
       discountedFee: programsTable.discountedFee,
+      depositFee: programsTable.depositFee,
+      languageFee: programsTable.languageFee,
       currency: programsTable.currency,
       scholarship: programsTable.scholarship,
       intakes: programsTable.intakes,
