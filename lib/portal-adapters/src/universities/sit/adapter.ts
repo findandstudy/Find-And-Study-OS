@@ -1202,6 +1202,111 @@ async function uploadViaChooser(
  * fall back to the generic attachment trigger (uploadViaChooser also falls back
  * to the hidden <input type=file>). Returns true when the file was pushed.
  */
+async function uploadDocRow(
+  page: any,
+  key: string,
+  keyword: string,
+  docPath: string,
+): Promise<boolean> {
+  try {
+    const addBtn = page.getByRole("button", { name: /add (new )?doc/i }).first();
+    if (!(await addBtn.count())) {
+      logger.warn(`[sit] uploadDocRow ${key}: 'Add New Document' butonu yok`);
+      return false;
+    }
+    await addBtn.scrollIntoViewIfNeeded().catch(() => {});
+    await addBtn.click().catch(() => {});
+    await page.waitForTimeout(800);
+
+    // The new row exposes a cmdk combobox labelled "Select document type".
+    let combo = page
+      .locator('button[role="combobox"]')
+      .filter({ hasText: /document type/i })
+      .last();
+    if (!(await combo.count())) {
+      combo = page.locator('button[role="combobox"]').last();
+    }
+    await combo.scrollIntoViewIfNeeded().catch(() => {});
+    await combo.click().catch(() => {});
+    await page.waitForTimeout(500);
+    // cmdk palette: type keyword to filter
+    await page.keyboard.type(keyword).catch(() => {});
+    await page.waitForTimeout(450);
+
+    const opts: string[] = await page
+      .evaluate(() => {
+        const els = Array.from(
+          document.querySelectorAll(
+            '[role="option"], [cmdk-item], [data-slot="command-item"]',
+          ),
+        );
+        return els
+          .map((e) => (e.textContent || "").trim())
+          .filter(Boolean);
+      })
+      .catch(() => [] as string[]);
+    logger.info(`[sit] DOCOPTS ${key} kw=${keyword} => ${JSON.stringify(opts)}`);
+
+    let picked = false;
+    try {
+      await page
+        .getByRole("option", { name: new RegExp(keyword, "i") })
+        .first()
+        .click({ timeout: 1500 });
+      picked = true;
+    } catch {}
+    if (!picked) {
+      try {
+        await page
+          .getByText(new RegExp(keyword, "i"))
+          .first()
+          .click({ timeout: 1500 });
+        picked = true;
+      } catch {}
+    }
+    if (!picked) {
+      await page.keyboard.press("Enter").catch(() => {});
+    }
+    await page.waitForTimeout(800);
+
+    // After selecting a type the row reveals a file input.
+    const fileInputs = page.locator('input[type="file"]');
+    const fc: number = await fileInputs.count();
+    if (fc > 0) {
+      await fileInputs
+        .last()
+        .setInputFiles(docPath)
+        .catch(() => {});
+      await page.waitForTimeout(900);
+      logger.info(`[sit] DOCUP ${key} picked=${picked} via=setInputFiles fc=${fc}`);
+      return true;
+    }
+
+    // Fallback: a browse/choose button that opens a native file chooser.
+    try {
+      const browseBtn = page
+        .getByRole("button", { name: /choose|browse|upload|select file|dosya/i })
+        .last();
+      if (await browseBtn.count()) {
+        const [chooser] = await Promise.all([
+          page.waitForEvent("filechooser", { timeout: 2500 }),
+          browseBtn.click().catch(() => {}),
+        ]);
+        await chooser.setFiles(docPath);
+        await page.waitForTimeout(900);
+        logger.info(`[sit] DOCUP ${key} picked=${picked} via=filechooser`);
+        return true;
+      }
+    } catch {}
+
+    logger.warn(`[sit] uploadDocRow ${key}: tip seçildi ama file input/chooser bulunamadı (picked=${picked})`);
+    return false;
+  } catch (e) {
+    logger.warn(`[sit] uploadDocRow ${key} hata: ${(e as any)?.message}`);
+    return false;
+  }
+}
+
 async function uploadDocByType(
   page: Page,
   typeTriggerRe: RegExp,
@@ -1656,7 +1761,7 @@ export const sitAdapter: SitAdapter = {
     let validationRetries = 0;
 
     // --- Walk up to 6 wizard steps, filling whatever is on screen ---
-    for (let step = 0; step < 6; step++) {
+    for (let step = 0; step < 9; step++) {
       await sleep(page, 1500);
       await dismissInactivityModal(page);
 
@@ -1713,11 +1818,251 @@ export const sitAdapter: SitAdapter = {
       // leak the STUDENT's phone into a parent's mobile field. Fill only until it
       // first lands, then leave the parent-mobile fields (no CRM data) untouched.
       if (profile.phone && !everSet.has("phone")) {
-        if (await fillField(page, SIT_STUDENT_FIELDS.phone, profile.phone)) {
+        if (
+          await fillField(page, SIT_STUDENT_FIELDS.phone, profile.phone, [
+            'input[type="tel"]',
+            'input[placeholder*="mobile" i]',
+            'input[placeholder*="phone" i]',
+          ])
+        ) {
           everSet.add("phone");
         }
       }
+      // STEP6 handler: Educational Background (High School Country/Name/GPA) for Bachelor applicants.
+      try {
+        const hasHS = await page.evaluate(
+          () => !!Array.from(document.querySelectorAll("label")).find((l) => /high school/i.test(l.textContent || "")),
+        );
+        if (hasHS) {
+          const selIdx = await page.evaluate(() => {
+            const arr = Array.from(document.querySelectorAll("select"));
+            for (let k = 0; k < arr.length; k++) {
+              const fi = (arr[k] as HTMLElement).closest('[data-slot="form-item"]');
+              const lab = fi ? (fi.querySelector("label")?.textContent || "").toLowerCase() : "";
+              if (lab.includes("school") && lab.includes("country")) return k;
+            }
+            return -1;
+          });
+          const hsCountry =
+            toEnglishCountryName(
+              (profile as any).highSchoolCountry || (profile as any).schoolCountry || profile.nationality,
+            ) ||
+            profile.nationality ||
+            "";
+          let cOk = false;
+          if (selIdx >= 0 && hsCountry) {
+            const cs = page.locator("select").nth(selIdx);
+            try {
+              await cs.selectOption({ label: hsCountry });
+              cOk = true;
+            } catch {}
+            if (!cOk) {
+              const opts = (await cs.locator("option").allTextContents()).map((o) => o.trim());
+              const hit =
+                opts.find((o) => o.toLowerCase() === hsCountry.toLowerCase()) ||
+                opts.find((o) => o.toLowerCase().includes(hsCountry.toLowerCase()));
+              if (hit) {
+                try {
+                  await cs.selectOption({ label: hit });
+                  cOk = true;
+                } catch {}
+              }
+            }
+          }
+          const hsName =
+            String(
+              (profile as any).highSchoolName ||
+                (profile as any).schoolName ||
+                (profile as any).bachelorSchoolName ||
+                "High School",
+            ).trim() || "High School";
+          const gpaRaw =
+            (profile as any).highSchoolGpaPercent ??
+            (profile as any).highSchoolGpa ??
+            (profile as any).gpa ??
+            (profile as any).gpaPercent;
+          const hsGpa =
+            gpaRaw !== undefined && gpaRaw !== null && String(gpaRaw).trim() !== "" ? String(gpaRaw) : "3.0";
+          const setByName = (nm: string, val: string) =>
+            page.evaluate(
+              (a: { nm: string; val: string }) => {
+                const el = document.querySelector('input[name="' + a.nm + '"]') as HTMLInputElement | null;
+                if (!el) return "no-el";
+                el.focus();
+                const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value");
+                if (d && d.set) d.set.call(el, a.val);
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+                el.dispatchEvent(new Event("change", { bubbles: true }));
+                el.dispatchEvent(new Event("blur", { bubbles: true }));
+                return "val=" + el.value;
+              },
+              { nm, val },
+            );
+          const nR = await setByName("high_school_name", hsName);
+          const gR = await setByName("high_school_gpa_percent", hsGpa);
+          logger.info(
+            "[sit] SCHOOLFIX cOk=" + cOk + " hsCountry='" + hsCountry + "' name=" + nR + " gpa=" + gR,
+          );
+        }
+      } catch (e) {
+        logger.info("[sit] SCHOOLFIX err " + (e as any)?.message);
+      }
+      // STEP5 handler v5: cmdk education-level combobox (opts: Associate/Bachelor/Master/PhD).
+      try {
+        const cbIdx = await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button[role="combobox"]'));
+          for (let k = 0; k < btns.length; k++) {
+            const fi = (btns[k] as HTMLElement).closest('[data-slot="form-item"]');
+            const lab = fi ? (fi.querySelector("label")?.textContent || "").toLowerCase() : "";
+            if (lab.includes("apply for")) return k;
+          }
+          return -1;
+        });
+        if (cbIdx >= 0) {
+          const btn = page.locator('button[role="combobox"]').nth(cbIdx);
+          const cur = ((await btn.textContent().catch(() => "")) || "").trim();
+          if (!cur || /select education level/i.test(cur)) {
+            const lvlRaw = String(
+              (profile as any).applyingFor ||
+                (profile as any).degreeLevel ||
+                (profile as any).educationLevel ||
+                (profile as any).degree ||
+                (profile as any).level ||
+                "",
+            ).toLowerCase();
+            let label = "Bachelor";
+            if (/phd|doctor|doktora/.test(lvlRaw)) label = "PhD";
+            else if (/master|graduate|yüksek/.test(lvlRaw)) label = "Master";
+            else if (/associate|vocational|önlisans|onlisans/.test(lvlRaw)) label = "Associate";
+            await btn.scrollIntoViewIfNeeded().catch(() => {});
+            await btn.click().catch(() => {});
+            await page.waitForTimeout(350);
+            let expanded = await btn.getAttribute("aria-expanded").catch(() => null);
+            if (expanded !== "true") {
+              await btn.focus().catch(() => {});
+              await page.keyboard.press("Enter").catch(() => {});
+              await page.waitForTimeout(300);
+              expanded = await btn.getAttribute("aria-expanded").catch(() => null);
+            }
+            await page.waitForTimeout(400);
+            // The open dropdown is a cmdk palette: type into its search to filter, then click the option.
+            await page.keyboard.type(label, { delay: 45 }).catch(() => {});
+            await page.waitForTimeout(500);
+            let clicked = false;
+            try {
+              await page.getByText(label, { exact: true }).first().click({ timeout: 2500 });
+              clicked = true;
+            } catch {}
+            if (!clicked) {
+              await page.keyboard.press("Enter").catch(() => {});
+            }
+            await page.waitForTimeout(400);
+            const after = ((await btn.textContent().catch(() => "")) || "").trim();
+            logger.info(
+              "[sit] APPLYPICK v5 label=" + label + " clicked=" + clicked + " after='" + after + "'",
+            );
+          }
+        }
+      } catch (e) {
+        logger.info("[sit] APPLYFOR handler err " + (e as any)?.message);
+      }
+      // AGGRESSIVE Contact fixer v5 — Contact step only (residence select present); ignores everSet.
+      try {
+        await page.waitForTimeout(600);
+        const selIdx = await page.evaluate(() => {
+          const arr = Array.from(document.querySelectorAll("select"));
+          for (let k = 0; k < arr.length; k++) {
+            const fi = (arr[k] as HTMLElement).closest('[data-slot="form-item"]');
+            const lab = fi ? (fi.querySelector("label")?.textContent || "").toLowerCase() : "";
+            if (lab.includes("residence")) return k;
+          }
+          return -1;
+        });
+        const cval2 = toEnglishCountryName(profile.nationality) || profile.nationality || "";
+        let cOk = false;
+        let telOk = false;
+        let telDbg = "not-contact";
+        if (selIdx >= 0) {
+          // Country of Residence
+          if (cval2) {
+            const cs = page.locator("select").nth(selIdx);
+            try {
+              await cs.selectOption({ label: cval2 });
+              cOk = true;
+            } catch {}
+            if (!cOk) {
+              const opts = (await cs.locator("option").allTextContents()).map((o) => o.trim());
+              const hit =
+                opts.find((o) => o.toLowerCase() === cval2.toLowerCase()) ||
+                opts.find((o) => o.toLowerCase().includes(cval2.toLowerCase()));
+              if (hit) {
+                try {
+                  await cs.selectOption({ label: hit });
+                  cOk = true;
+                } catch {}
+              }
+            }
+          }
+          // Mobile — student's number, filled once on the Contact step (ignore everSet gate).
+          const phoneVal =
+            profile.phone || (profile as any).mobile || (profile as any).whatsapp || "";
+          if (phoneVal) {
+            telDbg = await page.evaluate((val: string) => {
+              const el = document.querySelector(
+                'input[type="tel"], input[placeholder*="mobile" i], input[placeholder*="phone" i]',
+              ) as HTMLInputElement | null;
+              if (!el) return "no-el";
+              el.focus();
+              const proto = Object.getPrototypeOf(el);
+              const d = Object.getOwnPropertyDescriptor(proto, "value");
+              if (d && d.set) d.set.call(el, val);
+              el.dispatchEvent(new Event("input", { bubbles: true }));
+              el.dispatchEvent(new Event("change", { bubbles: true }));
+              el.dispatchEvent(new Event("blur", { bubbles: true }));
+              return "val=" + el.value;
+            }, phoneVal);
+            telOk = telDbg.startsWith("val=") && telDbg.length > 4;
+            if (telOk) everSet.add("phone");
+          }
+        }
+        logger.info(
+          "[sit] CONTACTFIX2 telOk=" + telOk + " telDbg=" + telDbg + " cval='" + cval2 + "' selIdx=" + selIdx + " cOk=" + cOk,
+        );
+      } catch (e) {
+        logger.info("[sit] CONTACTFIX err " + (e as any)?.message);
+      }
       await fillField(page, SIT_STUDENT_FIELDS.address, profile.address);
+      // Robust residence-country: target the labelled select directly (independent of
+      // the country label regex) and fuzzy-match the English nationality country name.
+      try {
+        const cval = toEnglishCountryName(profile.nationality) || profile.nationality || "";
+        if (cval) {
+          const csel = page
+            .locator('div[data-slot="form-item"]:has(label:has-text("Country of Residence")) select')
+            .first();
+          if (await csel.count()) {
+            const cur = await csel.inputValue().catch(() => "");
+            if (!cur) {
+              let done = false;
+              try {
+                await csel.selectOption({ label: cval });
+                done = true;
+              } catch {}
+              if (!done) {
+                const opts = (await csel.locator("option").allTextContents()).map((o) => o.trim());
+                const hit =
+                  opts.find((o) => o.toLowerCase() === cval.toLowerCase()) ||
+                  opts.find((o) => cval && o.toLowerCase().includes(cval.toLowerCase()));
+                if (hit) {
+                  try {
+                    await csel.selectOption({ label: hit });
+                  } catch {}
+                }
+              }
+            }
+          }
+        }
+      } catch {}
       // Country (Contact & Location). The CRM has no residence-country field, so
       // default to the applicant's nationality country (EN). Best-effort: only
       // fills when a Country control is present on the current step. Mirrors the
@@ -1912,6 +2257,30 @@ export const sitAdapter: SitAdapter = {
             .catch(() => 0));
         if (trigCount > 0) {
           reachedDocuments = true;
+            try {
+              const addBtn = page.getByRole("button", { name: /add (new )?doc/i }).first();
+              if (await addBtn.count()) {
+                await addBtn.click().catch(() => {});
+                await page.waitForTimeout(900);
+                await page
+                  .screenshot({ path: "/var/www/apply.findandstudy.com/artifacts/edcons/dist/public/swf.png", fullPage: true })
+                  .catch(() => {});
+                const rowDump = await page.evaluate(() => {
+                  const files = document.querySelectorAll('input[type="file"]').length;
+                  const selects = Array.from(document.querySelectorAll("select")).map((se) => {
+                    const fi = (se as HTMLElement).closest('[data-slot="form-item"]');
+                    const lab = fi ? (fi.querySelector("label")?.textContent || "").trim() : "";
+                    return lab + " [" + (se as HTMLSelectElement).options.length + "]";
+                  });
+                  const combos = Array.from(document.querySelectorAll('button[role="combobox"]')).map((b) => (b.textContent || "").trim());
+                  const btns = Array.from(document.querySelectorAll("button")).map((b) => (b.textContent || "").trim()).filter(Boolean).slice(0, 20);
+                  return { files, selects, combos, btns };
+                });
+                logger.info("[sit] DOCROW " + JSON.stringify(rowDump));
+              }
+            } catch (e) {
+              logger.info("[sit] DOCROW err " + (e as any)?.message);
+            }
           logger.info(`[sit] wizard adım=${step + 1}: belge yükleme adımına ulaşıldı`);
         }
       }
@@ -1933,7 +2302,7 @@ export const sitAdapter: SitAdapter = {
       }
       for (const [key, trig, docPath] of docJobs) {
         if (uploadedDocs.has(key)) continue;
-        if (await uploadDocByType(page, trig, docPath)) {
+        if (await uploadDocRow(page, key, key, docPath)) {
           uploadedDocs.add(key);
           logger.info(`[sit] wizard adım=${step + 1} yükleme: ${key}=ok`);
         }
@@ -2012,6 +2381,18 @@ export const sitAdapter: SitAdapter = {
         "[sit] wizard: create formunda dosya-yükleme adımı YOK — belge/foto ayrı gerekiyor",
       );
     }
+    await page
+      .screenshot({ path: "/var/www/apply.findandstudy.com/artifacts/edcons/dist/public/swf.png", fullPage: true })
+      .catch(() => {});
+    try {
+      const upDump = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll("button")).map((b) => (b.textContent || "").trim()).filter(Boolean).slice(0, 25);
+        const files = document.querySelectorAll('input[type="file"]').length;
+        const heading = (document.querySelector("h1,h2,h3")?.textContent || "").trim();
+        return { heading, files, btns };
+      });
+      logger.info("[sit] UPLOADSTEP " + JSON.stringify(upDump));
+    } catch {}
     const missingUploads: string[] = [];
     if (files.photo && !photoUploaded) missingUploads.push("foto");
     if (files.passport && !uploadedDocs.has("passport")) missingUploads.push("pasaport");

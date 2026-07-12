@@ -140,8 +140,8 @@ export type SitButtonKey = keyof typeof SIT_BUTTONS;
 // input[type=file], which SIT hides behind a styled button).
 // ---------------------------------------------------------------------------
 export const SIT_UPLOAD = {
-  photoTrigger:      /upload (photo|image)|profile (photo|image)|fotoğraf|resim/i,
-  attachmentTrigger: /upload|attach|browse|choose file|dosya|belge (ekle|yükle)/i,
+  photoTrigger:      /upload (photo|image)|profile (photo|image)|choose (image|photo)|fotoğraf|resim/i,
+  attachmentTrigger: /upload|attach|browse|choose file|add (new )?doc|dosya|belge (ekle|yükle)/i,
   /**
    * Per-document upload triggers — the Documents step exposes a distinct
    * file-chooser per attachment type. Tried before the generic attachmentTrigger
