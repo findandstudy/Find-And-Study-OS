@@ -85,8 +85,8 @@ test("GPA3 — number input rounds; empty/garbage → undefined", () => {
 // Allowlist integrity
 // ---------------------------------------------------------------------------
 
-test("AL1 — allowlist length is exactly 11", () => {
-  assert.equal(SIT_ALLOWLIST.length, 11);
+test("AL1 — allowlist length is exactly 12", () => {
+  assert.equal(SIT_ALLOWLIST.length, 12);
 });
 
 test("AL2 — includes Beykoz, excludes İstanbul Yeni Yüzyıl", () => {
