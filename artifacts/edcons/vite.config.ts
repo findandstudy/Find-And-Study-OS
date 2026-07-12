@@ -81,6 +81,9 @@ export default defineConfig({
           }
           if (id.includes("@tanstack/react-query")) return "vendor-react";
           if (id.includes("@radix-ui/")) return "vendor-radix";
+          if (id.includes("react-phone-number-input") || id.includes("libphonenumber-js")) {
+            return "vendor-phone";
+          }
           if (id.includes("/recharts/") || id.includes("/d3-") || id.includes("/victory-vendor/")) {
             return "vendor-charts";
           }
