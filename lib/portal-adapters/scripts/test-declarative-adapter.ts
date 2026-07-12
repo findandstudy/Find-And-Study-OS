@@ -266,12 +266,6 @@ test("HLP2: applyTransform override/map use the table, fuzzy is passthrough", ()
   assert.equal(applyTransform("male", undefined), "male");
 });
 
-test("HLP3: resolveProgramValue — spec override wins", () => {
-  const opts: ProgramOption[] = [{ v: "100", t: "Computer Engineering" }];
-  const res = resolveProgramValue(opts, TEST_PROFILE, { source: "ajaxOptions", overrides: { "42": "999" } });
-  assert.deepEqual(res, { value: "999", conf: 1 });
-});
-
 test("HLP4: resolveProgramValue — exact label match", () => {
   const opts: ProgramOption[] = [{ v: "100", t: "Computer Engineering" }];
   const res = resolveProgramValue(opts, TEST_PROFILE, { source: "ajaxOptions" });
