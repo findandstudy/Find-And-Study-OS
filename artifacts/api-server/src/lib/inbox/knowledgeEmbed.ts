@@ -7,6 +7,7 @@
 import OpenAI from "openai";
 import { db, integrationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { decryptConfig } from "../encryption";
 
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
@@ -24,7 +25,7 @@ async function resolveOpenAiApiKey(): Promise<string | null> {
       .where(eq(integrationsTable.key, "openai"));
     for (const integ of rows) {
       if ((integ as { isEnabled?: boolean }).isEnabled === false) continue;
-      const cfg = ((integ as { config?: unknown }).config ?? {}) as Record<string, string>;
+      const cfg = decryptConfig(((integ as { config?: Record<string, unknown> }).config ?? {})) as Record<string, string>;
       if (cfg.apiKey) return cfg.apiKey;
     }
   } catch {
