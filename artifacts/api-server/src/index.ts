@@ -2314,8 +2314,9 @@ async function seedClaudeIntegration() {
     }, 15_000);
     const { startFollowUpChecker } = await import("./lib/followUpChecker");
     startFollowUpChecker();
-    const { startPortalStuckReset } = await import("./routes/portalAutomation");
+    const { startPortalStuckReset, startPortalAutoDrain } = await import("./routes/portalAutomation");
     startPortalStuckReset();
+    startPortalAutoDrain();
     const { startPortalUniversityLinker } = await import("./lib/portalUniversityLinker");
     startPortalUniversityLinker();
     const { startStuckConversationSweep } = await import("./lib/stuckConversationAssigner");

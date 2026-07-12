@@ -71,6 +71,51 @@ export type EnqueueOutcome =
 const ACTIVE_STATUSES = ["queued", "running", "submitted"] as const;
 
 // ---------------------------------------------------------------------------
+// Immediate drain trigger (Scheduled Auto-Process OFF)
+// ---------------------------------------------------------------------------
+
+type DrainTrigger = (label: string, triggerStages?: string[]) => void;
+
+/**
+ * Default: fire the shared non-blocking background drain in
+ * routes/portalAutomation.ts. Dynamic import breaks the circular dependency
+ * (portalAutomation.ts imports from this module) — same accepted pattern as
+ * maybeFanOutStudentForApplication. Never awaited, never throws to callers.
+ */
+const defaultDrainTrigger: DrainTrigger = (label, triggerStages) => {
+  void (async () => {
+    try {
+      const { triggerBackgroundDrain } = await import("../routes/portalAutomation.js");
+      triggerBackgroundDrain(label, triggerStages);
+    } catch (err) {
+      console.error("[portal-auto] immediate drain trigger failed:", err);
+    }
+  })();
+};
+
+let drainTrigger: DrainTrigger = defaultDrainTrigger;
+
+/** Test seam — inject a spy; pass null to restore the default trigger. */
+export function __setDrainTriggerForTests(fn: DrainTrigger | null): void {
+  drainTrigger = fn ?? defaultDrainTrigger;
+}
+
+/**
+ * Fires a non-blocking drain right after a successful enqueue when Scheduled
+ * Auto-Process is OFF (immediate mode). With Scheduled ON the periodic
+ * auto-drain scheduler owns draining instead. Reuses the already-loaded
+ * settings row — no extra query. The shared _processMutex makes concurrent
+ * fires safe (an in-flight drain picks up the newly queued row).
+ */
+function maybeTriggerImmediateDrain(settings: PortalSettings, label: string): void {
+  if (!settings.isEnabled || settings.autoProcessEnabled) return;
+  const stages = Array.isArray(settings.triggerStages)
+    ? (settings.triggerStages as string[])
+    : [];
+  drainTrigger(label, stages);
+}
+
+// ---------------------------------------------------------------------------
 // findActivePortalUniversity
 // ---------------------------------------------------------------------------
 
@@ -353,6 +398,7 @@ export async function maybeEnqueuePortalSubmission(
       ` app=${params.applicationId} uni=${outcome.universityKey}` +
       ` stage=${params.newStage} mode=${settings.mode}`,
     );
+    maybeTriggerImmediateDrain(settings, "auto-single");
   } else if (outcome.reason === "duplicate") {
     console.log(
       `[portal-auto] Dedup — active submission already exists ` +
@@ -410,6 +456,7 @@ export async function enqueueOnStageChange(opts: {
           `[portal-auto] Stage-change enqueue: sub=#${outcome.submissionId}` +
           ` app=${opts.applicationId} stage=${opts.newStage}`,
         );
+        maybeTriggerImmediateDrain(settings, "auto-stagechange");
       }
 
       // Auto fan-out (best-effort). Dynamic import breaks the circular dependency
@@ -436,6 +483,7 @@ export async function enqueueOnStageChange(opts: {
         isNull(applicationsTable.deletedAt),
       ));
 
+    let anyQueued = false;
     for (const app of apps) {
       const outcome = await enqueueIfEligible(
         {
@@ -449,6 +497,7 @@ export async function enqueueOnStageChange(opts: {
         settings,
       );
       if (outcome.status === "queued") {
+        anyQueued = true;
         console.log(
           `[portal-auto] Stage-change enqueue: sub=#${outcome.submissionId}` +
           ` app=${app.id} stage=${opts.newStage}`,
@@ -463,6 +512,9 @@ export async function enqueueOnStageChange(opts: {
         } catch (_) { /* non-fatal */ }
       })();
     }
+
+    // Fire ONCE after the sweep — a single drain picks up every row queued above.
+    if (anyQueued) maybeTriggerImmediateDrain(settings, "auto-sweep");
   } catch (e) {
     console.error("[portal-auto] enqueueOnStageChange error (non-fatal):", e);
   }

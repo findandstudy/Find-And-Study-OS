@@ -1675,14 +1675,23 @@ function computeApplyToAllCounts(results: ApplyToAllItem[]) {
  * Reuses the exact manual drain path; not awaited so the caller returns
  * immediately. If a run is already in flight the rows are picked up by it (or
  * the always-on worker).
+ *
+ * When `triggerStages` is provided (auto-enqueue immediate drain), only
+ * submissions whose application is currently in one of those stages are
+ * claimed — same stage-gating convention as Run Now. When omitted (fan-out /
+ * manual call sites), all queued submissions are drained regardless of stage.
+ *
+ * Exported so the auto-enqueue flow (lib/portalAutoTrigger.ts) can fire an
+ * immediate drain after a successful enqueue via dynamic import (same
+ * circular-dependency-breaking pattern as maybeFanOutStudentForApplication).
  */
-function triggerBackgroundDrain(label: string): void {
+export function triggerBackgroundDrain(label: string, triggerStages?: string[]): void {
   if (_processMutex) return;
   const workerId = `api-${label}-${Date.now()}`;
   _processMutex = true;
   void (async () => {
     try {
-      await drainQueue(workerId);
+      await drainQueue(workerId, triggerStages);
     } catch (err) {
       console.error(`[${label}] background drain failed:`, err);
     } finally {
@@ -2314,6 +2323,100 @@ export function startPortalStuckReset(intervalMs = 5 * 60_000): void {
   console.log(
     `[portal-stuck-reset] Started — interval=${intervalMs}ms threshold=${STUCK_THRESHOLD_MS}ms`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Background job: scheduled auto-drain (Scheduled Auto-Process ON)
+// ---------------------------------------------------------------------------
+
+/** How often the scheduler checks whether a scheduled drain is due. */
+const AUTO_DRAIN_TICK_MS = 60_000; // 1 minute
+
+/** Fallback drain interval when the settings column is unset. */
+const DEFAULT_AUTO_PROCESS_INTERVAL_MIN = 20;
+
+/** Outcome of one scheduler tick — exported shape for the test script. */
+export type AutoDrainTickResult =
+  | { ran: false; reason: "disabled" | "scheduled_off" | "interval_not_elapsed" | "already_running" }
+  | { ran: true; claimed: number; processed: number };
+
+/**
+ * One scheduled-drain tick. Loads settings fresh each tick so toggling the
+ * Scheduled Auto-Process switch (or the kill-switch) takes effect without a
+ * restart. Drains only when:
+ *
+ *   1. isEnabled (global kill-switch — single gate, nothing runs when off)
+ *   2. autoProcessEnabled (Scheduled Auto-Process toggle)
+ *   3. `auto_process_interval_minutes` have elapsed since last_auto_drain_at
+ *      (never-drained → due immediately)
+ *   4. no drain currently in flight (_processMutex)
+ *
+ * The drain passes settings.triggerStages so scheduled drains respect the
+ * configured stage filter (same claimNext gating convention as Run Now).
+ * last_auto_drain_at is updated only after a completed drain, so a failed
+ * drain is retried on the next tick.
+ *
+ * Exported separately from startPortalAutoDrain so the test script can drive
+ * ticks deterministically without timers.
+ */
+export async function runPortalAutoDrainTick(): Promise<AutoDrainTickResult> {
+  const [settings] = await db
+    .select()
+    .from(portalAutomationSettingsTable)
+    .limit(1);
+
+  if (!settings?.isEnabled)       return { ran: false, reason: "disabled" };
+  if (!settings.autoProcessEnabled) return { ran: false, reason: "scheduled_off" };
+
+  const intervalMin =
+    settings.autoProcessIntervalMinutes ?? DEFAULT_AUTO_PROCESS_INTERVAL_MIN;
+  const lastMs = settings.lastAutoDrainAt
+    ? new Date(settings.lastAutoDrainAt).getTime()
+    : 0;
+  if (Date.now() - lastMs < intervalMin * 60_000) {
+    return { ran: false, reason: "interval_not_elapsed" };
+  }
+
+  if (_processMutex) return { ran: false, reason: "already_running" };
+
+  const workerId = `api-autodrain-${Date.now()}`;
+  _processMutex = true;
+  let results: ProcessSingleResult[] = [];
+  try {
+    results = await drainQueue(workerId, settings.triggerStages ?? []);
+  } finally {
+    _processMutex = false;
+  }
+
+  await db
+    .update(portalAutomationSettingsTable)
+    .set({ lastAutoDrainAt: new Date() })
+    .where(eq(portalAutomationSettingsTable.id, settings.id));
+
+  const processed = results.filter(
+    (r) => r.status !== "skipped" && r.status !== "requeued",
+  ).length;
+  if (results.length > 0) {
+    console.log(
+      `[portal-auto-drain] Scheduled drain done — claimed=${results.length} processed=${processed}`,
+    );
+  }
+  return { ran: true, claimed: results.length, processed };
+}
+
+/**
+ * Starts the periodic scheduled-drain checker. Call once at api-server
+ * startup, next to startPortalStuckReset. Errors are caught and logged per
+ * tick — the interval never crashes the process.
+ */
+export function startPortalAutoDrain(intervalMs = AUTO_DRAIN_TICK_MS): void {
+  const run = (): void => {
+    runPortalAutoDrainTick().catch((err) => {
+      console.error("[portal-auto-drain] Tick error:", err);
+    });
+  };
+  setInterval(run, intervalMs);
+  console.log(`[portal-auto-drain] Started — tick=${intervalMs}ms`);
 }
 
 // ===========================================================================

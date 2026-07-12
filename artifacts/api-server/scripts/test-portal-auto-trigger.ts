@@ -12,6 +12,17 @@
  * TAT4: Dedup — does NOT enqueue when an active submission (queued) already exists
  *       for the same application × universityKey
  *
+ * TAT5: Scheduled OFF (autoProcessEnabled=false) — immediate drain trigger fires
+ *       right after a successful enqueue (with the configured triggerStages);
+ *       does NOT fire again on a dedup skip
+ *
+ * TAT6: Scheduled ON (autoProcessEnabled=true) — no immediate drain on enqueue;
+ *       scheduler tick: no drain before the interval elapses, drain after it
+ *       elapses with last_auto_drain_at updated
+ *
+ * TAT7: Enabled OFF (isEnabled=false) — neither immediate drain nor scheduled
+ *       drain (kill-switch)
+ *
  * Run:
  *   pnpm --filter @workspace/api-server test:portal-auto-trigger
  */
@@ -27,7 +38,11 @@ import {
   portalUniversitiesTable,
   portalSubmissionsTable,
 } from "@workspace/db";
-import { maybeEnqueuePortalSubmission } from "../src/lib/portalAutoTrigger.js";
+import {
+  maybeEnqueuePortalSubmission,
+  __setDrainTriggerForTests,
+} from "../src/lib/portalAutoTrigger.js";
+import { runPortalAutoDrainTick } from "../src/routes/portalAutomation.js";
 
 // ---------------------------------------------------------------------------
 // Run-specific unique key
@@ -81,6 +96,9 @@ before(async () => {
         mode:                   "dry",
         scope:                  "only_applied",
         selectedUniversityKeys: [],
+        autoProcessEnabled:     false,
+        autoProcessIntervalMinutes: 20,
+        lastAutoDrainAt:        null,
       })
       .where(eq(portalAutomationSettingsTable.id, existing.id));
     settingsRowId = existing.id;
@@ -91,6 +109,8 @@ before(async () => {
       mode:                   "dry",
       scope:                  "only_applied",
       selectedUniversityKeys: [],
+      autoProcessEnabled:     false,
+      autoProcessIntervalMinutes: 20,
     }).returning({ id: portalAutomationSettingsTable.id });
     settingsRowId = ins.id;
   }
@@ -111,16 +131,24 @@ before(async () => {
 after(async () => {
   // Restore settings
   if (savedSettings && settingsRowId) {
-    const { isEnabled, triggerStages, mode, scope, selectedUniversityKeys } =
-      savedSettings.row as {
+    const {
+      isEnabled, triggerStages, mode, scope, selectedUniversityKeys,
+      autoProcessEnabled, autoProcessIntervalMinutes, lastAutoDrainAt,
+    } = savedSettings.row as {
         isEnabled: boolean;
         triggerStages: string[];
         mode: "dry" | "real";
         scope: "only_applied" | "selected" | "all";
         selectedUniversityKeys: string[];
+        autoProcessEnabled: boolean;
+        autoProcessIntervalMinutes: number;
+        lastAutoDrainAt: Date | null;
       };
     await db.update(portalAutomationSettingsTable)
-      .set({ isEnabled, triggerStages, mode, scope, selectedUniversityKeys })
+      .set({
+        isEnabled, triggerStages, mode, scope, selectedUniversityKeys,
+        autoProcessEnabled, autoProcessIntervalMinutes, lastAutoDrainAt,
+      })
       .where(eq(portalAutomationSettingsTable.id, settingsRowId))
       .catch(() => {});
   } else if (settingsRowId && !savedSettings) {
@@ -303,4 +331,167 @@ test("TAT4: dedup — skips enqueue when an active submission already exists", a
       ),
     );
   assert.equal(all.length, 1, "only one submission — dedup prevented duplicate");
+});
+
+// ---------------------------------------------------------------------------
+// TAT5 — Scheduled OFF: immediate drain trigger fires after a successful enqueue
+// ---------------------------------------------------------------------------
+test("TAT5: Scheduled OFF — immediate drain trigger fires after enqueue (not on dedup)", async () => {
+  const { studentId, appId } = await seedApp();
+
+  // Baseline: enabled + autoProcessEnabled=false (set in before())
+  const calls: Array<{ label: string; stages: string[] | undefined }> = [];
+  __setDrainTriggerForTests((label, stages) => calls.push({ label, stages }));
+
+  try {
+    // Successful enqueue → drain trigger fires exactly once
+    await maybeEnqueuePortalSubmission({
+      applicationId: appId,
+      studentId,
+      newStage:      TRIGGER_STAGE,
+      universityName: UNI_NAME,
+      universityId:  null,
+      actorUserId:   1,
+    });
+
+    const sub = await findSub(appId);
+    assert.ok(sub !== null, "submission was enqueued");
+    assert.equal(calls.length, 1, "drain trigger fired exactly once after enqueue");
+    assert.ok(Array.isArray(calls[0].stages), "trigger received a triggerStages array");
+    assert.ok(
+      calls[0].stages!.includes(TRIGGER_STAGE),
+      "trigger received the configured trigger stage",
+    );
+
+    // Dedup skip → NO additional fire
+    await maybeEnqueuePortalSubmission({
+      applicationId: appId,
+      studentId,
+      newStage:      TRIGGER_STAGE,
+      universityName: UNI_NAME,
+      universityId:  null,
+      actorUserId:   1,
+    });
+    assert.equal(calls.length, 1, "no drain trigger on a dedup skip");
+  } finally {
+    __setDrainTriggerForTests(null);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// TAT6 — Scheduled ON: no immediate drain; periodic tick respects the interval
+//        and updates last_auto_drain_at
+// ---------------------------------------------------------------------------
+test("TAT6: Scheduled ON — no immediate drain; tick drains only after interval + updates last_auto_drain_at", async () => {
+  const { studentId, appId } = await seedApp();
+
+  const calls: string[] = [];
+  __setDrainTriggerForTests((label) => calls.push(label));
+
+  try {
+    // Scheduled ON, last drain = now → interval not elapsed
+    const now = new Date();
+    await db.update(portalAutomationSettingsTable)
+      .set({ autoProcessEnabled: true, autoProcessIntervalMinutes: 20, lastAutoDrainAt: now })
+      .where(eq(portalAutomationSettingsTable.id, settingsRowId!));
+
+    // Enqueue → NO immediate drain trigger (scheduler owns draining)
+    await maybeEnqueuePortalSubmission({
+      applicationId: appId,
+      studentId,
+      newStage:      TRIGGER_STAGE,
+      universityName: UNI_NAME,
+      universityId:  null,
+      actorUserId:   1,
+    });
+    const sub = await findSub(appId);
+    assert.ok(sub !== null, "submission was still enqueued");
+    assert.equal(calls.length, 0, "no immediate drain trigger when Scheduled ON");
+
+    // Tick BEFORE the interval elapses → no drain, timestamp unchanged
+    const early = await runPortalAutoDrainTick();
+    assert.equal(early.ran, false, "tick did not drain before the interval elapsed");
+    assert.equal(
+      (early as { ran: false; reason: string }).reason,
+      "interval_not_elapsed",
+      "reason=interval_not_elapsed",
+    );
+    const [afterEarly] = await db.select().from(portalAutomationSettingsTable)
+      .where(eq(portalAutomationSettingsTable.id, settingsRowId!));
+    assert.equal(
+      new Date(afterEarly.lastAutoDrainAt as unknown as string | Date).getTime(),
+      now.getTime(),
+      "last_auto_drain_at unchanged before the interval",
+    );
+
+    // Backdate last drain past the interval → tick drains + updates timestamp
+    const past = new Date(Date.now() - 21 * 60_000);
+    await db.update(portalAutomationSettingsTable)
+      .set({ lastAutoDrainAt: past })
+      .where(eq(portalAutomationSettingsTable.id, settingsRowId!));
+
+    const due = await runPortalAutoDrainTick();
+    assert.equal(due.ran, true, "tick drained once the interval elapsed");
+
+    const [afterDue] = await db.select().from(portalAutomationSettingsTable)
+      .where(eq(portalAutomationSettingsTable.id, settingsRowId!));
+    const updatedMs = new Date(afterDue.lastAutoDrainAt as unknown as string | Date).getTime();
+    assert.ok(
+      Date.now() - updatedMs < 60_000,
+      "last_auto_drain_at updated to now after the scheduled drain",
+    );
+  } finally {
+    __setDrainTriggerForTests(null);
+    // Restore baseline: Scheduled OFF
+    await db.update(portalAutomationSettingsTable)
+      .set({ autoProcessEnabled: false, lastAutoDrainAt: null })
+      .where(eq(portalAutomationSettingsTable.id, settingsRowId!));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// TAT7 — Enabled OFF: kill-switch blocks BOTH immediate and scheduled drain
+// ---------------------------------------------------------------------------
+test("TAT7: Enabled OFF — neither immediate drain nor scheduled drain", async () => {
+  const { studentId, appId } = await seedApp();
+
+  const calls: string[] = [];
+  __setDrainTriggerForTests((label) => calls.push(label));
+
+  try {
+    await db.update(portalAutomationSettingsTable)
+      .set({ isEnabled: false, autoProcessEnabled: true, lastAutoDrainAt: null })
+      .where(eq(portalAutomationSettingsTable.id, settingsRowId!));
+
+    // Enqueue attempt → kill-switch: nothing enqueued, no drain trigger
+    await maybeEnqueuePortalSubmission({
+      applicationId: appId,
+      studentId,
+      newStage:      TRIGGER_STAGE,
+      universityName: UNI_NAME,
+      universityId:  null,
+      actorUserId:   1,
+    });
+    const sub = await findSub(appId);
+    assert.equal(sub, null, "no submission enqueued when isEnabled=false");
+    assert.equal(calls.length, 0, "no immediate drain trigger when isEnabled=false");
+
+    // Scheduled tick → disabled, timestamp untouched
+    const tick = await runPortalAutoDrainTick();
+    assert.equal(tick.ran, false, "tick did not drain when isEnabled=false");
+    assert.equal(
+      (tick as { ran: false; reason: string }).reason,
+      "disabled",
+      "reason=disabled",
+    );
+    const [row] = await db.select().from(portalAutomationSettingsTable)
+      .where(eq(portalAutomationSettingsTable.id, settingsRowId!));
+    assert.equal(row.lastAutoDrainAt, null, "last_auto_drain_at untouched when disabled");
+  } finally {
+    __setDrainTriggerForTests(null);
+    // Restore baseline: enabled + Scheduled OFF
+    await db.update(portalAutomationSettingsTable)
+      .set({ isEnabled: true, autoProcessEnabled: false, lastAutoDrainAt: null })
+      .where(eq(portalAutomationSettingsTable.id, settingsRowId!));
+  }
 });
