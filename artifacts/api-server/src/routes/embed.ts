@@ -63,9 +63,19 @@ function firstNonLatinNameField(pairs: Array<[string, unknown]>): string | null 
   return null;
 }
 function pn(raw: any, cc: any, max: number): string | null {
-  const phoneRaw = raw ? String(raw) : "";
+  let phoneRaw = raw ? String(raw) : "";
   if (!phoneRaw) return null;
   const ccRaw = cc ? String(cc) : "";
+  // When an international dial code (e.g. "+44") is provided, strip any
+  // leading national trunk prefix "0" from the subscriber number so the
+  // combined result is valid E.164 (e.g. "07700900000" + "+44" →
+  // "+447700900000" not "+4407700900000"). In E.164 the trunk digit is
+  // always omitted; keeping it produces an invalid number that is rejected
+  // by libphonenumber-js even though the subscriber number itself is correct.
+  if (ccRaw.startsWith("+") && phoneRaw.startsWith("0")) {
+    phoneRaw = phoneRaw.replace(/^0+/, "");
+    if (!phoneRaw) return null;
+  }
   const combined = (ccRaw + phoneRaw).trim();
   const hasPlus = combined.startsWith("+");
   const digits = combined.replace(/\D/g, "");
@@ -2069,6 +2079,10 @@ function addToken(u){if(!TOKEN)return u;var sep=u.indexOf('?')>=0?'&':'?';return
 var config=null, filters=null, programs=[], meta={}, currentPage=1;
 var formOpen=false, formProgram=null, formSubmitted=false, formLoading=false;
 var programDocs=null;
+// Tracks which program ID the current programDocs cache belongs to.
+// loadProgramDocs skips the fetch when the same pid is requested again
+// (e.g. the user closes and re-opens the same program's apply modal).
+var programDocsPid=null;
 // Document-type metadata is injected server-side from the admin-managed
 // catalog_options table (category='documents'). Adding/editing a document
 // type in the staff panel (Catalog > Options > Documents) shows up in this
@@ -2078,7 +2092,13 @@ function humanizeDocKey(k){
   return String(k||'').replace(/([A-Z])/g,' $1').replace(/[_-]+/g,' ').replace(/\\s+/g,' ').trim().replace(/^./,function(c){return c.toUpperCase();});
 }
 function loadProgramDocs(pid,cb){
+  // Return cached result immediately when the same program is requested again
+  // (e.g. close → re-open the same apply modal). This prevents a redundant
+  // /document-requirements fetch and avoids the retry doubling the request
+  // count on the same pid within a single page session.
+  if(pid&&pid===programDocsPid&&Array.isArray(programDocs)){if(cb)cb();return;}
   programDocs=null;
+  programDocsPid=pid||null;
   if(!pid){if(cb)cb();return;}
   var apiBase=API.replace('/public/embed/'+SLUG,'');
   var url=apiBase+'/public/programs/'+pid+'/document-requirements';
