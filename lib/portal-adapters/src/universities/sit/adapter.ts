@@ -2300,6 +2300,9 @@ export const sitAdapter: SitAdapter = {
       if (files.diploma) {
         docJobs.push(["diploma", SIT_UPLOAD.diplomaTrigger, files.diploma]);
       }
+      if (files.english) { docJobs.push(["english", SIT_UPLOAD.attachmentTrigger, files.english]); }
+      if (files.motivation) { docJobs.push(["motivation", SIT_UPLOAD.attachmentTrigger, files.motivation]); }
+      if (files.recommendation) { docJobs.push(["recommendation", SIT_UPLOAD.attachmentTrigger, files.recommendation]); }
       for (const [key, trig, docPath] of docJobs) {
         if (uploadedDocs.has(key)) continue;
         if (await uploadDocRow(page, key, key, docPath)) {

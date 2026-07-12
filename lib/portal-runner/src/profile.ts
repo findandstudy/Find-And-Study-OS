@@ -223,7 +223,7 @@ async function ensureJpegImage(
  * diploma). The photo slot is intentionally absent — it must stay an image
  * (JPEG), handled by ensureJpegImage above.
  */
-const PDF_DOC_SLOTS = new Set<string>(["passport", "transcript", "diploma"]);
+const PDF_DOC_SLOTS = new Set<string>(["passport", "transcript", "diploma", "english", "motivation", "recommendation"]);
 
 /**
  * Some portals (e.g. Topkapı) accept passport / transcript / diploma ONLY as

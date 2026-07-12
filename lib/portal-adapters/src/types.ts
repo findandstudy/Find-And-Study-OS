@@ -227,6 +227,9 @@ export interface SubmitFiles {
   passport?: string;
   transcript?: string;
   diploma?: string;
+  english?: string;
+  motivation?: string;
+  recommendation?: string;
 }
 
 // ---------------------------------------------------------------------------

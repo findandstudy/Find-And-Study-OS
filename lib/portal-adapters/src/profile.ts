@@ -22,6 +22,9 @@ export function mapDocType(raw: string): DocType | null {
   if (/transcript|marks|marksheet|result|grade|hsc/.test(f))                         return "transcript";
   // diploma: includes generic certificate types and translated copies of diplomas
   if (/diploma|degree|mezuniyet|certificate|translation/.test(f))                    return "diploma";
+  if (/ielts|toefl|yds|yokdil|english|language|proficiency|dil belge|dil yeterlilik/.test(f)) return "english";
+  if (/motivation|niyet|statement of purpose|\bsop\b|cover letter|onyazi/.test(f)) return "motivation";
+  if (/recommendation|reference|tavsiye|referans/.test(f)) return "recommendation";
   return null;
 }
 
