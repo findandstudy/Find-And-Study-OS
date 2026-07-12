@@ -333,6 +333,7 @@ export async function handleNeedsFallback(
       studentId:      portalSubmissionsTable.studentId,
       universityKey:  portalSubmissionsTable.universityKey,
       universityName: portalSubmissionsTable.universityName,
+      adapterKey:     portalSubmissionsTable.adapterKey,
       mode:           portalSubmissionsTable.mode,
       status:         portalSubmissionsTable.status,
       meta:           portalSubmissionsTable.meta,
@@ -623,6 +624,8 @@ export async function handleNeedsFallback(
         studentId:      srcApp.studentId,
         universityKey:  sub.universityKey,
         universityName: sub.universityName,
+        // Same portal as the source submission → same adapter (graduation count).
+        adapterKey:     sub.adapterKey ?? null,
         mode:           newMode,
         status:         "queued",
         meta:           {

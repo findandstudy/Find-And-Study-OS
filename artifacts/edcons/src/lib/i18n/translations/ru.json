@@ -5145,7 +5145,8 @@
       "bulkDeleteError": "Не удалось удалить выбранные университеты.",
       "bulkDeleteConfirmTitle": "Удалить выбранные университеты?",
       "bulkDeleteConfirmDescription": "{{count}} университетов будут удалены из автоматизации портала. Существующие отправки будут сохранены. Это действие нельзя отменить.",
-      "bulkDeleteConfirmButton": "Удалить выбранные"
+      "bulkDeleteConfirmButton": "Удалить выбранные",
+      "autoProcessGraduationHint": "Разблокируется автоматически после {threshold} успешных отправок ({count}/{threshold})."
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5254,7 +5255,9 @@
       "inactiveBadge": "Inactive",
       "sortByLabel": "Сортировать по названию",
       "sortByKey": "Сортировать по ключу",
-      "sortByCreatedAt": "Сортировать по дате добавления"
+      "sortByCreatedAt": "Сортировать по дате добавления",
+      "graduated": "Аттестован",
+      "graduationProgress": "{count}/{threshold} успешных отправок"
     },
     "submissions": {
       "title": "Submission Board",

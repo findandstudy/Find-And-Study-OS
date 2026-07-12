@@ -62,6 +62,7 @@ import {
   writebackResult,
   resolveAdapterKey,
   resolveNationalityExclusion,
+  getExperimentalExcludedUniversityKeys,
   type ClaimedSubmission,
 } from "@workspace/portal-runner";
 import { batchPortalCredentialKeys, resolvePortalCreds, checkHasPortalCredentials } from "../lib/portalCreds.js";
@@ -119,6 +120,10 @@ router.post(
     const meta = adapterMetadata();
     const universityName = meta.find((m) => m.key === universityKey)?.label ?? universityKey;
 
+    // Stamp the adapter this row will run on (multi-portal routing aware) —
+    // feeds the per-adapter auto-graduation success count.
+    const { adapterKey: routedAdapterKey } = await resolveAdapterKey(universityKey);
+
     const [row] = await db
       .insert(portalSubmissionsTable)
       .values({
@@ -126,6 +131,7 @@ router.post(
         studentId: app.studentId,
         universityKey,
         universityName,
+        adapterKey: routedAdapterKey,
         mode,
         status: "queued",
         enqueuedBy: user.id,
@@ -855,6 +861,7 @@ async function processSingle(
 async function drainQueue(
   workerId: string,
   triggerStages?: string[],
+  excludeUniversityKeys?: string[],
 ): Promise<ProcessSingleResult[]> {
   const results: ProcessSingleResult[] = [];
 
@@ -869,7 +876,7 @@ async function drainQueue(
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const sub = await claimNext(workerId, undefined, triggerStages);
+    const sub = await claimNext(workerId, undefined, triggerStages, excludeUniversityKeys);
     if (!sub) break;
 
     console.log(
@@ -1405,7 +1412,7 @@ async function fanOutApplicationToUniversities(
    * application row (and its dedup) still keys on the member CRM university.
    * Omitted → identical legacy behavior (apply-to-all / bulk are unchanged).
    */
-  routeVia?: { universityKey: string },
+  routeVia?: { universityKey: string; adapterKey: string },
 ): Promise<ApplyToAllItem[]> {
   const [student] = await db
     .select({ nationality: studentsTable.nationality })
@@ -1614,6 +1621,9 @@ async function fanOutApplicationToUniversities(
               studentId:      srcApp.studentId,
               universityKey:  submissionKey,
               universityName: uni.universityName,
+              // Aggregator-routed rows run on the aggregator's adapter;
+              // direct fan-out rows on the candidate's own adapter.
+              adapterKey:     routeVia ? routeVia.adapterKey : uni.adapterKey,
               mode,
               status:         "queued",
               enqueuedBy:     userId,
@@ -1887,11 +1897,11 @@ export async function maybeFanOutStudentForApplication(
     //   Multi-portal aggregator → load its member universities (routeVia set).
     //   Direct portal           → all credential-ready unis except the source.
     let unis: CredentialReadyUniversity[];
-    let routeVia: { universityKey: string } | undefined;
+    let routeVia: { universityKey: string; adapterKey: string } | undefined;
 
     if (routing.portalUni.isMultiPortal) {
       unis    = await loadAggregatorMemberUniversities(portalKey);
-      routeVia = { universityKey: portalKey };
+      routeVia = { universityKey: portalKey, adapterKey: routing.portalUni.adapterKey };
     } else {
       unis = (await loadCredentialReadyPortalUniversities())
         .filter((u) => u.universityKey !== portalKey);
@@ -2380,10 +2390,16 @@ export async function runPortalAutoDrainTick(): Promise<AutoDrainTickResult> {
   if (_processMutex) return { ran: false, reason: "already_running" };
 
   const workerId = `api-autodrain-${Date.now()}`;
+
+  // Adapter auto-graduation: scheduled drains never process submissions whose
+  // portal adapter is still experimental (non-graduated). Manual (meta.manual)
+  // rows bypass the exclusion inside claimNext, like every other gate.
+  const excludeUniversityKeys = await getExperimentalExcludedUniversityKeys();
+
   _processMutex = true;
   let results: ProcessSingleResult[] = [];
   try {
-    results = await drainQueue(workerId, settings.triggerStages ?? []);
+    results = await drainQueue(workerId, settings.triggerStages ?? [], excludeUniversityKeys);
   } finally {
     _processMutex = false;
   }

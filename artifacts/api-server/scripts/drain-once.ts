@@ -44,6 +44,7 @@ import {
   buildStudentProfile,
   runSubmission,
   writebackResult,
+  getNonGraduatedExperimentalAdapterKeys,
 } from "@workspace/portal-runner";
 import { resolvePortalCreds } from "../src/lib/portalCreds.js";
 import { db, pool, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
@@ -182,7 +183,16 @@ async function drain(): Promise<void> {
         eq(portalUniversitiesTable.isActive, true),
         isNull(portalUniversitiesTable.deletedAt),
       ));
-    autoProcessKeys = unis.map((u) => u.universityKey);
+
+    // Adapter auto-graduation: exclude universities whose adapter is still
+    // experimental (non-graduated). Mirrors the identical filter in
+    // portal-automation-worker/src/worker.ts loadAutoProcessKeys().
+    const nonGraduated = await getNonGraduatedExperimentalAdapterKeys(
+      unis.map((u) => u.adapterKey),
+    );
+    autoProcessKeys = unis
+      .filter((u) => !nonGraduated.has(u.adapterKey))
+      .map((u) => u.universityKey);
   } catch (err) {
     console.error("[drain-once] Fatal: failed to load auto-process universities:", err instanceof Error ? err.message : err);
     process.exit(1);

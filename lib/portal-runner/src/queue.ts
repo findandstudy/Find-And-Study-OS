@@ -100,6 +100,7 @@ export async function claimNext(
   workerId: string,
   universityKeys?: string[],
   triggerStages?: string[],
+  excludeUniversityKeys?: string[],
 ): Promise<ClaimedSubmission | null> {
   const client = await pool.connect();
   try {
@@ -126,6 +127,15 @@ export async function claimNext(
             AND a.stage = ANY($${params.length}::text[])
         )`,
       );
+    }
+
+    // Adapter auto-graduation: scheduled/automatic drains exclude submissions
+    // targeting still-experimental (non-graduated) adapters. Gated — manual
+    // (meta.manual) rows bypass this like every other automatic-only gate,
+    // because manual single-submission of experimental adapters is allowed.
+    if (excludeUniversityKeys && excludeUniversityKeys.length > 0) {
+      params.push(excludeUniversityKeys);
+      gatedConds.push(`university_key <> ALL($${params.length}::text[])`);
     }
 
     if (gatedConds.length > 0) {

@@ -5145,7 +5145,8 @@
       "bulkDeleteError": "Échec de la suppression des universités sélectionnées.",
       "bulkDeleteConfirmTitle": "Supprimer les universités sélectionnées ?",
       "bulkDeleteConfirmDescription": "{{count}} universités seront retirées de l'automatisation du portail. Les soumissions existantes sont conservées. Cette action est irréversible.",
-      "bulkDeleteConfirmButton": "Supprimer la sélection"
+      "bulkDeleteConfirmButton": "Supprimer la sélection",
+      "autoProcessGraduationHint": "Se débloque automatiquement après {threshold} soumissions réussies ({count}/{threshold})."
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5254,7 +5255,9 @@
       "inactiveBadge": "Inactive",
       "sortByLabel": "Trier par libellé",
       "sortByKey": "Trier par clé",
-      "sortByCreatedAt": "Trier par date d'ajout"
+      "sortByCreatedAt": "Trier par date d'ajout",
+      "graduated": "Validé",
+      "graduationProgress": "{count}/{threshold} soumissions réussies"
     },
     "submissions": {
       "title": "Submission Board",

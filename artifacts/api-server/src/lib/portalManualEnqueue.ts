@@ -106,6 +106,7 @@ export async function enqueuePortalSubmissions(opts: {
         studentId: app.studentId,
         universityKey: portalUni.universityKey,
         universityName: target ? target.universityName : portalUni.universityName,
+        adapterKey: portalUni.adapterKey,
         mode: opts.mode,
         status: "queued",
         enqueuedBy: opts.userId,

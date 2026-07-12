@@ -74,6 +74,7 @@ export {
   declarativeAdapterKeys,
   isExperimentalAdapterKey,
   isSitFamilyKey,
+  GRADUATION_THRESHOLD,
 } from "./registry.js";
 
 // Declarative adapter engine

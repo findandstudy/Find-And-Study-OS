@@ -90,6 +90,15 @@ export function isExperimentalAdapterKey(adapterKey: string): boolean {
 }
 
 /**
+ * Auto-graduation threshold: an adapter whose family is experimental stops
+ * being treated as experimental once it has this many `submitted` portal
+ * submissions (counted live per adapter_key — no persisted flag). The count
+ * itself lives in the DB layer (api-server / worker); this registry stays
+ * pure, so only the shared constant is exported here.
+ */
+export const GRADUATION_THRESHOLD = 3;
+
+/**
  * True when the given adapter key resolves to the "sit" family — the only
  * adapter that submits via a create-webhook + URL references instead of a
  * real browser upload from local temp files. All other families (metronic,

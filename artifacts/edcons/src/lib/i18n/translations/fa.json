@@ -5145,7 +5145,8 @@
       "bulkDeleteError": "حذف دانشگاه‌های انتخابی ناموفق بود.",
       "bulkDeleteConfirmTitle": "دانشگاه‌های انتخابی حذف شوند؟",
       "bulkDeleteConfirmDescription": "{{count}} دانشگاه از اتوماسیون پورتال حذف خواهد شد. ارسال‌های موجود حفظ می‌شوند. این عملیات قابل بازگشت نیست.",
-      "bulkDeleteConfirmButton": "حذف موارد انتخابی"
+      "bulkDeleteConfirmButton": "حذف موارد انتخابی",
+      "autoProcessGraduationHint": "پس از {threshold} ارسال موفق به‌طور خودکار فعال می‌شود ({count}/{threshold})."
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5254,7 +5255,9 @@
       "inactiveBadge": "Inactive",
       "sortByLabel": "مرتب‌سازی بر اساس برچسب",
       "sortByKey": "مرتب‌سازی بر اساس کلید",
-      "sortByCreatedAt": "مرتب‌سازی بر اساس تاریخ افزودن"
+      "sortByCreatedAt": "مرتب‌سازی بر اساس تاریخ افزودن",
+      "graduated": "تأیید شده",
+      "graduationProgress": "{count}/{threshold} ارسال موفق"
     },
     "submissions": {
       "title": "Submission Board",

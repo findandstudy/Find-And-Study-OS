@@ -5145,7 +5145,8 @@
       "bulkDeleteError": "فشل حذف الجامعات المحددة.",
       "bulkDeleteConfirmTitle": "هل تريد حذف الجامعات المحددة؟",
       "bulkDeleteConfirmDescription": "ستتم إزالة {{count}} جامعة من أتمتة البوابة. سيتم الاحتفاظ بالطلبات الحالية. لا يمكن التراجع عن هذا الإجراء.",
-      "bulkDeleteConfirmButton": "حذف المحدد"
+      "bulkDeleteConfirmButton": "حذف المحدد",
+      "autoProcessGraduationHint": "يُفتح تلقائيًا بعد {threshold} عمليات إرسال ناجحة ({count}/{threshold})."
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5254,7 +5255,9 @@
       "inactiveBadge": "Inactive",
       "sortByLabel": "الفرز حسب التسمية",
       "sortByKey": "الفرز حسب المفتاح",
-      "sortByCreatedAt": "الفرز حسب تاريخ الإضافة"
+      "sortByCreatedAt": "الفرز حسب تاريخ الإضافة",
+      "graduated": "مؤهَّل",
+      "graduationProgress": "{count}/{threshold} عمليات إرسال ناجحة"
     },
     "submissions": {
       "title": "Submission Board",

@@ -58,6 +58,14 @@ export const portalSubmissionsTable = pgTable(
     universityKey:  text("university_key").notNull(),
     universityName: text("university_name").notNull(),
 
+    /**
+     * Adapter key the submission is (or was) routed to at enqueue time
+     * (e.g. "topkapi", "sit"). Nullable: historical rows predate the column
+     * and are backfilled best-effort from portal_universities. Drives
+     * adapter auto-graduation (live COUNT of status='submitted' per key).
+     */
+    adapterKey:     text("adapter_key"),
+
     mode: portalSubmissionModeEnum("mode").notNull().default("dry"),
 
     status: portalSubmissionStatusEnum("status").notNull().default("queued"),
@@ -99,6 +107,11 @@ export const portalSubmissionsTable = pgTable(
     // Added: worker poll query — multi-tenant status filter
     index("portal_submissions_org_status_idx").on(
       table.organizationId,
+      table.status,
+    ),
+    // Added: adapter auto-graduation success COUNT per adapter key
+    index("portal_submissions_adapter_key_status_idx").on(
+      table.adapterKey,
       table.status,
     ),
   ],

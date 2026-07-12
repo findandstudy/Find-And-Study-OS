@@ -5145,7 +5145,8 @@
       "bulkDeleteError": "Gagal menghapus universitas yang dipilih.",
       "bulkDeleteConfirmTitle": "Hapus universitas yang dipilih?",
       "bulkDeleteConfirmDescription": "{{count}} universitas akan dihapus dari otomatisasi portal. Pengiriman yang ada akan tetap disimpan. Tindakan ini tidak dapat dibatalkan.",
-      "bulkDeleteConfirmButton": "Hapus yang Dipilih"
+      "bulkDeleteConfirmButton": "Hapus yang Dipilih",
+      "autoProcessGraduationHint": "Terbuka otomatis setelah {threshold} pengiriman berhasil ({count}/{threshold})."
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5254,7 +5255,9 @@
       "inactiveBadge": "Inactive",
       "sortByLabel": "Urutkan berdasarkan label",
       "sortByKey": "Urutkan berdasarkan kunci",
-      "sortByCreatedAt": "Urutkan berdasarkan tanggal ditambahkan"
+      "sortByCreatedAt": "Urutkan berdasarkan tanggal ditambahkan",
+      "graduated": "Lulus",
+      "graduationProgress": "{count}/{threshold} pengiriman berhasil"
     },
     "submissions": {
       "title": "Submission Board",

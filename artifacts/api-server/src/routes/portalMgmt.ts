@@ -31,6 +31,7 @@ import {
   GENERAL_MAPPING_KEY,
 } from "@workspace/db";
 import { resolveAdapterByKey, adapterMetadata, setCredsOverride, clearCredsOverride, invalidateDeclarativeAdapterCache } from "@workspace/portal-adapters";
+import { getSuccessCounts, isExperimentalDynamic, getNonGraduatedExperimentalKeys, GRADUATION_THRESHOLD } from "../lib/adapterGraduation.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -391,7 +392,10 @@ router.patch(
     const user = req.user!;
 
     const [row] = await db
-      .select({ id: portalUniversitiesTable.id })
+      .select({
+        id: portalUniversitiesTable.id,
+        adapterKey: portalUniversitiesTable.adapterKey,
+      })
       .from(portalUniversitiesTable)
       .where(and(
         eq(portalUniversitiesTable.id, id),
@@ -400,6 +404,17 @@ router.patch(
 
     if (!row) {
       res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    // Auto-graduation guard: an experimental adapter that has NOT yet reached
+    // GRADUATION_THRESHOLD 'submitted' successes may not enable auto-process.
+    // (Manual single-submission remains allowed regardless.)
+    if (autoProcess && await isExperimentalDynamic(row.adapterKey)) {
+      res.status(409).json({
+        error: "EXPERIMENTAL_ADAPTER",
+        message: `Adapter '${row.adapterKey}' is experimental and has not yet graduated (${GRADUATION_THRESHOLD} successful submissions required).`,
+      });
       return;
     }
 
@@ -749,10 +764,24 @@ router.post(
     const user = req.user!;
 
     const eligible = await db
-      .select({ id: portalUniversitiesTable.id })
+      .select({
+        id: portalUniversitiesTable.id,
+        adapterKey: portalUniversitiesTable.adapterKey,
+      })
       .from(portalUniversitiesTable)
       .where(and(inArray(portalUniversitiesTable.id, ids), isNull(portalUniversitiesTable.deletedAt)));
-    const eligibleIds = eligible.map((r) => r.id);
+
+    // Auto-graduation guard (enable only): silently skip universities whose
+    // adapter is experimental and not yet graduated — mirrors the single
+    // toggle's 409 but keeps bulk semantics (partial success + skipped list).
+    let eligibleRows = eligible;
+    if (autoProcess) {
+      const nonGraduated = new Set(
+        await getNonGraduatedExperimentalKeys(eligible.map((r) => r.adapterKey)),
+      );
+      eligibleRows = eligible.filter((r) => !nonGraduated.has(r.adapterKey));
+    }
+    const eligibleIds = eligibleRows.map((r) => r.id);
 
     if (eligibleIds.length > 0) {
       await db
@@ -1134,7 +1163,16 @@ router.get(
     // Registry (code + declarative from declarativeConfigs.ts) — read-only
     // hasCredentials: DB-first by adapterKey (canonical), then env fallback.
     const dbCredKeys = await batchPortalCredentialKeys();
-    const registry = adapterMetadata().map(({ key, label, family, experimental }) => {
+    // Auto-graduation: live success counts for statically-experimental keys —
+    // an adapter with >= GRADUATION_THRESHOLD 'submitted' rows is no longer
+    // experimental (one GROUP BY query, no N+1).
+    const staticMeta = adapterMetadata();
+    const staticExperimentalKeys = staticMeta
+      .filter((m) => m.experimental)
+      .map((m) => m.key);
+    const successCounts = await getSuccessCounts(staticExperimentalKeys);
+
+    const registry = staticMeta.map(({ key, label, family, experimental }) => {
       const K = key.toUpperCase().replace(/-/g, "_");
       const envHas = !!(
         (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
@@ -1142,7 +1180,21 @@ router.get(
       );
       const hasCredentials = dbCredKeys.has(key) || envHas;
       const kind: "declarative" | "code" = family === "declarative" ? "declarative" : "code";
-      return { key, label, family, kind, experimental, hasCredentials };
+      const successCount = experimental ? (successCounts.get(key) ?? 0) : null;
+      const graduated = experimental ? successCount! >= GRADUATION_THRESHOLD : null;
+      return {
+        key,
+        label,
+        family,
+        kind,
+        // Dynamic: static family flag AND not yet graduated by live successes.
+        experimental: experimental && !graduated,
+        staticExperimental: experimental,
+        successCount,
+        graduationThreshold: experimental ? GRADUATION_THRESHOLD : null,
+        graduated,
+        hasCredentials,
+      };
     });
 
     // DB-stored adapters — manageable via UI

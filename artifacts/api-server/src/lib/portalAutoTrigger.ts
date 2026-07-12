@@ -332,6 +332,7 @@ export async function enqueueIfEligible(
         studentId,
         universityKey:  portalUni.universityKey,
         universityName: target ? target.universityName : portalUni.universityName,
+        adapterKey:     portalUni.adapterKey,
         mode:           settings.mode,
         status:         "queued",
         enqueuedBy:     actorUserId,

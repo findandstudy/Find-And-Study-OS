@@ -5145,7 +5145,8 @@
       "bulkDeleteError": "删除所选大学失败。",
       "bulkDeleteConfirmTitle": "删除所选大学？",
       "bulkDeleteConfirmDescription": "将从门户自动化中移除 {{count}} 所大学。现有提交将予以保留。此操作无法撤销。",
-      "bulkDeleteConfirmButton": "删除所选"
+      "bulkDeleteConfirmButton": "删除所选",
+      "autoProcessGraduationHint": "在 {threshold} 次成功提交后自动解锁（{count}/{threshold}）。"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5254,7 +5255,9 @@
       "inactiveBadge": "Inactive",
       "sortByLabel": "按标签排序",
       "sortByKey": "按键值排序",
-      "sortByCreatedAt": "按添加日期排序"
+      "sortByCreatedAt": "按添加日期排序",
+      "graduated": "已转正",
+      "graduationProgress": "{count}/{threshold} 次成功提交"
     },
     "submissions": {
       "title": "Submission Board",

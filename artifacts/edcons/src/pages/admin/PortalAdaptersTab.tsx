@@ -54,7 +54,13 @@ interface RegistryAdapter {
   key: string;
   label: string;
   kind: "code" | "declarative";
+  /** Dynamic: static experimental family AND not yet graduated. */
   experimental?: boolean;
+  /** Static family flag (true even after graduation). */
+  staticExperimental?: boolean;
+  successCount?: number | null;
+  graduationThreshold?: number | null;
+  graduated?: boolean | null;
   hasCredentials: boolean;
 }
 
@@ -534,6 +540,19 @@ export default function PortalAdaptersTab() {
                           <FlaskConical className="w-2.5 h-2.5" />
                           {t("portalAutomation.adapters.experimental")}
                         </Badge>
+                      )}
+                      {a.staticExperimental && a.graduated && (
+                        <Badge className="gap-1 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 text-[11px] py-0 h-4">
+                          {t("portalAutomation.adapters.graduated")}
+                        </Badge>
+                      )}
+                      {a.experimental && a.graduationThreshold != null && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {t("portalAutomation.adapters.graduationProgress", {
+                            count: a.successCount ?? 0,
+                            threshold: a.graduationThreshold,
+                          })}
+                        </span>
                       )}
                       {credBadge(a.hasCredentials)}
                     </div>

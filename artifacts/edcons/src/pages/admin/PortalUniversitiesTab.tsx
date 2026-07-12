@@ -125,7 +125,13 @@ interface RegistryAdapter {
   key: string;
   label: string;
   kind: "code" | "declarative";
+  /** Dynamic: static experimental family AND not yet graduated. */
   experimental?: boolean;
+  /** Static family flag (true even after graduation). */
+  staticExperimental?: boolean;
+  successCount?: number | null;
+  graduationThreshold?: number | null;
+  graduated?: boolean | null;
   hasCredentials: boolean;
 }
 
@@ -807,6 +813,7 @@ interface RowProps {
   onManageMembers: (uni: PortalUniversity) => void;
   onDelete: (uni: PortalUniversity) => void;
   experimental:           boolean;
+  graduationInfo:         { successCount: number; threshold: number } | null;
   togglingId:             number | null;
   togglingAutoProcessId:  number | null;
   settingFanOutModeId:    number | null;
@@ -816,7 +823,7 @@ interface RowProps {
   bulkBusy: boolean;
 }
 
-function UniversityRow({ uni, onToggle, onToggleAutoProcess, onSetFanOutMode, onTestLogin, onEditDefaults, onManageCreds, onManageMembers, onDelete, experimental, togglingId, togglingAutoProcessId, settingFanOutModeId, testingId, selected, onToggleSelect, bulkBusy }: RowProps) {
+function UniversityRow({ uni, onToggle, onToggleAutoProcess, onSetFanOutMode, onTestLogin, onEditDefaults, onManageCreds, onManageMembers, onDelete, experimental, graduationInfo, togglingId, togglingAutoProcessId, settingFanOutModeId, testingId, selected, onToggleSelect, bulkBusy }: RowProps) {
   const { t } = useI18n();
   const isToggling            = togglingId            === uni.id;
   const isTogglingAutoProcess = togglingAutoProcessId === uni.id;
@@ -970,6 +977,15 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onSetFanOutMode, on
                       </TooltipTrigger>
                       <TooltipContent>
                         {t("portalAutomation.unis.autoProcessExperimentalBlocked")}
+                        {graduationInfo && (
+                          <>
+                            {" "}
+                            {t("portalAutomation.unis.autoProcessGraduationHint", {
+                              count: graduationInfo.successCount,
+                              threshold: graduationInfo.threshold,
+                            })}
+                          </>
+                        )}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -1156,6 +1172,20 @@ export default function PortalUniversitiesTab() {
     () => new Set(registryAdapters.filter((a) => a.experimental).map((a) => a.key)),
     [registryAdapters],
   );
+
+  // Graduation progress per still-experimental adapter key (tooltip detail).
+  const graduationInfoByKey = useMemo(() => {
+    const map = new Map<string, { successCount: number; threshold: number }>();
+    for (const a of registryAdapters) {
+      if (a.experimental && a.graduationThreshold != null) {
+        map.set(a.key, {
+          successCount: a.successCount ?? 0,
+          threshold: a.graduationThreshold,
+        });
+      }
+    }
+    return map;
+  }, [registryAdapters]);
 
   // Load universities
   const load = useCallback(async (q: string) => {
@@ -1586,6 +1616,7 @@ export default function PortalUniversitiesTab() {
               onManageMembers={setMembersTarget}
               onDelete={setDeleteTarget}
               experimental={experimentalKeys.has(uni.adapterKey)}
+              graduationInfo={graduationInfoByKey.get(uni.adapterKey) ?? null}
               togglingId={togglingId}
               togglingAutoProcessId={togglingAutoProcessId}
               settingFanOutModeId={settingFanOutModeId}

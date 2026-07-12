@@ -5145,7 +5145,8 @@
       "bulkDeleteError": "Seçilen üniversiteler silinemedi.",
       "bulkDeleteConfirmTitle": "Seçilen üniversiteler silinsin mi?",
       "bulkDeleteConfirmDescription": "{{count}} üniversite portal otomasyonundan kaldırılacak. Mevcut gönderimler korunur. Bu işlem geri alınamaz.",
-      "bulkDeleteConfirmButton": "Seçilenleri Sil"
+      "bulkDeleteConfirmButton": "Seçilenleri Sil",
+      "autoProcessGraduationHint": "{threshold} başarılı gönderimden sonra otomatik olarak açılır ({count}/{threshold})."
     },
     "programMapping": {
       "title": "Program Haritalama",
@@ -5254,7 +5255,9 @@
       "inactiveBadge": "Pasif",
       "sortByLabel": "Etikete göre sırala",
       "sortByKey": "Anahtara göre sırala",
-      "sortByCreatedAt": "Eklenme tarihine göre sırala"
+      "sortByCreatedAt": "Eklenme tarihine göre sırala",
+      "graduated": "Mezun oldu",
+      "graduationProgress": "{count}/{threshold} başarılı gönderim"
     },
     "submissions": {
       "title": "Başvuru Panosu",

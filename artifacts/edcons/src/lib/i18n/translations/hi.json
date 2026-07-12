@@ -5145,7 +5145,8 @@
       "bulkDeleteError": "चयनित विश्वविद्यालयों को हटाने में विफल।",
       "bulkDeleteConfirmTitle": "क्या चयनित विश्वविद्यालय हटाएं?",
       "bulkDeleteConfirmDescription": "{{count}} विश्वविद्यालय पोर्टल ऑटोमेशन से हटा दिए जाएंगे। मौजूदा सबमिशन बनाए रखे जाएंगे। यह कार्रवाई पूर्ववत नहीं की जा सकती।",
-      "bulkDeleteConfirmButton": "चयनित हटाएं"
+      "bulkDeleteConfirmButton": "चयनित हटाएं",
+      "autoProcessGraduationHint": "{threshold} सफल सबमिशन के बाद स्वतः अनलॉक हो जाता है ({count}/{threshold})।"
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5254,7 +5255,9 @@
       "inactiveBadge": "Inactive",
       "sortByLabel": "लेबल के अनुसार क्रमबद्ध करें",
       "sortByKey": "कुंजी के अनुसार क्रमबद्ध करें",
-      "sortByCreatedAt": "जोड़ी गई तारीख के अनुसार क्रमबद्ध करें"
+      "sortByCreatedAt": "जोड़ी गई तारीख के अनुसार क्रमबद्ध करें",
+      "graduated": "स्नातक",
+      "graduationProgress": "{count}/{threshold} सफल सबमिशन"
     },
     "submissions": {
       "title": "Submission Board",

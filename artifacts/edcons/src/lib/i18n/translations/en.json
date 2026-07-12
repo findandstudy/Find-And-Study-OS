@@ -5145,7 +5145,8 @@
       "bulkDeleteError": "Failed to delete selected universities.",
       "bulkDeleteConfirmTitle": "Delete selected universities?",
       "bulkDeleteConfirmDescription": "This will remove {{count}} universities from portal automation. Existing submissions are kept. This action cannot be undone.",
-      "bulkDeleteConfirmButton": "Delete Selected"
+      "bulkDeleteConfirmButton": "Delete Selected",
+      "autoProcessGraduationHint": "Unlocks automatically after {threshold} successful submissions ({count}/{threshold})."
     },
     "programMapping": {
       "title": "Program Mapping",
@@ -5254,7 +5255,9 @@
       "inactiveBadge": "Inactive",
       "sortByLabel": "Sort by label",
       "sortByKey": "Sort by key",
-      "sortByCreatedAt": "Sort by date added"
+      "sortByCreatedAt": "Sort by date added",
+      "graduated": "Graduated",
+      "graduationProgress": "{count}/{threshold} successful submissions"
     },
     "submissions": {
       "title": "Submission Board",

@@ -1604,6 +1604,18 @@ async function seedClaudeIntegration() {
     // Free-form metadata jsonb (supersession context / structured "Kontenjan
     // Dolu" program_full payload: requestedProgram + openPrograms). Idempotent.
     await pool.query(`ALTER TABLE portal_submissions ADD COLUMN IF NOT EXISTS meta JSONB`);
+    // Adapter auto-graduation: adapter key stamped at enqueue + success-count
+    // index + one-off NULL backfill from portal_universities. Idempotent.
+    await pool.query(`ALTER TABLE portal_submissions ADD COLUMN IF NOT EXISTS adapter_key TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS portal_submissions_adapter_key_status_idx ON portal_submissions USING btree (adapter_key, status)`);
+    await pool.query(`
+      UPDATE portal_submissions ps
+      SET adapter_key = pu.adapter_key
+      FROM portal_universities pu
+      WHERE ps.adapter_key IS NULL
+        AND pu.university_key = ps.university_key
+        AND pu.deleted_at IS NULL
+    `);
   } catch (err) {
     console.error("[migrate] portal_submissions:", err);
   }

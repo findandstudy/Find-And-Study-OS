@@ -23,6 +23,7 @@ import {
   writebackResult,
   handleNeedsFallback,
   resolveAdapterKey,
+  getNonGraduatedExperimentalAdapterKeys,
 } from "@workspace/portal-runner";
 import { isSitFamilyKey } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "./credResolver.js";
@@ -108,7 +109,17 @@ async function loadAutoProcessKeys(): Promise<string[]> {
       isNull(portalUniversitiesTable.deletedAt),
     ));
 
-  return unis.map((u) => u.universityKey);
+  // Adapter auto-graduation: exclude universities whose adapter is still
+  // experimental (non-graduated). Belt-and-suspenders — the panel's
+  // auto-process toggle is already 409-guarded, but a graduation can be
+  // "un-earned" (submissions soft-deleted) after the toggle was enabled.
+  const nonGraduated = await getNonGraduatedExperimentalAdapterKeys(
+    unis.map((u) => u.adapterKey),
+  );
+
+  return unis
+    .filter((u) => !nonGraduated.has(u.adapterKey))
+    .map((u) => u.universityKey);
 }
 
 /**
