@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
+import { PhoneField, isPhoneFieldValid, toPhoneFieldValue } from "@/components/ui/phone-field";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useDocumentPreview } from "@/components/DocumentPreviewDialog";
 import { getPreviewKind, type PreviewTarget } from "@/components/documentPreview";
@@ -36,34 +36,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 
-const PHONE_CODES = [
-  { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
-  { code: "+49", country: "DE" }, { code: "+33", country: "FR" }, { code: "+39", country: "IT" },
-  { code: "+34", country: "ES" }, { code: "+31", country: "NL" }, { code: "+46", country: "SE" },
-  { code: "+47", country: "NO" }, { code: "+45", country: "DK" }, { code: "+41", country: "CH" },
-  { code: "+43", country: "AT" }, { code: "+48", country: "PL" }, { code: "+7", country: "RU" },
-  { code: "+380", country: "UA" }, { code: "+86", country: "CN" }, { code: "+81", country: "JP" },
-  { code: "+82", country: "KR" }, { code: "+91", country: "IN" }, { code: "+92", country: "PK" },
-  { code: "+93", country: "AF" }, { code: "+966", country: "SA" }, { code: "+971", country: "AE" },
-  { code: "+964", country: "IQ" }, { code: "+98", country: "IR" }, { code: "+962", country: "JO" },
-  { code: "+961", country: "LB" }, { code: "+20", country: "EG" }, { code: "+212", country: "MA" },
-  { code: "+234", country: "NG" }, { code: "+254", country: "KE" }, { code: "+55", country: "BR" },
-  { code: "+52", country: "MX" }, { code: "+61", country: "AU" }, { code: "+64", country: "NZ" },
-  { code: "+60", country: "MY" }, { code: "+65", country: "SG" }, { code: "+66", country: "TH" },
-  { code: "+84", country: "VN" }, { code: "+62", country: "ID" }, { code: "+63", country: "PH" },
-  { code: "+880", country: "BD" }, { code: "+94", country: "LK" }, { code: "+977", country: "NP" },
-  { code: "+251", country: "ET" }, { code: "+255", country: "TZ" }, { code: "+233", country: "GH" },
-];
 
 const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
 
-function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string } {
-  if (!fullPhone) return { phoneCode: "+90", phone: "" };
-  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
-  const matched = sorted.find(pc => fullPhone.startsWith(pc.code));
-  if (matched) return { phoneCode: matched.code, phone: fullPhone.slice(matched.code.length).trim() };
-  return { phoneCode: "+90", phone: fullPhone.replace(/^\+/, "").trim() };
-}
 
 type CountryRecord = { id: number; name: string; code: string; flagEmoji?: string; isActive: boolean };
 
@@ -1204,7 +1179,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
   const { hasPermission } = useAuth();
   const canSeeRevenue = hasPermission("leads.view_commission");
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", phoneCode: "+90", phone: "",
+    firstName: "", lastName: "", email: "", phone: "",
     source: "website", interestedProgram: "", interestedUniversity: "", interestedCountry: "", nationality: "", estimatedValue: "",
   });
   const updateLead = useUpdateLead();
@@ -1213,10 +1188,9 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
 
   useEffect(() => {
     if (open && lead) {
-      const parsed = parsePhoneCode(lead.phone || "");
       setForm({
         firstName: lead.firstName || "", lastName: lead.lastName || "",
-        email: lead.email || "", phoneCode: parsed.phoneCode, phone: parsed.phone,
+        email: lead.email || "", phone: toPhoneFieldValue(lead.phoneE164 || lead.phone),
         source: lead.source || "website", interestedProgram: lead.interestedProgram || "",
         interestedUniversity: lead.interestedUniversity || "",
         interestedCountry: lead.interestedCountry || "", nationality: lead.nationality || "",
@@ -1226,9 +1200,8 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
   }, [open, lead]);
 
   function handleSave() {
-    if (!form.firstName || !form.lastName) return;
-    const { phoneCode, ...rest } = form;
-    const payload: any = { ...rest, phone: form.phone ? `${phoneCode}${form.phone}` : "" };
+    if (!form.firstName || !form.lastName || !isPhoneFieldValid(form.phone)) return;
+    const payload: any = { ...form, phone: form.phone || "" };
     const parsedVal = parseFloat(form.estimatedValue);
     if (form.estimatedValue && !isNaN(parsedVal)) payload.estimatedValue = parsedVal;
     else delete payload.estimatedValue;
@@ -1269,10 +1242,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
           </div>
           <div className="space-y-1.5">
             <Label>{t("leadDetailPage.phone")}</Label>
-            <div className="flex gap-1">
-              <PhoneCodePicker value={form.phoneCode} onChange={v => setForm({ ...form, phoneCode: v })} triggerClassName="w-[90px] shrink-0" />
-              <Input className="flex-1 min-w-0" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="555 000 0000" />
-            </div>
+            <PhoneField value={form.phone} onChange={v => setForm({ ...form, phone: v })} />
           </div>
           <div className="space-y-1.5">
             <Label>{t("leadDetailPage.nationality")}</Label>

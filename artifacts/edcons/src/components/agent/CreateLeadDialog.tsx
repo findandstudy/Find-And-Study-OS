@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
+import { toLatinUpper } from "@/lib/textTransform";
 import { useCreateLead } from "@workspace/api-client-react";
 import { useSeason } from "@/contexts/SeasonContext";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CountryFlag } from "@/components/CountryFlag";
-import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
+import { PhoneField, isPhoneFieldValid } from "@/components/ui/phone-field";
 import { useCountrySearch } from "@/hooks/use-countries";
 import { ChevronDown, TrendingUp, X } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,37 +39,11 @@ function useCountries() {
 
 const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
 
-const PHONE_CODES = [
-  { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
-  { code: "+49", country: "DE" }, { code: "+33", country: "FR" }, { code: "+39", country: "IT" },
-  { code: "+34", country: "ES" }, { code: "+31", country: "NL" }, { code: "+46", country: "SE" },
-  { code: "+47", country: "NO" }, { code: "+45", country: "DK" }, { code: "+41", country: "CH" },
-  { code: "+43", country: "AT" }, { code: "+48", country: "PL" }, { code: "+7", country: "RU" },
-  { code: "+380", country: "UA" }, { code: "+86", country: "CN" }, { code: "+81", country: "JP" },
-  { code: "+82", country: "KR" }, { code: "+91", country: "IN" }, { code: "+92", country: "PK" },
-  { code: "+93", country: "AF" }, { code: "+966", country: "SA" }, { code: "+971", country: "AE" },
-  { code: "+964", country: "IQ" }, { code: "+98", country: "IR" }, { code: "+962", country: "JO" },
-  { code: "+961", country: "LB" }, { code: "+20", country: "EG" }, { code: "+212", country: "MA" },
-  { code: "+234", country: "NG" }, { code: "+27", country: "ZA" }, { code: "+55", country: "BR" },
-  { code: "+52", country: "MX" }, { code: "+54", country: "AR" }, { code: "+61", country: "AU" },
-  { code: "+64", country: "NZ" }, { code: "+60", country: "MY" }, { code: "+65", country: "SG" },
-  { code: "+63", country: "PH" }, { code: "+66", country: "TH" }, { code: "+84", country: "VN" },
-  { code: "+62", country: "ID" }, { code: "+994", country: "AZ" }, { code: "+995", country: "GE" },
-  { code: "+998", country: "UZ" }, { code: "+996", country: "KG" }, { code: "+993", country: "TM" },
-  { code: "+77", country: "KZ" },
-];
 
-function parsePhoneCode(raw: string) {
-  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
-  for (const pc of sorted) {
-    if (raw.startsWith(pc.code)) return { phoneCode: pc.code, phone: raw.slice(pc.code.length).trim() };
-  }
-  return { phoneCode: "+90", phone: raw };
-}
 
 const EMPTY_FORM = {
   firstName: "", lastName: "", email: "",
-  phoneCode: "+90", phone: "",
+  phone: "",
   source: "website", interestedProgram: "", interestedCountry: "",
   nationality: "", estimatedValue: "",
 };
@@ -224,10 +198,9 @@ export function CreateLeadDialog({ open, onOpenChange }: {
   }
 
   function handleCreate() {
-    if (!form.firstName || !form.lastName || !form.email || !form.phone) return;
+    if (!form.firstName || !form.lastName || !form.email || !isPhoneFieldValid(form.phone, true)) return;
     const defaultStatus = pipelineStages.length > 0 ? pipelineStages[0].key : "new";
-    const { phoneCode, ...formRest } = form;
-    const payload: any = { ...formRest, phone: `${phoneCode}${form.phone}`, status: defaultStatus, season };
+    const payload: any = { ...form, status: defaultStatus, season };
     const parsedCreate = parseFloat(form.estimatedValue);
     if (form.estimatedValue && !isNaN(parsedCreate)) payload.estimatedValue = parsedCreate;
     else delete payload.estimatedValue;
@@ -263,10 +236,7 @@ export function CreateLeadDialog({ open, onOpenChange }: {
           </div>
           <div className="space-y-1.5">
             <Label>Phone *</Label>
-            <div className="flex gap-1">
-              <PhoneCodePicker value={form.phoneCode} onChange={v => setForm({ ...form, phoneCode: v })} triggerClassName="w-[90px] shrink-0" />
-              <Input className="flex-1 min-w-0" value={form.phone} onChange={(e) => setForm({ ...form, phone: digitsOnly(e.target.value) })} placeholder="555 000 0000" />
-            </div>
+            <PhoneField value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
           </div>
           <div className="space-y-1.5">
             <Label>Nationality</Label>
@@ -301,7 +271,7 @@ export function CreateLeadDialog({ open, onOpenChange }: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>Cancel</Button>
-          <Button onClick={handleCreate} disabled={createLead.isPending || !form.firstName || !form.lastName || !form.email || !form.phone}>
+          <Button onClick={handleCreate} disabled={createLead.isPending || !form.firstName || !form.lastName || !form.email || !isPhoneFieldValid(form.phone, true)}>
             {createLead.isPending ? "Creating…" : "Create Lead"}
           </Button>
         </DialogFooter>

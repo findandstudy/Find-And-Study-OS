@@ -134,7 +134,7 @@ export async function buildStudentProfile(
     motherName:     motherNameVal,
     nationality:    student.nationality ?? "",
     address:        addressVal,
-    phone:          student.phone          ?? "",
+    phone:          student.phoneE164 ?? student.phone ?? "",
     level:          app.level              ?? "",
     programName:    app.programName        ?? "",
     programId:      app.programId          != null ? String(app.programId) : "",

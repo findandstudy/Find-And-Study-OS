@@ -630,10 +630,12 @@ test.describe("embed widget — apply submission", { tag: "@desktop" }, () => {
         set("firstName", d.firstName);
         set("lastName", d.lastName);
         set("email", d.email);
-        set("phone", "5000000000");
+        // Must be a country-valid number: the /apply endpoint now rejects
+        // invalid phones with 422 phone.invalid (TR mobile, 10 digits).
+        set("phone", "5321112233");
         // countryCode is a hidden input — must be non-empty or
         // handleNextPersonal blocks with an alert.
-        set("countryCode", "+1");
+        set("countryCode", "+90");
         btn.click();
       },
       { firstName, lastName, email: submittedEmail },

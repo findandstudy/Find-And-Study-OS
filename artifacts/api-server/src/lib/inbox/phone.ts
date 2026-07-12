@@ -1,23 +1,17 @@
-import { parsePhoneNumberFromString, isValidPhoneNumber, type CountryCode } from "libphonenumber-js";
+import { isValidPhoneNumber, type CountryCode } from "libphonenumber-js";
+import { normalizePhone } from "@workspace/phone";
 
 const DEFAULT_COUNTRY: CountryCode = "TR";
 
 /**
  * Normalize a phone string to E.164 format. Returns null if it cannot
- * be parsed. Default country is Turkey (TR).
+ * be parsed OR is not a valid number for its country. Default country
+ * is Turkey (TR). Delegates to the shared @workspace/phone util so the
+ * whole project uses one parsing engine.
  */
 export function toE164(input: string | null | undefined, defaultCountry: CountryCode = DEFAULT_COUNTRY): string | null {
-  if (!input) return null;
-  const raw = String(input).trim();
-  if (!raw) return null;
-  try {
-    const parsed = parsePhoneNumberFromString(raw, defaultCountry);
-    if (!parsed) return null;
-    if (!parsed.isValid()) return null;
-    return parsed.number;
-  } catch {
-    return null;
-  }
+  const n = normalizePhone(input, defaultCountry);
+  return n.isValid ? n.e164 : null;
 }
 
 export function isValidE164(value: string | null | undefined): boolean {

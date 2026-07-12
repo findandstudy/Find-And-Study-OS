@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
+import { PhoneField, isPhoneFieldValid, toPhoneFieldValue } from "@/components/ui/phone-field";
 import { Progress } from "@/components/ui/progress";
 import {
   FileUp, Sparkles, ChevronLeft, User, GraduationCap, X, CheckCircle2,
@@ -80,25 +80,6 @@ type ExtractedData = {
   languageScore?: string | null; confidence?: string; extractedNotes?: string | null;
 };
 
-const PHONE_CODES = [
-  { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
-  { code: "+49", country: "DE" }, { code: "+33", country: "FR" }, { code: "+39", country: "IT" },
-  { code: "+34", country: "ES" }, { code: "+31", country: "NL" }, { code: "+46", country: "SE" },
-  { code: "+47", country: "NO" }, { code: "+45", country: "DK" }, { code: "+41", country: "CH" },
-  { code: "+43", country: "AT" }, { code: "+48", country: "PL" }, { code: "+7", country: "RU" },
-  { code: "+380", country: "UA" }, { code: "+86", country: "CN" }, { code: "+81", country: "JP" },
-  { code: "+82", country: "KR" }, { code: "+91", country: "IN" }, { code: "+92", country: "PK" },
-  { code: "+93", country: "AF" }, { code: "+966", country: "SA" }, { code: "+971", country: "AE" },
-  { code: "+964", country: "IQ" }, { code: "+98", country: "IR" }, { code: "+962", country: "JO" },
-  { code: "+961", country: "LB" }, { code: "+20", country: "EG" }, { code: "+212", country: "MA" },
-  { code: "+234", country: "NG" }, { code: "+27", country: "ZA" }, { code: "+55", country: "BR" },
-  { code: "+52", country: "MX" }, { code: "+54", country: "AR" }, { code: "+61", country: "AU" },
-  { code: "+64", country: "NZ" }, { code: "+60", country: "MY" }, { code: "+65", country: "SG" },
-  { code: "+63", country: "PH" }, { code: "+66", country: "TH" }, { code: "+84", country: "VN" },
-  { code: "+62", country: "ID" }, { code: "+994", country: "AZ" }, { code: "+995", country: "GE" },
-  { code: "+998", country: "UZ" }, { code: "+996", country: "KG" }, { code: "+993", country: "TM" },
-  { code: "+77", country: "KZ" },
-];
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -275,7 +256,7 @@ function NationalityCombobox({ value, onChange, countries, aiExtracted }: {
 }
 
 const EMPTY_FORM = {
-  firstName: "", lastName: "", email: "", phone: "", phoneCode: "",
+  firstName: "", lastName: "", email: "", phone: "",
   nationality: "", dateOfBirth: "", gender: "",
   passportNumber: "", passportIssueDate: "", passportExpiry: "",
   motherName: "", fatherName: "", address: "",
@@ -357,12 +338,7 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
         if (val !== null && val !== undefined && val !== "") {
           if (fk === "phone") {
             const phoneStr = String(val).replace(/\s+/g, " ").trim();
-            if (phoneStr.startsWith("+")) {
-              const sortedCodes = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
-              const matched = sortedCodes.find(pc => phoneStr.startsWith(pc.code));
-              if (matched) { newForm.phoneCode = matched.code; newForm.phone = phoneStr.slice(matched.code.length).trim(); }
-              else { newForm.phone = phoneStr; }
-            } else { newForm.phone = phoneStr; }
+            newForm.phone = toPhoneFieldValue(phoneStr);
             newExtracted.add("phone");
           } else if (fk === "nationality") {
             const natVal = String(val).trim(); const lower = natVal.toLowerCase();
@@ -434,9 +410,10 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
     if (!form.fatherName.trim()) missing.push("Father's Name"); if (!form.passportNumber.trim()) missing.push("Passport Number");
     if (!form.passportIssueDate.trim()) missing.push("Issue Date"); if (!form.passportExpiry.trim()) missing.push("Expiry Date");
     if (missing.length > 0) { toast({ title: "Required fields missing", description: missing.join(", "), variant: "destructive" }); return; }
+    if (!isPhoneFieldValid(form.phone, true)) { toast({ title: "Invalid phone number", description: "Enter a valid phone number for the selected country.", variant: "destructive" }); return; }
     const missingDocs = currentDocs.filter(dt => dt.required && !docs[dt.key]).map(dt => dt.label);
     if (missingDocs.length > 0) { toast({ title: "Required documents missing", description: missingDocs.join(", "), variant: "destructive" }); return; }
-    const fullPhone = form.phone ? `${form.phoneCode} ${form.phone}` : null;
+    const fullPhone = form.phone || null;
     createStudent.mutate(
       { data: { firstName: form.firstName, lastName: form.lastName, email: form.email || null, phone: fullPhone, nationality: form.nationality || null, dateOfBirth: form.dateOfBirth || null, gender: form.gender || null, passportNumber: form.passportNumber || null, passportIssueDate: form.passportIssueDate || null, passportExpiry: form.passportExpiry || null, motherName: form.motherName || null, fatherName: form.fatherName || null, address: form.address || null, highSchool: form.highSchool || null, graduationYear: form.graduationYear ? parseInt(form.graduationYear, 10) : null, gpa: form.gpa ? `${form.gpa} / ${form.gradingSystem}` : null, languageScore: form.languageScore || null, notes: form.notes || null, status: defaultStatus || "active" } as any },
       {
@@ -569,16 +546,7 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                   <FormField required label="Email" value={form.email} onChange={field("email")} placeholder="email@example.com" type="email" aiExtracted={ef.has("email")} />
                   <div className="space-y-1.5">
                     <Label className="font-semibold text-sm flex items-center">Phone<span className="text-destructive ml-0.5">*</span>{ef.has("phone") && <AiBadge />}</Label>
-                    <div className="flex gap-1.5">
-                      <PhoneCodePicker
-                        value={form.phoneCode}
-                        onChange={field("phoneCode")}
-                        className="w-[120px] shrink-0"
-                        triggerClassName="rounded-xl h-9"
-                      />
-                      <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="555 000 0000"
-                        className={cn("rounded-xl flex-1", ef.has("phone") && "border-emerald-300 bg-emerald-50/40 focus-visible:ring-emerald-400")} />
-                    </div>
+                    <PhoneField value={form.phone} onChange={(v) => setForm(f => ({ ...f, phone: v }))} />
                   </div>
                   <FormField required label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" aiExtracted={ef.has("dateOfBirth")} />
                   <div>

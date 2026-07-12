@@ -5805,5 +5805,10 @@
     "deleteConfirmTitle": "Delete exclusion?",
     "deleteConfirmDescription": "Are you sure you want to delete the exclusion for {nationality}?",
     "deleteConfirmButton": "Delete"
+  },
+  "phone": {
+    "invalid": "Enter a valid phone number for the selected country",
+    "selectCountry": "Select country",
+    "required": "Phone number is required"
   }
 }

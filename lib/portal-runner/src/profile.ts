@@ -88,7 +88,7 @@ function buildSubmitProfileFromRecords(
     motherName:     student.motherName?.trim() || "-",
     nationality:    student.nationality     ?? "",
     address:        student.address         ?? "",
-    phone:          student.phone           ?? "",
+    phone:          student.phoneE164 ?? student.phone ?? "",
     level:          app.level               ?? "",
     programName:    app.programName         ?? "",
     programId:      app.programId           != null ? String(app.programId) : "",

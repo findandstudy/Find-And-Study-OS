@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
+import { PhoneField, isPhoneFieldValid, toPhoneFieldValue } from "@/components/ui/phone-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Phone, Globe, GraduationCap, FileText, User, Home, Calendar, Upload, X, CheckCircle2, Camera, Download, Trash2, Plus, Loader2, Pencil, Clock, CalendarClock, Copy, Check, Eye, UserPlus } from "lucide-react";
@@ -25,7 +25,7 @@ import { apiFetch } from "@/lib/apiFetch";
 import { useDocumentPreview } from "@/components/DocumentPreviewDialog";
 import { getPreviewKind } from "@/components/documentPreview";
 import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
-import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
+import { toLatinUpper } from "@/lib/textTransform";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CountryFlag } from "@/components/CountryFlag";
 import { useCountrySearch } from "@/hooks/use-countries";
@@ -1487,24 +1487,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   );
 }
 
-const PHONE_CODES = [
-  { code: "+90", country: "TR" }, { code: "+1", country: "US" }, { code: "+44", country: "GB" },
-  { code: "+49", country: "DE" }, { code: "+33", country: "FR" }, { code: "+39", country: "IT" },
-  { code: "+34", country: "ES" }, { code: "+31", country: "NL" }, { code: "+46", country: "SE" },
-  { code: "+47", country: "NO" }, { code: "+45", country: "DK" }, { code: "+41", country: "CH" },
-  { code: "+43", country: "AT" }, { code: "+48", country: "PL" }, { code: "+7", country: "RU" },
-  { code: "+380", country: "UA" }, { code: "+86", country: "CN" }, { code: "+81", country: "JP" },
-  { code: "+82", country: "KR" }, { code: "+91", country: "IN" }, { code: "+92", country: "PK" },
-  { code: "+93", country: "AF" }, { code: "+966", country: "SA" }, { code: "+971", country: "AE" },
-  { code: "+964", country: "IQ" }, { code: "+98", country: "IR" }, { code: "+962", country: "JO" },
-  { code: "+961", country: "LB" }, { code: "+20", country: "EG" }, { code: "+212", country: "MA" },
-  { code: "+234", country: "NG" }, { code: "+254", country: "KE" }, { code: "+55", country: "BR" },
-  { code: "+52", country: "MX" }, { code: "+61", country: "AU" }, { code: "+64", country: "NZ" },
-  { code: "+60", country: "MY" }, { code: "+65", country: "SG" }, { code: "+66", country: "TH" },
-  { code: "+84", country: "VN" }, { code: "+62", country: "ID" }, { code: "+63", country: "PH" },
-  { code: "+880", country: "BD" }, { code: "+94", country: "LK" }, { code: "+977", country: "NP" },
-  { code: "+251", country: "ET" }, { code: "+255", country: "TZ" }, { code: "+233", country: "GH" },
-];
 
 const GRADING_SYSTEMS = [
   { value: "4", label: "/ 4", max: 4, placeholder: "e.g. 3.8" },
@@ -1513,13 +1495,6 @@ const GRADING_SYSTEMS = [
   { value: "100", label: "/ 100", max: 100, placeholder: "e.g. 85" },
 ];
 
-function parsePhoneCode(fullPhone: string): { phoneCode: string; phone: string } {
-  if (!fullPhone) return { phoneCode: "+90", phone: "" };
-  const sorted = [...PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
-  const matched = sorted.find(pc => fullPhone.startsWith(pc.code));
-  if (matched) return { phoneCode: matched.code, phone: fullPhone.slice(matched.code.length).trim() };
-  return { phoneCode: "+90", phone: fullPhone.replace(/^\+/, "").trim() };
-}
 
 function NationalityCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [searchVal, setSearchVal] = useState("");
@@ -1586,7 +1561,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
   const { t } = useI18n();
   const { levels: studyLevels } = useStudyLevels();
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", phone: "", phoneCode: "+90",
+    firstName: "", lastName: "", email: "", phone: "",
     nationality: "", dateOfBirth: "", gender: "",
     passportNumber: "", passportIssueDate: "", passportExpiry: "",
     motherName: "", fatherName: "", address: "",
@@ -1600,7 +1575,6 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
 
   useEffect(() => {
     if (open && student) {
-      const parsed = parsePhoneCode(student.phone || "");
       const gpaRaw = student.gpa || "";
       let gpaVal = gpaRaw;
       let gradingSys = "4";
@@ -1612,7 +1586,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
       }
       setForm({
         firstName: student.firstName || "", lastName: student.lastName || "",
-        email: student.email || "", phone: parsed.phone, phoneCode: parsed.phoneCode,
+        email: student.email || "", phone: toPhoneFieldValue(student.phoneE164 || student.phone),
         nationality: student.nationality || "", dateOfBirth: student.dateOfBirth || "",
         gender: student.gender || "",
         passportNumber: student.passportNumber || "",
@@ -1637,10 +1611,10 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
   }
 
   async function handleSave() {
-    if (!form.firstName || !form.lastName) return;
+    if (!form.firstName || !form.lastName || !isPhoneFieldValid(form.phone)) return;
     setSaving(true);
     try {
-      const phone = form.phone ? `${form.phoneCode}${form.phone.replace(/^\s+/, "")}` : "";
+      const phone = form.phone || "";
       const gpa = form.gpa ? (form.gradingSystem !== "4" ? `${form.gpa}/${form.gradingSystem}` : form.gpa) : "";
       const res = await fetch(`${BASE_URL}/api/students/${studentId}`, {
         method: "PATCH", credentials: "include",
@@ -1690,10 +1664,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
               <F label="Email" value={form.email} onChange={field("email")} type="email" placeholder="email@example.com" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Phone</Label>
-                <div className="flex gap-1.5">
-                  <PhoneCodePicker value={form.phoneCode} onChange={field("phoneCode")} triggerClassName="w-[100px] h-9 shrink-0" />
-                  <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: digitsOnly(e.target.value) }))} inputMode="numeric" placeholder="555 000 0000" className="rounded-xl flex-1 h-9" />
-                </div>
+                <PhoneField value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} />
               </div>
               <F label="Date of Birth" value={form.dateOfBirth} onChange={field("dateOfBirth")} type="date" />
               <div className="space-y-1.5">

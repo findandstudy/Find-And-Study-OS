@@ -16,6 +16,7 @@ import { normalizeAndValidateNames, normalizePhoneField, EXTENDED_NAME_FIELDS, t
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
+import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import { verifyStudentPhotoSignature } from "@workspace/portal-adapters";
 import bcrypt from "bcryptjs";
@@ -140,6 +141,7 @@ router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
   if (meNameErr) { res.status(400).json({ error: meNameErr }); return; }
   if (Object.prototype.hasOwnProperty.call(normData, "phone")) {
     const rawPhone = (normData as any).phone;
+    if (rejectInvalidPhone(res, rawPhone)) return;
     (normData as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
     (normData as any).phoneE164 = toE164((normData as any).phone);
   }
@@ -403,6 +405,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     }
   }
 
+  if (rejectInvalidPhone(res, phone)) return;
   const user = req.user!;
   const origin = resolvedAgentId
     ? await inferOriginFromAgentId(resolvedAgentId)
@@ -637,6 +640,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   if (Object.prototype.hasOwnProperty.call(normUpdates, "phone")) {
     const rawPhone = (normUpdates as any).phone;
+    if (rejectInvalidPhone(res, rawPhone)) return;
     (normUpdates as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
     (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
   }
@@ -1056,6 +1060,7 @@ router.post("/students/:id/set-password", requireAuth, requireRole(...ADMIN_ROLE
         role: "student",
         isActive: true,
         phone: student.phone || null,
+        phoneE164: (student as any).phoneE164 || toE164(student.phone || "") || null,
       }).returning();
       await db.update(studentsTable).set({ userId: newUser.id }).where(eq(studentsTable.id, id));
       await logAudit(req.user!.id, "set_password", "student", id, { userId: newUser.id, createdUser: true }, req.ip);

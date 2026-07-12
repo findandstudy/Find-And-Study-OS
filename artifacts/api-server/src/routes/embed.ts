@@ -19,6 +19,8 @@ import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceG
 import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { findOrUpsertEmbedLead } from "../lib/embedLeadDedup";
+import { toE164 } from "../lib/inbox/phone";
+import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { containsNonLatinLetter, NON_LATIN_NAME_CODE } from "../lib/textNormalize";
 import {
   emptySummary,
@@ -1060,6 +1062,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
         lastName: tlu(lastName, 100)!,
         email: s(email, 255)!,
         phone: pn(phone, countryCode, 50),
+        phoneE164: toE164(pn(phone, countryCode, 50)),
         interestedProgram: s(programName, 255),
         interestedUniversity: s(universityName, 255),
         sourcePageUrl: s(sourcePageUrl, 500),
@@ -1118,6 +1121,12 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     res.status(400).json({ error: "Invalid email format" });
     return;
   }
+
+  // Final submit must carry a country-valid phone. The step-1 early-fire
+  // /lead endpoint stays lenient (never lose a captured contact), but the
+  // completed application is rejected with 422 + phone.invalid so the
+  // widget can surface an inline error.
+  if (rejectInvalidPhone(res, pn(phone, countryCode, 50))) return;
 
   let sourceWebsite: string | null = null;
   try { sourceWebsite = origin || (req.headers.referer ? new URL(req.headers.referer as string).origin : null) || null; } catch {}
@@ -1224,6 +1233,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         lastName: tlu(lastName, 100)!,
         email: s(email, 255)!,
         phone: pn(phone, countryCode, 50),
+        phoneE164: toE164(pn(phone, countryCode, 50)),
         nationality: s(nationality, 100),
         interestedProgram: s(programName || desiredProgram, 255),
         interestedUniversity: s(universityName || preferredUniversity, 255),
@@ -1348,6 +1358,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           firstName: tlu(firstName, 100)!,
           lastName: tlu(lastName, 100)!,
           phone: pn(phone, countryCode, 50),
+          phoneE164: toE164(pn(phone, countryCode, 50)),
           role: "student",
           isActive: false,
           emailVerified: false,
@@ -1377,6 +1388,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           lastName: tlu(lastName, 100)!,
           email: normalizedEmail,
           phone: pn(phone, countryCode, 50),
+          phoneE164: toE164(pn(phone, countryCode, 50)),
           nationality: s(nationality, 100),
           dateOfBirth: s(dateOfBirth, 20),
           gender: safeGender,
@@ -1920,6 +1932,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-skeleton-card{height:240px;border-radius:${borderRadius};background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);background-size:200% 100%;animation:shimmer 1.5s infinite}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .ew-phone-group{display:flex;gap:6px}
+.ew-field-err{color:#dc2626;font-size:12px;margin-top:4px}
 .ew-phone-group select{width:100px;flex-shrink:0}
 .ew-phone-group input{flex:1}
 .ew-cc{position:relative;width:120px;flex-shrink:0}
@@ -2105,6 +2118,7 @@ function loadProgramDocs(pid,cb){
 }
 var detailProgram=null, detailOpen=false;
 var formStep='personal';
+var phoneError=false;
 var uploadedDocs={};
 // Message shown when the applicant tries to advance past the Documents step
 // without uploading every document marked Required. {docs} is replaced with
@@ -2827,7 +2841,7 @@ function renderFormContent(prog){
     // Phone with a flag-prefixed country code picker (matches the portal's
     // PhoneCodePicker visual). Spans the full row.
     var sel=fv.countryCode||'';
-    h+='<div class="ew-form-group full"><label>Phone *</label><div class="ew-phone-group">'+buildCcDropdown(sel)+'<input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'" required></div></div>';
+    h+='<div class="ew-form-group full"><label>Phone *</label><div class="ew-phone-group">'+buildCcDropdown(sel)+'<input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'" required></div>'+(phoneError?'<div class="ew-field-err">Please enter a valid phone number for the selected country.</div>':'')+'</div>';
     h+='</div>';
     if(prog){
       // "Applying for" summary pill (mirrors portal's bg-secondary/50 card).
@@ -2906,7 +2920,7 @@ function renderFormContent(prog){
     aiField('lastName','Last Name','text',true,true);
     aiField('email','Email','email',true,true);
     var sel2=fv2.countryCode||'';
-    h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group">'+buildCcDropdown(sel2)+'<input name="phone" placeholder="Phone number" value="'+esc(fv2.phone||'')+'" required></div></div>';
+    h+='<div class="ew-form-group"><label>Phone *</label><div class="ew-phone-group">'+buildCcDropdown(sel2)+'<input name="phone" placeholder="Phone number" value="'+esc(fv2.phone||'')+'" required></div>'+(phoneError?'<div class="ew-field-err">Please enter a valid phone number for the selected country.</div>':'')+'</div>';
     var natVal=savedFormData.nationality||'';
     var natIsAi=!!extractedFields.nationality;
     var natStyle=natIsAi?'border-color:#22c55e;background:#f0fdf4':'';
@@ -3673,6 +3687,7 @@ function handleFormSubmit(e){
   }
   if(!enforceDocGate())return;
   if(formLoading)return;
+  phoneError=false;
   formLoading=true;
   if(formOpen)showModal();else render(false);
   var data=Object.assign({},savedFormData);
@@ -3705,6 +3720,14 @@ function handleFormSubmit(e){
   }).then(function(r){
     formLoading=false;
     if(!r.ok)return r.json().then(function(d){
+      // Invalid phone (422 phone.invalid): bounce back to the personal step
+      // and show an inline error next to the phone field instead of an alert.
+      if(r.status===422&&d&&d.code==='phone.invalid'){
+        phoneError=true;
+        formStep='personal';
+        if(formOpen)showModal();else render(false);
+        return;
+      }
       // Server rejected because mandatory documents are missing (defense in
       // depth behind the client gate). Bounce the user back to the Documents
       // step so they can upload what's missing instead of being stuck.
@@ -3741,7 +3764,7 @@ function bindEvents(){
     btn.addEventListener('click',function(){
       var pid=parseInt(btn.getAttribute('data-apply'));
       formProgram=programs.find(function(p){return p.id===pid})||null;
-      formOpen=true;formSubmitted=false;formStep='personal';uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;
+      formOpen=true;formSubmitted=false;formStep='personal';phoneError=false;uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;
       loadProgramDocs(pid,function(){if(formOpen)showModal();else render(false);});
       showModal();
     });

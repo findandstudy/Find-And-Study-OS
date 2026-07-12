@@ -5805,5 +5805,10 @@
     "deleteConfirmTitle": "İstisna silinsin mi?",
     "deleteConfirmDescription": "{nationality} uyruğu için istisnayı silmek istediğinizden emin misiniz?",
     "deleteConfirmButton": "Sil"
+  },
+  "phone": {
+    "invalid": "Seçilen ülke için geçerli bir telefon numarası girin",
+    "selectCountry": "Ülke seçin",
+    "required": "Telefon numarası zorunludur"
   }
 }

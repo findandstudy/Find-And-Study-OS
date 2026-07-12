@@ -13,6 +13,7 @@ import { normalizeAndValidateNames, normalizePhoneField, toLatinUpper } from "..
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginMeta } from "../lib/originHelper";
 import { toE164 } from "../lib/inbox/phone";
+import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { getCurrentSeason } from "../lib/season";
 import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
@@ -107,6 +108,7 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
     res.status(400).json({ error: "Invalid email address" });
     return;
   }
+  if (rejectInvalidPhone(res, phone)) return;
   const origin = directOrigin();
   const phoneStr = phone ? normalizePhoneField(phone).slice(0, 30) : null;
   // Guard against cross-channel lead overwrite via untrusted body.source.
@@ -179,6 +181,8 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
     res.status(400).json({ error: "Invalid email address" });
     return;
   }
+
+  if (rejectInvalidPhone(res, phone)) return;
 
   const origin = await inferOriginFromAgentId(agent.id);
 
@@ -365,6 +369,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     { firstName, lastName }, ["firstName", "lastName"]
   );
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
+  if (rejectInvalidPhone(res, phone)) return;
   const currentYear = await getCurrentSeason();
   let resolvedAgentId = agentId || null;
   if (isAgentRole(user.role)) {
@@ -822,6 +827,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
   if (Object.prototype.hasOwnProperty.call(normUpdates, "phone")) {
     const rawPhone = (normUpdates as any).phone;
+    if (rejectInvalidPhone(res, rawPhone)) return;
     (normUpdates as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
     (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
   }
@@ -1102,6 +1108,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     lastName: lead.lastName,
     email: lead.email || null,
     phone: lead.phone || null,
+    phoneE164: (lead as any).phoneE164 || toE164(lead.phone || "") || null,
     nationality: lead.nationality || s(aiData.nationality) || null,
     agentId: (lead as any).agentId || null,
     assignedToId: lead.assignedToId || null,
