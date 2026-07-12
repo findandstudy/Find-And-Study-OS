@@ -5,17 +5,42 @@
 // support the embeddings endpoint, so this module intentionally uses the raw
 // `openai` SDK with the real API key instead of the proxy.
 import OpenAI from "openai";
+import { db, integrationsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
 
 let client: OpenAI | null = null;
-function getOpenAiClient(): OpenAI {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured — Faz 2 knowledge sources require it for embeddings.");
+let clientKey: string | null = null;
+
+// Resolve the OpenAI API key: prefer the key configured in Admin -> Settings ->
+// Integrations (integrationsTable key="openai"); fall back to OPENAI_API_KEY env.
+async function resolveOpenAiApiKey(): Promise<string | null> {
+  try {
+    const rows = await db
+      .select()
+      .from(integrationsTable)
+      .where(eq(integrationsTable.key, "openai"));
+    for (const integ of rows) {
+      if ((integ as { isEnabled?: boolean }).isEnabled === false) continue;
+      const cfg = ((integ as { config?: unknown }).config ?? {}) as Record<string, string>;
+      if (cfg.apiKey) return cfg.apiKey;
+    }
+  } catch {
+    // DB unreachable -> fall through to env
   }
-  if (!client) {
-    client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return process.env.OPENAI_API_KEY ?? null;
+}
+
+async function getOpenAiClient(): Promise<OpenAI> {
+  const apiKey = await resolveOpenAiApiKey();
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured - set it in Settings -> Integrations (OpenAI) or the OPENAI_API_KEY env.");
+  }
+  if (!client || clientKey !== apiKey) {
+    client = new OpenAI({ apiKey });
+    clientKey = apiKey;
   }
   return client;
 }
@@ -79,7 +104,7 @@ export function estimateTokenCount(text: string): number {
  */
 export async function embedTexts(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const openai = getOpenAiClient();
+  const openai = await getOpenAiClient();
   const BATCH = 96;
   const results: number[][] = [];
   for (let i = 0; i < texts.length; i += BATCH) {
