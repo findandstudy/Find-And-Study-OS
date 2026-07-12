@@ -37,9 +37,12 @@ import {
   portalAutomationSettingsTable,
   portalUniversitiesTable,
   portalSubmissionsTable,
+  universitiesTable,
+  portalAccountUniversitiesTable,
 } from "@workspace/db";
 import {
   maybeEnqueuePortalSubmission,
+  resolvePortalRouting,
   __setDrainTriggerForTests,
 } from "../src/lib/portalAutoTrigger.js";
 import { runPortalAutoDrainTick } from "../src/routes/portalAutomation.js";
@@ -56,12 +59,22 @@ const UNI_KEY      = `uni_${RUN}`;
 const UNI_NAME     = `TAT Test University ${RUN}`;
 const TRIGGER_STAGE = `tat_stage_${RUN}`;
 
+// Aggregator fixture identifiers (for TAT8-TAT11)
+const AGG_ADAPTER_KEY  = `agg_adp_${RUN}`;
+const AGG_UNI_KEY      = `agg_sit_${RUN}`;
+const AGG_UNI_LABEL    = `TAT Aggregator Portal ${RUN}`;
+const AGG_MEMBER_NAME  = `Istanbul Gelisim University ${RUN}`;
+
 // ---------------------------------------------------------------------------
 // Credential injection — set env vars so hasPortalCredentials() returns true
 // ---------------------------------------------------------------------------
 const ENV_PREFIX = ADAPTER_KEY.toUpperCase().replace(/-/g, "_");
 process.env[`${ENV_PREFIX}_USER`]     = "tat-test-user";
 process.env[`${ENV_PREFIX}_PASSWORD`] = "tat-test-pass";
+
+const AGG_ENV_PREFIX = AGG_ADAPTER_KEY.toUpperCase().replace(/-/g, "_");
+process.env[`${AGG_ENV_PREFIX}_USER`]     = "tat-agg-user";
+process.env[`${AGG_ENV_PREFIX}_PASSWORD`] = "tat-agg-pass";
 
 // ---------------------------------------------------------------------------
 // Saved originals for settings restore
@@ -71,11 +84,17 @@ let savedSettings: { id: number; row: Record<string, unknown> } | null = null;
 // ---------------------------------------------------------------------------
 // Cleanup tracking
 // ---------------------------------------------------------------------------
-const cleanupStudentIds:   number[] = [];
-const cleanupAppIds:       number[] = [];
-const cleanupSubIds:       number[] = [];
-const cleanupPortalUniIds: number[] = [];
-let   settingsRowId: number | null  = null;
+const cleanupStudentIds:    number[] = [];
+const cleanupAppIds:        number[] = [];
+const cleanupSubIds:        number[] = [];
+const cleanupPortalUniIds:  number[] = [];
+const cleanupCatalogUniIds: number[] = [];
+const cleanupMembershipIds: number[] = [];
+let   settingsRowId: number | null   = null;
+
+// Shared aggregator fixture state (set in before(), read in TAT8-TAT11)
+let aggPortalUniId:  number | null = null;
+let aggCatalogUniId: number | null = null;
 
 // ---------------------------------------------------------------------------
 // before — create shared fixtures
@@ -115,7 +134,7 @@ before(async () => {
     settingsRowId = ins.id;
   }
 
-  // Create portal_universities row for test university
+  // Create portal_universities row for test university (standalone — TAT1-TAT7)
   const [pu] = await db.insert(portalUniversitiesTable).values({
     universityKey: UNI_KEY,
     universityName: UNI_NAME,
@@ -123,6 +142,33 @@ before(async () => {
     isActive:      true,
   }).returning({ id: portalUniversitiesTable.id });
   cleanupPortalUniIds.push(pu.id);
+
+  // --- Aggregator fixtures (TAT8–TAT11) ---
+  // 1. Catalog university row (universities table)
+  const [catUni] = await db.insert(universitiesTable).values({
+    name:     AGG_MEMBER_NAME,
+    country:  "Turkey",
+  }).returning({ id: universitiesTable.id });
+  aggCatalogUniId = catUni.id;
+  cleanupCatalogUniIds.push(catUni.id);
+
+  // 2. Aggregator portal_universities row (SIT-like)
+  const [aggPu] = await db.insert(portalUniversitiesTable).values({
+    universityKey: AGG_UNI_KEY,
+    universityName: AGG_UNI_LABEL,
+    adapterKey:    AGG_ADAPTER_KEY,
+    isActive:      true,
+  }).returning({ id: portalUniversitiesTable.id });
+  aggPortalUniId = aggPu.id;
+  cleanupPortalUniIds.push(aggPu.id);
+
+  // 3. Membership row linking catalog university → aggregator
+  const [mem] = await db.insert(portalAccountUniversitiesTable).values({
+    portalKey:          AGG_UNI_KEY,
+    catalogUniversityId: catUni.id,
+    enabled:            true,
+  }).returning({ id: portalAccountUniversitiesTable.id });
+  cleanupMembershipIds.push(mem.id);
 });
 
 // ---------------------------------------------------------------------------
@@ -162,9 +208,17 @@ after(async () => {
   for (const id of cleanupSubIds) {
     await db.delete(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, id)).catch(() => {});
   }
+  // Clean portal_account_universities (memberships) — before portal_universities (FK)
+  for (const id of cleanupMembershipIds) {
+    await db.delete(portalAccountUniversitiesTable).where(eq(portalAccountUniversitiesTable.id, id)).catch(() => {});
+  }
   // Clean portal_universities
   for (const id of cleanupPortalUniIds) {
     await db.delete(portalUniversitiesTable).where(eq(portalUniversitiesTable.id, id)).catch(() => {});
+  }
+  // Clean catalog universities — after memberships (cascade would handle it but be explicit)
+  for (const id of cleanupCatalogUniIds) {
+    await db.delete(universitiesTable).where(eq(universitiesTable.id, id)).catch(() => {});
   }
   // Clean apps + students
   for (const id of cleanupAppIds) {
@@ -494,4 +548,70 @@ test("TAT7: Enabled OFF — neither immediate drain nor scheduled drain", async 
       .set({ isEnabled: true, autoProcessEnabled: false, lastAutoDrainAt: null })
       .where(eq(portalAutomationSettingsTable.id, settingsRowId!));
   }
+});
+
+// ---------------------------------------------------------------------------
+// TAT8 — resolvePortalRouting: aggregator membership resolved by NAME
+//        (universityId=null, only universityName provided)
+// ---------------------------------------------------------------------------
+test("TAT8: resolvePortalRouting routes to aggregator by universityName when universityId=null", async () => {
+  assert.ok(aggCatalogUniId !== null, "aggregator fixture set up");
+
+  const result = await resolvePortalRouting({
+    universityId:  null,
+    universityName: AGG_MEMBER_NAME,
+  });
+
+  assert.ok(result !== null, "routing resolved (not null)");
+  assert.equal(result!.portalUni.universityKey, AGG_UNI_KEY,     "routed to aggregator portalKey");
+  assert.equal(result!.portalUni.adapterKey,    AGG_ADAPTER_KEY, "aggregator adapterKey");
+  assert.ok(result!.target !== null,                              "target is set (not standalone)");
+  assert.equal(result!.target!.catalogUniversityId, aggCatalogUniId!, "target.catalogUniversityId = catalog uni");
+  assert.equal(result!.target!.universityName,       AGG_MEMBER_NAME,  "target.universityName = member name");
+});
+
+// ---------------------------------------------------------------------------
+// TAT9 — resolvePortalRouting: aggregator membership resolved by universityId
+//        (regression — existing id-based path still works)
+// ---------------------------------------------------------------------------
+test("TAT9: resolvePortalRouting routes to aggregator by universityId (regression)", async () => {
+  assert.ok(aggCatalogUniId !== null, "aggregator fixture set up");
+
+  const result = await resolvePortalRouting({
+    universityId:  aggCatalogUniId,
+    universityName: null,
+  });
+
+  assert.ok(result !== null, "routing resolved by universityId");
+  assert.equal(result!.portalUni.universityKey, AGG_UNI_KEY,     "routed to aggregator");
+  assert.ok(result!.target !== null,                              "target set");
+  assert.equal(result!.target!.catalogUniversityId, aggCatalogUniId!, "correct catalogUniversityId");
+});
+
+// ---------------------------------------------------------------------------
+// TAT10 — resolvePortalRouting: standalone university (not an aggregator member)
+//         resolves via its own portal_universities row by name
+// ---------------------------------------------------------------------------
+test("TAT10: resolvePortalRouting falls back to standalone row for non-member university", async () => {
+  // UNI_NAME has a portal_universities row but no portal_account_universities entry
+  const result = await resolvePortalRouting({
+    universityId:  null,
+    universityName: UNI_NAME,
+  });
+
+  assert.ok(result !== null, "standalone routing resolved");
+  assert.equal(result!.portalUni.universityKey, UNI_KEY, "uses the standalone portal row");
+  assert.equal(result!.target,                  null,    "target=null on standalone path");
+});
+
+// ---------------------------------------------------------------------------
+// TAT11 — resolvePortalRouting: unknown university name → null (no auto-trigger)
+// ---------------------------------------------------------------------------
+test("TAT11: resolvePortalRouting returns null for an unknown universityName", async () => {
+  const result = await resolvePortalRouting({
+    universityId:  null,
+    universityName: `unknown_uni_not_in_db_${RUN}`,
+  });
+
+  assert.equal(result, null, "null when university has no catalog row and no standalone portal row");
 });

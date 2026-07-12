@@ -197,14 +197,29 @@ export async function resolvePortalRouting(args: {
 }): Promise<PortalRoutingResolution | null> {
   const { universityId, universityName } = args;
 
+  // Resolve the catalog university ID we will use for membership lookup.
+  // When the application already carries the FK we use it directly; when only
+  // a free-text name is available (universityId=null) we look the catalog row
+  // up by name so that SIT/United members are routed to their aggregator even
+  // without a universityId FK on the application row.
+  let resolvedUniversityId = universityId;
+  if (resolvedUniversityId == null && universityName) {
+    const [cat] = await db
+      .select({ id: universitiesTable.id })
+      .from(universitiesTable)
+      .where(sql`LOWER(${universitiesTable.name}) = LOWER(${universityName})`)
+      .limit(1);
+    resolvedUniversityId = cat?.id ?? null;
+  }
+
   // ----- Rule 1: aggregator membership (wins over a standalone row) ---------
-  if (universityId != null) {
+  if (resolvedUniversityId != null) {
     const [member] = await db
       .select({ portalKey: portalAccountUniversitiesTable.portalKey })
       .from(portalAccountUniversitiesTable)
       .where(
         and(
-          eq(portalAccountUniversitiesTable.catalogUniversityId, universityId),
+          eq(portalAccountUniversitiesTable.catalogUniversityId, resolvedUniversityId),
           eq(portalAccountUniversitiesTable.enabled, true),
         ),
       )
@@ -229,13 +244,13 @@ export async function resolvePortalRouting(args: {
         const [cat] = await db
           .select({ name: universitiesTable.name })
           .from(universitiesTable)
-          .where(eq(universitiesTable.id, universityId))
+          .where(eq(universitiesTable.id, resolvedUniversityId))
           .limit(1);
         const memberName =
           cat?.name ?? universityName ?? aggregator.universityName;
         return {
           portalUni: aggregator,
-          target: { catalogUniversityId: universityId, universityName: memberName },
+          target: { catalogUniversityId: resolvedUniversityId, universityName: memberName },
         };
       }
       // Aggregator row missing/inactive → fall through to the standalone match.
