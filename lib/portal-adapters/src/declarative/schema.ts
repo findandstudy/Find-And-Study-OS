@@ -61,9 +61,11 @@ export const profilePathSchema = z
  *  - fuzzy    : fuzzy-match against live <option> labels (only meaningful in
  *               programSelection, where candidate options exist). Elsewhere a
  *               fuzzy transform is a no-op passthrough.
+ *  - toDMY    : converts an ISO date "YYYY-MM-DD" to the "DD.MM.YYYY" format
+ *               expected by many Turkish portals. Non-matching strings pass through.
  */
 export const transformSchema = z.object({
-  type: z.enum(["override", "map", "fuzzy"]),
+  type: z.enum(["override", "map", "fuzzy", "toDMY"]),
   table: z.record(z.string(), z.string()).optional(),
   threshold: z.number().min(0).max(1).optional(),
 });
@@ -78,6 +80,24 @@ const navigateStep = z.object({
   optional: z.boolean().optional(),
 });
 
+// ---------------------------------------------------------------------------
+// Shared selector-hint fields
+// ---------------------------------------------------------------------------
+
+/**
+ * Optional shadow-DOM / name-attribute / aria-label locator hints. When
+ * present on any step the interpreter converts them to CSS attribute
+ * selectors (`[name="X"]` / `[aria-label="X"]`) and prefers them over
+ * the plain `selector` field. All three are optional — at least one
+ * locator source must be present for the step to execute.
+ */
+const selectorHints = {
+  /** HTML `name` attribute value — resolved to `[name="X"]`. */
+  name: z.string().min(1).optional(),
+  /** HTML `aria-label` attribute value — resolved to `[aria-label="X"]`. */
+  ariaLabel: z.string().min(1).optional(),
+};
+
 // NOTE: the "exactly one of value/valueFrom" rule is enforced in the
 // top-level superRefine (below) rather than via `.refine()` here, because
 // discriminatedUnion members must be plain ZodObjects (a ZodEffects from
@@ -85,6 +105,7 @@ const navigateStep = z.object({
 const fillStep = z.object({
   action: z.literal("fill"),
   selector: z.string().min(1),
+  ...selectorHints,
   value: z.string().optional(),
   valueFrom: profilePathSchema.optional(),
   transform: transformSchema.optional(),
@@ -94,6 +115,7 @@ const fillStep = z.object({
 const selectStep = z.object({
   action: z.literal("select"),
   selector: z.string().min(1),
+  ...selectorHints,
   valueFrom: profilePathSchema,
   /** Select by visible option label instead of value attribute. */
   byLabel: z.boolean().optional(),
@@ -104,6 +126,7 @@ const selectStep = z.object({
 const clickStep = z.object({
   action: z.literal("click"),
   selector: z.string().min(1),
+  ...selectorHints,
   /** Marks the terminal submit click — skipped in dry-run. */
   final: z.boolean().optional(),
   optional: z.boolean().optional(),
@@ -112,6 +135,7 @@ const clickStep = z.object({
 const uploadStep = z.object({
   action: z.literal("upload"),
   selector: z.string().min(1),
+  ...selectorHints,
   /** Document slot key (see documents.slots) or a SubmitFiles field. */
   slot: z.string().min(1),
   optional: z.boolean().optional(),
@@ -120,6 +144,7 @@ const uploadStep = z.object({
 const checkStep = z.object({
   action: z.literal("check"),
   selector: z.string().min(1),
+  ...selectorHints,
   value: z.boolean().optional(),
   optional: z.boolean().optional(),
 });
@@ -135,6 +160,7 @@ const radioStep = z.object({
 const waitForStep = z.object({
   action: z.literal("waitFor"),
   selector: z.string().min(1),
+  ...selectorHints,
   optional: z.boolean().optional(),
 });
 
@@ -150,6 +176,84 @@ const jsHookStep = z.object({
   action: z.literal("jsHook"),
   /** Arbitrary page.evaluate() expression. Executed ONLY for trusted specs. */
   script: z.string().min(1),
+  optional: z.boolean().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// New UI step schemas — lookup / selectLabel / clickCardByText / phone
+// ---------------------------------------------------------------------------
+
+/**
+ * `lookup` — fills an autocomplete input with a profile value, waits for the
+ * dropdown option list to appear, and clicks the matching option.
+ * Playwright's `getByRole("option", {name})` is used when available; falls
+ * back to a `[role="option"]:has-text(...)` CSS click otherwise.
+ * Use `optionText` when the displayed option label differs from the typed value.
+ */
+const lookupStep = z.object({
+  action: z.literal("lookup"),
+  selector: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  ariaLabel: z.string().min(1).optional(),
+  valueFrom: profilePathSchema,
+  /** Option label to click; defaults to the resolved valueFrom value. */
+  optionText: z.string().min(1).optional(),
+  optional: z.boolean().optional(),
+});
+
+/**
+ * `selectLabel` — selects a `<select>` option by its visible label text rather
+ * than by value attribute. Supports an optional `map` that translates the raw
+ * profile value to the displayed label before calling selectOption.
+ */
+const selectLabelStep = z.object({
+  action: z.literal("selectLabel"),
+  selector: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  ariaLabel: z.string().min(1).optional(),
+  valueFrom: profilePathSchema,
+  /** Optional value-to-label mapping (applied before selectOption). */
+  map: z.record(z.string(), z.string()).optional(),
+  optional: z.boolean().optional(),
+});
+
+/**
+ * `clickCardByText` — clicks a card/button/list-item element that contains a
+ * specific text string. Useful for Salesforce Lightning / LWC card grids where
+ * there is no stable CSS selector. Provide `containerHint` to scope the
+ * `:has-text()` search to a specific parent selector.
+ */
+const clickCardByTextStep = z.object({
+  action: z.literal("clickCardByText"),
+  /** Literal text to match (use textFrom for profile-derived text). */
+  text: z.string().min(1).optional(),
+  /** Profile path whose value is used as the match text. */
+  textFrom: profilePathSchema.optional(),
+  /**
+   * CSS selector for the element that wraps the cards (e.g. ".card-list").
+   * When present, the interpreter generates `{containerHint} :has-text(...)`;
+   * otherwise it uses `:is(button,li,[role="option"],[role="button"])`.
+   */
+  containerHint: z.string().min(1).optional(),
+  optional: z.boolean().optional(),
+});
+
+/**
+ * `phone` — fills a two-part phone field: first types the country name into a
+ * combobox and clicks the matching option, then fills the phone number input.
+ * Accepts optional `countrySelector`/`numberSelector` to override the default
+ * aria-label heuristics.
+ */
+const phoneStep = z.object({
+  action: z.literal("phone"),
+  /** Profile path for the country name typed into the country combobox. */
+  countryFrom: profilePathSchema,
+  /** Profile path for the full phone number (including country code). */
+  numberFrom: profilePathSchema,
+  /** CSS selector for the country combobox input (defaults to aria-label heuristic). */
+  countrySelector: z.string().min(1).optional(),
+  /** CSS selector for the phone number input (defaults to aria-label heuristic). */
+  numberSelector: z.string().min(1).optional(),
   optional: z.boolean().optional(),
 });
 
@@ -229,6 +333,10 @@ export const specStepSchema = z.discriminatedUnion("action", [
   graphqlStep,
   captureStep,
   setVarStep,
+  lookupStep,
+  selectLabelStep,
+  clickCardByTextStep,
+  phoneStep,
 ]);
 
 // ---------------------------------------------------------------------------

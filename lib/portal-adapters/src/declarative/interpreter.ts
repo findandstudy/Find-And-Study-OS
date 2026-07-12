@@ -46,6 +46,15 @@ import { executeHttpLikeStep } from "./httpRunner.js";
 export interface SpecPage extends MinimalPage {
   /** Current page URL (used for success/redirect detection). */
   url?(): string;
+  /**
+   * Playwright `getByRole` — used by `lookup` and `phone` steps for blur-race-
+   * free option selection. Optional so existing mock pages compile unchanged.
+   * Returns a Locator-like object; only `click()` and `fill()` are consumed.
+   */
+  getByRole?(
+    role: string,
+    opts?: { name?: string | RegExp },
+  ): { click(): Promise<void>; fill?(value: string): Promise<void> };
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +72,8 @@ export function resolveProfileValue(profile: SubmitProfile, path: string): strin
  * Applies a step-level value transform. `override`/`map` are deterministic
  * table lookups (keep the original value when no mapping exists). `fuzzy` is a
  * passthrough here — fuzzy matching only makes sense against live option lists
- * and is handled in {@link resolveProgramValue}.
+ * and is handled in {@link resolveProgramValue}. `toDMY` converts an ISO date
+ * string "YYYY-MM-DD" to "DD.MM.YYYY" (passes non-matching strings through).
  */
 export function applyTransform(value: string, transform?: Transform): string {
   if (!transform) return value;
@@ -73,6 +83,10 @@ export function applyTransform(value: string, transform?: Transform): string {
       return transform.table?.[value] ?? value;
     case "fuzzy":
       return value;
+    case "toDMY": {
+      const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return m ? `${m[3]}.${m[2]}.${m[1]}` : value;
+    }
     default:
       return value;
   }
@@ -192,6 +206,36 @@ export interface StepContext {
   dryRun: boolean;
 }
 
+/**
+ * Resolves the effective CSS selector for a step that supports the
+ * `name`/`ariaLabel` locator hints. Priority: `name` → `ariaLabel` → `selector`.
+ * Converting name/ariaLabel to CSS attribute selectors lets Playwright pierce
+ * open shadow DOM automatically (Chromium pierces for attribute selectors).
+ */
+function resolveStepSelector(step: {
+  selector?: string;
+  name?: string;
+  ariaLabel?: string;
+}): string {
+  if (step.name) return `[name="${step.name}"]`;
+  if (step.ariaLabel) return `[aria-label="${step.ariaLabel}"]`;
+  if (step.selector) return step.selector;
+  throw new Error("step requires at least one locator: selector, name, or ariaLabel");
+}
+
+/**
+ * Clicks a ARIA option element by name, using `getByRole("option", {name})`
+ * when the page supports it (Playwright Locator API), or falling back to a
+ * `:has-text()` CSS click so mock pages and simple wrappers still work.
+ */
+async function clickOption(page: SpecPage, label: string): Promise<void> {
+  if (typeof page.getByRole === "function") {
+    await page.getByRole("option", { name: label }).click();
+  } else {
+    await page.click(`[role="option"]:has-text("${label}")`);
+  }
+}
+
 /** Resolves an upload step's slot to a concrete file path. */
 function resolveSlotFile(slot: string, ctx: StepContext): string | undefined {
   const slotDef = ctx.documentSlots?.slots?.[slot];
@@ -221,41 +265,45 @@ export async function executeSpecStep(
         break;
 
       case "fill": {
+        const sel = resolveStepSelector(step);
         const base = step.valueFrom != null
           ? resolveProfileValue(ctx.profile, step.valueFrom)
           : (step.value ?? "");
-        await page.fill(step.selector, applyTransform(base, step.transform));
+        await page.fill(sel, applyTransform(base, step.transform));
         break;
       }
 
       case "select": {
+        const sel = resolveStepSelector(step);
         const base = resolveProfileValue(ctx.profile, step.valueFrom);
         const value = applyTransform(base, step.transform);
-        if (step.byLabel) await page.selectOption(step.selector, { label: value });
-        else await page.selectOption(step.selector, value);
+        if (step.byLabel) await page.selectOption(sel, { label: value });
+        else await page.selectOption(sel, value);
         break;
       }
 
       case "click":
-        await page.click(step.selector);
+        await page.click(resolveStepSelector(step));
         break;
 
       case "upload": {
+        const sel = resolveStepSelector(step);
         const filePath = resolveSlotFile(step.slot, ctx);
-        if (filePath) await page.setInputFiles(step.selector, filePath);
+        if (filePath) await page.setInputFiles(sel, filePath);
         else logger.warn(`[spec] upload skipped — no file for slot "${step.slot}"`);
         break;
       }
 
       case "check": {
+        const sel = resolveStepSelector(step);
         const want = step.value ?? true;
         let current = false;
         try {
-          current = page.isChecked ? await page.isChecked(step.selector) : false;
+          current = page.isChecked ? await page.isChecked(sel) : false;
         } catch {
           current = false;
         }
-        if (current !== want) await page.click(step.selector);
+        if (current !== want) await page.click(sel);
         break;
       }
 
@@ -273,8 +321,46 @@ export async function executeSpecStep(
       }
 
       case "waitFor":
-        await page.waitForSelector(step.selector);
+        await page.waitForSelector(resolveStepSelector(step));
         break;
+
+      case "lookup": {
+        const sel = resolveStepSelector(step);
+        const typed = resolveProfileValue(ctx.profile, step.valueFrom);
+        await page.fill(sel, typed);
+        await clickOption(page, step.optionText ?? typed);
+        break;
+      }
+
+      case "selectLabel": {
+        const sel = resolveStepSelector(step);
+        const raw = resolveProfileValue(ctx.profile, step.valueFrom);
+        const label = step.map ? (step.map[raw] ?? raw) : raw;
+        await page.selectOption(sel, { label });
+        break;
+      }
+
+      case "clickCardByText": {
+        const text = step.textFrom != null
+          ? resolveProfileValue(ctx.profile, step.textFrom)
+          : (step.text ?? "");
+        const cssSel = step.containerHint
+          ? `${step.containerHint} :has-text("${text}")`
+          : `:is(button,li,[role="option"],[role="button"]):has-text("${text}")`;
+        await page.click(cssSel);
+        break;
+      }
+
+      case "phone": {
+        const country = resolveProfileValue(ctx.profile, step.countryFrom);
+        const number = resolveProfileValue(ctx.profile, step.numberFrom);
+        const countrySel = step.countrySelector ?? '[aria-label*="ountry" i],[name*="ountry" i]';
+        const numberSel = step.numberSelector ?? '[aria-label*="hone" i],[name*="hone" i]';
+        await page.fill(countrySel, country);
+        await clickOption(page, country);
+        await page.fill(numberSel, number);
+        break;
+      }
 
       case "ajaxWait": {
         // Best-effort: MinimalPage has no response API. If the page exposes a

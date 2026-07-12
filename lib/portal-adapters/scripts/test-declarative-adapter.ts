@@ -25,6 +25,7 @@ import assert from "node:assert/strict";
 import {
   parseAdapterSpec,
   specHasJsHook,
+  specIsPrivileged,
   type AdapterSpec,
 } from "../src/declarative/schema.js";
 import {
@@ -543,4 +544,368 @@ test("ROW5: jsHook in a user/unapproved row is skipped at run time", async () =>
   (raw.steps as unknown[]).push({ action: "jsHook", script: "window.x=1" });
   const adapter = buildSpecAdapterFromRow(makeSpecRow({ spec: raw as Record<string, unknown>, source: "uploaded", jsHookApproved: false }));
   assert.notEqual(adapter, null, "row still builds (jsHook is skipped, not rejected)");
+});
+
+// ---------------------------------------------------------------------------
+// HLP — new transform: toDMY
+// ---------------------------------------------------------------------------
+
+test("HLP6: applyTransform toDMY converts ISO date to DD.MM.YYYY", () => {
+  assert.equal(applyTransform("2003-07-15", { type: "toDMY" }), "15.07.2003");
+  assert.equal(applyTransform("1999-01-31", { type: "toDMY" }), "31.01.1999");
+});
+
+test("HLP7: applyTransform toDMY passes through non-ISO strings unchanged", () => {
+  assert.equal(applyTransform("15.07.2003", { type: "toDMY" }), "15.07.2003", "already DMY");
+  assert.equal(applyTransform("", { type: "toDMY" }), "", "empty string");
+  assert.equal(applyTransform("not-a-date", { type: "toDMY" }), "not-a-date", "non-date");
+});
+
+// ---------------------------------------------------------------------------
+// SV — schema accepts new step types + name/ariaLabel hints
+// ---------------------------------------------------------------------------
+
+test("SV8: parseAdapterSpec accepts a fill step with name hint (no selector)", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.steps as Array<Record<string, unknown>>)[1] = {
+    action: "fill",
+    selector: "#firstName",
+    name: "firstName",
+    valueFrom: "profile.firstName",
+  };
+  const res = parseAdapterSpec(raw);
+  assert.equal(res.ok, true, "name hint accepted alongside selector");
+});
+
+test("SV9: parseAdapterSpec accepts a fill step with ariaLabel hint", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.steps as Array<Record<string, unknown>>)[1] = {
+    action: "fill",
+    selector: "#firstName",
+    ariaLabel: "First Name",
+    valueFrom: "profile.firstName",
+  };
+  const res = parseAdapterSpec(raw);
+  assert.equal(res.ok, true, "ariaLabel hint accepted alongside selector");
+});
+
+test("SV10: parseAdapterSpec accepts a lookup step (all selector fields optional)", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.steps as Array<Record<string, unknown>>).push({
+    action: "lookup",
+    name: "country",
+    valueFrom: "profile.nationality",
+    optionText: "Turkey",
+  });
+  const res = parseAdapterSpec(raw);
+  assert.equal(res.ok, true, "lookup step with name hint accepted");
+});
+
+test("SV11: parseAdapterSpec accepts a selectLabel step", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.steps as Array<Record<string, unknown>>).push({
+    action: "selectLabel",
+    selector: "#gender",
+    valueFrom: "profile.gender",
+    map: { male: "Erkek", female: "Kadın" },
+  });
+  const res = parseAdapterSpec(raw);
+  assert.equal(res.ok, true, "selectLabel step accepted");
+});
+
+test("SV12: parseAdapterSpec accepts a clickCardByText step with literal text", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.steps as Array<Record<string, unknown>>).push({
+    action: "clickCardByText",
+    text: "Computer Science",
+  });
+  const res = parseAdapterSpec(raw);
+  assert.equal(res.ok, true, "clickCardByText with literal text accepted");
+});
+
+test("SV13: parseAdapterSpec accepts a clickCardByText step with textFrom", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.steps as Array<Record<string, unknown>>).push({
+    action: "clickCardByText",
+    textFrom: "profile.programName",
+    containerHint: ".lwc-card-list",
+  });
+  const res = parseAdapterSpec(raw);
+  assert.equal(res.ok, true, "clickCardByText with textFrom accepted");
+});
+
+test("SV14: parseAdapterSpec accepts a phone step", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.steps as Array<Record<string, unknown>>).push({
+    action: "phone",
+    countryFrom: "profile.nationality",
+    numberFrom: "profile.phone",
+  });
+  const res = parseAdapterSpec(raw);
+  assert.equal(res.ok, true, "phone step accepted");
+});
+
+test("SV15: parseAdapterSpec accepts a phone step with explicit selectors", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.steps as Array<Record<string, unknown>>).push({
+    action: "phone",
+    countryFrom: "profile.nationality",
+    numberFrom: "profile.phone",
+    countrySelector: "#countryCombo",
+    numberSelector: "#phoneNumber",
+  });
+  const res = parseAdapterSpec(raw);
+  assert.equal(res.ok, true, "phone step with explicit selectors accepted");
+});
+
+test("SV16: parseAdapterSpec accepts toDMY transform on a fill step", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.steps as Array<Record<string, unknown>>)[1] = {
+    action: "fill",
+    selector: "#dob",
+    valueFrom: "profile.dateOfBirth",
+    transform: { type: "toDMY" },
+  };
+  const res = parseAdapterSpec(raw);
+  assert.equal(res.ok, true, "toDMY transform accepted on fill step");
+});
+
+// ---------------------------------------------------------------------------
+// STP — executeSpecStep for 4 new step types
+// ---------------------------------------------------------------------------
+
+test("STP14: lookup — fills input + clicks matching option (fallback path)", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "lookup", selector: "#country", valueFrom: "profile.nationality" },
+    ctx(),
+  );
+  const fills = calls.filter((c) => c.method === "fill");
+  const clicks = calls.filter((c) => c.method === "click");
+  assert.equal(fills.length, 1, "fills the input");
+  assert.equal(fills[0].args[0], "#country", "uses selector as locator");
+  assert.equal(fills[0].args[1], "Turkish", "resolved from profile.nationality");
+  assert.equal(clicks.length, 1, "clicks one option");
+  assert.ok(String(clicks[0].args[0]).includes("Turkish"), "click target contains the typed value");
+});
+
+test("STP15: lookup — uses name hint when provided", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "lookup", name: "countryField", valueFrom: "profile.nationality", optionText: "TURKEY" },
+    ctx(),
+  );
+  const fills = calls.filter((c) => c.method === "fill");
+  assert.equal(fills[0].args[0], '[name="countryField"]', "name resolved to [name=...] selector");
+  assert.equal(fills[0].args[1], "Turkish", "typed value from profile");
+  const clicks = calls.filter((c) => c.method === "click");
+  assert.ok(String(clicks[0].args[0]).includes("TURKEY"), "optionText overrides typed value for click");
+});
+
+test("STP16: lookup — prefers getByRole when page supports it", async () => {
+  const roleCalls: Array<{ role: string; name: string }> = [];
+  const { page, calls } = makeMockPage({
+    getByRole: (role, opts) => {
+      roleCalls.push({ role, name: String(opts?.name ?? "") });
+      return { click: async () => { calls.push({ method: "getByRoleClick", args: [role, opts?.name] }); } };
+    },
+  });
+  await executeSpecStep(
+    page,
+    { action: "lookup", selector: "#c", valueFrom: "profile.nationality" },
+    ctx(),
+  );
+  assert.equal(roleCalls.length, 1, "getByRole called once");
+  assert.equal(roleCalls[0].role, "option", "role=option");
+  assert.equal(roleCalls[0].name, "Turkish", "name matches resolved profile value");
+  assert.ok(calls.some((c) => c.method === "getByRoleClick"), "getByRole click dispatched");
+  assert.ok(!calls.some((c) => c.method === "click"), "fallback CSS click NOT used");
+});
+
+test("STP17: selectLabel — calls selectOption with { label } object", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "selectLabel", selector: "#gender", valueFrom: "profile.gender" },
+    ctx(),
+  );
+  assert.equal(calls[0].method, "selectOption", "calls selectOption");
+  assert.equal(calls[0].args[0], "#gender", "selector");
+  assert.deepEqual(calls[0].args[1], { label: "male" }, "passes { label } not string");
+});
+
+test("STP18: selectLabel — applies map before selecting", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    {
+      action: "selectLabel",
+      selector: "#gender",
+      valueFrom: "profile.gender",
+      map: { male: "Erkek", female: "Kadın" },
+    },
+    ctx(),
+  );
+  assert.deepEqual(calls[0].args[1], { label: "Erkek" }, "map applied: male → Erkek");
+});
+
+test("STP19: selectLabel — uses name hint as locator", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "selectLabel", name: "genderSelect", valueFrom: "profile.gender" },
+    ctx(),
+  );
+  assert.equal(calls[0].args[0], '[name="genderSelect"]', "name resolved to [name=...] selector");
+});
+
+test("STP20: clickCardByText — literal text + default container", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "clickCardByText", text: "Computer Engineering" },
+    ctx(),
+  );
+  assert.equal(calls.length, 1, "one page.click call");
+  assert.ok(String(calls[0].args[0]).includes("Computer Engineering"), "selector contains the text");
+  assert.ok(String(calls[0].args[0]).startsWith(":is("), "uses default :is() container");
+});
+
+test("STP21: clickCardByText — textFrom resolves from profile", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "clickCardByText", textFrom: "profile.programName" },
+    ctx(),
+  );
+  assert.ok(String(calls[0].args[0]).includes("Computer Engineering"), "profile value used");
+});
+
+test("STP22: clickCardByText — containerHint scopes the selector", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "clickCardByText", text: "Bilgisayar", containerHint: ".lwc-programs" },
+    ctx(),
+  );
+  const sel = String(calls[0].args[0]);
+  assert.ok(sel.startsWith(".lwc-programs"), "containerHint is the leading selector");
+  assert.ok(sel.includes("Bilgisayar"), "text is embedded in selector");
+});
+
+test("STP23: phone — fills country input, clicks option, fills phone (fallback path)", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "phone", countryFrom: "profile.nationality", numberFrom: "profile.phone" },
+    ctx(),
+  );
+  const fills = calls.filter((c) => c.method === "fill");
+  const clicks = calls.filter((c) => c.method === "click");
+  assert.equal(fills.length, 2, "two fill calls: country + number");
+  assert.ok(String(fills[0].args[1]) === "Turkish", "first fill = country value");
+  assert.ok(String(fills[1].args[1]) === "+905001234567", "second fill = phone value");
+  assert.equal(clicks.length, 1, "one click to select country option");
+  assert.ok(String(clicks[0].args[0]).includes("Turkish"), "option click matches country value");
+});
+
+test("STP24: phone — uses explicit countrySelector / numberSelector when provided", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    {
+      action: "phone",
+      countryFrom: "profile.nationality",
+      numberFrom: "profile.phone",
+      countrySelector: "#countryCombo",
+      numberSelector: "#phoneInput",
+    },
+    ctx(),
+  );
+  const fills = calls.filter((c) => c.method === "fill");
+  assert.equal(fills[0].args[0], "#countryCombo", "explicit countrySelector used");
+  assert.equal(fills[1].args[0], "#phoneInput", "explicit numberSelector used");
+});
+
+test("STP25: phone — uses getByRole for country option when available", async () => {
+  const roleCalls: string[] = [];
+  const { page, calls } = makeMockPage({
+    getByRole: (role, opts) => {
+      roleCalls.push(String(opts?.name ?? ""));
+      return { click: async () => { calls.push({ method: "getByRoleClick", args: [role] }); } };
+    },
+  });
+  await executeSpecStep(
+    page,
+    { action: "phone", countryFrom: "profile.nationality", numberFrom: "profile.phone" },
+    ctx(),
+  );
+  assert.equal(roleCalls[0], "Turkish", "getByRole called with country name");
+  assert.ok(calls.some((c) => c.method === "getByRoleClick"), "getByRole click dispatched");
+  assert.ok(!calls.some((c) => c.method === "click"), "CSS fallback click NOT used");
+});
+
+// ---------------------------------------------------------------------------
+// STP — name/ariaLabel hints on existing step types
+// ---------------------------------------------------------------------------
+
+test("STP26: fill with name hint uses [name=...] selector", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "fill", selector: "#ignored", name: "firstName", valueFrom: "profile.firstName" },
+    ctx(),
+  );
+  assert.equal(calls[0].args[0], '[name="firstName"]', "name hint wins over selector");
+  assert.equal(calls[0].args[1], "Ali", "profile value resolved");
+});
+
+test("STP27: fill with ariaLabel hint uses [aria-label=...] selector", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "fill", selector: "#ignored", ariaLabel: "Email Address", valueFrom: "profile.email" },
+    ctx(),
+  );
+  assert.equal(calls[0].args[0], '[aria-label="Email Address"]', "ariaLabel hint wins over selector");
+});
+
+test("STP28: waitFor with name hint resolves to [name=...] selector", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "waitFor", selector: "#ignored", name: "dashboardReady" },
+    ctx(),
+  );
+  assert.equal(calls[0].method, "waitForSelector", "waitForSelector called");
+  assert.equal(calls[0].args[0], '[name="dashboardReady"]', "name hint used");
+});
+
+test("STP29: click with ariaLabel hint resolves to [aria-label=...] selector", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    { action: "click", selector: "#ignored", ariaLabel: "Submit Application" },
+    ctx(),
+  );
+  assert.equal(calls[0].args[0], '[aria-label="Submit Application"]', "ariaLabel hint used for click");
+});
+
+// ---------------------------------------------------------------------------
+// STP — privileged gate: new actions are NOT privileged
+// ---------------------------------------------------------------------------
+
+test("PRIV1: new UI actions are not in the privileged set (specIsPrivileged)", () => {
+  const withNewActions = {
+    steps: [
+      { action: "lookup", selector: "#a", valueFrom: "profile.nationality" },
+      { action: "selectLabel", selector: "#b", valueFrom: "profile.gender" },
+      { action: "clickCardByText", text: "Foo" },
+      { action: "phone", countryFrom: "profile.nationality", numberFrom: "profile.phone" },
+    ],
+    auth: { loginSteps: [] },
+  };
+  assert.equal(specIsPrivileged(withNewActions), false, "new UI steps never trigger privileged gate");
 });
