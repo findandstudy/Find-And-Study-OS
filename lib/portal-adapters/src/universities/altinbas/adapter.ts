@@ -343,9 +343,23 @@ function hasSfPadding(id: string): boolean {
 function scanIdsFromRaw(rt: FlowRuntime, raw: string, source: "flow" | "aura"): void {
   // FIX-10: değer uzunluğu TAM 15 veya 18 (16-17 char junk explicit bile olsa red).
   const keyRe =
-    /\\?"(applicantId|applicationId|accountId|contactId|AccountId|ContactId)\\?"\s*:\s*\\?"([a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?)\\?"/g;
+    /\\?"(applicantId|applicationId|accountId|contactId|AccountId|ContactId|Application__c)\\?"\s*:\s*\\?"([a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?)\\?"/g;
   let m: RegExpExecArray | null;
   while ((m = keyRe.exec(raw)) !== null) {
+    // FIX-11: Application__c is a Salesforce lookup field in commit responses
+    // carrying the real application record Id (a02). It never appears in
+    // availability payloads, so adding it to explicitAppIds is safe. Only
+    // accept from flow-controller responses (source="flow").
+    if (m[1] === "Application__c") {
+      if (source !== "flow") continue;
+      const id = m[2];
+      if (!hasSfPadding(id)) {
+        logger.warn(`[altinbas] Application__c=${id} 0000-padding'siz (şüpheli format) — yine de kabul`);
+      }
+      logger.info(`[altinbas] FIX-11: Application__c=${id} → explicitAppIds (from-Application__c)`);
+      rt.explicitAppIds.add(id);
+      continue;
+    }
     const k = (m[1].charAt(0).toLowerCase() + m[1].slice(1)) as keyof FlowIds;
     if (source !== "flow") {
       // Flow-dışı trafikten: applicationId ASLA (eski taslak kirliliği);
@@ -451,6 +465,20 @@ function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
           rt.explicitIdSource[key] = "flow";
           if (key === "applicationId") rt.explicitAppIds.add(v); // FIX-6: bizim oluşturduğumuz
         }
+      }
+      // FIX-11: Application__c lookup field — Salesforce commit responses carry
+      // the real application record Id here (a02). Walk confirms it via JSON
+      // parse; regex path (scanIdsFromRaw) covers parse-failure fallback.
+      const appCVal = o["Application__c"];
+      if (typeof appCVal === "string" && /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/.test(appCVal)) {
+        logger.info(`[altinbas] FIX-11: Application__c=${appCVal} (walk) → explicitAppIds`);
+        rt.explicitAppIds.add(appCVal);
+        // Also promote to explicitIds.applicationId if not yet set by a stronger source.
+        if (!rt.explicitIds.applicationId) {
+          rt.explicitIds.applicationId = appCVal;
+          rt.explicitIdSource.applicationId = "flow";
+        }
+        if (!rt.ids.applicationId) rt.ids.applicationId = appCVal;
       }
 
       for (const v of Object.values(o)) walk(v);
@@ -1225,6 +1253,17 @@ async function runFlowReplay(
         `[altinbas] FIX-8: applicationId düzeltildi ${rt.ids.applicationId ?? "?"} → ${provenAppId} (bu run'da oluşturulan kayıt)`,
       );
       rt.ids.applicationId = provenAppId;
+    }
+    // FIX-11: hard guard — refuse to enter Educational with no resolved
+    // applicationId. A missing/unprovable Id causes navigateFlow "Error"
+    // (interviewStatus) every time; better to fail loudly here.
+    if (!provenAppId) {
+      const fallback = rt.ids.applicationId;
+      throw new Error(
+        `altinbas Educational ABORT (FIX-11): applicationId Application__c/commit'ten çözülemedi` +
+        ` (commitTrusted=[] explicit=[] fallback=${fallback ?? "null"})` +
+        ` — ALTINBAS_CAPTURE=1 ile commit dump'ını inceleyip Application__c alanını doğrulayın`,
+      );
     }
     // FIX-8: dört binding'in TAMAMI için deterministik kaynak seçimi —
     // explicit anahtar (yanıtlarda "contactId":"003..." gibi) > prefix fallback
