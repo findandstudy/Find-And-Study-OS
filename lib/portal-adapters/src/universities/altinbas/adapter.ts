@@ -1264,37 +1264,58 @@ async function runFlowReplay(
       );
       rt.ids.applicationId = provenAppId;
     }
-    // FIX-11/FIX-12: commitTrusted ve explicit boşsa fallback adayını filtrele.
-    // Canlı dry-run kanıtı (2072, 2656): Application__c key-scan ateşlemiyor
-    // ama prefix-fallback doğru a02'yi rt.ids.applicationId'ye zaten koymuş.
-    // FIX-12: bu değeri güvenmeden önce iki filtreden geçir:
-    //  (a) hasSfPadding — junk token'ları eliyor (FIX-10 dersi)
-    //  (b) !knownAvailabilityIds — commit öncesi görülen availability a02'lerini dışla
-    // Tek geçerli aday → güven. 0 veya ≥2 belirsiz aday → ABORT.
+    // FIX-11/FIX-12/FIX-13: commitTrusted ve explicit boşsa fallback'i değerlendir.
+    // Öncelik:
+    //  1. commitTrusted / explicit → provenAppId (yukarıda çözüldü)
+    //  2. FIX-13: rt.ids.applicationId (commit sonrası prefix-fallback'te stored) —
+    //     hasSfPadding geçiyorsa DOĞRUDAN GÜVEN; availability kontrolü YAPILMAZ.
+    //     Gerekçe: application önceki bir run'dan rt.records'ta (a02Before) görünmüş
+    //     olabilir → knownAvailabilityIds'e girmiş olabilir; bu onu availability
+    //     yapmaz, FIX-12'nin availability filtresi bu durumda hatalıydı.
+    //  3. FIX-12: rawCommitA02 havuzu; hasSfPadding + !knownAvailabilityIds ile filtrele
+    //     (tek geçerli aday). rt.ids.applicationId yoksa veya padding'siz ise bu devreye girer.
+    //  4. ABORT: hiçbiri geçmezse; teşhis logu ekle.
     if (!provenAppId) {
       const fallback = rt.ids.applicationId;
-      const rawCandidates = [
-        ...(fallback ? [fallback] : []),
-        ...[...rawCommitA02],
-      ];
-      const trustworthy = [...new Set(rawCandidates)]
-        .filter(isSfIdShape)
-        .filter(hasSfPadding)
-        .filter((id) => !rt.knownAvailabilityIds.has(id));
-      if (trustworthy.length === 1) {
-        const trusted = trustworthy[0];
-        rt.ids.applicationId = trusted;
+      const fallbackPadded = !!fallback && hasSfPadding(fallback);
+      if (fallbackPadded) {
+        // FIX-13: commit-sonrası stored değer — hasSfPadding yeterli güvence.
         logger.info(
-          `[altinbas] FIX-12: applicationId=${trusted} (from-fallback-trusted, tek geçerli SF-a02;` +
-          ` availability-filtresi: ${rt.knownAvailabilityIds.size} id; fallback=${fallback ?? "null"})`,
+          `[altinbas] FIX-13: applicationId=${fallback} (from-post-commit-stored;` +
+          ` inAvailability=${rt.knownAvailabilityIds.has(fallback!)})`,
         );
+        // rt.ids.applicationId zaten doğru — değişiklik gerekmez.
       } else {
-        throw new Error(
-          `altinbas Educational ABORT (FIX-11): applicationId Application__c/commit'ten çözülemedi` +
-          ` (commitTrusted=[] explicit=[] fallback=${fallback ?? "null"}` +
-          ` trustworthy=[${trustworthy.join(",")}])` +
-          ` — ALTINBAS_CAPTURE=1 ile commit dump'ını inceleyip Application__c alanını doğrulayın`,
-        );
+        // FIX-12: geniş aday havuzu, availability filtreli.
+        const rawCandidates = [
+          ...(fallback ? [fallback] : []),
+          ...[...rawCommitA02],
+        ];
+        const trustworthy = [...new Set(rawCandidates)]
+          .filter(isSfIdShape)
+          .filter(hasSfPadding)
+          .filter((id) => !rt.knownAvailabilityIds.has(id));
+        if (trustworthy.length === 1) {
+          rt.ids.applicationId = trustworthy[0];
+          logger.info(
+            `[altinbas] FIX-12: applicationId=${trustworthy[0]} (from-fallback-trusted, tek geçerli SF-a02;` +
+            ` availability-filtresi: ${rt.knownAvailabilityIds.size} id; fallback=${fallback ?? "null"})`,
+          );
+        } else {
+          logger.warn(
+            `[altinbas] FIX-13 teşhis: runState.applicationId=${fallback ?? "null"}` +
+            ` hasSfPadding=${fallbackPadded}` +
+            ` inAvailability=${fallback ? rt.knownAvailabilityIds.has(fallback) : false}` +
+            ` trustworthy=[${trustworthy.join(",")}]` +
+            ` commitTrusted=[${commitTrusted.join(",")}] explicit=[${explicitAll.join(",")}]`,
+          );
+          throw new Error(
+            `altinbas Educational ABORT (FIX-11): applicationId Application__c/commit'ten çözülemedi` +
+            ` (commitTrusted=[] explicit=[] fallback=${fallback ?? "null"}` +
+            ` trustworthy=[${trustworthy.join(",")}])` +
+            ` — ALTINBAS_CAPTURE=1 ile commit dump'ını inceleyip Application__c alanını doğrulayın`,
+          );
+        }
       }
     }
     // FIX-8: dört binding'in TAMAMI için deterministik kaynak seçimi —
