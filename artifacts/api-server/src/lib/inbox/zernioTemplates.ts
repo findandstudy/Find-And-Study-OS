@@ -138,8 +138,8 @@ export async function createZernioWhatsAppTemplate(
   const url = `${ZERNIO_BASE}/templates`;
   const components: ZernioTemplateComponent[] = [];
   if (params.mode === "custom") {
-    components.push({ type: "BODY", text: params.bodyText || "" });
-    if (params.footerText) components.push({ type: "FOOTER", text: params.footerText });
+    components.push({ type: "body", text: params.bodyText || "" });
+    if (params.footerText) components.push({ type: "footer", text: params.footerText });
   }
 
   // WhatsApp template names: lowercase alphanumeric + underscores only.
