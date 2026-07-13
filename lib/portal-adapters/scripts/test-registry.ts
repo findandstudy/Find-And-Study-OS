@@ -171,7 +171,7 @@ test("TR10 — isExperimentalAdapterKey flags salesforce/sit/united/emu and clea
 // experimental. The panel must show it ONCE with family="declarative".
 // ---------------------------------------------------------------------------
 
-test("TR11 — altinbas resolves as declarative family and is experimental", () => {
+test("TR11 — altinbas resolves as imperative adapter, family=altinbas, experimental=true", () => {
   const meta = adapterMetadata();
 
   // Must appear exactly once
@@ -179,8 +179,8 @@ test("TR11 — altinbas resolves as declarative family and is experimental", () 
   assert.equal(altinbasMeta.length, 1, "altinbas must appear exactly once in adapterMetadata()");
 
   const a = altinbasMeta[0];
-  assert.equal(a.family, "declarative", "altinbas family must be 'declarative'");
-  assert.equal(a.experimental, true,    "altinbas must remain experimental");
+  assert.equal(a.family, "altinbas",  "altinbas family must be 'altinbas' (imperative)");
+  assert.equal(a.experimental, true,  "altinbas must remain experimental");
 
   // adapterForUniversity should resolve by Turkish name variants
   const byTr = adapterForUniversity("Altınbaş Üniversitesi");

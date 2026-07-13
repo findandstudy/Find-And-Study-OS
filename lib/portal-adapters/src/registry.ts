@@ -5,6 +5,7 @@ import { sitAdapter }              from "./universities/sit/adapter.js";
 import { unitedAdapter }           from "./universities/united/adapter.js";
 import { okanAdapter }             from "./universities/okan/adapter.js";
 import { emuAdapter }              from "./universities/emu/adapter.js";
+import { altinbasAdapter }         from "./universities/altinbas/adapter.js";
 import { createDeclarativeAdapter } from "./declarativeAdapter.js";
 import { declarativeConfigs, declarativeSpecRaws } from "./declarativeConfigs.js";
 import { parseAdapterSpec }        from "./declarative/schema.js";
@@ -44,6 +45,7 @@ export const adapters: UniversityAdapter[] = [
   unitedAdapter,
   okanAdapter,
   emuAdapter,
+  altinbasAdapter,
   ..._declarativeAdapters,
   ..._specAdapters,
 ];
@@ -80,6 +82,7 @@ function resolveFamily(adapterKey: string): AdapterFamily {
   if (adapterKey === unitedAdapter.key) return "united";
   if (adapterKey === okanAdapter.key) return "okan";
   if (adapterKey === emuAdapter.key) return "emu";
+  if (adapterKey === altinbasAdapter.key) return "altinbas";
   return "declarative";
 }
 
@@ -92,10 +95,6 @@ function resolveFamily(adapterKey: string): AdapterFamily {
 // still allowed. Topkapı (metronic) and the Okan/Medipol declarative flow
 // remain production-active.
 //
-// "altinbas" is kept here as an explicit key sentinel: the altınbaş adapter
-// is now declarative (family = "declarative") but still experimental during
-// roll-out. isExperimentalAdapterKey checks both family membership and direct
-// key membership so declarative adapters can be marked experimental by key.
 // ---------------------------------------------------------------------------
 const EXPERIMENTAL_FAMILIES: ReadonlySet<AdapterFamily> = new Set<AdapterFamily>([
   "salesforce",
