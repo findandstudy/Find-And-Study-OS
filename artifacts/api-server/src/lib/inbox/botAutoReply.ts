@@ -26,6 +26,7 @@ import { inboxBus } from "./eventBus";
 import {
   buildBotSystemPrompt,
   DEFAULT_ESCALATION_KEYWORDS,
+  sanitizeWhatsAppText,
   type BotLanguage,
   type EscalationTopic,
 } from "./botBrain";
@@ -731,14 +732,16 @@ export async function maybeAutoReply(opts: {
     console.error("[bot] missing-doc computation failed:", err);
   }
 
-  const replyText = await generateBotReply({
+  const rawReplyText = await generateBotReply({
     systemPrompt,
     language,
     model: config.model,
     temperature: config.temperature,
     messages: history.map((m) => ({ direction: m.direction, content: m.content })),
   });
-  if (!replyText) return { acted: false, reason: "send_failed" };
+  if (!rawReplyText) return { acted: false, reason: "send_failed" };
+  // Strip any Markdown that WhatsApp renders as literal characters (**, ##, ---, etc.)
+  const replyText = sanitizeWhatsAppText(rawReplyText);
 
   // Persist a pending outbound row first so the lifecycle is observable.
   const [pending] = await db
