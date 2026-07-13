@@ -148,14 +148,14 @@ export async function createZernioWhatsAppTemplate(
           accountId: params.externalAccountId,
           name: params.name,
           language: params.language,
-          category: params.category || "utility",
+          category: String(params.category || "UTILITY").toUpperCase(),
           libraryTemplateName: params.libraryTemplateName,
         }
       : {
           accountId: params.externalAccountId,
           name: params.name,
           language: params.language,
-          category: params.category || "utility",
+          category: String(params.category || "UTILITY").toUpperCase(),
           components,
         };
 

@@ -776,7 +776,7 @@ function InboxTab() {
 
   async function openTemplateDialog() {
     try {
-      const r = await customFetch(`/api/messages/templates?channel=whatsapp`);
+      const r = await customFetch(`/api/messages/message-templates?channel=whatsapp`);
       setTemplates((r as any)?.data || []);
       setTplOpen(true);
     } catch {
