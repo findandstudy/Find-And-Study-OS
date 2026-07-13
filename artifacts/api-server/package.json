@@ -74,6 +74,7 @@
     "test:portal-process": "tsx --test ./scripts/test-portal-process.ts",
     "test:portal-mapping": "tsx --test ./scripts/test-portal-mapping.ts",
     "test:portal-universities": "tsx --test ./scripts/test-portal-universities.ts",
+    "test:spec-loader-resilience": "tsx --test ./scripts/test-spec-loader-resilience.ts",
     "test:portal-routing": "tsx --test ./scripts/test-portal-routing.ts",
     "test:portal-membership": "tsx --test ./scripts/test-portal-membership.ts",
     "test:portal-fallbacks": "tsx --test ./scripts/test-portal-fallbacks.ts",

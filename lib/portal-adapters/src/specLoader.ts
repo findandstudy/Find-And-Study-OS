@@ -79,6 +79,31 @@ export function invalidateSpecAdapterCache(): void {
   cache = null;
 }
 
+// Test seam — override the DB select to simulate errors or empty results.
+let _dbSelectOverrideForTests: (() => Promise<PortalAdapterSpec[]>) | null = null;
+/** @internal — test use only */
+export function __setDbSelectOverrideForTests(
+  fn: (() => Promise<PortalAdapterSpec[]>) | null,
+): void {
+  _dbSelectOverrideForTests = fn;
+  cache = null;
+  inflight = null;
+}
+
+async function fetchEnabledSpecRows(): Promise<PortalAdapterSpec[]> {
+  if (_dbSelectOverrideForTests) return _dbSelectOverrideForTests();
+  try {
+    return await db
+      .select()
+      .from(portalAdapterSpecsTable)
+      .where(eq(portalAdapterSpecsTable.enabled, true))
+      .orderBy(asc(portalAdapterSpecsTable.key));
+  } catch (err) {
+    logger.warn(`[specLoader] failed to load adapter specs from DB: ${String(err)}`);
+    return [];
+  }
+}
+
 /**
  * Loads + caches the enabled declarative SPEC adapters from the DB. Never
  * throws: on a DB error it logs and returns the last cached list (or empty).
@@ -91,11 +116,7 @@ export async function loadSpecAdaptersFromDb(force = false): Promise<UniversityA
 
   inflight = (async () => {
     try {
-      const rows = await db
-        .select()
-        .from(portalAdapterSpecsTable)
-        .where(eq(portalAdapterSpecsTable.enabled, true))
-        .orderBy(asc(portalAdapterSpecsTable.key));
+      const rows = await fetchEnabledSpecRows();
       const list = buildSpecAdaptersFromRows(rows);
       cache = { at: Date.now(), list };
       return list;

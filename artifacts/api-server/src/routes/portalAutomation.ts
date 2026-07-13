@@ -3688,13 +3688,20 @@ router.get(
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (_req, res) => {
-    const rows = await db
-      .select()
-      .from(portalAdapterSpecsTable)
-      .orderBy(
-        asc(portalAdapterSpecsTable.key),
-        desc(portalAdapterSpecsTable.version),
-      );
+    let rows: (typeof portalAdapterSpecsTable.$inferSelect)[];
+    try {
+      rows = await db
+        .select()
+        .from(portalAdapterSpecsTable)
+        .orderBy(
+          asc(portalAdapterSpecsTable.key),
+          desc(portalAdapterSpecsTable.version),
+        );
+    } catch (err) {
+      console.warn(`[portalAutomation] failed to load adapter specs: ${String(err)}`);
+      res.json({ specs: [] });
+      return;
+    }
 
     const byKey = new Map<
       string,
