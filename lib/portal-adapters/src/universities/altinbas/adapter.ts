@@ -287,6 +287,12 @@ interface FlowRuntime {
   scanIds: FlowIds;
   /** FIX-9: applicant grid'inde öğrenci seçildi mi — scanIds doldurma kapısı. */
   applicantSelected: boolean;
+  /**
+   * FIX-12: commit ÖNCESİ görülen a02 Id'leri (program availability kayıtları).
+   * Educational guard'ında fallback adayı filtrelemek için kullanılır — bu
+   * set'te olan bir a02 availability kaydıdır, application DEĞİLDİR.
+   */
+  knownAvailabilityIds: Set<string>;
 }
 
 function newFlowRuntime(): FlowRuntime {
@@ -303,6 +309,7 @@ function newFlowRuntime(): FlowRuntime {
     seenA02: new Set(),
     scanIds: {},
     applicantSelected: false,
+    knownAvailabilityIds: new Set(),
   };
 }
 
@@ -1146,6 +1153,9 @@ async function runFlowReplay(
       ...[...rt.records.keys()].filter((id) => id.startsWith("a02")),
       ...rt.seenA02,
     ]);
+    // FIX-12: availability baseline'ı rt'ye kaydet — Educational guard'ında
+    // fallback adayını filtrelemek için (pre-commit a02 = availability, not application).
+    for (const id of a02Before) rt.knownAvailabilityIds.add(id);
     for (let i = 0; i < 4 && !/Personal Information/i.test(raw); i++) {
       const ownBefore = ownAppIds();
       raw = await postNavigateFlow(page, rt, "CONTINUE_AFTER_COMMIT", [], `commit${i + 1}`);
@@ -1254,16 +1264,38 @@ async function runFlowReplay(
       );
       rt.ids.applicationId = provenAppId;
     }
-    // FIX-11: hard guard — refuse to enter Educational with no resolved
-    // applicationId. A missing/unprovable Id causes navigateFlow "Error"
-    // (interviewStatus) every time; better to fail loudly here.
+    // FIX-11/FIX-12: commitTrusted ve explicit boşsa fallback adayını filtrele.
+    // Canlı dry-run kanıtı (2072, 2656): Application__c key-scan ateşlemiyor
+    // ama prefix-fallback doğru a02'yi rt.ids.applicationId'ye zaten koymuş.
+    // FIX-12: bu değeri güvenmeden önce iki filtreden geçir:
+    //  (a) hasSfPadding — junk token'ları eliyor (FIX-10 dersi)
+    //  (b) !knownAvailabilityIds — commit öncesi görülen availability a02'lerini dışla
+    // Tek geçerli aday → güven. 0 veya ≥2 belirsiz aday → ABORT.
     if (!provenAppId) {
       const fallback = rt.ids.applicationId;
-      throw new Error(
-        `altinbas Educational ABORT (FIX-11): applicationId Application__c/commit'ten çözülemedi` +
-        ` (commitTrusted=[] explicit=[] fallback=${fallback ?? "null"})` +
-        ` — ALTINBAS_CAPTURE=1 ile commit dump'ını inceleyip Application__c alanını doğrulayın`,
-      );
+      const rawCandidates = [
+        ...(fallback ? [fallback] : []),
+        ...[...rawCommitA02],
+      ];
+      const trustworthy = [...new Set(rawCandidates)]
+        .filter(isSfIdShape)
+        .filter(hasSfPadding)
+        .filter((id) => !rt.knownAvailabilityIds.has(id));
+      if (trustworthy.length === 1) {
+        const trusted = trustworthy[0];
+        rt.ids.applicationId = trusted;
+        logger.info(
+          `[altinbas] FIX-12: applicationId=${trusted} (from-fallback-trusted, tek geçerli SF-a02;` +
+          ` availability-filtresi: ${rt.knownAvailabilityIds.size} id; fallback=${fallback ?? "null"})`,
+        );
+      } else {
+        throw new Error(
+          `altinbas Educational ABORT (FIX-11): applicationId Application__c/commit'ten çözülemedi` +
+          ` (commitTrusted=[] explicit=[] fallback=${fallback ?? "null"}` +
+          ` trustworthy=[${trustworthy.join(",")}])` +
+          ` — ALTINBAS_CAPTURE=1 ile commit dump'ını inceleyip Application__c alanını doğrulayın`,
+        );
+      }
     }
     // FIX-8: dört binding'in TAMAMI için deterministik kaynak seçimi —
     // explicit anahtar (yanıtlarda "contactId":"003..." gibi) > prefix fallback
