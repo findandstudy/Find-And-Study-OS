@@ -165,3 +165,36 @@ test("TR10 — isExperimentalAdapterKey flags salesforce/sit/united/emu and clea
     "Unknown adapter keys must default to non-experimental=false",
   );
 });
+
+// ---------------------------------------------------------------------------
+// TR11 — Altınbaş is now a declarative adapter (not imperative) and remains
+// experimental. The panel must show it ONCE with family="declarative".
+// ---------------------------------------------------------------------------
+
+test("TR11 — altinbas resolves as declarative family and is experimental", () => {
+  const meta = adapterMetadata();
+
+  // Must appear exactly once
+  const altinbasMeta = meta.filter(m => m.key === "altinbas");
+  assert.equal(altinbasMeta.length, 1, "altinbas must appear exactly once in adapterMetadata()");
+
+  const a = altinbasMeta[0];
+  assert.equal(a.family, "declarative", "altinbas family must be 'declarative'");
+  assert.equal(a.experimental, true,    "altinbas must remain experimental");
+
+  // adapterForUniversity should resolve by Turkish name variants
+  const byTr = adapterForUniversity("Altınbaş Üniversitesi");
+  assert.ok(byTr !== null, "adapterForUniversity('Altınbaş Üniversitesi') must resolve");
+  assert.equal(byTr?.key, "altinbas", `Expected key "altinbas", got "${byTr?.key}"`);
+
+  const byEn = adapterForUniversity("Altinbas University");
+  assert.ok(byEn !== null, "adapterForUniversity('Altinbas University') must resolve");
+  assert.equal(byEn?.key, "altinbas");
+
+  // isExperimentalAdapterKey must return true for the key
+  assert.equal(
+    isExperimentalAdapterKey("altinbas"),
+    true,
+    "isExperimentalAdapterKey('altinbas') must be true",
+  );
+});

@@ -56,13 +56,6 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     requiredDocs: ["diploma", "transcript", "passport"],
   },
   {
-    key: "altinbas",
-    label: "Altınbaş Üniversitesi",
-    portalUrl: "https://apply.altinbas.edu.tr/partner/s",
-    namePatterns: ["altinbas"],
-    requiredDocs: ["diploma", "transcript", "passport"],
-  },
-  {
     key: "pirireis",
     label: "Piri Reis Üniversitesi",
     portalUrl: "https://apply.pirireis.edu.tr/partner/s",

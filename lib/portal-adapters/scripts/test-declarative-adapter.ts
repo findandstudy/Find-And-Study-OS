@@ -903,3 +903,33 @@ test("PRIV1: new UI actions are not in the privileged set (specIsPrivileged)", (
   };
   assert.equal(specIsPrivileged(withNewActions), false, "new UI steps never trigger privileged gate");
 });
+
+// ---------------------------------------------------------------------------
+// ALTINBAS — declarative spec round-trip validation
+// ---------------------------------------------------------------------------
+
+test("ALTINBAS1: altinbas spec from declarativeSpecRaws parses without errors", async () => {
+  const { declarativeSpecRaws } = await import("../src/declarativeConfigs.js");
+  const altinbasRaw = declarativeSpecRaws.find(
+    (r) => typeof r === "object" && r !== null && (r as Record<string, unknown>)["meta"] !== undefined &&
+      ((r as Record<string, unknown>)["meta"] as Record<string, unknown>)["key"] === "altinbas",
+  );
+  assert.ok(altinbasRaw !== undefined, "altinbas raw spec must exist in declarativeSpecRaws");
+
+  const result = parseAdapterSpec(altinbasRaw);
+  assert.equal(result.ok, true, `altinbas spec must parse OK; error: ${!result.ok ? result.error : ""}`);
+  if (!result.ok) return;
+
+  assert.equal(result.spec.meta.key, "altinbas");
+  assert.equal(result.spec.meta.experimental, true, "altinbas spec must carry experimental:true");
+  assert.ok(result.spec.steps.length > 0, "altinbas spec must have at least one step");
+});
+
+test("ALTINBAS2: altinbas declarative adapter matches Turkish name variants", async () => {
+  const { adapterForUniversity } = await import("../src/registry.js");
+  for (const name of ["Altınbaş Üniversitesi", "Altinbas University", "altınbaş"]) {
+    const adapter = adapterForUniversity(name);
+    assert.ok(adapter !== null, `Expected altinbas adapter for name "${name}"`);
+    assert.equal(adapter?.key, "altinbas", `Wrong key for "${name}": got "${adapter?.key}"`);
+  }
+});
