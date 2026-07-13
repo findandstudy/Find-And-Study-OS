@@ -8,8 +8,12 @@
 // similarity is computed with brute-force cosine in Node. This is entirely
 // fast enough for a knowledge base of a few thousand chunks — do not
 // reintroduce the `vector` type, `<=>` operator, or ivfflat/hnsw indexes.
+//
+// Hybrid retrieval: vector channel (embedding cosine) + lexical channel
+// (ILIKE keyword match). Lexical ensures rare terms, acronyms, and proper
+// nouns (e.g. "NAWA") are never missed by cosine distance alone.
 import { db, knowledgeChunksTable, knowledgeSourcesTable } from "@workspace/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ilike, or } from "drizzle-orm";
 import { embedQuery } from "./knowledgeEmbed";
 
 export interface RetrievedChunk {
@@ -20,11 +24,16 @@ export interface RetrievedChunk {
 }
 
 const RAG_SOURCE_TYPES = ["file", "url", "text"] as const;
-const TOP_K = 5;
+// Vector channel: how many top cosine-scored chunks to keep.
+const TOP_K = 8;
 // Cosine distance (1 - cosine similarity) ranges 0 (identical) to 2
 // (opposite). Chunks farther than this are considered irrelevant noise and
-// dropped.
-const MAX_DISTANCE = 0.6;
+// dropped. Raised from 0.6 → 0.75 to improve recall for paraphrased queries.
+const MAX_DISTANCE = 0.75;
+// Lexical channel: how many ILIKE hits to add before merging.
+const LEXICAL_LIMIT = 8;
+// After merging both channels (deduped), cap the final prompt injection.
+const MERGED_LIMIT = 8;
 
 function cosineDistance(a: number[], b: number[]): number {
   const len = Math.min(a.length, b.length);
@@ -43,8 +52,36 @@ function cosineDistance(a: number[], b: number[]): number {
 }
 
 /**
- * Retrieve the top-K relevant knowledge chunks for a query message. Returns an
- * empty array (never throws) on any failure — embeddings being unavailable
+ * Deduplicate chunks by (sourceId, content prefix) — keeps the first
+ * occurrence (vector results have priority, being better scored).
+ */
+function dedupeChunks(chunks: RetrievedChunk[]): RetrievedChunk[] {
+  const seen = new Set<string>();
+  return chunks.filter((c) => {
+    const key = `${c.sourceId}::${c.content.slice(0, 120)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Tokenise a query into search terms for the lexical channel.
+ * Removes punctuation, keeps words ≥ 3 chars, limits to 6 terms.
+ */
+function queryTerms(query: string): string[] {
+  return query
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3)
+    .slice(0, 6);
+}
+
+/**
+ * Retrieve the top-K relevant knowledge chunks for a query message using
+ * hybrid retrieval (vector cosine + ILIKE lexical). Returns an empty array
+ * (never throws) on any failure — embeddings being unavailable
  * (e.g. missing OPENAI_API_KEY) or the DB being unreachable must never break
  * the bot reply; retrieval is an enhancement, not a hard dependency.
  */
@@ -66,30 +103,65 @@ export async function retrieveKnowledgeChunks(query: string): Promise<RetrievedC
     if (activeSourceIds.length === 0) return [];
     const idSet = new Set(activeSourceIds.map((s) => s.id));
     const nameById = new Map(activeSourceIds.map((s) => [s.id, s.name]));
+    const sourceIdList = [...idSet];
 
-    const embedding = await embedQuery(trimmed);
+    // ── A) Vector channel ──────────────────────────────────────────────────
+    // Embed the query, brute-force cosine against all active chunks, keep
+    // the top TOP_K results under MAX_DISTANCE.
+    let vectorScored: RetrievedChunk[] = [];
+    try {
+      const embedding = await embedQuery(trimmed);
+      const rows = await db
+        .select({
+          sourceId: knowledgeChunksTable.sourceId,
+          content: knowledgeChunksTable.content,
+          embedding: knowledgeChunksTable.embedding,
+        })
+        .from(knowledgeChunksTable)
+        .where(inArray(knowledgeChunksTable.sourceId, sourceIdList));
 
-    const rows = await db
-      .select({
-        sourceId: knowledgeChunksTable.sourceId,
-        content: knowledgeChunksTable.content,
-        embedding: knowledgeChunksTable.embedding,
-      })
-      .from(knowledgeChunksTable)
-      .where(inArray(knowledgeChunksTable.sourceId, [...idSet]));
+      vectorScored = rows
+        .map((r) => ({
+          sourceId: r.sourceId,
+          sourceName: nameById.get(r.sourceId) ?? "Knowledge source",
+          content: r.content,
+          distance: cosineDistance(embedding, (r.embedding as number[] | null) ?? []),
+        }))
+        .filter((r) => r.distance <= MAX_DISTANCE)
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, TOP_K);
+    } catch (embedErr) {
+      // Embedding may fail (key missing, quota, etc.) — lexical still runs.
+      console.error("[knowledge-retrieval] vector channel failed:", embedErr);
+    }
 
-    const scored = rows
-      .map((r) => ({
+    // ── B) Lexical channel ─────────────────────────────────────────────────
+    // ILIKE keyword match — guarantees rare terms/acronyms/proper nouns are
+    // found even when cosine distance is too high. Independent of embedding.
+    let lexical: RetrievedChunk[] = [];
+    const terms = queryTerms(trimmed);
+    if (terms.length > 0) {
+      const orClauses = terms.map((t) => ilike(knowledgeChunksTable.content, `%${t}%`));
+      const lexRows = await db
+        .select({
+          sourceId: knowledgeChunksTable.sourceId,
+          content: knowledgeChunksTable.content,
+        })
+        .from(knowledgeChunksTable)
+        .where(and(inArray(knowledgeChunksTable.sourceId, sourceIdList), or(...orClauses)))
+        .limit(LEXICAL_LIMIT);
+      lexical = lexRows.map((r) => ({
         sourceId: r.sourceId,
         sourceName: nameById.get(r.sourceId) ?? "Knowledge source",
         content: r.content,
-        distance: cosineDistance(embedding, (r.embedding as number[] | null) ?? []),
-      }))
-      .filter((r) => r.distance <= MAX_DISTANCE)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, TOP_K);
+        distance: 0.35, // neutral near score — lexical hits are always relevant
+      }));
+    }
 
-    return scored;
+    // ── C) Merge + dedupe ──────────────────────────────────────────────────
+    // Vector results first (better ranked), lexical fills gaps.
+    const merged = dedupeChunks([...vectorScored, ...lexical]).slice(0, MERGED_LIMIT);
+    return merged;
   } catch (err) {
     console.error("[knowledge-retrieval] failed, continuing without RAG context:", err);
     return [];
