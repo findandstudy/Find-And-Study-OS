@@ -49,7 +49,7 @@ export const searchProgramsToolDefinition = {
       },
       field: {
         type: "string",
-        description: "Field of study / department, e.g. 'Computer Engineering', 'Medicine'. Optional.",
+        description: "Field / department / program the student wants, e.g. 'Computer Engineering', 'Medicine', 'Business'. Matched loosely against program field, program name and degree — pass the program name the student uses; you do NOT need to know an exact taxonomy. Optional.",
       },
       feeMax: {
         type: "number",
@@ -131,7 +131,7 @@ export async function executeSearchProgramsTool(
   }
 
   const params = scopedParams(input, scope);
-  const where = buildProgramFacetConditions(params);
+  const where = buildProgramFacetConditions(params, undefined, { fuzzyField: true });
 
   const rows = await db
     .select({

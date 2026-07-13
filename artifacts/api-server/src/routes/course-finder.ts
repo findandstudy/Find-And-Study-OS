@@ -185,6 +185,7 @@ export function buildProgramFacetConditions(
   excludeKey?:
     | "country" | "city" | "universityType" | "universityId"
     | "level" | "language" | "field" | "fee" | "search",
+  opts?: { fuzzyField?: boolean },
 ) {
   const conditions = [eq(programsTable.isActive, true)];
   if (excludeKey !== "country" && params.country) {
@@ -219,8 +220,23 @@ export function buildProgramFacetConditions(
   }
   if (excludeKey !== "field" && params.field) {
     const vals = params.field.split(",").map(s => s.trim()).filter(Boolean);
-    if (vals.length === 1) conditions.push(ilike(programsTable.field, vals[0]));
-    else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.field, v)))!);
+    if (opts?.fuzzyField) {
+      // AI tool: free-text — match loosely against field taxonomy, program name and degree.
+      conditions.push(
+        or(...vals.flatMap(v => {
+          const esc = escapeLikePattern(v);
+          return [
+            ilike(programsTable.field,  `%${esc}%`),
+            ilike(programsTable.name,   `%${esc}%`),
+            ilike(programsTable.degree, `%${esc}%`),
+          ];
+        }))!
+      );
+    } else {
+      // Course Finder facet: exact taxonomy match (unchanged).
+      if (vals.length === 1) conditions.push(ilike(programsTable.field, vals[0]));
+      else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.field, v)))!);
+    }
   }
   if (excludeKey !== "fee") {
     const feeMinNum = parseNonNegativeInt(params.feeMin);
