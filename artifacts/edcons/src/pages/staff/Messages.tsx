@@ -2579,6 +2579,8 @@ function TemplatesTab() {
   const [waSyncing, setWaSyncing] = useState(false);
   const [waSyncError, setWaSyncError] = useState<string | null>(null);
   const [waTplOpen, setWaTplOpen] = useState(false);
+  const [waDeleteConfirm, setWaDeleteConfirm] = useState<number | null>(null);
+  const [waDeleting, setWaDeleting] = useState(false);
   const [waSaving, setWaSaving] = useState(false);
   const [waMode, setWaMode] = useState<"custom" | "library">("custom");
   const [waName, setWaName] = useState("");
@@ -2629,6 +2631,22 @@ function TemplatesTab() {
     setWaFooterText("");
     setWaLibraryName("");
     setWaTplOpen(true);
+  }
+
+  async function deleteWaTemplate(id: number, externalName: string) {
+    setWaDeleting(true);
+    try {
+      await customFetch(`/api/inbox/whatsapp-templates/${encodeURIComponent(externalName)}`, {
+        method: "DELETE",
+      });
+      setTemplates(prev => prev.filter(t => t.id !== id));
+      toast({ title: tx("messagesPage.templateDeleted") });
+    } catch (err: any) {
+      toast({ title: err?.body?.error || tx("messagesPage.failedToDelete"), variant: "destructive" });
+    } finally {
+      setWaDeleting(false);
+      setWaDeleteConfirm(null);
+    }
   }
 
   async function submitWaTemplate() {
@@ -3017,13 +3035,42 @@ function TemplatesTab() {
                 <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">{t.content}</p>
                 <div className="flex items-center justify-between mt-3">
                   <p className="text-[10px] text-muted-foreground capitalize">{t.category}</p>
-                  <button
-                    onClick={() => copyContent(t.content)}
-                    className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
-                    title={tx("messagesPage.copyContent")}
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => copyContent(t.content)}
+                      className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+                      title={tx("messagesPage.copyContent")}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    {waDeleteConfirm === t.id ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => t.externalTemplateName && deleteWaTemplate(t.id, t.externalTemplateName)}
+                          disabled={waDeleting}
+                          className="p-1.5 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                          title={tx("messagesPage.confirmDelete")}
+                        >
+                          {waDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => setWaDeleteConfirm(null)}
+                          className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
+                          title={tx("messagesPage.cancel")}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setWaDeleteConfirm(t.id)}
+                        className="p-1.5 rounded-lg hover:bg-red-500/10 transition-colors text-muted-foreground hover:text-red-600"
+                        title={tx("messagesPage.delete")}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

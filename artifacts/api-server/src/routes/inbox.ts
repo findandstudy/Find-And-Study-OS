@@ -47,6 +47,7 @@ import { sendViaZernio, getZernioApiKey, resolveZernioAccount } from "../lib/inb
 import {
   listZernioWhatsAppTemplates,
   createZernioWhatsAppTemplate,
+  deleteZernioWhatsAppTemplate,
   resolveZernioWhatsAppAccount,
 } from "../lib/inbox/zernioTemplates";
 import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
@@ -1872,6 +1873,36 @@ function countVariablesForCreate(text: string): number {
   const matches = text.match(/\{\{\s*\d+\s*\}\}/g);
   return matches ? new Set(matches).size : 0;
 }
+
+router.delete(
+  "/inbox/whatsapp-templates/:templateName",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const templateName = String(req.params.templateName || "").trim();
+    const channelAccountId = req.query.channelAccountId ? parseInt(String(req.query.channelAccountId), 10) : undefined;
+    if (!templateName) {
+      res.status(400).json({ error: "templateName is required" });
+      return;
+    }
+    const account = await resolveZernioWhatsAppAccount(channelAccountId);
+    if (!account) {
+      res.status(400).json({ error: "No Zernio-hosted WhatsApp channel account configured" });
+      return;
+    }
+    const outcome = await deleteZernioWhatsAppTemplate(account.externalAccountId, templateName);
+    if (!outcome.ok) {
+      res.status(502).json({ error: outcome.error || "Failed to delete WhatsApp template from Zernio" });
+      return;
+    }
+    // Also remove the local message_templates record so it disappears from selectors.
+    await db
+      .delete(messageTemplatesTable)
+      .where(eq(messageTemplatesTable.externalTemplateName, templateName));
+    logAudit(req.user!.id, "delete_whatsapp_template", "message_template", undefined, { name: templateName }, req.ip);
+    res.json({ ok: true });
+  },
+);
 
 router.get(
   "/inbox/external-history",

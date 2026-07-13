@@ -5,9 +5,14 @@ import { getZernioApiKey } from "./zernioSend";
 /**
  * Zernio WhatsApp Template Management proxy.
  *
- * Lists and creates Meta-approved WhatsApp message templates through the
- * Zernio API (rather than talking to the Meta Graph API directly — the
+ * Lists, creates and deletes Meta-approved WhatsApp message templates through
+ * the Zernio API (rather than talking to the Meta Graph API directly — the
  * account is registered/hosted on Zernio, same reasoning as zernioSend.ts).
+ *
+ * Confirmed Zernio endpoints (from openapi at docs.zernio.com/api/openapi):
+ *   GET    /v1/whatsapp/templates?accountId=...            → list
+ *   POST   /v1/whatsapp/templates                          → create
+ *   DELETE /v1/whatsapp/templates/{templateName}?accountId=... → delete
  */
 
 const ZERNIO_BASE = "https://zernio.com/api/v1/whatsapp";
@@ -82,7 +87,8 @@ export async function listZernioWhatsAppTemplates(externalAccountId: string): Pr
   const apiKey = await getZernioApiKey();
   if (!apiKey) return { ok: false, templates: [], error: "zernio_api_key_not_configured" };
 
-  const url = `${ZERNIO_BASE}/get-whatsapp-templates?accountId=${encodeURIComponent(externalAccountId)}`;
+  // Correct endpoint: GET /v1/whatsapp/templates?accountId=...
+  const url = `${ZERNIO_BASE}/templates?accountId=${encodeURIComponent(externalAccountId)}`;
   try {
     const resp = await fetch(url, {
       method: "GET",
@@ -90,15 +96,16 @@ export async function listZernioWhatsAppTemplates(externalAccountId: string): Pr
     });
     const bodyText = await resp.text().catch(() => "");
     if (!resp.ok) {
-      console.error(`[ZERNIO] get-whatsapp-templates failed (${resp.status}):`, bodyText.slice(0, 600));
+      console.error(`[ZERNIO] list templates failed (${resp.status}):`, bodyText.slice(0, 600));
       return { ok: false, templates: [], error: `Zernio template list failed (${resp.status}): ${bodyText.slice(0, 200)}` };
     }
     let data: any = {};
     try { data = JSON.parse(bodyText); } catch { /* non-JSON */ }
+    // Zernio response: { success: true, templates: [...] }
     const rawList: any[] = Array.isArray(data) ? data : (data?.templates || data?.data || []);
     return { ok: true, templates: rawList.map(normalizeTemplate) };
   } catch (err: any) {
-    console.error("[ZERNIO] get-whatsapp-templates error:", err?.message || err);
+    console.error("[ZERNIO] list templates error:", err?.message || err);
     return { ok: false, templates: [], error: `Zernio template list error: ${err?.message || "Unknown"}` };
   }
 }
@@ -127,7 +134,8 @@ export async function createZernioWhatsAppTemplate(
   const apiKey = await getZernioApiKey();
   if (!apiKey) return { ok: false, error: "zernio_api_key_not_configured" };
 
-  const url = `${ZERNIO_BASE}/create-whatsapp-template`;
+  // Correct endpoint: POST /v1/whatsapp/templates
+  const url = `${ZERNIO_BASE}/templates`;
   const components: ZernioTemplateComponent[] = [];
   if (params.mode === "custom") {
     components.push({ type: "BODY", text: params.bodyText || "" });
@@ -161,12 +169,45 @@ export async function createZernioWhatsAppTemplate(
     let data: any = {};
     try { data = JSON.parse(bodyText); } catch { /* non-JSON */ }
     if (!resp.ok) {
-      console.error(`[ZERNIO] create-whatsapp-template failed (${resp.status}):`, bodyText.slice(0, 600));
-      return { ok: false, error: data?.error || `Zernio template create failed (${resp.status}): ${bodyText.slice(0, 200)}`, raw: data };
+      console.error(`[ZERNIO] create template failed (${resp.status}):`, bodyText.slice(0, 600));
+      return { ok: false, error: data?.error || data?.message || `Zernio template create failed (${resp.status}): ${bodyText.slice(0, 200)}`, raw: data };
     }
     return { ok: true, status: normalizeStatus(data?.status), raw: data };
   } catch (err: any) {
-    console.error("[ZERNIO] create-whatsapp-template error:", err?.message || err);
+    console.error("[ZERNIO] create template error:", err?.message || err);
     return { ok: false, error: `Zernio template create error: ${err?.message || "Unknown"}` };
+  }
+}
+
+export interface ZernioTemplateDeleteOutcome {
+  ok: boolean;
+  error?: string;
+}
+
+export async function deleteZernioWhatsAppTemplate(
+  externalAccountId: string,
+  templateName: string,
+): Promise<ZernioTemplateDeleteOutcome> {
+  const apiKey = await getZernioApiKey();
+  if (!apiKey) return { ok: false, error: "zernio_api_key_not_configured" };
+
+  // Correct endpoint: DELETE /v1/whatsapp/templates/{templateName}?accountId=...
+  const url = `${ZERNIO_BASE}/templates/${encodeURIComponent(templateName)}?accountId=${encodeURIComponent(externalAccountId)}`;
+  try {
+    const resp = await fetch(url, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const bodyText = await resp.text().catch(() => "");
+    if (!resp.ok) {
+      let data: any = {};
+      try { data = JSON.parse(bodyText); } catch { /* non-JSON */ }
+      console.error(`[ZERNIO] delete template failed (${resp.status}):`, bodyText.slice(0, 600));
+      return { ok: false, error: data?.error || data?.message || `Zernio template delete failed (${resp.status}): ${bodyText.slice(0, 200)}` };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.error("[ZERNIO] delete template error:", err?.message || err);
+    return { ok: false, error: `Zernio template delete error: ${err?.message || "Unknown"}` };
   }
 }
