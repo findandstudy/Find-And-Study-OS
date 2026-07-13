@@ -19,6 +19,7 @@ import { getActiveExtractor, buildExtractionPrompt, isFallbackExtractor, recordE
 import { getCurrentSeason } from "../lib/season";
 import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
+import { maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 
 const router: IRouter = Router();
 
@@ -252,6 +253,19 @@ export async function createApplicationForStudent(studentId: number, programId: 
       languageFee: snapshotLanguageFee,
       currency: snapshotCurrency,
     }).returning();
+
+    // Portal automation auto-trigger (fire-and-forget — never blocks response).
+    // Unauthenticated embed/public intake → no actor user.
+    maybeEnqueuePortalSubmission({
+      applicationId:  app.id,
+      studentId:      app.studentId,
+      newStage:       String(app.stage),
+      universityName: app.universityName ?? null,
+      universityId:   app.universityId ?? null,
+      actorUserId:    null,
+    }).catch((err) =>
+      console.error("[portal-auto] Trigger failed for new app", app.id, ":", err),
+    );
 
     const commissionBaseFee = (snapshotDiscountedFee != null && !isNaN(snapshotDiscountedFee))
       ? snapshotDiscountedFee

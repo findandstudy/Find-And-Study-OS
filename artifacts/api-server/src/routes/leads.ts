@@ -15,7 +15,7 @@ import { inferOriginFromUser, inferOriginFromAgentId, directOrigin, type OriginM
 import { toE164 } from "../lib/inbox/phone";
 import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { getCurrentSeason } from "../lib/season";
-import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
+import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
@@ -1166,7 +1166,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       await recomputeStudentPhoto(existingByEmail.id);
 
       if (submission?.programId) {
-        await createApplicationFromSubmission(existingByEmail.id, submission);
+        await createApplicationFromSubmission(existingByEmail.id, submission, req.user?.id ?? null);
       }
 
       await db.update(leadsTable).set({ status: "converted", convertedStudentId: existingByEmail.id }).where(eq(leadsTable.id, id));
@@ -1199,7 +1199,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   res.json({ student, merged: false });
 });
 
-async function createApplicationFromSubmission(studentId: number, submission: any) {
+async function createApplicationFromSubmission(studentId: number, submission: any, actorUserId: number | null = null) {
   try {
     const programId = submission.programId;
     const [program] = await db.select().from(programsTable).where(eq(programsTable.id, programId));
@@ -1217,7 +1217,7 @@ async function createApplicationFromSubmission(studentId: number, submission: an
       originEntityId: studentsTable.originEntityId, originDisplayName: studentsTable.originDisplayName,
     }).from(studentsTable).where(eq(studentsTable.id, studentId));
 
-    await db.insert(applicationsTable).values({
+    const [app] = await db.insert(applicationsTable).values({
       studentId,
       // Lead submission (public intake form) → student self-service.
       createdSource: "student",
@@ -1240,7 +1240,21 @@ async function createApplicationFromSubmission(studentId: number, submission: an
       originEntityId: studentRec?.originEntityId || null,
       originDisplayName: studentRec?.originDisplayName || "Find And Study",
       originStudentId: studentId,
-    });
+    }).returning();
+
+    if (app) {
+      // Portal automation auto-trigger (fire-and-forget — never blocks response).
+      maybeEnqueuePortalSubmission({
+        applicationId:  app.id,
+        studentId:      app.studentId,
+        newStage:       String(app.stage),
+        universityName: app.universityName ?? null,
+        universityId:   app.universityId ?? null,
+        actorUserId,
+      }).catch((err) =>
+        console.error("[portal-auto] Trigger failed for new app", app.id, ":", err),
+      );
+    }
   } catch (err) {
     console.error("Failed to create application from submission:", err);
   }

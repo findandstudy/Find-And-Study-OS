@@ -8,7 +8,7 @@ import { resolveAgentCommission } from "../lib/agentCommission";
 import { getCurrentSeason } from "../lib/season";
 import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
-import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
+import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { getVisibleBranchIds } from "../lib/branchScope";
 
@@ -491,6 +491,18 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
     intake: program.intakes || null,
     notes: notes || null,
   }).returning();
+
+  // Portal automation auto-trigger (fire-and-forget — never blocks response).
+  maybeEnqueuePortalSubmission({
+    applicationId:  application.id,
+    studentId:      application.studentId,
+    newStage:       String(application.stage),
+    universityName: application.universityName ?? null,
+    universityId:   application.universityId ?? null,
+    actorUserId:    req.user?.id ?? null,
+  }).catch((err) =>
+    console.error("[portal-auto] Trigger failed for new app", application.id, ":", err),
+  );
 
   await logAudit(req.user!.id, "create_application", "application", application.id,
     { studentId: student.id, programId: program.id, source: "course_finder" }, req.ip);

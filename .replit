@@ -76,11 +76,3 @@ PLAYWRIGHT_STAFF_PASS = "En9881274!"
 
 [userenv.production]
 APP_BASE_URL = "https://portal.masterstudyinturkey.com"
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 25197
-externalPort = 80
