@@ -142,22 +142,27 @@ export async function createZernioWhatsAppTemplate(
     if (params.footerText) components.push({ type: "FOOTER", text: params.footerText });
   }
 
+  // WhatsApp template names: lowercase alphanumeric + underscores only.
+  const normalizedName = params.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
   const body: Record<string, any> =
     params.mode === "library"
       ? {
           accountId: params.externalAccountId,
-          name: params.name,
+          name: normalizedName,
           language: params.language,
           category: String(params.category || "UTILITY").toUpperCase(),
           libraryTemplateName: params.libraryTemplateName,
         }
       : {
           accountId: params.externalAccountId,
-          name: params.name,
+          name: normalizedName,
           language: params.language,
           category: String(params.category || "UTILITY").toUpperCase(),
           components,
         };
+
+  console.log("[ZERNIO create body]", JSON.stringify(body));
 
   try {
     const resp = await fetch(url, {
