@@ -114,7 +114,7 @@ export const aiAgentConfigSchema = z.object({
   handoffMessage: z.string().max(2000),
   languages: z.array(z.enum(["tr", "en", "ar", "ru", "fr"])).min(1),
   escalationKeywords: escalationKeywordsSchema,
-  knowledgeBase: z.string().min(1).max(20000),
+  knowledgeBase: z.string().min(1).max(200000),
   programScope: programScopeSchema,
 });
 

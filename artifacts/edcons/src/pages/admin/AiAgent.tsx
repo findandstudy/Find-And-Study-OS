@@ -414,7 +414,7 @@ export default function AiAgent() {
             placeholder={t("aiAgentAdmin.knowledgeBasePlaceholder")}
           />
           <p className="text-xs text-muted-foreground mt-1.5">
-            {config.knowledgeBase.length} / 20000
+            {config.knowledgeBase.length} / 200000
           </p>
         </CardContent>
       </Card>
