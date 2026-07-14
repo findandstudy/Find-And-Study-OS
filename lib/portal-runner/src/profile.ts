@@ -616,6 +616,12 @@ export async function buildStudentProfile(
   // ----- 4. Build profile + download documents -----------------------------
   const profile = buildSubmitProfileFromRecords(student, app);
 
+  // Expose E164 phone on the profile as untyped extra fields so adapters that
+  // cast to `any` (e.g. SIT CONTACTFIX2) can read it without relying on the
+  // `profile.phone` fallback alone. `phone_e164` mirrors the DB column name.
+  (profile as any).phoneE164   = student.phoneE164 ?? null;
+  (profile as any).phone_e164  = student.phoneE164 ?? null;
+
   // Aggregator (SIT/United) routing: the submission carries the member
   // (catalog) university it must select inside the aggregator portal. Override
   // the profile so the adapter's school-selection (matchAllowedUniversity /
@@ -675,6 +681,8 @@ export async function buildProfileFromApplication(
   if (!student) throw new Error(`Student ${app.studentId} not found`);
 
   const profile = buildSubmitProfileFromRecords(student, app);
+  (profile as any).phoneE164  = student.phoneE164 ?? null;
+  (profile as any).phone_e164 = student.phoneE164 ?? null;
   const dl = await downloadStudentDocuments(
     app.studentId,
     `portal-app-${applicationId}`,

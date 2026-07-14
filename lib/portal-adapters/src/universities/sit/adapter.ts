@@ -2033,16 +2033,20 @@ export const sitAdapter: SitAdapter = {
               }
             }
           }
-          // Mobile — student's number, filled once on the Contact step (ignore everSet gate).
-          const phoneVal =
-            cleanPhone(
-      (profile as any).phoneE164 ||
-        (profile as any).phone_e164 ||
-        profile.phone ||
-        (profile as any).mobile ||
-        (profile as any).whatsapp ||
-        "",
-    );
+        }
+        // Mobile — student's number. Runs unconditionally (not gated by selIdx)
+        // so the phone is filled even when the residence-country select is absent
+        // or its label doesn't include "residence" (selIdx=-1 historically
+        // caused this entire block to be skipped → studentId never resolved).
+        {
+          const phoneVal = cleanPhone(
+            (profile as any).phoneE164 ||
+              (profile as any).phone_e164 ||
+              profile.phone ||
+              (profile as any).mobile ||
+              (profile as any).whatsapp ||
+              "",
+          );
           if (phoneVal) {
             telDbg = await page.evaluate((val: string) => {
               const el = document.querySelector(
