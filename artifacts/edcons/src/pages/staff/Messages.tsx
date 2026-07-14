@@ -783,7 +783,7 @@ function InboxTab() {
     setTplLoading(true);
     setTplOpen(true);
     try {
-      const r = await customFetch(`/api/message-templates?channel=whatsapp`);
+      const r = await customFetch(`/api/inbox/whatsapp-templates`);
       setTemplates((r as any)?.data || []);
     } catch {
       toast({ title: t("messagesPage.failedToLoadTemplates"), variant: "destructive" });
@@ -1727,17 +1727,20 @@ function InboxTab() {
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
             ) : (() => {
-              const approved = templates.filter(tpl => tpl.externalTemplateName);
+              const approved = templates.filter(tpl =>
+                tpl.externalTemplateName &&
+                (tpl.approvalStatus ?? tpl.status ?? "").toLowerCase() === "approved"
+              );
               if (approved.length === 0) {
                 return <p className="text-sm text-muted-foreground text-center py-6">{t("messagesPage.noApprovedTemplates")}</p>;
               }
               const q = templateQuery.toLowerCase();
               const filtered = approved.filter(tpl =>
                 !q ||
-                (tpl.externalTemplateName || "").toLowerCase().includes(q) ||
+                (tpl.externalTemplateName || tpl.name || "").toLowerCase().includes(q) ||
                 (tpl.category || "").toLowerCase().includes(q) ||
                 (tpl.language || "").toLowerCase().includes(q) ||
-                (tpl.content || "").toLowerCase().includes(q)
+                (tpl.content ?? tpl.bodyText ?? "").toLowerCase().includes(q)
               );
               if (filtered.length === 0) {
                 return <p className="text-sm text-muted-foreground text-center py-6">{t("messagesPage.noTemplatesMatchSearch")}</p>;
@@ -1746,14 +1749,16 @@ function InboxTab() {
                 <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
                   {filtered.map(tpl => {
                     const isSelected = tplId === String(tpl.id);
-                    const status = (tpl.approvalStatus || "").toUpperCase();
+                    const rawStatus = (tpl.approvalStatus ?? tpl.status ?? "").toUpperCase();
+                    const body = tpl.content ?? tpl.bodyText ?? "";
+                    const varCount = Array.isArray(tpl.variables) ? tpl.variables.length : (tpl.variableCount ?? (body.match(/\{\{\d+\}\}/g) || []).length);
                     return (
                       <button
                         key={tpl.id}
                         type="button"
                         onClick={() => {
                           setTplId(String(tpl.id));
-                          setTplVars(Array.from({ length: (tpl.variables || []).length }, () => ""));
+                          setTplVars(Array.from({ length: varCount }, () => ""));
                         }}
                         className={cn(
                           "w-full text-left rounded-lg border p-2.5 transition-colors hover:bg-muted/50",
@@ -1761,18 +1766,18 @@ function InboxTab() {
                         )}
                       >
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-medium text-sm flex-1 min-w-0 truncate">{tpl.externalTemplateName}</span>
+                          <span className="font-medium text-sm flex-1 min-w-0 truncate">{tpl.externalTemplateName || tpl.name}</span>
                           {tpl.language && <Badge variant="secondary" className="text-[10px] px-1.5 h-4 shrink-0">{tpl.language.toUpperCase()}</Badge>}
                           {tpl.category && <Badge variant="outline" className="text-[10px] px-1.5 h-4 shrink-0">{tpl.category}</Badge>}
-                          {status && (
+                          {rawStatus && (
                             <Badge variant="outline" className={cn("text-[10px] px-1.5 h-4 shrink-0",
-                              status === "APPROVED" ? "bg-green-50 text-green-700 border-green-200" :
-                              status === "PENDING" ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
+                              rawStatus === "APPROVED" ? "bg-green-50 text-green-700 border-green-200" :
+                              rawStatus === "PENDING" ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
                               "bg-gray-50 text-gray-600"
-                            )}>{status}</Badge>
+                            )}>{rawStatus}</Badge>
                           )}
                         </div>
-                        {tpl.content && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tpl.content}</p>}
+                        {body && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{body}</p>}
                       </button>
                     );
                   })}
@@ -1783,7 +1788,8 @@ function InboxTab() {
             {/* Variable inputs */}
             {(() => {
               const sel = templates.find(tpl => String(tpl.id) === tplId);
-              const varCount = (sel?.variables || []).length;
+              const selBody = sel ? (sel.content ?? sel.bodyText ?? "") : "";
+              const varCount = sel ? (Array.isArray(sel.variables) ? sel.variables.length : (sel.variableCount ?? (selBody.match(/\{\{\d+\}\}/g) || []).length)) : 0;
               if (!sel || varCount === 0) return null;
               return (
                 <div className="space-y-2">
@@ -1805,8 +1811,9 @@ function InboxTab() {
             {/* Live preview */}
             {(() => {
               const sel = templates.find(tpl => String(tpl.id) === tplId);
-              if (!sel?.content) return null;
-              const preview = sel.content.replace(/\{\{(\d+)\}\}/g, (_: string, n: string) => {
+              const previewBody = sel ? (sel.content ?? sel.bodyText ?? "") : "";
+              if (!previewBody) return null;
+              const preview = previewBody.replace(/\{\{(\d+)\}\}/g, (_: string, n: string) => {
                 const val = tplVars[parseInt(n, 10) - 1];
                 return val?.trim() ? val.trim() : `{{${n}}}`;
               });
