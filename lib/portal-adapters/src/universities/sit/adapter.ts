@@ -1470,15 +1470,18 @@ async function resolveCreatedStudentId(
   page: Page,
   by: { email?: string; passportNumber?: string },
 ): Promise<string | null> {
-  // ~1+2+3+3+4+5 = ~18s across 6 attempts — tolerant of Zoho indexing lag
-  // without stalling the worker on the submission hot path.
-  const backoffMs = [1000, 2000, 3000, 3000, 4000, 5000];
+  // ~1+2+3+4+5+5+5 = ~25s across 7 attempts — tolerant of Zoho/SIT indexing
+  // lag (previously 18s which was too short on slow Zoho writes).
+  const backoffMs = [1000, 2000, 3000, 4000, 5000, 5000, 5000];
   const started = Date.now();
   for (let i = 0; i < backoffMs.length; i++) {
     await sleep(page, backoffMs[i]);
     const elapsedS = () => Math.round((Date.now() - started) / 1000);
     if (by.email) {
       const r = await findStudent(page, { email: by.email });
+      logger.info(
+        `[sit] resolve poll attempt=${i + 1} field=email status=${r.status} ~${elapsedS()}s`,
+      );
       if (r.status === "found") {
         logger.info(
           `[sit] id poll: email ile bulundu (deneme=${i + 1}, ~${elapsedS()}s, id=${r.ref.id})`,
@@ -1488,6 +1491,9 @@ async function resolveCreatedStudentId(
     }
     if (by.passportNumber) {
       const r = await findStudent(page, { passportNumber: by.passportNumber });
+      logger.info(
+        `[sit] resolve poll attempt=${i + 1} field=passport status=${r.status} ~${elapsedS()}s`,
+      );
       if (r.status === "found") {
         logger.info(
           `[sit] id poll: passport ile bulundu (deneme=${i + 1}, ~${elapsedS()}s, id=${r.ref.id})`,
@@ -2523,19 +2529,20 @@ export const sitAdapter: SitAdapter = {
     }
 
     // Fallback: parse the id from the student-detail URL we landed on after save.
+    // Trust any numeric /students/{id} path regardless of save-detection heuristic
+    // — if the page navigated to a student detail, the student was created.
     // Require at least one digit and reject wizard route words so a stray
     // /students/new never masquerades as a created id. Left UNVERIFIED → logged.
     const urlMatch = page.url().match(/\/students\/([0-9a-z][0-9a-z-]{5,})/i);
     const urlId = urlMatch?.[1];
     if (
-      saved &&
       urlId &&
       /[0-9]/.test(urlId) &&
       !/^(new|create|add|edit)$/i.test(urlId)
     ) {
       logger.warn(
         "[sit] öğrenci id GraphQL ile doğrulanamadı — detay URL'den alındı " +
-          `(id=${urlId}, DOĞRULANMADI)`,
+          `(id=${urlId}, saved=${saved}, DOĞRULANMADI)`,
       );
       return {
         studentId: urlId,
@@ -2545,7 +2552,28 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    logger.warn("[sit] öğrenci kaydedildi ancak id çözülemedi");
+    // Surface the real SIT rejection reason before giving up — previously
+    // only a screenshot was captured; now the inline error + current heading
+    // are also logged and returned in `detail` so the board shows a useful message.
+    const diagInline = await readInlineErrors(page).catch(() => "");
+    const diagTitle = await page
+      .evaluate(
+        () =>
+          (
+            document.querySelector("h1,h2,[data-slot='heading']")?.textContent || ""
+          )
+            .trim()
+            .slice(0, 120),
+      )
+      .catch(() => "");
+    const diagUrl = page.url();
+    logger.warn(
+      `[sit] create-fail teşhis — url=${diagUrl} inline=${JSON.stringify(diagInline)} step="${diagTitle}" saved=${saved}`,
+    );
+    const diagDetail = diagInline
+      ? `SIT create reddetti: ${diagInline}`
+      : `SIT öğrenci oluşturulamadı — son adım: "${diagTitle}", url: ${diagUrl}`;
+
     return {
       studentId: null,
       created: false,
@@ -2553,9 +2581,7 @@ export const sitAdapter: SitAdapter = {
       createdViaWebhook: false,
       detail: duplicateSeen
         ? "öğrenci zaten mevcut ancak id doğrulanamadı"
-        : saved
-          ? "öğrenci kaydedildi ancak id doğrulanamadı"
-          : "öğrenci kaydedilemedi",
+        : diagDetail,
     };
   },
 
