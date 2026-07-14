@@ -8,6 +8,7 @@ import { clearConfigCache } from "@workspace/integrations-anthropic-ai";
 import { createSmtpTransporter, invalidateSmtpCache } from "../lib/email";
 import crypto from "crypto";
 import { isLiveIntegrationsEnabled, liveModeReason } from "../lib/inbox/liveMode";
+import { resolveZernioWhatsAppAccount, listZernioWhatsAppTemplates } from "../lib/inbox/zernioTemplates";
 import { encryptConfig, decryptConfig } from "../lib/encryption";
 import { maskSecrets, mergeConfig } from "../lib/configMasking";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
@@ -339,14 +340,19 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
       return;
     }
     try {
-      const r = await fetch("https://zernio.com/api/v1/me", {
-        headers: { Authorization: `Bearer ${config.apiKey}` },
-      });
-      if (r.ok) {
-        res.json({ success: true, message: "Zernio API key verified" });
+      const acct = await resolveZernioWhatsAppAccount();
+      if (!acct) {
+        res.json({ success: false, message: "Zernio accountId çözülemedi — önce WhatsApp channel account'ı kaydet/bağla." });
+        return;
+      }
+      const outcome = await listZernioWhatsAppTemplates(acct.externalAccountId);
+      if (outcome.ok) {
+        res.json({ success: true, message: "Zernio API key doğrulandı (WhatsApp templates erişilebilir)." });
       } else {
-        const body = await r.text().catch(() => "");
-        res.json({ success: false, message: `Zernio test failed (${r.status}): ${body.slice(0, 200)}` });
+        const clean = String(outcome.error || "").trim().startsWith("<")
+          ? `HTTP hata (HTML yanıt)`
+          : (outcome.error || "unknown").slice(0, 200);
+        res.json({ success: false, message: `Zernio test failed: ${clean}` });
       }
     } catch (err: any) {
       res.json({ success: false, message: `Zernio test failed: ${err?.message || "Unknown error"}` });
