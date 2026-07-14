@@ -175,6 +175,93 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
   return { ok, error, externalMessageId };
 }
 
+// ── Template send via Zernio ─────────────────────────────────────────────────
+
+export interface ZernioTemplateSendParams {
+  /** Zernio conversation id (conversations.external_thread_id). */
+  externalThreadId: string;
+  /** Zernio account id (channel_accounts.external_account_id). */
+  externalAccountId: string;
+  templateName: string;
+  language: string;
+  parameters?: string[];
+}
+
+/**
+ * Send a WhatsApp template message through Zernio's conversation messages
+ * endpoint (same URL as text sends, different body shape). This must be used
+ * instead of the direct Meta Graph API for Zernio-hosted numbers.
+ */
+export async function sendZernioTemplate(params: ZernioTemplateSendParams): Promise<ZernioSendOutcome> {
+  const apiKey = await getZernioApiKey();
+  if (!apiKey) return { ok: false, error: "zernio_api_key_not_configured" };
+  if (!params.externalThreadId) return { ok: false, error: "zernio_no_external_thread" };
+
+  const url = `https://zernio.com/api/v1/inbox/conversations/${encodeURIComponent(params.externalThreadId)}/messages`;
+
+  const components =
+    params.parameters && params.parameters.length > 0
+      ? [{ type: "body", parameters: params.parameters.map((p) => ({ type: "text", text: p })) }]
+      : undefined;
+
+  const body: Record<string, unknown> = {
+    accountId: params.externalAccountId,
+    type: "template",
+    template: {
+      name: params.templateName,
+      language: { code: params.language },
+      ...(components ? { components } : {}),
+    },
+  };
+
+  console.log("[ZERNIO] send template request:", JSON.stringify({
+    url,
+    accountId: params.externalAccountId,
+    externalThreadId: params.externalThreadId,
+    templateName: params.templateName,
+    language: params.language,
+    paramCount: params.parameters?.length ?? 0,
+    auth: `Bearer ${maskApiKey(apiKey)}`,
+  }));
+
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const bodyText = await resp.text().catch(() => "");
+    console.log(`[ZERNIO] send template response (${resp.status}):`, bodyText.slice(0, 600));
+
+    if (!resp.ok) {
+      const error = `Zernio template send failed (${resp.status}): ${bodyText}`;
+      console.error("[ZERNIO] " + error);
+      return { ok: false, error };
+    }
+
+    let data: any = {};
+    try { data = JSON.parse(bodyText); } catch { /* non-JSON */ }
+    const messageId = data?.data?.messageId
+      ? String(data.data.messageId)
+      : data?.messageId
+        ? String(data.messageId)
+        : undefined;
+
+    if (messageId) {
+      return { ok: true, externalMessageId: messageId };
+    }
+
+    // Some Zernio versions return 2xx with no messageId for template sends —
+    // treat as success (template was accepted) but without a trackable id.
+    console.warn("[ZERNIO] template send returned", resp.status, "but no messageId:", bodyText.slice(0, 200));
+    return { ok: true, externalMessageId: undefined };
+  } catch (err: any) {
+    const error = `Zernio template send error: ${err?.message || "Unknown"}`;
+    console.error("[ZERNIO] " + error, err?.stack || "");
+    return { ok: false, error };
+  }
+}
+
 // ── Attachment upload (2-step) ────────────────────────────────────────────────
 // Step 1: POST https://zernio.com/api/v1/media/upload-direct with the file
 //   bytes as multipart/form-data (field name "file") → { url, filename,

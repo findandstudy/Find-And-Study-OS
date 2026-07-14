@@ -43,7 +43,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
 import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
 import { decryptConfig } from "../lib/encryption";
-import { sendViaZernio, getZernioApiKey, resolveZernioAccount } from "../lib/inbox/zernioSend";
+import { sendViaZernio, getZernioApiKey, resolveZernioAccount, sendZernioTemplate } from "../lib/inbox/zernioSend";
 import {
   listZernioWhatsAppTemplates,
   createZernioWhatsAppTemplate,
@@ -1686,14 +1686,30 @@ router.post(
       res.status(400).json({ error: "Template missing externalTemplateName" });
       return;
     }
-    const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
-    const result = await sendWhatsAppTemplate({
-      config: cfg,
-      toPhoneE164: contact.phoneE164,
-      templateName: tpl.externalTemplateName,
-      language: tpl.language || "en",
-      parameters: parameters || [],
-    });
+    // Route through Zernio for Zernio-hosted numbers; fall back to Meta Cloud
+    // only when the account is not Zernio (which currently never applies — we
+    // have no direct Meta Cloud credentials).
+    const zernioAcctForTpl = await resolveZernioAccount(conv.channelAccountId);
+    let result: { ok: boolean; externalMessageId?: string; error?: string; simulated: boolean };
+    if (zernioAcctForTpl && conv.externalThreadId) {
+      const zr = await sendZernioTemplate({
+        externalThreadId: conv.externalThreadId,
+        externalAccountId: zernioAcctForTpl.externalAccountId,
+        templateName: tpl.externalTemplateName,
+        language: tpl.language || "en",
+        parameters: parameters || [],
+      });
+      result = { ...zr, simulated: false };
+    } else {
+      const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
+      result = await sendWhatsAppTemplate({
+        config: cfg,
+        toPhoneE164: contact.phoneE164,
+        templateName: tpl.externalTemplateName,
+        language: tpl.language || "en",
+        parameters: parameters || [],
+      });
+    }
 
     const renderedContent = (parameters || []).reduce<string>(
       (acc, val, idx) => acc.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, "g"), val),
