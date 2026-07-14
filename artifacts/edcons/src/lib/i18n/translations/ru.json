@@ -2203,6 +2203,8 @@
     "refresh": "Обновить",
     "newWhatsappTemplate": "Новый шаблон WhatsApp",
     "noWhatsappTemplatesFound": "Шаблоны WhatsApp не найдены",
+    "noApprovedTemplates": "No approved WhatsApp templates yet — create one in the Templates tab.",
+    "noTemplatesMatchSearch": "No templates match your search.",
     "waModeCustom": "Свой",
     "waModeLibrary": "Из библиотеки",
     "waFooterOptional": "Нижний колонтитул (необязательно)",

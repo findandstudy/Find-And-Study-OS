@@ -2385,6 +2385,8 @@
     "refresh": "Yenile",
     "newWhatsappTemplate": "Yeni WhatsApp Şablonu",
     "noWhatsappTemplatesFound": "WhatsApp şablonu bulunamadı",
+    "noApprovedTemplates": "Henüz onaylı WhatsApp şablonu yok — Şablonlar sekmesinde bir tane oluşturun.",
+    "noTemplatesMatchSearch": "Aramanızla eşleşen şablon bulunamadı.",
     "waModeCustom": "Özel",
     "waModeLibrary": "Kütüphaneden",
     "waFooterOptional": "Alt Bilgi (opsiyonel)",

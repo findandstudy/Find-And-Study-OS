@@ -2203,6 +2203,8 @@
     "refresh": "تحديث",
     "newWhatsappTemplate": "قالب واتساب جديد",
     "noWhatsappTemplatesFound": "لم يتم العثور على قوالب واتساب",
+    "noApprovedTemplates": "No approved WhatsApp templates yet — create one in the Templates tab.",
+    "noTemplatesMatchSearch": "No templates match your search.",
     "waModeCustom": "مخصص",
     "waModeLibrary": "من المكتبة",
     "waFooterOptional": "تذييل (اختياري)",

@@ -279,7 +279,9 @@ function InboxTab() {
   const [tplOpen, setTplOpen] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [tplId, setTplId] = useState<string>("");
-  const [tplParams, setTplParams] = useState<string>("");
+  const [tplVars, setTplVars] = useState<string[]>([]);
+  const [templateQuery, setTemplateQuery] = useState("");
+  const [tplLoading, setTplLoading] = useState(false);
   const [liveStatus, setLiveStatus] = useState<"connecting" | "open" | "offline">("connecting");
   const [reconnectKey, setReconnectKey] = useState(0);
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
@@ -775,29 +777,35 @@ function InboxTab() {
   };
 
   async function openTemplateDialog() {
+    setTplId("");
+    setTplVars([]);
+    setTemplateQuery("");
+    setTplLoading(true);
+    setTplOpen(true);
     try {
       const r = await customFetch(`/api/message-templates?channel=whatsapp`);
       setTemplates((r as any)?.data || []);
-      setTplOpen(true);
     } catch {
       toast({ title: t("messagesPage.failedToLoadTemplates"), variant: "destructive" });
+    } finally {
+      setTplLoading(false);
     }
   }
 
   async function sendTemplate() {
     if (!selectedId || !tplId) return;
     try {
-      const params = tplParams.split("|").map((s) => s.trim()).filter(Boolean);
       const res: any = await customFetch(`/api/inbox/conversations/${selectedId}/templates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId: parseInt(tplId, 10), parameters: params }),
+        body: JSON.stringify({ templateId: parseInt(tplId, 10), parameters: tplVars.map(v => v.trim()) }),
       });
       if (res?.simulated) toast({ title: t("messagesPage.templateSentSimulated") });
       else toast({ title: t("messagesPage.templateSent") });
       setTplOpen(false);
       setTplId("");
-      setTplParams("");
+      setTplVars([]);
+      setTemplateQuery("");
       fetchDetail(selectedId);
     } catch (err: any) {
       toast({ title: err?.body?.error || "Failed to send template", variant: "destructive" });
@@ -1701,33 +1709,126 @@ function InboxTab() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={tplOpen} onOpenChange={setTplOpen}>
-        <DialogContent className="max-w-md">
+      <Dialog open={tplOpen} onOpenChange={(open) => { setTplOpen(open); if (!open) { setTplId(""); setTplVars([]); setTemplateQuery(""); } }}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><FileText className="w-4 h-4" /> {t("messagesPage.whatsappTemplate")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <Label className="text-xs">{t("messagesPage.template")}</Label>
-              <Select value={tplId} onValueChange={setTplId}>
-                <SelectTrigger className="h-9 rounded-lg"><SelectValue placeholder={t("messagesPage.selectTemplate")} /></SelectTrigger>
-                <SelectContent>
-                  {templates
-                    .filter((t) => t.externalTemplateName)
-                    .map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>{t.externalTemplateName} ({t.language || "en"})</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-4 py-2">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <Input className="pl-8 h-9 rounded-lg" placeholder={t("messagesPage.searchTemplates")} value={templateQuery} onChange={(e) => setTemplateQuery(e.target.value)} />
             </div>
-            <div>
-              <Label className="text-xs">{t("messagesPage.parametersPipeSeparated")}</Label>
-              <Input value={tplParams} onChange={(e) => setTplParams(e.target.value)} placeholder={t("messagesPage.paramExample")} className="h-9 rounded-lg" />
-            </div>
+
+            {/* Template list */}
+            {tplLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (() => {
+              const approved = templates.filter(tpl => tpl.externalTemplateName);
+              if (approved.length === 0) {
+                return <p className="text-sm text-muted-foreground text-center py-6">{t("messagesPage.noApprovedTemplates")}</p>;
+              }
+              const q = templateQuery.toLowerCase();
+              const filtered = approved.filter(tpl =>
+                !q ||
+                (tpl.externalTemplateName || "").toLowerCase().includes(q) ||
+                (tpl.category || "").toLowerCase().includes(q) ||
+                (tpl.language || "").toLowerCase().includes(q) ||
+                (tpl.content || "").toLowerCase().includes(q)
+              );
+              if (filtered.length === 0) {
+                return <p className="text-sm text-muted-foreground text-center py-6">{t("messagesPage.noTemplatesMatchSearch")}</p>;
+              }
+              return (
+                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                  {filtered.map(tpl => {
+                    const isSelected = tplId === String(tpl.id);
+                    const status = (tpl.approvalStatus || "").toUpperCase();
+                    return (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => {
+                          setTplId(String(tpl.id));
+                          setTplVars(Array.from({ length: (tpl.variables || []).length }, () => ""));
+                        }}
+                        className={cn(
+                          "w-full text-left rounded-lg border p-2.5 transition-colors hover:bg-muted/50",
+                          isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-medium text-sm flex-1 min-w-0 truncate">{tpl.externalTemplateName}</span>
+                          {tpl.language && <Badge variant="secondary" className="text-[10px] px-1.5 h-4 shrink-0">{tpl.language.toUpperCase()}</Badge>}
+                          {tpl.category && <Badge variant="outline" className="text-[10px] px-1.5 h-4 shrink-0">{tpl.category}</Badge>}
+                          {status && (
+                            <Badge variant="outline" className={cn("text-[10px] px-1.5 h-4 shrink-0",
+                              status === "APPROVED" ? "bg-green-50 text-green-700 border-green-200" :
+                              status === "PENDING" ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
+                              "bg-gray-50 text-gray-600"
+                            )}>{status}</Badge>
+                          )}
+                        </div>
+                        {tpl.content && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tpl.content}</p>}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Variable inputs */}
+            {(() => {
+              const sel = templates.find(tpl => String(tpl.id) === tplId);
+              const varCount = (sel?.variables || []).length;
+              if (!sel || varCount === 0) return null;
+              return (
+                <div className="space-y-2">
+                  {Array.from({ length: varCount }, (_, i) => (
+                    <div key={i}>
+                      <Label className="text-xs">Variable {i + 1} {`({{${i + 1}}})`}</Label>
+                      <Input
+                        className="h-9 rounded-lg mt-0.5"
+                        placeholder={`Value for {{${i + 1}}}`}
+                        value={tplVars[i] ?? ""}
+                        onChange={(e) => setTplVars(prev => { const next = [...prev]; next[i] = e.target.value; return next; })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Live preview */}
+            {(() => {
+              const sel = templates.find(tpl => String(tpl.id) === tplId);
+              if (!sel?.content) return null;
+              const preview = sel.content.replace(/\{\{(\d+)\}\}/g, (_: string, n: string) => {
+                const val = tplVars[parseInt(n, 10) - 1];
+                return val?.trim() ? val.trim() : `{{${n}}}`;
+              });
+              return (
+                <div>
+                  <Label className="text-xs">{t("messagesPage.preview")}</Label>
+                  <div className="mt-1 rounded-xl bg-green-50 border border-green-200 px-3 py-2.5">
+                    <p className="text-sm whitespace-pre-wrap text-green-900">{preview}</p>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTplOpen(false)}>{t("messagesPage.cancel")}</Button>
-            <Button onClick={sendTemplate} disabled={!tplId} className="gap-1"><Send className="w-3 h-3" /> Send</Button>
+            <Button
+              onClick={sendTemplate}
+              disabled={!tplId || ((templates.find(tpl => String(tpl.id) === tplId)?.variables || []).length > 0 && tplVars.some(v => !v.trim()))}
+              className="gap-1"
+            >
+              <Send className="w-3 h-3" /> {t("messagesPage.send")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -2152,6 +2152,8 @@
     "refresh": "रीफ़्रेश करें",
     "newWhatsappTemplate": "नया WhatsApp टेम्पलेट",
     "noWhatsappTemplatesFound": "कोई WhatsApp टेम्पलेट नहीं मिला",
+    "noApprovedTemplates": "No approved WhatsApp templates yet — create one in the Templates tab.",
+    "noTemplatesMatchSearch": "No templates match your search.",
     "waModeCustom": "कस्टम",
     "waModeLibrary": "लाइब्रेरी से",
     "waFooterOptional": "फ़ुटर (वैकल्पिक)",

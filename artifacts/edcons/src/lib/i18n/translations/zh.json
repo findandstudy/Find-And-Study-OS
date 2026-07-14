@@ -2152,6 +2152,8 @@
     "refresh": "刷新",
     "newWhatsappTemplate": "新建 WhatsApp 模板",
     "noWhatsappTemplatesFound": "未找到 WhatsApp 模板",
+    "noApprovedTemplates": "No approved WhatsApp templates yet — create one in the Templates tab.",
+    "noTemplatesMatchSearch": "No templates match your search.",
     "waModeCustom": "自定义",
     "waModeLibrary": "来自模板库",
     "waFooterOptional": "页脚（可选）",

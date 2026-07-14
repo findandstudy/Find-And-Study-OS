@@ -2203,6 +2203,8 @@
     "refresh": "Actualiser",
     "newWhatsappTemplate": "Nouveau modèle WhatsApp",
     "noWhatsappTemplatesFound": "Aucun modèle WhatsApp trouvé",
+    "noApprovedTemplates": "No approved WhatsApp templates yet — create one in the Templates tab.",
+    "noTemplatesMatchSearch": "No templates match your search.",
     "waModeCustom": "Personnalisé",
     "waModeLibrary": "Depuis la bibliothèque",
     "waFooterOptional": "Pied de page (optionnel)",

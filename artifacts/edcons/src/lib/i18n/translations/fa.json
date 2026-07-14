@@ -2152,6 +2152,8 @@
     "refresh": "تازه‌سازی",
     "newWhatsappTemplate": "قالب واتساپ جدید",
     "noWhatsappTemplatesFound": "هیچ قالب واتساپی یافت نشد",
+    "noApprovedTemplates": "No approved WhatsApp templates yet — create one in the Templates tab.",
+    "noTemplatesMatchSearch": "No templates match your search.",
     "waModeCustom": "سفارشی",
     "waModeLibrary": "از کتابخانه",
     "waFooterOptional": "پاورقی (اختیاری)",

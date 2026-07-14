@@ -2152,6 +2152,8 @@
     "refresh": "Actualizar",
     "newWhatsappTemplate": "Nueva plantilla de WhatsApp",
     "noWhatsappTemplatesFound": "No se encontraron plantillas de WhatsApp",
+    "noApprovedTemplates": "No approved WhatsApp templates yet — create one in the Templates tab.",
+    "noTemplatesMatchSearch": "No templates match your search.",
     "waModeCustom": "Personalizado",
     "waModeLibrary": "Desde la biblioteca",
     "waFooterOptional": "Pie de página (opcional)",

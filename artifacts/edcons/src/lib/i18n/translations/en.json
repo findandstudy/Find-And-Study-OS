@@ -2444,6 +2444,8 @@
     "refresh": "Refresh",
     "newWhatsappTemplate": "New WhatsApp Template",
     "noWhatsappTemplatesFound": "No WhatsApp templates found",
+    "noApprovedTemplates": "No approved WhatsApp templates yet — create one in the Templates tab.",
+    "noTemplatesMatchSearch": "No templates match your search.",
     "waModeCustom": "Custom",
     "waModeLibrary": "From Library",
     "waFooterOptional": "Footer (optional)",
