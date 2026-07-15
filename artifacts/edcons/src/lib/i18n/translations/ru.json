@@ -3900,7 +3900,7 @@
     "statusInactive": "Неактивен",
     "bodyLabel": "Текст договора (HTML — поддерживаются h1/h2/h3, p, ul/li)",
     "intakeSchemaLabel": "Дополнительные поля для самостоятельного заполнения (JSON)",
-    "intakeSchemaHint": "Каждое поле: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "Каждое поле: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }. Добавьте dependsOn: \"fieldKey\" в поле города, чтобы оно сбрасывалось при изменении страны.",
     "cancel": "Отмена",
     "save": "Сохранить",
     "error": "Ошибка",

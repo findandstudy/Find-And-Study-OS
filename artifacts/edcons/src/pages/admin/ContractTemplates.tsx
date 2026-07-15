@@ -25,7 +25,7 @@ type Template = {
   updatedAt: string;
 };
 
-type IntakeField = { key: string; label: string; type: "text" | "email" | "date" | "textarea"; required?: boolean; maps_to?: string };
+type IntakeField = { key: string; label: string; type: "text" | "email" | "date" | "textarea" | "select" | "tel" | "country" | "city"; required?: boolean; maps_to?: string; dependsOn?: string; options?: string[] };
 
 const LANGUAGES = [
   { code: "en", label: "English" },

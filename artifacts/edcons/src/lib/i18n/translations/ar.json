@@ -3900,7 +3900,7 @@
     "statusInactive": "غير نشط",
     "bodyLabel": "نص العقد (HTML — يدعم h1/h2/h3 وp وul/li)",
     "intakeSchemaLabel": "حقول إضافية للتعبئة الذاتية (JSON)",
-    "intakeSchemaHint": "كل حقل: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "كل حقل: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }. أضف dependsOn: \"fieldKey\" في حقل المدينة ليُمسح تلقائياً عند تغيير حقل الدولة.",
     "cancel": "إلغاء",
     "save": "حفظ",
     "error": "خطأ",

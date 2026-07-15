@@ -3849,7 +3849,7 @@
     "statusInactive": "Inactiva",
     "bodyLabel": "Cuerpo del contrato (HTML; se admiten h1/h2/h3, p, ul/li)",
     "intakeSchemaLabel": "Campos adicionales de autocompletado (JSON)",
-    "intakeSchemaHint": "Cada campo: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "Cada campo: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }. Añada dependsOn: \"fieldKey\" en un campo ciudad para vaciarlo automáticamente cuando cambie el campo país.",
     "cancel": "Cancelar",
     "save": "Guardar",
     "error": "Error",

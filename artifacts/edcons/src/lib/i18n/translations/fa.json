@@ -3849,7 +3849,7 @@
     "statusInactive": "غیرفعال",
     "bodyLabel": "متن قرارداد (HTML — پشتیبانی از h1/h2/h3، p، ul/li)",
     "intakeSchemaLabel": "فیلدهای اضافی تکمیل توسط کاربر (JSON)",
-    "intakeSchemaHint": "هر فیلد: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "هر فیلد: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }. برای پاک‌سازی خودکار فیلد شهر هنگام تغییر کشور، dependsOn: \"fieldKey\" را اضافه کنید.",
     "cancel": "انصراف",
     "save": "ذخیره",
     "error": "خطا",

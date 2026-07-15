@@ -11,6 +11,7 @@ import {
   Mail, ShieldCheck, Pencil, Upload, FileText, PenLine, X,
 } from "lucide-react";
 import { getTranslation, isValidLanguage, type Language, RTL_LANGUAGES } from "@/lib/i18n/index";
+import { FALLBACK_COUNTRIES } from "@/lib/nationalities";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -232,7 +233,7 @@ export default function SignFlow({ token }: { token: string }) {
   // iframe and re-fetches automatically (no separate JSON round-trip needed).
   const previewUrl = `${BASE_URL}/api/public/sign/${encodeURIComponent(token)}/preview.html`;
 
-  const fields = (session?.template.intakeSchema || []) as { key: string; label: string; type: string; required?: boolean; placeholder?: string }[];
+  const fields = (session?.template.intakeSchema || []) as { key: string; label: string; type: string; required?: boolean; placeholder?: string; options?: string[]; dependsOn?: string }[];
   const nameLikeFields = fields.filter(isNameLikeField);
   const intakeNameField =
     nameLikeFields.find(f => /contact|person|full|signer|ad\s*soyad|isim/i.test(`${f.key} ${f.label}`)) ||
@@ -463,6 +464,23 @@ export default function SignFlow({ token }: { token: string }) {
                     <PhoneInput
                       value={intake[f.key] || ""}
                       onChange={v => setIntake(s => ({ ...s, [f.key]: v }))}
+                    />
+                  </div>
+                ) : f.type === "country" ? (
+                  <div className="mt-1.5">
+                    <SearchableSelect
+                      value={intake[f.key] || ""}
+                      onValueChange={v => {
+                        setIntake(s => {
+                          const next = { ...s, [f.key]: v };
+                          fields.forEach(ff => {
+                            if (ff.dependsOn === f.key) next[ff.key] = "";
+                          });
+                          return next;
+                        });
+                      }}
+                      options={FALLBACK_COUNTRIES.map(c => ({ value: c, label: c }))}
+                      placeholder={f.placeholder || t("selectPlaceholder")}
                     />
                   </div>
                 ) : (

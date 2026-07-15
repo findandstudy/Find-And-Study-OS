@@ -1885,7 +1885,7 @@
     "statusInactive": "Pasif",
     "bodyLabel": "Sözleşme metni (HTML — h1/h2/h3, p, ul/li destekli)",
     "intakeSchemaLabel": "Self-fill için ek alanlar (JSON)",
-    "intakeSchemaHint": "Her alan: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "Her alan: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }. Şehir alanına dependsOn: \"alanKey\" ekleyerek ülke değiştiğinde otomatik sıfırlanmasını sağlayın.",
     "cancel": "İptal",
     "save": "Kaydet",
     "error": "Hata",

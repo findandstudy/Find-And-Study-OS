@@ -3849,7 +3849,7 @@
     "statusInactive": "Nonaktif",
     "bodyLabel": "Isi kontrak (HTML — h1/h2/h3, p, ul/li didukung)",
     "intakeSchemaLabel": "Kolom tambahan isi mandiri (JSON)",
-    "intakeSchemaHint": "Setiap kolom: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "Setiap kolom: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }. Tambahkan dependsOn: \"fieldKey\" pada kolom kota agar dikosongkan otomatis saat kolom negara berubah.",
     "cancel": "Batal",
     "save": "Simpan",
     "error": "Kesalahan",

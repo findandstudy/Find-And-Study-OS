@@ -3849,7 +3849,7 @@
     "statusInactive": "निष्क्रिय",
     "bodyLabel": "अनुबंध सामग्री (HTML — h1/h2/h3, p, ul/li समर्थित)",
     "intakeSchemaLabel": "स्व-भरण अतिरिक्त फ़ील्ड (JSON)",
-    "intakeSchemaHint": "प्रत्येक फ़ील्ड: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "प्रत्येक फ़ील्ड: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }। city फ़ील्ड में dependsOn: \"fieldKey\" जोड़ें ताकि country बदलने पर यह स्वतः रीसेट हो।",
     "cancel": "रद्द करें",
     "save": "सहेजें",
     "error": "त्रुटि",

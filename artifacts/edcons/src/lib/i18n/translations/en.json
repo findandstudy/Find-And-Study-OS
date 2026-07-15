@@ -1944,7 +1944,7 @@
     "statusInactive": "Inactive",
     "bodyLabel": "Contract body (HTML — h1/h2/h3, p, ul/li supported)",
     "intakeSchemaLabel": "Self-fill extra fields (JSON)",
-    "intakeSchemaHint": "Each field: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "Each field: { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }. Add dependsOn: \"fieldKey\" on a city field to clear it automatically when the referenced country field changes.",
     "cancel": "Cancel",
     "save": "Save",
     "error": "Error",

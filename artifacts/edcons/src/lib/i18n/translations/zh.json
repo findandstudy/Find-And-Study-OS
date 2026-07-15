@@ -3849,7 +3849,7 @@
     "statusInactive": "停用",
     "bodyLabel": "合同正文（HTML — 支持 h1/h2/h3、p、ul/li）",
     "intakeSchemaLabel": "自助填写额外字段（JSON）",
-    "intakeSchemaHint": "每个字段：{ key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "每个字段：{ key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }。在城市字段添加 dependsOn: \"fieldKey\"，当国家字段更改时自动清空该字段。",
     "cancel": "取消",
     "save": "保存",
     "error": "错误",

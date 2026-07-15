@@ -3900,7 +3900,7 @@
     "statusInactive": "Inactif",
     "bodyLabel": "Corps du contrat (HTML — h1/h2/h3, p, ul/li pris en charge)",
     "intakeSchemaLabel": "Champs supplémentaires à compléter (JSON)",
-    "intakeSchemaHint": "Chaque champ : { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\", required? }",
+    "intakeSchemaHint": "Chaque champ : { key, label, type: \"text\"|\"email\"|\"date\"|\"textarea\"|\"select\"|\"tel\"|\"country\"|\"city\", required?, dependsOn? }. Ajoutez dependsOn: \"fieldKey\" sur un champ ville pour le réinitialiser automatiquement quand le champ pays change.",
     "cancel": "Annuler",
     "save": "Enregistrer",
     "error": "Erreur",
