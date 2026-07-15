@@ -181,17 +181,24 @@ const objectStorageService = new ObjectStorageService();
 
 router.get("/settings/branding/logo", async (req, res): Promise<void> => {
   try {
-    const variant = req.query.variant === "dark"
+    const variantKey = req.query.variant === "dark"
       ? "logoDarkUrl"
       : req.query.variant === "square"
         ? "logoSquareUrl"
-        : "logoUrl";
+        : req.query.variant === "email"
+          ? "emailLogoUrl"
+          : "logoUrl";
     const [settings] = await db.select({
       logoUrl: settingsTable.logoUrl,
       logoDarkUrl: settingsTable.logoDarkUrl,
       logoSquareUrl: settingsTable.logoSquareUrl,
+      emailLogoUrl: settingsTable.emailLogoUrl,
     }).from(settingsTable);
-    const url = settings?.[variant] || settings?.logoUrl;
+    // email variant falls back through logoSquareUrl → logoUrl so emails always
+    // show *something* even when no dedicated email logo has been uploaded yet.
+    const url = variantKey === "emailLogoUrl"
+      ? (settings?.emailLogoUrl || settings?.logoSquareUrl || settings?.logoUrl)
+      : (settings?.[variantKey as keyof typeof settings] || settings?.logoUrl);
     if (!url) { res.status(404).json({ error: "No logo configured" }); return; }
 
     const match = url.match(/\/api\/storage\/objects\/(.+)$/);

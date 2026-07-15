@@ -189,7 +189,10 @@ export async function getEmailBranding(): Promise<EmailBranding> {
       if (rawLogo.startsWith("http") && !rawLogo.includes("/api/storage/objects/")) {
         logoUrl = rawLogo;
       } else if (rawLogo.includes("/api/storage/objects/") || rawLogo.startsWith("/objects/")) {
-        logoUrl = `${baseUrl}/api/settings/branding/logo`;
+        // Always request the email-specific variant so the proxy serves
+        // emailLogoUrl (with logoSquareUrl → logoUrl fallback) rather than
+        // the main site logo. The endpoint is public — no auth required.
+        logoUrl = `${baseUrl}/api/settings/branding/logo?variant=email`;
       } else {
         logoUrl = `${baseUrl}${rawLogo.startsWith("/") ? "" : "/"}${rawLogo}`;
       }
