@@ -105,6 +105,10 @@ export default function SignFlow({ token }: { token: string }) {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [pdfMsg, setPdfMsg] = useState<string | null>(null);
 
+  // Country catalog fetched from the active country catalog on demand.
+  // Falls back to FALLBACK_COUNTRIES if the fetch fails or returns empty.
+  const [countryCatalog, setCountryCatalog] = useState<string[]>([]);
+
   // Sign flow language is driven by the contract template's language so the
   // signing experience matches the language the issuer picked when sending
   // the link, regardless of the recipient's browser locale.
@@ -202,6 +206,14 @@ export default function SignFlow({ token }: { token: string }) {
         setSignerName(data.signerName || "");
         const schema = Array.isArray(data.template.intakeSchema) ? data.template.intakeSchema : [];
         if (schema.length && data.intakeData) setIntake(data.intakeData);
+        // Fetch the active country catalog if the schema uses a country field.
+        if (schema.some((f: any) => f.type === "country")) {
+          customFetch(`/api/public/countries?limit=300`).then((r: any) => {
+            const list = (r.data ?? r ?? []) as { name: string }[];
+            const names = list.map((c: any) => c.name).filter(Boolean).sort() as string[];
+            if (names.length > 0) setCountryCatalog(names);
+          }).catch(() => { /* fall back to FALLBACK_COUNTRIES in renderer */ });
+        }
         // Lock the contract year to the current year regardless of any saved value.
         const yearField = schema.find(isYearLikeField);
         if (yearField) setIntake(s => ({ ...s, [yearField.key]: CURRENT_YEAR }));
@@ -480,7 +492,7 @@ export default function SignFlow({ token }: { token: string }) {
                           return next;
                         });
                       }}
-                      options={FALLBACK_COUNTRIES.map(c => ({ value: c, label: c }))}
+                      options={(countryCatalog.length > 0 ? countryCatalog : FALLBACK_COUNTRIES).map(c => ({ value: c, label: c }))}
                       placeholder={f.placeholder || t("selectPlaceholder")}
                     />
                   </div>
