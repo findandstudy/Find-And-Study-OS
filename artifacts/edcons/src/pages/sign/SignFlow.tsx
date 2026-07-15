@@ -16,6 +16,8 @@ const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_SIG_BASE64 = 1_900_000;
 
+type SigningPageConfig = { logoUrl?: string; pageTitle?: string; pageSubtitle?: string } | null;
+
 type SessionView = {
   sessionId: number;
   mode: "admin_driven" | "self_fill";
@@ -25,13 +27,13 @@ type SessionView = {
   signerName: string | null;
   expiresAt: string;
   expired: boolean;
-  template: { id: number; name: string; language: string; entityType: string; intakeSchema: any[] | null };
+  template: { id: number; name: string; language: string; entityType: string; intakeSchema: any[] | null; signingPageConfig: SigningPageConfig };
   agent: any;
   intakeData: Record<string, string> | null;
 };
 
 type Step = "loading" | "expired" | "revoked" | "intake" | "review" | "sign" | "success" | "error";
-type Brand = { companyName: string; hasLogo: boolean };
+type Brand = { companyName: string; hasLogo: boolean; customLogoUrl?: string | null; pageTitle?: string | null; pageSubtitle?: string | null };
 type Tfn = (key: string, params?: Record<string, string | number>) => string;
 
 // Heuristic: detect intake fields that already capture the signer's full name
@@ -184,6 +186,17 @@ export default function SignFlow({ token }: { token: string }) {
         const res: any = await customFetch(`/api/public/sign/${encodeURIComponent(token)}`);
         const data: SessionView = res.data;
         setSession(data);
+        // Merge per-template signing page config into brand so BrandHeader +
+        // title/subtitle can use it without a separate fetch.
+        const spc = data.template.signingPageConfig;
+        if (spc?.logoUrl || spc?.pageTitle || spc?.pageSubtitle) {
+          setBrand(prev => ({
+            ...prev,
+            customLogoUrl: spc.logoUrl || null,
+            pageTitle: spc.pageTitle || null,
+            pageSubtitle: spc.pageSubtitle || null,
+          }));
+        }
         setSignerName(data.signerName || "");
         const schema = Array.isArray(data.template.intakeSchema) ? data.template.intakeSchema : [];
         if (schema.length && data.intakeData) setIntake(data.intakeData);
@@ -362,13 +375,17 @@ export default function SignFlow({ token }: { token: string }) {
       ? (intake[intakeNameField.key] || "").trim().length > 0
       : signerName.trim().length > 0;
     const canContinue = nameOk && verified;
+    const intakeTitle = brand.pageTitle || t("title");
+    const intakeSubtitle = brand.pageSubtitle
+      ? <span className="font-semibold text-foreground">{brand.pageSubtitle}</span>
+      : <>{t("fillDetailsFor")} <span className="font-semibold text-foreground">{session.template.name}</span></>;
     return (
       <Shell
         brand={brand}
         step={1}
         labels={stepLabels}
-        title={t("title")}
-        subtitle={<>{t("fillDetailsFor")} <span className="font-semibold text-foreground">{session.template.name}</span></>}
+        title={intakeTitle}
+        subtitle={intakeSubtitle}
         footerNote={t("footerNote")}
         footer={
           <Button className="w-full bg-[#143591] hover:bg-[#0f2870] text-white" size="lg" onClick={submitIntake} disabled={submitting || !canContinue}>
@@ -582,15 +599,23 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
 }
 
 function BrandHeader({ brand }: { brand: Brand }) {
-  const [imgError, setImgError] = useState(false);
-  const logoSrc = brand.hasLogo && !imgError ? `${BASE_URL}/api/settings/branding/logo?variant=dark` : null;
+  const [globalImgError, setGlobalImgError] = useState(false);
+  const [customImgError, setCustomImgError] = useState(false);
+
+  // Per-template custom logo takes priority over the global branding logo.
+  const customLogoSrc = brand.customLogoUrl && !customImgError ? brand.customLogoUrl : null;
+  const globalLogoSrc = !customLogoSrc && brand.hasLogo && !globalImgError
+    ? `${BASE_URL}/api/settings/branding/logo?variant=dark`
+    : null;
+  const logoSrc = customLogoSrc || globalLogoSrc;
+
   return (
     <div className="bg-[#143591] text-white">
       <div className="max-w-3xl mx-auto px-6 py-5 flex items-center justify-center gap-3">
         {logoSrc ? (
           <img
             src={logoSrc}
-            onError={() => setImgError(true)}
+            onError={() => { if (customLogoSrc) setCustomImgError(true); else setGlobalImgError(true); }}
             alt={brand.companyName || "Logo"}
             className="h-10 max-w-[220px] object-contain"
           />

@@ -164,6 +164,7 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
           language: r.template.language,
           entityType: r.template.entityType,
           intakeSchema: r.template.intakeSchema || null,
+          signingPageConfig: r.template.signingPageConfig || null,
         },
         agent: r.agent ? {
           id: r.agent.id,

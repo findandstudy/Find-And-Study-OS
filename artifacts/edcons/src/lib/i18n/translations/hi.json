@@ -3858,7 +3858,19 @@
     "created": "टेम्पलेट बनाया गया",
     "confirmDelete": "क्या आप वाकई इस टेम्पलेट को हटाना चाहते हैं?",
     "deleted": "हटा दिया गया",
-    "bulkDeleted": "Templates deleted"
+    "bulkDeleted": "Templates deleted",
+    "signingPageSection": "Signing page",
+    "signingPageLogoUrl": "Logo URL",
+    "signingPageLogoUrlHint": "Custom logo shown at the top of the signing page. Leave blank to use the global company logo.",
+    "signingPageTitle": "Page title",
+    "signingPageTitleHint": "Overrides the default heading on the signing page. Leave blank to keep the default.",
+    "signingPageTitlePlaceholder": "Enter your details",
+    "signingPageSubtitle": "Page subtitle",
+    "signingPageSubtitleHint": "Overrides the default subtitle. Leave blank to keep the default.",
+    "signingPageSubtitlePlaceholder": "Please fill in your details for...",
+    "fieldMappingTitle": "Field → placeholder mapping",
+    "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
+    "fieldMappingNotInBody": "Not found in contract body"
   },
   "agentOnboarding": {
     "verifyEmail": {

@@ -1894,7 +1894,19 @@
     "created": "Şablon oluşturuldu",
     "confirmDelete": "Şablonu silmek istediğinize emin misiniz?",
     "deleted": "Silindi",
-    "bulkDeleted": "Şablonlar silindi"
+    "bulkDeleted": "Şablonlar silindi",
+    "signingPageSection": "İmza sayfası",
+    "signingPageLogoUrl": "Logo URL",
+    "signingPageLogoUrlHint": "İmza sayfasının üstünde gösterilecek özel logo. Boş bırakırsanız genel şirket logosu kullanılır.",
+    "signingPageTitle": "Sayfa başlığı",
+    "signingPageTitleHint": "İmza sayfasındaki varsayılan başlığı geçersiz kılar. Varsayılanı korumak için boş bırakın.",
+    "signingPageTitlePlaceholder": "Bilgilerinizi girin",
+    "signingPageSubtitle": "Sayfa alt başlığı",
+    "signingPageSubtitleHint": "Varsayılan alt başlığı geçersiz kılar. Varsayılanı korumak için boş bırakın.",
+    "signingPageSubtitlePlaceholder": "Lütfen bilgilerinizi doldurun...",
+    "fieldMappingTitle": "Alan → değişken eşlemesi",
+    "fieldMappingEmpty": "Eşlemeyi görmek için yukarıya alan ekleyin.",
+    "fieldMappingNotInBody": "Sözleşme gövdesinde bulunamadı"
   },
   "universityContracts": {
     "title": "Üniversite Sözleşmeleri",

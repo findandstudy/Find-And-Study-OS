@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { FileText, Plus, Edit, Trash2, Loader2 } from "lucide-react";
+import { FileText, Plus, Edit, Trash2, Loader2, ChevronDown, ChevronUp, AlertTriangle, ArrowRight } from "lucide-react";
 
 type Template = {
   id: number;
@@ -20,11 +20,12 @@ type Template = {
   version: number;
   bodyHtml: string;
   intakeSchema: any;
+  signingPageConfig: { logoUrl?: string; pageTitle?: string; pageSubtitle?: string } | null;
   isActive: boolean;
   updatedAt: string;
 };
 
-type IntakeField = { key: string; label: string; type: "text" | "email" | "date" | "textarea"; required?: boolean };
+type IntakeField = { key: string; label: string; type: "text" | "email" | "date" | "textarea"; required?: boolean; maps_to?: string };
 
 const LANGUAGES = [
   { code: "en", label: "English" },
@@ -53,6 +54,79 @@ const STARTER_INTAKE: IntakeField[] = [
   { key: "address", label: "Address", type: "textarea" },
 ];
 
+// Bridge aliases from contractRenderer.ts: camelCase intake keys → snake_case placeholders
+const BRIDGE_ALIASES: Record<string, string> = {
+  fullName: "contact_person_name",
+  fullname: "contact_person_name",
+  contactName: "contact_person_name",
+  signerName: "contact_person_name",
+  companyName: "agency_name",
+  company: "agency_name",
+  tradeName: "agency_name",
+  legalName: "agency_name",
+  agencyName: "agency_name",
+  taxNumber: "tax_number",
+  taxNo: "tax_number",
+  taxId: "tax_number",
+};
+
+function resolveFieldPlaceholder(field: IntakeField): string {
+  // Explicit override wins
+  if (field.maps_to) return field.maps_to;
+  // Known bridge alias
+  if (BRIDGE_ALIASES[field.key]) return BRIDGE_ALIASES[field.key];
+  // Direct match
+  return field.key;
+}
+
+function placeholderInBody(placeholder: string, bodyHtml: string): boolean {
+  // Check for both {{placeholder}} and {{{placeholder}}} forms
+  return bodyHtml.includes(`{{${placeholder}}}`) || bodyHtml.includes(`{{{${placeholder}}}}`) ||
+    bodyHtml.includes(`{{intake.${placeholder}}}`) || bodyHtml.includes(`{{{intake.${placeholder}}}}`) ||
+    bodyHtml.includes(`{{agent.${placeholder}}}`) || bodyHtml.includes(`{{{agent.${placeholder}}}}`) ||
+    bodyHtml.includes(`{{contract.${placeholder}}}`) || bodyHtml.includes(`{{{contract.${placeholder}}}}`) ||
+    bodyHtml.includes(`{{${placeholder}}`);
+}
+
+type SigningPageConfig = { logoUrl: string; pageTitle: string; pageSubtitle: string };
+
+const EMPTY_SPC: SigningPageConfig = { logoUrl: "", pageTitle: "", pageSubtitle: "" };
+
+function FieldMappingPanel({ schema, bodyHtml, t }: { schema: IntakeField[]; bodyHtml: string; t: (k: string, p?: any) => string }) {
+  if (!schema.length) {
+    return <p className="text-xs text-muted-foreground italic">{t("contractTemplates.fieldMappingEmpty")}</p>;
+  }
+  return (
+    <div className="divide-y border rounded-md overflow-hidden">
+      {schema.map(field => {
+        const placeholder = resolveFieldPlaceholder(field);
+        const found = placeholderInBody(placeholder, bodyHtml);
+        const isAlias = BRIDGE_ALIASES[field.key] && !field.maps_to;
+        const isOverride = Boolean(field.maps_to);
+        return (
+          <div key={field.key} className="flex items-center gap-2 px-3 py-2 text-xs bg-card hover:bg-muted/30 transition-colors">
+            <div className="flex-1 min-w-0">
+              <span className="font-medium text-foreground">{field.label}</span>
+              <span className="text-muted-foreground ml-1.5">({field.key})</span>
+              {isAlias && <span className="ml-1.5 text-[10px] text-blue-500 uppercase tracking-wide">alias</span>}
+              {isOverride && <span className="ml-1.5 text-[10px] text-purple-500 uppercase tracking-wide">maps_to</span>}
+            </div>
+            <ArrowRight className="w-3 h-3 shrink-0 text-muted-foreground" />
+            <div className="flex items-center gap-1 shrink-0">
+              <code className="font-mono text-emerald-700 dark:text-emerald-400">{`{{${placeholder}}}`}</code>
+              {!found && (
+                <span title={t("contractTemplates.fieldMappingNotInBody")}>
+                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ContractTemplatesPage() {
   const { toast } = useToast();
   const { t } = useI18n();
@@ -67,9 +141,11 @@ export default function ContractTemplatesPage() {
     entityType: "company" as "company" | "individual",
     version: 1,
     bodyHtml: STARTER_BODY,
-    intakeSchema: STARTER_INTAKE,
+    intakeSchema: STARTER_INTAKE as IntakeField[],
     isActive: true,
+    signingPageConfig: EMPTY_SPC,
   });
+  const [signingPageOpen, setSigningPageOpen] = useState(false);
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -93,12 +169,15 @@ export default function ContractTemplatesPage() {
     setForm({
       name: "", language: "en", entityType: "company", version: 1,
       bodyHtml: STARTER_BODY, intakeSchema: STARTER_INTAKE, isActive: true,
+      signingPageConfig: EMPTY_SPC,
     });
+    setSigningPageOpen(false);
     setShowDialog(true);
   }
 
   function openEdit(tpl: Template) {
     setEditing(tpl);
+    const spc = tpl.signingPageConfig;
     setForm({
       name: tpl.name,
       language: tpl.language,
@@ -107,7 +186,13 @@ export default function ContractTemplatesPage() {
       bodyHtml: tpl.bodyHtml,
       intakeSchema: Array.isArray(tpl.intakeSchema) ? tpl.intakeSchema : STARTER_INTAKE,
       isActive: tpl.isActive,
+      signingPageConfig: {
+        logoUrl: spc?.logoUrl || "",
+        pageTitle: spc?.pageTitle || "",
+        pageSubtitle: spc?.pageSubtitle || "",
+      },
     });
+    setSigningPageOpen(Boolean(spc?.logoUrl || spc?.pageTitle || spc?.pageSubtitle));
     setShowDialog(true);
   }
 
@@ -115,7 +200,17 @@ export default function ContractTemplatesPage() {
     if (!form.name.trim()) { toast({ title: t("contractTemplates.nameRequired"), variant: "destructive" }); return; }
     setSaving(true);
     try {
-      const body = JSON.stringify(form);
+      const spc = form.signingPageConfig;
+      const hasSpc = spc.logoUrl || spc.pageTitle || spc.pageSubtitle;
+      const payload = {
+        ...form,
+        signingPageConfig: hasSpc ? {
+          logoUrl: spc.logoUrl || undefined,
+          pageTitle: spc.pageTitle || undefined,
+          pageSubtitle: spc.pageSubtitle || undefined,
+        } : null,
+      };
+      const body = JSON.stringify(payload);
       if (editing) {
         await customFetch(`/api/contract-templates/${editing.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body });
       } else {
@@ -172,6 +267,11 @@ export default function ContractTemplatesPage() {
   }
 
   const allSelected = rows.length > 0 && rows.every(r => selected.has(r.id));
+
+  // Live-parse intake schema for the mapping panel
+  const parsedSchema = useMemo<IntakeField[]>(() => {
+    return Array.isArray(form.intakeSchema) ? form.intakeSchema : [];
+  }, [form.intakeSchema]);
 
   return (
     <div className="p-6 space-y-6">
@@ -297,7 +397,74 @@ export default function ContractTemplatesPage() {
                 className="font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground mt-1">{t("contractTemplates.intakeSchemaHint")}</p>
+
+              {/* Field → placeholder mapping panel */}
+              {parsedSchema.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">{t("contractTemplates.fieldMappingTitle")}</p>
+                  <FieldMappingPanel schema={parsedSchema} bodyHtml={form.bodyHtml} t={t} />
+                </div>
+              )}
+              {parsedSchema.length === 0 && (
+                <p className="text-xs text-muted-foreground italic mt-2">{t("contractTemplates.fieldMappingEmpty")}</p>
+              )}
             </div>
+
+            {/* Signing page branding section (collapsible) */}
+            <div className="border rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setSigningPageOpen(o => !o)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-muted/40 hover:bg-muted/60 transition-colors text-sm font-medium text-left"
+              >
+                <span>{t("contractTemplates.signingPageSection")}</span>
+                {signingPageOpen ? <ChevronUp className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+              </button>
+              {signingPageOpen && (
+                <div className="p-4 space-y-3 bg-background">
+                  <div>
+                    <Label className="text-xs">{t("contractTemplates.signingPageLogoUrl")}</Label>
+                    <Input
+                      className="mt-1"
+                      placeholder="https://example.com/logo.png"
+                      value={form.signingPageConfig.logoUrl}
+                      onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, logoUrl: e.target.value } }))}
+                    />
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("contractTemplates.signingPageLogoUrlHint")}</p>
+                    {form.signingPageConfig.logoUrl && (
+                      <img
+                        src={form.signingPageConfig.logoUrl}
+                        alt="Logo preview"
+                        className="mt-2 h-10 max-w-[200px] object-contain border rounded bg-[#143591] p-1"
+                        onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                        onLoad={e => { (e.currentTarget as HTMLImageElement).style.display = "block"; }}
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t("contractTemplates.signingPageTitle")}</Label>
+                    <Input
+                      className="mt-1"
+                      placeholder={t("contractTemplates.signingPageTitlePlaceholder")}
+                      value={form.signingPageConfig.pageTitle}
+                      onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, pageTitle: e.target.value } }))}
+                    />
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("contractTemplates.signingPageTitleHint")}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t("contractTemplates.signingPageSubtitle")}</Label>
+                    <Input
+                      className="mt-1"
+                      placeholder={t("contractTemplates.signingPageSubtitlePlaceholder")}
+                      value={form.signingPageConfig.pageSubtitle}
+                      onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, pageSubtitle: e.target.value } }))}
+                    />
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("contractTemplates.signingPageSubtitleHint")}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-2">
               <input id="isActive" type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} />
               <Label htmlFor="isActive">{t("contractTemplates.statusActive")}</Label>

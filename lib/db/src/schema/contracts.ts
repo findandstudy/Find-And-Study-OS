@@ -11,6 +11,7 @@ export const contractTemplatesTable = pgTable("contract_templates", {
   version: integer("version").notNull().default(1),
   bodyHtml: text("body_html").notNull().default(""),
   intakeSchema: jsonb("intake_schema"),
+  signingPageConfig: jsonb("signing_page_config"),
   isActive: boolean("is_active").notNull().default(true),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
