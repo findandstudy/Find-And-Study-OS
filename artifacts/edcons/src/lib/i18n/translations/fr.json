@@ -512,7 +512,8 @@
     "aiActionQueue": "File d'actions IA",
     "staffCards": "Fiches du personnel",
     "apiTokens": "Jetons API",
-    "portalAutomation": "Portal Automation"
+    "portalAutomation": "Portal Automation",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "Page introuvable",

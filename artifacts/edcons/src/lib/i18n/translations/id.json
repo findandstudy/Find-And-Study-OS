@@ -512,7 +512,8 @@
     "aiActionQueue": "Antrian Tindakan AI",
     "staffCards": "Kartu Staf",
     "apiTokens": "Token API",
-    "portalAutomation": "Portal Automation"
+    "portalAutomation": "Portal Automation",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "Halaman Tidak Ditemukan",

@@ -512,7 +512,8 @@
     "aiActionQueue": "AI एक्शन क्यू",
     "staffCards": "स्टाफ़ कार्ड",
     "apiTokens": "API टोकन",
-    "portalAutomation": "Portal Automation"
+    "portalAutomation": "Portal Automation",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "पृष्ठ नहीं मिला",

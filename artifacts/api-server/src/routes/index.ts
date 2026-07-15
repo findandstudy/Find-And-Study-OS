@@ -57,6 +57,7 @@ import portalMgmtRouter from "./portalMgmt";
 import portalProgramFallbacksRouter from "./portalProgramFallbacks";
 import portalUniversityExclusionsRouter from "./portalUniversityExclusions";
 import personFeedRouter from "./personFeed";
+import academySsoRouter from "./academySso";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
 const router: IRouter = Router();
@@ -91,6 +92,7 @@ const ALLOWLIST_EXACT = new Set([
   "/settings/branding/logo",
   "/settings/available-years",
   "/health",
+  "/academy-sso",
 ]);
 const ALLOWLIST_PREFIX = ["/storage/", "/auth/"];
 
@@ -198,5 +200,6 @@ router.use(portalMgmtRouter);
 router.use(portalProgramFallbacksRouter);
 router.use(portalUniversityExclusionsRouter);
 router.use(personFeedRouter);
+router.use(academySsoRouter);
 
 export default router;

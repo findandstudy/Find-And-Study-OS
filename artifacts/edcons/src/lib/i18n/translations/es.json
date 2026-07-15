@@ -512,7 +512,8 @@
     "aiActionQueue": "Cola de acciones de IA",
     "staffCards": "Fichas del personal",
     "apiTokens": "Tokens de API",
-    "portalAutomation": "Portal Automation"
+    "portalAutomation": "Portal Automation",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "Página no encontrada",

@@ -512,7 +512,8 @@
     "aiActionQueue": "Очередь действий AI",
     "staffCards": "Карточки сотрудников",
     "apiTokens": "API-токены",
-    "portalAutomation": "Portal Automation"
+    "portalAutomation": "Portal Automation",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "Страница не найдена",

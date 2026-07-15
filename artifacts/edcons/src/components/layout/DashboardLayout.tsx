@@ -66,6 +66,7 @@ import {
   FileSearch,
   KeyRound,
   Bot,
+  ExternalLink,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -81,7 +82,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogOut, ChevronUp, ChevronDown, User } from "lucide-react";
 
-type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string; permKey?: string };
+type MenuItem = { title: string; icon: typeof LayoutDashboard; url: string; group?: string; permKey?: string; externalHref?: string };
 type TFunc = (key: string, params?: Record<string, string | number>) => string;
 
 // Sidebar groups that start collapsed by default (long, less-frequently used).
@@ -232,6 +233,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
       { title: t("dashboard.courseFinder"), icon: Search,          url: '/agent/course-finder', permKey: 'course_finder' },
       { title: t("dashboard.messages"),     icon: MessageSquare,   url: '/agent/messages',      permKey: 'messages' },
       { title: t("dashboard.commissions"),  icon: TrendingUp,      url: '/agent/commissions',   permKey: 'commissions' },
+      { title: t("dashboard.academy"),      icon: ExternalLink,    url: '/agent/__academy__',   externalHref: '/api/academy-sso' },
     ];
     if (role === 'agent_staff' && agentStaffPerms) {
       agentItems = agentItems.filter(item => !item.permKey || agentStaffPerms.includes(item.permKey));
@@ -564,13 +566,15 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                               className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-muted-foreground hover:text-foreground data-[active=true]:font-semibold text-sm group-data-[collapsible=icon]:!w-10 group-data-[collapsible=icon]:!h-10 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!rounded-xl group-data-[collapsible=icon]:!gap-0 relative"
                             >
                               <a
-                                href={item.url}
-                                onClick={handleNavClick(item.url)}
-                                onAuxClick={(e) => {
-                                  // Middle-click (button=1): let the browser open in a new tab natively.
-                                  // Default <a> behavior already handles this; nothing to do.
-                                  if (e.button === 1) e.stopPropagation();
-                                }}
+                                href={item.externalHref ?? item.url}
+                                {...(item.externalHref
+                                  ? { target: "_blank", rel: "noopener noreferrer" }
+                                  : {
+                                      onClick: handleNavClick(item.url),
+                                      onAuxClick: (e: React.MouseEvent) => {
+                                        if (e.button === 1) e.stopPropagation();
+                                      },
+                                    })}
                               >
                               <item.icon className={`w-[18px] h-[18px] shrink-0 ${isActive ? 'text-primary' : ''}`} />
                               <span className="flex-1 group-data-[collapsible=icon]:hidden">{item.title}</span>

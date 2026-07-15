@@ -512,7 +512,8 @@
     "aiActionQueue": "قائمة إجراءات الذكاء الاصطناعي",
     "staffCards": "بطاقات الموظفين",
     "apiTokens": "رموز API",
-    "portalAutomation": "Portal Automation"
+    "portalAutomation": "Portal Automation",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "الصفحة غير موجودة",

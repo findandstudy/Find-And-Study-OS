@@ -512,7 +512,8 @@
     "aiActionQueue": "صف اقدامات هوش مصنوعی",
     "staffCards": "کارت‌های کارکنان",
     "apiTokens": "توکن‌های API",
-    "portalAutomation": "Portal Automation"
+    "portalAutomation": "Portal Automation",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "صفحه یافت نشد",

@@ -512,7 +512,8 @@
     "aiPersonas": "AI Personaları",
     "aiActionQueue": "AI Aksiyon Kuyruğu",
     "apiTokens": "API Anahtarları",
-    "portalAutomation": "Portal Otomasyonu"
+    "portalAutomation": "Portal Otomasyonu",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "Sayfa Bulunamadı",

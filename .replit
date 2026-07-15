@@ -76,3 +76,6 @@ PLAYWRIGHT_STAFF_PASS = "En9881274!"
 
 [userenv.production]
 APP_BASE_URL = "https://portal.masterstudyinturkey.com"
+
+[userenv.shared]
+SSO_SHARED_SECRET = "dc4e34371257f5eae85d2343e92b6a5df118cbd97a07235246b2ae7fbb57ace0e87865a4bc303bf1413fa414e15788b9"

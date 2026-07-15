@@ -512,7 +512,8 @@
     "aiActionQueue": "AI 操作队列",
     "staffCards": "员工卡片",
     "apiTokens": "API 令牌",
-    "portalAutomation": "Portal Automation"
+    "portalAutomation": "Portal Automation",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "页面未找到",

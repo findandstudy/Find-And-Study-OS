@@ -512,7 +512,8 @@
     "aiPersonas": "AI Personas",
     "aiActionQueue": "AI Action Queue",
     "apiTokens": "API Tokens",
-    "portalAutomation": "Portal Automation"
+    "portalAutomation": "Portal Automation",
+    "academy": "Academy"
   },
   "notFound": {
     "title": "Page Not Found",
