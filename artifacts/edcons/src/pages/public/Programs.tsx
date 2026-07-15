@@ -22,7 +22,7 @@ import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
   SlidersHorizontal, Building2, Award, ChevronDown, ChevronUp, Info, ExternalLink,
-  AlertTriangle, FileText, Camera, Calendar,
+  AlertTriangle, FileText, Camera, Calendar, Shield,
 } from "lucide-react";
 import { DocumentScanner } from "@/components/DocumentScanner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1879,25 +1879,24 @@ export default function Programs() {
                     <motion.div key={prog.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04, duration: 0.4 }}
                       className="group bg-card rounded-2xl overflow-hidden shadow-md shadow-black/[0.04] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary/[0.08] transition-all duration-300 border border-border/40 hover:border-primary/20 flex flex-col">
 
-                      {/* Banner */}
-                      <div className={`h-[72px] bg-gradient-to-r ${gradient} relative flex items-center px-4 gap-3`}>
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.4),transparent_70%)] pointer-events-none" />
-                        {/* University logo */}
+                      {/* Banner (white) */}
+                      <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card">
+                        {/* Logo */}
                         {prog.universityWebsite ? (
                           <a href={prog.universityWebsite} target="_blank" rel="noopener noreferrer"
-                            className="relative z-10 w-10 h-10 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-white/50 hover:ring-primary/50 hover:scale-105 transition-all cursor-pointer"
+                            className="w-10 h-10 rounded-xl border border-border/60 bg-background flex items-center justify-center shrink-0 overflow-hidden hover:border-primary/40 hover:scale-105 transition-all cursor-pointer"
                             onClick={(e) => e.stopPropagation()}>
                             {logoSrc ? (
-                              <img src={logoSrc} alt={prog.universityName} className="w-full h-full object-contain p-1" loading="lazy"
+                              <img src={logoSrc} alt={prog.universityName} className="w-full h-full object-contain p-0.5" loading="lazy"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
                               />
                             ) : null}
                             <Building2 className={`w-5 h-5 text-muted-foreground ${logoSrc ? "hidden" : ""}`} />
                           </a>
                         ) : (
-                          <div className="relative z-10 w-10 h-10 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-white/50">
+                          <div className="w-10 h-10 rounded-xl border border-border/60 bg-background flex items-center justify-center shrink-0 overflow-hidden">
                             {logoSrc ? (
-                              <img src={logoSrc} alt={prog.universityName} className="w-full h-full object-contain p-1" loading="lazy"
+                              <img src={logoSrc} alt={prog.universityName} className="w-full h-full object-contain p-0.5" loading="lazy"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
                               />
                             ) : null}
@@ -1905,22 +1904,22 @@ export default function Programs() {
                           </div>
                         )}
                         {/* University name + location */}
-                        <div className="relative z-10 min-w-0 flex-1 flex flex-col gap-0.5">
-                          <p className="text-[11px] text-foreground/75 truncate font-semibold">{prog.universityName}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[12px] font-bold text-foreground/80 truncate leading-tight">{prog.universityName}</p>
                           {(prog.universityCity || prog.universityCountry) && (
-                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground leading-none">
-                              <MapPin className="w-2.5 h-2.5 shrink-0 text-primary/50" />
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
+                              <MapPin className="w-3 h-3 shrink-0 text-primary/60" />
                               <span className="truncate">{[prog.universityCity, prog.universityCountry].filter(Boolean).join(", ")}</span>
                             </div>
                           )}
                         </div>
                         {/* Type + Degree badges */}
-                        <div className="relative z-10 flex flex-col items-end gap-1 shrink-0">
+                        <div className="flex flex-col items-end gap-1 shrink-0">
                           {prog.universityType && (
-                            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-white/75 dark:bg-card/75 backdrop-blur-sm border-0 shadow-sm font-medium">{prog.universityType}</Badge>
+                            <Badge variant="outline" className="text-[10px] px-2 py-0 h-[18px] font-medium">{prog.universityType}</Badge>
                           )}
                           {prog.degree && (
-                            <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/90 text-primary-foreground shadow-sm border-0 font-medium">{prog.degree}</Badge>
+                            <Badge className="text-[10px] px-2 py-0 h-[18px] bg-primary text-primary-foreground font-medium">{prog.degree}</Badge>
                           )}
                         </div>
                       </div>
@@ -1928,96 +1927,112 @@ export default function Programs() {
                       {/* Card body */}
                       <div className="p-4 flex-1 flex flex-col gap-3">
                         {/* Program name */}
-                        <h3 className="font-display font-bold text-foreground text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors duration-200">
+                        <h3 className="font-bold text-foreground text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors duration-200">
                           {prog.name}
                         </h3>
 
                         {/* Fee + Scholarship */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                              {t("courseFinderPage.tuitionFee")}
-                            </p>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {hasDiscount && (
-                                <span className="text-[12px] text-muted-foreground/50 line-through leading-none">
-                                  {formatFee(prog.tuitionFee, prog.currency)}
+                        {effectiveFee != null && (
+                          <div className="flex items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] text-muted-foreground mb-1.5">
+                                {t("courseFinderPage.tuitionFee")}{(prog as any).feeType ? ` (${(prog as any).feeType})` : ""}
+                              </p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[22px] font-extrabold leading-none tracking-tight">
+                                  {formatFee(effectiveFee, prog.currency)}
                                 </span>
-                              )}
-                              <span className={`text-xl font-extrabold leading-none ${hasDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
-                                {formatFee(effectiveFee, prog.currency)}
-                              </span>
-                              {hasDiscount && (
-                                <span className="text-[9px] font-bold text-white bg-emerald-500 rounded-full px-1.5 py-0 leading-[16px]">
-                                  -{Math.round(((prog.tuitionFee! - prog.discountedFee!) / prog.tuitionFee!) * 100)}%
-                                </span>
-                              )}
+                                {hasDiscount && (
+                                  <span className="text-sm text-muted-foreground/50 line-through leading-none">{formatFee(prog.tuitionFee, prog.currency)}</span>
+                                )}
+                                {hasDiscount && (
+                                  <Badge className="bg-emerald-500 text-white text-[10px] font-bold rounded-full border-0 px-2 py-0 h-[18px]">
+                                    {Math.round(((prog.tuitionFee! - prog.discountedFee!) / prog.tuitionFee!) * 100)}% OFF
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
+                            {prog.scholarship != null && prog.scholarship > 0 && (
+                              <div className="shrink-0 border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl px-3 py-2 text-center min-w-[76px]">
+                                <Award className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
+                                <p className="text-[9px] text-muted-foreground font-medium mt-0.5">{t("courseFinderPage.scholarship")}:</p>
+                                <p className="text-[13px] font-extrabold text-emerald-700 dark:text-emerald-400 leading-tight">{formatFee(prog.scholarship, prog.currency)}</p>
+                              </div>
+                            )}
                           </div>
-                          {prog.scholarship && prog.scholarship > 0 ? (
-                            <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 gap-1 shrink-0 whitespace-nowrap h-auto py-1 px-2">
-                              <Award className="w-3 h-3" /> {formatFee(prog.scholarship, prog.currency)}
-                            </Badge>
-                          ) : null}
-                        </div>
+                        )}
 
                         {/* Deposit strip */}
                         {prog.depositFee != null && prog.depositFee > 0 && (
-                          <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-700/30 rounded-lg px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
-                            <DollarSign className="w-3.5 h-3.5 shrink-0" />
+                          <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-700/30 rounded-lg px-3 py-2 text-[11px] text-indigo-700 dark:text-indigo-400 font-medium">
+                            <Shield className="w-3.5 h-3.5 shrink-0" />
                             {t("courseFinderPage.depositStrip", { fee: formatFee(prog.depositFee, prog.currency) })}
                           </div>
                         )}
 
-                        {/* Metadata grid */}
-                        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-muted-foreground bg-secondary/30 dark:bg-secondary/20 rounded-xl p-3">
+                        {/* Metadata 3-col grid */}
+                        <div className="grid grid-cols-3 gap-2 bg-muted/40 rounded-xl p-3">
                           {prog.degree && (
-                            <span className="flex items-center gap-1.5 min-w-0">
-                              <GraduationCap className="w-3.5 h-3.5 text-violet-500 shrink-0" />
-                              <span className="truncate font-medium">{prog.degree}</span>
-                            </span>
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                                <GraduationCap className="w-3 h-3 text-violet-500 shrink-0" />{t("courseFinderPage.degree")}
+                              </span>
+                              <span className="text-[11px] font-bold truncate">{prog.degree}</span>
+                            </div>
                           )}
                           {prog.field && (
-                            <span className="flex items-center gap-1.5 min-w-0">
-                              <BookOpen className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                              <span className="truncate font-medium">{prog.field}</span>
-                            </span>
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                                <BookOpen className="w-3 h-3 text-orange-500 shrink-0" />{t("courseFinderPage.field")}
+                              </span>
+                              <span className="text-[11px] font-bold truncate">{prog.field}</span>
+                            </div>
                           )}
                           {prog.language && (
-                            <span className="flex items-center gap-1.5 min-w-0">
-                              <Languages className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                              <span className="truncate font-medium">{prog.language}</span>
-                            </span>
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                                <Languages className="w-3 h-3 text-blue-500 shrink-0" />{t("courseFinderPage.language")}
+                              </span>
+                              <span className="text-[11px] font-bold truncate">{prog.language}</span>
+                            </div>
                           )}
                           {prog.duration && (
-                            <span className="flex items-center gap-1.5 min-w-0">
-                              <Clock className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                              <span className="truncate font-medium">{prog.duration}</span>
-                            </span>
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                                <Clock className="w-3 h-3 text-green-500 shrink-0" />{t("courseFinderPage.duration")}
+                              </span>
+                              <span className="text-[11px] font-bold truncate">{prog.duration}</span>
+                            </div>
                           )}
                           {prog.intakes && (
-                            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
-                              <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                              <span className="truncate font-medium">{prog.intakes}</span>
-                            </span>
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                                <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />{t("courseFinderPage.intakes")}
+                              </span>
+                              <span className="text-[11px] font-bold truncate">{prog.intakes}</span>
+                            </div>
                           )}
                           {prog.languageFee != null && prog.languageFee > 0 && (
-                            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
-                              <Globe2 className="w-3.5 h-3.5 text-pink-500 shrink-0" />
-                              <span className="font-medium">{t("courseFinderPage.languageFee")}: {formatFee(prog.languageFee, prog.currency)}</span>
-                            </span>
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                                <Globe2 className="w-3 h-3 text-pink-500 shrink-0" />{t("courseFinderPage.languageFee")}
+                              </span>
+                              <span className="text-[11px] font-bold truncate">{formatFee(prog.languageFee, prog.currency)}</span>
+                            </div>
                           )}
                         </div>
 
                         {/* Bottom actions */}
-                        <div className="mt-auto flex gap-2">
-                          <Button variant="outline" size="icon" onClick={() => setDetailProgram(prog)}
-                            className="rounded-xl shrink-0 h-10 w-10 border-border/50 hover:border-primary/40 hover:bg-primary/5"
-                            aria-label={t("programs.programDetails")}>
+                        <div className="mt-auto flex items-center gap-2 pt-1">
+                          <button
+                            onClick={() => setDetailProgram(prog)}
+                            className="w-9 h-9 rounded-full border-2 border-border/60 flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all shrink-0"
+                            aria-label={t("programs.programDetails")}
+                          >
                             <Info className="w-4 h-4" aria-hidden="true" />
-                          </Button>
+                          </button>
                           <Button onClick={() => setApplyProgram(prog)} className="flex-1 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300">
-                            {t("programs.apply")} →
+                            {t("courseFinderPage.apply")} →
                           </Button>
                         </div>
                       </div>

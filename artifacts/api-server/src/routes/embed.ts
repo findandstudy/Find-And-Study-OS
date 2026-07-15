@@ -1867,8 +1867,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;margin-bottom:20px}
 .ew-card{border:1px solid rgba(226,232,240,.7);border-radius:16px;background:#fff;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:box-shadow .25s,transform .25s,border-color .25s}
 .ew-card:hover{box-shadow:0 12px 28px rgba(37,99,235,.10);transform:translateY(-4px);border-color:rgba(37,99,235,.25)}
-.ew-card-banner{height:72px;display:flex;align-items:center;gap:12px;padding:0 18px;position:relative;overflow:hidden}
-.ew-card-banner::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at top right,rgba(255,255,255,.45),transparent 65%);pointer-events:none}
+.ew-card-banner{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(226,232,240,.6);background:#fff}
 .ew-card-banner-g0{background:linear-gradient(to right,rgba(59,130,246,.15),rgba(99,102,241,.10) 60%,rgba(168,85,247,.05))}
 .ew-card-banner-g1{background:linear-gradient(to right,rgba(16,185,129,.15),rgba(20,184,166,.10) 60%,rgba(6,182,212,.05))}
 .ew-card-banner-g2{background:linear-gradient(to right,rgba(249,115,22,.15),rgba(244,63,94,.10) 60%,rgba(236,72,153,.05))}
@@ -1887,7 +1886,11 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-card-loc{display:flex;align-items:center;gap:6px;font-size:13px;color:#64748b;margin-bottom:14px}
 .ew-card-loc svg{width:14px;height:14px;color:rgba(37,99,235,.5);flex-shrink:0}
 .ew-card-loc span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ew-card-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;background:rgba(241,245,249,.6);border-radius:10px;padding:12px;margin-bottom:14px}
+.ew-card-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;background:rgba(241,245,249,.6);border-radius:10px;padding:12px;margin-bottom:14px}
+.ew-meta-cell{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ew-meta-label{display:flex;align-items:center;gap:3px;font-size:9px;color:#94a3b8;font-weight:500}
+.ew-meta-label svg{width:10px;height:10px;flex-shrink:0}
+.ew-meta-val{font-size:11px;font-weight:700;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ew-meta-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;font-weight:500;min-width:0}
 .ew-meta-item svg{width:14px;height:14px;flex-shrink:0}
 .ew-meta-item .ew-meta-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1901,6 +1904,10 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-fee-pct{font-size:9px;font-weight:700;color:#fff;background:#10b981;border-radius:3px;padding:1px 4px;line-height:1.2}
 .ew-scholarship{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 9px;border-radius:9999px;border:1px solid rgba(16,185,129,.3);color:#059669;background:rgba(236,253,245,.6);margin-bottom:12px;align-self:flex-start}
 .ew-scholarship svg{width:12px;height:12px}
+.ew-scholarship-box{border:1px solid rgba(16,185,129,.25);background:rgba(236,253,245,.8);border-radius:10px;padding:8px 10px;text-align:center;flex-shrink:0;min-width:72px}
+.ew-scholarship-box svg{color:#059669;width:14px;height:14px;display:block;margin:0 auto 2px}
+.ew-scholarship-box-lbl{font-size:9px;color:#94a3b8;font-weight:500;margin-bottom:2px}
+.ew-scholarship-box-amt{font-size:13px;font-weight:800;color:#059669}
 .ew-fee-section{margin-bottom:12px}
 .ew-fee-section-label{font-size:10px;color:#94a3b8;font-weight:500;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
 .ew-fee-section-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -1908,10 +1915,10 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-fee-disc-big{color:#059669!important;font-size:20px;font-weight:800;line-height:1}
 .ew-scholarship-right{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:9999px;border:1px solid rgba(16,185,129,.3);color:#059669;background:rgba(236,253,245,.7);white-space:nowrap}
 .ew-scholarship-right svg{width:12px;height:12px}
-.ew-deposit-strip{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;background:rgba(254,243,199,.7);border:1px solid rgba(253,230,138,.6);color:#b45309;font-size:11px;font-weight:500;margin-bottom:12px}
+.ew-deposit-strip{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;background:rgba(238,242,255,.8);border:1px solid rgba(199,210,254,.6);color:#4338ca;font-size:11px;font-weight:500;margin-bottom:12px}
 .ew-deposit-strip svg{width:12px;height:12px;flex-shrink:0}
 .ew-card-actions{margin-top:auto;display:flex;gap:8px}
-.ew-btn-info{width:40px;height:40px;border-radius:10px;border:1px solid rgba(226,232,240,.8);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#64748b;flex-shrink:0;transition:all .2s}
+.ew-btn-info{width:40px;height:40px;border-radius:50%;border:2px solid rgba(226,232,240,.8);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#64748b;flex-shrink:0;transition:all .2s}
 .ew-btn-info:hover{border-color:rgba(37,99,235,.4);background:rgba(239,246,255,.5);color:${primaryColor}}
 .ew-btn-info svg{width:16px;height:16px}
 .ew-badge{font-size:.7rem;padding:3px 8px;border-radius:20px;background:#f1f5f9;color:#475569;font-weight:500;white-space:nowrap}
@@ -2696,6 +2703,7 @@ var ICON_DOLLAR='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fil
 var ICON_AWARD='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>';
 var ICON_INFO='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
 var ICON_GRAD='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>';
+var ICON_SHIELD='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
 
 function fmtFee(amount,cur){
   if(amount==null||isNaN(amount))return '';
@@ -2703,7 +2711,6 @@ function fmtFee(amount,cur){
 }
 
 function renderCard(p){
-  var idx=(typeof p.id==='number'?p.id:0)%5;
   var loc=[p.universityCity,p.universityCountry].filter(Boolean).map(esc).join(', ');
   var hasDiscount=p.discountedFee&&p.tuitionFee&&p.discountedFee<p.tuitionFee;
   var effFee=p.discountedFee||p.tuitionFee;
@@ -2712,8 +2719,8 @@ function renderCard(p){
 
   var h='<div class="ew-card">';
 
-  /* ── Banner ── */
-  h+='<div class="ew-card-banner ew-card-banner-g'+idx+'">';
+  /* ── Banner (white) ── */
+  h+='<div class="ew-card-banner">';
   h+='<div class="ew-card-logo-wrap">'+logoInner+'</div>';
   h+='<div class="ew-card-uni-name"><div class="ew-card-uni-name-text">'+esc(p.universityName||'')+'</div>';
   if(loc)h+='<div class="ew-card-uni-loc">'+ICON_MAPPIN+'<span>'+loc+'</span></div>';
@@ -2727,37 +2734,38 @@ function renderCard(p){
   h+='<div class="ew-card-body">';
   h+='<div class="ew-card-title">'+esc(p.name)+'</div>';
 
-  /* Fee section */
+  /* Fee + Scholarship */
   if(effFee){
     h+='<div class="ew-fee-section">';
-    h+='<div class="ew-fee-section-label">Tuition Fee</div>';
-    h+='<div class="ew-fee-section-row">';
+    h+='<div class="ew-fee-section-label">Tuition Fee'+(p.feeType?' ('+esc(p.feeType)+')':'')+'</div>';
+    h+='<div style="display:flex;align-items:flex-start;gap:10px">';
+    h+='<div>';
     h+='<div class="ew-fee-row">';
-    if(hasDiscount)h+='<span class="ew-fee-orig">'+esc(fmtFee(p.tuitionFee,p.currency))+'</span>';
-    h+='<span class="'+(hasDiscount?'ew-fee-disc-big':'ew-fee-main')+'">'+esc(fmtFee(effFee,p.currency))+'</span>';
-    if(hasDiscount)h+='<span class="ew-fee-pct">-'+pct+'%</span>';
-    h+='</div>';
+    h+='<span class="ew-fee-main">'+esc(fmtFee(effFee,p.currency))+'</span>';
+    if(hasDiscount)h+=' <span class="ew-fee-orig">'+esc(fmtFee(p.tuitionFee,p.currency))+'</span>';
+    if(hasDiscount)h+=' <span class="ew-fee-pct">'+pct+'% OFF</span>';
+    h+='</div></div>';
     if(p.scholarship&&p.scholarship>0){
-      h+='<div class="ew-scholarship-right">'+ICON_AWARD+'<span>'+esc(fmtFee(p.scholarship,p.currency))+'</span></div>';
+      h+='<div class="ew-scholarship-box">'+ICON_AWARD+'<div class="ew-scholarship-box-lbl">Scholarship:</div><div class="ew-scholarship-box-amt">'+esc(fmtFee(p.scholarship,p.currency))+'</div></div>';
     }
     h+='</div></div>';
   } else if(p.scholarship&&p.scholarship>0){
-    h+='<div class="ew-scholarship">'+ICON_AWARD+'<span>Scholarship: '+esc(fmtFee(p.scholarship,p.currency))+'</span></div>';
+    h+='<div class="ew-scholarship-box" style="margin-bottom:12px;display:inline-block">'+ICON_AWARD+'<div class="ew-scholarship-box-lbl">Scholarship:</div><div class="ew-scholarship-box-amt">'+esc(fmtFee(p.scholarship,p.currency))+'</div></div>';
   }
 
   /* Deposit strip */
   if(p.depositFee&&p.depositFee>0){
-    h+='<div class="ew-deposit-strip">'+ICON_DOLLAR+'<span>Secure your place with a '+esc(fmtFee(p.depositFee,p.currency))+' deposit</span></div>';
+    h+='<div class="ew-deposit-strip">'+ICON_SHIELD+'<span>Secure your place with a '+esc(fmtFee(p.depositFee,p.currency))+' deposit</span></div>';
   }
 
-  /* Metadata grid */
+  /* Metadata 3-col grid */
   h+='<div class="ew-card-meta">';
-  if(p.degree)h+='<div class="ew-meta-item"><span class="ew-meta-icon-blue">'+ICON_GRAD+'</span><span class="ew-meta-text">'+esc(p.degree)+'</span></div>';
-  if(p.field)h+='<div class="ew-meta-item"><span class="ew-meta-icon-orange">'+ICON_BOOK+'</span><span class="ew-meta-text">'+esc(p.field)+'</span></div>';
-  if(p.language)h+='<div class="ew-meta-item"><span class="ew-meta-icon-blue">'+ICON_LANG+'</span><span class="ew-meta-text">'+esc(p.language)+'</span></div>';
-  if(p.duration)h+='<div class="ew-meta-item"><span class="ew-meta-icon-green">'+ICON_CLOCK+'</span><span class="ew-meta-text">'+esc(p.duration)+'</span></div>';
-  if(p.intakes)h+='<div class="ew-meta-item" style="grid-column:1/-1"><span class="ew-meta-icon-orange">'+ICON_BOOK+'</span><span class="ew-meta-text">'+esc(p.intakes)+'</span></div>';
-  if(p.languageFee&&p.languageFee>0)h+='<div class="ew-meta-item" style="grid-column:1/-1"><span class="ew-meta-icon-emerald">'+ICON_DOLLAR+'</span><span class="ew-meta-text">Language Fee: '+esc(fmtFee(p.languageFee,p.currency))+'</span></div>';
+  if(p.degree)h+='<div class="ew-meta-cell"><div class="ew-meta-label"><span style="color:#7c3aed">'+ICON_GRAD+'</span>Degree</div><div class="ew-meta-val">'+esc(p.degree)+'</div></div>';
+  if(p.field)h+='<div class="ew-meta-cell"><div class="ew-meta-label"><span style="color:#f97316">'+ICON_BOOK+'</span>Field</div><div class="ew-meta-val">'+esc(p.field)+'</div></div>';
+  if(p.language)h+='<div class="ew-meta-cell"><div class="ew-meta-label"><span style="color:#3b82f6">'+ICON_LANG+'</span>Language</div><div class="ew-meta-val">'+esc(p.language)+'</div></div>';
+  if(p.duration)h+='<div class="ew-meta-cell"><div class="ew-meta-label"><span style="color:#22c55e">'+ICON_CLOCK+'</span>Duration</div><div class="ew-meta-val">'+esc(p.duration)+'</div></div>';
+  if(p.intakes)h+='<div class="ew-meta-cell"><div class="ew-meta-label"><span style="color:#6366f1">'+ICON_BOOK+'</span>Intake</div><div class="ew-meta-val">'+esc(p.intakes)+'</div></div>';
+  if(p.languageFee&&p.languageFee>0)h+='<div class="ew-meta-cell"><div class="ew-meta-label"><span style="color:#ec4899">'+ICON_DOLLAR+'</span>Language Fee</div><div class="ew-meta-val">'+esc(fmtFee(p.languageFee,p.currency))+'</div></div>';
   h+='</div>';
 
   /* Actions */

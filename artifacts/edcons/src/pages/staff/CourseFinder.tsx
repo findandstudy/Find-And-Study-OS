@@ -19,7 +19,7 @@ import {
   ChevronLeft, ChevronRight, X, FileText, ExternalLink,
   Mail, Phone, User, Award, Calendar, Check, Loader2, UserSearch,
   Download, CheckSquare, Square, FileDown, LayoutGrid, List, ArrowUpDown,
-  ArrowUp, ArrowDown, CheckCircle2, AlertCircle, Upload, UserPlus,
+  ArrowUp, ArrowDown, CheckCircle2, AlertCircle, Upload, UserPlus, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
@@ -1223,187 +1223,175 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
   const cur = p.currency ?? "USD";
   const websiteUrl = ensureUrl(p.universityWebsite);
 
+  const pct = hasDiscount ? Math.round(((p.tuitionFee ?? 0) - (p.discountedFee ?? 0)) / (p.tuitionFee ?? 1) * 100) : 0;
+
   return (
     <>
-    <div className={`bg-card border rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-primary/[0.08] hover:-translate-y-1 transition-all duration-300 group flex flex-col ${isSelected ? "ring-2 ring-primary border-primary/50" : "border-border/40 hover:border-primary/20"}`}>
-      {/* Banner */}
-      <div className="relative h-[72px] bg-gradient-to-r from-blue-500/15 via-indigo-500/10 to-violet-500/5 flex items-center px-3 gap-2.5">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.4),transparent_70%)] pointer-events-none" />
-        {/* Select checkbox */}
-        <button
-          onClick={onToggleSelect}
-          className="relative z-10 shrink-0 p-0.5 rounded hover:bg-white/50 transition-colors"
-          title={isSelected ? "Deselect" : "Select for proposal"}
-        >
-          {isSelected
-            ? <CheckSquare className="w-4 h-4 text-primary" />
-            : <Square className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground" />}
+    <div className={`bg-card border rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-primary/[0.08] hover:-translate-y-1 transition-all duration-300 group flex flex-col ${isSelected ? "ring-2 ring-primary border-primary/50" : "border-border/50 hover:border-primary/20"}`}>
+
+      {/* ── Banner (white) ── */}
+      <div className="flex items-center gap-2.5 px-3 py-3 border-b border-border/50 bg-card">
+        {/* Select */}
+        <button onClick={onToggleSelect} className="shrink-0 p-0.5 rounded hover:bg-muted/80 transition-colors" title={isSelected ? "Deselect" : "Select for proposal"}>
+          {isSelected ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground/30 group-hover:text-muted-foreground" />}
         </button>
-        {/* University logo */}
+        {/* Logo */}
         {websiteUrl ? (
-          <a
-            href={websiteUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="relative z-10 w-10 h-10 rounded-xl bg-white/90 shadow-md flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-white/50 hover:ring-primary/40 hover:scale-105 transition-all"
-          >
-            {p.universityLogoUrl
-              ? <img src={p.universityLogoUrl} alt={p.universityName} loading="lazy" className="w-full h-full object-contain p-1" />
-              : <Building2 className="w-5 h-5 text-muted-foreground" />}
+          <a href={websiteUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+            className="w-10 h-10 rounded-xl border border-border/60 bg-background flex items-center justify-center shrink-0 overflow-hidden hover:border-primary/40 hover:scale-105 transition-all">
+            {p.universityLogoUrl ? <img src={p.universityLogoUrl} alt={p.universityName} loading="lazy" className="w-full h-full object-contain p-0.5" /> : <Building2 className="w-5 h-5 text-muted-foreground" />}
           </a>
         ) : (
-          <div className="relative z-10 w-10 h-10 rounded-xl bg-white/90 shadow-md flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-white/50">
-            {p.universityLogoUrl
-              ? <img src={p.universityLogoUrl} alt={p.universityName} loading="lazy" className="w-full h-full object-contain p-1" />
-              : <Building2 className="w-5 h-5 text-muted-foreground" />}
+          <div className="w-10 h-10 rounded-xl border border-border/60 bg-background flex items-center justify-center shrink-0 overflow-hidden">
+            {p.universityLogoUrl ? <img src={p.universityLogoUrl} alt={p.universityName} loading="lazy" className="w-full h-full object-contain p-0.5" /> : <Building2 className="w-5 h-5 text-muted-foreground" />}
           </div>
         )}
-        {/* University name + location */}
-        <div className="relative z-10 min-w-0 flex-1 flex flex-col gap-0.5">
-          <button
-            onClick={onUniversityClick}
-            className="text-[11px] font-semibold text-foreground/75 truncate text-left hover:text-primary transition-colors hover:underline"
-          >
+        {/* Uni name + location */}
+        <div className="min-w-0 flex-1">
+          <button onClick={onUniversityClick} className="text-[12px] font-bold text-foreground/80 truncate block max-w-full text-left hover:text-primary transition-colors hover:underline leading-tight">
             {p.universityName}
           </button>
           {(p.universityCity || p.universityCountry) && (
-            <div className="flex items-center gap-1 text-[10px] text-muted-foreground leading-none">
-              <MapPin className="w-2.5 h-2.5 shrink-0 text-primary/50" />
+            <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
+              <MapPin className="w-3 h-3 shrink-0 text-primary/60" />
               <span className="truncate">{[p.universityCity, p.universityCountry].filter(Boolean).join(", ")}</span>
             </div>
           )}
         </div>
         {/* Type + Degree badges */}
-        <div className="relative z-10 flex flex-col items-end gap-1 shrink-0">
-          {p.universityType && (
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-white/75 backdrop-blur-sm border-0 shadow-sm font-medium">{p.universityType}</Badge>
-          )}
-          {p.degree && (
-            <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/85 text-primary-foreground shadow-sm border-0 font-medium">{p.degree}</Badge>
-          )}
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {p.universityType && <Badge variant="outline" className="text-[10px] px-2 py-0 h-[18px] font-medium">{p.universityType}</Badge>}
+          {p.degree && <Badge className="text-[10px] px-2 py-0 h-[18px] bg-primary text-primary-foreground font-medium">{p.degree}</Badge>}
         </div>
         {/* Wishlist */}
         {showWishlist && (
-          <button
-            onClick={onToggleWishlist}
-            className="relative z-10 shrink-0 p-1.5 rounded-full hover:bg-white/60 transition-colors"
-            title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-          >
-            <Heart className={`w-4 h-4 transition-all ${isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground/40 hover:text-red-400"}`} />
+          <button onClick={onToggleWishlist} className="shrink-0 p-1.5 rounded-full hover:bg-muted/80 transition-colors" title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}>
+            <Heart className={`w-4 h-4 transition-all ${isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground/30 hover:text-red-400"}`} />
           </button>
         )}
       </div>
 
-      {/* Card body */}
+      {/* ── Body ── */}
       <div className="p-4 flex-1 flex flex-col gap-3">
         {/* Program name */}
-        <h3 className="font-bold text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors">
-          {p.name}
-        </h3>
+        <h3 className="font-bold text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors">{p.name}</h3>
 
         {/* Fee + Scholarship */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
-              {t("courseFinderPage.tuitionFee")}
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] text-muted-foreground mb-1.5">
+              {t("courseFinderPage.tuitionFee")}{p.feeType ? ` (${p.feeType})` : ""}
             </p>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {hasDiscount && (
-                <span className="text-[12px] text-muted-foreground/50 line-through leading-none">
-                  {formatCurrency(p.tuitionFee, cur)}
-                </span>
-              )}
-              <span className={`text-xl font-extrabold leading-none ${hasDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[22px] font-extrabold leading-none tracking-tight">
                 {formatCurrency(hasDiscount ? p.discountedFee : p.tuitionFee, cur)}
               </span>
               {hasDiscount && (
-                <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-500 text-white border-0 font-bold rounded-full">
-                  -{Math.round(((p.tuitionFee ?? 0) - (p.discountedFee ?? 0)) / (p.tuitionFee ?? 1) * 100)}%
-                </Badge>
+                <span className="text-sm text-muted-foreground/50 line-through leading-none">{formatCurrency(p.tuitionFee, cur)}</span>
+              )}
+              {hasDiscount && (
+                <Badge className="bg-emerald-500 text-white text-[10px] font-bold rounded-full border-0 px-2 py-0 h-[18px]">{pct}% OFF</Badge>
               )}
             </div>
           </div>
           {p.scholarship != null && p.scholarship > 0 && (
-            <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 gap-1 shrink-0 whitespace-nowrap h-auto py-1 px-2">
-              <Award className="w-3 h-3" /> {formatCurrency(p.scholarship, cur)}
-            </Badge>
+            <div className="shrink-0 border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl px-3 py-2 text-center min-w-[76px]">
+              <Award className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
+              <p className="text-[9px] text-muted-foreground font-medium mt-0.5">{t("courseFinderPage.scholarship")}:</p>
+              <p className="text-[13px] font-extrabold text-emerald-700 dark:text-emerald-400 leading-tight">{formatCurrency(p.scholarship, cur)}</p>
+            </div>
           )}
         </div>
 
         {/* Deposit strip */}
         {p.depositFee != null && p.depositFee > 0 && (
-          <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-700/30 rounded-lg px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
-            <DollarSign className="w-3.5 h-3.5 shrink-0" />
+          <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-700/30 rounded-lg px-3 py-2 text-[11px] text-indigo-700 dark:text-indigo-400 font-medium">
+            <Shield className="w-3.5 h-3.5 shrink-0" />
             {t("courseFinderPage.depositStrip", { fee: formatCurrency(p.depositFee, cur) })}
           </div>
         )}
 
-        {/* Metadata grid */}
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2 bg-muted/40 rounded-xl p-3 text-xs text-muted-foreground">
+        {/* Metadata 3-col grid */}
+        <div className="grid grid-cols-3 gap-2 bg-muted/40 rounded-xl p-3">
           {p.degree && (
-            <span className="flex items-center gap-1.5 min-w-0">
-              <GraduationCap className="w-3.5 h-3.5 text-violet-500 shrink-0" />
-              <span className="truncate font-medium">{p.degree}</span>
-            </span>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                <GraduationCap className="w-3 h-3 text-violet-500 shrink-0" />{t("courseFinderPage.degree")}
+              </span>
+              <span className="text-[11px] font-bold truncate">{p.degree}</span>
+            </div>
           )}
           {p.field && (
-            <span className="flex items-center gap-1.5 min-w-0">
-              <BookOpen className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-              <span className="truncate font-medium">{p.field}</span>
-            </span>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                <BookOpen className="w-3 h-3 text-orange-500 shrink-0" />{t("courseFinderPage.field")}
+              </span>
+              <span className="text-[11px] font-bold truncate">{p.field}</span>
+            </div>
           )}
           {p.language && (
-            <span className="flex items-center gap-1.5 min-w-0">
-              <Languages className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-              <span className="truncate font-medium">{p.language}</span>
-            </span>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                <Languages className="w-3 h-3 text-blue-500 shrink-0" />{t("courseFinderPage.language")}
+              </span>
+              <span className="text-[11px] font-bold truncate">{p.language}</span>
+            </div>
           )}
           {p.duration && (
-            <span className="flex items-center gap-1.5 min-w-0">
-              <Clock className="w-3.5 h-3.5 text-green-500 shrink-0" />
-              <span className="truncate font-medium">{p.duration}</span>
-            </span>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                <Clock className="w-3 h-3 text-green-500 shrink-0" />{t("courseFinderPage.duration")}
+              </span>
+              <span className="text-[11px] font-bold truncate">{p.duration}</span>
+            </div>
           )}
           {p.intakes && (
-            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
-              <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-              <span className="truncate font-medium">{p.intakes}</span>
-            </span>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />{t("courseFinderPage.intakes")}
+              </span>
+              <span className="text-[11px] font-bold truncate">{p.intakes}</span>
+            </div>
           )}
           {p.languageFee != null && p.languageFee > 0 && (
-            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
-              <Globe className="w-3.5 h-3.5 text-pink-500 shrink-0" />
-              <span className="font-medium">{t("courseFinderPage.languageFee")}: {formatCurrency(p.languageFee, cur)}</span>
-            </span>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                <DollarSign className="w-3 h-3 text-pink-500 shrink-0" />{t("courseFinderPage.languageFee")}
+              </span>
+              <span className="text-[11px] font-bold truncate">{formatCurrency(p.languageFee, cur)}{p.feeType ? ` (${p.feeType})` : ""}</span>
+            </div>
           )}
           {p.applicationFee != null && p.applicationFee > 0 && (
-            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
-              <FileText className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-              <span className="font-medium">{t("courseFinderPage.appFee")}: {formatCurrency(p.applicationFee, cur)}</span>
-            </span>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                <FileText className="w-3 h-3 text-muted-foreground/60 shrink-0" />{t("courseFinderPage.appFee")}
+              </span>
+              <span className="text-[11px] font-bold truncate">{formatCurrency(p.applicationFee, cur)}</span>
+            </div>
           )}
           {showCommission && commissionAmount != null && (
-            <span className="flex items-center gap-1.5 col-span-2 pt-1.5 border-t border-dashed border-muted-foreground/20 min-w-0">
-              <Award className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-              <span className="font-bold text-indigo-600 dark:text-indigo-400">{t("courseFinderPage.commission")}: {formatCurrency(commissionAmount, cur)}</span>
-            </span>
+            <div className="flex flex-col gap-0.5 min-w-0 col-span-3 pt-2 mt-0.5 border-t border-dashed border-muted-foreground/20">
+              <span className="flex items-center gap-1 text-[9px] text-indigo-600 dark:text-indigo-400 font-medium">
+                <Award className="w-3 h-3 shrink-0" />{t("courseFinderPage.commission")}
+              </span>
+              <span className="text-[14px] font-extrabold text-indigo-600 dark:text-indigo-400">{formatCurrency(commissionAmount, cur)}</span>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Bottom actions */}
-      <div className="flex border-t border-border/60">
+      {/* ── Bottom actions ── */}
+      <div className="flex items-center gap-2 px-4 py-3 border-t border-border/60">
         <button
           onClick={onInfo}
-          className="flex items-center justify-center px-4 py-3 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors border-r border-border/60 shrink-0"
+          className="w-9 h-9 rounded-full border-2 border-border/60 flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all shrink-0"
           aria-label="Details"
         >
           <Info className="w-4 h-4" />
         </button>
         <button
           onClick={onApply}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           {t("courseFinderPage.apply")} →
         </button>
