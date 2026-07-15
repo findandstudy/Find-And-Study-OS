@@ -6,6 +6,7 @@ import { usersTable } from "./users";
 export const contractTemplatesTable = pgTable("contract_templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  title: text("title").notNull().default(""),
   language: text("language").notNull().default("en"),
   entityType: text("entity_type").notNull().default("company"),
   version: integer("version").notNull().default(1),

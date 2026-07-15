@@ -3849,6 +3849,7 @@
     "colExpires": "Expire",
     "colActions": "Actions",
     "colDate": "Date",
+    "colTitle": "Titre",
     "colEvidenceHash": "Hachage de preuve",
     "colPdf": "PDF",
     "onboarding": "Intégration",
@@ -3929,7 +3930,9 @@
     "signingPageSubtitlePlaceholder": "Please fill in your details for...",
     "fieldMappingTitle": "Field → placeholder mapping",
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
-    "fieldMappingNotInBody": "Not found in contract body"
+    "fieldMappingNotInBody": "Not found in contract body",
+    "titleLabel": "Titre du PDF",
+    "titlePlaceholder": "Affiché sur le PDF signé et dans l'e-mail de livraison"
   },
   "agentOnboarding": {
     "verifyEmail": {

@@ -454,7 +454,7 @@ export function AuditLogSection({ resource, resourceId }: Props) {
                               {meta.label}
                             </span>
                           </div>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap" title={new Date(log.createdAt).toLocaleString("tr-TR")}>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap" title={(() => { const d = new Date(log.createdAt); return isNaN(d.getTime()) ? "" : `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; })()}>
                             {formatDate(log.createdAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" })}
                             {" "}
                             {formatDate(log.createdAt, lang, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, agentBranchesTable } from "@workspace/db";
-import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, ilike, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { createSigningToken } from "../lib/signingTokens";
@@ -143,10 +143,14 @@ router.get("/contracts/signed", requireAuth, requirePermission("contracts.view")
   try {
     const me = (req as any).user!;
     const visible = await getVisibleBranchIds(me.id, me.role);
+    const cols = {
+      ...getTableColumns(signedContractsTable),
+      templateTitle: contractTemplatesTable.title,
+    };
     let rows;
     if (visible === null) {
-      // super_admin sees all
-      rows = await db.select().from(signedContractsTable)
+      rows = await db.select(cols).from(signedContractsTable)
+        .leftJoin(contractTemplatesTable, eq(signedContractsTable.templateId, contractTemplatesTable.id))
         .orderBy(desc(signedContractsTable.signedAt))
         .limit(500);
     } else if (visible.length > 0) {
@@ -155,12 +159,14 @@ router.get("/contracts/signed", requireAuth, requirePermission("contracts.view")
         .from(agentBranchesTable)
         .where(inArray(agentBranchesTable.branchId, visible));
       const scopedIds = [...new Set(scopedAgents.map(r => r.agentId))];
-      rows = await db.select().from(signedContractsTable)
+      rows = await db.select(cols).from(signedContractsTable)
+        .leftJoin(contractTemplatesTable, eq(signedContractsTable.templateId, contractTemplatesTable.id))
         .where(scopedIds.length ? or(isNull(signedContractsTable.agentId), inArray(signedContractsTable.agentId, scopedIds)) : isNull(signedContractsTable.agentId))
         .orderBy(desc(signedContractsTable.signedAt))
         .limit(500);
     } else {
-      rows = await db.select().from(signedContractsTable)
+      rows = await db.select(cols).from(signedContractsTable)
+        .leftJoin(contractTemplatesTable, eq(signedContractsTable.templateId, contractTemplatesTable.id))
         .where(isNull(signedContractsTable.agentId))
         .orderBy(desc(signedContractsTable.signedAt))
         .limit(500);

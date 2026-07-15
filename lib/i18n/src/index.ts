@@ -57,9 +57,9 @@ const PRESETS: Record<DatePresetName, Intl.DateTimeFormatOptions> = {
 export type FormatDateOptions = DatePresetName | Intl.DateTimeFormatOptions;
 
 /**
- * Format a Date / ISO string / epoch ms in the active language.
- * Returns "" for null/undefined/invalid input so callers don't have to
- * sprinkle ternaries.
+ * Format a Date / ISO string / epoch ms as dd.mm.yyyy (e.g. 15.07.2026).
+ * When opts is "time" or a time-only options object, falls back to locale time.
+ * Returns "" for null/undefined/invalid input.
  */
 export function formatDate(
   value: Date | string | number | null | undefined,
@@ -70,7 +70,20 @@ export function formatDate(
   const d = value instanceof Date ? value : new Date(value);
   if (isNaN(d.getTime())) return "";
   const options = typeof opts === "string" ? PRESETS[opts] : opts;
-  return getFormatter(toLocale(lang), options).format(d);
+  // Time-only preset: no year/month/day → use locale formatter
+  if (options && !options.year && !options.month && !options.day) {
+    return getFormatter(toLocale(lang), options).format(d);
+  }
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  // Include time when options ask for it
+  if (options?.hour !== undefined || options?.minute !== undefined || opts === "dateTime") {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${dd}.${mm}.${yyyy} ${hh}:${mi}`;
+  }
+  return `${dd}.${mm}.${yyyy}`;
 }
 
 /** Convenience: relative formatting (e.g. "2 days ago"). */

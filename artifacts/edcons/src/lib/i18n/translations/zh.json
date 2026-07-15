@@ -3798,6 +3798,7 @@
     "colExpires": "过期时间",
     "colActions": "操作",
     "colDate": "日期",
+    "colTitle": "标题",
     "colEvidenceHash": "证据哈希",
     "colPdf": "PDF",
     "onboarding": "入驻",
@@ -3878,7 +3879,9 @@
     "signingPageSubtitlePlaceholder": "Please fill in your details for...",
     "fieldMappingTitle": "Field → placeholder mapping",
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
-    "fieldMappingNotInBody": "Not found in contract body"
+    "fieldMappingNotInBody": "Not found in contract body",
+    "titleLabel": "PDF 标题",
+    "titlePlaceholder": "显示在已签署的 PDF 和交付邮件中"
   },
   "agentOnboarding": {
     "verifyEmail": {

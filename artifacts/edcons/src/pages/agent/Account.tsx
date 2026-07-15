@@ -760,7 +760,7 @@ function DocumentViewer({
     try {
       const dt = new Date(d);
       if (isNaN(dt.getTime())) return d;
-      return dt.toLocaleDateString();
+      return `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}.${dt.getFullYear()}`;
     } catch {
       return d;
     }

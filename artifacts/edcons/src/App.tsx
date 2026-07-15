@@ -657,7 +657,7 @@ function AuthPrefetch() {
             initialData: initialUser as any,
             // Mark initial data as fresh so TanStack Query doesn't
             // immediately schedule a background refetch on mount.
-            initialDataUpdatedAt: Date.now(),
+            initialDataUpdatedAt: Date.now() - 60_000, // stale so role/permission changes reflect on reload without re-login
           }
         : {}),
     } as any,

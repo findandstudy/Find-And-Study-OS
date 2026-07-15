@@ -308,7 +308,7 @@ function CategorySection({
                   <div className="flex-1 min-w-0">
                     <p className="truncate font-medium text-foreground">{doc.fileName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {doc.uploadedByName || t("appDocsPanel.unknown")} · {new Date(doc.createdAt).toLocaleDateString()}
+                      {doc.uploadedByName || t("appDocsPanel.unknown")} · {(() => { const d = new Date(doc.createdAt); return isNaN(d.getTime()) ? "—" : `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; })()}
                       {doc.sizeBytes && ` · ${(doc.sizeBytes / 1024).toFixed(0)}KB`}
                     </p>
                   </div>

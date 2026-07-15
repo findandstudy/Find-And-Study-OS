@@ -3798,6 +3798,7 @@
     "colExpires": "समाप्ति",
     "colActions": "क्रियाएँ",
     "colDate": "दिनांक",
+    "colTitle": "शीर्षक",
     "colEvidenceHash": "साक्ष्य हैश",
     "colPdf": "PDF",
     "onboarding": "ऑनबोर्डिंग",
@@ -3878,7 +3879,9 @@
     "signingPageSubtitlePlaceholder": "Please fill in your details for...",
     "fieldMappingTitle": "Field → placeholder mapping",
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
-    "fieldMappingNotInBody": "Not found in contract body"
+    "fieldMappingNotInBody": "Not found in contract body",
+    "titleLabel": "PDF शीर्षक",
+    "titlePlaceholder": "हस्ताक्षरित PDF और डिलीवरी ईमेल में दिखाया जाता है"
   },
   "agentOnboarding": {
     "verifyEmail": {

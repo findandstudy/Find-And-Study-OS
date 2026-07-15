@@ -336,7 +336,7 @@ function StageSection({
                   <div className="flex-1 min-w-0">
                     <p className="truncate font-medium text-foreground">{doc.fileName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {doc.uploadedByName || t("stageDocs.unknownUploader")} · {new Date(doc.createdAt).toLocaleDateString()}
+                      {doc.uploadedByName || t("stageDocs.unknownUploader")} · {formatDate(doc.createdAt, lang)}
                       {doc.sizeBytes && ` · ${(doc.sizeBytes / 1024).toFixed(0)}KB`}
                     </p>
                     {validUntil && (
@@ -604,10 +604,10 @@ function MissingDocsSection({
                     <p className="text-[11px] text-muted-foreground mt-0.5">{note.note}</p>
                   )}
                   <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {t("stageDocs.requestDate", { date: note.createdAt ? new Date(note.createdAt).toLocaleDateString() : "—" })}
+                    {t("stageDocs.requestDate", { date: note.createdAt ? formatDate(note.createdAt, lang) : "—" })}
                     {note.uploadedByName ? ` · ${t("stageDocs.requestedBy", { name: note.uploadedByName })}` : ""}
                     {fulfilled && note.fulfilledAt
-                      ? ` · ${t("stageDocs.fulfilledOn", { date: new Date(note.fulfilledAt).toLocaleDateString() })}`
+                      ? ` · ${t("stageDocs.fulfilledOn", { date: formatDate(note.fulfilledAt, lang) })}`
                       : ""}
                   </p>
                 </div>

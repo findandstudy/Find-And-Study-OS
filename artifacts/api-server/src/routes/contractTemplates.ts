@@ -74,11 +74,12 @@ router.get("/contract-templates/:id", requireAuth, requirePermission("contract_t
 
 router.post("/contract-templates", requireAuth, requirePermission("contract_templates.manage"), async (req, res): Promise<void> => {
   try {
-    const { name, language, entityType, version, bodyHtml, intakeSchema, isActive, signingPageConfig } = req.body || {};
+    const { name, title, language, entityType, version, bodyHtml, intakeSchema, isActive, signingPageConfig } = req.body || {};
     if (!name || typeof name !== "string") { res.status(400).json({ error: "name is required" }); return; }
     if (!bodyHtml || typeof bodyHtml !== "string") { res.status(400).json({ error: "bodyHtml is required" }); return; }
     const norm = {
       name: String(name).slice(0, 200),
+      title: title && typeof title === "string" ? String(title).slice(0, 500) : "",
       language: language && typeof language === "string" ? language.slice(0, 8) : "en",
       entityType: entityType === "individual" ? "individual" : "company",
       version: Number.isInteger(version) && version > 0 ? version : 1,
@@ -112,7 +113,7 @@ router.patch("/contract-templates/:id", requireAuth, requirePermission("contract
     const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const updates: any = {};
-    const allowed = ["name", "language", "entityType", "version", "bodyHtml", "intakeSchema", "isActive", "signingPageConfig"];
+    const allowed = ["name", "title", "language", "entityType", "version", "bodyHtml", "intakeSchema", "isActive", "signingPageConfig"];
     for (const k of allowed) {
       if (k in (req.body || {})) updates[k] = req.body[k];
     }

@@ -15,6 +15,7 @@ import { FileText, Plus, Edit, Trash2, Loader2, ChevronDown, ChevronUp, AlertTri
 type Template = {
   id: number;
   name: string;
+  title: string;
   language: string;
   entityType: "company" | "individual";
   version: number;
@@ -137,6 +138,7 @@ export default function ContractTemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: "",
+    title: "",
     language: "en",
     entityType: "company" as "company" | "individual",
     version: 1,
@@ -167,7 +169,7 @@ export default function ContractTemplatesPage() {
   function openNew() {
     setEditing(null);
     setForm({
-      name: "", language: "en", entityType: "company", version: 1,
+      name: "", title: "", language: "en", entityType: "company", version: 1,
       bodyHtml: STARTER_BODY, intakeSchema: STARTER_INTAKE, isActive: true,
       signingPageConfig: EMPTY_SPC,
     });
@@ -180,6 +182,7 @@ export default function ContractTemplatesPage() {
     const spc = tpl.signingPageConfig;
     setForm({
       name: tpl.name,
+      title: tpl.title || "",
       language: tpl.language,
       entityType: tpl.entityType,
       version: tpl.version,
@@ -345,6 +348,8 @@ export default function ContractTemplatesPage() {
               <div>
                 <Label>{t("contractTemplates.colName")} *</Label>
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                <Label className="mt-2 block">{t("contractTemplates.titleLabel")}</Label>
+                <Input className="mt-1" placeholder={t("contractTemplates.titlePlaceholder")} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>

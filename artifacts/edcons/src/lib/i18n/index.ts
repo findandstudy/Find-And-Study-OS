@@ -119,7 +119,7 @@ export function getLocale(lang: Language): string {
   return LOCALE_MAP[lang] || "en-US";
 }
 
-/** Format a date with the given language's locale. */
+/** Format a date as dd.mm.yyyy (e.g. 15.07.2026). Locale-independent. */
 export function formatDate(
   lang: Language,
   date: string | number | Date,
@@ -128,11 +128,10 @@ export function formatDate(
   if (date == null) return "";
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d.getTime())) return "";
-  try {
-    return d.toLocaleDateString(getLocale(lang), options);
-  } catch {
-    return d.toLocaleDateString("en-US", options);
-  }
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
 }
 
 /** Format a time with the given language's locale. */
@@ -151,7 +150,7 @@ export function formatTime(
   }
 }
 
-/** Format a date+time with the given language's locale. */
+/** Format a date+time as dd.mm.yyyy HH:MM 24h (e.g. 15.07.2026 14:30). Locale-independent. */
 export function formatDateTime(
   lang: Language,
   date: string | number | Date,
@@ -160,11 +159,12 @@ export function formatDateTime(
   if (date == null) return "";
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d.getTime())) return "";
-  try {
-    return d.toLocaleString(getLocale(lang), options);
-  } catch {
-    return d.toLocaleString("en-US", options);
-  }
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}.${mm}.${yyyy} ${hh}:${mi}`;
 }
 
 export function isValidLanguage(lang: string): lang is Language {

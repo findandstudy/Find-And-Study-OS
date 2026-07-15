@@ -1435,7 +1435,9 @@ export default function StudentsPage() {
 
   function formatDate(d: string | null | undefined) {
     if (!d) return "-";
-    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return "-";
+    return `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}.${dt.getFullYear()}`;
   }
 
   if (isLoading) {

@@ -565,7 +565,7 @@ export default function AdminDashboard() {
                         {st.firstName} {st.lastName}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(st.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}{", "}
+                        {formatDate(st.createdAt, lang)}{", "}
                         {new Date(st.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
                       </p>
                     </div>
@@ -764,7 +764,7 @@ export default function AdminDashboard() {
                     </div>
                     {fu.leadName && <p className="text-xs text-primary mt-0.5">{fu.leadName}</p>}
                     <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
-                      {new Date(fu.scheduledAt).toLocaleDateString("tr-TR", { day: "numeric", month: "short" })}
+                      {formatDate(fu.scheduledAt, lang)}
                       {" "}
                       {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                       {isOverdue(fu.scheduledAt) && " — Overdue"}

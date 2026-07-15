@@ -3798,6 +3798,7 @@
     "colExpires": "Kedaluwarsa",
     "colActions": "Tindakan",
     "colDate": "Tanggal",
+    "colTitle": "Judul",
     "colEvidenceHash": "Hash bukti",
     "colPdf": "PDF",
     "onboarding": "Onboarding",
@@ -3878,7 +3879,9 @@
     "signingPageSubtitlePlaceholder": "Please fill in your details for...",
     "fieldMappingTitle": "Field → placeholder mapping",
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
-    "fieldMappingNotInBody": "Not found in contract body"
+    "fieldMappingNotInBody": "Not found in contract body",
+    "titleLabel": "Judul PDF",
+    "titlePlaceholder": "Ditampilkan di PDF yang ditandatangani dan email pengiriman"
   },
   "agentOnboarding": {
     "verifyEmail": {

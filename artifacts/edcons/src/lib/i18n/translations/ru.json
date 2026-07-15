@@ -3849,6 +3849,7 @@
     "colExpires": "Истекает",
     "colActions": "Действия",
     "colDate": "Дата",
+    "colTitle": "Заголовок",
     "colEvidenceHash": "Хеш подтверждения",
     "colPdf": "PDF",
     "onboarding": "Онбординг",
@@ -3929,7 +3930,9 @@
     "signingPageSubtitlePlaceholder": "Please fill in your details for...",
     "fieldMappingTitle": "Field → placeholder mapping",
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
-    "fieldMappingNotInBody": "Not found in contract body"
+    "fieldMappingNotInBody": "Not found in contract body",
+    "titleLabel": "Заголовок PDF",
+    "titlePlaceholder": "Отображается в подписанном PDF и в письме о доставке"
   },
   "agentOnboarding": {
     "verifyEmail": {

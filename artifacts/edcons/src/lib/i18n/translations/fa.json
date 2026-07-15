@@ -3798,6 +3798,7 @@
     "colExpires": "انقضا",
     "colActions": "عملیات",
     "colDate": "تاریخ",
+    "colTitle": "عنوان",
     "colEvidenceHash": "هَش مدرک",
     "colPdf": "PDF",
     "onboarding": "راه‌اندازی اولیه",
@@ -3878,7 +3879,9 @@
     "signingPageSubtitlePlaceholder": "Please fill in your details for...",
     "fieldMappingTitle": "Field → placeholder mapping",
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
-    "fieldMappingNotInBody": "Not found in contract body"
+    "fieldMappingNotInBody": "Not found in contract body",
+    "titleLabel": "عنوان PDF",
+    "titlePlaceholder": "در PDF امضاشده و ایمیل تحویل نمایش داده می‌شود"
   },
   "agentOnboarding": {
     "verifyEmail": {

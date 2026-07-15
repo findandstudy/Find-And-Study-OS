@@ -90,7 +90,7 @@ export function OfferDeadlinesWidget({ detailHrefPrefix, hideStudent }: Props) {
                         {validUntilDate && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
-                            {validUntilDate.toLocaleDateString("en-US")}
+                            {`${String(validUntilDate.getDate()).padStart(2,"0")}.${String(validUntilDate.getMonth()+1).padStart(2,"0")}.${validUntilDate.getFullYear()}`}
                           </span>
                         )}
                       </div>

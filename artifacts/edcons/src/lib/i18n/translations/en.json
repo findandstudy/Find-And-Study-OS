@@ -1886,6 +1886,7 @@
     "colExpires": "Expires",
     "colActions": "Actions",
     "colDate": "Date",
+    "colTitle": "Title",
     "colEvidenceHash": "Evidence hash",
     "colPdf": "PDF",
     "onboarding": "Onboarding",
@@ -1966,7 +1967,9 @@
     "signingPageSubtitlePlaceholder": "Please fill in your details for...",
     "fieldMappingTitle": "Field → placeholder mapping",
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
-    "fieldMappingNotInBody": "Not found in contract body"
+    "fieldMappingNotInBody": "Not found in contract body",
+    "titleLabel": "PDF Title",
+    "titlePlaceholder": "Shown on the signed PDF and in the delivery email"
   },
   "universityContracts": {
     "title": "University Contracts",

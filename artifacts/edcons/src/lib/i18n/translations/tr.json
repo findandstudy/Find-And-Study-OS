@@ -1827,6 +1827,7 @@
     "colExpires": "Bitiş",
     "colActions": "İşlemler",
     "colDate": "Tarih",
+    "colTitle": "Başlık",
     "colEvidenceHash": "Delil hash",
     "colPdf": "PDF",
     "onboarding": "Başlangıç Süreci",
@@ -1907,7 +1908,9 @@
     "signingPageSubtitlePlaceholder": "Lütfen bilgilerinizi doldurun...",
     "fieldMappingTitle": "Alan → değişken eşlemesi",
     "fieldMappingEmpty": "Eşlemeyi görmek için yukarıya alan ekleyin.",
-    "fieldMappingNotInBody": "Sözleşme gövdesinde bulunamadı"
+    "fieldMappingNotInBody": "Sözleşme gövdesinde bulunamadı",
+    "titleLabel": "PDF Başlığı",
+    "titlePlaceholder": "İmzalı PDF'de ve teslim e-postasında gösterilir"
   },
   "universityContracts": {
     "title": "Üniversite Sözleşmeleri",

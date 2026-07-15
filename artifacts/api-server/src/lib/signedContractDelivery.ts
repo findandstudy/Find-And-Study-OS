@@ -169,7 +169,33 @@ export async function deliverPendingSignedContracts(): Promise<void> {
             portalUrl,
             language: template?.language,
           });
-          await sendEmail(signerEmail, email);
+
+          // Attach the signed PDF if it was successfully rendered.
+          let pdfOpts: { attachments: import("./email").EmailAttachment[] } | undefined;
+          try {
+            const [pdfRow] = await db
+              .select({ pdfObjectKey: signedContractsTable.pdfObjectKey })
+              .from(signedContractsTable)
+              .where(eq(signedContractsTable.id, row.id));
+            if (pdfRow?.pdfObjectKey) {
+              const { ObjectStorageService } = await import("./objectStorage");
+              const svc = new ObjectStorageService();
+              const file = await svc.getObjectEntityFile(pdfRow.pdfObjectKey);
+              const [pdfBuffer] = await file.download();
+              const safeSlug = templateName.replace(/[^a-z0-9]/gi, "-").replace(/-+/g, "-").slice(0, 60);
+              pdfOpts = {
+                attachments: [{
+                  filename: `${safeSlug}-signed.pdf`,
+                  content: pdfBuffer,
+                  contentType: "application/pdf",
+                }],
+              };
+            }
+          } catch (attachErr) {
+            console.warn(`[SIGNED-DELIVERY] Could not attach PDF for signed_contract ${row.id}:`, attachErr);
+          }
+
+          await sendEmail(signerEmail, email, pdfOpts);
         }
 
         // Notify admins/super_admins via the notification-rule system (respects

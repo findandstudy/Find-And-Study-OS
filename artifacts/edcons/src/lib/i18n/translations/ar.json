@@ -3849,6 +3849,7 @@
     "colExpires": "تاريخ الانتهاء",
     "colActions": "الإجراءات",
     "colDate": "التاريخ",
+    "colTitle": "العنوان",
     "colEvidenceHash": "بصمة الإثبات",
     "colPdf": "PDF",
     "onboarding": "التأهيل",
@@ -3929,7 +3930,9 @@
     "signingPageSubtitlePlaceholder": "Please fill in your details for...",
     "fieldMappingTitle": "Field → placeholder mapping",
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
-    "fieldMappingNotInBody": "Not found in contract body"
+    "fieldMappingNotInBody": "Not found in contract body",
+    "titleLabel": "عنوان PDF",
+    "titlePlaceholder": "يظهر في PDF الموقع وفي رسالة التسليم"
   },
   "agentOnboarding": {
     "verifyEmail": {

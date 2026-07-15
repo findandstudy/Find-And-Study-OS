@@ -750,7 +750,7 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {new Date(doc.createdAt).toLocaleDateString()}
+                    {(() => { const d = new Date(doc.createdAt); return isNaN(d.getTime()) ? "—" : `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; })()}
                   </td>
                   <td className="px-4 py-3">
                     {(doc.fileKey || doc.fileData || doc.fileUrl) && (

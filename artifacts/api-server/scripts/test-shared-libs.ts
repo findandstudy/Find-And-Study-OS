@@ -96,10 +96,9 @@ test("@workspace/i18n: formatDate returns empty for null/invalid", () => {
   assert.equal(formatDate("not-a-date"), "");
 });
 
-test("@workspace/i18n: formatDate('tr', 'date') matches Intl tr-TR output", () => {
+test("@workspace/i18n: formatDate('tr', 'date') produces dd.mm.yyyy", () => {
   const d = new Date("2026-05-13T12:00:00Z");
-  const expected = new Intl.DateTimeFormat("tr-TR", { year: "numeric", month: "short", day: "numeric" }).format(d);
-  assert.equal(formatDate(d, "tr", "date"), expected);
+  assert.equal(formatDate(d, "tr", "date"), "13.05.2026");
 });
 
 test("@workspace/i18n: formatDate accepts custom Intl options", () => {

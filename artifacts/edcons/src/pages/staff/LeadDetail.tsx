@@ -795,7 +795,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-foreground whitespace-pre-wrap break-words">{note.content}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {note.authorName || "Team"} · {new Date(note.createdAt).toLocaleDateString()}
+                            {note.authorName || "Team"} · {formatDate(note.createdAt, lang)}
                           </p>
                         </div>
                         {isStaffUser && (
@@ -882,8 +882,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 </Select>
               )}
               <div className="pt-2 border-t text-xs text-muted-foreground space-y-1">
-                <p>Created: {lead ? new Date(lead.createdAt).toLocaleDateString() : "—"}</p>
-                <p>Updated: {lead ? new Date(lead.updatedAt).toLocaleDateString() : "—"}</p>
+                <p>Created: {lead ? formatDate(lead.createdAt, lang) : "—"}</p>
+                <p>Updated: {lead ? formatDate(lead.updatedAt, lang) : "—"}</p>
               </div>
             </div>
 

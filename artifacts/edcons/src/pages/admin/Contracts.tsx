@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
+import { fmtDate, fmtDateTime } from "@/lib/formatDate";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ type Session = {
 type Signed = {
   id: number; signingSessionId: number; agentId: number | null; templateId: number;
   pdfObjectKey: string | null; evidenceHash: string | null; signerEmail: string; signerName: string | null; signedAt: string;
+  templateTitle?: string | null;
 };
 type Agent = { id: number; firstName: string | null; lastName: string | null; businessName: string | null; email: string | null; entityType?: string | null; preferredContractLanguage?: string | null };
 type Template = { id: number; name: string; language: string; entityType: string; version: number; isActive: boolean };
@@ -193,7 +195,7 @@ export default function ContractsPage() {
     if (!confirm(t("contracts.confirmResendOnboarding"))) return;
     try {
       const res: any = await customFetch(`/api/contracts/agent/${agentId}/resend-onboarding`, { method: "POST" });
-      toast({ title: t("contracts.onboardingResentTitle"), description: t("contracts.onboardingResentDesc", { date: new Date(res.data?.expiresAt).toLocaleString() }) });
+      toast({ title: t("contracts.onboardingResentTitle"), description: t("contracts.onboardingResentDesc", { date: fmtDateTime(res.data?.expiresAt) }) });
       await load();
     } catch (err: any) { toast({ title: t("contracts.error"), description: err.message, variant: "destructive" }); }
   }
@@ -300,6 +302,7 @@ export default function ContractsPage() {
         case "signer": return (c.signerName || c.signerEmail || "").toLowerCase();
         case "date": return c.signedAt ? new Date(c.signedAt).getTime() : null;
         case "evidence": return c.evidenceHash || null;
+        case "title": return (c.templateTitle || "").toLowerCase();
         default: return null;
       }
     };
@@ -385,8 +388,8 @@ export default function ContractsPage() {
                         <div className="text-xs text-muted-foreground">{s.signerEmail}</div>
                       </td>
                       <td className="px-4 py-3"><Badge variant={STATUS_LABELS[s.status]?.tone}>{STATUS_LABELS[s.status]?.label || s.status}</Badge></td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{s.openedAt ? new Date(s.openedAt).toLocaleString() : "-"}</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(s.expiresAt).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{s.openedAt ? fmtDateTime(s.openedAt) : "-"}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDateTime(s.expiresAt)}</td>
                       <td className="px-4 py-3 text-right space-x-1">
                         {s.status !== "signed" && s.status !== "revoked" && (
                           <>
@@ -424,6 +427,7 @@ export default function ContractsPage() {
                   <input type="checkbox" checked={allSignedSelected} onChange={toggleAllSigned} className="cursor-pointer" title={t("common.selectAll")} />
                 </th>
                 {sortTh(t("contracts.colSigner"), "signer", signedSort, setSignedSort)}
+                {sortTh(t("contracts.colTitle"), "title", signedSort, setSignedSort)}
                 {sortTh(t("contracts.colDate"), "date", signedSort, setSignedSort)}
                 {sortTh(t("contracts.colEvidenceHash"), "evidence", signedSort, setSignedSort)}
                 <th className="text-right px-4 py-3">{t("contracts.colPdf")}</th>
@@ -439,7 +443,8 @@ export default function ContractsPage() {
                     <div className="font-medium">{c.signerName || "-"}</div>
                     <div className="text-xs text-muted-foreground">{c.signerEmail}</div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(c.signedAt).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{c.templateTitle || "—"}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(c.signedAt)}</td>
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{c.evidenceHash ? c.evidenceHash.slice(0, 16) + "…" : "—"}</td>
                   <td className="px-4 py-3 text-right">
                     <Button
