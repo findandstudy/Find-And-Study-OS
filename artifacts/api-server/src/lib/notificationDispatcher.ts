@@ -39,6 +39,17 @@ interface DispatchContext {
   };
   templateVars?: Record<string, string>;
   createdSource?: string | null;
+  /**
+   * When set, the notification system also delivers an email to this external
+   * (non-user) address — provided the rule is active AND "email" is in channels.
+   * Used for transactional emails to signers who are not internal users.
+   */
+  externalEmail?: string;
+  /**
+   * Fallback email builder used when no custom template body is configured for
+   * the rule. Only called when externalEmail is set and the rule/channels allow it.
+   */
+  externalEmailFallback?: () => Promise<{ subject: string; html: string; text: string }>;
 }
 
 interface LangTemplate {
@@ -221,7 +232,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
       userIds = userIds.filter(id => id !== ctx.actorUserId);
     }
 
-    if (userIds.length === 0) return;
+    if (userIds.length === 0 && !ctx.externalEmail) return;
 
     if (channels.includes("in_app")) {
       // Batched insert + parallel pg_notify so the notification list and the
@@ -341,6 +352,39 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
           }
         } catch (err) {
           console.error(`[NOTIFY] WhatsApp dispatch error for ${ctx.event}:`, err);
+        }
+      })();
+    }
+
+    // External email delivery — for transactional emails to non-user recipients
+    // (e.g. external signers). Only sent when externalEmail is provided, the rule
+    // is active (already guarded above via `if (!rule) return`), and "email" is
+    // in the rule's channels. Honors isActive and channels like internal delivery.
+    if (ctx.externalEmail && channels.includes("email")) {
+      const externalEmailAddr = ctx.externalEmail;
+      (async () => {
+        try {
+          const localized = resolveTemplate(template, null);
+          let emailContent: { subject: string; html: string; text: string };
+          if (localized?.subject || localized?.body) {
+            const subject = localized.subject
+              ? replaceVars(localized.subject, vars)
+              : ctx.title;
+            const bodyHtml = localized.body
+              ? renderBodyHtml(localized.body, vars)
+              : bodyToHtml(ctx.body);
+            emailContent = await buildNotificationEmail({ subject, bodyHtml });
+          } else if (ctx.externalEmailFallback) {
+            emailContent = await ctx.externalEmailFallback();
+          } else {
+            emailContent = await buildNotificationEmail({
+              subject: ctx.title,
+              bodyHtml: bodyToHtml(ctx.body),
+            });
+          }
+          await sendEmail(externalEmailAddr, emailContent);
+        } catch (err) {
+          console.error(`[NOTIFY] External email dispatch error for ${ctx.event} to ${externalEmailAddr}:`, err);
         }
       })();
     }

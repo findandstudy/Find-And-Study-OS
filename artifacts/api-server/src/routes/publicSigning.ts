@@ -1,6 +1,6 @@
 import express, { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, emailVerificationCodesTable, notificationRulesTable } from "@workspace/db";
+import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, emailVerificationCodesTable } from "@workspace/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import { hashToken } from "../lib/signingTokens";
@@ -9,7 +9,8 @@ import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOL
 import { ObjectStorageService } from "../lib/objectStorage";
 import { finalizeSign } from "../lib/signContract";
 import { writeAudit } from "../lib/auditLog";
-import { buildSignedContractEmail, buildSignVerificationCodeEmail, buildNotificationEmail, sendEmail, getAppBaseUrl } from "../lib/email";
+import { buildSignVerificationCodeEmail, getAppBaseUrl } from "../lib/email";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp, getClientIp } from "../lib/clientIp";
 
@@ -305,47 +306,26 @@ router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Prom
     await db.insert(emailVerificationCodesTable).values({
       email, code, token: tokenHash, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     });
+    // Route verification-code delivery through the notification-rule system so
+    // Settings > Notification Rules > Contracts > Email Verification Code controls
+    // both activation (isActive) and template customization (channels/body).
+    // externalEmail + externalEmailFallback ensure the rule's active/email-channel
+    // flags are honored: if the rule is inactive or email is not in channels, the
+    // code email is not sent (dispatchNotification returns early).
     try {
-      // Check if a custom template has been set for the verification-code email
-      // via Settings > System Notification Rules > Contracts > Email Verification Code.
-      // If a custom template has content, use it (with var substitution). Otherwise
-      // fall back to the built-in multilingual buildSignVerificationCodeEmail.
-      const codeVars = {
-        verificationCode: code,
-        contractName: r.template.name,
-        signerName: r.session.signerName || email,
-        signerEmail: email,
-      };
-      let mail: { subject: string; html: string; text: string };
-      try {
-        const [vcRule] = await db.select({ template: notificationRulesTable.template })
-          .from(notificationRulesTable)
-          .where(and(
-            eq(notificationRulesTable.event, "contract.verification_code"),
-            eq(notificationRulesTable.isActive, true),
-          ));
-        const tpl = vcRule?.template as { subject?: string; body?: string; translations?: Record<string, { subject?: string; body?: string }> } | undefined;
-        const lang = r.template.language || "en";
-        const trans = tpl?.translations || {};
-        const resolved = trans[lang] || (tpl?.subject || tpl?.body ? { subject: tpl?.subject, body: tpl?.body } : undefined) || trans["en"] || trans["tr"];
-        const customSubject = resolved?.subject?.trim();
-        const customBody = resolved?.body?.trim();
-        if (customSubject || customBody) {
-          function replaceVars(tmpl: string, vars: Record<string, string>) {
-            let r = tmpl;
-            for (const [k, v] of Object.entries(vars)) r = r.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v || "");
-            return r;
-          }
-          const subject = replaceVars(customSubject || "Your verification code", codeVars as Record<string, string>);
-          const bodyHtml = replaceVars(customBody || `Your code: <strong>${code}</strong>`, codeVars as Record<string, string>);
-          mail = await buildNotificationEmail({ subject, bodyHtml });
-        } else {
-          mail = await buildSignVerificationCodeEmail({ code, templateName: r.template.name, language: r.template.language });
-        }
-      } catch {
-        mail = await buildSignVerificationCodeEmail({ code, templateName: r.template.name, language: r.template.language });
-      }
-      await sendEmail(email, mail);
+      await dispatchNotification({
+        event: "contract.verification_code",
+        title: "Your verification code",
+        body: `Your verification code for "${r.template.name}": ${code}`,
+        templateVars: {
+          verificationCode: code,
+          contractName: r.template.name,
+          signerName: r.session.signerName || email,
+          signerEmail: email,
+        },
+        externalEmail: email,
+        externalEmailFallback: () => buildSignVerificationCodeEmail({ code, templateName: r.template.name, language: r.template.language }),
+      });
     } catch (mailErr) {
       console.error("[public-sign] failed to send verification code:", mailErr);
     }
