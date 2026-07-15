@@ -72,7 +72,7 @@ interface Props {
 }
 
 export default function LeadDetail({ id, basePath = "/staff" }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, hasPermission } = useAuth(true);
