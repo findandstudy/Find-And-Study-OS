@@ -192,12 +192,13 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           items: workItems
         },
         ...(() => {
+          const sp = agentStaffPerms || [];
           const contractItems: MenuItem[] = [
-            ...(canSee('contracts.view') ? [{ title: t("dashboard.contracts"), icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' }] : []),
-            ...(canSee('contract_templates.view') ? [{ title: t("dashboard.contractTemplates"), icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' }] : []),
-            ...(canSee('university_contracts.view') ? [{ title: t("dashboard.universityContracts"), icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' }] : []),
-            ...(canSee('company_contracts.view') ? [{ title: t("dashboard.companyContracts"), icon: Building, url: '/admin/company-contracts', permKey: 'company_contracts.view' }] : []),
-            ...(canSee('self_fill_links.view') ? [{ title: t("dashboard.selfFillLinks"), icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' }] : []),
+            ...(sp.includes('contracts.view') ? [{ title: t("dashboard.contracts"), icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' }] : []),
+            ...(sp.includes('contract_templates.view') ? [{ title: t("dashboard.contractTemplates"), icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' }] : []),
+            ...(sp.includes('university_contracts.view') ? [{ title: t("dashboard.universityContracts"), icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' }] : []),
+            ...(sp.includes('company_contracts.view') ? [{ title: t("dashboard.companyContracts"), icon: Building, url: '/admin/company-contracts', permKey: 'company_contracts.view' }] : []),
+            ...(sp.includes('self_fill_links.view') ? [{ title: t("dashboard.selfFillLinks"), icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' }] : []),
           ];
           return contractItems.length ? [{ label: t("dashboard.groupAgentNetwork"), items: contractItems }] : [];
         })(),
