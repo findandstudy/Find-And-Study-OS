@@ -96,7 +96,7 @@ export function ProtectedRoute({ children, allowedRoles, requiredPermission }: P
     return <AccessDeniedScreen />;
   }
 
-  if (requiredPermission && effectiveUser.role === "agent_staff") {
+  if (requiredPermission && effectiveUser.role !== "super_admin" && effectiveUser.role !== "admin") {
     const raw = effectiveUser.agentStaffPermissions;
     const perms = Array.isArray(raw) ? raw : [];
     if (!perms.includes(requiredPermission)) {

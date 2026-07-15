@@ -360,25 +360,25 @@ function StaffAdminShell() {
             <ProtectedRoute allowedRoles={["super_admin","admin"]}><AdminStaffCards /></ProtectedRoute>
           </Route>
           <Route path="/admin/contract-templates">
-            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminContractTemplates /></ProtectedRoute>
+            <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "staff", "consultant", "accountant", "editor", "agent_staff"]} requiredPermission="contract_templates.view"><AdminContractTemplates /></ProtectedRoute>
           </Route>
           <Route path="/admin/contracts">
-            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminContracts /></ProtectedRoute>
+            <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "staff", "consultant", "accountant", "editor", "agent_staff"]} requiredPermission="contracts.view"><AdminContracts /></ProtectedRoute>
           </Route>
           <Route path="/admin/self-fill-links">
-            <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminSelfFillLinks /></ProtectedRoute>
+            <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "staff", "consultant", "accountant", "editor", "agent_staff"]} requiredPermission="self_fill_links.view"><AdminSelfFillLinks /></ProtectedRoute>
           </Route>
           <Route path="/admin/university-contracts/:id">
-            {(params) => <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "agent_staff"]} requiredPermission="university_contracts.view"><AdminUniversityContracts openId={Number(params.id)} /></ProtectedRoute>}
+            {(params) => <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "staff", "consultant", "accountant", "editor", "agent_staff"]} requiredPermission="university_contracts.view"><AdminUniversityContracts openId={Number(params.id)} /></ProtectedRoute>}
           </Route>
           <Route path="/admin/university-contracts">
-            <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "agent_staff"]} requiredPermission="university_contracts.view"><AdminUniversityContracts /></ProtectedRoute>
+            <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "staff", "consultant", "accountant", "editor", "agent_staff"]} requiredPermission="university_contracts.view"><AdminUniversityContracts /></ProtectedRoute>
           </Route>
           <Route path="/admin/company-contracts/:id">
-            {(params) => <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "agent_staff"]} requiredPermission="company_contracts.view"><AdminCompanyContracts openId={Number(params.id)} /></ProtectedRoute>}
+            {(params) => <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "staff", "consultant", "accountant", "editor", "agent_staff"]} requiredPermission="company_contracts.view"><AdminCompanyContracts openId={Number(params.id)} /></ProtectedRoute>}
           </Route>
           <Route path="/admin/company-contracts">
-            <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "agent_staff"]} requiredPermission="company_contracts.view"><AdminCompanyContracts /></ProtectedRoute>
+            <ProtectedRoute allowedRoles={[...ADMIN_ROLES, "staff", "consultant", "accountant", "editor", "agent_staff"]} requiredPermission="company_contracts.view"><AdminCompanyContracts /></ProtectedRoute>
           </Route>
           <Route path="/admin/portal-automation">
             <ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminPortalAutomation /></ProtectedRoute>
