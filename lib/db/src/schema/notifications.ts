@@ -124,6 +124,14 @@ export const NOTIFICATION_EVENTS = {
       "inbox.send_failed": { name: "Outbound Send Failed", description: "When an outbound channel message fails to send" },
     },
   },
+  contracts: {
+    label: "Contracts",
+    events: {
+      "contract.sent": { name: "Contract Sent to Signer", description: "When a contract signing link is sent or resent to a signer" },
+      "contract.verification_code": { name: "Email Verification Code", description: "The verification code email sent to the signer before signing (customizable template)" },
+      "contract.signed": { name: "Contract Signed", description: "When a signer successfully completes contract signing" },
+    },
+  },
 } as const;
 
 export const DEFAULT_NOTIFICATION_RULES = [
@@ -164,4 +172,7 @@ export const DEFAULT_NOTIFICATION_RULES = [
   { event: "company_contract.expired", name: "Company Contract Expired", category: "agents", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
   { event: "mandatory_docs_missing", name: "Application Parked: Missing Mandatory Docs", category: "applications", channels: ["in_app"], recipientType: "assigned", recipientRoles: [] },
   { event: "mandatory_docs_missing_student", name: "Required Documents Missing (Student)", category: "applications", channels: ["in_app", "email"], recipientType: "specific", recipientRoles: [] },
+  { event: "contract.sent", name: "Contract Sent to Signer", category: "contracts", channels: ["in_app", "email"], recipientType: "role", recipientRoles: ["super_admin", "admin"] },
+  { event: "contract.verification_code", name: "Email Verification Code", category: "contracts", channels: ["email"], recipientType: "specific", recipientRoles: [] },
+  { event: "contract.signed", name: "Contract Signed", category: "contracts", channels: ["in_app", "email"], recipientType: "role", recipientRoles: ["super_admin", "admin"] },
 ];

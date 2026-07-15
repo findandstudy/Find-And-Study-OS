@@ -4,6 +4,7 @@ import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, type SQL } from "d
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { createSigningToken } from "../lib/signingTokens";
+import { dispatchNotification } from "../lib/notificationDispatcher";
 import { buildContractSignRequestEmail, sendEmail, getAppBaseUrl } from "../lib/email";
 import { signedContractFilename } from "../lib/contractRenderer";
 import { getVisibleBranchIds, isAgentInScope } from "../lib/branchScope";
@@ -349,8 +350,22 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
       console.error("[contracts] failed to send sign request email:", err);
     }
 
+    const actorUserId = (req as any).user?.id ?? undefined;
+    const sentVars = { signerName: signerName || "", signerEmail: agent.email || "", templateName: tpl.name || "" };
+    (async () => {
+      try {
+        await dispatchNotification({
+          event: "contract.sent",
+          title: "Contract Sent",
+          body: `Contract "${sentVars.templateName}" sent to ${sentVars.signerName || sentVars.signerEmail}.`,
+          actorUserId,
+          templateVars: sentVars,
+        });
+      } catch (e) { console.error("[contracts] contract.sent dispatch:", e); }
+    })();
+
     await writeAudit({
-      userId: (req as any).user?.id ?? null,
+      userId: actorUserId ?? null,
       action: "contract.link_sent",
       resource: "signing_session",
       resourceId: session.id,
@@ -422,8 +437,22 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
       }
     }
 
+    const sfActorId = (req as any).user?.id ?? undefined;
+    const sfVars = { signerName: signerName || "", signerEmail: normalizedEmail || "", templateName: tpl.name || "" };
+    (async () => {
+      try {
+        await dispatchNotification({
+          event: "contract.sent",
+          title: "Contract Sent",
+          body: `Contract "${sfVars.templateName}" sent to ${sfVars.signerName || sfVars.signerEmail}.`,
+          actorUserId: sfActorId,
+          templateVars: sfVars,
+        });
+      } catch (e) { console.error("[contracts] contract.sent dispatch (self_fill):", e); }
+    })();
+
     await writeAudit({
-      userId: (req as any).user?.id ?? null,
+      userId: sfActorId ?? null,
       action: "contract.link_sent",
       resource: "signing_session",
       resourceId: session.id,
@@ -572,8 +601,21 @@ router.post("/contracts/sessions/:id/resend", requireAuth, gateSessionMutate, as
         console.error("[contracts] failed to resend email:", err);
       }
     }
+    const resendActorId = (req as any).user?.id ?? undefined;
+    const resendVars = { signerName: session.signerName || "", signerEmail: session.signerEmail || "", templateName: tpl?.name || "" };
+    (async () => {
+      try {
+        await dispatchNotification({
+          event: "contract.sent",
+          title: "Contract Resent",
+          body: `Contract "${resendVars.templateName}" resent to ${resendVars.signerName || resendVars.signerEmail}.`,
+          actorUserId: resendActorId,
+          templateVars: resendVars,
+        });
+      } catch (e) { console.error("[contracts] contract.sent dispatch (resend):", e); }
+    })();
     await writeAudit({
-      userId: (req as any).user?.id ?? null,
+      userId: resendActorId ?? null,
       action: "contract.link_sent",
       resource: "signing_session",
       resourceId: id,

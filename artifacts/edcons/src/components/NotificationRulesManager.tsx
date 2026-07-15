@@ -75,11 +75,13 @@ const CHANNEL_META: Record<string, { label: string; icon: any; color: string }> 
 const CATEGORY_LABELS: Record<string, string> = {
   leads: "Leads", applications: "Applications", students: "Students",
   finance: "Finance", agents: "Agents", system: "System", messages: "Messages",
+  contracts: "Contracts",
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
   leads: "UserPlus", applications: "FileText", students: "GraduationCap",
   finance: "DollarSign", agents: "Building", system: "Settings", messages: "MessageSquare",
+  contracts: "FileText",
 };
 
 const RECIPIENT_LABELS: Record<string, string> = {
@@ -112,6 +114,9 @@ const TEMPLATE_VARS: Record<string, string[]> = {
   "system.announcement": ["title", "message"],
   "message.new": ["senderName"],
   "message.mention": ["senderName", "channel"],
+  "contract.sent": ["signerName", "signerEmail", "templateName"],
+  "contract.verification_code": ["verificationCode", "templateName", "signerName"],
+  "contract.signed": ["signerName", "signerEmail", "templateName"],
 };
 
 interface Props {

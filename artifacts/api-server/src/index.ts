@@ -2094,6 +2094,59 @@ async function seedClaudeIntegration() {
       console.error("[migrate] conversation.stuck_assigned notification rule:", err);
     }
 
+    // Idempotent: seed the three contract notification rules introduced in this
+    // release (contract.sent, contract.verification_code, contract.signed).
+    // All three use ON CONFLICT DO NOTHING so re-running on existing envs is safe.
+    try {
+      await pool.query(`
+        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
+        VALUES (
+          'contract.sent',
+          'Contract Sent to Signer',
+          'When a contract signing link is sent or resent to a signer',
+          'contracts',
+          '["in_app","email"]'::jsonb,
+          'role',
+          '["super_admin","admin"]'::jsonb,
+          true,
+          '{}'::jsonb
+        )
+        ON CONFLICT (event) DO NOTHING
+      `);
+      await pool.query(`
+        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
+        VALUES (
+          'contract.verification_code',
+          'Email Verification Code',
+          'The verification code email sent to the signer before signing (customizable template)',
+          'contracts',
+          '["email"]'::jsonb,
+          'specific',
+          '[]'::jsonb,
+          true,
+          '{}'::jsonb
+        )
+        ON CONFLICT (event) DO NOTHING
+      `);
+      await pool.query(`
+        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
+        VALUES (
+          'contract.signed',
+          'Contract Signed',
+          'When a signer successfully completes contract signing',
+          'contracts',
+          '["in_app","email"]'::jsonb,
+          'role',
+          '["super_admin","admin"]'::jsonb,
+          true,
+          '{}'::jsonb
+        )
+        ON CONFLICT (event) DO NOTHING
+      `);
+    } catch (err) {
+      console.error("[migrate] contract notification rules:", err);
+    }
+
     // One-shot data fix: sync leads and applications whose assigned_to_id does
     // not match their student's assigned_to_id. These accumulated over time
     // because assignment cascades are permission-gated and many historical
