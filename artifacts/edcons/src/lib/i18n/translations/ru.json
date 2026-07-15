@@ -2169,6 +2169,8 @@
     "match": "Сопоставить",
     "matchContact": "Сопоставить контакт",
     "createNewLead": "Создать новый лид",
+    "newLead": "Новый лид",
+    "addStudentBtn": "Добавить студента",
     "createLeadFromConversation": "Создать лид из переписки",
     "aiSuggestion": "Предложение ИИ",
     "loadingAiSuggestion": "Загрузка предложения ИИ...",

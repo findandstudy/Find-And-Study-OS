@@ -2118,6 +2118,8 @@
     "match": "मिलान",
     "matchContact": "संपर्क मिलाएं",
     "createNewLead": "नया लीड बनाएं",
+    "newLead": "नया लीड",
+    "addStudentBtn": "छात्र जोड़ें",
     "createLeadFromConversation": "बातचीत से लीड बनाएं",
     "aiSuggestion": "AI सुझाव",
     "loadingAiSuggestion": "AI सुझाव लोड हो रहा है...",

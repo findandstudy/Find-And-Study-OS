@@ -40,11 +40,13 @@ import {
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown, Star, Bell,
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
-  Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical
+  Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical,
+  UserPlus,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useI18n } from "@/hooks/use-i18n";
+import { AddStudentModal } from "@/components/AddStudentModal";
 
 interface Conversation {
   id: number;
@@ -276,6 +278,8 @@ function InboxTab() {
   const [createLeadForm, setCreateLeadForm] = useState({ fullName: "", email: "", phone: "" });
   const [createLeadAiFields, setCreateLeadAiFields] = useState<Set<string>>(new Set());
   const [createLeadDuplicate, setCreateLeadDuplicate] = useState<null | { id: number; firstName: string; lastName: string; email: string | null; phone: string | null; status: string }>(null);
+  const [addStudentOpen, setAddStudentOpen] = useState(false);
+  const [addStudentPrefill, setAddStudentPrefill] = useState<{ firstName?: string; lastName?: string; email?: string; phone?: string }>({});
   const [tplOpen, setTplOpen] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [tplId, setTplId] = useState<string>("");
@@ -498,6 +502,21 @@ function InboxTab() {
     } catch {
       toast({ title: t("messagesPage.failedToLink"), variant: "destructive" });
     }
+  }
+
+  function openAddStudentDialog() {
+    const currentExt = detail?.externalContact;
+    const currentConv = detail?.conversation;
+    const name = (currentExt?.displayName || currentConv?.title || "").trim();
+    const parts = name.split(/\s+/);
+    setAddStudentPrefill({
+      firstName: parts[0] || "",
+      lastName: parts.slice(1).join(" ") || "",
+      email: currentExt?.email || "",
+      phone: currentExt?.phone || "",
+    });
+    setMatchOpen(false);
+    setAddStudentOpen(true);
   }
 
   async function openCreateLeadDialog() {
@@ -1617,7 +1636,8 @@ function InboxTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMatchOpen(false)}>{t("messagesPage.cancel")}</Button>
-            <Button onClick={openCreateLeadDialog} className="gap-1"><Plus className="w-3 h-3" /> {t("messagesPage.createNewLead")}</Button>
+            <Button variant="outline" onClick={openCreateLeadDialog} className="gap-1"><Plus className="w-3 h-3" /> {t("messagesPage.newLead")}</Button>
+            <Button onClick={openAddStudentDialog} className="gap-1"><UserPlus className="w-3 h-3" /> {t("messagesPage.addStudentBtn")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1708,6 +1728,14 @@ function InboxTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AddStudentModal
+        open={addStudentOpen}
+        onClose={() => setAddStudentOpen(false)}
+        onSuccess={() => {}}
+        prefill={addStudentPrefill}
+        onCreated={(studentId) => applyMatch("student", studentId)}
+      />
 
       <Dialog open={tplOpen} onOpenChange={(open) => { setTplOpen(open); if (!open) { setTplId(""); setTplVars([]); setTemplateQuery(""); } }}>
         <DialogContent className="sm:max-w-lg">

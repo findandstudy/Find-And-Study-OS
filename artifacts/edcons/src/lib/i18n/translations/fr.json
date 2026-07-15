@@ -2169,6 +2169,8 @@
     "match": "Associer",
     "matchContact": "Associer le contact",
     "createNewLead": "Créer un nouveau prospect",
+    "newLead": "Nouveau Lead",
+    "addStudentBtn": "Ajouter un étudiant",
     "createLeadFromConversation": "Créer un prospect depuis la conversation",
     "aiSuggestion": "Suggestion IA",
     "loadingAiSuggestion": "Chargement de la suggestion IA...",

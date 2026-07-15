@@ -2118,6 +2118,8 @@
     "match": "Cocokkan",
     "matchContact": "Cocokkan kontak",
     "createNewLead": "Buat lead baru",
+    "newLead": "Lead Baru",
+    "addStudentBtn": "Tambah Siswa",
     "createLeadFromConversation": "Buat prospek dari percakapan",
     "aiSuggestion": "Saran AI",
     "loadingAiSuggestion": "Memuat saran AI...",

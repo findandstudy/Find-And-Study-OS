@@ -2118,6 +2118,8 @@
     "match": "تطبیق",
     "matchContact": "مطابقت مخاطب",
     "createNewLead": "ایجاد سرنخ جدید",
+    "newLead": "سرنخ جدید",
+    "addStudentBtn": "افزودن دانشجو",
     "createLeadFromConversation": "ایجاد سرنخ از مکالمه",
     "aiSuggestion": "پیشنهاد هوش مصنوعی",
     "loadingAiSuggestion": "در حال بارگذاری پیشنهاد...",

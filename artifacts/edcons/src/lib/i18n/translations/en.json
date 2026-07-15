@@ -2422,6 +2422,8 @@
     "match": "Match",
     "matchContact": "Match contact",
     "createNewLead": "Create new lead",
+    "newLead": "New Lead",
+    "addStudentBtn": "Add Student",
     "createLeadFromConversation": "Create lead from conversation",
     "aiSuggestion": "AI suggestion",
     "loadingAiSuggestion": "Loading AI suggestion...",

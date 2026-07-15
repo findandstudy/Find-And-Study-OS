@@ -2363,6 +2363,8 @@
     "match": "Eşleştir",
     "matchContact": "Kişiyi eşleştir",
     "createNewLead": "Yeni lead oluştur",
+    "newLead": "Yeni Lead",
+    "addStudentBtn": "Öğrenci Ekle",
     "createLeadFromConversation": "Konuşmadan lead oluştur",
     "aiSuggestion": "AI önerisi",
     "loadingAiSuggestion": "AI önerisi yükleniyor...",

@@ -2118,6 +2118,8 @@
     "match": "匹配",
     "matchContact": "匹配联系人",
     "createNewLead": "创建新潜在客户",
+    "newLead": "新线索",
+    "addStudentBtn": "添加学生",
     "createLeadFromConversation": "从对话创建线索",
     "aiSuggestion": "AI建议",
     "loadingAiSuggestion": "正在加载AI建议...",

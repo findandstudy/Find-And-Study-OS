@@ -2118,6 +2118,8 @@
     "match": "Coincidir",
     "matchContact": "Coincidir contacto",
     "createNewLead": "Crear nuevo lead",
+    "newLead": "Nuevo Lead",
+    "addStudentBtn": "Agregar Estudiante",
     "createLeadFromConversation": "Crear lead desde la conversación",
     "aiSuggestion": "Sugerencia IA",
     "loadingAiSuggestion": "Cargando sugerencia IA...",

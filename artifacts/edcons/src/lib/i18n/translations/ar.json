@@ -2169,6 +2169,8 @@
     "match": "مطابقة",
     "matchContact": "مطابقة جهة الاتصال",
     "createNewLead": "إنشاء عميل محتمل جديد",
+    "newLead": "عميل جديد",
+    "addStudentBtn": "إضافة طالب",
     "createLeadFromConversation": "إنشاء عميل محتمل من المحادثة",
     "aiSuggestion": "اقتراح الذكاء الاصطناعي",
     "loadingAiSuggestion": "تحميل اقتراح الذكاء الاصطناعي...",
