@@ -357,21 +357,16 @@ export default function SignFlow({ token }: { token: string }) {
       <CheckCircle2 className="w-14 h-14 text-emerald-500 mb-4" />
       <h1 className="text-2xl font-semibold mb-2">{t("signed")}</h1>
       <p className="text-muted-foreground text-sm text-center max-w-md mb-6">{t("signedBody")}</p>
-      <div className="flex flex-col sm:flex-row gap-2 w-full">
-        <Button
-          onClick={handleDownloadPdf}
-          disabled={downloadingPdf}
-          className="flex-1 bg-[#143591] hover:bg-[#0f2870] text-white"
-        >
-          {downloadingPdf
-            ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            : <FileSignature className="w-4 h-4 mr-2" />}
-          {t("downloadPdf")}
-        </Button>
-        <Button asChild variant="outline" className="flex-1">
-          <a href={`${BASE_URL}/login`}>{t("openPortal")}</a>
-        </Button>
-      </div>
+      <Button
+        onClick={handleDownloadPdf}
+        disabled={downloadingPdf}
+        className="w-full bg-[#143591] hover:bg-[#0f2870] text-white"
+      >
+        {downloadingPdf
+          ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          : <FileSignature className="w-4 h-4 mr-2" />}
+        {t("downloadPdf")}
+      </Button>
       {pdfMsg && (
         <p className="text-sm text-muted-foreground text-center mt-3">{pdfMsg}</p>
       )}
