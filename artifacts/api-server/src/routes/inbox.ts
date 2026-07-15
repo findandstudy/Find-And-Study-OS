@@ -38,7 +38,8 @@ import { sendMessengerText, type MessengerConfig } from "../lib/inbox/channels/m
 import { sendInstagramText, type InstagramConfig } from "../lib/inbox/channels/instagram";
 import { isLiveIntegrationsEnabled } from "../lib/inbox/liveMode";
 import { directOrigin } from "../lib/originHelper";
-import { applyLeadAssignmentRules } from "../lib/leadAssignment";
+import { applyLeadAssignmentRules, cascadeLeadAssignment, cascadeStudentAssignment } from "../lib/leadAssignment";
+import { userHasPermission } from "../lib/permissions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
 import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
@@ -736,6 +737,50 @@ router.patch(
       return;
     }
     await logAudit(req.user!.id, "assign_conversation", "conversation", id, { assignedToId }, req.ip);
+
+    // Cascade to linked lead / student (and their sibling applications).
+    // Fire-and-forget so this never blocks the HTTP response.
+    const assignmentActuallyChanged = assignedToId !== (previous?.assignedToId ?? null);
+    if (assignmentActuallyChanged) {
+      void (async () => {
+        try {
+          const link = await loadConversationLink(id);
+          if (!link) return;
+          const actor = req.user!;
+          const canCascade = await userHasPermission(
+            { id: actor.id, role: actor.role },
+            "records.cascade_assignment",
+          );
+          if (link.leadId != null) {
+            const [lead] = await db
+              .select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
+              .from(leadsTable)
+              .where(and(eq(leadsTable.id, link.leadId), isNull(leadsTable.deletedAt)));
+            if (lead && (canCascade || assignedToId !== null)) {
+              await cascadeLeadAssignment({
+                leadId: lead.id,
+                convertedStudentId: lead.convertedStudentId ?? null,
+                newAssignedToId: assignedToId,
+                actorUserId: actor.id,
+                ipAddress: req.ip,
+                nullFillOnly: !canCascade,
+              });
+            }
+          } else if (link.studentId != null && (canCascade || assignedToId !== null)) {
+            await cascadeStudentAssignment({
+              studentId: link.studentId,
+              newAssignedToId: assignedToId,
+              actorUserId: actor.id,
+              ipAddress: req.ip,
+              nullFillOnly: !canCascade,
+            });
+          }
+        } catch (err: any) {
+          console.error("[inbox assign cascade]", err?.message || err);
+        }
+      })();
+    }
+
     inboxBus.publish({
       type: "assigned",
       conversationId: id,
