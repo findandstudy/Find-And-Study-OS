@@ -3241,8 +3241,8 @@ function renderDetailContent(p){
   return h;
 }
 
-var EW_TR_MAP={'ç':'C','Ç':'C','ğ':'G','Ğ':'G','ı':'I','İ':'I','ö':'O','Ö':'O','ş':'S','Ş':'S','ü':'U','Ü':'U'};
-function ewToLatinUpper(v){return String(v==null?'':v).replace(/[çÇğĞıİöÖşŞüÜ]/g,function(c){return EW_TR_MAP[c]||c;}).toUpperCase();}
+var EW_TR_MAP={'ç':'C','Ç':'C','ğ':'G','Ğ':'G','ı':'I','İ':'I','ö':'O','Ö':'O','ş':'S','Ş':'S','ü':'U','Ü':'U','â':'A','Â':'A','î':'I','Î':'I','û':'U','Û':'U','ə':'E','Ə':'E','ø':'O','Ø':'O','ß':'SS','æ':'AE','Æ':'AE','œ':'OE','Œ':'OE','ð':'D','Ð':'D','þ':'TH','Þ':'TH','đ':'D','Đ':'D','ł':'L','Ł':'L'};
+function ewToLatinUpper(v){var s=String(v==null?'':v).replace(/[çÇğĞıİöÖşŞüÜâÂîÎûÛəƏøØßæÆœŒðÐþÞđĐłŁ]/g,function(c){return EW_TR_MAP[c]||c;});if(typeof s.normalize==='function'){s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x00-\x7F]/g,'');}return s.toUpperCase();}
 function ewHasNonLatin(v){var s=String(v==null?'':v);for(var ci=0;ci<s.length;ci++){var ch=s[ci];if(/\\p{L}/u.test(ch)&&!/\\p{Script=Latin}/u.test(ch))return true;}return false;}
 function ewFirstNonLatinName(){var NLF=['firstName','lastName','motherName','fatherName','highSchool','address'];for(var i=0;i<NLF.length;i++){var val=savedFormData[NLF[i]];if(val&&ewHasNonLatin(val))return NLF[i];}return null;}
 function wireNameAndPhoneNormalizers(scope){

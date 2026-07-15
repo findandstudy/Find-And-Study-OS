@@ -1,4 +1,5 @@
 const TR_TO_LATIN_MAP: Record<string, string> = {
+  // Turkish
   "ç": "c", "Ç": "C",
   "ğ": "g", "Ğ": "G",
   "ı": "i", "İ": "I",
@@ -8,6 +9,18 @@ const TR_TO_LATIN_MAP: Record<string, string> = {
   "â": "a", "Â": "A",
   "î": "i", "Î": "I",
   "û": "u", "Û": "U",
+  // Azerbaijani (schwa — does NOT decompose via NFD)
+  "ə": "e", "Ə": "E",
+  // Nordic / Germanic / Celtic
+  "ø": "o", "Ø": "O",
+  "ß": "ss",
+  "æ": "ae", "Æ": "AE",
+  "œ": "oe", "Œ": "OE",
+  "ð": "d", "Ð": "D",
+  "þ": "th", "Þ": "Th",
+  // Slavic / Baltic
+  "đ": "d", "Đ": "D",
+  "ł": "l", "Ł": "L",
 };
 
 export function transliterateToLatin(input: string): string {
@@ -20,7 +33,13 @@ export function transliterateToLatin(input: string): string {
     const stripped = ch.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     out += stripped;
   }
-  return out;
+  // Safety net: one final NFKD pass to catch any remaining composed forms,
+  // then drop any non-ASCII characters that neither the map nor NFD resolved.
+  // (Name fields must be pure ASCII; unknown chars are silently removed.)
+  return out
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x00-\x7F]/g, "");
 }
 
 export function toLatinUpper(input: string): string {
