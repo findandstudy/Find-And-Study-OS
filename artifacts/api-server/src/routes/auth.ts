@@ -75,13 +75,12 @@ function buildSessionUser(user: Record<string, unknown>): SessionUser {
     emailVerified: user.emailVerified as boolean,
     phone: user.phone as string | null,
   };
-  if (user.role === "agent_staff") {
-    // Always emit the field for agent_staff (even when the DB column is null)
-    // so the frontend never sees `undefined` and mis-renders Access Denied.
-    result.agentStaffPermissions = Array.isArray(user.agentStaffPermissions)
-      ? (user.agentStaffPermissions as string[])
-      : [];
-  }
+  // Emit effective permissions for ALL roles (staff, consultant, agent_staff, ...) so the
+  // frontend sidebar can gate menus. authMiddleware populates user.agentStaffPermissions
+  // from the role's effective permission set. Admins rely on isAdmin instead.
+  result.agentStaffPermissions = Array.isArray(user.agentStaffPermissions)
+    ? (user.agentStaffPermissions as string[])
+    : [];
   return result;
 }
 

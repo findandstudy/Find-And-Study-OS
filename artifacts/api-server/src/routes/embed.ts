@@ -1633,7 +1633,17 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   const dialCodes: [string, string, string][] = dialRows
     .filter(r => r.dialCode)
     .map(r => [r.dialCode as string, r.code, r.name]);
-  const html = generateWidgetHTML(slug, baseUrl, widget, docMeta, dialCodes);
+  let html = generateWidgetHTML(slug, baseUrl, widget, docMeta, dialCodes);
+    // SAFETY GUARD (widget fragility): strip control chars the HTML parser rewrites, which
+    // can corrupt the inline widget <script> - a stray NUL (U+0000) becomes U+FFFD and yields
+    // a "Range out of order in character class" SyntaxError that blanks the whole widget.
+    html = html.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+    try {
+      const _m = html.match(/<script[^>]*>([\s\S]*?)<\/script>/);
+      if (_m) new Function(_m[1]);
+    } catch (_e) {
+      console.error("[EMBED WIDGET] inline script INVALID JS after generation - widget would render blank:", (_e as Error).message);
+    }
   res.setHeader("Content-Type", "text/html");
   // No-cache so widget fixes propagate instantly (no stale/broken version served
   // from browser or CDN cache for up to an hour).
