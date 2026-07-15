@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { getTranslation, isValidLanguage, type Language, RTL_LANGUAGES } from "@/lib/i18n/index";
 import { FALLBACK_COUNTRIES } from "@/lib/nationalities";
+import { CITIES_BY_COUNTRY } from "@/lib/city-data";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -483,6 +484,29 @@ export default function SignFlow({ token }: { token: string }) {
                       placeholder={f.placeholder || t("selectPlaceholder")}
                     />
                   </div>
+                ) : f.type === "city" ? (
+                  (() => {
+                    const parentCountry = f.dependsOn ? (intake[f.dependsOn] || "") : "";
+                    const cityOptions = parentCountry ? (CITIES_BY_COUNTRY[parentCountry] || []) : [];
+                    return cityOptions.length > 0 ? (
+                      <div className="mt-1.5">
+                        <SearchableSelect
+                          value={intake[f.key] || ""}
+                          onValueChange={v => setIntake(s => ({ ...s, [f.key]: v }))}
+                          options={cityOptions.map(c => ({ value: c, label: c }))}
+                          placeholder={f.placeholder || t("selectPlaceholder")}
+                        />
+                      </div>
+                    ) : (
+                      <Input
+                        className="mt-1.5"
+                        placeholder={f.placeholder}
+                        type="text"
+                        value={intake[f.key] || ""}
+                        onChange={e => setIntake(s => ({ ...s, [f.key]: e.target.value }))}
+                      />
+                    );
+                  })()
                 ) : (
                   <Input
                     className="mt-1.5"
