@@ -191,6 +191,9 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[]): { g
           label: t("dashboard.work"),
           items: workItems
         },
+        ...(agentNetworkItems.some((it) => (it as any).permKey)
+          ? [{ label: t("dashboard.groupAgentNetwork"), items: agentNetworkItems.filter((it) => (it as any).permKey) }]
+          : []),
         {
           label: t("dashboard.system"),
           items: [
