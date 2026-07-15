@@ -91,7 +91,7 @@ export async function deliverPendingSignedContracts(): Promise<void> {
     if (pending.length === 0) return;
 
     const portalUrl = `${getAppBaseUrl()}/login`;
-    const adminContractUrl = `${getAppBaseUrl()}/staff/contracts/signed`;
+    const adminContractUrl = `${getAppBaseUrl()}/admin/contracts`;
 
     for (const row of pending) {
       // Atomically claim a lease on the row so concurrent workers / instances

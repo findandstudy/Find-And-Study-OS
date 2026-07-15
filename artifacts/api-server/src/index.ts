@@ -2098,51 +2098,80 @@ async function seedClaudeIntegration() {
     // release (contract.sent, contract.verification_code, contract.signed).
     // All three use ON CONFLICT DO NOTHING so re-running on existing envs is safe.
     try {
-      await pool.query(`
-        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
-        VALUES (
-          'contract.sent',
-          'Contract Sent to Signer',
-          'When a contract signing link is sent or resent to a signer',
-          'contracts',
-          '["in_app","email"]'::jsonb,
-          'role',
-          '["super_admin","admin"]'::jsonb,
-          true,
-          '{}'::jsonb
-        )
-        ON CONFLICT (event) DO NOTHING
-      `);
-      await pool.query(`
-        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
-        VALUES (
-          'contract.verification_code',
-          'Email Verification Code',
-          'The verification code email sent to the signer before signing (customizable template)',
-          'contracts',
-          '["email"]'::jsonb,
-          'specific',
-          '[]'::jsonb,
-          true,
-          '{}'::jsonb
-        )
-        ON CONFLICT (event) DO NOTHING
-      `);
-      await pool.query(`
-        INSERT INTO notification_rules (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
-        VALUES (
-          'contract.signed',
-          'Contract Signed',
-          'When a signer successfully completes contract signing',
-          'contracts',
-          '["in_app","email"]'::jsonb,
-          'role',
-          '["super_admin","admin"]'::jsonb,
-          true,
-          '{}'::jsonb
-        )
-        ON CONFLICT (event) DO NOTHING
-      `);
+      const contractNotificationRules = [
+        {
+          event: "contract.sent",
+          name: "Contract Sent to Signer",
+          description: "When a contract signing link is sent or resent to a signer",
+          channels: ["in_app", "email"],
+          recipientType: "role",
+          recipientRoles: ["super_admin", "admin"],
+          template: {
+            subject: "Contract Sent to Signer",
+            body: "The contract <strong>{{contractName}}</strong> has been sent to <strong>{{signerName}}</strong> ({{signerEmail}}) for signing.<br><br><a href=\"{{contractLink}}\">View Contracts</a>",
+            translations: {
+              tr: {
+                subject: "Sözleşme İmzaya Gönderildi",
+                body: "<strong>{{contractName}}</strong> sözleşmesi, <strong>{{signerName}}</strong> ({{signerEmail}}) kişisine imzalanmak üzere gönderildi.<br><br><a href=\"{{contractLink}}\">Sözleşmeleri Görüntüle</a>",
+              },
+            },
+          },
+        },
+        {
+          event: "contract.verification_code",
+          name: "Email Verification Code",
+          description: "The verification code email sent to the signer before signing (customizable template)",
+          channels: ["email"],
+          recipientType: "specific",
+          recipientRoles: [] as string[],
+          template: {
+            subject: "Your Verification Code for {{contractName}}",
+            body: "Your verification code for signing <strong>{{contractName}}</strong>:<br><br><strong style=\"font-size:24px;letter-spacing:4px\">{{verificationCode}}</strong><br><br>This code expires in 15 minutes.",
+            translations: {
+              tr: {
+                subject: "{{contractName}} İçin Doğrulama Kodunuz",
+                body: "<strong>{{contractName}}</strong> sözleşmesini imzalamak için doğrulama kodunuz:<br><br><strong style=\"font-size:24px;letter-spacing:4px\">{{verificationCode}}</strong><br><br>Bu kod 15 dakika içinde geçersiz olacaktır.",
+              },
+            },
+          },
+        },
+        {
+          event: "contract.signed",
+          name: "Contract Signed",
+          description: "When a signer successfully completes contract signing",
+          channels: ["in_app", "email"],
+          recipientType: "role",
+          recipientRoles: ["super_admin", "admin"],
+          template: {
+            subject: "{{signerName}} Signed {{contractName}}",
+            body: "<strong>{{signerName}}</strong> ({{signerEmail}}) has successfully signed the contract <strong>{{contractName}}</strong>.<br><br><a href=\"{{contractLink}}\">View Signed Contracts</a>",
+            translations: {
+              tr: {
+                subject: "{{signerName}}, {{contractName}} Sözleşmesini İmzaladı",
+                body: "<strong>{{signerName}}</strong> ({{signerEmail}}), <strong>{{contractName}}</strong> sözleşmesini başarıyla imzaladı.<br><br><a href=\"{{contractLink}}\">İmzalanan Sözleşmeleri Görüntüle</a>",
+              },
+            },
+          },
+        },
+      ];
+      for (const rule of contractNotificationRules) {
+        await pool.query(
+          `INSERT INTO notification_rules
+             (event, name, description, category, channels, recipient_type, recipient_roles, is_active, template)
+           VALUES ($1, $2, $3, 'contracts', $4::jsonb, $5, $6::jsonb, true, $7::jsonb)
+           ON CONFLICT (event) DO UPDATE SET template = EXCLUDED.template
+           WHERE notification_rules.template = '{}'::jsonb`,
+          [
+            rule.event,
+            rule.name,
+            rule.description,
+            JSON.stringify(rule.channels),
+            rule.recipientType,
+            JSON.stringify(rule.recipientRoles),
+            JSON.stringify(rule.template),
+          ]
+        );
+      }
     } catch (err) {
       console.error("[migrate] contract notification rules:", err);
     }

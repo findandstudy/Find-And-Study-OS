@@ -322,6 +322,7 @@ router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Prom
           contractName: r.template.name,
           signerName: r.session.signerName || email,
           signerEmail: email,
+          contractLink: `${getAppBaseUrl()}/sign/${String(req.params.token)}`,
         },
         externalEmail: email,
         externalEmailFallback: () => buildSignVerificationCodeEmail({ code, templateName: r.template.name, language: r.template.language }),

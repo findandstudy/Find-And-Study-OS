@@ -115,7 +115,7 @@ const TEMPLATE_VARS: Record<string, string[]> = {
   "message.new": ["senderName"],
   "message.mention": ["senderName", "channel"],
   "contract.sent": ["signerName", "signerEmail", "contractName", "contractLink"],
-  "contract.verification_code": ["verificationCode", "contractName", "signerName", "signerEmail"],
+  "contract.verification_code": ["verificationCode", "contractName", "signerName", "signerEmail", "contractLink"],
   "contract.signed": ["signerName", "signerEmail", "contractName", "contractLink"],
 };
 
