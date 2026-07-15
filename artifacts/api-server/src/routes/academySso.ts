@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { db, agentsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -40,13 +40,17 @@ function signHs256(payload: Record<string, unknown>, secret: string): string {
   return data + "." + sig;
 }
 
-router.get("/academy-sso", requireAuth, async (req: Request, res: Response) => {
+router.get("/academy-sso", requireAuth, requireRole("agent", "sub_agent", "agent_staff"), async (req: Request, res: Response) => {
   const secret = process.env.SSO_SHARED_SECRET;
   if (!secret) {
     res.status(500).send("SSO not configured");
     return;
   }
   const u = req.user!;
+  if (!u.email) {
+    res.status(400).send("email required");
+    return;
+  }
   const company = await resolveCompanyName(u.id, u.role);
   const token = signHs256(
     {
