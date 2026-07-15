@@ -2996,7 +2996,12 @@
     "submitting": "Enviando...",
     "creating": "Creando...",
     "uploadRequiredRemaining": "Sube los documentos requeridos ({count} restantes)",
-    "submitApplication": "Enviar solicitud"
+    "submitApplication": "Enviar solicitud",
+    "degree": "Grado",
+    "duration": "Duración",
+    "languageFee": "Tarifa de idioma",
+    "depositStrip": "Asegure su lugar con un depósito de {fee}",
+    "apply": "Aplicar ahora"
   },
   "docTypes": {
     "passport": "Pasaporte",

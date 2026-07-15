@@ -1877,7 +1877,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-card-logo-wrap{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.92);box-shadow:0 4px 10px rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;z-index:1;overflow:hidden;border:2px solid rgba(255,255,255,.5)}
 .ew-card-logo-wrap img{width:32px;height:32px;object-fit:contain}
 .ew-card-logo-fallback{width:20px;height:20px;color:${primaryColor}}
-.ew-card-uni-name{font-size:.75rem;font-weight:600;color:rgba(31,41,55,.78);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:relative;z-index:1}
+.ew-card-uni-name{font-size:.75rem;font-weight:600;color:rgba(31,41,55,.78);flex:1;min-width:0;overflow:hidden;position:relative;z-index:1;display:flex;flex-direction:column;gap:2px}.ew-card-uni-name-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ew-card-uni-loc{display:flex;align-items:center;gap:3px;font-size:9px;color:rgba(100,116,139,.8);font-weight:400}.ew-card-uni-loc svg{width:9px;height:9px;flex-shrink:0;color:rgba(37,99,235,.45)}
 .ew-card-pills{display:flex;gap:6px;flex-shrink:0;position:relative;z-index:1}
 .ew-pill-soft{font-size:10px;font-weight:500;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.75);backdrop-filter:blur(4px);color:#475569;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .ew-pill-primary{font-size:10px;font-weight:500;padding:3px 8px;border-radius:6px;background:${primaryColor};color:#fff;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.08)}
@@ -1901,6 +1901,15 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-fee-pct{font-size:9px;font-weight:700;color:#fff;background:#10b981;border-radius:3px;padding:1px 4px;line-height:1.2}
 .ew-scholarship{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 9px;border-radius:9999px;border:1px solid rgba(16,185,129,.3);color:#059669;background:rgba(236,253,245,.6);margin-bottom:12px;align-self:flex-start}
 .ew-scholarship svg{width:12px;height:12px}
+.ew-fee-section{margin-bottom:12px}
+.ew-fee-section-label{font-size:10px;color:#94a3b8;font-weight:500;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
+.ew-fee-section-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ew-fee-main{font-size:20px;font-weight:800;color:#1f2937;line-height:1}
+.ew-fee-disc-big{color:#059669!important;font-size:20px;font-weight:800;line-height:1}
+.ew-scholarship-right{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:9999px;border:1px solid rgba(16,185,129,.3);color:#059669;background:rgba(236,253,245,.7);white-space:nowrap}
+.ew-scholarship-right svg{width:12px;height:12px}
+.ew-deposit-strip{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;background:rgba(254,243,199,.7);border:1px solid rgba(253,230,138,.6);color:#b45309;font-size:11px;font-weight:500;margin-bottom:12px}
+.ew-deposit-strip svg{width:12px;height:12px;flex-shrink:0}
 .ew-card-actions{margin-top:auto;display:flex;gap:8px}
 .ew-btn-info{width:40px;height:40px;border-radius:10px;border:1px solid rgba(226,232,240,.8);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#64748b;flex-shrink:0;transition:all .2s}
 .ew-btn-info:hover{border-color:rgba(37,99,235,.4);background:rgba(239,246,255,.5);color:${primaryColor}}
@@ -2702,39 +2711,60 @@ function renderCard(p){
   var logoInner=p.universityLogoUrl?'<img src="'+esc(p.universityLogoUrl)+'" alt="" onerror="this.style.display=\\'none\\';this.nextElementSibling&&(this.nextElementSibling.style.display=\\'block\\')">'+'<span style="display:none" class="ew-card-logo-fallback">'+ICON_GRAD+'</span>':'<span class="ew-card-logo-fallback">'+ICON_GRAD+'</span>';
 
   var h='<div class="ew-card">';
+
+  /* ── Banner ── */
   h+='<div class="ew-card-banner ew-card-banner-g'+idx+'">';
   h+='<div class="ew-card-logo-wrap">'+logoInner+'</div>';
-  h+='<div class="ew-card-uni-name">'+esc(p.universityName||'')+'</div>';
+  h+='<div class="ew-card-uni-name"><div class="ew-card-uni-name-text">'+esc(p.universityName||'')+'</div>';
+  if(loc)h+='<div class="ew-card-uni-loc">'+ICON_MAPPIN+'<span>'+loc+'</span></div>';
+  h+='</div>';
   h+='<div class="ew-card-pills">';
   if(p.universityType)h+='<span class="ew-pill-soft">'+esc(p.universityType)+'</span>';
   if(p.degree)h+='<span class="ew-pill-primary">'+esc(p.degree)+'</span>';
   h+='</div></div>';
 
+  /* ── Body ── */
   h+='<div class="ew-card-body">';
   h+='<div class="ew-card-title">'+esc(p.name)+'</div>';
-  if(loc)h+='<div class="ew-card-loc">'+ICON_MAPPIN+'<span>'+loc+'</span></div>';
 
-  h+='<div class="ew-card-meta">';
-  if(p.language)h+='<div class="ew-meta-item"><span class="ew-meta-icon-blue">'+ICON_LANG+'</span><span class="ew-meta-text">'+esc(p.language)+'</span></div>';
-  if(p.duration)h+='<div class="ew-meta-item"><span class="ew-meta-icon-green">'+ICON_CLOCK+'</span><span class="ew-meta-text">'+esc(p.duration)+'</span></div>';
-  if(p.intakes)h+='<div class="ew-meta-item"><span class="ew-meta-icon-orange">'+ICON_BOOK+'</span><span class="ew-meta-text">'+esc(p.intakes)+'</span></div>';
+  /* Fee section */
   if(effFee){
-    h+='<div class="ew-meta-item"><span class="ew-meta-icon-emerald">'+ICON_DOLLAR+'</span><span class="ew-fee-row">';
+    h+='<div class="ew-fee-section">';
+    h+='<div class="ew-fee-section-label">Tuition Fee</div>';
+    h+='<div class="ew-fee-section-row">';
+    h+='<div class="ew-fee-row">';
     if(hasDiscount)h+='<span class="ew-fee-orig">'+esc(fmtFee(p.tuitionFee,p.currency))+'</span>';
-    h+='<span'+(hasDiscount?' class="ew-fee-disc"':'')+'>'+esc(fmtFee(effFee,p.currency))+'</span>';
+    h+='<span class="'+(hasDiscount?'ew-fee-disc-big':'ew-fee-main')+'">'+esc(fmtFee(effFee,p.currency))+'</span>';
     if(hasDiscount)h+='<span class="ew-fee-pct">-'+pct+'%</span>';
-    h+='</span></div>';
-  }
-  h+='</div>';
-
-  if(p.scholarship&&p.scholarship>0){
+    h+='</div>';
+    if(p.scholarship&&p.scholarship>0){
+      h+='<div class="ew-scholarship-right">'+ICON_AWARD+'<span>'+esc(fmtFee(p.scholarship,p.currency))+'</span></div>';
+    }
+    h+='</div></div>';
+  } else if(p.scholarship&&p.scholarship>0){
     h+='<div class="ew-scholarship">'+ICON_AWARD+'<span>Scholarship: '+esc(fmtFee(p.scholarship,p.currency))+'</span></div>';
   }
 
+  /* Deposit strip */
+  if(p.depositFee&&p.depositFee>0){
+    h+='<div class="ew-deposit-strip">'+ICON_DOLLAR+'<span>Secure your place with a '+esc(fmtFee(p.depositFee,p.currency))+' deposit</span></div>';
+  }
+
+  /* Metadata grid */
+  h+='<div class="ew-card-meta">';
+  if(p.degree)h+='<div class="ew-meta-item"><span class="ew-meta-icon-blue">'+ICON_GRAD+'</span><span class="ew-meta-text">'+esc(p.degree)+'</span></div>';
+  if(p.field)h+='<div class="ew-meta-item"><span class="ew-meta-icon-orange">'+ICON_BOOK+'</span><span class="ew-meta-text">'+esc(p.field)+'</span></div>';
+  if(p.language)h+='<div class="ew-meta-item"><span class="ew-meta-icon-blue">'+ICON_LANG+'</span><span class="ew-meta-text">'+esc(p.language)+'</span></div>';
+  if(p.duration)h+='<div class="ew-meta-item"><span class="ew-meta-icon-green">'+ICON_CLOCK+'</span><span class="ew-meta-text">'+esc(p.duration)+'</span></div>';
+  if(p.intakes)h+='<div class="ew-meta-item" style="grid-column:1/-1"><span class="ew-meta-icon-orange">'+ICON_BOOK+'</span><span class="ew-meta-text">'+esc(p.intakes)+'</span></div>';
+  if(p.languageFee&&p.languageFee>0)h+='<div class="ew-meta-item" style="grid-column:1/-1"><span class="ew-meta-icon-emerald">'+ICON_DOLLAR+'</span><span class="ew-meta-text">Language Fee: '+esc(fmtFee(p.languageFee,p.currency))+'</span></div>';
+  h+='</div>';
+
+  /* Actions */
   h+='<div class="ew-card-actions">';
   h+='<button type="button" class="ew-btn-info" aria-label="Details" data-info="'+p.id+'">'+ICON_INFO+'</button>';
   if(MODE!=='course_finder'){
-    h+='<button class="ew-btn" data-apply="'+p.id+'">Apply Now</button>';
+    h+='<button class="ew-btn" data-apply="'+p.id+'">Apply Now \u2192</button>';
   }
   h+='</div>';
 

@@ -3251,7 +3251,12 @@
     "submitting": "Gönderiliyor...",
     "creating": "Oluşturuluyor...",
     "uploadRequiredRemaining": "Gerekli belgeleri yükleyin ({count} kaldı)",
-    "submitApplication": "Başvuruyu Gönder"
+    "submitApplication": "Başvuruyu Gönder",
+    "degree": "Derece",
+    "duration": "Süre",
+    "languageFee": "Dil Ücreti",
+    "depositStrip": "{fee} depozito ile yerinizi güvenceye alın",
+    "apply": "Başvur"
   },
   "staffCards": {
     "title": "Personel Kartları",

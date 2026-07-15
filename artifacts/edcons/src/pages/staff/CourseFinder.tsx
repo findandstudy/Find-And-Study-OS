@@ -1216,7 +1216,7 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
   showWishlist?: boolean;
   isSelected: boolean;
   onToggleSelect: () => void;
-  t: (k: string) => string;
+  t: (k: string, vars?: Record<string, string>) => string;
 }) {
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
   const commissionAmount = calcCommissionAmount(p, agentShareRate);
@@ -1225,173 +1225,187 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
 
   return (
     <>
-    <div className={`bg-card border rounded-2xl overflow-hidden hover:shadow-lg transition-all duration-200 group flex flex-col ${isSelected ? "ring-2 ring-primary border-primary/50" : ""}`}>
-      <div className="p-5 space-y-4 flex-1">
-        <div className="flex items-start gap-3">
-          <button
-            onClick={onToggleSelect}
-            className="shrink-0 mt-1 p-0.5 rounded hover:bg-muted/80 transition-colors"
-            title={isSelected ? "Deselect" : "Select for proposal"}
+    <div className={`bg-card border rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-primary/[0.08] hover:-translate-y-1 transition-all duration-300 group flex flex-col ${isSelected ? "ring-2 ring-primary border-primary/50" : "border-border/40 hover:border-primary/20"}`}>
+      {/* Banner */}
+      <div className="relative h-[72px] bg-gradient-to-r from-blue-500/15 via-indigo-500/10 to-violet-500/5 flex items-center px-3 gap-2.5">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.4),transparent_70%)] pointer-events-none" />
+        {/* Select checkbox */}
+        <button
+          onClick={onToggleSelect}
+          className="relative z-10 shrink-0 p-0.5 rounded hover:bg-white/50 transition-colors"
+          title={isSelected ? "Deselect" : "Select for proposal"}
+        >
+          {isSelected
+            ? <CheckSquare className="w-4 h-4 text-primary" />
+            : <Square className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground" />}
+        </button>
+        {/* University logo */}
+        {websiteUrl ? (
+          <a
+            href={websiteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="relative z-10 w-10 h-10 rounded-xl bg-white/90 shadow-md flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-white/50 hover:ring-primary/40 hover:scale-105 transition-all"
           >
-            {isSelected ? (
-              <CheckSquare className="w-4.5 h-4.5 text-primary" />
-            ) : (
-              <Square className="w-4.5 h-4.5 text-muted-foreground/50 group-hover:text-muted-foreground" />
-            )}
-          </button>
-          {websiteUrl ? (
-            <a
-              href={websiteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-14 h-14 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0 hover:border-primary/40 hover:shadow-md transition-all cursor-pointer"
-              title={`Visit ${p.universityName} website`}
-            >
-              {p.universityLogoUrl ? (
-                <img src={p.universityLogoUrl} alt={p.universityName} width={40} height={40} loading="lazy" className="w-full h-full object-contain p-1" />
-              ) : (
-                <Building2 className="w-7 h-7 text-muted-foreground" />
-              )}
-            </a>
-          ) : (
-            <div className="w-14 h-14 rounded-xl border-2 border-muted bg-white flex items-center justify-center overflow-hidden shrink-0">
-              {p.universityLogoUrl ? (
-                <img src={p.universityLogoUrl} alt={p.universityName} width={40} height={40} loading="lazy" className="w-full h-full object-contain p-1" />
-              ) : (
-                <Building2 className="w-7 h-7 text-muted-foreground" />
-              )}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <button
-              onClick={onUniversityClick}
-              className="text-xs text-muted-foreground hover:text-primary transition-colors truncate block max-w-full text-left hover:underline"
-              title="View university details"
-            >
-              {p.universityName}
-            </button>
-            <h3 className="font-semibold text-sm leading-tight line-clamp-2 mt-0.5">{p.name}</h3>
+            {p.universityLogoUrl
+              ? <img src={p.universityLogoUrl} alt={p.universityName} loading="lazy" className="w-full h-full object-contain p-1" />
+              : <Building2 className="w-5 h-5 text-muted-foreground" />}
+          </a>
+        ) : (
+          <div className="relative z-10 w-10 h-10 rounded-xl bg-white/90 shadow-md flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-white/50">
+            {p.universityLogoUrl
+              ? <img src={p.universityLogoUrl} alt={p.universityName} loading="lazy" className="w-full h-full object-contain p-1" />
+              : <Building2 className="w-5 h-5 text-muted-foreground" />}
           </div>
-          {showWishlist && (
-            <button onClick={onToggleWishlist} className="shrink-0 p-2 rounded-full hover:bg-muted/80 transition-colors" title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}>
-              <Heart className={`w-5 h-5 transition-all ${isWishlisted ? "fill-red-500 text-red-500 scale-110" : "text-muted-foreground hover:text-red-400"}`} />
-            </button>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          {p.degree && (
-            <Badge className="text-[10px] px-2 py-0.5 h-auto rounded-full bg-primary/10 text-primary border-0 font-medium">
-              <GraduationCap className="w-3 h-3 mr-1" />{p.degree}
-            </Badge>
-          )}
-          {p.language && (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-auto rounded-full font-medium">
-              <Languages className="w-3 h-3 mr-1" />{p.language}
-            </Badge>
-          )}
-          {p.duration && (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-auto rounded-full font-medium">
-              <Clock className="w-3 h-3 mr-1" />{p.duration}
-            </Badge>
-          )}
-          {p.universityCountry && (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-auto rounded-full font-medium">
-              <Globe className="w-3 h-3 mr-1" />{p.universityCountry}
-            </Badge>
-          )}
-          {p.universityCity && (
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-auto rounded-full font-medium">
-              <MapPin className="w-3 h-3 mr-1" />{p.universityCity}
-            </Badge>
-          )}
-        </div>
-
-        <div className="bg-muted/40 rounded-xl p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">{t("courseFinderPage.tuition")}</span>
-              {p.feeType && (
-                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 rounded font-normal text-muted-foreground">{p.feeType}</Badge>
-              )}
+        )}
+        {/* University name + location */}
+        <div className="relative z-10 min-w-0 flex-1 flex flex-col gap-0.5">
+          <button
+            onClick={onUniversityClick}
+            className="text-[11px] font-semibold text-foreground/75 truncate text-left hover:text-primary transition-colors hover:underline"
+          >
+            {p.universityName}
+          </button>
+          {(p.universityCity || p.universityCountry) && (
+            <div className="flex items-center gap-1 text-[10px] text-muted-foreground leading-none">
+              <MapPin className="w-2.5 h-2.5 shrink-0 text-primary/50" />
+              <span className="truncate">{[p.universityCity, p.universityCountry].filter(Boolean).join(", ")}</span>
             </div>
-            <div className="flex items-center gap-2">
+          )}
+        </div>
+        {/* Type + Degree badges */}
+        <div className="relative z-10 flex flex-col items-end gap-1 shrink-0">
+          {p.universityType && (
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-white/75 backdrop-blur-sm border-0 shadow-sm font-medium">{p.universityType}</Badge>
+          )}
+          {p.degree && (
+            <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/85 text-primary-foreground shadow-sm border-0 font-medium">{p.degree}</Badge>
+          )}
+        </div>
+        {/* Wishlist */}
+        {showWishlist && (
+          <button
+            onClick={onToggleWishlist}
+            className="relative z-10 shrink-0 p-1.5 rounded-full hover:bg-white/60 transition-colors"
+            title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          >
+            <Heart className={`w-4 h-4 transition-all ${isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground/40 hover:text-red-400"}`} />
+          </button>
+        )}
+      </div>
+
+      {/* Card body */}
+      <div className="p-4 flex-1 flex flex-col gap-3">
+        {/* Program name */}
+        <h3 className="font-bold text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+          {p.name}
+        </h3>
+
+        {/* Fee + Scholarship */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+              {t("courseFinderPage.tuitionFee")}
+            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
               {hasDiscount && (
-                <span className="text-xs text-muted-foreground line-through">{formatCurrency(p.tuitionFee, cur)}</span>
+                <span className="text-[12px] text-muted-foreground/50 line-through leading-none">
+                  {formatCurrency(p.tuitionFee, cur)}
+                </span>
               )}
-              <span className={`text-sm font-bold ${hasDiscount ? "text-emerald-600" : ""}`}>
+              <span className={`text-xl font-extrabold leading-none ${hasDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
                 {formatCurrency(hasDiscount ? p.discountedFee : p.tuitionFee, cur)}
               </span>
               {hasDiscount && (
-                <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-100 text-emerald-700 border-0 rounded-full dark:bg-emerald-900/40 dark:text-emerald-300">
-                  SAVE {formatCurrency((p.tuitionFee ?? 0) - (p.discountedFee ?? 0), cur)}
+                <Badge className="text-[9px] px-1.5 py-0 h-4 bg-emerald-500 text-white border-0 font-bold rounded-full">
+                  -{Math.round(((p.tuitionFee ?? 0) - (p.discountedFee ?? 0)) / (p.tuitionFee ?? 1) * 100)}%
                 </Badge>
               )}
             </div>
           </div>
-
           {p.scholarship != null && p.scholarship > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-emerald-600 font-medium">{t("courseFinderPage.scholarship")}</span>
-              <span className="text-xs font-semibold text-emerald-600">{formatCurrency(p.scholarship, cur)}</span>
-            </div>
-          )}
-
-          {p.applicationFee != null && p.applicationFee > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">{t("courseFinderPage.appFee")}</span>
-              <span className="text-xs font-medium">{formatCurrency(p.applicationFee, cur)}</span>
-            </div>
-          )}
-
-          {p.intakes && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">{t("courseFinderPage.intakes")}</span>
-              <div className="flex gap-1">
-                {p.intakes.split(",").map(intake => (
-                  <Badge key={intake.trim()} variant="outline" className="text-[10px] px-1.5 py-0 h-4 rounded-full">
-                    <Calendar className="w-2.5 h-2.5 mr-0.5" />{intake.trim()}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {showCommission && commissionAmount != null && (
-            <div className="flex items-center justify-between pt-1 border-t border-dashed border-muted-foreground/20">
-              <span className="text-xs font-medium text-indigo-600">{t("courseFinderPage.commission")}</span>
-              <span className="text-sm font-bold text-indigo-600">{formatCurrency(commissionAmount, cur)}</span>
-            </div>
+            <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 gap-1 shrink-0 whitespace-nowrap h-auto py-1 px-2">
+              <Award className="w-3 h-3" /> {formatCurrency(p.scholarship, cur)}
+            </Badge>
           )}
         </div>
 
-        <div className="flex items-center justify-between">
-          {p.universityStatus && (
-            <div className="flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${p.universityStatus === "open" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-              <span className="text-[11px] text-muted-foreground capitalize font-medium">
-                {p.universityStatus === "open" ? "Open for Applications" : "Closed"}
-              </span>
-            </div>
+        {/* Deposit strip */}
+        {p.depositFee != null && p.depositFee > 0 && (
+          <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-700/30 rounded-lg px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+            <DollarSign className="w-3.5 h-3.5 shrink-0" />
+            {t("courseFinderPage.depositStrip", { fee: formatCurrency(p.depositFee, cur) })}
+          </div>
+        )}
+
+        {/* Metadata grid */}
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 bg-muted/40 rounded-xl p-3 text-xs text-muted-foreground">
+          {p.degree && (
+            <span className="flex items-center gap-1.5 min-w-0">
+              <GraduationCap className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+              <span className="truncate font-medium">{p.degree}</span>
+            </span>
           )}
-          {p.universityType && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 rounded-full">{p.universityType}</Badge>
+          {p.field && (
+            <span className="flex items-center gap-1.5 min-w-0">
+              <BookOpen className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span className="truncate font-medium">{p.field}</span>
+            </span>
+          )}
+          {p.language && (
+            <span className="flex items-center gap-1.5 min-w-0">
+              <Languages className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              <span className="truncate font-medium">{p.language}</span>
+            </span>
+          )}
+          {p.duration && (
+            <span className="flex items-center gap-1.5 min-w-0">
+              <Clock className="w-3.5 h-3.5 text-green-500 shrink-0" />
+              <span className="truncate font-medium">{p.duration}</span>
+            </span>
+          )}
+          {p.intakes && (
+            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
+              <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span className="truncate font-medium">{p.intakes}</span>
+            </span>
+          )}
+          {p.languageFee != null && p.languageFee > 0 && (
+            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
+              <Globe className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+              <span className="font-medium">{t("courseFinderPage.languageFee")}: {formatCurrency(p.languageFee, cur)}</span>
+            </span>
+          )}
+          {p.applicationFee != null && p.applicationFee > 0 && (
+            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
+              <FileText className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
+              <span className="font-medium">{t("courseFinderPage.appFee")}: {formatCurrency(p.applicationFee, cur)}</span>
+            </span>
+          )}
+          {showCommission && commissionAmount != null && (
+            <span className="flex items-center gap-1.5 col-span-2 pt-1.5 border-t border-dashed border-muted-foreground/20 min-w-0">
+              <Award className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span className="font-bold text-indigo-600 dark:text-indigo-400">{t("courseFinderPage.commission")}: {formatCurrency(commissionAmount, cur)}</span>
+            </span>
           )}
         </div>
       </div>
 
-      <div className="border-t grid grid-cols-2 divide-x">
+      {/* Bottom actions */}
+      <div className="flex border-t border-border/60">
         <button
           onClick={onInfo}
-          className="py-3 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors flex items-center justify-center gap-1.5"
+          className="flex items-center justify-center px-4 py-3 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors border-r border-border/60 shrink-0"
+          aria-label="Details"
         >
-          <Info className="w-3.5 h-3.5" /> Details
+          <Info className="w-4 h-4" />
         </button>
         <button
           onClick={onApply}
-          className="py-3 text-xs font-semibold text-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
+          className="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
-          <Send className="w-3.5 h-3.5" /> Apply
+          {t("courseFinderPage.apply")} →
         </button>
       </div>
     </div>

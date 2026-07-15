@@ -22,7 +22,7 @@ import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
   SlidersHorizontal, Building2, Award, ChevronDown, ChevronUp, Info, ExternalLink,
-  AlertTriangle, FileText, Camera,
+  AlertTriangle, FileText, Camera, Calendar,
 } from "lucide-react";
 import { DocumentScanner } from "@/components/DocumentScanner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1878,106 +1878,146 @@ export default function Programs() {
                   return (
                     <motion.div key={prog.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.04, duration: 0.4 }}
                       className="group bg-card rounded-2xl overflow-hidden shadow-md shadow-black/[0.04] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary/[0.08] transition-all duration-300 border border-border/40 hover:border-primary/20 flex flex-col">
-                      <div className={`h-20 bg-gradient-to-r ${gradient} relative flex items-center px-5 gap-3`}>
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.4),transparent_70%)]" />
+
+                      {/* Banner */}
+                      <div className={`h-[72px] bg-gradient-to-r ${gradient} relative flex items-center px-4 gap-3`}>
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.4),transparent_70%)] pointer-events-none" />
+                        {/* University logo */}
                         {prog.universityWebsite ? (
                           <a href={prog.universityWebsite} target="_blank" rel="noopener noreferrer"
-                            className="w-11 h-11 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden relative z-10 ring-2 ring-white/50 hover:ring-primary/50 hover:scale-105 transition-all cursor-pointer"
+                            className="relative z-10 w-10 h-10 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-white/50 hover:ring-primary/50 hover:scale-105 transition-all cursor-pointer"
                             onClick={(e) => e.stopPropagation()}>
                             {logoSrc ? (
-                              <img src={logoSrc} alt={prog.universityName} className="w-8 h-8 object-contain" loading="lazy"
+                              <img src={logoSrc} alt={prog.universityName} className="w-full h-full object-contain p-1" loading="lazy"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
                               />
                             ) : null}
-                            <GraduationCap className={`w-5 h-5 text-primary ${logoSrc ? "hidden" : ""}`} />
+                            <Building2 className={`w-5 h-5 text-muted-foreground ${logoSrc ? "hidden" : ""}`} />
                           </a>
                         ) : (
-                          <div className="w-11 h-11 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden relative z-10 ring-2 ring-white/50">
+                          <div className="relative z-10 w-10 h-10 rounded-xl bg-white/90 dark:bg-card/90 shadow-md shadow-black/10 flex items-center justify-center shrink-0 overflow-hidden ring-2 ring-white/50">
                             {logoSrc ? (
-                              <img src={logoSrc} alt={prog.universityName} className="w-8 h-8 object-contain" loading="lazy"
+                              <img src={logoSrc} alt={prog.universityName} className="w-full h-full object-contain p-1" loading="lazy"
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
                               />
                             ) : null}
-                            <GraduationCap className={`w-5 h-5 text-primary ${logoSrc ? "hidden" : ""}`} />
+                            <Building2 className={`w-5 h-5 text-muted-foreground ${logoSrc ? "hidden" : ""}`} />
                           </div>
                         )}
-                        <div className="min-w-0 flex-1 relative z-10">
-                          <p className="text-xs text-foreground/70 truncate font-semibold">{prog.universityName}</p>
+                        {/* University name + location */}
+                        <div className="relative z-10 min-w-0 flex-1 flex flex-col gap-0.5">
+                          <p className="text-[11px] text-foreground/75 truncate font-semibold">{prog.universityName}</p>
+                          {(prog.universityCity || prog.universityCountry) && (
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground leading-none">
+                              <MapPin className="w-2.5 h-2.5 shrink-0 text-primary/50" />
+                              <span className="truncate">{[prog.universityCity, prog.universityCountry].filter(Boolean).join(", ")}</span>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex gap-1.5 shrink-0 relative z-10">
+                        {/* Type + Degree badges */}
+                        <div className="relative z-10 flex flex-col items-end gap-1 shrink-0">
                           {prog.universityType && (
-                            <Badge variant="secondary" className="text-[10px] px-2 py-0.5 bg-white/70 dark:bg-card/70 backdrop-blur-sm border-0 shadow-sm">{prog.universityType}</Badge>
+                            <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-white/75 dark:bg-card/75 backdrop-blur-sm border-0 shadow-sm font-medium">{prog.universityType}</Badge>
                           )}
                           {prog.degree && (
-                            <Badge className="bg-primary/90 text-white text-[10px] px-2 py-0.5 shadow-sm">{prog.degree}</Badge>
+                            <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/90 text-primary-foreground shadow-sm border-0 font-medium">{prog.degree}</Badge>
                           )}
                         </div>
                       </div>
 
-                      <div className="p-5 flex-1 flex flex-col">
-                        <h3 className="font-display font-bold text-foreground text-[15px] mb-2.5 group-hover:text-primary transition-colors duration-200 leading-snug line-clamp-2">
+                      {/* Card body */}
+                      <div className="p-4 flex-1 flex flex-col gap-3">
+                        {/* Program name */}
+                        <h3 className="font-display font-bold text-foreground text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors duration-200">
                           {prog.name}
                         </h3>
-                        <div className="flex items-center gap-1.5 text-muted-foreground text-sm mb-3.5">
-                          <MapPin className="w-3.5 h-3.5 shrink-0 text-primary/50" />
-                          <span className="truncate">{[prog.universityCity, prog.universityCountry].filter(Boolean).join(", ")}</span>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm text-muted-foreground mb-4 bg-secondary/30 dark:bg-secondary/20 rounded-xl p-3">
-                          {prog.language && (
-                            <span className="flex items-center gap-1.5">
-                              <Languages className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                              <span className="truncate text-xs font-medium">{prog.language}</span>
-                            </span>
-                          )}
-                          {prog.duration && (
-                            <span className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                              <span className="truncate text-xs font-medium">{prog.duration}</span>
-                            </span>
-                          )}
-                          {prog.intakes && (
-                            <span className="flex items-center gap-1.5">
-                              <BookOpen className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                              <span className="truncate text-xs font-medium">{prog.intakes}</span>
-                            </span>
-                          )}
-                          {effectiveFee ? (
-                            <span className="flex items-center gap-1.5">
-                              <DollarSign className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                              <span className="flex items-center gap-1 text-xs font-medium min-w-0">
-                                {hasDiscount && (
-                                  <span className="line-through text-muted-foreground/40 text-[10px]">{formatFee(prog.tuitionFee, prog.currency)}</span>
-                                )}
-                                <span className={hasDiscount ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}>
-                                  {formatFee(effectiveFee, prog.currency)}
+                        {/* Fee + Scholarship */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                              {t("courseFinderPage.tuitionFee")}
+                            </p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {hasDiscount && (
+                                <span className="text-[12px] text-muted-foreground/50 line-through leading-none">
+                                  {formatFee(prog.tuitionFee, prog.currency)}
                                 </span>
-                                {hasDiscount && (
-                                  <span className="text-[9px] font-bold text-white bg-emerald-500 rounded px-1 py-px leading-tight">
-                                    -{Math.round(((prog.tuitionFee! - prog.discountedFee!) / prog.tuitionFee!) * 100)}%
-                                  </span>
-                                )}
+                              )}
+                              <span className={`text-xl font-extrabold leading-none ${hasDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
+                                {formatFee(effectiveFee, prog.currency)}
                               </span>
-                            </span>
+                              {hasDiscount && (
+                                <span className="text-[9px] font-bold text-white bg-emerald-500 rounded-full px-1.5 py-0 leading-[16px]">
+                                  -{Math.round(((prog.tuitionFee! - prog.discountedFee!) / prog.tuitionFee!) * 100)}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {prog.scholarship && prog.scholarship > 0 ? (
+                            <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 gap-1 shrink-0 whitespace-nowrap h-auto py-1 px-2">
+                              <Award className="w-3 h-3" /> {formatFee(prog.scholarship, prog.currency)}
+                            </Badge>
                           ) : null}
                         </div>
 
-                        {prog.scholarship && prog.scholarship > 0 ? (
-                          <div className="mb-3">
-                            <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 gap-1">
-                              <Award className="w-3 h-3" /> {t("apply.scholarship")}: {formatFee(prog.scholarship, prog.currency)}
-                            </Badge>
+                        {/* Deposit strip */}
+                        {prog.depositFee != null && prog.depositFee > 0 && (
+                          <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-700/30 rounded-lg px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+                            <DollarSign className="w-3.5 h-3.5 shrink-0" />
+                            {t("courseFinderPage.depositStrip", { fee: formatFee(prog.depositFee, prog.currency) })}
                           </div>
-                        ) : null}
+                        )}
 
+                        {/* Metadata grid */}
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-muted-foreground bg-secondary/30 dark:bg-secondary/20 rounded-xl p-3">
+                          {prog.degree && (
+                            <span className="flex items-center gap-1.5 min-w-0">
+                              <GraduationCap className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                              <span className="truncate font-medium">{prog.degree}</span>
+                            </span>
+                          )}
+                          {prog.field && (
+                            <span className="flex items-center gap-1.5 min-w-0">
+                              <BookOpen className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                              <span className="truncate font-medium">{prog.field}</span>
+                            </span>
+                          )}
+                          {prog.language && (
+                            <span className="flex items-center gap-1.5 min-w-0">
+                              <Languages className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                              <span className="truncate font-medium">{prog.language}</span>
+                            </span>
+                          )}
+                          {prog.duration && (
+                            <span className="flex items-center gap-1.5 min-w-0">
+                              <Clock className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                              <span className="truncate font-medium">{prog.duration}</span>
+                            </span>
+                          )}
+                          {prog.intakes && (
+                            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
+                              <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                              <span className="truncate font-medium">{prog.intakes}</span>
+                            </span>
+                          )}
+                          {prog.languageFee != null && prog.languageFee > 0 && (
+                            <span className="flex items-center gap-1.5 col-span-2 min-w-0">
+                              <Globe2 className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+                              <span className="font-medium">{t("courseFinderPage.languageFee")}: {formatFee(prog.languageFee, prog.currency)}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Bottom actions */}
                         <div className="mt-auto flex gap-2">
                           <Button variant="outline" size="icon" onClick={() => setDetailProgram(prog)}
                             className="rounded-xl shrink-0 h-10 w-10 border-border/50 hover:border-primary/40 hover:bg-primary/5"
                             aria-label={t("programs.programDetails")}>
                             <Info className="w-4 h-4" aria-hidden="true" />
                           </Button>
-                          <Button onClick={() => setApplyProgram(prog)} className="flex-1 rounded-xl shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300">
-                            {t("programs.apply")}
+                          <Button onClick={() => setApplyProgram(prog)} className="flex-1 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300">
+                            {t("programs.apply")} →
                           </Button>
                         </div>
                       </div>

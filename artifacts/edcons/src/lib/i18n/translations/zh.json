@@ -2996,7 +2996,12 @@
     "submitting": "提交中...",
     "creating": "创建中...",
     "uploadRequiredRemaining": "上传所需文件（还剩 {count} 个）",
-    "submitApplication": "提交申请"
+    "submitApplication": "提交申请",
+    "degree": "学位",
+    "duration": "时长",
+    "languageFee": "语言费",
+    "depositStrip": "以{fee}押金保留您的名额",
+    "apply": "立即申请"
   },
   "docTypes": {
     "passport": "护照",

@@ -2996,7 +2996,12 @@
     "submitting": "Mengirim...",
     "creating": "Membuat...",
     "uploadRequiredRemaining": "Unggah dokumen yang diperlukan ({count} tersisa)",
-    "submitApplication": "Kirim Lamaran"
+    "submitApplication": "Kirim Lamaran",
+    "degree": "Gelar",
+    "duration": "Durasi",
+    "languageFee": "Biaya Bahasa",
+    "depositStrip": "Amankan tempat Anda dengan deposit {fee}",
+    "apply": "Daftar Sekarang"
   },
   "docTypes": {
     "passport": "Paspor",

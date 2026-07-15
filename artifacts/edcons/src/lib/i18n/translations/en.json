@@ -3310,7 +3310,12 @@
     "submitting": "Submitting...",
     "creating": "Creating...",
     "uploadRequiredRemaining": "Upload required documents ({count} remaining)",
-    "submitApplication": "Submit Application"
+    "submitApplication": "Submit Application",
+    "degree": "Degree",
+    "duration": "Duration",
+    "languageFee": "Language Fee",
+    "depositStrip": "Secure your place with a {fee} deposit",
+    "apply": "Apply Now"
   },
   "staffCards": {
     "title": "Staff Cards",

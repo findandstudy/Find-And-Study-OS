@@ -2996,7 +2996,12 @@
     "submitting": "در حال ارسال...",
     "creating": "در حال ایجاد...",
     "uploadRequiredRemaining": "مدارک لازم را بارگذاری کنید ({count} باقی‌مانده)",
-    "submitApplication": "ارسال درخواست"
+    "submitApplication": "ارسال درخواست",
+    "degree": "مدرک",
+    "duration": "مدت",
+    "languageFee": "هزینه زبان",
+    "depositStrip": "جای خود را با {fee} ودیعه رزرو کنید",
+    "apply": "درخواست دهید"
   },
   "docTypes": {
     "passport": "گذرنامه",

@@ -2996,7 +2996,12 @@
     "submitting": "सबमिट हो रहा है...",
     "creating": "बनाया जा रहा है...",
     "uploadRequiredRemaining": "आवश्यक दस्तावेज़ अपलोड करें ({count} शेष)",
-    "submitApplication": "आवेदन सबमिट करें"
+    "submitApplication": "आवेदन सबमिट करें",
+    "degree": "डिग्री",
+    "duration": "अवधि",
+    "languageFee": "भाषा शुल्क",
+    "depositStrip": "{fee} जमा के साथ अपनी जगह सुरक्षित करें",
+    "apply": "अभी आवेदन करें"
   },
   "docTypes": {
     "passport": "पासपोर्ट",

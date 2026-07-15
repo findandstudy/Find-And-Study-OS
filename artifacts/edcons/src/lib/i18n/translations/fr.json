@@ -3047,7 +3047,12 @@
     "submitting": "Envoi...",
     "creating": "Création...",
     "uploadRequiredRemaining": "Téléversez les documents requis ({count} restants)",
-    "submitApplication": "Envoyer la candidature"
+    "submitApplication": "Envoyer la candidature",
+    "degree": "Niveau",
+    "duration": "Durée",
+    "languageFee": "Frais de langue",
+    "depositStrip": "Sécurisez votre place avec un acompte de {fee}",
+    "apply": "Postuler"
   },
   "docTypes": {
     "passport": "Passeport",
