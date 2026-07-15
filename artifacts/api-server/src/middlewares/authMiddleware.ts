@@ -1,5 +1,5 @@
 import { type Request, type Response, type NextFunction } from "express";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, rolesTable, DEFAULT_ROLE_PERMISSIONS } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
   clearSession,
@@ -32,6 +32,65 @@ declare global {
     }
   }
 }
+
+// ─── Role-permission cache ────────────────────────────────────────────────────
+// Roles change rarely; cache the rolesTable lookup per role name for 60 s so
+// every authenticated request does not incur an extra DB round-trip.
+const PERM_CACHE_TTL = 60_000;
+const rolePermCache = new Map<string, { perms: string[]; exp: number }>();
+
+// admin / super_admin already have isAdmin=true on the frontend → canSee is
+// always true for them, so there is no need to populate agentStaffPermissions.
+const ADMINISH_ROLES = new Set(["admin", "super_admin"]);
+
+async function resolveRolePerms(role: string): Promise<string[]> {
+  const now = Date.now();
+  const cached = rolePermCache.get(role);
+  if (cached && cached.exp > now) return cached.perms;
+
+  const [row] = await db
+    .select({ permissions: rolesTable.permissions })
+    .from(rolesTable)
+    .where(eq(rolesTable.name, role));
+
+  const perms: string[] = row
+    ? ((row.permissions as string[] | null) ?? [])
+    : ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[role] ?? []);
+
+  rolePermCache.set(role, { perms, exp: now + PERM_CACHE_TTL });
+  return perms;
+}
+
+/**
+ * Populate `user.agentStaffPermissions` with the effective permission set for
+ * the user's role (sourced from rolesTable, cached per role) unioned with any
+ * per-user agent_staff permissions already stored on the DB row.
+ *
+ * This is what the frontend `canSee(perm)` check consults for sidebar menu
+ * visibility — without this, staff/consultant/accountant roles would always
+ * see an empty set and therefore no gated menu items.
+ *
+ * Skipped for admin/super_admin (they pass the isAdmin short-circuit instead).
+ * Never throws — on error the existing session value is preserved unchanged.
+ */
+async function enrichWithEffectivePerms(
+  user: SessionUser,
+  dbUser: typeof usersTable.$inferSelect,
+): Promise<void> {
+  if (ADMINISH_ROLES.has(user.role)) return;
+  try {
+    const rolePerms = await resolveRolePerms(user.role);
+    // Union: role-level perms ∪ per-user agent_staff column (for agent_staff rows)
+    const own = Array.isArray(dbUser.agentStaffPermissions)
+      ? (dbUser.agentStaffPermissions as string[])
+      : [];
+    user.agentStaffPermissions = Array.from(new Set([...rolePerms, ...own]));
+  } catch {
+    // Preserve whatever buildSessionUser already set on error.
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchDbUser(id: number): Promise<typeof usersTable.$inferSelect | null> {
   const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, id));
@@ -83,6 +142,7 @@ export async function authMiddleware(
       return;
     }
     req.user = buildSessionUser(result.dbUser);
+    await enrichWithEffectivePerms(req.user, result.dbUser);
     req.tokenScopes = result.scopes;
     req.apiTokenAuth = true;
     next();
@@ -102,6 +162,7 @@ export async function authMiddleware(
       return;
     }
     req.user = buildSessionUser(result.dbUser);
+    await enrichWithEffectivePerms(req.user, result.dbUser);
     req.tokenScopes = result.scopes;
     req.apiTokenAuth = true;
     next();
@@ -153,6 +214,7 @@ export async function authMiddleware(
   }
 
   req.user = buildSessionUser(dbUser);
+  await enrichWithEffectivePerms(req.user, dbUser);
 
   // Slide session expiry on every authenticated request (fire-and-forget).
   setImmediate(() => {
