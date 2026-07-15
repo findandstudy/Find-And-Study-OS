@@ -1,10 +1,9 @@
-import { db, signedContractsTable, contractTemplatesTable, agentsTable, usersTable } from "@workspace/db";
-import { and, eq, isNull, isNotNull, inArray, gt, lt, or, asc } from "drizzle-orm";
-import { buildSignedContractEmail, buildSignedContractAdminEmail, sendEmail, getAppBaseUrl } from "./email";
+import { db, signedContractsTable, contractTemplatesTable, agentsTable } from "@workspace/db";
+import { and, eq, isNull, isNotNull, gt, lt, or, asc } from "drizzle-orm";
+import { buildSignedContractEmail, sendEmail, getAppBaseUrl } from "./email";
 import { ensureSignedContractPdf } from "./signContract";
+import { dispatchNotification } from "./notificationDispatcher";
 
-// Roles that receive a copy of every signed contract (mirrors publicSigning).
-const SIGNED_CONTRACT_ADMIN_ROLES = ["super_admin", "admin"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // How often the delivery sweep runs. Delivery is best-effort and not latency
@@ -40,24 +39,6 @@ const OOM_PATTERN = /out of memory|OOM|Chromium|page crashed|Protocol error|Targ
 // stop the worker — delivery keeps retrying.
 let oomStreak = 0;
 
-async function getAdminRecipientEmails(excludeEmail?: string | null): Promise<string[]> {
-  const rows = await db.select({ email: usersTable.email })
-    .from(usersTable)
-    .where(and(inArray(usersTable.role, SIGNED_CONTRACT_ADMIN_ROLES), eq(usersTable.isActive, true)));
-  const exclude = (excludeEmail || "").trim().toLowerCase();
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const row of rows) {
-    const email = (row.email || "").trim();
-    if (!email || !EMAIL_RE.test(email)) continue;
-    const key = email.toLowerCase();
-    if (key === exclude || seen.has(key)) continue;
-    seen.add(key);
-    out.push(email);
-  }
-  return out;
-}
-
 /**
  * Lightweight delivery worker for signed contracts produced by the in-app /
  * onboarding signing flow (finalizeSign leaves emailed_at = NULL). For each
@@ -68,9 +49,10 @@ async function getAdminRecipientEmails(excludeEmail?: string | null): Promise<st
  *      agents.contractUrl. This is the ONLY place headless Chromium runs for the
  *      in-app / onboarding signing flow — never on a request path.
  *   3. Sets contractStartDate / contractEndDate on the agent row.
- *   4. Sends a link-only notification email to the signer (portal login URL)
- *      and every active admin (admin signed-contracts panel URL).
- *   5. Marks emailed_at = now, permanently excluding the row from future sweeps.
+ *   4. Sends a link-only notification email to the signer (portal login URL).
+ *   5. Fires contract.signed via the notification-rule system (in_app + email
+ *      to roles as configured in Settings > Notification Rules).
+ *   6. Marks emailed_at = now, permanently excluding the row from future sweeps.
  *
  * PDF rendering runs HERE, off the request path, by design. Chromium is
  * memory-heavy and, when launched inside an HTTP handler, OOM-killed the 512MB
@@ -109,7 +91,7 @@ export async function deliverPendingSignedContracts(): Promise<void> {
     if (pending.length === 0) return;
 
     const portalUrl = `${getAppBaseUrl()}/login`;
-    const adminContractUrl = `${getAppBaseUrl()}/admin/signed-contracts`;
+    const adminContractUrl = `${getAppBaseUrl()}/staff/contracts/signed`;
 
     for (const row of pending) {
       // Atomically claim a lease on the row so concurrent workers / instances
@@ -190,32 +172,34 @@ export async function deliverPendingSignedContracts(): Promise<void> {
           await sendEmail(signerEmail, email);
         }
 
-        const adminEmails = await getAdminRecipientEmails(signerEmail);
-        if (adminEmails.length > 0) {
-          const adminEmail = await buildSignedContractAdminEmail({
-            signerName: row.signerName,
-            signerEmail,
-            templateName,
-            adminContractUrl,
-          });
-          for (const to of adminEmails) {
-            try {
-              await sendEmail(to, adminEmail);
-            } catch (adminErr) {
-              console.error(`[SIGNED-DELIVERY] failed to email admin ${to} for signed_contract ${row.id}:`, adminErr);
-            }
-          }
-        }
+        // Notify admins/super_admins via the notification-rule system (respects
+        // Settings > Notification Rules > Contracts > Contract Signed channels/active).
+        // This replaces the previous hardcoded buildSignedContractAdminEmail loop.
+        (async () => {
+          try {
+            await dispatchNotification({
+              event: "contract.signed",
+              title: "Contract Signed",
+              body: `${row.signerName || signerEmail || "A signer"} signed "${templateName}".`,
+              templateVars: {
+                signerName: row.signerName || "",
+                signerEmail,
+                contractName: templateName,
+                contractLink: adminContractUrl,
+              },
+            });
+          } catch (e) { console.error(`[SIGNED-DELIVERY] contract.signed dispatch failed for signed_contract ${row.id}:`, e); }
+        })();
 
         // Mark delivered only now that the dates were updated and the signer
         // email was sent. emailed_at is the permanent "done" flag and excludes
-        // the row from all future sweeps. Admin failures are logged above but
-        // do not block this — admins are best-effort copies.
+        // the row from all future sweeps. The contract.signed dispatch is
+        // fire-and-forget so admin notification failures never block delivery.
         await db.update(signedContractsTable)
           .set({ emailedAt: new Date() })
           .where(eq(signedContractsTable.id, row.id));
 
-        console.log(`[SIGNED-DELIVERY] delivered signed_contract ${row.id} (signer=${signerEmail || "none"}, admins=${adminEmails.length})`);
+        console.log(`[SIGNED-DELIVERY] delivered signed_contract ${row.id} (signer=${signerEmail || "none"})`);
       } catch (err) {
         // Release the lease so the row is retried on the next sweep (still bounded
         // by RECENT_WINDOW_DAYS). emailed_at stays NULL, so a partial failure

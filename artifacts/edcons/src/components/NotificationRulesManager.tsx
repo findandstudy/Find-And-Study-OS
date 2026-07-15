@@ -114,9 +114,9 @@ const TEMPLATE_VARS: Record<string, string[]> = {
   "system.announcement": ["title", "message"],
   "message.new": ["senderName"],
   "message.mention": ["senderName", "channel"],
-  "contract.sent": ["signerName", "signerEmail", "templateName"],
-  "contract.verification_code": ["verificationCode", "templateName", "signerName"],
-  "contract.signed": ["signerName", "signerEmail", "templateName"],
+  "contract.sent": ["signerName", "signerEmail", "contractName", "contractLink"],
+  "contract.verification_code": ["verificationCode", "contractName", "signerName", "signerEmail"],
+  "contract.signed": ["signerName", "signerEmail", "contractName", "contractLink"],
 };
 
 interface Props {

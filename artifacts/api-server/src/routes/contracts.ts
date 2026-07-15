@@ -351,13 +351,13 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
     }
 
     const actorUserId = (req as any).user?.id ?? undefined;
-    const sentVars = { signerName: signerName || "", signerEmail: agent.email || "", templateName: tpl.name || "" };
+    const sentVars = { signerName: signerName || "", signerEmail: agent.email || "", contractName: tpl.name || "", contractLink: signUrl };
     (async () => {
       try {
         await dispatchNotification({
           event: "contract.sent",
           title: "Contract Sent",
-          body: `Contract "${sentVars.templateName}" sent to ${sentVars.signerName || sentVars.signerEmail}.`,
+          body: `Contract "${sentVars.contractName}" sent to ${sentVars.signerName || sentVars.signerEmail}.`,
           actorUserId,
           templateVars: sentVars,
         });
@@ -438,13 +438,13 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
     }
 
     const sfActorId = (req as any).user?.id ?? undefined;
-    const sfVars = { signerName: signerName || "", signerEmail: normalizedEmail || "", templateName: tpl.name || "" };
+    const sfVars = { signerName: signerName || "", signerEmail: normalizedEmail || "", contractName: tpl.name || "", contractLink: signUrl };
     (async () => {
       try {
         await dispatchNotification({
           event: "contract.sent",
           title: "Contract Sent",
-          body: `Contract "${sfVars.templateName}" sent to ${sfVars.signerName || sfVars.signerEmail}.`,
+          body: `Contract "${sfVars.contractName}" sent to ${sfVars.signerName || sfVars.signerEmail}.`,
           actorUserId: sfActorId,
           templateVars: sfVars,
         });
@@ -602,13 +602,13 @@ router.post("/contracts/sessions/:id/resend", requireAuth, gateSessionMutate, as
       }
     }
     const resendActorId = (req as any).user?.id ?? undefined;
-    const resendVars = { signerName: session.signerName || "", signerEmail: session.signerEmail || "", templateName: tpl?.name || "" };
+    const resendVars = { signerName: session.signerName || "", signerEmail: session.signerEmail || "", contractName: tpl?.name || "", contractLink: signUrl };
     (async () => {
       try {
         await dispatchNotification({
           event: "contract.sent",
           title: "Contract Resent",
-          body: `Contract "${resendVars.templateName}" resent to ${resendVars.signerName || resendVars.signerEmail}.`,
+          body: `Contract "${resendVars.contractName}" resent to ${resendVars.signerName || resendVars.signerEmail}.`,
           actorUserId: resendActorId,
           templateVars: resendVars,
         });

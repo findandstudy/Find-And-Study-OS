@@ -9,8 +9,7 @@ import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOL
 import { ObjectStorageService } from "../lib/objectStorage";
 import { finalizeSign } from "../lib/signContract";
 import { writeAudit } from "../lib/auditLog";
-import { buildSignedContractEmail, buildSignVerificationCodeEmail, buildSignedContractAdminEmail, buildNotificationEmail, sendEmail, getAppBaseUrl } from "../lib/email";
-import { dispatchNotification } from "../lib/notificationDispatcher";
+import { buildSignedContractEmail, buildSignVerificationCodeEmail, buildNotificationEmail, sendEmail, getAppBaseUrl } from "../lib/email";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp, getClientIp } from "../lib/clientIp";
 
@@ -313,8 +312,9 @@ router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Prom
       // fall back to the built-in multilingual buildSignVerificationCodeEmail.
       const codeVars = {
         verificationCode: code,
-        templateName: r.template.name,
+        contractName: r.template.name,
         signerName: r.session.signerName || email,
+        signerEmail: email,
       };
       let mail: { subject: string; html: string; text: string };
       try {
@@ -336,8 +336,8 @@ router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Prom
             for (const [k, v] of Object.entries(vars)) r = r.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v || "");
             return r;
           }
-          const subject = replaceVars(customSubject || "Your verification code", codeVars);
-          const bodyHtml = replaceVars(customBody || `Your code: <strong>${code}</strong>`, codeVars);
+          const subject = replaceVars(customSubject || "Your verification code", codeVars as Record<string, string>);
+          const bodyHtml = replaceVars(customBody || `Your code: <strong>${code}</strong>`, codeVars as Record<string, string>);
           mail = await buildNotificationEmail({ subject, bodyHtml });
         } else {
           mail = await buildSignVerificationCodeEmail({ code, templateName: r.template.name, language: r.template.language });
@@ -505,22 +505,6 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
     const doneMs = Date.now() - signStart;
     const doneRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
     console.log(`[public-sign] done signedContractId=${result.signedContractId} ms=${doneMs} rss=${doneRss}MB`);
-
-    const signedVars = {
-      signerName: finalSignerName || r.session.signerEmail || "",
-      signerEmail: r.session.signerEmail || r.session.verifiedEmail || "",
-      templateName: r.template.name || "",
-    };
-    (async () => {
-      try {
-        await dispatchNotification({
-          event: "contract.signed",
-          title: "Contract Signed",
-          body: `${signedVars.signerName || signedVars.signerEmail} signed "${signedVars.templateName}".`,
-          templateVars: signedVars,
-        });
-      } catch (e) { console.error("[public-sign] contract.signed dispatch:", e); }
-    })();
 
     res.json({ data: { signedContractId: result.signedContractId } });
   } catch (err) {
