@@ -410,6 +410,27 @@ export async function cascadeApplicationAssignment(opts: {
         sourceId: applicationId,
       }, ipAddress);
     }
+    // Sibling applications of the same student — keep the whole person's
+    // applications in sync when one is reassigned (full-sync consistency).
+    const siblingApps = await db
+      .select({ id: applicationsTable.id, assignedToId: applicationsTable.assignedToId })
+      .from(applicationsTable)
+      .where(and(eq(applicationsTable.studentId, studentId), isNull(applicationsTable.deletedAt)));
+
+    for (const app of siblingApps) {
+      if (app.id === applicationId) continue;
+      if (app.assignedToId === newAssignedToId) continue;
+      if (nullFillOnly && app.assignedToId !== null) continue;
+      await db.update(applicationsTable)
+        .set({ assignedToId: newAssignedToId })
+        .where(eq(applicationsTable.id, app.id));
+      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
+        from: app.assignedToId ?? null,
+        to: newAssignedToId ?? null,
+        source: "application",
+        sourceId: applicationId,
+      }, ipAddress);
+    }
   } catch (err: any) {
     console.error("[cascadeApplicationAssignment] failed:", err?.message || err);
   }
