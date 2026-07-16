@@ -48,6 +48,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useI18n } from "@/hooks/use-i18n";
 import { AddStudentModal } from "@/components/AddStudentModal";
 import { AddAsDocumentModal, type AddDocTarget } from "@/components/inbox/AddAsDocumentModal";
+import { CreateStudentAndAddDocumentModal } from "@/components/inbox/CreateStudentAndAddDocumentModal";
 
 interface Conversation {
   id: number;
@@ -1418,7 +1419,8 @@ function InboxTab() {
                                   : rawUrl;
                                 const type = a.type ?? a.fileType ?? "file";
                                 const name = a.name ?? a.fileName ?? "file";
-                                const canAdd = !out && Boolean(detail.lead || detail.student);
+                                const isUnmatched = Boolean((detail as any).conversation?.unmatched);
+                                const canAdd = !out && (Boolean(detail.lead || detail.student) || isUnmatched);
                                 const _btnCls = "inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors";
                                 const actionRow = (
                                   <div className="flex items-center gap-1 flex-wrap mt-0.5">
@@ -1805,6 +1807,22 @@ function InboxTab() {
           ownerName={`${(detail.student ?? detail.lead)?.firstName ?? ""} ${(detail.student ?? detail.lead)?.lastName ?? ""}`.trim()}
           onClose={() => setAddDocTarget(null)}
           onSaved={() => { setAddDocTarget(null); setDocSummaryRefreshKey((k) => k + 1); }}
+        />
+      )}
+
+      {addDocTarget && detail && selectedId && (detail as any).conversation?.unmatched && !detail.lead && !detail.student && (
+        <CreateStudentAndAddDocumentModal
+          convId={selectedId}
+          target={addDocTarget}
+          detail={detail}
+          onClose={() => setAddDocTarget(null)}
+          onCreated={(studentId) => {
+            void studentId;
+            setAddDocTarget(null);
+            fetchInbox();
+            fetchDetail(selectedId);
+            setDocSummaryRefreshKey((k) => k + 1);
+          }}
         />
       )}
 

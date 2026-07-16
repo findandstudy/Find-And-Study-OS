@@ -1127,6 +1127,22 @@
       },
       "preview": "Aperçu",
       "download": "Télécharger"
+    },
+    "createStudentAndAddDoc": {
+      "title": "Créer un étudiant et ajouter un document",
+      "notLinked": "Cette conversation n'est liée à aucun étudiant.",
+      "aiWillAnalyze": "L'IA analysera le document et la conversation pour préremplir le profil étudiant.",
+      "selectType": "Sélectionnez le type de document pour continuer",
+      "analyzing": "Analyse du document…",
+      "analyzingDesc": "L'IA extrait les informations de l'étudiant du document",
+      "aiExtractedInfo": "{count} champ(s) prérempli(s) par l'IA — vérifiez avant d'enregistrer",
+      "fillRequired": "Veuillez remplir tous les champs obligatoires",
+      "submit": "Créer l'étudiant et enregistrer le document",
+      "submitting": "Création de l'étudiant…",
+      "success": "Étudiant créé et document enregistré",
+      "successDocFailed": "Étudiant créé — mais le document n'a pas pu être enregistré",
+      "failed": "Échec de la création de l'étudiant",
+      "cancel": "Annuler"
     }
   },
   "integrations": {

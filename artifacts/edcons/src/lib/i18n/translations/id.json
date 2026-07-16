@@ -1127,6 +1127,22 @@
       },
       "preview": "Pratinjau",
       "download": "Unduh"
+    },
+    "createStudentAndAddDoc": {
+      "title": "Buat Mahasiswa dan Tambahkan Dokumen",
+      "notLinked": "Percakapan ini tidak terhubung ke mahasiswa mana pun.",
+      "aiWillAnalyze": "AI akan menganalisis dokumen dan percakapan untuk mengisi profil mahasiswa secara otomatis.",
+      "selectType": "Pilih jenis dokumen untuk melanjutkan",
+      "analyzing": "Menganalisis dokumen…",
+      "analyzingDesc": "AI sedang mengekstrak informasi mahasiswa dari dokumen",
+      "aiExtractedInfo": "AI mengisi {count} kolom secara otomatis — periksa sebelum menyimpan",
+      "fillRequired": "Harap isi semua kolom yang diperlukan",
+      "submit": "Buat Mahasiswa dan Simpan Dokumen",
+      "submitting": "Membuat mahasiswa…",
+      "success": "Mahasiswa dibuat dan dokumen disimpan",
+      "successDocFailed": "Mahasiswa dibuat — tetapi dokumen tidak dapat disimpan",
+      "failed": "Gagal membuat mahasiswa",
+      "cancel": "Batal"
     }
   },
   "integrations": {

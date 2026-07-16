@@ -1127,6 +1127,22 @@
       },
       "preview": "预览",
       "download": "下载"
+    },
+    "createStudentAndAddDoc": {
+      "title": "创建学生并添加文件",
+      "notLinked": "此对话未与任何学生关联。",
+      "aiWillAnalyze": "AI将分析文件和对话历史，自动填充学生档案。",
+      "selectType": "选择文件类型以继续",
+      "analyzing": "正在分析文件…",
+      "analyzingDesc": "AI正在从文件中提取学生信息",
+      "aiExtractedInfo": "AI已自动填写{count}个字段 — 保存前请核对",
+      "fillRequired": "请填写所有必填字段",
+      "submit": "创建学生并保存文件",
+      "submitting": "正在创建学生…",
+      "success": "学生已创建，文件已保存",
+      "successDocFailed": "学生已创建 — 但文件保存失败",
+      "failed": "创建学生失败",
+      "cancel": "取消"
     }
   },
   "integrations": {

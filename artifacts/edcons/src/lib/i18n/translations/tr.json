@@ -1127,6 +1127,22 @@
       },
       "preview": "Önizle",
       "download": "İndir"
+    },
+    "createStudentAndAddDoc": {
+      "title": "Öğrenci Oluştur ve Belge Ekle",
+      "notLinked": "Bu konuşma herhangi bir öğrenci ile eşleşmemiş.",
+      "aiWillAnalyze": "Yapay zeka, belgeyi ve konuşmayı analiz ederek öğrenci profilini otomatik dolduracak.",
+      "selectType": "Devam etmek için belge türünü seçin",
+      "analyzing": "Belge analiz ediliyor…",
+      "analyzingDesc": "Yapay zeka belgeden öğrenci bilgilerini çıkarıyor",
+      "aiExtractedInfo": "Yapay zeka {count} alanı otomatik doldurdu — kaydetmeden önce kontrol edin",
+      "fillRequired": "Lütfen tüm zorunlu alanları doldurun",
+      "submit": "Öğrenci Oluştur ve Belgeyi Kaydet",
+      "submitting": "Öğrenci oluşturuluyor…",
+      "success": "Öğrenci oluşturuldu ve belge kaydedildi",
+      "successDocFailed": "Öğrenci oluşturuldu — ancak belge kaydedilemedi",
+      "failed": "Öğrenci oluşturulamadı",
+      "cancel": "İptal"
     }
   },
   "integrations": {

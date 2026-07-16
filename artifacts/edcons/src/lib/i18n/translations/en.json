@@ -1127,6 +1127,22 @@
       },
       "preview": "Preview",
       "download": "Download"
+    },
+    "createStudentAndAddDoc": {
+      "title": "Create Student and Add Document",
+      "notLinked": "This conversation is not linked to a student.",
+      "aiWillAnalyze": "AI will analyze the document and conversation to prefill the student profile.",
+      "selectType": "Select document type to continue",
+      "analyzing": "Analyzing document…",
+      "analyzingDesc": "AI is extracting student information from the document",
+      "aiExtractedInfo": "{count} field(s) prefilled by AI — review and correct before saving",
+      "fillRequired": "Please fill in all required fields",
+      "submit": "Create Student and Save Document",
+      "submitting": "Creating student…",
+      "success": "Student created and document saved",
+      "successDocFailed": "Student created — but document could not be saved",
+      "failed": "Failed to create student",
+      "cancel": "Cancel"
     }
   },
   "integrations": {

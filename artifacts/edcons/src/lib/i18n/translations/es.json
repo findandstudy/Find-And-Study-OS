@@ -1127,6 +1127,22 @@
       },
       "preview": "Vista previa",
       "download": "Descargar"
+    },
+    "createStudentAndAddDoc": {
+      "title": "Crear estudiante y añadir documento",
+      "notLinked": "Esta conversación no está vinculada a ningún estudiante.",
+      "aiWillAnalyze": "La IA analizará el documento y la conversación para rellenar previamente el perfil del estudiante.",
+      "selectType": "Selecciona el tipo de documento para continuar",
+      "analyzing": "Analizando documento…",
+      "analyzingDesc": "La IA está extrayendo información del estudiante del documento",
+      "aiExtractedInfo": "La IA rellenó {count} campo(s) automáticamente — revise antes de guardar",
+      "fillRequired": "Por favor, rellene todos los campos obligatorios",
+      "submit": "Crear estudiante y guardar documento",
+      "submitting": "Creando estudiante…",
+      "success": "Estudiante creado y documento guardado",
+      "successDocFailed": "Estudiante creado — pero el documento no se pudo guardar",
+      "failed": "No se pudo crear el estudiante",
+      "cancel": "Cancelar"
     }
   },
   "integrations": {
