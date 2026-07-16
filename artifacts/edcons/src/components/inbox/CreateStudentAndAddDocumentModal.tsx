@@ -25,8 +25,6 @@ import {
 import type { InboxConversationDetailResponse } from "@workspace/api-client-react";
 import type { AddDocTarget } from "./AddAsDocumentModal";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-
 type DocType = "diploma" | "transcript" | "passport" | "photograph";
 type Step = "select" | "analyzing" | "form";
 
@@ -35,13 +33,6 @@ const DOC_TYPE_ICONS: Record<DocType, typeof GraduationCap> = {
   transcript: ScrollText,
   passport: Shield,
   photograph: Camera,
-};
-
-const DOC_TYPE_LABELS: Record<DocType, string> = {
-  diploma: "Diploma",
-  transcript: "Transcript",
-  passport: "Passport",
-  photograph: "Photograph",
 };
 
 const EMPTY_FORM = {
@@ -58,37 +49,6 @@ const EMPTY_FORM = {
   highSchool: "",
   gpa: "",
 };
-
-async function fetchAttachmentAsBase64(url: string): Promise<{
-  data: string;
-  mediaType: string;
-  type: "image" | "pdf";
-} | null> {
-  try {
-    const res = await fetch(url, { credentials: "include" });
-    if (!res.ok) return null;
-    const contentType = res.headers.get("content-type") || "";
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64 = result.split(",")[1];
-        if (!base64) { resolve(null); return; }
-        const isImg = contentType.startsWith("image/");
-        resolve({
-          data: base64,
-          mediaType: contentType || (isImg ? "image/jpeg" : "application/pdf"),
-          type: isImg ? "image" : "pdf",
-        });
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
 
 interface Props {
   convId: number;
@@ -141,55 +101,45 @@ export function CreateStudentAndAddDocumentModal({
     const extracted = new Set<string>();
 
     try {
-      const att = await fetchAttachmentAsBase64(target.attachUrl);
-      if (att) {
-        const res = await fetch(`${BASE_URL}/api/ai/extract-document`, {
+      const res = await customFetch(
+        `/api/inbox/conversations/${convId}/messages/${target.msgId}/attachments/${target.attachIdx}/extract-for-student`,
+        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            documents: [
-              {
-                type: att.type,
-                data: att.data,
-                mediaType: att.mediaType,
-                label: DOC_TYPE_LABELS[type],
-              },
-            ],
-          }),
-        });
-        if (res.ok) {
-          const { extracted: data }: { extracted: Record<string, any> } = await res.json();
-          const MAPPING: Array<[keyof typeof EMPTY_FORM, string]> = [
-            ["firstName", "firstName"],
-            ["lastName", "lastName"],
-            ["email", "email"],
-            ["phone", "phone"],
-            ["nationality", "nationality"],
-            ["dateOfBirth", "dateOfBirth"],
-            ["passportNumber", "passportNumber"],
-            ["passportExpiry", "passportExpiry"],
-            ["motherName", "motherName"],
-            ["fatherName", "fatherName"],
-            ["highSchool", "highSchool"],
-          ];
-          for (const [fk, ek] of MAPPING) {
-            const val = data[ek];
-            if (val !== null && val !== undefined && val !== "") {
-              (initial as any)[fk] = String(val);
-              extracted.add(fk);
-            }
+          body: JSON.stringify({ docType: type }),
+        },
+      );
+      const { extracted: data }: { extracted: Record<string, any> } = res as any;
+      if (data && typeof data === "object") {
+        const MAPPING: Array<[keyof typeof EMPTY_FORM, string]> = [
+          ["firstName", "firstName"],
+          ["lastName", "lastName"],
+          ["email", "email"],
+          ["phone", "phone"],
+          ["nationality", "nationality"],
+          ["dateOfBirth", "dateOfBirth"],
+          ["passportNumber", "passportNumber"],
+          ["passportExpiry", "passportExpiry"],
+          ["motherName", "motherName"],
+          ["fatherName", "fatherName"],
+          ["highSchool", "highSchool"],
+        ];
+        for (const [fk, ek] of MAPPING) {
+          const val = data[ek];
+          if (val !== null && val !== undefined && val !== "") {
+            (initial as any)[fk] = String(val);
+            extracted.add(fk);
           }
-          if (data.gpa !== null && data.gpa !== undefined && data.gpa !== "") {
-            const gpaStr = String(data.gpa).trim();
-            const match = gpaStr.match(/^([\d.]+)\s*\/\s*(\d+)$/);
-            initial.gpa = match ? match[1] : gpaStr;
-            extracted.add("gpa");
-          }
-          if (data.graduationYear != null) {
-            initial.highSchool = initial.highSchool || "";
-            extracted.add("graduationYear");
-          }
+        }
+        if (data.gpa !== null && data.gpa !== undefined && data.gpa !== "") {
+          const gpaStr = String(data.gpa).trim();
+          const match = gpaStr.match(/^([\d.]+)\s*\/\s*(\d+)$/);
+          initial.gpa = match ? match[1] : gpaStr;
+          extracted.add("gpa");
+        }
+        if (data.graduationYear != null) {
+          initial.highSchool = initial.highSchool || "";
+          extracted.add("graduationYear");
         }
       }
     } catch {

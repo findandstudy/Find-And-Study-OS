@@ -2908,6 +2908,213 @@ router.post(
   }
 );
 
+// ── Server-side AI extraction for unmatched student creation ──────────────────
+//
+// Downloads the attachment server-side (so auth tokens for WA/Zernio are
+// always available) and calls the AI extraction endpoint logic. Returns the
+// same { extracted } shape as POST /api/ai/extract-document. When the media
+// cannot be fetched, returns { extracted: {} } — never an error — so the
+// CreateStudentAndAddDocumentModal still advances to the form step with the
+// contact-name/phone prefill applied.
+const EXTRACT_FOR_STUDENT_ALLOWED_TYPES = ["diploma", "transcript", "passport", "photograph"] as const;
+const EXTRACT_FOR_STUDENT_PROMPT = `You are an expert document analysis system for an education consultancy.
+Analyze the provided document image(s) and extract student information.
+
+Extract ALL of the following fields if visible in the document. Return a JSON object with these exact keys:
+{
+  "firstName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
+  "lastName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
+  "dateOfBirth": "YYYY-MM-DD format or null",
+  "nationality": "country name string (e.g. 'Afghanistan' not 'Afghan', 'Turkey' not 'Turkish', 'Iran' not 'Iranian', 'Pakistan' not 'Pakistani', 'Uzbekistan' not 'Uzbek', 'India' not 'Indian') or null",
+  "passportNumber": "string or null",
+  "passportExpiry": "YYYY-MM-DD format or null",
+  "motherName": "string or null - EXACTLY as printed on the document",
+  "fatherName": "string or null - EXACTLY as printed on the document",
+  "email": "string or null",
+  "phone": "string or null",
+  "highSchool": "string or null",
+  "graduationYear": "number or null",
+  "gpa": "string or null",
+  "documentType": "passport|diploma|transcript|photo|other",
+  "confidence": "high|medium|low"
+}
+Rules:
+- Extract names EXACTLY as they appear on the document. Do NOT modify, translate, or reformat names.
+- Always normalize dates to YYYY-MM-DD format
+- For nationality: always return the full country name (e.g. "Turkey" not "Turkish")
+- Return ONLY the JSON object, no other text
+- Set null for fields you cannot find`;
+
+router.post(
+  "/inbox/conversations/:id/messages/:msgId/attachments/:idx/extract-for-student",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const conversationId = parseInt(String(req.params.id), 10);
+    const msgId = parseInt(String(req.params.msgId), 10);
+    const attachIndex = parseInt(String(req.params.idx), 10);
+
+    if (!conversationId || !msgId || isNaN(attachIndex) || attachIndex < 0) {
+      res.status(400).json({ error: "Invalid parameters" });
+      return;
+    }
+
+    const { docType } = req.body as { docType?: string };
+
+    const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conversationId));
+    if (!conv) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    const [msg] = await db.select().from(messagesTable).where(
+      and(eq(messagesTable.id, msgId), eq(messagesTable.conversationId, conversationId))
+    );
+    if (!msg) { res.status(404).json({ error: "Message not found" }); return; }
+
+    const meta = (msg.metadata ?? {}) as Record<string, any>;
+    const zernioAtts: Array<Record<string, any>> = [
+      ...(meta.attachment && typeof meta.attachment === "object" ? [meta.attachment as Record<string, any>] : []),
+      ...(Array.isArray(meta.attachments) ? (meta.attachments as Record<string, any>[]) : []),
+    ];
+
+    let attachUrl: string | null = null;
+    let attachMimeType: string | null = null;
+    let waMediaId: string | null = null;
+
+    if (attachIndex < zernioAtts.length) {
+      const att = zernioAtts[attachIndex];
+      attachUrl = String(att?.url ?? att?.fileUrl ?? "").trim() || null;
+      attachMimeType = String(att?.mimeType ?? att?.mime_type ?? "").trim() || null;
+    }
+
+    if (!attachUrl && meta.raw && typeof meta.raw === "object" && attachIndex === 0) {
+      const raw = meta.raw as Record<string, any>;
+      const mediaType = String(raw.type ?? "");
+      const mediaObj = mediaType ? (raw[mediaType] as Record<string, any> | undefined) : undefined;
+      if (mediaObj?.id) {
+        waMediaId = String(mediaObj.id);
+        attachMimeType = attachMimeType || String(mediaObj.mime_type ?? "").trim() || null;
+      }
+    }
+
+    if (!attachUrl && !waMediaId) {
+      res.json({ extracted: {} });
+      return;
+    }
+
+    // ── Download media bytes server-side ────────────────────────────────────
+    let fileBuffer: Buffer;
+    let resolvedMimeType: string;
+
+    try {
+      if (waMediaId) {
+        const waConfig = await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId);
+        const accessToken = (waConfig?.accessToken ?? process.env.WA_ACCESS_TOKEN ?? "").trim();
+        if (!accessToken) {
+          res.json({ extracted: {} });
+          return;
+        }
+        const infoRes = await fetch(
+          `https://graph.facebook.com/${META_API_VERSION}/${waMediaId}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!infoRes.ok) {
+          console.warn(`[INBOX extract-for-student] WA media info failed ${infoRes.status} for ${waMediaId}`);
+          res.json({ extracted: {} });
+          return;
+        }
+        const mediaInfo = await infoRes.json() as { url?: string; mime_type?: string };
+        if (!mediaInfo.url) {
+          res.json({ extracted: {} });
+          return;
+        }
+        resolvedMimeType = attachMimeType || mediaInfo.mime_type || "application/octet-stream";
+        const mediaRes = await fetch(mediaInfo.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (!mediaRes.ok) {
+          console.warn(`[INBOX extract-for-student] WA media download failed ${mediaRes.status}`);
+          res.json({ extracted: {} });
+          return;
+        }
+        fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+      } else {
+        const fetchHeaders: Record<string, string> = {};
+        try {
+          const parsed = new URL(attachUrl!);
+          if (parsed.hostname === "zernio.com") {
+            const apiKey = await getZernioApiKey();
+            if (apiKey) fetchHeaders["Authorization"] = `Bearer ${apiKey}`;
+          }
+        } catch { /* non-parseable URL */ }
+
+        const mediaRes = await fetch(attachUrl!, { headers: fetchHeaders, redirect: "follow" });
+        if (!mediaRes.ok) {
+          console.warn(`[INBOX extract-for-student] Attachment download failed ${mediaRes.status}: ${attachUrl}`);
+          res.json({ extracted: {} });
+          return;
+        }
+        const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
+        fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+        resolvedMimeType = attachMimeType || contentType.split(";")[0].trim();
+      }
+    } catch (err: any) {
+      console.warn("[INBOX extract-for-student] media fetch error:", err?.message ?? err);
+      res.json({ extracted: {} });
+      return;
+    }
+
+    // ── Run AI extraction ───────────────────────────────────────────────────
+    try {
+      const anthropic = await getAnthropicClient();
+      const isImage = resolvedMimeType.startsWith("image/");
+      const base64 = fileBuffer.toString("base64");
+      const label = docType && EXTRACT_FOR_STUDENT_ALLOWED_TYPES.includes(docType as any) ? docType : "document";
+
+      const contentBlocks: any[] = [
+        { type: "text", text: EXTRACT_FOR_STUDENT_PROMPT },
+        { type: "text", text: `\n--- Document: ${label} ---` },
+      ];
+
+      if (isImage) {
+        const validImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+        const mediaType = validImageTypes.includes(resolvedMimeType) ? resolvedMimeType : "image/jpeg";
+        contentBlocks.push({
+          type: "image",
+          source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 },
+        });
+      } else {
+        contentBlocks.push({
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: base64 },
+        });
+      }
+
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 4096,
+        messages: [{ role: "user", content: contentBlocks }],
+      });
+
+      const textBlock = message.content.find((b) => b.type === "text");
+      if (!textBlock || textBlock.type !== "text") {
+        res.json({ extracted: {} });
+        return;
+      }
+
+      let extracted: Record<string, any> = {};
+      try {
+        const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) extracted = JSON.parse(jsonMatch[0]);
+      } catch {
+        res.json({ extracted: {} });
+        return;
+      }
+
+      res.json({ extracted });
+    } catch (err: any) {
+      console.warn("[INBOX extract-for-student] AI extraction error:", err?.message ?? err);
+      res.json({ extracted: {} });
+    }
+  }
+);
+
 // ── Document summary for a conversation's linked lead/student ─────────────────
 //
 // Returns the presence of each required document type for the conversation's
