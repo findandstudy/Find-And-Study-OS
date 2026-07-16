@@ -974,16 +974,7 @@
         "nameRequired": "First name is required",
         "selectAssigned": "Select staff...",
         "firstName": "First Name",
-        "lastName": "Last Name",
-        "interestedProgram": "Interested Program",
-        "interestedUniversity": "Interested University",
-        "estimatedValue": "Estimated Value"
-      },
-      "tabs": {
-        "lead": "Lead",
-        "student": "Student",
-        "application": "Application",
-        "comingSoon": "Coming soon"
+        "lastName": "Last Name"
       }
     },
     "aiSummary": {

@@ -974,16 +974,7 @@
         "nameRequired": "الاسم الأول مطلوب",
         "selectAssigned": "اختر موظفاً...",
         "firstName": "الاسم الأول",
-        "lastName": "الاسم الأخير",
-        "interestedProgram": "البرنامج المهتم به",
-        "interestedUniversity": "الجامعة المهتمة بها",
-        "estimatedValue": "القيمة المقدرة"
-      },
-      "tabs": {
-        "lead": "بطاقة",
-        "student": "طالب",
-        "application": "طلب",
-        "comingSoon": "قريبًا"
+        "lastName": "الاسم الأخير"
       }
     },
     "aiSummary": {

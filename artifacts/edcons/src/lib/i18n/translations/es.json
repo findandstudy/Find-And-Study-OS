@@ -974,16 +974,7 @@
         "nameRequired": "El nombre es requerido",
         "selectAssigned": "Seleccionar personal...",
         "firstName": "Nombre",
-        "lastName": "Apellido",
-        "interestedProgram": "Programa de interés",
-        "interestedUniversity": "Universidad de interés",
-        "estimatedValue": "Valor estimado"
-      },
-      "tabs": {
-        "lead": "Lead",
-        "student": "Estudiante",
-        "application": "Solicitud",
-        "comingSoon": "Próximamente"
+        "lastName": "Apellido"
       }
     },
     "aiSummary": {

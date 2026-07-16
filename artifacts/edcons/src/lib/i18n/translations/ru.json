@@ -974,16 +974,7 @@
         "nameRequired": "Имя обязательно",
         "selectAssigned": "Выбрать сотрудника...",
         "firstName": "Имя",
-        "lastName": "Фамилия",
-        "interestedProgram": "Интересующая программа",
-        "interestedUniversity": "Интересующий университет",
-        "estimatedValue": "Оценочная стоимость"
-      },
-      "tabs": {
-        "lead": "Лид",
-        "student": "Студент",
-        "application": "Заявка",
-        "comingSoon": "Скоро"
+        "lastName": "Фамилия"
       }
     },
     "aiSummary": {

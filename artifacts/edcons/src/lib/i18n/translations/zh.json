@@ -974,16 +974,7 @@
         "nameRequired": "名字为必填项",
         "selectAssigned": "选择员工...",
         "firstName": "名",
-        "lastName": "姓",
-        "interestedProgram": "感兴趣的项目",
-        "interestedUniversity": "感兴趣的大学",
-        "estimatedValue": "预估价值"
-      },
-      "tabs": {
-        "lead": "潜在客户",
-        "student": "学生",
-        "application": "申请",
-        "comingSoon": "即将推出"
+        "lastName": "姓"
       }
     },
     "aiSummary": {

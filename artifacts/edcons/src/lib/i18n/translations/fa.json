@@ -974,16 +974,7 @@
         "nameRequired": "نام الزامی است",
         "selectAssigned": "انتخاب کارمند...",
         "firstName": "نام",
-        "lastName": "نام خانوادگی",
-        "interestedProgram": "برنامه مورد علاقه",
-        "interestedUniversity": "دانشگاه مورد علاقه",
-        "estimatedValue": "ارزش تخمینی"
-      },
-      "tabs": {
-        "lead": "لید",
-        "student": "دانشجو",
-        "application": "درخواست",
-        "comingSoon": "به زودی"
+        "lastName": "نام خانوادگی"
       }
     },
     "aiSummary": {
