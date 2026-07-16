@@ -165,16 +165,13 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
     return m;
   }, [destinations]);
 
-  // Destination options come straight from the system's destinations
-  // table — the same rows that `university_contracts.destinationId`
-  // references. Every option is therefore a real destination, so a saved
-  // contract always links to an actual destination row (rather than a
-  // synthetic "country" value that would silently persist as NULL).
+  // Destination options: curated destinations (with real DB IDs) first,
+  // then synthetic options for any university-catalog country that has
+  // no matching curated destination. Synthetic values use the prefix
+  // "c:" so the save handler maps them to destinationId: null while
+  // still showing the correct country in the UI.
   const destinationOptions = useMemo(() => {
-    return destinations.map(d => {
-      // Most destination rows carry name === country (e.g. "Turkey"/"Turkey"),
-      // which rendered as a redundant "Turkey — Turkey". Collapse those to a
-      // single label and prefix the flag so options stay clean and readable.
+    const result: { value: string; country: string; label: string }[] = destinations.map(d => {
       const dedup = normCountry(d.name) === normCountry(d.country);
       const base = dedup ? d.name : `${d.name} — ${d.country}`;
       return {
@@ -183,14 +180,24 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
         label: d.flagEmoji ? `${d.flagEmoji} ${base}` : base,
       };
     });
-  }, [destinations]);
+    const coveredKeys = new Set(destinations.map(d => normCountry(d.country)));
+    for (const c of countries) {
+      if (c && !coveredKeys.has(normCountry(c))) {
+        result.push({ value: `c:${c}`, country: c, label: c });
+      }
+    }
+    return result;
+  }, [destinations, countries]);
 
-  // Auto-fill resolves to the destination whose country matches the
-  // selected university. If the system has no destination for that
-  // country, leave it blank rather than inventing a value.
+  // Auto-fill: prefer a curated destination whose country matches;
+  // fall back to a synthetic "c:<country>" option so the field still
+  // shows the correct country even when no curated destination exists.
   const destValueForCountry = (country: string | null | undefined) => {
-    const curated = destByCountry[normCountry(country)];
-    return curated ? String(curated.id) : "";
+    const key = normCountry(country);
+    const curated = destByCountry[key];
+    if (curated) return String(curated.id);
+    const inCatalog = countries.some(c => normCountry(c) === key);
+    return inCatalog && country ? `c:${country}` : "";
   };
 
   async function load() {
