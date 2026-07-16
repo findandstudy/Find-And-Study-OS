@@ -26,6 +26,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useCountrySearch } from "@/hooks/use-countries";
 import { InboxStudentTab } from "./InboxStudentTab";
+import { InboxApplicationTab } from "./InboxApplicationTab";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -298,6 +299,23 @@ export function LeadDetailSidebar({
         {tabBar}
         {conversationId ? (
           <InboxStudentTab
+            detail={detail}
+            conversationId={conversationId}
+            onUpdated={onUpdated}
+          />
+        ) : (
+          placeholder
+        )}
+      </div>
+    );
+  }
+
+  if (activeTab === "application") {
+    return (
+      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+        {tabBar}
+        {conversationId ? (
+          <InboxApplicationTab
             detail={detail}
             conversationId={conversationId}
             onUpdated={onUpdated}
