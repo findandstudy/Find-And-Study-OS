@@ -251,7 +251,9 @@ export function CreateStudentAndAddDocumentModal({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              docType,
+              documentType: docType,
+              ownerType: "student",
+              ownerId: studentId,
               setAsPhoto: docType === "photograph",
             }),
           },
