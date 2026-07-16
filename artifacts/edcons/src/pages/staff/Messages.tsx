@@ -837,6 +837,7 @@ function InboxTab() {
 
   const channelOptions = ["all", "whatsapp", "messenger", "instagram", "web_form", "email", "sms", "telegram"];
   const tabs: Array<{ key: typeof tab; label: string; icon: any }> = [
+    { key: "all", label: t("messagesPage.all"), icon: Hash },
     { key: "mine", label: t("messagesPage.mine"), icon: UserCheck },
     { key: "unassigned", label: t("messagesPage.unassigned"), icon: InboxIcon },
     { key: "open", label: t("inbox.tabs.open"), icon: MessageCircle },
@@ -844,7 +845,6 @@ function InboxTab() {
     { key: "subscribed", label: t("inbox.tabs.subscribed"), icon: Bell },
     { key: "starred", label: t("inbox.tabs.starred"), icon: Star },
     { key: "unmatched", label: t("messagesPage.unmatched"), icon: AlertTriangle },
-    { key: "all", label: t("messagesPage.all"), icon: Hash },
     { key: "archived", label: t("inbox.tabs.archived"), icon: Archive },
   ];
 
@@ -1021,7 +1021,7 @@ function InboxTab() {
               />
             </div>
 
-            <div className="flex w-full rounded-lg bg-muted/50 p-1 gap-0.5 overflow-x-auto scrollbar-none">
+            <div className="flex flex-wrap w-full rounded-lg bg-muted/50 p-1 gap-1">
               {tabs.map((tb) => {
                 const Icon = tb.icon;
                 const active = tab === tb.key;
@@ -1110,6 +1110,7 @@ function InboxTab() {
                 <ArrowUpDown className="w-3.5 h-3.5" />
                 {sortOrder === "desc" ? t("inbox.sort.newestFirst") : t("inbox.sort.oldestFirst")}
               </Button>
+              {["super_admin", "admin"].includes(user?.role || "") && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1121,6 +1122,7 @@ function InboxTab() {
                 <FlaskConical className="w-3.5 h-3.5" />
                 {showTests ? t("inbox.tests.shown") : t("inbox.tests.hidden")}
               </Button>
+              )}
               <div className="flex-1" />
               <Button
                 variant={selectMode ? "secondary" : "ghost"}
