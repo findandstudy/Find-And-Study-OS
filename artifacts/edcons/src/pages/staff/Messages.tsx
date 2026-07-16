@@ -1027,7 +1027,7 @@ function InboxTab() {
     <>
     <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
       <div className="grid grid-cols-1 lg:grid-cols-12 h-full grid-rows-[minmax(0,1fr)]">
-        <div className={`lg:col-span-3 h-full min-h-0 border-r border-border/50 min-w-0 overflow-hidden ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
+        <div className={`lg:col-span-2 h-full min-h-0 border-r border-border/50 min-w-0 overflow-hidden ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
           <div className="p-3 border-b border-border/50 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
@@ -1266,7 +1266,7 @@ function InboxTab() {
           </div>
         </div>
 
-        <div className={`lg:col-span-6 flex flex-col h-full min-h-0 overflow-hidden ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
+        <div className={`lg:col-span-7 flex flex-col h-full min-h-0 overflow-hidden ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
           {!selectedId ? (
             <div className="text-center text-muted-foreground">
               <InboxIcon className="w-16 h-16 mx-auto mb-3 opacity-20" />
