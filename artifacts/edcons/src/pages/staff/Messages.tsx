@@ -295,22 +295,27 @@ function InboxTab() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [attachPreview, setAttachPreview] = useState<{ url: string; name: string; isImage: boolean; isPdf: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
 
-  const DRAG_ACCEPT = /^(image\/|application\/pdf$|application\/msword$|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document$)/;
-  function handleChatDragOver(e: React.DragEvent) {
+  function handleChatDragEnter(e: React.DragEvent) {
     e.preventDefault();
-    e.stopPropagation();
+    dragCounterRef.current++;
     setIsDragging(true);
   }
+  function handleChatDragOver(e: React.DragEvent) {
+    e.preventDefault();
+  }
   function handleChatDragLeave(e: React.DragEvent) {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragging(false);
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) setIsDragging(false);
   }
   function handleChatDrop(e: React.DragEvent) {
     e.preventDefault();
-    e.stopPropagation();
+    dragCounterRef.current = 0;
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files).filter((f) => DRAG_ACCEPT.test(f.type));
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.size > 0);
     if (files.length > 0) setPendingFiles((prev) => [...prev, ...files]);
   }
   // Sort order for the conversation list — persisted per user preference.
@@ -1387,6 +1392,7 @@ function InboxTab() {
 
               <div
                 className="relative flex-1 min-h-0 flex flex-col overflow-hidden"
+                onDragEnter={handleChatDragEnter}
                 onDragOver={handleChatDragOver}
                 onDragLeave={handleChatDragLeave}
                 onDrop={handleChatDrop}
@@ -1457,15 +1463,14 @@ function InboxTab() {
                                 const _btnCls = "inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors";
                                 const actionRow = (
                                   <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                                    <a
-                                      href={url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
+                                    <button
+                                      type="button"
                                       className={_btnCls}
+                                      onClick={() => setAttachPreview({ url, name, isImage: type === "image", isPdf: type === "file" && name.toLowerCase().endsWith(".pdf") })}
                                     >
                                       <Eye className="w-3 h-3" />
                                       {t("inbox.addAsDoc.preview")}
-                                    </a>
+                                    </button>
                                     <a
                                       href={url}
                                       download={name}
@@ -1491,9 +1496,9 @@ function InboxTab() {
                                 );
                                 if (type === "image") return (
                                   <div key={i} className="space-y-1">
-                                    <a href={url} target="_blank" rel="noopener noreferrer">
-                                      <img src={url} alt={name} className="max-w-[240px] rounded-lg" loading="lazy" />
-                                    </a>
+                                    <button type="button" onClick={() => setAttachPreview({ url, name, isImage: true, isPdf: false })}>
+                                      <img src={url} alt={name} className="max-w-[240px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity" loading="lazy" draggable={false} />
+                                    </button>
                                     {actionRow}
                                   </div>
                                 );
@@ -1674,7 +1679,15 @@ function InboxTab() {
               onSummarize={handleSummarize}
               isSummarizing={summarizeMutation.isPending}
               onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
-              onCreateStudentAI={openAddStudentDialog}
+              onCreateStudentAI={(prefill) => {
+                if (prefill) {
+                  setAddStudentPrefill({ firstName: prefill.firstName, lastName: prefill.lastName, email: prefill.email, phone: prefill.phone });
+                  setMatchOpen(false);
+                  setAddStudentOpen(true);
+                } else {
+                  openAddStudentDialog();
+                }
+              }}
             />
           </div>
         )}
@@ -1698,7 +1711,16 @@ function InboxTab() {
                 onSummarize={handleSummarize}
                 isSummarizing={summarizeMutation.isPending}
                 onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
-                onCreateStudentAI={() => { setSidebarSheetOpen(false); openAddStudentDialog(); }}
+                onCreateStudentAI={(prefill) => {
+                  setSidebarSheetOpen(false);
+                  if (prefill) {
+                    setAddStudentPrefill({ firstName: prefill.firstName, lastName: prefill.lastName, email: prefill.email, phone: prefill.phone });
+                    setMatchOpen(false);
+                    setAddStudentOpen(true);
+                  } else {
+                    openAddStudentDialog();
+                  }
+                }}
               />
             </div>
           </SheetContent>
@@ -1822,6 +1844,29 @@ function InboxTab() {
               {t("messagesPage.createLead")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attachment preview modal */}
+      <Dialog open={!!attachPreview} onOpenChange={(o) => { if (!o) setAttachPreview(null); }}>
+        <DialogContent className="max-w-3xl w-full p-2">
+          <DialogHeader className="px-2 pt-1 pb-2">
+            <DialogTitle className="text-sm truncate">{attachPreview?.name}</DialogTitle>
+          </DialogHeader>
+          {attachPreview?.isImage ? (
+            <img
+              src={attachPreview.url}
+              alt={attachPreview.name}
+              className="max-h-[75vh] w-full object-contain rounded"
+            />
+          ) : (
+            <iframe
+              src={attachPreview?.url}
+              title={attachPreview?.name}
+              className="w-full rounded"
+              style={{ height: "75vh" }}
+            />
+          )}
         </DialogContent>
       </Dialog>
 

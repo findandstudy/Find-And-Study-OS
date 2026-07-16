@@ -971,8 +971,10 @@
         "submitting": "Création...",
         "added": "Prospect créé",
         "addFailed": "Échec de la création",
-        "nameRequired": "Le nom complet est requis",
-        "selectAssigned": "Sélectionner..."
+        "nameRequired": "Le prénom est requis",
+        "selectAssigned": "Sélectionner...",
+        "firstName": "Prénom",
+        "lastName": "Nom de famille"
       }
     },
     "aiSummary": {

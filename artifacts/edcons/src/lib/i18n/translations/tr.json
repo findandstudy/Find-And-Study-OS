@@ -971,8 +971,10 @@
         "submitting": "Oluşturuluyor...",
         "added": "Lead oluşturuldu",
         "addFailed": "Lead oluşturulamadı",
-        "nameRequired": "Ad Soyad gerekli",
-        "selectAssigned": "Personel seç..."
+        "nameRequired": "Ad gereklidir",
+        "selectAssigned": "Personel seç...",
+        "firstName": "Ad",
+        "lastName": "Soyad"
       }
     },
     "aiSummary": {

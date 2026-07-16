@@ -971,8 +971,10 @@
         "submitting": "Membuat...",
         "added": "Prospek dibuat",
         "addFailed": "Gagal membuat prospek",
-        "nameRequired": "Nama lengkap wajib diisi",
-        "selectAssigned": "Pilih staf..."
+        "nameRequired": "Nama depan wajib diisi",
+        "selectAssigned": "Pilih staf...",
+        "firstName": "Nama Depan",
+        "lastName": "Nama Belakang"
       }
     },
     "aiSummary": {

@@ -971,8 +971,10 @@
         "submitting": "جارٍ الإنشاء...",
         "added": "تم إنشاء العميل المحتمل",
         "addFailed": "فشل إنشاء العميل المحتمل",
-        "nameRequired": "الاسم الكامل مطلوب",
-        "selectAssigned": "اختر موظفاً..."
+        "nameRequired": "الاسم الأول مطلوب",
+        "selectAssigned": "اختر موظفاً...",
+        "firstName": "الاسم الأول",
+        "lastName": "الاسم الأخير"
       }
     },
     "aiSummary": {

@@ -971,8 +971,10 @@
         "submitting": "Создание...",
         "added": "Лид создан",
         "addFailed": "Не удалось создать лид",
-        "nameRequired": "Требуется полное имя",
-        "selectAssigned": "Выбрать сотрудника..."
+        "nameRequired": "Имя обязательно",
+        "selectAssigned": "Выбрать сотрудника...",
+        "firstName": "Имя",
+        "lastName": "Фамилия"
       }
     },
     "aiSummary": {

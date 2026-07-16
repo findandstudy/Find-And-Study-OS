@@ -971,8 +971,10 @@
         "submitting": "در حال ایجاد...",
         "added": "سرنخ ایجاد شد",
         "addFailed": "ایجاد سرنخ ناموفق بود",
-        "nameRequired": "نام کامل الزامی است",
-        "selectAssigned": "انتخاب کارمند..."
+        "nameRequired": "نام الزامی است",
+        "selectAssigned": "انتخاب کارمند...",
+        "firstName": "نام",
+        "lastName": "نام خانوادگی"
       }
     },
     "aiSummary": {

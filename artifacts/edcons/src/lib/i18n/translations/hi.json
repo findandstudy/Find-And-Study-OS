@@ -971,8 +971,10 @@
         "submitting": "बनाया जा रहा है...",
         "added": "लीड बनाई गई",
         "addFailed": "लीड बनाने में विफल",
-        "nameRequired": "पूरा नाम आवश्यक है",
-        "selectAssigned": "स्टाफ चुनें..."
+        "nameRequired": "पहला नाम आवश्यक है",
+        "selectAssigned": "स्टाफ चुनें...",
+        "firstName": "पहला नाम",
+        "lastName": "अंतिम नाम"
       }
     },
     "aiSummary": {

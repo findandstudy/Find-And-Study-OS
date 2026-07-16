@@ -971,8 +971,10 @@
         "submitting": "Creando...",
         "added": "Prospecto creado",
         "addFailed": "Error al crear prospecto",
-        "nameRequired": "El nombre completo es obligatorio",
-        "selectAssigned": "Seleccionar personal..."
+        "nameRequired": "El nombre es requerido",
+        "selectAssigned": "Seleccionar personal...",
+        "firstName": "Nombre",
+        "lastName": "Apellido"
       }
     },
     "aiSummary": {

@@ -971,8 +971,10 @@
         "submitting": "创建中...",
         "added": "潜在客户已创建",
         "addFailed": "创建失败",
-        "nameRequired": "全名为必填项",
-        "selectAssigned": "选择员工..."
+        "nameRequired": "名字为必填项",
+        "selectAssigned": "选择员工...",
+        "firstName": "名",
+        "lastName": "姓"
       }
     },
     "aiSummary": {

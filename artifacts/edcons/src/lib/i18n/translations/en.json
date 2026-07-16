@@ -971,8 +971,10 @@
         "submitting": "Creating...",
         "added": "Lead created",
         "addFailed": "Failed to create lead",
-        "nameRequired": "Full name is required",
-        "selectAssigned": "Select staff..."
+        "nameRequired": "First name is required",
+        "selectAssigned": "Select staff...",
+        "firstName": "First Name",
+        "lastName": "Last Name"
       }
     },
     "aiSummary": {
