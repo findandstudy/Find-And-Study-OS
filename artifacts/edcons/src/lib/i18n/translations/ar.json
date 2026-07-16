@@ -942,7 +942,14 @@
         "diploma": "Diploma",
         "transcript": "Transcript",
         "passport": "Passport",
-        "photograph": "Photograph"
+        "photograph": "Photograph",
+        "actions": "إجراءات المستند",
+        "preview": "معاينة",
+        "download": "تحميل",
+        "useInApplication": "استخدام في طلب",
+        "removeFromProfile": "إزالة من الملف",
+        "removed": "تمت إزالة {type} من الملف",
+        "removeFailed": "فشل إزالة المستند"
       }
     },
     "aiSummary": {
@@ -1117,7 +1124,9 @@
         "title": "Use as profile photo?",
         "docOnly": "Add as Document Only",
         "setPhoto": "Add and Set as Profile Photo"
-      }
+      },
+      "preview": "معاينة",
+      "download": "تحميل"
     }
   },
   "integrations": {

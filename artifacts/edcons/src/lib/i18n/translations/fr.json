@@ -942,7 +942,14 @@
         "diploma": "Diploma",
         "transcript": "Transcript",
         "passport": "Passport",
-        "photograph": "Photograph"
+        "photograph": "Photograph",
+        "actions": "Actions du document",
+        "preview": "Aperçu",
+        "download": "Télécharger",
+        "useInApplication": "Utiliser dans une demande",
+        "removeFromProfile": "Retirer du profil",
+        "removed": "{type} retiré du profil",
+        "removeFailed": "Échec de la suppression"
       }
     },
     "aiSummary": {
@@ -1117,7 +1124,9 @@
         "title": "Use as profile photo?",
         "docOnly": "Add as Document Only",
         "setPhoto": "Add and Set as Profile Photo"
-      }
+      },
+      "preview": "Aperçu",
+      "download": "Télécharger"
     }
   },
   "integrations": {

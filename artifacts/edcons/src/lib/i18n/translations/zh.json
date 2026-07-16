@@ -942,7 +942,14 @@
         "diploma": "Diploma",
         "transcript": "Transcript",
         "passport": "Passport",
-        "photograph": "Photograph"
+        "photograph": "Photograph",
+        "actions": "文件操作",
+        "preview": "预览",
+        "download": "下载",
+        "useInApplication": "在申请中使用",
+        "removeFromProfile": "从档案中移除",
+        "removed": "{type}已从档案中移除",
+        "removeFailed": "删除文件失败"
       }
     },
     "aiSummary": {
@@ -1117,7 +1124,9 @@
         "title": "Use as profile photo?",
         "docOnly": "Add as Document Only",
         "setPhoto": "Add and Set as Profile Photo"
-      }
+      },
+      "preview": "预览",
+      "download": "下载"
     }
   },
   "integrations": {

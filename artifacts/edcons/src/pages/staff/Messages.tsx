@@ -1419,35 +1419,59 @@ function InboxTab() {
                                 const type = a.type ?? a.fileType ?? "file";
                                 const name = a.name ?? a.fileName ?? "file";
                                 const canAdd = !out && Boolean(detail.lead || detail.student);
-                                const addBtn = canAdd ? (
-                                  <button
-                                    type="button"
-                                    title={t("inbox.addAsDoc.button")}
-                                    onClick={() => setAddDocTarget({ msgId: m.id, attachIdx: i, attachUrl: url, attachName: name, isImage: type === "image" })}
-                                    className="inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-                                  >
-                                    <FilePlus2 className="w-3 h-3" />
-                                    {t("inbox.addAsDoc.button")}
-                                  </button>
-                                ) : null;
+                                const _btnCls = "inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors";
+                                const actionRow = (
+                                  <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                    <a
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={_btnCls}
+                                    >
+                                      <Eye className="w-3 h-3" />
+                                      {t("inbox.addAsDoc.preview")}
+                                    </a>
+                                    <a
+                                      href={url}
+                                      download={name}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={_btnCls}
+                                    >
+                                      <Download className="w-3 h-3" />
+                                      {t("inbox.addAsDoc.download")}
+                                    </a>
+                                    {canAdd && (
+                                      <button
+                                        type="button"
+                                        title={t("inbox.addAsDoc.button")}
+                                        onClick={() => setAddDocTarget({ msgId: m.id, attachIdx: i, attachUrl: url, attachName: name, isImage: type === "image" })}
+                                        className={_btnCls}
+                                      >
+                                        <FilePlus2 className="w-3 h-3" />
+                                        {t("inbox.addAsDoc.button")}
+                                      </button>
+                                    )}
+                                  </div>
+                                );
                                 if (type === "image") return (
                                   <div key={i} className="space-y-1">
                                     <a href={url} target="_blank" rel="noopener noreferrer">
                                       <img src={url} alt={name} className="max-w-[240px] rounded-lg" loading="lazy" />
                                     </a>
-                                    {addBtn}
+                                    {actionRow}
                                   </div>
                                 );
                                 if (type === "video") return (
                                   <div key={i} className="space-y-1">
                                     <video src={url} controls className="max-w-[240px] rounded-lg" />
-                                    {addBtn}
+                                    {actionRow}
                                   </div>
                                 );
                                 if (type === "audio") return (
                                   <div key={i} className="space-y-1">
                                     <audio src={url} controls className="w-full" />
-                                    {addBtn}
+                                    {actionRow}
                                   </div>
                                 );
                                 return (
@@ -1456,7 +1480,7 @@ function InboxTab() {
                                       className={`flex items-center gap-1.5 text-xs underline ${out ? "text-primary-foreground/80" : "text-foreground/80"}`}>
                                       <Paperclip className="w-3 h-3 shrink-0" /> {name}
                                     </a>
-                                    {addBtn}
+                                    {actionRow}
                                   </div>
                                 );
                               })}

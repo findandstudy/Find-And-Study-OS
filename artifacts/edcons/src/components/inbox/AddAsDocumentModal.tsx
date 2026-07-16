@@ -6,6 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { customFetch } from "@workspace/api-client-react";
 
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
 export interface AddDocTarget {
   msgId: number;
   attachIdx: number;
@@ -50,13 +52,13 @@ export function AddAsDocumentModal({
   const [saving, setSaving] = useState(false);
   const [conflictDocId, setConflictDocId] = useState<number | null>(null);
 
-  async function callSave(documentType: DocType, force = false): Promise<"ok" | "conflict"> {
+  async function callSave(documentType: DocType, force = false, setAsPhoto = true): Promise<"ok" | "conflict"> {
     const res = await customFetch(
       `/api/inbox/conversations/${convId}/messages/${target.msgId}/attachments/${target.attachIdx}/save-as-document`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ownerType, ownerId, documentType, force }),
+        body: JSON.stringify({ ownerType, ownerId, documentType, force, setAsPhoto }),
       }
     ) as any;
     if (res?.conflict) {
@@ -75,10 +77,10 @@ export function AddAsDocumentModal({
     await doSave(type);
   }
 
-  async function doSave(type: DocType, force = false) {
+  async function doSave(type: DocType, force = false, setAsPhoto = true) {
     setSaving(true);
     try {
-      const result = await callSave(type, force);
+      const result = await callSave(type, force, setAsPhoto);
       if (result === "conflict") {
         setStep("conflict");
         return;
@@ -101,7 +103,7 @@ export function AddAsDocumentModal({
     try {
       await customFetch(`/api/documents/${conflictDocId}`, { method: "DELETE" });
     } catch {
-      // ignore
+      // ignore — proceed with save regardless
     }
     await doSave(selectedType, false);
   }
@@ -109,6 +111,12 @@ export function AddAsDocumentModal({
   async function handleAddAsNew() {
     if (!selectedType) return;
     await doSave(selectedType, true);
+  }
+
+  function handleViewExisting() {
+    if (!conflictDocId) return;
+    window.open(`${BASE_URL}/api/documents/${conflictDocId}/download?disposition=inline`, "_blank", "noopener,noreferrer");
+    // Keep modal open so user can still choose an action
   }
 
   const typeLabel = selectedType ? t(`inbox.addAsDoc.${selectedType}`) : "";
@@ -170,7 +178,7 @@ export function AddAsDocumentModal({
           </div>
         )}
 
-        {/* Photo confirmation */}
+        {/* Photo confirmation — two distinct paths */}
         {step === "photo-confirm" && (
           <div className="flex flex-col gap-3">
             {target.isImage && target.attachUrl && (
@@ -183,19 +191,21 @@ export function AddAsDocumentModal({
               </div>
             )}
             <div className="flex flex-col gap-2">
+              {/* Primary: set as profile photo (also calls recomputeStudentPhoto on backend) */}
               <Button
                 disabled={saving}
                 className="w-full"
-                onClick={() => void doSave("photograph", false)}
+                onClick={() => void doSave("photograph", false, true)}
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin me-2" /> : <Camera className="w-4 h-4 me-2" />}
                 {t("inbox.addAsDoc.photoConfirm.setPhoto")}
               </Button>
+              {/* Secondary: document only — skips profile photo update */}
               <Button
                 variant="outline"
                 disabled={saving}
                 className="w-full"
-                onClick={() => void doSave("photograph", false)}
+                onClick={() => void doSave("photograph", false, false)}
               >
                 {t("inbox.addAsDoc.photoConfirm.docOnly")}
               </Button>
@@ -214,12 +224,7 @@ export function AddAsDocumentModal({
                 variant="outline"
                 disabled={saving}
                 className="w-full justify-start gap-2"
-                onClick={() => {
-                  if (conflictDocId) {
-                    window.open(`/staff/students`, "_blank");
-                  }
-                  onClose();
-                }}
+                onClick={handleViewExisting}
               >
                 <Eye className="w-4 h-4" />
                 {t("inbox.addAsDoc.conflict.viewExisting")}

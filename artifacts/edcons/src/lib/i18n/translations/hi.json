@@ -942,7 +942,14 @@
         "diploma": "Diploma",
         "transcript": "Transcript",
         "passport": "Passport",
-        "photograph": "Photograph"
+        "photograph": "Photograph",
+        "actions": "दस्तावेज़ क्रियाएं",
+        "preview": "पूर्वावलोकन",
+        "download": "डाउनलोड",
+        "useInApplication": "आवेदन में उपयोग करें",
+        "removeFromProfile": "प्रोफ़ाइल से हटाएं",
+        "removed": "प्रोफ़ाइल से {type} हटाया गया",
+        "removeFailed": "दस्तावेज़ हटाने में विफल"
       }
     },
     "aiSummary": {
@@ -1117,7 +1124,9 @@
         "title": "Use as profile photo?",
         "docOnly": "Add as Document Only",
         "setPhoto": "Add and Set as Profile Photo"
-      }
+      },
+      "preview": "पूर्वावलोकन",
+      "download": "डाउनलोड"
     }
   },
   "integrations": {

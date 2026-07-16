@@ -942,7 +942,14 @@
         "diploma": "Diploma",
         "transcript": "Transcript",
         "passport": "Passport",
-        "photograph": "Photograph"
+        "photograph": "Photograph",
+        "actions": "Действия с документом",
+        "preview": "Просмотр",
+        "download": "Скачать",
+        "useInApplication": "Использовать в заявке",
+        "removeFromProfile": "Удалить из профиля",
+        "removed": "{type} удалён из профиля",
+        "removeFailed": "Не удалось удалить документ"
       }
     },
     "aiSummary": {
@@ -1117,7 +1124,9 @@
         "title": "Use as profile photo?",
         "docOnly": "Add as Document Only",
         "setPhoto": "Add and Set as Profile Photo"
-      }
+      },
+      "preview": "Просмотр",
+      "download": "Скачать"
     }
   },
   "integrations": {

@@ -1,15 +1,28 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, Building, Check, Loader2, Pencil, X, FileText, GraduationCap, ScrollText, Shield, Camera, CheckCircle2, Circle } from "lucide-react";
+import {
+  ArrowRight, Building, Check, Loader2, Pencil, X,
+  FileText, GraduationCap, ScrollText, Shield, Camera,
+  CheckCircle2, Circle, MoreHorizontal, Eye, Download, Trash2, ExternalLink,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { customFetch } from "@workspace/api-client-react";
 import type { InboxConversationDetailResponse } from "@workspace/api-client-react";
 import { PipelineStageBadge } from "./PipelineStageBadge";
 import { AiSummaryCard } from "./AiSummaryCard";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 interface LeadDetailSidebarProps {
   detail: InboxConversationDetailResponse;
@@ -141,6 +154,8 @@ export function LeadDetailSidebar({
   const [saving, setSaving] = useState(false);
   const [docSummary, setDocSummary] = useState<DocSummary | null>(null);
   const [docSummaryLoading, setDocSummaryLoading] = useState(false);
+  const [localRefreshKey, setLocalRefreshKey] = useState(0);
+  const [removingDocId, setRemovingDocId] = useState<number | null>(null);
 
   const linkedType: LinkedType | null = detail.lead
     ? "lead"
@@ -167,7 +182,22 @@ export function LeadDetailSidebar({
         if (!cancelled) setDocSummaryLoading(false);
       });
     return () => { cancelled = true; };
-  }, [conversationId, canShowDocs, docSummaryRefreshKey]);
+  }, [conversationId, canShowDocs, docSummaryRefreshKey, localRefreshKey]);
+
+  const removeDoc = useCallback(async (documentId: number, typeLabel: string) => {
+    setRemovingDocId(documentId);
+    try {
+      await customFetch(`/api/documents/${documentId}`, { method: "DELETE" });
+      toast({ title: t("inbox.sidebar.documents.removed", { type: typeLabel }) });
+      setLocalRefreshKey((k) => k + 1);
+      onUpdated?.();
+    } catch (err: any) {
+      const msg = err?.data?.error || err?.body?.error || err?.message;
+      toast({ title: t("inbox.sidebar.documents.removeFailed"), description: typeof msg === "string" ? msg : undefined, variant: "destructive" });
+    } finally {
+      setRemovingDocId(null);
+    }
+  }, [t, toast, onUpdated]);
 
   if (!linkedType) {
     return (
@@ -228,6 +258,12 @@ export function LeadDetailSidebar({
     else if (linkedType === "student" && student) navigate(`/staff/students/${student.id}`);
     else if (linkedType === "agent" && agent) navigate(`/staff/agents/${agent.id}`);
   };
+
+  const entityProfileUrl = linkedType === "lead" && lead
+    ? `/staff/leads/${lead.id}`
+    : linkedType === "student" && student
+      ? `/staff/students/${student.id}`
+      : null;
 
   const estimatedValueText = (() => {
     if (linkedType !== "lead" || !lead?.estimatedValue) return null;
@@ -342,14 +378,79 @@ export function LeadDetailSidebar({
               const Icon = DOC_TYPE_ICONS[type] ?? FileText;
               const entry = docSummary?.[type];
               const exists = entry?.exists ?? false;
+              const documentId = entry?.documentId ?? null;
+              const docTypeLabel = t(`inbox.sidebar.documents.${type}`);
+              const isRemoving = documentId !== null && removingDocId === documentId;
               return (
                 <div key={type} className="flex items-center gap-2 py-0.5">
                   <Icon className={`w-3.5 h-3.5 shrink-0 ${exists ? "text-emerald-600" : "text-muted-foreground/50"}`} />
                   <span className={`text-xs flex-1 ${exists ? "text-foreground" : "text-muted-foreground"}`}>
-                    {t(`inbox.sidebar.documents.${type}`)}
+                    {docTypeLabel}
                   </span>
-                  {exists ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  {exists && documentId ? (
+                    isRemoving ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />
+                    ) : (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="flex items-center justify-center w-5 h-5 rounded hover:bg-muted transition-colors shrink-0"
+                            aria-label={t("inbox.sidebar.documents.actions")}
+                          >
+                            <MoreHorizontal className="w-3.5 h-3.5 text-emerald-600" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={`${BASE_URL}/api/documents/${documentId}/download?disposition=inline`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              {t("inbox.sidebar.documents.preview")}
+                            </a>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={`${BASE_URL}/api/documents/${documentId}/download`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              {t("inbox.sidebar.documents.download")}
+                            </a>
+                          </DropdownMenuItem>
+                          {entityProfileUrl && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem asChild>
+                                <a
+                                  href={entityProfileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  {t("inbox.sidebar.documents.useInApplication")}
+                                </a>
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive flex items-center gap-2"
+                            onClick={() => void removeDoc(documentId, docTypeLabel)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {t("inbox.sidebar.documents.removeFromProfile")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )
                   ) : (
                     <Circle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
                   )}

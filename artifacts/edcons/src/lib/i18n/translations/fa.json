@@ -942,7 +942,14 @@
         "diploma": "Diploma",
         "transcript": "Transcript",
         "passport": "Passport",
-        "photograph": "Photograph"
+        "photograph": "Photograph",
+        "actions": "اقدامات سند",
+        "preview": "پیش‌نمایش",
+        "download": "دانلود",
+        "useInApplication": "استفاده در درخواست",
+        "removeFromProfile": "حذف از پروفایل",
+        "removed": "{type} از پروفایل حذف شد",
+        "removeFailed": "حذف سند ناموفق بود"
       }
     },
     "aiSummary": {
@@ -1117,7 +1124,9 @@
         "title": "Use as profile photo?",
         "docOnly": "Add as Document Only",
         "setPhoto": "Add and Set as Profile Photo"
-      }
+      },
+      "preview": "پیش‌نمایش",
+      "download": "دانلود"
     }
   },
   "integrations": {

@@ -2654,7 +2654,7 @@ router.post(
       return;
     }
 
-    const { ownerType, ownerId: ownerIdRaw, documentType, force } = req.body;
+    const { ownerType, ownerId: ownerIdRaw, documentType, force, setAsPhoto = true } = req.body;
     const ownerId = Number(ownerIdRaw);
 
     if (!SAVE_AS_DOC_ALLOWED_TYPES.includes(documentType as SaveAsDocType)) {
@@ -2880,8 +2880,10 @@ router.post(
       sourceAttachmentId,
     }).returning();
 
-    // Sync has_photo flag when a photo document is saved for a student
-    if (ownerType === "student" && (documentType === "photo" || documentType === "photograph")) {
+    // Sync has_photo flag when a photo document is saved for a student.
+    // Skipped when setAsPhoto === false (user chose "Add as Document Only" without
+    // setting it as the profile photo).
+    if (ownerType === "student" && (documentType === "photo" || documentType === "photograph") && setAsPhoto !== false) {
       await recomputeStudentPhoto(ownerId);
     }
 
