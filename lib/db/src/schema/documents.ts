@@ -27,6 +27,11 @@ export const documentsTable = pgTable("documents", {
   // this points back to the originating application_stage_documents row so
   // we can soft-delete the mirror when the stage doc is deleted (Faz J).
   sourceStageDocumentId: integer("source_stage_document_id"),
+  // Inbox "Add as Document" — tracks where the document came from.
+  source: text("source"),
+  sourceConversationId: integer("source_conversation_id"),
+  sourceMessageId: integer("source_message_id"),
+  sourceAttachmentId: text("source_attachment_id"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

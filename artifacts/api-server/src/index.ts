@@ -1939,6 +1939,17 @@ async function seedClaudeIntegration() {
     console.error("[migrate] knowledge_chunks:", err);
   }
 
+  // Step 2b18: "Add as Document" — source-tracking columns on documents (Task #627).
+  try {
+    await pool.query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source TEXT`);
+    await pool.query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_conversation_id INTEGER`);
+    await pool.query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_message_id INTEGER`);
+    await pool.query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_attachment_id TEXT`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS documents_source_attachment_idx ON documents(source_attachment_id) WHERE source_attachment_id IS NOT NULL`);
+  } catch (err) {
+    console.error("[migrate] documents source columns:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

@@ -16,6 +16,7 @@ import {
   followUpsTable,
   channelAccountsTable,
   integrationsTable,
+  documentsTable,
 } from "@workspace/db";
 import type { ConversationAiSummary } from "@workspace/db";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
@@ -70,6 +71,12 @@ import {
   deleteRagSource,
   reprocessRagSource,
 } from "../lib/inbox/knowledgeSourcesAdmin";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
+import { buildDocNameFromParts } from "../lib/docNaming";
+import { writeAudit } from "../lib/auditLog";
+import { recomputeStudentPhoto } from "../lib/studentPhoto";
+import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 
 const router: IRouter = Router();
 
@@ -2609,6 +2616,350 @@ router.post(
       res.json({ starred: true });
     }
   },
+);
+
+// ── "Add as Document" — save an inbound attachment as a Lead/Student document ─
+//
+// Resolves the attachment from the stored message metadata (Zernio: url field;
+// WhatsApp Cloud API: media ID in metadata.raw → fetches download URL via WA API).
+// Validates file type (PDF/JPG/PNG), checks for duplicate (same attachment + owner)
+// and type conflict (same doc type + owner), then uploads to object storage and
+// creates the document row with source-tracking columns.
+//
+// Body: { ownerType: "lead"|"student", ownerId: number, documentType: "diploma"|"transcript"|"passport"|"photograph" }
+
+function mimeToExt(mime: string): string {
+  if (mime === "application/pdf") return "pdf";
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "image/png") return "png";
+  if (mime === "image/gif") return "gif";
+  if (mime === "image/webp") return "webp";
+  return "bin";
+}
+
+const SAVE_AS_DOC_ALLOWED_TYPES = ["diploma", "transcript", "passport", "photograph"] as const;
+type SaveAsDocType = typeof SAVE_AS_DOC_ALLOWED_TYPES[number];
+
+router.post(
+  "/inbox/conversations/:id/messages/:msgId/attachments/:attachId/save-as-document",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const conversationId = parseInt(String(req.params.id), 10);
+    const msgId = parseInt(String(req.params.msgId), 10);
+    const attachIndex = parseInt(String(req.params.attachId), 10);
+
+    if (!conversationId || !msgId || isNaN(attachIndex) || attachIndex < 0) {
+      res.status(400).json({ error: "Invalid parameters" });
+      return;
+    }
+
+    const { ownerType, ownerId: ownerIdRaw, documentType } = req.body;
+    const ownerId = Number(ownerIdRaw);
+
+    if (!SAVE_AS_DOC_ALLOWED_TYPES.includes(documentType as SaveAsDocType)) {
+      res.status(400).json({ error: "documentType must be one of: diploma, transcript, passport, photograph" });
+      return;
+    }
+    if (ownerType !== "lead" && ownerType !== "student") {
+      res.status(400).json({ error: "ownerType must be 'lead' or 'student'" });
+      return;
+    }
+    if (!ownerId || isNaN(ownerId)) {
+      res.status(400).json({ error: "ownerId is required" });
+      return;
+    }
+
+    // Load conversation
+    const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conversationId));
+    if (!conv) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    // Load message (must belong to this conversation)
+    const [msg] = await db.select().from(messagesTable).where(
+      and(eq(messagesTable.id, msgId), eq(messagesTable.conversationId, conversationId))
+    );
+    if (!msg) { res.status(404).json({ error: "Message not found" }); return; }
+
+    // Extract attachment info from message metadata.
+    // For Zernio: metadata.attachment or metadata.attachments[index].url
+    // For WhatsApp: metadata.raw.{image|document|video|audio}.id
+    const meta = (msg.metadata ?? {}) as Record<string, any>;
+    const zernioAtts: Array<Record<string, any>> = [
+      ...(meta.attachment && typeof meta.attachment === "object" ? [meta.attachment as Record<string, any>] : []),
+      ...(Array.isArray(meta.attachments) ? (meta.attachments as Record<string, any>[]) : []),
+    ];
+
+    let attachUrl: string | null = null;
+    let attachMimeType: string | null = null;
+    let attachName: string | null = null;
+    let waMediaId: string | null = null;
+
+    if (attachIndex < zernioAtts.length) {
+      const att = zernioAtts[attachIndex];
+      attachUrl = String(att?.url ?? att?.fileUrl ?? "").trim() || null;
+      attachMimeType = String(att?.mimeType ?? att?.mime_type ?? "").trim() || null;
+      attachName = String(att?.name ?? att?.filename ?? "").trim() || null;
+    }
+
+    // WhatsApp: media object lives in metadata.raw under the message type key
+    if (!attachUrl && meta.raw && typeof meta.raw === "object" && attachIndex === 0) {
+      const raw = meta.raw as Record<string, any>;
+      const mediaType = String(raw.type ?? "");
+      const mediaObj = mediaType ? (raw[mediaType] as Record<string, any> | undefined) : undefined;
+      if (mediaObj?.id) {
+        waMediaId = String(mediaObj.id);
+        attachMimeType = attachMimeType || String(mediaObj.mime_type ?? "").trim() || null;
+        attachName = attachName || String(mediaObj.filename ?? mediaObj.file_name ?? "").trim() || null;
+      }
+    }
+
+    if (!attachUrl && !waMediaId) {
+      res.status(404).json({ error: "Attachment not found at this index" });
+      return;
+    }
+
+    const sourceAttachmentId = `${msgId}:${attachIndex}`;
+
+    // Duplicate guard: same source_attachment_id + same owner already saved
+    const ownerCondition = ownerType === "student"
+      ? eq(documentsTable.studentId, ownerId)
+      : eq(documentsTable.leadId, ownerId);
+
+    const [dupDoc] = await db.select({ id: documentsTable.id })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.sourceAttachmentId, sourceAttachmentId),
+        ownerCondition,
+        isNull(documentsTable.deletedAt)
+      ));
+    if (dupDoc) {
+      res.status(409).json({ error: "This attachment has already been saved as a document for this owner", existingDocumentId: dupDoc.id });
+      return;
+    }
+
+    // Conflict check: same doc type + same owner already exists (profile-level)
+    const [conflictDoc] = await db.select({ id: documentsTable.id })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.type, documentType),
+        ownerCondition,
+        isNull(documentsTable.applicationId),
+        isNull(documentsTable.deletedAt)
+      ));
+    if (conflictDoc) {
+      // Return 200 with conflict flag so frontend can prompt the user to decide
+      res.json({ conflict: true, existingDocumentId: conflictDoc.id });
+      return;
+    }
+
+    // ── Download media bytes ────────────────────────────────────────────────
+    let fileBuffer: Buffer;
+    let resolvedMimeType: string;
+    let resolvedFilename: string;
+
+    try {
+      if (waMediaId) {
+        // WhatsApp Cloud API: resolve download URL then download with Bearer token
+        const waConfig = await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId);
+        const accessToken = (waConfig?.accessToken ?? process.env.WA_ACCESS_TOKEN ?? "").trim();
+        if (!accessToken) {
+          res.status(502).json({ error: "WhatsApp access token not configured" });
+          return;
+        }
+
+        // Step 1: get media info (URL + mime_type) from Graph API
+        const infoRes = await fetch(
+          `https://graph.facebook.com/${META_API_VERSION}/${waMediaId}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!infoRes.ok) {
+          console.error(`[INBOX save-as-doc] WA media info failed ${infoRes.status} for ${waMediaId}`);
+          res.status(502).json({ error: "Failed to retrieve WhatsApp media info" });
+          return;
+        }
+        const mediaInfo = await infoRes.json() as { url?: string; mime_type?: string; file_size?: number };
+        if (!mediaInfo.url) {
+          res.status(502).json({ error: "WhatsApp media URL not returned" });
+          return;
+        }
+        resolvedMimeType = attachMimeType || mediaInfo.mime_type || "application/octet-stream";
+
+        // Step 2: download the media bytes with the same Bearer token
+        const mediaRes = await fetch(mediaInfo.url, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (!mediaRes.ok) {
+          console.error(`[INBOX save-as-doc] WA media download failed ${mediaRes.status}`);
+          res.status(502).json({ error: "Failed to download WhatsApp media" });
+          return;
+        }
+        fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+        resolvedFilename = sanitizeFileName(attachName || `attachment.${mimeToExt(resolvedMimeType)}`);
+      } else {
+        // Zernio or direct URL — add Bearer auth only for zernio.com hosts
+        const fetchHeaders: Record<string, string> = {};
+        try {
+          const parsed = new URL(attachUrl!);
+          if (parsed.hostname === "zernio.com") {
+            const apiKey = await getZernioApiKey();
+            if (apiKey) fetchHeaders["Authorization"] = `Bearer ${apiKey}`;
+          }
+        } catch { /* non-parseable URL — will fail on fetch below */ }
+
+        const mediaRes = await fetch(attachUrl!, { headers: fetchHeaders, redirect: "follow" });
+        if (!mediaRes.ok) {
+          console.error(`[INBOX save-as-doc] Attachment download failed ${mediaRes.status}: ${attachUrl}`);
+          res.status(502).json({ error: "Failed to download attachment" });
+          return;
+        }
+        const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
+        fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+        resolvedMimeType = attachMimeType || contentType.split(";")[0].trim();
+        resolvedFilename = sanitizeFileName(attachName || `attachment.${mimeToExt(resolvedMimeType)}`);
+      }
+    } catch (err: any) {
+      console.error("[INBOX save-as-doc] media fetch error:", err?.message ?? err);
+      res.status(502).json({ error: "Failed to fetch attachment" });
+      return;
+    }
+
+    // ── Validate file type and size ─────────────────────────────────────────
+    const validationError = validateUploadedFile(resolvedFilename, resolvedMimeType, fileBuffer.length);
+    if (validationError) {
+      res.status(validationError.type === "size_exceeded" ? 413 : 400).json({ error: validationError.message });
+      return;
+    }
+    const bufferError = await validateUploadedFileBuffer(resolvedFilename, resolvedMimeType, fileBuffer.slice(0, 4100));
+    if (bufferError) {
+      res.status(bufferError.type === "size_exceeded" ? 413 : 400).json({ error: bufferError.message });
+      return;
+    }
+
+    // ── Upload to object storage ────────────────────────────────────────────
+    const storage = new ObjectStorageService();
+    const fileKey = await storage.uploadBuffer({
+      subdir: "inbox-docs",
+      filename: resolvedFilename,
+      buffer: fileBuffer,
+      contentType: resolvedMimeType,
+    });
+
+    // ── Resolve owner name for descriptive document name ────────────────────
+    let ownerFirstName: string | null = null;
+    let ownerLastName: string | null = null;
+    if (ownerType === "student") {
+      const [s] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+        .from(studentsTable).where(eq(studentsTable.id, ownerId));
+      ownerFirstName = s?.firstName ?? null;
+      ownerLastName = s?.lastName ?? null;
+    } else {
+      const [l] = await db.select({ firstName: leadsTable.firstName, lastName: leadsTable.lastName })
+        .from(leadsTable).where(eq(leadsTable.id, ownerId));
+      ownerFirstName = l?.firstName ?? null;
+      ownerLastName = l?.lastName ?? null;
+    }
+    const docName = buildDocNameFromParts(ownerFirstName, ownerLastName, documentType, resolvedMimeType);
+
+    // ── Create document record ──────────────────────────────────────────────
+    const [doc] = await db.insert(documentsTable).values({
+      name: docName,
+      type: documentType,
+      status: "pending",
+      studentId: ownerType === "student" ? ownerId : null,
+      leadId: ownerType === "lead" ? ownerId : null,
+      applicationId: null,
+      fileKey,
+      mimeType: resolvedMimeType,
+      sizeBytes: fileBuffer.length,
+      source: "inbox",
+      sourceConversationId: conversationId,
+      sourceMessageId: msgId,
+      sourceAttachmentId,
+    }).returning();
+
+    // Sync has_photo flag when a photo document is saved for a student
+    if (ownerType === "student" && (documentType === "photo" || documentType === "photograph")) {
+      await recomputeStudentPhoto(ownerId);
+    }
+
+    // ── Audit log ───────────────────────────────────────────────────────────
+    await writeAudit({
+      userId: req.user!.id,
+      action: "inbox_save_as_document",
+      resource: "document",
+      resourceId: doc.id,
+      changes: {
+        sourceConversationId: conversationId,
+        sourceMessageId: msgId,
+        sourceAttachmentId,
+        documentType,
+        ownerType,
+        ownerId,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json(doc);
+  }
+);
+
+// ── Document summary for a conversation's linked lead/student ─────────────────
+//
+// Returns the presence of each required document type for the conversation's
+// linked entity (lead or student). Student takes priority over lead when both
+// are linked (i.e. a converted lead).
+//
+// Response: { diploma: {exists, documentId}, transcript: {...}, passport: {...}, photograph: {...} }
+
+router.get(
+  "/inbox/conversations/:id/document-summary",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const conversationId = parseInt(String(req.params.id), 10);
+    if (!conversationId) { res.status(400).json({ error: "Invalid id" }); return; }
+
+    const link = await loadConversationLink(conversationId);
+    if (!link) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    const DOC_TYPES = ["diploma", "transcript", "passport", "photograph"] as const;
+    type SummaryDocType = typeof DOC_TYPES[number];
+
+    const summary: Record<SummaryDocType, { exists: boolean; documentId: number | null }> = {
+      diploma: { exists: false, documentId: null },
+      transcript: { exists: false, documentId: null },
+      passport: { exists: false, documentId: null },
+      photograph: { exists: false, documentId: null },
+    };
+
+    if (!link.leadId && !link.studentId) {
+      res.json(summary);
+      return;
+    }
+
+    const ownerConditions: ReturnType<typeof eq>[] = [];
+    if (link.studentId) ownerConditions.push(eq(documentsTable.studentId, link.studentId));
+    if (link.leadId) ownerConditions.push(eq(documentsTable.leadId, link.leadId));
+
+    const docs = await db
+      .select({ id: documentsTable.id, type: documentsTable.type })
+      .from(documentsTable)
+      .where(and(
+        or(...ownerConditions),
+        inArray(documentsTable.type, [...DOC_TYPES]),
+        isNull(documentsTable.deletedAt)
+      ))
+      .orderBy(desc(documentsTable.createdAt));
+
+    for (const doc of docs) {
+      const t = doc.type as SummaryDocType;
+      if (DOC_TYPES.includes(t) && !summary[t].exists) {
+        summary[t] = { exists: true, documentId: doc.id };
+      }
+    }
+
+    res.json(summary);
+  }
 );
 
 // ── Per-conversation subscribe toggle (per-user) ─────────────────────────────
