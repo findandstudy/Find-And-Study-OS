@@ -974,7 +974,16 @@
         "nameRequired": "पहला नाम आवश्यक है",
         "selectAssigned": "स्टाफ चुनें...",
         "firstName": "पहला नाम",
-        "lastName": "अंतिम नाम"
+        "lastName": "अंतिम नाम",
+        "interestedProgram": "रुचि का कार्यक्रम",
+        "interestedUniversity": "रुचि का विश्वविद्यालय",
+        "estimatedValue": "अनुमानित मूल्य"
+      },
+      "tabs": {
+        "lead": "लीड",
+        "student": "छात्र",
+        "application": "आवेदन",
+        "comingSoon": "जल्द आ रहा है"
       }
     },
     "aiSummary": {

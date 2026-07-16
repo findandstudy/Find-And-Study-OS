@@ -215,7 +215,7 @@ interface WAMessage {
     list_reply?: { title?: string };
   };
   image?: { caption?: string };
-  document?: { caption?: string };
+  document?: { caption?: string; filename?: string; mime_type?: string };
   audio?: { caption?: string };
   video?: { caption?: string };
   [k: string]: unknown;

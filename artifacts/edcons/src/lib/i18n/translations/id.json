@@ -974,7 +974,16 @@
         "nameRequired": "Nama depan wajib diisi",
         "selectAssigned": "Pilih staf...",
         "firstName": "Nama Depan",
-        "lastName": "Nama Belakang"
+        "lastName": "Nama Belakang",
+        "interestedProgram": "Program yang diminati",
+        "interestedUniversity": "Universitas yang diminati",
+        "estimatedValue": "Nilai estimasi"
+      },
+      "tabs": {
+        "lead": "Lead",
+        "student": "Siswa",
+        "application": "Lamaran",
+        "comingSoon": "Segera hadir"
       }
     },
     "aiSummary": {

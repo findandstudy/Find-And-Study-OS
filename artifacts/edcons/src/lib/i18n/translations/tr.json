@@ -974,7 +974,16 @@
         "nameRequired": "Ad gereklidir",
         "selectAssigned": "Personel seç...",
         "firstName": "Ad",
-        "lastName": "Soyad"
+        "lastName": "Soyad",
+        "interestedProgram": "İlgilenilen Program",
+        "interestedUniversity": "İlgilenilen Üniversite",
+        "estimatedValue": "Tahmini Değer"
+      },
+      "tabs": {
+        "lead": "Lead",
+        "student": "Öğrenci",
+        "application": "Başvuru",
+        "comingSoon": "Yakında"
       }
     },
     "aiSummary": {
