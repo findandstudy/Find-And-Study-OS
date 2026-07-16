@@ -950,6 +950,29 @@
         "removeFromProfile": "Hapus dari Profil",
         "removed": "{type} dihapus dari profil",
         "removeFailed": "Gagal menghapus dokumen"
+      },
+      "unlinked": {
+        "title": "Kontak Tidak Tertaut",
+        "fullName": "Nama Lengkap",
+        "waNumber": "Nomor WhatsApp",
+        "phone": "Telepon",
+        "email": "Email",
+        "country": "Negara",
+        "source": "Sumber / Saluran",
+        "nationality": "Kewarganegaraan",
+        "preferredLanguage": "Bahasa Pilihan",
+        "motherName": "Nama Ibu",
+        "fatherName": "Nama Ayah",
+        "assignedStaff": "Staf yang Ditugaskan",
+        "notes": "Catatan",
+        "matchExisting": "Cocokkan yang Ada",
+        "addAsLead": "Tambahkan sebagai Prospek",
+        "addStudentAI": "Tambahkan Siswa (AI)",
+        "submitting": "Membuat...",
+        "added": "Prospek dibuat",
+        "addFailed": "Gagal membuat prospek",
+        "nameRequired": "Nama lengkap wajib diisi",
+        "selectAssigned": "Pilih staf..."
       }
     },
     "aiSummary": {
@@ -984,7 +1007,8 @@
       "taskCreated": "Tindak lanjut dibuat",
       "taskFailed": "Gagal membuat tindak lanjut",
       "attach": "Lampirkan file",
-      "enterToSend": "Enter untuk mengirim"
+      "enterToSend": "Enter untuk mengirim",
+      "dropFilesHere": "Letakkan file di sini"
     },
     "title": "Kotak Masuk",
     "internal": "Internal",
@@ -1126,7 +1150,11 @@
         "setPhoto": "Add and Set as Profile Photo"
       },
       "preview": "Pratinjau",
-      "download": "Unduh"
+      "download": "Unduh",
+      "addedBadge": "Ditambahkan",
+      "analyze": "Analisis",
+      "done": "Selesai",
+      "multiAdded": "{count} dokumen ditambahkan"
     },
     "createStudentAndAddDoc": {
       "title": "Buat Mahasiswa dan Tambahkan Dokumen",

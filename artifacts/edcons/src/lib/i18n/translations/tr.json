@@ -950,6 +950,29 @@
         "removeFromProfile": "Profilden Kaldır",
         "removed": "{type} profilden kaldırıldı",
         "removeFailed": "Belge kaldırılamadı"
+      },
+      "unlinked": {
+        "title": "Eşleşmemiş Kişi",
+        "fullName": "Ad Soyad",
+        "waNumber": "WhatsApp Numarası",
+        "phone": "Telefon",
+        "email": "E-posta",
+        "country": "Ülke",
+        "source": "Kaynak / Kanal",
+        "nationality": "Uyruk",
+        "preferredLanguage": "Tercih Edilen Dil",
+        "motherName": "Anne Adı",
+        "fatherName": "Baba Adı",
+        "assignedStaff": "Sorumlu Personel",
+        "notes": "Notlar",
+        "matchExisting": "Mevcut ile Eşleştir",
+        "addAsLead": "Lead Ekle",
+        "addStudentAI": "Öğrenci Ekle (AI)",
+        "submitting": "Oluşturuluyor...",
+        "added": "Lead oluşturuldu",
+        "addFailed": "Lead oluşturulamadı",
+        "nameRequired": "Ad Soyad gerekli",
+        "selectAssigned": "Personel seç..."
       }
     },
     "aiSummary": {
@@ -984,7 +1007,8 @@
       "taskCreated": "Takip oluşturuldu",
       "taskFailed": "Takip oluşturulamadı",
       "attach": "Dosya ekle",
-      "enterToSend": "Enter ile gönder"
+      "enterToSend": "Enter ile gönder",
+      "dropFilesHere": "Dosyaları buraya bırakın"
     },
     "title": "Gelen Kutusu",
     "internal": "Dahili",
@@ -1126,7 +1150,11 @@
         "setPhoto": "Add and Set as Profile Photo"
       },
       "preview": "Önizle",
-      "download": "İndir"
+      "download": "İndir",
+      "addedBadge": "Eklendi",
+      "analyze": "Analiz Et",
+      "done": "Bitti",
+      "multiAdded": "{count} belge eklendi"
     },
     "createStudentAndAddDoc": {
       "title": "Öğrenci Oluştur ve Belge Ekle",

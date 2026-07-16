@@ -950,6 +950,29 @@
         "removeFromProfile": "حذف از پروفایل",
         "removed": "{type} از پروفایل حذف شد",
         "removeFailed": "حذف سند ناموفق بود"
+      },
+      "unlinked": {
+        "title": "مخاطب پیوند نشده",
+        "fullName": "نام کامل",
+        "waNumber": "شماره واتساپ",
+        "phone": "تلفن",
+        "email": "ایمیل",
+        "country": "کشور",
+        "source": "منبع / کانال",
+        "nationality": "ملیت",
+        "preferredLanguage": "زبان ترجیحی",
+        "motherName": "نام مادر",
+        "fatherName": "نام پدر",
+        "assignedStaff": "کارمند مسؤول",
+        "notes": "یادداشت‌ها",
+        "matchExisting": "تطبیق با موجود",
+        "addAsLead": "افزودن به عنوان سرنخ",
+        "addStudentAI": "افزودن دانش‌آموز (هوش مصنوعی)",
+        "submitting": "در حال ایجاد...",
+        "added": "سرنخ ایجاد شد",
+        "addFailed": "ایجاد سرنخ ناموفق بود",
+        "nameRequired": "نام کامل الزامی است",
+        "selectAssigned": "انتخاب کارمند..."
       }
     },
     "aiSummary": {
@@ -984,7 +1007,8 @@
       "taskCreated": "پیگیری ایجاد شد",
       "taskFailed": "ایجاد پیگیری ناموفق بود",
       "attach": "پیوست فایل",
-      "enterToSend": "Enter برای ارسال"
+      "enterToSend": "Enter برای ارسال",
+      "dropFilesHere": "فایل‌ها را اینجا رها کنید"
     },
     "title": "صندوق ورودی",
     "internal": "داخلی",
@@ -1126,7 +1150,11 @@
         "setPhoto": "Add and Set as Profile Photo"
       },
       "preview": "پیش‌نمایش",
-      "download": "دانلود"
+      "download": "دانلود",
+      "addedBadge": "اضافه شد",
+      "analyze": "تحلیل",
+      "done": "تمام",
+      "multiAdded": "{count} سند اضافه شد"
     },
     "createStudentAndAddDoc": {
       "title": "ایجاد دانشجو و افزودن مدرک",

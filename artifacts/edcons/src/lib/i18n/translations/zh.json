@@ -950,6 +950,29 @@
         "removeFromProfile": "从档案中移除",
         "removed": "{type}已从档案中移除",
         "removeFailed": "删除文件失败"
+      },
+      "unlinked": {
+        "title": "未关联联系人",
+        "fullName": "全名",
+        "waNumber": "WhatsApp号码",
+        "phone": "电话",
+        "email": "邮箱",
+        "country": "国家",
+        "source": "来源/渠道",
+        "nationality": "国籍",
+        "preferredLanguage": "首选语言",
+        "motherName": "母亲姓名",
+        "fatherName": "父亲姓名",
+        "assignedStaff": "负责员工",
+        "notes": "备注",
+        "matchExisting": "匹配现有记录",
+        "addAsLead": "添加为潜在客户",
+        "addStudentAI": "添加学生（AI）",
+        "submitting": "创建中...",
+        "added": "潜在客户已创建",
+        "addFailed": "创建失败",
+        "nameRequired": "全名为必填项",
+        "selectAssigned": "选择员工..."
       }
     },
     "aiSummary": {
@@ -984,7 +1007,8 @@
       "taskCreated": "跟进已创建",
       "taskFailed": "创建跟进失败",
       "attach": "附加文件",
-      "enterToSend": "回车发送"
+      "enterToSend": "回车发送",
+      "dropFilesHere": "将文件拖放到此处"
     },
     "title": "收件箱",
     "internal": "内部",
@@ -1126,7 +1150,11 @@
         "setPhoto": "Add and Set as Profile Photo"
       },
       "preview": "预览",
-      "download": "下载"
+      "download": "下载",
+      "addedBadge": "已添加",
+      "analyze": "分析",
+      "done": "完成",
+      "multiAdded": "已添加 {count} 个文档"
     },
     "createStudentAndAddDoc": {
       "title": "创建学生并添加文件",

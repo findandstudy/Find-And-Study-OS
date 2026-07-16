@@ -950,6 +950,29 @@
         "removeFromProfile": "Удалить из профиля",
         "removed": "{type} удалён из профиля",
         "removeFailed": "Не удалось удалить документ"
+      },
+      "unlinked": {
+        "title": "Несвязанный контакт",
+        "fullName": "Полное имя",
+        "waNumber": "Номер WhatsApp",
+        "phone": "Телефон",
+        "email": "Эл. почта",
+        "country": "Страна",
+        "source": "Источник / Канал",
+        "nationality": "Гражданство",
+        "preferredLanguage": "Предпочитаемый язык",
+        "motherName": "Имя матери",
+        "fatherName": "Имя отца",
+        "assignedStaff": "Ответственный сотрудник",
+        "notes": "Заметки",
+        "matchExisting": "Сопоставить с существующим",
+        "addAsLead": "Добавить как лид",
+        "addStudentAI": "Добавить студента (ИИ)",
+        "submitting": "Создание...",
+        "added": "Лид создан",
+        "addFailed": "Не удалось создать лид",
+        "nameRequired": "Требуется полное имя",
+        "selectAssigned": "Выбрать сотрудника..."
       }
     },
     "aiSummary": {
@@ -984,7 +1007,8 @@
       "taskCreated": "Напоминание создано",
       "taskFailed": "Не удалось создать напоминание",
       "attach": "Прикрепить файл",
-      "enterToSend": "Enter для отправки"
+      "enterToSend": "Enter для отправки",
+      "dropFilesHere": "Перетащите файлы сюда"
     },
     "title": "Входящие",
     "internal": "Внутренние",
@@ -1126,7 +1150,11 @@
         "setPhoto": "Add and Set as Profile Photo"
       },
       "preview": "Просмотр",
-      "download": "Скачать"
+      "download": "Скачать",
+      "addedBadge": "Добавлено",
+      "analyze": "Анализ",
+      "done": "Готово",
+      "multiAdded": "Добавлено {count} документ(ов)"
     },
     "createStudentAndAddDoc": {
       "title": "Создать студента и добавить документ",

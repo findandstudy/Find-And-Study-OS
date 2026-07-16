@@ -950,6 +950,29 @@
         "removeFromProfile": "Retirer du profil",
         "removed": "{type} retiré du profil",
         "removeFailed": "Échec de la suppression"
+      },
+      "unlinked": {
+        "title": "Contact non lié",
+        "fullName": "Nom complet",
+        "waNumber": "Numéro WhatsApp",
+        "phone": "Téléphone",
+        "email": "E-mail",
+        "country": "Pays",
+        "source": "Source / Canal",
+        "nationality": "Nationalité",
+        "preferredLanguage": "Langue préférée",
+        "motherName": "Nom de la mère",
+        "fatherName": "Nom du père",
+        "assignedStaff": "Personnel assigné",
+        "notes": "Notes",
+        "matchExisting": "Associer à l'existant",
+        "addAsLead": "Ajouter comme prospect",
+        "addStudentAI": "Ajouter étudiant (IA)",
+        "submitting": "Création...",
+        "added": "Prospect créé",
+        "addFailed": "Échec de la création",
+        "nameRequired": "Le nom complet est requis",
+        "selectAssigned": "Sélectionner..."
       }
     },
     "aiSummary": {
@@ -984,7 +1007,8 @@
       "taskCreated": "Suivi créé",
       "taskFailed": "Échec de la création du suivi",
       "attach": "Joindre un fichier",
-      "enterToSend": "Entrée pour envoyer"
+      "enterToSend": "Entrée pour envoyer",
+      "dropFilesHere": "Déposez les fichiers ici"
     },
     "title": "Boîte de réception",
     "internal": "Interne",
@@ -1126,7 +1150,11 @@
         "setPhoto": "Add and Set as Profile Photo"
       },
       "preview": "Aperçu",
-      "download": "Télécharger"
+      "download": "Télécharger",
+      "addedBadge": "Ajouté",
+      "analyze": "Analyser",
+      "done": "Terminé",
+      "multiAdded": "{count} document(s) ajouté(s)"
     },
     "createStudentAndAddDoc": {
       "title": "Créer un étudiant et ajouter un document",

@@ -950,6 +950,29 @@
         "removeFromProfile": "Remove from Profile",
         "removed": "{type} removed from profile",
         "removeFailed": "Failed to remove document"
+      },
+      "unlinked": {
+        "title": "Unlinked Contact",
+        "fullName": "Full Name",
+        "waNumber": "WhatsApp Number",
+        "phone": "Phone",
+        "email": "Email",
+        "country": "Country",
+        "source": "Source / Channel",
+        "nationality": "Nationality",
+        "preferredLanguage": "Preferred Language",
+        "motherName": "Mother's Name",
+        "fatherName": "Father's Name",
+        "assignedStaff": "Assigned Staff",
+        "notes": "Notes",
+        "matchExisting": "Match Existing",
+        "addAsLead": "Add as Lead",
+        "addStudentAI": "Add Student (AI)",
+        "submitting": "Creating...",
+        "added": "Lead created",
+        "addFailed": "Failed to create lead",
+        "nameRequired": "Full name is required",
+        "selectAssigned": "Select staff..."
       }
     },
     "aiSummary": {
@@ -984,7 +1007,8 @@
       "taskCreated": "Follow-up created",
       "taskFailed": "Failed to create follow-up",
       "attach": "Attach file",
-      "enterToSend": "Enter to send"
+      "enterToSend": "Enter to send",
+      "dropFilesHere": "Drop files here"
     },
     "title": "Inbox",
     "internal": "Internal",
@@ -1126,7 +1150,11 @@
         "setPhoto": "Add and Set as Profile Photo"
       },
       "preview": "Preview",
-      "download": "Download"
+      "download": "Download",
+      "addedBadge": "Added",
+      "analyze": "Analyze",
+      "done": "Done",
+      "multiAdded": "{count} document(s) added"
     },
     "createStudentAndAddDoc": {
       "title": "Create Student and Add Document",

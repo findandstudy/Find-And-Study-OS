@@ -4,6 +4,7 @@ import {
   ArrowRight, Building, Check, Loader2, Pencil, X,
   FileText, GraduationCap, ScrollText, Shield, Camera,
   CheckCircle2, Circle, MoreHorizontal, Eye, Download, Trash2, ExternalLink,
+  Plus, UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ interface LeadDetailSidebarProps {
   onSummarize: () => void;
   isSummarizing: boolean;
   onUpdated?: () => void;
+  onCreateStudentAI?: () => void;
 }
 
 type LinkedType = "lead" | "student" | "agent";
@@ -138,6 +140,20 @@ function EditableField({
   );
 }
 
+const EMPTY_UNM_FORM = {
+  fullName: "",
+  phone: "",
+  email: "",
+  country: "",
+  source: "",
+  nationality: "",
+  preferredLanguage: "",
+  motherName: "",
+  fatherName: "",
+  assignedStaffId: "",
+  notes: "",
+};
+
 export function LeadDetailSidebar({
   detail,
   conversationId,
@@ -146,6 +162,7 @@ export function LeadDetailSidebar({
   onSummarize,
   isSummarizing,
   onUpdated,
+  onCreateStudentAI,
 }: LeadDetailSidebarProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -157,6 +174,11 @@ export function LeadDetailSidebar({
   const [localRefreshKey, setLocalRefreshKey] = useState(0);
   const [removingDocId, setRemovingDocId] = useState<number | null>(null);
 
+  // Unmatched contact form state
+  const [unmF, setUnmF] = useState(EMPTY_UNM_FORM);
+  const [unmStaff, setUnmStaff] = useState<{ id: number; name: string }[]>([]);
+  const [unmSubmitting, setUnmSubmitting] = useState(false);
+
   const linkedType: LinkedType | null = detail.lead
     ? "lead"
     : detail.student
@@ -166,6 +188,39 @@ export function LeadDetailSidebar({
         : null;
 
   const canShowDocs = (linkedType === "lead" || linkedType === "student") && conversationId;
+
+  // Initialize unmatched form when conversation changes and contact is unlinked
+  useEffect(() => {
+    if (linkedType !== null) return;
+    const ext = (detail as any).externalContact;
+    const conv = (detail as any).conversation;
+    setUnmF({
+      fullName: ext?.displayName || conv?.title || "",
+      phone: ext?.phone || "",
+      email: ext?.email || "",
+      country: "",
+      source: conv?.channel || "",
+      nationality: "",
+      preferredLanguage: "",
+      motherName: "",
+      fatherName: "",
+      assignedStaffId: "",
+      notes: "",
+    });
+    customFetch(
+      "/api/users?roles=super_admin,admin,manager,staff,consultant,editor,accountant&limit=200"
+    )
+      .then((r: any) => {
+        setUnmStaff(
+          (r?.data || []).map((u: any) => ({
+            id: u.id,
+            name: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`,
+          }))
+        );
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
 
   useEffect(() => {
     if (!canShowDocs) { setDocSummary(null); return; }
@@ -199,15 +254,240 @@ export function LeadDetailSidebar({
     }
   }, [t, toast, onUpdated]);
 
+  // ── Unmatched: inline lead-creation form ──────────────────────────────────
   if (!linkedType) {
+    async function handleAddAsLead() {
+      if (!unmF.fullName.trim()) {
+        toast({ title: t("inbox.sidebar.unlinked.nameRequired"), variant: "destructive" });
+        return;
+      }
+      if (!conversationId) return;
+      setUnmSubmitting(true);
+      try {
+        const res: any = await customFetch(
+          `/api/inbox/conversations/${conversationId}/create-lead`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fullName: unmF.fullName.trim(),
+              email: unmF.email.trim() || null,
+              phone: unmF.phone.trim() || null,
+            }),
+          }
+        );
+        // Patch additional fields that the create endpoint doesn't accept
+        const leadId = res?.id;
+        if (leadId) {
+          const patch: Record<string, unknown> = {};
+          if (unmF.country.trim()) patch.interestedCountry = unmF.country.trim();
+          if (unmF.motherName.trim()) patch.motherName = unmF.motherName.trim();
+          if (unmF.fatherName.trim()) patch.fatherName = unmF.fatherName.trim();
+          if (unmF.assignedStaffId) patch.assignedToId = parseInt(unmF.assignedStaffId, 10);
+          if (Object.keys(patch).length > 0) {
+            await customFetch(`/api/leads/${leadId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(patch),
+            }).catch(() => {});
+          }
+        }
+        toast({ title: t("inbox.sidebar.unlinked.added") });
+        onUpdated?.();
+      } catch (err: any) {
+        const msg = err?.data?.error || err?.body?.error || err?.message;
+        toast({
+          title: t("inbox.sidebar.unlinked.addFailed"),
+          description: typeof msg === "string" ? msg : undefined,
+          variant: "destructive",
+        });
+      } finally {
+        setUnmSubmitting(false);
+      }
+    }
+
+    const fieldCls = "w-full h-7 text-sm rounded-md border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring";
+    const labelCls = "text-[11px] text-muted-foreground uppercase tracking-wide mb-0.5";
+
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center gap-3">
-        <div className="text-muted-foreground text-sm">{t("inbox.sidebar.noLink")}</div>
-        {detail.conversation.unmatched && onOpenMatchDialog && (
-          <Button size="sm" variant="outline" onClick={onOpenMatchDialog} data-testid="sidebar-match-button">
-            {t("inbox.sidebar.matchButton")}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3" data-testid="lead-detail-sidebar-unmatched">
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pb-1 border-b">
+          {t("inbox.sidebar.unlinked.title")}
+        </div>
+
+        <div className="space-y-2">
+          {/* Full Name */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.fullName")} *</div>
+            <input
+              className={fieldCls}
+              value={unmF.fullName}
+              onChange={(e) => setUnmF((f) => ({ ...f, fullName: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.fullName")}
+            />
+          </div>
+
+          {/* WhatsApp / Phone from contact */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.waNumber")}</div>
+            <input
+              className={fieldCls}
+              value={unmF.phone}
+              onChange={(e) => setUnmF((f) => ({ ...f, phone: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.waNumber")}
+            />
+          </div>
+
+          {/* Email */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.email")}</div>
+            <input
+              type="email"
+              className={fieldCls}
+              value={unmF.email}
+              onChange={(e) => setUnmF((f) => ({ ...f, email: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.email")}
+            />
+          </div>
+
+          {/* Country */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.country")}</div>
+            <input
+              className={fieldCls}
+              value={unmF.country}
+              onChange={(e) => setUnmF((f) => ({ ...f, country: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.country")}
+            />
+          </div>
+
+          {/* Source / Channel */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.source")}</div>
+            <input
+              className={fieldCls}
+              value={unmF.source}
+              onChange={(e) => setUnmF((f) => ({ ...f, source: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.source")}
+            />
+          </div>
+
+          {/* Nationality */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.nationality")}</div>
+            <input
+              className={fieldCls}
+              value={unmF.nationality}
+              onChange={(e) => setUnmF((f) => ({ ...f, nationality: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.nationality")}
+            />
+          </div>
+
+          {/* Preferred Language */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.preferredLanguage")}</div>
+            <input
+              className={fieldCls}
+              value={unmF.preferredLanguage}
+              onChange={(e) => setUnmF((f) => ({ ...f, preferredLanguage: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.preferredLanguage")}
+            />
+          </div>
+
+          {/* Mother's Name */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.motherName")}</div>
+            <input
+              className={fieldCls}
+              value={unmF.motherName}
+              onChange={(e) => setUnmF((f) => ({ ...f, motherName: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.motherName")}
+            />
+          </div>
+
+          {/* Father's Name */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.fatherName")}</div>
+            <input
+              className={fieldCls}
+              value={unmF.fatherName}
+              onChange={(e) => setUnmF((f) => ({ ...f, fatherName: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.fatherName")}
+            />
+          </div>
+
+          {/* Assigned Staff */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.assignedStaff")}</div>
+            <select
+              value={unmF.assignedStaffId}
+              onChange={(e) => setUnmF((f) => ({ ...f, assignedStaffId: e.target.value }))}
+              className={fieldCls}
+            >
+              <option value="">{t("inbox.sidebar.unlinked.selectAssigned")}</option>
+              {unmStaff.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <div className={labelCls}>{t("inbox.sidebar.unlinked.notes")}</div>
+            <textarea
+              rows={2}
+              className="w-full text-sm rounded-md border border-input bg-background px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+              value={unmF.notes}
+              onChange={(e) => setUnmF((f) => ({ ...f, notes: e.target.value }))}
+              placeholder={t("inbox.sidebar.unlinked.notes")}
+            />
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex flex-col gap-1.5 pt-2 border-t">
+          {onOpenMatchDialog && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onOpenMatchDialog}
+              data-testid="sidebar-match-button"
+              className="w-full h-8 text-xs"
+            >
+              {t("inbox.sidebar.unlinked.matchExisting")}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={() => void handleAddAsLead()}
+            disabled={unmSubmitting}
+            className="w-full h-8 text-xs gap-1"
+            data-testid="sidebar-add-lead-button"
+          >
+            {unmSubmitting ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Plus className="w-3 h-3" />
+            )}
+            {unmSubmitting
+              ? t("inbox.sidebar.unlinked.submitting")
+              : t("inbox.sidebar.unlinked.addAsLead")}
           </Button>
-        )}
+          {onCreateStudentAI && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onCreateStudentAI}
+              className="w-full h-8 text-xs gap-1"
+              data-testid="sidebar-add-student-ai-button"
+            >
+              <UserPlus className="w-3 h-3" />
+              {t("inbox.sidebar.unlinked.addStudentAI")}
+            </Button>
+          )}
+        </div>
       </div>
     );
   }

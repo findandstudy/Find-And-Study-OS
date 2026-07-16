@@ -294,7 +294,25 @@ function InboxTab() {
   const [now, setNow] = useState<number>(() => Date.now());
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const DRAG_ACCEPT = /^(image\/|application\/pdf$|application\/msword$|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document$)/;
+  function handleChatDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }
+  function handleChatDragLeave(e: React.DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragging(false);
+  }
+  function handleChatDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files).filter((f) => DRAG_ACCEPT.test(f.type));
+    if (files.length > 0) setPendingFiles((prev) => [...prev, ...files]);
+  }
   // Sort order for the conversation list — persisted per user preference.
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">(() => {
     try { return localStorage.getItem("inbox_sort_order") === "asc" ? "asc" : "desc"; } catch { return "desc"; }
@@ -1367,7 +1385,20 @@ function InboxTab() {
                 </div>
               )}
 
-              <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div
+                className="relative flex-1 min-h-0 flex flex-col overflow-hidden"
+                onDragOver={handleChatDragOver}
+                onDragLeave={handleChatDragLeave}
+                onDrop={handleChatDrop}
+              >
+              {isDragging && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-lg pointer-events-none">
+                  <div className="flex flex-col items-center gap-2 text-primary">
+                    <Paperclip className="w-8 h-8" />
+                    <span className="text-sm font-medium">{t("inbox.compose.dropFilesHere")}</span>
+                  </div>
+                </div>
+              )}
               <div ref={msgScrollRef} onScroll={handleMsgScroll} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3" data-testid="inbox-message-scroll">
                 {hasMoreOlder && (
                   <div className="flex justify-center">
@@ -1643,6 +1674,7 @@ function InboxTab() {
               onSummarize={handleSummarize}
               isSummarizing={summarizeMutation.isPending}
               onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
+              onCreateStudentAI={openAddStudentDialog}
             />
           </div>
         )}
@@ -1666,6 +1698,7 @@ function InboxTab() {
                 onSummarize={handleSummarize}
                 isSummarizing={summarizeMutation.isPending}
                 onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
+                onCreateStudentAI={() => { setSidebarSheetOpen(false); openAddStudentDialog(); }}
               />
             </div>
           </SheetContent>

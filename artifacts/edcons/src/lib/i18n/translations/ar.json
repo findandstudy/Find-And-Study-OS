@@ -950,6 +950,29 @@
         "removeFromProfile": "إزالة من الملف",
         "removed": "تمت إزالة {type} من الملف",
         "removeFailed": "فشل إزالة المستند"
+      },
+      "unlinked": {
+        "title": "جهة اتصال غير مرتبطة",
+        "fullName": "الاسم الكامل",
+        "waNumber": "رقم واتساب",
+        "phone": "الهاتف",
+        "email": "البريد الإلكتروني",
+        "country": "البلد",
+        "source": "المصدر / القناة",
+        "nationality": "الجنسية",
+        "preferredLanguage": "اللغة المفضلة",
+        "motherName": "اسم الأم",
+        "fatherName": "اسم الأب",
+        "assignedStaff": "الموظف المسؤول",
+        "notes": "ملاحظات",
+        "matchExisting": "مطابقة موجود",
+        "addAsLead": "إضافة كعميل محتمل",
+        "addStudentAI": "إضافة طالب (ذكاء اصطناعي)",
+        "submitting": "جارٍ الإنشاء...",
+        "added": "تم إنشاء العميل المحتمل",
+        "addFailed": "فشل إنشاء العميل المحتمل",
+        "nameRequired": "الاسم الكامل مطلوب",
+        "selectAssigned": "اختر موظفاً..."
       }
     },
     "aiSummary": {
@@ -984,7 +1007,8 @@
       "taskCreated": "تم إنشاء المتابعة",
       "taskFailed": "فشل إنشاء المتابعة",
       "attach": "إرفاق ملف",
-      "enterToSend": "Enter للإرسال"
+      "enterToSend": "Enter للإرسال",
+      "dropFilesHere": "أفلت الملفات هنا"
     },
     "title": "صندوق الوارد",
     "internal": "داخلي",
@@ -1126,7 +1150,11 @@
         "setPhoto": "Add and Set as Profile Photo"
       },
       "preview": "معاينة",
-      "download": "تحميل"
+      "download": "تحميل",
+      "addedBadge": "تمت الإضافة",
+      "analyze": "تحليل",
+      "done": "تم",
+      "multiAdded": "تمت إضافة {count} مستند"
     },
     "createStudentAndAddDoc": {
       "title": "إنشاء طالب وإضافة مستند",

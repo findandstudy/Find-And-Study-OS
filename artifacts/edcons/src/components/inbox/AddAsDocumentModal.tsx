@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FilePlus2, FileText, GraduationCap, ScrollText, Shield, Camera, Loader2, Eye, RefreshCw, Copy } from "lucide-react";
+import {
+  FilePlus2, FileText, GraduationCap, ScrollText, Shield, Camera,
+  Loader2, Eye, RefreshCw, Copy, CheckCircle2, Sparkles,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { customFetch } from "@workspace/api-client-react";
@@ -24,6 +27,7 @@ interface AddAsDocumentModalProps {
   ownerName: string;
   onClose: () => void;
   onSaved: () => void;
+  onAnalyze?: () => void;
 }
 
 const DOC_TYPES = ["diploma", "transcript", "passport", "photograph"] as const;
@@ -44,6 +48,7 @@ export function AddAsDocumentModal({
   ownerName,
   onClose,
   onSaved,
+  onAnalyze,
 }: AddAsDocumentModalProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -51,6 +56,8 @@ export function AddAsDocumentModal({
   const [selectedType, setSelectedType] = useState<DocType | null>(null);
   const [saving, setSaving] = useState(false);
   const [conflictDocId, setConflictDocId] = useState<number | null>(null);
+  // Track which document types have been successfully saved this session
+  const [addedTypes, setAddedTypes] = useState<Set<DocType>>(new Set());
 
   async function callSave(documentType: DocType, force = false, setAsPhoto = true): Promise<"ok" | "conflict"> {
     const res = await customFetch(
@@ -88,7 +95,10 @@ export function AddAsDocumentModal({
       const typeName = t(`inbox.addAsDoc.${type}`);
       toast({ title: t("inbox.addAsDoc.added", { type: typeName, name: ownerName }) });
       onSaved();
-      onClose();
+      // Mark type as added and return to type-select (keep modal open)
+      setAddedTypes((prev) => new Set([...prev, type]));
+      setStep("type-select");
+      setSelectedType(null);
     } catch (err: any) {
       const msg = err?.data?.error || err?.body?.error || err?.message;
       toast({ title: t("inbox.addAsDoc.failed"), description: typeof msg === "string" ? msg : undefined, variant: "destructive" });
@@ -116,13 +126,19 @@ export function AddAsDocumentModal({
   function handleViewExisting() {
     if (!conflictDocId) return;
     window.open(`${BASE_URL}/api/documents/${conflictDocId}/download?disposition=inline`, "_blank", "noopener,noreferrer");
-    // Keep modal open so user can still choose an action
+  }
+
+  function handleAnalyze() {
+    onSaved();
+    onAnalyze?.();
+    onClose();
   }
 
   const typeLabel = selectedType ? t(`inbox.addAsDoc.${selectedType}`) : "";
+  const hasAdded = addedTypes.size > 0;
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog open onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
@@ -133,7 +149,7 @@ export function AddAsDocumentModal({
           </DialogTitle>
         </DialogHeader>
 
-        {/* File preview */}
+        {/* File preview + type select */}
         {step === "type-select" && (
           <div className="flex flex-col gap-3">
             {target.isImage && target.attachUrl ? (
@@ -151,20 +167,45 @@ export function AddAsDocumentModal({
               </div>
             )}
 
+            {/* Added types summary */}
+            {hasAdded && (
+              <div className="flex flex-wrap gap-1.5">
+                {[...addedTypes].map((type) => (
+                  <span
+                    key={type}
+                    className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] text-emerald-700"
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                    {t(`inbox.addAsDoc.${type}`)}
+                  </span>
+                ))}
+              </div>
+            )}
+
             <p className="text-xs text-muted-foreground">{t("inbox.addAsDoc.selectType")}</p>
             <div className="grid grid-cols-2 gap-2">
               {DOC_TYPES.map((type) => {
                 const Icon = DOC_ICONS[type];
+                const isAdded = addedTypes.has(type);
                 return (
                   <Button
                     key={type}
-                    variant="outline"
-                    className="h-14 flex-col gap-1 text-xs"
+                    variant={isAdded ? "secondary" : "outline"}
+                    className="h-14 flex-col gap-1 text-xs relative"
                     disabled={saving}
                     onClick={() => void handleTypeSelect(type)}
                   >
-                    <Icon className="w-4 h-4" />
+                    {isAdded ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <Icon className="w-4 h-4" />
+                    )}
                     {t(`inbox.addAsDoc.${type}`)}
+                    {isAdded && (
+                      <span className="absolute top-1 right-1 text-[9px] text-emerald-600">
+                        {t("inbox.addAsDoc.addedBadge")}
+                      </span>
+                    )}
                   </Button>
                 );
               })}
@@ -178,7 +219,7 @@ export function AddAsDocumentModal({
           </div>
         )}
 
-        {/* Photo confirmation — two distinct paths */}
+        {/* Photo confirmation */}
         {step === "photo-confirm" && (
           <div className="flex flex-col gap-3">
             {target.isImage && target.attachUrl && (
@@ -191,7 +232,6 @@ export function AddAsDocumentModal({
               </div>
             )}
             <div className="flex flex-col gap-2">
-              {/* Primary: set as profile photo (also calls recomputeStudentPhoto on backend) */}
               <Button
                 disabled={saving}
                 className="w-full"
@@ -200,7 +240,6 @@ export function AddAsDocumentModal({
                 {saving ? <Loader2 className="w-4 h-4 animate-spin me-2" /> : <Camera className="w-4 h-4 me-2" />}
                 {t("inbox.addAsDoc.photoConfirm.setPhoto")}
               </Button>
-              {/* Secondary: document only — skips profile photo update */}
               <Button
                 variant="outline"
                 disabled={saving}
@@ -250,10 +289,22 @@ export function AddAsDocumentModal({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="flex-row gap-2 sm:justify-between">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
-            {t("inbox.addAsDoc.conflict.cancel")}
+            {hasAdded ? t("inbox.addAsDoc.done") : t("inbox.addAsDoc.conflict.cancel")}
           </Button>
+          {hasAdded && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleAnalyze}
+              disabled={saving}
+              className="gap-1"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              {t("inbox.addAsDoc.analyze")}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

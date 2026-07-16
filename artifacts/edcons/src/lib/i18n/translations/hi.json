@@ -950,6 +950,29 @@
         "removeFromProfile": "प्रोफ़ाइल से हटाएं",
         "removed": "प्रोफ़ाइल से {type} हटाया गया",
         "removeFailed": "दस्तावेज़ हटाने में विफल"
+      },
+      "unlinked": {
+        "title": "असंबद्ध संपर्क",
+        "fullName": "पूरा नाम",
+        "waNumber": "WhatsApp नंबर",
+        "phone": "फ़ोन",
+        "email": "ईमेल",
+        "country": "देश",
+        "source": "स्रोत / चैनल",
+        "nationality": "राष्ट्रीयता",
+        "preferredLanguage": "पसंदीदा भाषा",
+        "motherName": "माँ का नाम",
+        "fatherName": "पिता का नाम",
+        "assignedStaff": "असाइन किया गया स्टाफ",
+        "notes": "नोट्स",
+        "matchExisting": "मौजूदा से मिलाएँ",
+        "addAsLead": "लीड के रूप में जोड़ें",
+        "addStudentAI": "छात्र जोड़ें (AI)",
+        "submitting": "बनाया जा रहा है...",
+        "added": "लीड बनाई गई",
+        "addFailed": "लीड बनाने में विफल",
+        "nameRequired": "पूरा नाम आवश्यक है",
+        "selectAssigned": "स्टाफ चुनें..."
       }
     },
     "aiSummary": {
@@ -984,7 +1007,8 @@
       "taskCreated": "फ़ॉलो-अप बनाया गया",
       "taskFailed": "फ़ॉलो-अप बनाने में विफल",
       "attach": "फ़ाइल संलग्न करें",
-      "enterToSend": "भेजने के लिए Enter दबाएं"
+      "enterToSend": "भेजने के लिए Enter दबाएं",
+      "dropFilesHere": "फ़ाइलें यहाँ छोड़ें"
     },
     "title": "इनबॉक्स",
     "internal": "आंतरिक",
@@ -1126,7 +1150,11 @@
         "setPhoto": "Add and Set as Profile Photo"
       },
       "preview": "पूर्वावलोकन",
-      "download": "डाउनलोड"
+      "download": "डाउनलोड",
+      "addedBadge": "जोड़ा गया",
+      "analyze": "विश्लेषण",
+      "done": "हो गया",
+      "multiAdded": "{count} दस्तावेज़ जोड़े गए"
     },
     "createStudentAndAddDoc": {
       "title": "छात्र बनाएं और दस्तावेज़ जोड़ें",
