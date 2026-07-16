@@ -41,12 +41,13 @@ import {
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
   Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical,
-  UserPlus,
+  UserPlus, FilePlus2,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useI18n } from "@/hooks/use-i18n";
 import { AddStudentModal } from "@/components/AddStudentModal";
+import { AddAsDocumentModal, type AddDocTarget } from "@/components/inbox/AddAsDocumentModal";
 
 interface Conversation {
   id: number;
@@ -312,6 +313,8 @@ function InboxTab() {
   const [hasMoreOlder, setHasMoreOlder] = useState(false);
   const [newBelow, setNewBelow] = useState(0);
   const [retryingId, setRetryingId] = useState<number | null>(null);
+  const [addDocTarget, setAddDocTarget] = useState<AddDocTarget | null>(null);
+  const [docSummaryRefreshKey, setDocSummaryRefreshKey] = useState(0);
   const msgScrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const prevLastMsgIdRef = useRef<number | null>(null);
@@ -1415,18 +1418,46 @@ function InboxTab() {
                                   : rawUrl;
                                 const type = a.type ?? a.fileType ?? "file";
                                 const name = a.name ?? a.fileName ?? "file";
+                                const canAdd = !out && Boolean(detail.lead || detail.student);
+                                const addBtn = canAdd ? (
+                                  <button
+                                    type="button"
+                                    title={t("inbox.addAsDoc.button")}
+                                    onClick={() => setAddDocTarget({ msgId: m.id, attachIdx: i, attachUrl: url, attachName: name, isImage: type === "image" })}
+                                    className="inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                                  >
+                                    <FilePlus2 className="w-3 h-3" />
+                                    {t("inbox.addAsDoc.button")}
+                                  </button>
+                                ) : null;
                                 if (type === "image") return (
-                                  <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                                    <img src={url} alt={name} className="max-w-[240px] rounded-lg" loading="lazy" />
-                                  </a>
+                                  <div key={i} className="space-y-1">
+                                    <a href={url} target="_blank" rel="noopener noreferrer">
+                                      <img src={url} alt={name} className="max-w-[240px] rounded-lg" loading="lazy" />
+                                    </a>
+                                    {addBtn}
+                                  </div>
                                 );
-                                if (type === "video") return <video key={i} src={url} controls className="max-w-[240px] rounded-lg" />;
-                                if (type === "audio") return <audio key={i} src={url} controls className="w-full" />;
+                                if (type === "video") return (
+                                  <div key={i} className="space-y-1">
+                                    <video src={url} controls className="max-w-[240px] rounded-lg" />
+                                    {addBtn}
+                                  </div>
+                                );
+                                if (type === "audio") return (
+                                  <div key={i} className="space-y-1">
+                                    <audio src={url} controls className="w-full" />
+                                    {addBtn}
+                                  </div>
+                                );
                                 return (
-                                  <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                                    className={`flex items-center gap-1.5 text-xs underline ${out ? "text-primary-foreground/80" : "text-foreground/80"}`}>
-                                    <Paperclip className="w-3 h-3 shrink-0" /> {name}
-                                  </a>
+                                  <div key={i} className="space-y-1">
+                                    <a href={url} target="_blank" rel="noopener noreferrer"
+                                      className={`flex items-center gap-1.5 text-xs underline ${out ? "text-primary-foreground/80" : "text-foreground/80"}`}>
+                                      <Paperclip className="w-3 h-3 shrink-0" /> {name}
+                                    </a>
+                                    {addBtn}
+                                  </div>
                                 );
                               })}
                             </div>
@@ -1578,6 +1609,8 @@ function InboxTab() {
           <div className="hidden lg:flex lg:col-span-3 lg:flex-col h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20">
             <LeadDetailSidebar
               detail={detail}
+              conversationId={selectedId}
+              docSummaryRefreshKey={docSummaryRefreshKey}
               onOpenMatchDialog={loadSuggestions}
               onSummarize={handleSummarize}
               isSummarizing={summarizeMutation.isPending}
@@ -1599,6 +1632,8 @@ function InboxTab() {
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
               <LeadDetailSidebar
                 detail={detail}
+                conversationId={selectedId}
+                docSummaryRefreshKey={docSummaryRefreshKey}
                 onOpenMatchDialog={() => { setSidebarSheetOpen(false); loadSuggestions(); }}
                 onSummarize={handleSummarize}
                 isSummarizing={summarizeMutation.isPending}
@@ -1736,6 +1771,18 @@ function InboxTab() {
         prefill={addStudentPrefill}
         onCreated={(studentId) => applyMatch("student", studentId)}
       />
+
+      {addDocTarget && detail && selectedId && (detail.lead || detail.student) && (
+        <AddAsDocumentModal
+          convId={selectedId}
+          target={addDocTarget}
+          ownerType={detail.student ? "student" : "lead"}
+          ownerId={(detail.student?.id ?? detail.lead?.id)!}
+          ownerName={`${(detail.student ?? detail.lead)?.firstName ?? ""} ${(detail.student ?? detail.lead)?.lastName ?? ""}`.trim()}
+          onClose={() => setAddDocTarget(null)}
+          onSaved={() => { setAddDocTarget(null); setDocSummaryRefreshKey((k) => k + 1); }}
+        />
+      )}
 
       <Dialog open={tplOpen} onOpenChange={(open) => { setTplOpen(open); if (!open) { setTplId(""); setTplVars([]); setTemplateQuery(""); } }}>
         <DialogContent className="sm:max-w-lg">

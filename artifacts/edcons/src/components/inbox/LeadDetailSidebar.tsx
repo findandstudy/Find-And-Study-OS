@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, Building, Check, Loader2, Pencil, X } from "lucide-react";
+import { ArrowRight, Building, Check, Loader2, Pencil, X, FileText, GraduationCap, ScrollText, Shield, Camera, CheckCircle2, Circle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import { AiSummaryCard } from "./AiSummaryCard";
 
 interface LeadDetailSidebarProps {
   detail: InboxConversationDetailResponse;
+  conversationId?: number | null;
+  docSummaryRefreshKey?: number;
   onOpenMatchDialog?: () => void;
   onSummarize: () => void;
   isSummarizing: boolean;
@@ -20,6 +22,20 @@ interface LeadDetailSidebarProps {
 }
 
 type LinkedType = "lead" | "student" | "agent";
+
+type DocSummary = {
+  diploma: { exists: boolean; documentId: number | null };
+  transcript: { exists: boolean; documentId: number | null };
+  passport: { exists: boolean; documentId: number | null };
+  photograph: { exists: boolean; documentId: number | null };
+};
+
+const DOC_TYPE_ICONS: Record<string, typeof FileText> = {
+  diploma: GraduationCap,
+  transcript: ScrollText,
+  passport: Shield,
+  photograph: Camera,
+};
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -111,6 +127,8 @@ function EditableField({
 
 export function LeadDetailSidebar({
   detail,
+  conversationId,
+  docSummaryRefreshKey = 0,
   onOpenMatchDialog,
   onSummarize,
   isSummarizing,
@@ -121,6 +139,8 @@ export function LeadDetailSidebar({
   const [, navigate] = useLocation();
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [docSummary, setDocSummary] = useState<DocSummary | null>(null);
+  const [docSummaryLoading, setDocSummaryLoading] = useState(false);
 
   const linkedType: LinkedType | null = detail.lead
     ? "lead"
@@ -129,6 +149,25 @@ export function LeadDetailSidebar({
       : detail.agent
         ? "agent"
         : null;
+
+  const canShowDocs = (linkedType === "lead" || linkedType === "student") && conversationId;
+
+  useEffect(() => {
+    if (!canShowDocs) { setDocSummary(null); return; }
+    let cancelled = false;
+    setDocSummaryLoading(true);
+    customFetch(`/api/inbox/conversations/${conversationId}/document-summary`)
+      .then((res) => {
+        if (!cancelled) setDocSummary(res as DocSummary);
+      })
+      .catch(() => {
+        if (!cancelled) setDocSummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDocSummaryLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [conversationId, canShowDocs, docSummaryRefreshKey]);
 
   if (!linkedType) {
     return (
@@ -149,7 +188,6 @@ export function LeadDetailSidebar({
   const entity = lead ?? student ?? agent;
   if (!entity) return null;
 
-  // Lead & student panels are editable inline; agents are read-only here.
   const editable = linkedType === "lead" || linkedType === "student";
   const patchUrl =
     linkedType === "lead" && lead
@@ -199,6 +237,8 @@ export function LeadDetailSidebar({
   })();
 
   const editProps = { editingKey, setEditingKey, onSave: saveField, saving };
+
+  const DOC_TYPE_KEYS = ["diploma", "transcript", "passport", "photograph"] as const;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4" data-testid="lead-detail-sidebar">
@@ -283,6 +323,40 @@ export function LeadDetailSidebar({
             </div>
           )}
           {agent.entityType && <Field label={t("inbox.sidebar.entityType")} value={agent.entityType} />}
+        </div>
+      )}
+
+      {/* Documents section — lead or student only */}
+      {canShowDocs && (
+        <div className="border-t pt-3 space-y-1.5">
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-2">
+            {t("inbox.sidebar.documents.title")}
+          </div>
+          {docSummaryLoading ? (
+            <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>…</span>
+            </div>
+          ) : (
+            DOC_TYPE_KEYS.map((type) => {
+              const Icon = DOC_TYPE_ICONS[type] ?? FileText;
+              const entry = docSummary?.[type];
+              const exists = entry?.exists ?? false;
+              return (
+                <div key={type} className="flex items-center gap-2 py-0.5">
+                  <Icon className={`w-3.5 h-3.5 shrink-0 ${exists ? "text-emerald-600" : "text-muted-foreground/50"}`} />
+                  <span className={`text-xs flex-1 ${exists ? "text-foreground" : "text-muted-foreground"}`}>
+                    {t(`inbox.sidebar.documents.${type}`)}
+                  </span>
+                  {exists ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  ) : (
+                    <Circle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 

@@ -936,7 +936,14 @@
       "motherName": "Nama Ibu",
       "fatherName": "Nama Ayah",
       "updateSaved": "Tersimpan",
-      "updateFailed": "Pembaruan gagal"
+      "updateFailed": "Pembaruan gagal",
+      "documents": {
+        "title": "Documents",
+        "diploma": "Diploma",
+        "transcript": "Transcript",
+        "passport": "Passport",
+        "photograph": "Photograph"
+      }
     },
     "aiSummary": {
       "title": "Ringkasan AI",
@@ -1086,6 +1093,31 @@
       "delivered": "Tersampaikan",
       "read": "Dibaca",
       "simulated": "simulasi"
+    },
+    "addAsDoc": {
+      "button": "Add",
+      "title": "Add to Profile",
+      "selectType": "Select document type",
+      "diploma": "Diploma",
+      "transcript": "Transcript",
+      "passport": "Passport",
+      "photograph": "Photograph",
+      "adding": "Adding…",
+      "added": "{type} added to {name}'s profile.",
+      "failed": "Failed to add document",
+      "conflict": {
+        "title": "Document already exists",
+        "body": "A {type} already exists on this profile.",
+        "viewExisting": "View Existing",
+        "replaceExisting": "Replace Existing",
+        "addAsNew": "Add as New Version",
+        "cancel": "Cancel"
+      },
+      "photoConfirm": {
+        "title": "Use as profile photo?",
+        "docOnly": "Add as Document Only",
+        "setPhoto": "Add and Set as Profile Photo"
+      }
     }
   },
   "integrations": {

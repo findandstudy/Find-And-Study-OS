@@ -2654,7 +2654,7 @@ router.post(
       return;
     }
 
-    const { ownerType, ownerId: ownerIdRaw, documentType } = req.body;
+    const { ownerType, ownerId: ownerIdRaw, documentType, force } = req.body;
     const ownerId = Number(ownerIdRaw);
 
     if (!SAVE_AS_DOC_ALLOWED_TYPES.includes(documentType as SaveAsDocType)) {
@@ -2737,19 +2737,22 @@ router.post(
       return;
     }
 
-    // Conflict check: same doc type + same owner already exists (profile-level)
-    const [conflictDoc] = await db.select({ id: documentsTable.id })
-      .from(documentsTable)
-      .where(and(
-        eq(documentsTable.type, documentType),
-        ownerCondition,
-        isNull(documentsTable.applicationId),
-        isNull(documentsTable.deletedAt)
-      ));
-    if (conflictDoc) {
-      // Return 200 with conflict flag so frontend can prompt the user to decide
-      res.json({ conflict: true, existingDocumentId: conflictDoc.id });
-      return;
+    // Conflict check: same doc type + same owner already exists (profile-level).
+    // Skipped when `force: true` is passed (user chose "Add as New Version").
+    if (!force) {
+      const [conflictDoc] = await db.select({ id: documentsTable.id })
+        .from(documentsTable)
+        .where(and(
+          eq(documentsTable.type, documentType),
+          ownerCondition,
+          isNull(documentsTable.applicationId),
+          isNull(documentsTable.deletedAt)
+        ));
+      if (conflictDoc) {
+        // Return 200 with conflict flag so frontend can prompt the user to decide
+        res.json({ conflict: true, existingDocumentId: conflictDoc.id });
+        return;
+      }
     }
 
     // ── Download media bytes ────────────────────────────────────────────────

@@ -936,7 +936,14 @@
       "motherName": "母亲姓名",
       "fatherName": "父亲姓名",
       "updateSaved": "已保存",
-      "updateFailed": "更新失败"
+      "updateFailed": "更新失败",
+      "documents": {
+        "title": "Documents",
+        "diploma": "Diploma",
+        "transcript": "Transcript",
+        "passport": "Passport",
+        "photograph": "Photograph"
+      }
     },
     "aiSummary": {
       "title": "AI 摘要",
@@ -1086,6 +1093,31 @@
       "delivered": "已送达",
       "read": "已读",
       "simulated": "模拟"
+    },
+    "addAsDoc": {
+      "button": "Add",
+      "title": "Add to Profile",
+      "selectType": "Select document type",
+      "diploma": "Diploma",
+      "transcript": "Transcript",
+      "passport": "Passport",
+      "photograph": "Photograph",
+      "adding": "Adding…",
+      "added": "{type} added to {name}'s profile.",
+      "failed": "Failed to add document",
+      "conflict": {
+        "title": "Document already exists",
+        "body": "A {type} already exists on this profile.",
+        "viewExisting": "View Existing",
+        "replaceExisting": "Replace Existing",
+        "addAsNew": "Add as New Version",
+        "cancel": "Cancel"
+      },
+      "photoConfirm": {
+        "title": "Use as profile photo?",
+        "docOnly": "Add as Document Only",
+        "setPhoto": "Add and Set as Profile Photo"
+      }
     }
   },
   "integrations": {
