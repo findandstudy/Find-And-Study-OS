@@ -140,14 +140,17 @@ export default function ContractsPage() {
   async function load() {
     setLoading(true);
     try {
-      const [s, sc, a]: any = await Promise.all([
+      const [s, sc]: any = await Promise.all([
         customFetch(`/api/contracts/sessions?mode=admin_driven`),
         customFetch(`/api/contracts/signed`),
-        customFetch(`/api/agents?type=agent`),
       ]);
       setSessions(s.data || []);
       setSigned(sc.data || []);
-      setAgents(a.data || a.agents || []);
+      // Agents load is non-blocking: a failure here (e.g. 500 for staff) must not hide sessions/signed.
+      try {
+        const a: any = await customFetch(`/api/agents?type=agent`);
+        setAgents(a.data || a.agents || []);
+      } catch { setAgents([]); }
       setSelected(new Set());
       try {
         const tpls: any = await customFetch(`/api/contract-templates?isActive=true`);
