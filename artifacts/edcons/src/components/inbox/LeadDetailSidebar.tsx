@@ -25,6 +25,7 @@ import { AiSummaryCard } from "./AiSummaryCard";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useCountrySearch } from "@/hooks/use-countries";
+import { InboxStudentTab } from "./InboxStudentTab";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -290,6 +291,23 @@ export function LeadDetailSidebar({
       <p className="text-sm text-muted-foreground">{t("inbox.sidebar.tabs.comingSoon")}</p>
     </div>
   );
+
+  if (activeTab === "student") {
+    return (
+      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+        {tabBar}
+        {conversationId ? (
+          <InboxStudentTab
+            detail={detail}
+            conversationId={conversationId}
+            onUpdated={onUpdated}
+          />
+        ) : (
+          placeholder
+        )}
+      </div>
+    );
+  }
 
   if (activeTab !== "lead") {
     return (
