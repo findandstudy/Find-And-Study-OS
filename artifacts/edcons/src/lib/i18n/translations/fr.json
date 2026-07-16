@@ -974,7 +974,16 @@
         "nameRequired": "Le prénom est requis",
         "selectAssigned": "Sélectionner...",
         "firstName": "Prénom",
-        "lastName": "Nom de famille"
+        "lastName": "Nom de famille",
+        "interestedProgram": "Programme souhaité",
+        "interestedUniversity": "Université souhaitée",
+        "estimatedValue": "Valeur estimée"
+      },
+      "tabs": {
+        "lead": "Lead",
+        "student": "Étudiant",
+        "application": "Candidature",
+        "comingSoon": "Bientôt disponible"
       }
     },
     "aiSummary": {

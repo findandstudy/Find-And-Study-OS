@@ -1457,7 +1457,7 @@ function InboxTab() {
                                   ? `/api/inbox/media/${m.id}/${i}`
                                   : rawUrl;
                                 const type = a.type ?? a.fileType ?? "file";
-                                const name = a.name ?? a.fileName ?? "file";
+                                const name = a.name ?? a.fileName ?? (a.type && a.type !== "file" ? a.type : null) ?? "file";
                                 const isUnmatched = Boolean((detail as any).conversation?.unmatched);
                                 const canAdd = !out && (Boolean(detail.lead || detail.student) || isUnmatched);
                                 const _btnCls = "inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors";
