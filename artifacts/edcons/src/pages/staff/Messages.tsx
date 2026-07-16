@@ -1237,7 +1237,7 @@ function InboxTab() {
           </div>
         </div>
 
-        <div className={`lg:col-span-5 flex flex-col h-full min-h-0 overflow-hidden ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
+        <div className={`lg:col-span-6 flex flex-col h-full min-h-0 overflow-hidden ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
           {!selectedId ? (
             <div className="text-center text-muted-foreground">
               <InboxIcon className="w-16 h-16 mx-auto mb-3 opacity-20" />
@@ -1575,7 +1575,7 @@ function InboxTab() {
         </div>
 
         {selectedId !== null && detail && (
-          <div className="hidden lg:flex lg:col-span-4 lg:flex-col h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20">
+          <div className="hidden lg:flex lg:col-span-3 lg:flex-col h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20">
             <LeadDetailSidebar
               detail={detail}
               onOpenMatchDialog={loadSuggestions}
