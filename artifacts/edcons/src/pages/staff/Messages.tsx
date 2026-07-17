@@ -41,13 +41,14 @@ import {
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
   Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical,
-  UserPlus, FilePlus2, Sparkles,
+  UserPlus, FilePlus2,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useI18n } from "@/hooks/use-i18n";
 import { AddStudentModal } from "@/components/AddStudentModal";
-import { AddAsDocumentModal, type AddDocTarget } from "@/components/inbox/AddAsDocumentModal";
+import type { AddDocTarget } from "@/components/inbox/AddAsDocumentModal";
+import { AssignDocumentFromMessageModal } from "@/components/inbox/AssignDocumentFromMessageModal";
 import { CreateStudentAndAddDocumentModal } from "@/components/inbox/CreateStudentAndAddDocumentModal";
 
 interface Conversation {
@@ -338,7 +339,6 @@ function InboxTab() {
   const [newBelow, setNewBelow] = useState(0);
   const [retryingId, setRetryingId] = useState<number | null>(null);
   const [addDocTarget, setAddDocTarget] = useState<AddDocTarget | null>(null);
-  const [docSummaryRefreshKey, setDocSummaryRefreshKey] = useState(0);
   const msgScrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const prevLastMsgIdRef = useRef<number | null>(null);
@@ -1353,19 +1353,6 @@ function InboxTab() {
                     <span className="hidden lg:inline">{(conv as any).isSubscribed ? t("inbox.action.unsubscribe") : t("inbox.action.subscribe")}</span>
                   </Button>
                   <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleSummarize}
-                    disabled={summarizeMutation.isPending}
-                    className="h-7 text-xs gap-1"
-                    title={t("inbox.aiSummary.generate")}
-                  >
-                    {summarizeMutation.isPending
-                      ? <Loader2 className="w-3 h-3 animate-spin" />
-                      : <Sparkles className="w-3 h-3" />}
-                    <span className="hidden lg:inline">{t("inbox.aiSummary.generate")}</span>
-                  </Button>
-                  <Button
                     size="icon"
                     variant="ghost"
                     className="lg:hidden h-8 w-8"
@@ -1472,7 +1459,7 @@ function InboxTab() {
                                 const type = a.type ?? a.fileType ?? "file";
                                 const name = a.name ?? a.fileName ?? (a.type && a.type !== "file" ? a.type : null) ?? "file";
                                 const isUnmatched = Boolean((detail as any).conversation?.unmatched);
-                                const canAdd = !out && (Boolean(detail.lead || detail.student) || isUnmatched);
+                                const canAdd = !out && (Boolean(detail.student) || isUnmatched);
                                 const _btnCls = "inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors";
                                 const actionRow = (
                                   <div className="flex items-center gap-1 flex-wrap mt-0.5">
@@ -1687,7 +1674,6 @@ function InboxTab() {
             <LeadDetailSidebar
               detail={detail}
               conversationId={selectedId}
-              docSummaryRefreshKey={docSummaryRefreshKey}
               onOpenMatchDialog={loadSuggestions}
               onSummarize={handleSummarize}
               isSummarizing={summarizeMutation.isPending}
@@ -1719,7 +1705,6 @@ function InboxTab() {
               <LeadDetailSidebar
                 detail={detail}
                 conversationId={selectedId}
-                docSummaryRefreshKey={docSummaryRefreshKey}
                 onOpenMatchDialog={() => { setSidebarSheetOpen(false); loadSuggestions(); }}
                 onSummarize={handleSummarize}
                 isSummarizing={summarizeMutation.isPending}
@@ -1891,15 +1876,13 @@ function InboxTab() {
         onCreated={(studentId) => applyMatch("student", studentId)}
       />
 
-      {addDocTarget && detail && selectedId && (detail.lead || detail.student) && (
-        <AddAsDocumentModal
+      {addDocTarget && detail?.student && selectedId && (
+        <AssignDocumentFromMessageModal
           convId={selectedId}
           target={addDocTarget}
-          ownerType={detail.student ? "student" : "lead"}
-          ownerId={(detail.student?.id ?? detail.lead?.id)!}
-          ownerName={`${(detail.student ?? detail.lead)?.firstName ?? ""} ${(detail.student ?? detail.lead)?.lastName ?? ""}`.trim()}
+          student={detail.student}
           onClose={() => setAddDocTarget(null)}
-          onSaved={() => { setAddDocTarget(null); setDocSummaryRefreshKey((k) => k + 1); }}
+          onSaved={() => { /* doc saved to student — no additional refresh needed */ }}
         />
       )}
 
@@ -1914,7 +1897,6 @@ function InboxTab() {
             setAddDocTarget(null);
             fetchInbox();
             fetchDetail(selectedId);
-            setDocSummaryRefreshKey((k) => k + 1);
           }}
         />
       )}

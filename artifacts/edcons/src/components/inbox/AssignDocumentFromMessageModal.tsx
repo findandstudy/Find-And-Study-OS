@@ -1,0 +1,211 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import {
+  FileText,
+  GraduationCap,
+  ScrollText,
+  Shield,
+  Camera,
+  Loader2,
+  CheckCircle2,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
+import { customFetch } from "@workspace/api-client-react";
+import type { AddDocTarget } from "./AddAsDocumentModal";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+interface DocReq {
+  documentType: string;
+  mandatory: boolean;
+  sortOrder: number;
+}
+
+const DOC_ICONS: Record<string, typeof FileText> = {
+  diploma: GraduationCap,
+  transcript: ScrollText,
+  passport: Shield,
+  photograph: Camera,
+};
+
+function getDocIcon(key: string): typeof FileText {
+  return DOC_ICONS[key.toLowerCase()] ?? FileText;
+}
+
+interface AssignDocumentFromMessageModalProps {
+  convId: number;
+  target: AddDocTarget;
+  student: { id: number; interestedLevel?: string | null };
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+export function AssignDocumentFromMessageModal({
+  convId,
+  target,
+  student,
+  onClose,
+  onSaved,
+}: AssignDocumentFromMessageModalProps) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saved, setSaved] = useState<Set<string>>(new Set());
+
+  const level = student.interestedLevel ?? "";
+
+  const { data: docReqs = [], isLoading } = useQuery<DocReq[]>({
+    queryKey: ["degree-doc-reqs-assign-msg", level],
+    queryFn: () =>
+      fetch(
+        `${BASE_URL}/api/degrees/by-value/${encodeURIComponent(level)}/document-requirements`,
+        { credentials: "include" }
+      ).then((r) => (r.ok ? r.json() : [])),
+    enabled: !!level,
+    staleTime: 30_000,
+  });
+
+  const sortedReqs = [...docReqs].sort((a, b) => a.sortOrder - b.sortOrder);
+
+  async function handlePick(docType: string) {
+    setSaving(docType);
+    try {
+      await customFetch(
+        `/api/inbox/conversations/${convId}/messages/${target.msgId}/attachments/${target.attachIdx}/save-as-document`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ownerType: "student",
+            ownerId: student.id,
+            documentType: docType,
+            setAsPhoto: docType === "photograph",
+          }),
+        }
+      );
+      setSaved((prev) => new Set([...prev, docType]));
+      onSaved();
+    } catch (err: any) {
+      const msg = err?.data?.error || err?.body?.error || err?.message;
+      toast({
+        title: t("inbox.addAsDoc.failed"),
+        description: typeof msg === "string" ? msg : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  if (!level) {
+    return (
+      <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">
+              {t("inbox.studentTab.selectDocType")}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            {t("inbox.studentTab.selectLevelFirst")}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={onClose}>
+              {t("inbox.studentTab.cancel")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-sm">
+            {t("inbox.studentTab.selectDocType")}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="py-1 space-y-3">
+          {target.attachName && (
+            <p className="text-xs text-muted-foreground truncate">
+              {target.attachName}
+            </p>
+          )}
+
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>…</span>
+            </div>
+          ) : sortedReqs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t("inbox.studentTab.noDocReqs")}
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {sortedReqs.map((req) => {
+                const Icon = getDocIcon(req.documentType);
+                const isSaved = saved.has(req.documentType);
+                const isSaving = saving === req.documentType;
+                return (
+                  <button
+                    key={req.documentType}
+                    type="button"
+                    onClick={() => void handlePick(req.documentType)}
+                    disabled={!!saving}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center cursor-pointer transition-colors disabled:opacity-60 ${
+                      isSaved
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                        : "border-border hover:border-primary hover:bg-primary/5"
+                    }`}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : isSaved ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    ) : (
+                      <Icon className="w-5 h-5" />
+                    )}
+                    <span className="text-xs font-medium leading-tight">
+                      {req.documentType}
+                    </span>
+                    {isSaved && (
+                      <span className="text-[10px] text-emerald-600">
+                        {t("inbox.studentTab.filled")}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={!!saving}
+          >
+            {saved.size > 0
+              ? t("inbox.addAsDoc.done")
+              : t("inbox.studentTab.cancel")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -1,21 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowRight, Building, Check, Loader2, Pencil, X,
-  FileText, GraduationCap, ScrollText, Shield, Camera,
-  CheckCircle2, Circle, MoreHorizontal, Eye, Download, Trash2, ExternalLink,
   Plus, UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { customFetch } from "@workspace/api-client-react";
@@ -33,7 +24,6 @@ const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 interface LeadDetailSidebarProps {
   detail: InboxConversationDetailResponse;
   conversationId?: number | null;
-  docSummaryRefreshKey?: number;
   onOpenMatchDialog?: () => void;
   onSummarize: () => void;
   isSummarizing: boolean;
@@ -43,20 +33,6 @@ interface LeadDetailSidebarProps {
 
 type LinkedType = "lead" | "student" | "agent";
 type SidebarTab = "lead" | "student" | "application";
-
-type DocSummary = {
-  diploma: { exists: boolean; documentId: number | null };
-  transcript: { exists: boolean; documentId: number | null };
-  passport: { exists: boolean; documentId: number | null };
-  photograph: { exists: boolean; documentId: number | null };
-};
-
-const DOC_TYPE_ICONS: Record<string, typeof FileText> = {
-  diploma: GraduationCap,
-  transcript: ScrollText,
-  passport: Shield,
-  photograph: Camera,
-};
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -163,7 +139,6 @@ const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
 export function LeadDetailSidebar({
   detail,
   conversationId,
-  docSummaryRefreshKey = 0,
   onOpenMatchDialog,
   onSummarize,
   isSummarizing,
@@ -176,10 +151,6 @@ export function LeadDetailSidebar({
   const [activeTab, setActiveTab] = useState<SidebarTab>("lead");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [docSummary, setDocSummary] = useState<DocSummary | null>(null);
-  const [docSummaryLoading, setDocSummaryLoading] = useState(false);
-  const [localRefreshKey, setLocalRefreshKey] = useState(0);
-  const [removingDocId, setRemovingDocId] = useState<number | null>(null);
 
   const [unmF, setUnmF] = useState(EMPTY_UNM_FORM);
   const [unmSubmitting, setUnmSubmitting] = useState(false);
@@ -194,8 +165,6 @@ export function LeadDetailSidebar({
       : detail.agent
         ? "agent"
         : null;
-
-  const canShowDocs = (linkedType === "lead" || linkedType === "student") && conversationId;
 
   useEffect(() => {
     if (linkedType !== null) return;
@@ -225,38 +194,6 @@ export function LeadDetailSidebar({
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
-
-  useEffect(() => {
-    if (!canShowDocs) { setDocSummary(null); return; }
-    let cancelled = false;
-    setDocSummaryLoading(true);
-    customFetch(`/api/inbox/conversations/${conversationId}/document-summary`)
-      .then((res) => {
-        if (!cancelled) setDocSummary(res as DocSummary);
-      })
-      .catch(() => {
-        if (!cancelled) setDocSummary(null);
-      })
-      .finally(() => {
-        if (!cancelled) setDocSummaryLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [conversationId, canShowDocs, docSummaryRefreshKey, localRefreshKey]);
-
-  const removeDoc = useCallback(async (documentId: number, typeLabel: string) => {
-    setRemovingDocId(documentId);
-    try {
-      await customFetch(`/api/documents/${documentId}`, { method: "DELETE" });
-      toast({ title: t("inbox.sidebar.documents.removed", { type: typeLabel }) });
-      setLocalRefreshKey((k) => k + 1);
-      onUpdated?.();
-    } catch (err: any) {
-      const msg = err?.data?.error || err?.body?.error || err?.message;
-      toast({ title: t("inbox.sidebar.documents.removeFailed"), description: typeof msg === "string" ? msg : undefined, variant: "destructive" });
-    } finally {
-      setRemovingDocId(null);
-    }
-  }, [t, toast, onUpdated]);
 
   const TABS: SidebarTab[] = ["lead", "student", "application"];
 
@@ -609,8 +546,6 @@ export function LeadDetailSidebar({
 
   const editProps = { editingKey, setEditingKey, onSave: saveField, saving };
 
-  const DOC_TYPE_KEYS = ["diploma", "transcript", "passport", "photograph"] as const;
-
   return (
     <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
       {tabBar}
@@ -694,105 +629,6 @@ export function LeadDetailSidebar({
               </div>
             )}
             {agent.entityType && <Field label={t("inbox.sidebar.entityType")} value={agent.entityType} />}
-          </div>
-        )}
-
-        {/* Documents section — lead or student only */}
-        {canShowDocs && (
-          <div className="border-t pt-3 space-y-1.5">
-            <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-2">
-              {t("inbox.sidebar.documents.title")}
-            </div>
-            {docSummaryLoading ? (
-              <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>…</span>
-              </div>
-            ) : (
-              DOC_TYPE_KEYS.map((type) => {
-                const Icon = DOC_TYPE_ICONS[type] ?? FileText;
-                const entry = docSummary?.[type];
-                const exists = entry?.exists ?? false;
-                const documentId = entry?.documentId ?? null;
-                const docTypeLabel = t(`inbox.sidebar.documents.${type}`);
-                const isRemoving = documentId !== null && removingDocId === documentId;
-                return (
-                  <div key={type} className="flex items-center gap-2 py-0.5">
-                    <Icon className={`w-3.5 h-3.5 shrink-0 ${exists ? "text-emerald-600" : "text-muted-foreground/50"}`} />
-                    <span className={`text-xs flex-1 ${exists ? "text-foreground" : "text-muted-foreground"}`}>
-                      {docTypeLabel}
-                    </span>
-                    {exists && documentId ? (
-                      isRemoving ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />
-                      ) : (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              className="flex items-center justify-center w-5 h-5 rounded hover:bg-muted transition-colors shrink-0"
-                              aria-label={t("inbox.sidebar.documents.actions")}
-                            >
-                              <MoreHorizontal className="w-3.5 h-3.5 text-emerald-600" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem asChild>
-                              <a
-                                href={`${BASE_URL}/api/documents/${documentId}/download?disposition=inline`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                {t("inbox.sidebar.documents.preview")}
-                              </a>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <a
-                                href={`${BASE_URL}/api/documents/${documentId}/download`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                {t("inbox.sidebar.documents.download")}
-                              </a>
-                            </DropdownMenuItem>
-                            {entityProfileUrl && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem asChild>
-                                  <a
-                                    href={entityProfileUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2"
-                                  >
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                    {t("inbox.sidebar.documents.useInApplication")}
-                                  </a>
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive flex items-center gap-2"
-                              onClick={() => void removeDoc(documentId, docTypeLabel)}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              {t("inbox.sidebar.documents.removeFromProfile")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )
-                    ) : (
-                      <Circle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
-                    )}
-                  </div>
-                );
-              })
-            )}
           </div>
         )}
 
