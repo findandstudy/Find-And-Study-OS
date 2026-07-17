@@ -1253,6 +1253,16 @@
       "addFailed": "Failed to add application",
       "deleted": "Application deleted",
       "deleteFailed": "Failed to delete application"
+    },
+    "react": {
+      "button": "React",
+      "free": "Custom"
+    },
+    "replyAction": {
+      "button": "Reply",
+      "cancel": "Cancel reply",
+      "replyingTo": "Replying to",
+      "repliedTo": "Replied to"
     }
   },
   "integrations": {

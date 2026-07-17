@@ -1253,6 +1253,16 @@
       "addFailed": "Gagal menambahkan pendaftaran",
       "deleted": "Pendaftaran dihapus",
       "deleteFailed": "Gagal menghapus pendaftaran"
+    },
+    "react": {
+      "button": "Reaksi",
+      "free": "Kustom"
+    },
+    "replyAction": {
+      "button": "Balas",
+      "cancel": "Batal",
+      "replyingTo": "Membalas",
+      "repliedTo": "Membalas"
     }
   },
   "integrations": {

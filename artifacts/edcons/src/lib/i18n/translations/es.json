@@ -1253,6 +1253,16 @@
       "addFailed": "Error al añadir solicitud",
       "deleted": "Solicitud eliminada",
       "deleteFailed": "Error al eliminar solicitud"
+    },
+    "react": {
+      "button": "Reaccionar",
+      "free": "Personalizado"
+    },
+    "replyAction": {
+      "button": "Responder",
+      "cancel": "Cancelar",
+      "replyingTo": "Respondiendo a",
+      "repliedTo": "Respondió a"
     }
   },
   "integrations": {

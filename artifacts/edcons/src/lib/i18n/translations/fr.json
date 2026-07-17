@@ -1253,6 +1253,16 @@
       "addFailed": "Échec de l’ajout",
       "deleted": "Candidature supprimée",
       "deleteFailed": "Échec de la suppression"
+    },
+    "react": {
+      "button": "Réagir",
+      "free": "Personnalisé"
+    },
+    "replyAction": {
+      "button": "Répondre",
+      "cancel": "Annuler",
+      "replyingTo": "En réponse à",
+      "repliedTo": "En réponse à"
     }
   },
   "integrations": {

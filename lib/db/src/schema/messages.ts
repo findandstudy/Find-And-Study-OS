@@ -113,7 +113,19 @@ export const messageTemplatesTable = pgTable("message_templates", {
   index("msg_templates_created_by_id_idx").on(table.createdById),
 ]);
 
+export const messageReactionsTable = pgTable("message_reactions", {
+  id: serial("id").primaryKey(),
+  messageId: integer("message_id").notNull().references(() => messagesTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  emoji: text("emoji").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("message_reactions_msg_user_emoji_idx").on(table.messageId, table.userId, table.emoji),
+  index("message_reactions_message_id_idx").on(table.messageId),
+]);
+
 export type Conversation = typeof conversationsTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
 export type Broadcast = typeof broadcastsTable.$inferSelect;
 export type MessageTemplate = typeof messageTemplatesTable.$inferSelect;
+export type MessageReaction = typeof messageReactionsTable.$inferSelect;

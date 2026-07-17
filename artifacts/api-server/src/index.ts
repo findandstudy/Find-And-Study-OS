@@ -1950,6 +1950,26 @@ async function seedClaudeIntegration() {
     console.error("[migrate] documents source columns:", err);
   }
 
+  // Step 2b19: message_reactions — CRM-side emoji reactions on inbox messages.
+  // Also ensures reply_to_id column exists on messages (present in schema since
+  // day-one but may be absent on older prod DBs that predate the column).
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS message_reactions (
+        id SERIAL PRIMARY KEY,
+        message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        emoji TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS message_reactions_msg_user_emoji_idx ON message_reactions(message_id, user_id, emoji)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS message_reactions_message_id_idx ON message_reactions(message_id)`);
+    await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER`);
+  } catch (err) {
+    console.error("[migrate] message_reactions:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

@@ -1253,6 +1253,16 @@
       "addFailed": "添加申请失败",
       "deleted": "申请已删除",
       "deleteFailed": "删除申请失败"
+    },
+    "react": {
+      "button": "回应",
+      "free": "自定义"
+    },
+    "replyAction": {
+      "button": "回复",
+      "cancel": "取消回复",
+      "replyingTo": "正在回复",
+      "repliedTo": "回复了"
     }
   },
   "integrations": {

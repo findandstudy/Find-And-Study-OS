@@ -1253,6 +1253,16 @@
       "addFailed": "افزودن درخواست ناموفق",
       "deleted": "درخواست حذف شد",
       "deleteFailed": "حذف درخواست ناموفق"
+    },
+    "react": {
+      "button": "واکنش",
+      "free": "سفارشی"
+    },
+    "replyAction": {
+      "button": "پاسخ",
+      "cancel": "لغو",
+      "replyingTo": "در پاسخ به",
+      "repliedTo": "پاسخ به"
     }
   },
   "integrations": {

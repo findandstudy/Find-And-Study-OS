@@ -41,7 +41,7 @@ import {
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
   Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical,
-  UserPlus, FilePlus2,
+  UserPlus, FilePlus2, SmilePlus, CornerUpLeft,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -305,6 +305,10 @@ function InboxTab() {
   const [attachPreview, setAttachPreview] = useState<{ url: string; name: string; isImage: boolean; isPdf: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
+  const [replyToMsg, setReplyToMsg] = useState<{ id: number; snippet: string; senderName: string } | null>(null);
+  const [emojiPaletteFor, setEmojiPaletteFor] = useState<number | null>(null);
+  const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
+  const emojiPaletteRef = useRef<HTMLDivElement>(null);
 
   function handleChatDragEnter(e: React.DragEvent) {
     e.preventDefault();
@@ -443,6 +447,17 @@ function InboxTab() {
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
   useEffect(() => { fetchInboxRef.current = fetchInbox; }, [fetchInbox]);
   useEffect(() => { fetchDetailRef.current = fetchDetail; }, [fetchDetail]);
+
+  useEffect(() => {
+    if (emojiPaletteFor === null) return;
+    function handleOutside(e: MouseEvent) {
+      if (emojiPaletteRef.current && !emojiPaletteRef.current.contains(e.target as Node)) {
+        setEmojiPaletteFor(null);
+      }
+    }
+    document.addEventListener("click", handleOutside);
+    return () => document.removeEventListener("click", handleOutside);
+  }, [emojiPaletteFor]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof EventSource === "undefined") return;
@@ -695,6 +710,24 @@ function InboxTab() {
     }
   }
 
+  const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
+  async function toggleReaction(msgId: number, emoji: string) {
+    if (!selectedId) return;
+    try {
+      await customFetch(`/api/inbox/conversations/${selectedId}/messages/${msgId}/react`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emoji }),
+      });
+      fetchDetail(selectedId);
+    } catch {
+      toast({ title: t("inbox.react.button"), variant: "destructive" });
+    } finally {
+      setEmojiPaletteFor(null);
+    }
+  }
+
   async function sendReply() {
     if (!selectedId || (!reply.trim() && pendingFiles.length === 0)) return;
     setSending(true);
@@ -713,12 +746,14 @@ function InboxTab() {
         body: JSON.stringify({
           content: reply.trim(),
           ...(attachments.length > 0 ? { attachments } : {}),
+          ...(replyToMsg ? { replyToMessageId: replyToMsg.id } : {}),
         }),
       });
       if (res?.simulated) toast({ title: t("messagesPage.sentSimulated"), description: t("messagesPage.outboundSimulated") });
       else toast({ title: t("messagesPage.sent") });
       setReply("");
       setPendingFiles([]);
+      setReplyToMsg(null);
       fetchDetail(selectedId);
     } catch (err: any) {
       const body = err?.body;
@@ -1035,7 +1070,7 @@ function InboxTab() {
 
   return (
     <>
-    <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
+    <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 120px)" }}>
       <div className="grid grid-cols-1 lg:grid-cols-12 h-full grid-rows-[minmax(0,1fr)]">
         <div className={`lg:col-span-2 h-full min-h-0 border-r border-border/50 min-w-0 overflow-hidden ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
           <div className="p-3 border-b border-border/50 space-y-2">
@@ -1445,8 +1480,64 @@ function InboxTab() {
                         </span>
                       </div>
                     )}
-                    <div className={`flex ${out ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${out ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
+                    <div className={`relative flex group ${out ? "justify-end" : "justify-start"}`}>
+                      {/* Hover action buttons — reply + react */}
+                      <div className={`flex items-center gap-0.5 self-center flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${out ? "order-first mr-1.5" : "order-last ml-1.5"}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="h-6 w-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                              onClick={() => {
+                                const snippet = m.content && m.content !== "[attachment]" ? m.content.slice(0, 80) : "[attachment]";
+                                setReplyToMsg({ id: m.id, snippet, senderName: m.senderName ?? "..." });
+                              }}
+                            >
+                              <CornerUpLeft className="w-3.5 h-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>{t("inbox.replyAction.button")}</p></TooltipContent>
+                        </Tooltip>
+                        <div className="relative">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="h-6 w-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                onClick={() => setEmojiPaletteFor(prev => prev === m.id ? null : m.id)}
+                              >
+                                <SmilePlus className="w-3.5 h-3.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top"><p>{t("inbox.react.button")}</p></TooltipContent>
+                          </Tooltip>
+                          {emojiPaletteFor === m.id && (
+                            <div
+                              ref={emojiPaletteRef}
+                              className={`absolute bottom-full mb-1 z-30 flex items-center gap-0.5 rounded-2xl bg-popover border border-border shadow-lg px-2 py-1 ${out ? "right-0" : "left-0"}`}
+                            >
+                              {QUICK_EMOJIS.map(emoji => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  className="text-base hover:scale-125 transition-transform px-0.5 leading-none"
+                                  onClick={() => toggleReaction(m.id, emoji)}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col max-w-[75%]">
+                      <div className={`rounded-2xl px-3 py-2 text-sm ${out ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
+                        {m.repliedMessage && (
+                          <div className={`mb-2 pl-2 border-l-2 rounded-sm text-xs py-1 pr-2 ${out ? "border-primary-foreground/40 bg-primary-foreground/10 opacity-75" : "border-foreground/30 bg-background/50 opacity-80"}`}>
+                            <div className="font-semibold truncate">{m.repliedMessage.senderName}</div>
+                            <div className="truncate max-w-[220px]">{m.repliedMessage.snippet}</div>
+                          </div>
+                        )}
                         {m.content && m.content !== "[attachment]" && (
                           <p className="whitespace-pre-wrap">{m.content}</p>
                         )}
@@ -1590,6 +1681,22 @@ function InboxTab() {
                           </button>
                         )}
                       </div>
+                      {(m.reactions ?? []).length > 0 && (
+                        <div className={`flex flex-wrap gap-1 mt-1 ${out ? "justify-end" : "justify-start"}`}>
+                          {(m.reactions ?? []).map((r: any) => (
+                            <button
+                              key={r.emoji}
+                              type="button"
+                              onClick={() => toggleReaction(m.id, r.emoji)}
+                              className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs transition-colors ${r.userIds.includes(user?.id ?? -1) ? "bg-primary/15 border-primary/40 font-semibold" : "bg-muted border-border hover:bg-muted/60"}`}
+                            >
+                              <span className="leading-none">{r.emoji}</span>
+                              {r.count > 1 && <span className="text-[10px] opacity-80 ml-0.5">{r.count}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      </div>
                     </div>
                     </div>
                   );
@@ -1612,6 +1719,18 @@ function InboxTab() {
                 onTabChange={setComposeTab}
                 chatSlot={
                   <div className="p-3 flex flex-col gap-2">
+                    {replyToMsg && (
+                      <div className="flex items-center gap-2 rounded-lg bg-muted/60 border border-border px-2.5 py-1.5 text-xs">
+                        <CornerUpLeft className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0 flex gap-1">
+                          <span className="font-medium text-foreground shrink-0">{replyToMsg.senderName}:</span>
+                          <span className="text-muted-foreground truncate">{replyToMsg.snippet.slice(0, 60)}</span>
+                        </div>
+                        <button type="button" onClick={() => setReplyToMsg(null)} className="shrink-0 rounded hover:text-destructive">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                     {pendingFiles.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {pendingFiles.map((f, i) => (
@@ -3701,9 +3820,7 @@ export default function MessagesPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <h1 className="text-2xl font-display font-bold text-foreground">{t("staffMessages.title")}</h1>
-
+      <div>
         <Tabs defaultValue="inbox" className="space-y-4">
           <TabsList className="h-10">
             <TabsTrigger value="inbox" className="gap-2 px-4">
@@ -3727,7 +3844,7 @@ export default function MessagesPage() {
           </TabsContent>
 
           <TabsContent value="messages">
-            <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 220px)" }}>
+            <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 120px)" }}>
               <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
                 <div className={`lg:col-span-4 h-full min-h-0 border-r border-border/50 ${selectedConv !== null ? "hidden lg:block" : ""}`}>
                   <ConversationList

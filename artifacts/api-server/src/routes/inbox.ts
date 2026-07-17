@@ -5,6 +5,7 @@ import {
   conversationsTable,
   conversationParticipantsTable,
   messagesTable,
+  messageReactionsTable,
   externalContactsTable,
   leadsTable,
   studentsTable,
@@ -604,7 +605,56 @@ router.get(
       .orderBy(desc(messagesTable.id))
       .limit(msgLimit + 1);
     const hasMoreMessages = newestFirst.length > msgLimit;
-    const messages = newestFirst.slice(0, msgLimit).reverse();
+    const rawMessages = newestFirst.slice(0, msgLimit).reverse();
+
+    // Enrich messages: reactions grouped by emoji + repliedMessage snippets.
+    let messages: Array<typeof rawMessages[number] & {
+      reactions: Array<{ emoji: string; count: number; userIds: number[] }>;
+      repliedMessage: { id: number; snippet: string; senderName: string } | null;
+    }>;
+    if (rawMessages.length > 0) {
+      const msgIds = rawMessages.map((m) => m.id);
+
+      // Reactions: batch-fetch all for this message window.
+      const reactRows = await pool.query<{ message_id: number; emoji: string; user_id: number }>(
+        `SELECT message_id, emoji, user_id FROM message_reactions WHERE message_id = ANY($1)`,
+        [msgIds],
+      );
+      const reactMap: Record<number, Record<string, { emoji: string; count: number; userIds: number[] }>> = {};
+      for (const r of reactRows.rows) {
+        if (!reactMap[r.message_id]) reactMap[r.message_id] = {};
+        if (!reactMap[r.message_id][r.emoji]) reactMap[r.message_id][r.emoji] = { emoji: r.emoji, count: 0, userIds: [] };
+        reactMap[r.message_id][r.emoji].count++;
+        reactMap[r.message_id][r.emoji].userIds.push(r.user_id);
+      }
+
+      // repliedMessage: fetch snippet for each unique replyToId.
+      const replyToIds = [...new Set(rawMessages.map((m) => m.replyToId).filter(Boolean) as number[])];
+      const repliedMap: Record<number, { id: number; snippet: string; senderName: string }> = {};
+      if (replyToIds.length > 0) {
+        const repliedRows = await pool.query<{ id: number; content: string; first_name: string | null; last_name: string | null }>(
+          `SELECT m.id, m.content, u.first_name, u.last_name
+           FROM messages m LEFT JOIN users u ON u.id = m.sender_id
+           WHERE m.id = ANY($1)`,
+          [replyToIds],
+        );
+        for (const r of repliedRows.rows) {
+          repliedMap[r.id] = {
+            id: r.id,
+            snippet: r.content.slice(0, 120),
+            senderName: [r.first_name, r.last_name].filter(Boolean).join(" ") || "Unknown",
+          };
+        }
+      }
+
+      messages = rawMessages.map((m) => ({
+        ...m,
+        reactions: Object.values(reactMap[m.id] ?? {}),
+        repliedMessage: m.replyToId ? (repliedMap[m.replyToId] ?? null) : null,
+      }));
+    } else {
+      messages = rawMessages.map((m) => ({ ...m, reactions: [], repliedMessage: null }));
+    }
 
     const leadId = externalContact?.leadId ?? null;
     const studentId = externalContact?.studentId ?? null;
@@ -1144,10 +1194,12 @@ router.post(
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
     const id = parseInt(String(req.params.id), 10);
-    const { content, attachments: bodyAttachments } = req.body as {
+    const { content, attachments: bodyAttachments, replyToMessageId } = req.body as {
       content: string;
       attachments?: Array<{ url: string; type?: string; name?: string }>;
+      replyToMessageId?: number;
     };
+    const replyToId: number | null = (typeof replyToMessageId === "number" && replyToMessageId > 0) ? replyToMessageId : null;
     const hasContent = Boolean(content && content.trim());
     const hasAttachments = Array.isArray(bodyAttachments) && bodyAttachments.length > 0;
     if (!id || (!hasContent && !hasAttachments)) {
@@ -1223,6 +1275,10 @@ router.post(
           return;
         }
 
+        // CRM-only reply context: store replyToId on the message row if provided.
+        if (replyToId && result.message?.id) {
+          await pool.query(`UPDATE messages SET reply_to_id = $1 WHERE id = $2`, [replyToId, result.message.id]);
+        }
         res.status(result.ok ? 201 : 502).json({ message: result.message, error: result.error });
         return;
       }
@@ -1258,6 +1314,7 @@ router.post(
           direction: "outbound",
           status: "pending",
           metadata: {},
+          ...(replyToId ? { replyToId } : {}),
         })
         .returning();
 
@@ -1339,6 +1396,7 @@ router.post(
           direction: "outbound",
           status: "pending",
           metadata: {},
+          ...(replyToId ? { replyToId } : {}),
         })
         .returning();
 
@@ -1409,6 +1467,7 @@ router.post(
           direction: "outbound",
           status: "sent",
           sentAt: new Date(),
+          ...(replyToId ? { replyToId } : {}),
         })
         .returning();
       await db
@@ -1468,6 +1527,40 @@ router.post(
     }
 
     res.status(400).json({ error: `Channel '${conv.channel}' is not supported by this endpoint` });
+  },
+);
+
+// Toggle an emoji reaction on a message. POST with { emoji } adds if absent,
+// removes if the same user already reacted with that emoji (toggle semantics).
+router.post(
+  "/inbox/conversations/:id/messages/:msgId/react",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const msgId = parseInt(String(req.params.msgId), 10);
+    const { emoji } = req.body as { emoji?: string };
+    if (!msgId || !emoji || typeof emoji !== "string" || emoji.length > 12) {
+      res.status(400).json({ error: "invalid params" });
+      return;
+    }
+    const userId = req.user!.id;
+    const existing = await pool.query<{ id: number }>(
+      `SELECT id FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+      [msgId, userId, emoji],
+    );
+    if (existing.rows.length > 0) {
+      await pool.query(
+        `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+        [msgId, userId, emoji],
+      );
+      res.json({ toggled: false, emoji });
+    } else {
+      await pool.query(
+        `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [msgId, userId, emoji],
+      );
+      res.json({ toggled: true, emoji });
+    }
   },
 );
 

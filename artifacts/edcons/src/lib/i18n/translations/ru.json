@@ -1253,6 +1253,16 @@
       "addFailed": "Не удалось добавить",
       "deleted": "Заявка удалена",
       "deleteFailed": "Не удалось удалить"
+    },
+    "react": {
+      "button": "Реакция",
+      "free": "Другой"
+    },
+    "replyAction": {
+      "button": "Ответить",
+      "cancel": "Отмена",
+      "replyingTo": "Ответ на",
+      "repliedTo": "Ответил на"
     }
   },
   "integrations": {

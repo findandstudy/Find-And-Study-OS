@@ -1253,6 +1253,16 @@
       "addFailed": "Başvuru eklenemedi",
       "deleted": "Başvuru silindi",
       "deleteFailed": "Başvuru silinemedi"
+    },
+    "react": {
+      "button": "Tepki",
+      "free": "Özel"
+    },
+    "replyAction": {
+      "button": "Yanıtla",
+      "cancel": "İptal",
+      "replyingTo": "Yanıtlanıyor",
+      "repliedTo": "Yanıtlandı"
     }
   },
   "integrations": {

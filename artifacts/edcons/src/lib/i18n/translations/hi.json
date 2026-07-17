@@ -1253,6 +1253,16 @@
       "addFailed": "आवेदन जोड़ने में विफल",
       "deleted": "आवेدन हटाया गया",
       "deleteFailed": "आवेदन हटाने में विफल"
+    },
+    "react": {
+      "button": "प्रतिक्रिया",
+      "free": "कस्टम"
+    },
+    "replyAction": {
+      "button": "जवाब दें",
+      "cancel": "रद्द करें",
+      "replyingTo": "जवाब दे रहे हैं",
+      "repliedTo": "जवाब दिया"
     }
   },
   "integrations": {

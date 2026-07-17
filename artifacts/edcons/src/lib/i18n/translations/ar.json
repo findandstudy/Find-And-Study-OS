@@ -1253,6 +1253,16 @@
       "addFailed": "فشل إضافة الطلب",
       "deleted": "تم حذف الطلب",
       "deleteFailed": "فشل حذف الطلب"
+    },
+    "react": {
+      "button": "تفاعل",
+      "free": "مخصص"
+    },
+    "replyAction": {
+      "button": "رد",
+      "cancel": "إلغاء الرد",
+      "replyingTo": "ردًا على",
+      "repliedTo": "رد على"
     }
   },
   "integrations": {
