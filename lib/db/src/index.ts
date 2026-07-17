@@ -16,12 +16,23 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+// Pool sizing: the pool is shared by user requests AND ~13 background
+// workers. 10 connections exhausted under load, making requests wait the
+// full connection timeout and fail ("Connection terminated due to
+// connection timeout"). Default raised to 20; connection wait lowered to
+// 5s so a saturated pool fails fast instead of hanging requests for 20s.
+// On autoscale keep (DB_POOL_MAX × max instances) ≤ the DB's connection
+// limit — override per deployment via DB_POOL_MAX when scaling out.
 export const pool: pg.Pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: parsePositiveInt(process.env.DB_POOL_MAX, 10),
+  max: parsePositiveInt(process.env.DB_POOL_MAX, 20),
   min: 0,
   idleTimeoutMillis: parsePositiveInt(process.env.DB_IDLE_TIMEOUT_MS, 10_000),
-  connectionTimeoutMillis: parsePositiveInt(process.env.DB_CONNECT_TIMEOUT_MS, 20_000),
+  // 10s: fresh connections to the managed DB can take several seconds to
+  // establish (cold start); 5s produced spurious "timeout exceeded when trying
+  // to connect" under load even with a mostly-idle pool. Still well below the
+  // old 20s default so a truly exhausted pool fails fast-ish.
+  connectionTimeoutMillis: parsePositiveInt(process.env.DB_CONNECT_TIMEOUT_MS, 10_000),
   keepAlive: true,
   keepAliveInitialDelayMillis: 10_000,
   allowExitOnIdle: false,
@@ -109,12 +120,40 @@ function isReadOnlySql(sql: string | null): boolean {
 const MAX_QUERY_ATTEMPTS = parsePositiveInt(process.env.DB_QUERY_RETRIES, 3);
 const RETRY_BASE_DELAY_MS = parsePositiveInt(process.env.DB_RETRY_BASE_MS, 120);
 
+// Pool pressure observability: warn (rate-limited) whenever a query is issued
+// while other callers are already waiting for a connection. Includes a short
+// SQL prefix so the log identifies WHICH call is hitting the saturated pool.
+const POOL_WAIT_WARN_THRESHOLD = parsePositiveInt(process.env.DB_POOL_WAIT_WARN, 3);
+const POOL_WAIT_WARN_INTERVAL_MS = 10_000;
+let lastPoolWarnAt = 0;
+
+function sqlSnippet(sql: string | null): string {
+  if (!sql) return "<non-text query>";
+  return sql.replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+function maybeWarnPoolPressure(sql: string | null): void {
+  const waiting = pool.waitingCount;
+  if (waiting < POOL_WAIT_WARN_THRESHOLD) return;
+  const now = Date.now();
+  if (now - lastPoolWarnAt < POOL_WAIT_WARN_INTERVAL_MS) return;
+  lastPoolWarnAt = now;
+  console.warn("[db pool] pressure: queries waiting for a connection", {
+    waitingCount: waiting,
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    max: (pool as unknown as { options?: { max?: number } }).options?.max,
+    sql: sqlSnippet(sql),
+  });
+}
+
 const originalQuery = pool.query.bind(pool) as (...args: unknown[]) => Promise<unknown>;
 
 (pool as unknown as { query: (...args: unknown[]) => Promise<unknown> }).query =
   async function retryingQuery(...args: unknown[]): Promise<unknown> {
     const sql = extractSqlText(args);
     const retryable = isReadOnlySql(sql);
+    maybeWarnPoolPressure(sql);
     let lastErr: unknown;
     for (let attempt = 1; attempt <= MAX_QUERY_ATTEMPTS; attempt++) {
       try {
@@ -136,6 +175,9 @@ const originalQuery = pool.query.bind(pool) as (...args: unknown[]) => Promise<u
           code: e?.code ?? e?.cause?.code,
           message: e?.message,
           delayMs: delay,
+          sql: sqlSnippet(sql),
+          poolWaiting: pool.waitingCount,
+          poolTotal: pool.totalCount,
         });
         await new Promise((resolve) => setTimeout(resolve, delay));
       }

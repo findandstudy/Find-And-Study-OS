@@ -116,8 +116,20 @@ router.get("/documents", requireAuth, requireAgentStaffPermission("documents"), 
     }
   }
 
+  // Cap result size so unfiltered calls can't drag the whole documents table
+  // through the shared pool. ?limit= is honored up to MAX; the default (500)
+  // is far above any single student's realistic document count.
+  const DEFAULT_DOC_LIMIT = 500;
+  const MAX_DOC_LIMIT = 2000;
+  const rawLimit = parseInt(String(req.query.limit ?? ""), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0
+    ? Math.min(rawLimit, MAX_DOC_LIMIT)
+    : DEFAULT_DOC_LIMIT;
+
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-  const docs = await db.select().from(documentsTable).where(whereClause).orderBy(desc(documentsTable.createdAt));
+  const docs = await db.select().from(documentsTable).where(whereClause)
+    .orderBy(desc(documentsTable.createdAt), desc(documentsTable.id))
+    .limit(limit);
   res.json(docs);
 });
 

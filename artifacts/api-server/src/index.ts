@@ -2472,39 +2472,73 @@ async function seedClaudeIntegration() {
     await runDataCleanupOnce();
 
     console.log("[Worker] Background workers started on instance", process.env.NODE_APP_INSTANCE ?? "0-solo");
-    const { startEmailWorker } = await import("./lib/email");
-    startEmailWorker();
-    const { startContractChecker } = await import("./lib/contractChecker");
-    startContractChecker();
-    const { startOfferExpiryChecker } = await import("./lib/offerExpiryChecker");
-    startOfferExpiryChecker();
-    const { startUniversityContractChecker } = await import("./lib/universityContractChecker");
-    startUniversityContractChecker();
-    const { startCompanyContractChecker } = await import("./lib/companyContractChecker");
-    startCompanyContractChecker();
-    const { startSignedContractDeliveryWorker } = await import("./lib/signedContractDelivery");
-    startSignedContractDeliveryWorker();
-    const { startAssignmentConsistencyChecker } = await import("./lib/assignmentConsistencyChecker");
-    startAssignmentConsistencyChecker();
+    // Stagger background-worker startup so their periodic queries don't all
+    // fire in the same tick and exhaust the shared DB connection pool. Each
+    // worker keeps its own interval; only the START moment is offset (fixed
+    // spacing + small random jitter so multiple autoscale instances also
+    // de-align from each other). Behavior of each worker is unchanged.
+    const staggerStart = (name: string, offsetMs: number, fn: () => void | Promise<void>): void => {
+      const delay = offsetMs + Math.floor(Math.random() * 5_000);
+      setTimeout(() => {
+        try {
+          const r = fn();
+          if (r instanceof Promise) r.catch((err) => console.error(`[boot] ${name} start error:`, err));
+        } catch (err: any) {
+          console.error(`[boot] ${name} start error:`, err?.message || err);
+        }
+      }, delay);
+    };
+    staggerStart("emailWorker", 1_000, async () => {
+      const { startEmailWorker } = await import("./lib/email");
+      startEmailWorker();
+    });
+    staggerStart("contractChecker", 4_000, async () => {
+      const { startContractChecker } = await import("./lib/contractChecker");
+      startContractChecker();
+    });
+    staggerStart("offerExpiryChecker", 7_000, async () => {
+      const { startOfferExpiryChecker } = await import("./lib/offerExpiryChecker");
+      startOfferExpiryChecker();
+    });
+    staggerStart("universityContractChecker", 10_000, async () => {
+      const { startUniversityContractChecker } = await import("./lib/universityContractChecker");
+      startUniversityContractChecker();
+    });
+    staggerStart("companyContractChecker", 13_000, async () => {
+      const { startCompanyContractChecker } = await import("./lib/companyContractChecker");
+      startCompanyContractChecker();
+    });
+    staggerStart("signedContractDelivery", 16_000, async () => {
+      const { startSignedContractDeliveryWorker } = await import("./lib/signedContractDelivery");
+      startSignedContractDeliveryWorker();
+    });
+    staggerStart("assignmentConsistencyChecker", 19_000, async () => {
+      const { startAssignmentConsistencyChecker } = await import("./lib/assignmentConsistencyChecker");
+      startAssignmentConsistencyChecker();
+    });
     // Null-fill backfill: runs on every boot but is idempotent — only touches
     // records where assignedToId IS NULL, so a second run is always a no-op.
-    setTimeout(async () => {
-      try {
-        const { backfillNullAssignments } = await import("./lib/leadAssignment");
-        await backfillNullAssignments(null);
-      } catch (err: any) {
-        console.error("[boot] backfillNullAssignments error:", err?.message || err);
-      }
-    }, 15_000);
-    const { startFollowUpChecker } = await import("./lib/followUpChecker");
-    startFollowUpChecker();
-    const { startPortalStuckReset, startPortalAutoDrain } = await import("./routes/portalAutomation");
-    startPortalStuckReset();
-    startPortalAutoDrain();
-    const { startPortalUniversityLinker } = await import("./lib/portalUniversityLinker");
-    startPortalUniversityLinker();
-    const { startStuckConversationSweep } = await import("./lib/stuckConversationAssigner");
-    startStuckConversationSweep();
+    staggerStart("backfillNullAssignments", 22_000, async () => {
+      const { backfillNullAssignments } = await import("./lib/leadAssignment");
+      await backfillNullAssignments(null);
+    });
+    staggerStart("followUpChecker", 25_000, async () => {
+      const { startFollowUpChecker } = await import("./lib/followUpChecker");
+      startFollowUpChecker();
+    });
+    staggerStart("portalStuckReset+autoDrain", 28_000, async () => {
+      const { startPortalStuckReset, startPortalAutoDrain } = await import("./routes/portalAutomation");
+      startPortalStuckReset();
+      startPortalAutoDrain();
+    });
+    staggerStart("portalUniversityLinker", 31_000, async () => {
+      const { startPortalUniversityLinker } = await import("./lib/portalUniversityLinker");
+      startPortalUniversityLinker();
+    });
+    staggerStart("stuckConversationSweep", 34_000, async () => {
+      const { startStuckConversationSweep } = await import("./lib/stuckConversationAssigner");
+      startStuckConversationSweep();
+    });
   }
 
   serveStaticFrontend();
