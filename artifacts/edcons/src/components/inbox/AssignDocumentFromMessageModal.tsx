@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,7 @@ import {
   Camera,
   Loader2,
   CheckCircle2,
+  Briefcase,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
@@ -40,9 +41,13 @@ interface DocReq {
 
 const DOC_ICONS: Record<string, typeof FileText> = {
   diploma: GraduationCap,
+  diploma_certificate: GraduationCap,
   transcript: ScrollText,
+  diploma_transcript: ScrollText,
   passport: Shield,
   photograph: Camera,
+  photo: Camera,
+  cv: Briefcase,
 };
 
 function getDocIcon(key: string): typeof FileText {
@@ -68,6 +73,7 @@ export function AssignDocumentFromMessageModal({
 }: AssignDocumentFromMessageModalProps) {
   const { t } = useI18n();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [localLevel, setLocalLevel] = useState<string>("");
@@ -75,6 +81,12 @@ export function AssignDocumentFromMessageModal({
   const { levels } = useStudyLevels({ onlyEnabled: true });
 
   const level = owner.interestedLevel ?? localLevel;
+
+  const docLabel = (docType: string) => {
+    const k = `docTypes.${docType.toLowerCase()}`;
+    const v = t(k);
+    return v !== k ? v : docType;
+  };
 
   const { data: docReqs = [], isLoading } = useQuery<DocReq[]>({
     queryKey: ["degree-doc-reqs-assign-msg", level],
@@ -87,12 +99,26 @@ export function AssignDocumentFromMessageModal({
     staleTime: 30_000,
   });
 
+  const existingDocsKey = ["existing-doc-types-assign", ownerType, owner.id];
+  const { data: existingDocs = [] } = useQuery<Array<{ type: string }>>({
+    queryKey: existingDocsKey,
+    queryFn: () =>
+      fetch(
+        `${BASE_URL}/api/${ownerType === "student" ? "students" : "leads"}/${owner.id}/documents`,
+        { credentials: "include" }
+      ).then((r) => (r.ok ? r.json() : [])),
+    staleTime: 10_000,
+  });
+
+  const filledTypes = new Set(existingDocs.map((d: any) => d.type));
+
   const sortedReqs = [...docReqs].sort((a, b) => a.sortOrder - b.sortOrder);
 
   async function handlePick(docType: string) {
+    if (filledTypes.has(docType)) return;
     setSaving(docType);
     try {
-      await customFetch(
+      const result = (await customFetch(
         `/api/inbox/conversations/${convId}/messages/${target.msgId}/attachments/${target.attachIdx}/save-as-document`,
         {
           method: "POST",
@@ -101,10 +127,15 @@ export function AssignDocumentFromMessageModal({
             ownerType,
             ownerId: owner.id,
             documentType: docType,
-            setAsPhoto: docType === "photograph",
+            setAsPhoto: docType === "photo" || docType === "photograph",
           }),
         }
-      );
+      )) as any;
+      void queryClient.invalidateQueries({ queryKey: existingDocsKey });
+      if (result?.conflict) {
+        onSaved();
+        return;
+      }
       setSaved((prev) => new Set([...prev, docType]));
       onSaved();
     } catch (err: any) {
@@ -119,6 +150,10 @@ export function AssignDocumentFromMessageModal({
     }
   }
 
+  const displayName = target.attachName && target.attachName !== "file"
+    ? target.attachName
+    : null;
+
   return (
     <Dialog open onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
       <DialogContent className="max-w-sm">
@@ -129,9 +164,9 @@ export function AssignDocumentFromMessageModal({
         </DialogHeader>
 
         <div className="py-1 space-y-3">
-          {target.attachName && (
-            <p className="text-xs text-muted-foreground truncate">
-              {target.attachName}
+          {displayName && (
+            <p className="text-xs text-muted-foreground truncate" title={displayName}>
+              {displayName}
             </p>
           )}
 
@@ -171,29 +206,33 @@ export function AssignDocumentFromMessageModal({
                   const Icon = getDocIcon(req.documentType);
                   const isSaved = saved.has(req.documentType);
                   const isSaving = saving === req.documentType;
+                  const isFilled = filledTypes.has(req.documentType);
+                  const isDisabled = !!saving || isFilled;
                   return (
                     <button
                       key={req.documentType}
                       type="button"
                       onClick={() => void handlePick(req.documentType)}
-                      disabled={!!saving}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center cursor-pointer transition-colors disabled:opacity-60 ${
-                        isSaved
+                      disabled={isDisabled}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center cursor-pointer transition-colors ${
+                        isFilled
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700 cursor-default opacity-80"
+                          : isSaved
                           ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                          : "border-border hover:border-primary hover:bg-primary/5"
+                          : "border-border hover:border-primary hover:bg-primary/5 disabled:opacity-60"
                       }`}
                     >
                       {isSaving ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : isSaved ? (
+                      ) : (isSaved || isFilled) ? (
                         <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                       ) : (
                         <Icon className="w-5 h-5" />
                       )}
                       <span className="text-xs font-medium leading-tight">
-                        {req.documentType}
+                        {docLabel(req.documentType)}
                       </span>
-                      {isSaved && (
+                      {(isSaved || isFilled) && (
                         <span className="text-[10px] text-emerald-600">
                           {t("inbox.studentTab.filled")}
                         </span>

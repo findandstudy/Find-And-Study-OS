@@ -697,6 +697,8 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
                 url: att.url ?? att.link ?? att.mediaUrl ?? "",
                 type: (att.type ?? "file") as "image" | "video" | "audio" | "file",
                 name: att.name ?? att.filename ?? undefined,
+                fileSize: att.size ?? att.fileSize ?? undefined,
+                mimeType: att.mimeType ?? att.contentType ?? att.content_type ?? att.mime_type ?? undefined,
               }))
               .filter((a: any) => a.url),
           }

@@ -1562,7 +1562,13 @@ function InboxTab() {
                                 const waRawType = rawMeta?.type;
                                 const waMedia = waRawType ? (rawMeta[waRawType] as any) : null;
                                 const waFilename = i === 0 ? (waMedia?.filename ?? waMedia?.file_name ?? null) : null;
-                                const name = a.name ?? a.fileName ?? waFilename ?? (a.type && a.type !== "file" ? a.type : null) ?? "file";
+                                const nameFromUrl = (() => {
+                                  try {
+                                    const seg = new URL(String(url)).pathname.split("/").pop() ?? "";
+                                    return seg.includes(".") ? decodeURIComponent(seg) : null;
+                                  } catch { return null; }
+                                })();
+                                const name = a.name ?? a.fileName ?? waFilename ?? nameFromUrl ?? (a.type && a.type !== "file" ? a.type : null) ?? "file";
                                 const isUnmatched = Boolean((detail as any).conversation?.unmatched);
                                 const canAdd = !out && (Boolean(detail.student) || Boolean(detail.lead) || isUnmatched);
                                 const _btnCls = "inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors";
@@ -2009,7 +2015,7 @@ function InboxTab() {
           ownerType="student"
           owner={detail.student}
           onClose={() => setAddDocTarget(null)}
-          onSaved={() => { /* doc saved to student — no additional refresh needed */ }}
+          onSaved={() => { if (selectedId) fetchDetail(selectedId); }}
         />
       )}
 
@@ -2020,7 +2026,7 @@ function InboxTab() {
           ownerType="lead"
           owner={{ id: detail.lead.id, interestedLevel: null }}
           onClose={() => setAddDocTarget(null)}
-          onSaved={() => {}}
+          onSaved={() => { if (selectedId) fetchDetail(selectedId); }}
         />
       )}
 
