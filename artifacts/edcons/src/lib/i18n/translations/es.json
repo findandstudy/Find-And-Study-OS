@@ -427,7 +427,8 @@
     "additionalInfoHint": "Completa los siguientes campos manualmente.",
     "aiCouldNotExtract": "La IA no pudo extraer este campo, complétalo manualmente.",
     "applicationSpecificDocuments": "Documentos específicos de la solicitud",
-    "applicationSpecificDocumentsHint": "Subidos para una solicitud específica, se mantienen separados de los documentos del perfil del estudiante."
+    "applicationSpecificDocumentsHint": "Subidos para una solicitud específica, se mantienen separados de los documentos del perfil del estudiante.",
+    "nationality": "Nacionalidad"
   },
   "dashboard": {
     "portal": "Portal",

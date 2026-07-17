@@ -427,7 +427,8 @@
     "additionalInfoHint": "कृपया निम्नलिखित फ़ील्ड स्वयं भरें।",
     "aiCouldNotExtract": "AI इस फ़ील्ड को नहीं निकाल सका, कृपया इसे स्वयं भरें।",
     "applicationSpecificDocuments": "आवेदन-विशिष्ट दस्तावेज़",
-    "applicationSpecificDocumentsHint": "किसी विशेष आवेदन के लिए अपलोड किए गए, छात्र के प्रोफ़ाइल दस्तावेज़ों से अलग रखे गए हैं।"
+    "applicationSpecificDocumentsHint": "किसी विशेष आवेदन के लिए अपलोड किए गए, छात्र के प्रोफ़ाइल दस्तावेज़ों से अलग रखे गए हैं।",
+    "nationality": "राष्ट्रीयता"
   },
   "dashboard": {
     "portal": "पोर्टल",

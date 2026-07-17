@@ -427,7 +427,8 @@
     "additionalInfoHint": "لطفاً فیلدهای زیر را به‌صورت دستی تکمیل کنید.",
     "aiCouldNotExtract": "هوش مصنوعی نتوانست این فیلد را استخراج کند؛ لطفاً آن را به‌صورت دستی پر کنید.",
     "applicationSpecificDocuments": "مدارک مخصوص این پرونده",
-    "applicationSpecificDocumentsHint": "برای یک پرونده‌ی خاص بارگذاری شده و جدا از مدارک پروفایل دانشجو نگهداری می‌شود."
+    "applicationSpecificDocumentsHint": "برای یک پرونده‌ی خاص بارگذاری شده و جدا از مدارک پروفایل دانشجو نگهداری می‌شود.",
+    "nationality": "ملیت"
   },
   "dashboard": {
     "portal": "پورتال",

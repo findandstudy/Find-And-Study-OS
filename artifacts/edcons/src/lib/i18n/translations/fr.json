@@ -427,7 +427,8 @@
     "additionalInfoHint": "Veuillez remplir les champs suivants manuellement.",
     "aiCouldNotExtract": "L'IA n'a pas pu extraire ce champ, veuillez le remplir manuellement.",
     "applicationSpecificDocuments": "Documents propres à la candidature",
-    "applicationSpecificDocumentsHint": "Téléversés pour une candidature spécifique, conservés séparément des documents du profil de l'étudiant."
+    "applicationSpecificDocumentsHint": "Téléversés pour une candidature spécifique, conservés séparément des documents du profil de l'étudiant.",
+    "nationality": "Nationalité"
   },
   "dashboard": {
     "portal": "Portail",

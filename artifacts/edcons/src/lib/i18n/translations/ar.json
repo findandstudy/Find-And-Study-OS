@@ -427,7 +427,8 @@
     "additionalInfoHint": "يرجى تعبئة الحقول التالية يدويًا.",
     "aiCouldNotExtract": "تعذّر على الذكاء الاصطناعي استخراج هذا الحقل، يرجى تعبئته يدويًا.",
     "applicationSpecificDocuments": "المستندات الخاصة بالطلب",
-    "applicationSpecificDocumentsHint": "تم رفعها لطلب محدّد، وتُحفظ منفصلة عن مستندات ملف الطالب."
+    "applicationSpecificDocumentsHint": "تم رفعها لطلب محدّد، وتُحفظ منفصلة عن مستندات ملف الطالب.",
+    "nationality": "الجنسية"
   },
   "dashboard": {
     "portal": "البوابة",

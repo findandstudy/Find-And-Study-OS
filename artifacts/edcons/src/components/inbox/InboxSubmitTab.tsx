@@ -6,13 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Loader2, Sparkles } from "lucide-react";
+import { toLatinUpper } from "@/lib/latin-utils";
 import type { SubmitReadyData } from "./InboxStudentTab";
 
 interface InboxSubmitTabProps {
   conversationId: number;
   data: SubmitReadyData;
-  onCreated: () => void;
+  onCreated: (studentId: number) => void;
   onBack: () => void;
 }
 
@@ -55,6 +57,10 @@ export function InboxSubmitTab({
 
   function field(key: keyof typeof form) {
     return (val: string) => setForm((f) => ({ ...f, [key]: val }));
+  }
+
+  function latinField(key: keyof typeof form) {
+    return (val: string) => setForm((f) => ({ ...f, [key]: toLatinUpper(val) }));
   }
 
   async function handleCreate() {
@@ -125,7 +131,7 @@ export function InboxSubmitTab({
           ? t("inbox.studentTab.studentCreatedWithDocs", { count: String(docsSaved) })
           : t("inbox.studentTab.studentCreated"),
       });
-      onCreated();
+      onCreated(studentId);
     } catch (err: any) {
       const msg = err?.data?.error || err?.body?.error || err?.message;
       toast({
@@ -158,16 +164,16 @@ export function InboxSubmitTab({
               {t("apply.firstName")}<span className="text-destructive ms-0.5">*</span>
               <AiTag field="firstName" aiFields={data.aiFields} />
             </Label>
-            <Input className="h-7 text-sm" value={form.firstName}
-              onChange={(e) => field("firstName")(e.target.value)} />
+            <Input className="h-7 text-sm uppercase" value={form.firstName}
+              onChange={(e) => latinField("firstName")(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs flex items-center">
               {t("apply.lastName")}<span className="text-destructive ms-0.5">*</span>
               <AiTag field="lastName" aiFields={data.aiFields} />
             </Label>
-            <Input className="h-7 text-sm" value={form.lastName}
-              onChange={(e) => field("lastName")(e.target.value)} />
+            <Input className="h-7 text-sm uppercase" value={form.lastName}
+              onChange={(e) => latinField("lastName")(e.target.value)} />
           </div>
         </div>
 
@@ -185,8 +191,11 @@ export function InboxSubmitTab({
               {t("apply.phone")}
               <AiTag field="phone" aiFields={data.aiFields} />
             </Label>
-            <Input className="h-7 text-sm" value={form.phone}
-              onChange={(e) => field("phone")(e.target.value)} />
+            <PhoneInput
+              value={form.phone}
+              onChange={field("phone")}
+              className="h-7 text-sm"
+            />
           </div>
         </div>
 
@@ -230,8 +239,8 @@ export function InboxSubmitTab({
               {t("apply.motherName")}
               <AiTag field="motherName" aiFields={data.aiFields} />
             </Label>
-            <Input className="h-7 text-sm" value={form.motherName}
-              onChange={(e) => field("motherName")(e.target.value)} />
+            <Input className="h-7 text-sm uppercase" value={form.motherName}
+              onChange={(e) => latinField("motherName")(e.target.value)} />
           </div>
         </div>
 
@@ -241,14 +250,14 @@ export function InboxSubmitTab({
               {t("apply.fatherName")}
               <AiTag field="fatherName" aiFields={data.aiFields} />
             </Label>
-            <Input className="h-7 text-sm" value={form.fatherName}
-              onChange={(e) => field("fatherName")(e.target.value)} />
+            <Input className="h-7 text-sm uppercase" value={form.fatherName}
+              onChange={(e) => latinField("fatherName")(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">{t("apply.address")}</Label>
-            <Input className="h-7 text-sm" value={form.address}
+            <Input className="h-7 text-sm uppercase" value={form.address}
               placeholder={t("apply.addressPlaceholder")}
-              onChange={(e) => field("address")(e.target.value)} />
+              onChange={(e) => latinField("address")(e.target.value)} />
           </div>
         </div>
 

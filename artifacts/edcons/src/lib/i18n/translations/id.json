@@ -427,7 +427,8 @@
     "additionalInfoHint": "Silakan isi kolom berikut secara manual.",
     "aiCouldNotExtract": "AI tidak dapat mengekstrak kolom ini, silakan isi secara manual.",
     "applicationSpecificDocuments": "Dokumen Khusus Aplikasi",
-    "applicationSpecificDocumentsHint": "Diunggah untuk aplikasi tertentu, disimpan terpisah dari dokumen profil siswa."
+    "applicationSpecificDocumentsHint": "Diunggah untuk aplikasi tertentu, disimpan terpisah dari dokumen profil siswa.",
+    "nationality": "Kewarganegaraan"
   },
   "dashboard": {
     "portal": "Portal",

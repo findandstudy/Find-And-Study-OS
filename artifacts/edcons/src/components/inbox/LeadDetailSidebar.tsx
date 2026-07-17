@@ -153,6 +153,14 @@ export function LeadDetailSidebar({
   const [unmF, setUnmF] = useState(EMPTY_UNM_FORM);
   const [unmSubmitting, setUnmSubmitting] = useState(false);
   const [submitData, setSubmitData] = useState<SubmitReadyData | null>(null);
+  const [pendingStudentId, setPendingStudentId] = useState<number | null>(null);
+
+  // Clear pendingStudentId once detail.student catches up
+  useEffect(() => {
+    if (detail.student && pendingStudentId) {
+      setPendingStudentId(null);
+    }
+  }, [detail.student, pendingStudentId]);
 
   const { data: countries = [] } = useCountrySearch("");
   const countryOptions = countries.map((c) => ({ value: c.name, label: c.name }));
@@ -248,9 +256,10 @@ export function LeadDetailSidebar({
           <InboxSubmitTab
             conversationId={conversationId}
             data={submitData}
-            onCreated={() => {
+            onCreated={(sid) => {
               setSubmitData(null);
-              setActiveTab("lead");
+              setPendingStudentId(sid);
+              setActiveTab("application");
               onUpdated?.();
             }}
             onBack={() => setActiveTab("documents")}
@@ -272,6 +281,7 @@ export function LeadDetailSidebar({
           <InboxApplicationTab
             detail={detail}
             conversationId={conversationId}
+            overrideStudentId={pendingStudentId ?? undefined}
             onUpdated={onUpdated}
           />
         ) : (

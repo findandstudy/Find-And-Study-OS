@@ -427,7 +427,8 @@
     "additionalInfoHint": "请手动填写以下字段。",
     "aiCouldNotExtract": "AI 无法提取此字段，请手动填写。",
     "applicationSpecificDocuments": "申请专属文件",
-    "applicationSpecificDocumentsHint": "为特定申请上传，与学生档案文件分开保存。"
+    "applicationSpecificDocumentsHint": "为特定申请上传，与学生档案文件分开保存。",
+    "nationality": "国籍"
   },
   "dashboard": {
     "portal": "门户",

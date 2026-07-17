@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { toLatinUpper, transliterateToLatin } from "@/lib/latin-utils";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
@@ -367,20 +368,20 @@ export function InboxStudentTab({
     setExtracting(false);
     onReadyToSubmit?.({
       form: {
-        firstName: extracted.firstName || parts[0] || "",
-        lastName: extracted.lastName || parts.slice(1).join(" ") || "",
+        firstName: toLatinUpper(extracted.firstName || parts[0] || ""),
+        lastName: toLatinUpper(extracted.lastName || parts.slice(1).join(" ") || ""),
         email: extracted.email || String(ext?.email ?? ""),
         phone: extracted.phone || String(ext?.phone ?? ""),
         gender: "",
-        motherName: extracted.motherName || "",
-        fatherName: extracted.fatherName || "",
+        motherName: toLatinUpper(extracted.motherName || ""),
+        fatherName: toLatinUpper(extracted.fatherName || ""),
         nationality: extracted.nationality || "",
         dateOfBirth: extracted.dateOfBirth || "",
-        address: "",
+        address: transliterateToLatin(extracted.address || "").toUpperCase(),
         passportNumber: extracted.passportNumber || "",
         passportIssueDate: (extracted as any).passportIssueDate || "",
         passportExpiry: extracted.passportExpiry || "",
-        school1: extracted.highSchool || "",
+        school1: transliterateToLatin(extracted.highSchool || "").toUpperCase(),
         school2: "",
         graduationYear: (extracted as any).graduationYear != null
           ? String((extracted as any).graduationYear)

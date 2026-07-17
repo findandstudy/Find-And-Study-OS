@@ -427,7 +427,8 @@
     "additionalInfoHint": "Пожалуйста, заполните следующие поля вручную.",
     "aiCouldNotExtract": "AI не удалось распознать это поле, заполните его вручную.",
     "applicationSpecificDocuments": "Документы для конкретной заявки",
-    "applicationSpecificDocumentsHint": "Загружены для конкретной заявки и хранятся отдельно от документов профиля студента."
+    "applicationSpecificDocumentsHint": "Загружены для конкретной заявки и хранятся отдельно от документов профиля студента.",
+    "nationality": "Национальность"
   },
   "dashboard": {
     "portal": "Портал",

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
-import { useCountrySearch } from "@/hooks/use-countries";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -45,11 +44,13 @@ interface AppRow {
 interface InboxApplicationTabProps {
   detail: InboxConversationDetailResponse;
   conversationId: number;
+  overrideStudentId?: number;
   onUpdated?: () => void;
 }
 
 export function InboxApplicationTab({
   detail,
+  overrideStudentId,
   onUpdated,
 }: InboxApplicationTabProps) {
   const { t } = useI18n();
@@ -65,15 +66,23 @@ export function InboxApplicationTab({
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  // Student from detail (may be null if not yet linked)
+  // Student from detail (may be null if not yet linked; use override while detail refreshes)
   const student = (detail as any).student as
     | { id: number; interestedLevel?: string | null; firstName?: string | null; lastName?: string | null }
     | null
     | undefined;
-  const studentId = student?.id;
+  const studentId = student?.id ?? overrideStudentId;
 
-  // Countries — load all upfront (same pattern as LeadDetailSidebar line 190)
-  const { data: countries = [] } = useCountrySearch("");
+  // Countries — only countries that have universities in the system
+  const { data: cfFilters } = useQuery<{ countries?: string[] }>({
+    queryKey: ["course-finder-countries"],
+    queryFn: () =>
+      fetch(`${BASE_URL}/api/course-finder/filters`, { credentials: "include" }).then((r) =>
+        r.ok ? r.json() : { countries: [] }
+      ),
+    staleTime: 60_000,
+  });
+  const countries = cfFilters?.countries ?? [];
 
   // Universities — server-side, enabled when country selected
   const { data: uniData, isLoading: unisLoading } = useQuery<{ data: UniRow[] }>({
@@ -116,7 +125,7 @@ export function InboxApplicationTab({
   const programs: ProgRow[] = progData?.data ?? [];
   const apps: AppRow[] = appsData?.data ?? [];
 
-  const countryOptions = countries.map((c) => ({ value: c.name, label: c.name }));
+  const countryOptions = countries.map((c) => ({ value: c, label: c }));
   const uniOptions = universities.map((u) => ({ value: String(u.id), label: u.name }));
   const progOptions = programs.map((p) => ({ value: String(p.id), label: p.name }));
 
@@ -225,7 +234,7 @@ export function InboxApplicationTab({
   }
 
   // ── No-student guard (after all hooks) ───────────────────────────────────
-  if (!student) {
+  if (!studentId) {
     return (
       <div className="flex flex-col h-full items-center justify-center p-6 text-center gap-3">
         <UserPlus className="w-8 h-8 text-muted-foreground/40" />
