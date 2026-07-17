@@ -2719,7 +2719,7 @@ router.post(
 // and type conflict (same doc type + owner), then uploads to object storage and
 // creates the document row with source-tracking columns.
 //
-// Body: { ownerType: "lead"|"student", ownerId: number, documentType: "diploma"|"transcript"|"passport"|"photograph" }
+// Body: { ownerType: "lead"|"student", ownerId: number, documentType: "diploma_certificate"|"diploma_transcript"|"passport"|"photo"|"cv"|"other_certificates_documents" }
 
 function mimeToExt(mime: string): string {
   if (mime === "application/pdf") return "pdf";
@@ -2748,7 +2748,11 @@ router.post(
     const { ownerType, ownerId: ownerIdRaw, documentType, force, setAsPhoto = true } = req.body;
     const ownerId = Number(ownerIdRaw);
 
-    const VALID_SAVE_AS_DOC_TYPES = ["diploma", "transcript", "passport", "photograph"] as const;
+    const VALID_SAVE_AS_DOC_TYPES = [
+      "diploma_certificate", "diploma_transcript", "passport", "photo", "cv", "other_certificates_documents",
+      // Legacy aliases kept for backward compatibility
+      "diploma", "transcript", "photograph",
+    ] as const;
     if (!documentType || typeof documentType !== "string" || !documentType.trim()) {
       res.status(400).json({ error: "documentType is required" });
       return;

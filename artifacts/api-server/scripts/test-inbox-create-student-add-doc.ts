@@ -292,7 +292,7 @@ test("save-as-document — 400 for invalid ownerType", async () => {
   const res = await api(
     "POST",
     `/api/inbox/conversations/${convId}/messages/${msgId}/attachments/0/save-as-document`,
-    { ownerType: "unknown_type", ownerId: studentId, documentType: "diploma" },
+    { ownerType: "unknown_type", ownerId: studentId, documentType: "diploma_certificate" },
   );
   assert.equal(res.status, 400, `Expected 400 but got ${res.status}: ${JSON.stringify(res.body)}`);
   assert.ok(
@@ -310,7 +310,7 @@ test("save-as-document — 404 when message has no attachment metadata", async (
   const res = await api(
     "POST",
     `/api/inbox/conversations/${convId}/messages/${msgId}/attachments/0/save-as-document`,
-    { ownerType: "student", ownerId: studentId, documentType: "diploma" },
+    { ownerType: "student", ownerId: studentId, documentType: "diploma_certificate" },
   );
   assert.equal(res.status, 404, `Expected 404 but got ${res.status}: ${JSON.stringify(res.body)}`);
 });
@@ -349,7 +349,7 @@ test("partial-failure invariant: student + conversation link survive save-as-doc
   const saveRes = await api(
     "POST",
     `/api/inbox/conversations/${convId}/messages/${msgId}/attachments/0/save-as-document`,
-    { ownerType: "student", ownerId: studentId, documentType: "transcript" },
+    { ownerType: "student", ownerId: studentId, documentType: "diploma_transcript" },
   );
   assert.equal(saveRes.status, 404, `save-as-document should return 404 for empty metadata`);
 
@@ -402,7 +402,7 @@ test("save-as-document duplicate guard: second call returns 409", async () => {
 
   await db.insert(documentsTable).values({
     studentId,
-    type: "diploma",
+    type: "diploma_certificate",
     name: `Dup guard test ${RUN_ID}`,
     fileKey: `test/cad_dup_${RUN_ID}.pdf`,
     sourceAttachmentId,
@@ -412,7 +412,7 @@ test("save-as-document duplicate guard: second call returns 409", async () => {
   const res = await api(
     "POST",
     `/api/inbox/conversations/${convId}/messages/${msgId}/attachments/0/save-as-document`,
-    { ownerType: "student", ownerId: studentId, documentType: "diploma" },
+    { ownerType: "student", ownerId: studentId, documentType: "diploma_certificate" },
   );
   assert.equal(res.status, 409, `Expected 409 for duplicate attachment, got ${res.status}: ${JSON.stringify(res.body)}`);
   assert.ok(
@@ -439,13 +439,13 @@ test("save-as-document conflict guard: same doc-type returns {conflict:true}", a
   });
   const studentId = await seedStudent();
 
-  // Pre-existing diploma (no sourceAttachmentId so the dup-guard doesn't fire first)
+  // Pre-existing diploma_certificate (no sourceAttachmentId so the dup-guard doesn't fire first)
   const [existingDoc] = await db
     .insert(documentsTable)
     .values({
       studentId,
-      type: "diploma",
-      name: `Existing diploma ${RUN_ID}`,
+      type: "diploma_certificate",
+      name: `Existing diploma_certificate ${RUN_ID}`,
       fileKey: `test/cad_existing_${RUN_ID}.pdf`,
     })
     .returning({ id: documentsTable.id });
@@ -453,7 +453,7 @@ test("save-as-document conflict guard: same doc-type returns {conflict:true}", a
   const res = await api(
     "POST",
     `/api/inbox/conversations/${convId}/messages/${msgId}/attachments/0/save-as-document`,
-    { ownerType: "student", ownerId: studentId, documentType: "diploma", force: false },
+    { ownerType: "student", ownerId: studentId, documentType: "diploma_certificate", force: false },
   );
   assert.equal(res.status, 200, `Expected 200 {conflict:true}, got ${res.status}: ${JSON.stringify(res.body)}`);
   const body = res.body as Record<string, unknown>;
