@@ -215,7 +215,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
           if (uni) {
             snapshotUniversityName = snapshotUniversityName || uni.name;
             snapshotCountry = uni.country || null;
-            isStateUniversity = uni.universityType === "state";
+            isStateUniversity = ["public", "state"].includes((uni.universityType ?? "").toLowerCase());
           }
         }
       }

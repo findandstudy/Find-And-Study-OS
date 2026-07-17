@@ -4642,7 +4642,8 @@
     "selecting": "جارٍ التحديد…",
     "exportSelected": "تصدير المحدد ({n})",
     "bulkDeleteFailed": "تعذّر حذف بعض العناصر",
-    "bulkDeleteFailedDesc": "تعذّر حذف {failed} من أصل {total}. قد تكون قيد الاستخدام."
+    "bulkDeleteFailedDesc": "تعذّر حذف {failed} من أصل {total}. قد تكون قيد الاستخدام.",
+    "uniTypePublic": "حكومية"
   },
   "appDocsPanel": {
     "documentUploaded": "تم رفع المستند",

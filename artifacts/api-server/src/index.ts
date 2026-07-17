@@ -1336,6 +1336,58 @@ async function seedClaudeIntegration() {
     console.error("[migrate] agent_staff/sub_agent emailVerified fix:", err);
   }
 
+  // Idempotent normalization: unify universities.university_type terminology
+  // and casing to "Public" / "Private" (legacy data had "State", "state",
+  // "public", "private", etc). Also normalize the catalog_options rows,
+  // deleting stray-cased duplicates first to respect the (category, value)
+  // unique constraint.
+  try {
+    const pubRes = await pool.query(`
+      UPDATE universities SET university_type='Public'
+      WHERE university_type IS NOT NULL
+        AND lower(university_type) IN ('public','state','devlet')
+        AND university_type <> 'Public'
+    `);
+    const privRes = await pool.query(`
+      UPDATE universities SET university_type='Private'
+      WHERE university_type IS NOT NULL
+        AND lower(university_type) IN ('private','özel','ozel')
+        AND university_type <> 'Private'
+    `);
+    await pool.query(`
+      DELETE FROM catalog_options co
+      WHERE co.category='university_type'
+        AND lower(co.value) IN ('public','state','devlet')
+        AND co.value <> 'Public'
+        AND EXISTS (SELECT 1 FROM catalog_options c2 WHERE c2.category='university_type' AND c2.value='Public')
+    `);
+    await pool.query(`
+      UPDATE catalog_options SET value='Public'
+      WHERE category='university_type'
+        AND lower(value) IN ('public','state','devlet')
+        AND value <> 'Public'
+    `);
+    await pool.query(`
+      DELETE FROM catalog_options co
+      WHERE co.category='university_type'
+        AND lower(co.value) IN ('private','özel','ozel')
+        AND co.value <> 'Private'
+        AND EXISTS (SELECT 1 FROM catalog_options c2 WHERE c2.category='university_type' AND c2.value='Private')
+    `);
+    await pool.query(`
+      UPDATE catalog_options SET value='Private'
+      WHERE category='university_type'
+        AND lower(value) IN ('private','özel','ozel')
+        AND value <> 'Private'
+    `);
+    const changed = (pubRes.rowCount || 0) + (privRes.rowCount || 0);
+    if (changed > 0) {
+      console.log(`[migrate] Normalized university_type on ${changed} universit(ies) to Public/Private`);
+    }
+  } catch (err) {
+    console.error("[migrate] university_type normalization:", err);
+  }
+
   // Idempotent fix: revoke any admin_driven signing sessions that were mistakenly
   // assigned to agent_staff or sub_agent users. These roles should never sign
   // individual agency contracts — only the primary agent (role='agent') does.

@@ -2838,7 +2838,7 @@
     "amount": "Amount",
     "date": "Date",
     "notes": "Notes",
-    "stateUniversity": "State University",
+    "stateUniversity": "Public University",
     "universityCollected": "University Collected",
     "agentPaidOut": "Agent Paid Out",
     "subAgentPaidOut": "Sub Agent Paid Out",
@@ -2848,7 +2848,7 @@
     "noSubAgent": "No sub agent",
     "paidDate": "Paid date",
     "leaveBlankIfUnpaid": "Leave blank if unpaid",
-    "isStateUniversity": "Is state university",
+    "isStateUniversity": "Is public university",
     "searchStudentOrUniversity": "Search student or university...",
     "universityPaysAgency": "University Pays Agency",
     "agencyPaysAgent": "Agency Pays Agent",
@@ -4583,7 +4583,8 @@
     "selecting": "Selecting…",
     "exportSelected": "Export Selected ({n})",
     "bulkDeleteFailed": "Some items could not be deleted",
-    "bulkDeleteFailedDesc": "{failed} of {total} could not be deleted. They may be in use."
+    "bulkDeleteFailedDesc": "{failed} of {total} could not be deleted. They may be in use.",
+    "uniTypePublic": "Public"
   },
   "appDocsPanel": {
     "documentUploaded": "Document uploaded",

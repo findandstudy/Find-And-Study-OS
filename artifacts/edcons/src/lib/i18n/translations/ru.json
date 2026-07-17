@@ -4642,7 +4642,8 @@
     "selecting": "Выбор…",
     "exportSelected": "Экспорт выбранного ({n})",
     "bulkDeleteFailed": "Некоторые элементы не удалось удалить",
-    "bulkDeleteFailedDesc": "Не удалось удалить {failed} из {total}. Возможно, они используются."
+    "bulkDeleteFailedDesc": "Не удалось удалить {failed} из {total}. Возможно, они используются.",
+    "uniTypePublic": "Государственный"
   },
   "appDocsPanel": {
     "documentUploaded": "Документ загружен",

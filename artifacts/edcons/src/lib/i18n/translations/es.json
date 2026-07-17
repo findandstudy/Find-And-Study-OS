@@ -2531,7 +2531,7 @@
     "amount": "Importe",
     "date": "Fecha",
     "notes": "Notas",
-    "stateUniversity": "Universidad estatal",
+    "stateUniversity": "Universidad pública",
     "universityCollected": "Cobrado a la universidad",
     "agentPaidOut": "Pagado al agente",
     "subAgentPaidOut": "Pagado al subagente",
@@ -2541,7 +2541,7 @@
     "noSubAgent": "Sin subagente",
     "paidDate": "Fecha de pago",
     "leaveBlankIfUnpaid": "Dejar en blanco si no está pagado",
-    "isStateUniversity": "Es universidad estatal",
+    "isStateUniversity": "Es universidad pública",
     "searchStudentOrUniversity": "Buscar estudiante o universidad...",
     "universityPaysAgency": "La universidad paga a la agencia",
     "agencyPaysAgent": "La agencia paga al agente",
@@ -4642,7 +4642,8 @@
     "selecting": "Seleccionando…",
     "exportSelected": "Exportar seleccionados ({n})",
     "bulkDeleteFailed": "Algunos elementos no se pudieron eliminar",
-    "bulkDeleteFailedDesc": "No se pudieron eliminar {failed} de {total}. Puede que estén en uso."
+    "bulkDeleteFailedDesc": "No se pudieron eliminar {failed} de {total}. Puede que estén en uso.",
+    "uniTypePublic": "Pública"
   },
   "appDocsPanel": {
     "documentUploaded": "Documento subido",

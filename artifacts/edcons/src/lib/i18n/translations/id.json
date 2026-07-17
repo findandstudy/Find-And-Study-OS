@@ -4642,7 +4642,8 @@
     "selecting": "Memilih…",
     "exportSelected": "Ekspor Terpilih ({n})",
     "bulkDeleteFailed": "Beberapa item tidak dapat dihapus",
-    "bulkDeleteFailedDesc": "{failed} dari {total} tidak dapat dihapus. Mungkin sedang digunakan."
+    "bulkDeleteFailedDesc": "{failed} dari {total} tidak dapat dihapus. Mungkin sedang digunakan.",
+    "uniTypePublic": "Negeri"
   },
   "appDocsPanel": {
     "documentUploaded": "Dokumen diunggah",

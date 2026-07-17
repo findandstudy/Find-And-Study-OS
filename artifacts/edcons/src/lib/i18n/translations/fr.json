@@ -2582,7 +2582,7 @@
     "amount": "Montant",
     "date": "Date",
     "notes": "Notes",
-    "stateUniversity": "Université d'État",
+    "stateUniversity": "Université publique",
     "universityCollected": "Encaissé de l'université",
     "agentPaidOut": "Versé à l'agent",
     "subAgentPaidOut": "Versé au sous-agent",
@@ -2592,7 +2592,7 @@
     "noSubAgent": "Pas de sous-agent",
     "paidDate": "Date de paiement",
     "leaveBlankIfUnpaid": "Laisser vide si impayé",
-    "isStateUniversity": "Université d'État",
+    "isStateUniversity": "Est une université publique",
     "searchStudentOrUniversity": "Rechercher étudiant ou université...",
     "universityPaysAgency": "L'université paie l'agence",
     "agencyPaysAgent": "L'agence paie l'agent",
@@ -4642,7 +4642,8 @@
     "selecting": "Sélection…",
     "exportSelected": "Exporter la sélection ({n})",
     "bulkDeleteFailed": "Certains éléments n'ont pas pu être supprimés",
-    "bulkDeleteFailedDesc": "{failed} sur {total} n'ont pas pu être supprimés. Ils sont peut-être utilisés."
+    "bulkDeleteFailedDesc": "{failed} sur {total} n'ont pas pu être supprimés. Ils sont peut-être utilisés.",
+    "uniTypePublic": "Publique"
   },
   "appDocsPanel": {
     "documentUploaded": "Document téléversé",

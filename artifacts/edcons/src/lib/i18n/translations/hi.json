@@ -2531,7 +2531,7 @@
     "amount": "राशि",
     "date": "तारीख",
     "notes": "नोट्स",
-    "stateUniversity": "राज्य विश्वविद्यालय",
+    "stateUniversity": "सरकारी विश्वविद्यालय",
     "universityCollected": "विश्वविद्यालय से वसूल",
     "agentPaidOut": "एजेंट को भुगतान",
     "subAgentPaidOut": "उप-एजेंट को भुगतान",
@@ -2541,7 +2541,7 @@
     "noSubAgent": "कोई उप-एजेंट नहीं",
     "paidDate": "भुगतान तिथि",
     "leaveBlankIfUnpaid": "यदि भुगतान नहीं हुआ तो खाली छोड़ें",
-    "isStateUniversity": "राज्य विश्वविद्यालय है",
+    "isStateUniversity": "सरकारी विश्वविद्यालय है",
     "searchStudentOrUniversity": "छात्र या विश्वविद्यालय खोजें...",
     "universityPaysAgency": "विश्वविद्यालय एजेंसी को भुगतान करता है",
     "agencyPaysAgent": "एजेंसी एजेंट को भुगतान करती है",
@@ -4642,7 +4642,8 @@
     "selecting": "चयन हो रहा है…",
     "exportSelected": "चयनित निर्यात करें ({n})",
     "bulkDeleteFailed": "कुछ आइटम हटाए नहीं जा सके",
-    "bulkDeleteFailedDesc": "{total} में से {failed} हटाए नहीं जा सके। वे उपयोग में हो सकते हैं।"
+    "bulkDeleteFailedDesc": "{total} में से {failed} हटाए नहीं जा सके। वे उपयोग में हो सकते हैं।",
+    "uniTypePublic": "सरकारी"
   },
   "appDocsPanel": {
     "documentUploaded": "दस्तावेज़ अपलोड किया गया",

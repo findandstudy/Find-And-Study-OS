@@ -4524,7 +4524,8 @@
     "selecting": "Seçiliyor…",
     "exportSelected": "Seçilenleri Dışa Aktar ({n})",
     "bulkDeleteFailed": "Bazı öğeler silinemedi",
-    "bulkDeleteFailedDesc": "{total} öğeden {failed} tanesi silinemedi. Kullanımda olabilirler."
+    "bulkDeleteFailedDesc": "{total} öğeden {failed} tanesi silinemedi. Kullanımda olabilirler.",
+    "uniTypePublic": "Devlet"
   },
   "appDocsPanel": {
     "documentUploaded": "Belge yüklendi",

@@ -553,7 +553,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
         if (uni) {
           snapshotUniversityName = snapshotUniversityName || uni.name;
           snapshotCountry = snapshotCountry || uni.country || null;
-          isStateUniversity = uni.universityType === "state";
+          isStateUniversity = ["public", "state"].includes((uni.universityType ?? "").toLowerCase());
         }
       }
     }

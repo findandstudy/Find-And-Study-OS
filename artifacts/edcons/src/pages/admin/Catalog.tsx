@@ -1090,8 +1090,8 @@ function UniversitiesTab() {
   const setF = (updates: Partial<University>) => setForm(f => ({ ...f, ...updates } as Partial<University>));
 
   const templateRows = [
-    { name: "Istanbul University", country: "Turkey", city: "Istanbul", website: "https://www.istanbul.edu.tr", description: "Leading state university", ranking: 351, universityType: "State", taxType: "KDV", taxPercent: 18, qsRanking: 501, timesRanking: 601, shanghaiRanking: 401, cwtsLeidenRanking: 0, address: "Beyazıt, 34452 Fatih/İstanbul", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Bank Transfer", admissionProcess: "Online application via portal", contactPersonName: "Ahmet Yılmaz", contactPersonPhone: "+90 212 440 0000", contactPersonEmail: "intl@istanbul.edu.tr", status: "open", isActive: "Yes" },
-    { name: "Middle East Technical University", country: "Turkey", city: "Ankara", website: "https://www.metu.edu.tr", description: "Top technical university", ranking: 601, universityType: "State", taxType: "KDV", taxPercent: 18, qsRanking: 336, timesRanking: 401, shanghaiRanking: 501, cwtsLeidenRanking: 0, address: "Üniversiteler Mah. Dumlupınar Blv. No:1, 06800 Çankaya/Ankara", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "Apply through international office", contactPersonName: "Elif Demir", contactPersonPhone: "+90 312 210 2000", contactPersonEmail: "intl@metu.edu.tr", status: "open", isActive: "Yes" },
+    { name: "Istanbul University", country: "Turkey", city: "Istanbul", website: "https://www.istanbul.edu.tr", description: "Leading state university", ranking: 351, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 501, timesRanking: 601, shanghaiRanking: 401, cwtsLeidenRanking: 0, address: "Beyazıt, 34452 Fatih/İstanbul", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Bank Transfer", admissionProcess: "Online application via portal", contactPersonName: "Ahmet Yılmaz", contactPersonPhone: "+90 212 440 0000", contactPersonEmail: "intl@istanbul.edu.tr", status: "open", isActive: "Yes" },
+    { name: "Middle East Technical University", country: "Turkey", city: "Ankara", website: "https://www.metu.edu.tr", description: "Top technical university", ranking: 601, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 336, timesRanking: 401, shanghaiRanking: 501, cwtsLeidenRanking: 0, address: "Üniversiteler Mah. Dumlupınar Blv. No:1, 06800 Çankaya/Ankara", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "Apply through international office", contactPersonName: "Elif Demir", contactPersonPhone: "+90 312 210 2000", contactPersonEmail: "intl@metu.edu.tr", status: "open", isActive: "Yes" },
     { name: "King's College London", country: "United Kingdom", city: "London", website: "https://www.kcl.ac.uk", description: "Russell Group university", ranking: 35, universityType: "Private", taxType: "VAT", taxPercent: 20, qsRanking: 40, timesRanking: 35, shanghaiRanking: 47, cwtsLeidenRanking: 55, address: "Strand, London WC2R 2LS, UK", logoUrl: "", onlinePaymentUrl: "https://pay.kcl.ac.uk", cricosLink: "", documentsLink: "https://docs.kcl.ac.uk", currentFeeListLink: "https://www.kcl.ac.uk/study/fees", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "UCAS application required", contactPersonName: "James Smith", contactPersonPhone: "+44 20 7836 5454", contactPersonEmail: "admissions@kcl.ac.uk", status: "open", isActive: "Yes" },
   ];
 
@@ -1174,7 +1174,13 @@ function UniversitiesTab() {
                 <td className="px-4 py-2.5 text-muted-foreground">{u.country ?? "—"}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{u.city ?? "—"}</td>
                 <td className="px-4 py-2.5 text-muted-foreground text-xs">
-                  {u.universityType === "state" ? t("catalogPage.uniTypeState") : u.universityType === "private" ? t("catalogPage.uniTypePrivate") : u.universityType === "foundation" ? t("catalogPage.uniTypeFoundation") : u.universityType ?? "—"}
+                  {(() => {
+                    const ut = (u.universityType ?? "").toLowerCase();
+                    if (ut === "public" || ut === "state") return t("catalogPage.uniTypePublic");
+                    if (ut === "private") return t("catalogPage.uniTypePrivate");
+                    if (ut === "foundation") return t("catalogPage.uniTypeFoundation");
+                    return u.universityType ?? "—";
+                  })()}
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">{u.qsRanking ?? "—"}</td>
                 <td className="px-4 py-2.5">
