@@ -41,7 +41,7 @@ import {
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
   Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical,
-  UserPlus, FilePlus2,
+  UserPlus, FilePlus2, Sparkles,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -1351,6 +1351,19 @@ function InboxTab() {
                   >
                     <Bell className="w-3 h-3" />
                     <span className="hidden lg:inline">{(conv as any).isSubscribed ? t("inbox.action.unsubscribe") : t("inbox.action.subscribe")}</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSummarize}
+                    disabled={summarizeMutation.isPending}
+                    className="h-7 text-xs gap-1"
+                    title={t("inbox.aiSummary.generate")}
+                  >
+                    {summarizeMutation.isPending
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <Sparkles className="w-3 h-3" />}
+                    <span className="hidden lg:inline">{t("inbox.aiSummary.generate")}</span>
                   </Button>
                   <Button
                     size="icon"

@@ -152,14 +152,10 @@ const EMPTY_UNM_FORM = {
   phone: "",
   email: "",
   country: "",
-  source: "",
-  nationality: "",
-  preferredLanguage: "",
   motherName: "",
   fatherName: "",
   interestedProgram: "",
   interestedUniversity: "",
-  estimatedValue: "",
 };
 
 const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
@@ -222,14 +218,10 @@ export function LeadDetailSidebar({
       phone: ext?.phone || "",
       email: autoEmail,
       country: "",
-      source: conv?.channel || "",
-      nationality: "",
-      preferredLanguage: "",
       motherName: "",
       fatherName: "",
       interestedProgram: "",
       interestedUniversity: "",
-      estimatedValue: "",
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
@@ -372,7 +364,6 @@ export function LeadDetailSidebar({
           if (unmF.country.trim()) patch.interestedCountry = unmF.country.trim();
           if (unmF.interestedProgram.trim()) patch.interestedProgram = unmF.interestedProgram.trim();
           if (unmF.interestedUniversity.trim()) patch.interestedUniversity = unmF.interestedUniversity.trim();
-          if (unmF.estimatedValue.trim()) patch.estimatedValue = unmF.estimatedValue.trim();
           if (unmF.motherName.trim()) patch.motherName = unmF.motherName.trim();
           if (unmF.fatherName.trim()) patch.fatherName = unmF.fatherName.trim();
           const convAssignedToId = (detail as any).conversation?.assignedToId;
@@ -451,28 +442,6 @@ export function LeadDetailSidebar({
               />
             </div>
 
-            {/* Nationality */}
-            <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.nationality")}</div>
-              <input
-                className={fieldCls}
-                value={unmF.nationality}
-                onChange={(e) => setUnmF((f) => ({ ...f, nationality: e.target.value }))}
-                placeholder={t("inbox.sidebar.unlinked.nationality")}
-              />
-            </div>
-
-            {/* Source / Channel */}
-            <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.source")}</div>
-              <input
-                className={fieldCls}
-                value={unmF.source}
-                onChange={(e) => setUnmF((f) => ({ ...f, source: e.target.value }))}
-                placeholder={t("inbox.sidebar.unlinked.source")}
-              />
-            </div>
-
             {/* Interested Country — searchable dropdown */}
             <div>
               <div className={labelCls}>{t("inbox.sidebar.unlinked.country")}</div>
@@ -505,30 +474,6 @@ export function LeadDetailSidebar({
                 value={unmF.interestedUniversity}
                 onChange={(e) => setUnmF((f) => ({ ...f, interestedUniversity: e.target.value }))}
                 placeholder={t("inbox.sidebar.unlinked.interestedUniversity")}
-              />
-            </div>
-
-            {/* Estimated Value */}
-            <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.estimatedValue")}</div>
-              <input
-                type="text"
-                inputMode="decimal"
-                className={fieldCls}
-                value={unmF.estimatedValue}
-                onChange={(e) => setUnmF((f) => ({ ...f, estimatedValue: e.target.value }))}
-                placeholder={t("inbox.sidebar.unlinked.estimatedValue")}
-              />
-            </div>
-
-            {/* Preferred Language */}
-            <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.preferredLanguage")}</div>
-              <input
-                className={fieldCls}
-                value={unmF.preferredLanguage}
-                onChange={(e) => setUnmF((f) => ({ ...f, preferredLanguage: e.target.value }))}
-                placeholder={t("inbox.sidebar.unlinked.preferredLanguage")}
               />
             </div>
 
@@ -662,13 +607,6 @@ export function LeadDetailSidebar({
       ? `/staff/students/${student.id}`
       : null;
 
-  const estimatedValueText = (() => {
-    if (linkedType !== "lead" || !lead?.estimatedValue) return null;
-    const n = Number(lead.estimatedValue);
-    if (!Number.isFinite(n)) return lead.estimatedValue;
-    return n.toLocaleString();
-  })();
-
   const editProps = { editingKey, setEditingKey, onSave: saveField, saving };
 
   const DOC_TYPE_KEYS = ["diploma", "transcript", "passport", "photograph"] as const;
@@ -734,8 +672,6 @@ export function LeadDetailSidebar({
             {lead.interestedProgram && <Field label={t("inbox.sidebar.interestedProgram")} value={lead.interestedProgram} />}
             {lead.interestedUniversity && <Field label={t("inbox.sidebar.interestedUniversity")} value={lead.interestedUniversity} />}
             {lead.interestedCountry && <Field label={t("inbox.sidebar.interestedCountry")} value={lead.interestedCountry} />}
-            {estimatedValueText && <Field label={t("inbox.sidebar.estimatedValue")} value={estimatedValueText} />}
-            {lead.source && <Field label={t("inbox.sidebar.source")} value={lead.source} />}
             {lead.originDisplayName && <Field label={t("inbox.sidebar.origin")} value={lead.originDisplayName} />}
           </div>
         )}
