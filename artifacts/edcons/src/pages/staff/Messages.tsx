@@ -262,6 +262,24 @@ type InboxTabKey = "mine" | "unassigned" | "unmatched" | "all" | "open" | "unans
 const INBOX_TAB_KEYS: InboxTabKey[] = ["mine", "unassigned", "unmatched", "all", "open", "unanswered", "subscribed", "starred", "archived"];
 const PINNED_INBOX_TAB_STORAGE_KEY = "inbox.pinnedTab";
 
+const INBOX_LIST_WIDTH_STORAGE_KEY = "inbox.listWidth";
+const INBOX_LIST_MIN_WIDTH = 220;
+const INBOX_LIST_DEFAULT_WIDTH = 280;
+
+function inboxListMaxWidth(): number {
+  return Math.max(INBOX_LIST_MIN_WIDTH, Math.floor((typeof window !== "undefined" ? window.innerWidth : 1280) * 0.5));
+}
+
+function readInboxListWidth(): number {
+  try {
+    const v = Number(localStorage.getItem(INBOX_LIST_WIDTH_STORAGE_KEY));
+    if (!Number.isFinite(v) || v <= 0) return INBOX_LIST_DEFAULT_WIDTH;
+    return Math.min(inboxListMaxWidth(), Math.max(INBOX_LIST_MIN_WIDTH, Math.round(v)));
+  } catch {
+    return INBOX_LIST_DEFAULT_WIDTH;
+  }
+}
+
 function readPinnedInboxTab(): InboxTabKey | null {
   try {
     const v = localStorage.getItem(PINNED_INBOX_TAB_STORAGE_KEY);
@@ -278,6 +296,11 @@ function InboxTab() {
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<InboxTabKey>(() => readPinnedInboxTab() ?? "mine");
   const [pinnedTab, setPinnedTab] = useState<InboxTabKey | null>(() => readPinnedInboxTab());
+  const [listWidth, setListWidth] = useState<number>(() => readInboxListWidth());
+  const listResizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => {
+    if (listResizeCleanupRef.current) listResizeCleanupRef.current();
+  }, []);
   const [assignedNotice, setAssignedNotice] = useState(false);
   const [channel, setChannel] = useState<string>("all");
   const [convs, setConvs] = useState<InboxConversation[]>([]);
@@ -918,6 +941,45 @@ function InboxTab() {
     }
   }
 
+  function startListResize(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    if (listResizeCleanupRef.current) listResizeCleanupRef.current();
+    const startX = e.clientX;
+    const startW = listWidth;
+    const maxW = inboxListMaxWidth();
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (ev: PointerEvent) => {
+      const delta = isRTL ? startX - ev.clientX : ev.clientX - startX;
+      setListWidth(Math.min(maxW, Math.max(INBOX_LIST_MIN_WIDTH, startW + delta)));
+    };
+    const cleanup = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onEnd);
+      document.removeEventListener("pointercancel", onEnd);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      listResizeCleanupRef.current = null;
+    };
+    const onEnd = () => {
+      cleanup();
+      setListWidth((w) => {
+        try {
+          localStorage.setItem(INBOX_LIST_WIDTH_STORAGE_KEY, String(w));
+        } catch {
+          // localStorage unavailable — width just won't persist
+        }
+        return w;
+      });
+    };
+    listResizeCleanupRef.current = cleanup;
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onEnd);
+    document.addEventListener("pointercancel", onEnd);
+  }
+
   function togglePinnedTab(key: InboxTabKey) {
     setPinnedTab((prev) => {
       const next = prev === key ? null : key;
@@ -1099,8 +1161,11 @@ function InboxTab() {
   return (
     <>
     <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 120px)" }}>
-      <div className="grid grid-cols-1 lg:grid-cols-12 h-full grid-rows-[minmax(0,1fr)]">
-        <div className={`lg:col-span-2 h-full min-h-0 border-r border-border/50 min-w-0 overflow-hidden ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}>
+      <div className="flex h-full min-h-0">
+        <div
+          className={`h-full min-h-0 min-w-0 overflow-hidden w-full lg:w-[var(--inbox-list-w)] lg:shrink-0 ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}
+          style={{ "--inbox-list-w": `${listWidth}px` } as React.CSSProperties}
+        >
           <div className="p-3 border-b border-border/50 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
@@ -1373,7 +1438,16 @@ function InboxTab() {
           </div>
         </div>
 
-        <div className={`lg:col-span-7 flex flex-col h-full min-h-0 overflow-hidden ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          onPointerDown={startListResize}
+          className="hidden lg:flex shrink-0 w-[7px] -mx-[3px] z-10 cursor-col-resize items-stretch justify-center group touch-none"
+        >
+          <div className="w-px bg-border/50 group-hover:bg-primary/60 group-active:bg-primary transition-colors" />
+        </div>
+
+        <div className={`flex-1 min-w-0 flex flex-col h-full min-h-0 overflow-hidden ${selectedId === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
           {!selectedId ? (
             <div className="text-center text-muted-foreground">
               <InboxIcon className="w-16 h-16 mx-auto mb-3 opacity-20" />
@@ -1898,7 +1972,7 @@ function InboxTab() {
         </div>
 
         {selectedId !== null && detail && (
-          <div className="hidden lg:flex lg:col-span-3 lg:flex-col h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20">
+          <div className="hidden lg:flex lg:w-1/4 lg:shrink-0 lg:flex-col h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20">
             <LeadDetailSidebar
               detail={detail}
               conversationId={selectedId}
