@@ -43,7 +43,7 @@ async function resolvePersonIds(context: string, id: number): Promise<PersonIds 
   }
   if (context === "application") {
     const [app] = await db.select({ id: applicationsTable.id, studentId: applicationsTable.studentId })
-      .from(applicationsTable).where(eq(applicationsTable.id, id));
+      .from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
     if (!app) return null;
     const [student] = await db.select({ id: studentsTable.id, originLeadId: studentsTable.originLeadId })
       .from(studentsTable).where(and(eq(studentsTable.id, app.studentId), isNull(studentsTable.deletedAt)));

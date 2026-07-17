@@ -1,5 +1,5 @@
 import { db, followUpsTable } from "@workspace/db";
-import { and, eq, isNull, lte } from "drizzle-orm";
+import { and, eq, isNull, lte, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
 
 const CHECK_INTERVAL = 60 * 1000;
@@ -27,6 +27,15 @@ export async function checkFollowUpsDue(): Promise<void> {
           eq(followUpsTable.completed, false),
           isNull(followUpsTable.notifiedAt),
           lte(followUpsTable.scheduledAt, now),
+          // Skip follow-ups whose linked parents have ALL been soft-deleted —
+          // they must not generate notifications for records that no longer exist.
+          // Dual-linked rows (leadId + studentId) stay visible while at least one
+          // parent is alive; unattached rows (both NULL) are unaffected.
+          sql`(
+            (${followUpsTable.leadId} IS NULL AND ${followUpsTable.studentId} IS NULL)
+            OR (${followUpsTable.leadId} IS NOT NULL AND EXISTS (SELECT 1 FROM leads l WHERE l.id = ${followUpsTable.leadId} AND l.deleted_at IS NULL))
+            OR (${followUpsTable.studentId} IS NOT NULL AND EXISTS (SELECT 1 FROM students s WHERE s.id = ${followUpsTable.studentId} AND s.deleted_at IS NULL))
+          )`,
         ),
       );
 

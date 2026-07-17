@@ -43,7 +43,7 @@ function sendExcel(res: any, data: Record<string, any>[], filename: string, shee
 
 router.get("/export/leads", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const { season } = req.query as Record<string, string>;
-  const conditions: any[] = [];
+  const conditions: any[] = [isNull(leadsTable.deletedAt)];
   if (season) conditions.push(eq(leadsTable.season, season));
   const ids = parseIds(req);
   if (ids.length > 0) conditions.push(inArray(leadsTable.id, ids));

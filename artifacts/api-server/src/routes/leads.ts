@@ -1591,6 +1591,13 @@ router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES), asy
   const baseConditions = [
     eq(followUpsTable.completed, false),
     lte(followUpsTable.scheduledAt, nextWeek),
+    // Hide follow-ups whose linked parents have ALL been soft-deleted.
+    // Dual-linked rows stay visible while at least one parent is alive.
+    sql`(
+      (${followUpsTable.leadId} IS NULL AND ${followUpsTable.studentId} IS NULL)
+      OR (${followUpsTable.leadId} IS NOT NULL AND EXISTS (SELECT 1 FROM leads pl WHERE pl.id = ${followUpsTable.leadId} AND pl.deleted_at IS NULL))
+      OR (${followUpsTable.studentId} IS NOT NULL AND EXISTS (SELECT 1 FROM students ps WHERE ps.id = ${followUpsTable.studentId} AND ps.deleted_at IS NULL))
+    )`,
   ];
 
   if (isAdmin && req.query.createdById) {
