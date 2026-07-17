@@ -24,6 +24,13 @@ router.get("/healthz", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+// Deployment healthchecks probe GET /api directly. Keep this endpoint
+// DB-independent so a slow database connection at boot doesn't make the
+// platform kill an otherwise healthy instance (DB health is on /health).
+router.get("/", (_req, res) => {
+  res.json({ status: "ok", uptime: Math.floor(process.uptime()) });
+});
+
 router.get("/health", async (_req, res) => {
   let dbConnected = false;
   try {

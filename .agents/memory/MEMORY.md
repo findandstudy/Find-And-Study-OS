@@ -152,3 +152,4 @@
 - [SIT Step-2 id-less controls & date widgets](sit-step2-idless-controls.md) — Gender/Nationality/date fields have NO id, scope by form-item label; dates are custom widgets, DATEHTML-log first.
 - [Inbox match drops lead link; lead-doc adoption](inbox-match-lead-doc-adoption.md) — mandatory-doc gates read student docs only; adopt lead docs then re-check before 422.
 - [Phone validation & phone_e164 dual-write](phone-validation-e164.md) — @workspace/phone + 422 phone.invalid guard; EVERY phone write must also set phoneE164; embed /lead intentionally lenient.
+- [Deploy healthcheck & port 8080 contention](deploy-healthcheck-port8080.md) — deploy probes GET /api (keep it DB-free 200); inbox-e2e workflow spawns its own api-server on 8080, blocking dev restarts until killed.

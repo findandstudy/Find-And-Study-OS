@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const notificationsTable = pgTable("notifications", {
@@ -14,7 +14,11 @@ export const notificationsTable = pgTable("notifications", {
   readAt: timestamp("read_at", { withTimezone: true }),
   channel: text("channel").notNull().default("in_app"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  // Full index on user_id: the FK to users is ON DELETE CASCADE and the
+  // cascade needs this index, or user deletions time out on large tables.
+  index("notifications_user_id_idx").on(table.userId),
+]);
 
 export const notificationRulesTable = pgTable("notification_rules", {
   id: serial("id").primaryKey(),

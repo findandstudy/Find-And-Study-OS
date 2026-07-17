@@ -1157,6 +1157,11 @@ async function seedClaudeIntegration() {
     // up the unread-count queries used by the badge / SSE flow.
     await pool.query(`CREATE INDEX IF NOT EXISTS notifications_user_unread_idx ON notifications (user_id) WHERE is_read = false`);
 
+    // Full index on user_id — the FK to users is ON DELETE CASCADE, and
+    // without a full index the cascade does a sequential scan per deleted
+    // user, which made user deletions time out on large notification tables.
+    await pool.query(`CREATE INDEX IF NOT EXISTS notifications_user_id_idx ON notifications (user_id)`);
+
     // students.has_photo: denormalize the photo-presence check so the
     // listing query no longer needs an extra SELECT against documents.
     await pool.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS has_photo BOOLEAN NOT NULL DEFAULT FALSE`);

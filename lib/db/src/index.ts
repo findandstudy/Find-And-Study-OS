@@ -21,7 +21,7 @@ export const pool: pg.Pool = new Pool({
   max: parsePositiveInt(process.env.DB_POOL_MAX, 10),
   min: 0,
   idleTimeoutMillis: parsePositiveInt(process.env.DB_IDLE_TIMEOUT_MS, 10_000),
-  connectionTimeoutMillis: parsePositiveInt(process.env.DB_CONNECT_TIMEOUT_MS, 10_000),
+  connectionTimeoutMillis: parsePositiveInt(process.env.DB_CONNECT_TIMEOUT_MS, 20_000),
   keepAlive: true,
   keepAliveInitialDelayMillis: 10_000,
   allowExitOnIdle: false,

@@ -55,7 +55,20 @@ async function connectListenClient(): Promise<void> {
       };
       client.on("notification", handleNotification);
       client.on("error", handleError);
-      await client.query(`LISTEN ${CHANNEL}`);
+      try {
+        await client.query(`LISTEN ${CHANNEL}`);
+      } catch (err) {
+        // Release the client back to the pool if LISTEN itself fails,
+        // otherwise repeated failures would leak pool connections.
+        client.removeListener("notification", handleNotification);
+        client.removeListener("error", handleError);
+        try {
+          client.release(true);
+        } catch {
+          // ignore
+        }
+        throw err;
+      }
       listenClient = client;
       return;
     } finally {
@@ -66,7 +79,8 @@ async function connectListenClient(): Promise<void> {
 }
 
 void connectListenClient().catch((err) => {
-  console.error("[notificationBus] initial LISTEN failed", err);
+  console.error("[notificationBus] initial LISTEN failed, will retry", err);
+  scheduleReconnect();
 });
 
 export const notificationBus = {
