@@ -1461,20 +1461,16 @@ function InboxTab() {
                                   ? `/api/inbox/media/${m.id}/${i}`
                                   : rawUrl;
                                 const type = a.type ?? a.fileType ?? "file";
-                                const name = a.name ?? a.fileName ?? (a.type && a.type !== "file" ? a.type : null) ?? "file";
+                                const rawMeta = (m.metadata as any)?.raw;
+                                const waRawType = rawMeta?.type;
+                                const waMedia = waRawType ? (rawMeta[waRawType] as any) : null;
+                                const waFilename = i === 0 ? (waMedia?.filename ?? waMedia?.file_name ?? null) : null;
+                                const name = a.name ?? a.fileName ?? waFilename ?? (a.type && a.type !== "file" ? a.type : null) ?? "file";
                                 const isUnmatched = Boolean((detail as any).conversation?.unmatched);
                                 const canAdd = !out && (Boolean(detail.student) || isUnmatched);
                                 const _btnCls = "inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors";
                                 const actionRow = (
                                   <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                                    <button
-                                      type="button"
-                                      className={_btnCls}
-                                      onClick={() => setAttachPreview({ url, name, isImage: type === "image", isPdf: type === "file" && name.toLowerCase().endsWith(".pdf") })}
-                                    >
-                                      <Eye className="w-3 h-3" />
-                                      {t("inbox.addAsDoc.preview")}
-                                    </button>
                                     <a
                                       href={url}
                                       download={name}
@@ -1518,12 +1514,26 @@ function InboxTab() {
                                     {actionRow}
                                   </div>
                                 );
+                                const fileExt = name.includes(".") ? (name.split(".").pop() ?? "").toUpperCase() : "";
                                 return (
                                   <div key={i} className="space-y-1">
-                                    <a href={url} target="_blank" rel="noopener noreferrer"
-                                      className={`flex items-center gap-1.5 text-xs underline ${out ? "text-primary-foreground/80" : "text-foreground/80"}`}>
-                                      <Paperclip className="w-3 h-3 shrink-0" /> {name}
-                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => setAttachPreview({ url, name, isImage: false, isPdf: fileExt === "PDF" })}
+                                      className={`flex items-center gap-2 rounded-xl px-2.5 py-2 w-full text-left transition-colors border ${
+                                        out
+                                          ? "border-primary-foreground/25 bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground"
+                                          : "border-border bg-muted/50 hover:bg-muted text-foreground"
+                                      }`}
+                                    >
+                                      <FileText className="w-4 h-4 shrink-0 opacity-70" />
+                                      <span className="text-xs flex-1 min-w-0 truncate font-medium">{name}</span>
+                                      {fileExt && (
+                                        <span className={`text-[9px] uppercase font-bold shrink-0 px-1 py-0.5 rounded ${out ? "bg-primary-foreground/20" : "bg-muted-foreground/15"}`}>
+                                          {fileExt}
+                                        </span>
+                                      )}
+                                    </button>
                                     {actionRow}
                                   </div>
                                 );
@@ -1682,15 +1692,6 @@ function InboxTab() {
               onSummarize={handleSummarize}
               isSummarizing={summarizeMutation.isPending}
               onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
-              onCreateStudentAI={(prefill) => {
-                if (prefill) {
-                  setAddStudentPrefill({ firstName: prefill.firstName, lastName: prefill.lastName, email: prefill.email, phone: prefill.phone });
-                  setMatchOpen(false);
-                  setAddStudentOpen(true);
-                } else {
-                  openAddStudentDialog();
-                }
-              }}
             />
           </div>
         )}
@@ -1713,16 +1714,6 @@ function InboxTab() {
                 onSummarize={handleSummarize}
                 isSummarizing={summarizeMutation.isPending}
                 onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
-                onCreateStudentAI={(prefill) => {
-                  setSidebarSheetOpen(false);
-                  if (prefill) {
-                    setAddStudentPrefill({ firstName: prefill.firstName, lastName: prefill.lastName, email: prefill.email, phone: prefill.phone });
-                    setMatchOpen(false);
-                    setAddStudentOpen(true);
-                  } else {
-                    openAddStudentDialog();
-                  }
-                }}
               />
             </div>
           </SheetContent>

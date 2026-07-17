@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowRight, Building, Check, Loader2, Pencil, X,
-  Plus, UserPlus,
+  Plus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,9 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useCountrySearch } from "@/hooks/use-countries";
 import { InboxStudentTab } from "./InboxStudentTab";
+import type { SubmitReadyData } from "./InboxStudentTab";
 import { InboxApplicationTab } from "./InboxApplicationTab";
+import { InboxSubmitTab } from "./InboxSubmitTab";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -28,11 +30,10 @@ interface LeadDetailSidebarProps {
   onSummarize: () => void;
   isSummarizing: boolean;
   onUpdated?: () => void;
-  onCreateStudentAI?: (prefill?: { firstName: string; lastName: string; email: string; phone: string }) => void;
 }
 
 type LinkedType = "lead" | "student" | "agent";
-type SidebarTab = "lead" | "student" | "application";
+type SidebarTab = "lead" | "student" | "submit" | "application";
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -128,8 +129,6 @@ const EMPTY_UNM_FORM = {
   phone: "",
   email: "",
   country: "",
-  motherName: "",
-  fatherName: "",
   interestedProgram: "",
   interestedUniversity: "",
 };
@@ -143,7 +142,6 @@ export function LeadDetailSidebar({
   onSummarize,
   isSummarizing,
   onUpdated,
-  onCreateStudentAI,
 }: LeadDetailSidebarProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -154,6 +152,7 @@ export function LeadDetailSidebar({
 
   const [unmF, setUnmF] = useState(EMPTY_UNM_FORM);
   const [unmSubmitting, setUnmSubmitting] = useState(false);
+  const [submitData, setSubmitData] = useState<SubmitReadyData | null>(null);
 
   const { data: countries = [] } = useCountrySearch("");
   const countryOptions = countries.map((c) => ({ value: c.name, label: c.name }));
@@ -187,15 +186,13 @@ export function LeadDetailSidebar({
       phone: ext?.phone || "",
       email: autoEmail,
       country: "",
-      motherName: "",
-      fatherName: "",
       interestedProgram: "",
       interestedUniversity: "",
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
 
-  const TABS: SidebarTab[] = ["lead", "student", "application"];
+  const TABS: SidebarTab[] = ["lead", "student", "submit", "application"];
 
   const tabBar = (
     <div className="flex shrink-0 border-b">
@@ -231,9 +228,37 @@ export function LeadDetailSidebar({
             detail={detail}
             conversationId={conversationId}
             onUpdated={onUpdated}
+            onReadyToSubmit={(data) => {
+              setSubmitData(data);
+              setActiveTab("submit");
+            }}
           />
         ) : (
           placeholder
+        )}
+      </div>
+    );
+  }
+
+  if (activeTab === "submit") {
+    return (
+      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+        {tabBar}
+        {conversationId && submitData ? (
+          <InboxSubmitTab
+            conversationId={conversationId}
+            data={submitData}
+            onCreated={() => {
+              setSubmitData(null);
+              setActiveTab("lead");
+              onUpdated?.();
+            }}
+            onBack={() => setActiveTab("student")}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center p-8 text-center">
+            <p className="text-sm text-muted-foreground">{t("inbox.studentTab.submitEmpty")}</p>
+          </div>
         )}
       </div>
     );
@@ -301,8 +326,6 @@ export function LeadDetailSidebar({
           if (unmF.country.trim()) patch.interestedCountry = unmF.country.trim();
           if (unmF.interestedProgram.trim()) patch.interestedProgram = unmF.interestedProgram.trim();
           if (unmF.interestedUniversity.trim()) patch.interestedUniversity = unmF.interestedUniversity.trim();
-          if (unmF.motherName.trim()) patch.motherName = unmF.motherName.trim();
-          if (unmF.fatherName.trim()) patch.fatherName = unmF.fatherName.trim();
           const convAssignedToId = (detail as any).conversation?.assignedToId;
           if (convAssignedToId) patch.assignedToId = convAssignedToId;
           if (Object.keys(patch).length > 0) {
@@ -414,42 +437,10 @@ export function LeadDetailSidebar({
               />
             </div>
 
-            {/* Mother's Name */}
-            <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.motherName")}</div>
-              <input
-                className={fieldCls}
-                value={unmF.motherName}
-                onChange={(e) => setUnmF((f) => ({ ...f, motherName: e.target.value }))}
-                placeholder={t("inbox.sidebar.unlinked.motherName")}
-              />
-            </div>
-
-            {/* Father's Name */}
-            <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.fatherName")}</div>
-              <input
-                className={fieldCls}
-                value={unmF.fatherName}
-                onChange={(e) => setUnmF((f) => ({ ...f, fatherName: e.target.value }))}
-                placeholder={t("inbox.sidebar.unlinked.fatherName")}
-              />
-            </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex flex-col gap-1.5 pt-2 border-t">
-            {onOpenMatchDialog && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onOpenMatchDialog}
-                data-testid="sidebar-match-button"
-                className="w-full h-8 text-xs"
-              >
-                {t("inbox.sidebar.unlinked.matchExisting")}
-              </Button>
-            )}
+          {/* Action button */}
+          <div className="pt-2 border-t">
             <Button
               size="sm"
               onClick={() => void handleAddAsLead()}
@@ -464,25 +455,8 @@ export function LeadDetailSidebar({
               )}
               {unmSubmitting
                 ? t("inbox.sidebar.unlinked.submitting")
-                : t("inbox.sidebar.unlinked.addAsLead")}
+                : t("inbox.sidebar.unlinked.createLead")}
             </Button>
-            {onCreateStudentAI && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onCreateStudentAI({
-                  firstName: unmF.firstName,
-                  lastName: unmF.lastName,
-                  email: unmF.email,
-                  phone: unmF.phone,
-                })}
-                className="w-full h-8 text-xs gap-1"
-                data-testid="sidebar-add-student-ai-button"
-              >
-                <UserPlus className="w-3 h-3" />
-                {t("inbox.sidebar.unlinked.addStudentAI")}
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -579,18 +553,6 @@ export function LeadDetailSidebar({
             <EditableField label={t("inbox.sidebar.lastName")} value={entity.lastName} fieldKey="lastName" {...editProps} />
             <EditableField label={t("inbox.sidebar.email")} value={entity.email} fieldKey="email" type="email" {...editProps} />
             <EditableField label={t("inbox.sidebar.phone")} value={entity.phone} fieldKey="phone" {...editProps} />
-            <EditableField
-              label={t("inbox.sidebar.motherName")}
-              value={(lead ?? student)?.motherName}
-              fieldKey="motherName"
-              {...editProps}
-            />
-            <EditableField
-              label={t("inbox.sidebar.fatherName")}
-              value={(lead ?? student)?.fatherName}
-              fieldKey="fatherName"
-              {...editProps}
-            />
           </div>
         ) : (
           (entity.email || entity.phone) && (

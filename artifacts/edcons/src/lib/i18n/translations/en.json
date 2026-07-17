@@ -967,6 +967,7 @@
         "notes": "Notes",
         "matchExisting": "Match Existing",
         "addAsLead": "Add as Lead",
+        "createLead": "Create Lead",
         "addStudentAI": "Add Student (AI)",
         "submitting": "Creating...",
         "added": "Lead created",
@@ -982,6 +983,7 @@
       "tabs": {
         "lead": "Lead",
         "student": "Student",
+        "submit": "Submit",
         "application": "Application",
         "comingSoon": "Coming soon"
       }
@@ -1198,8 +1200,9 @@
       "conflictBody": "\"{type}\" slot is already staged. Replace it?",
       "keepExisting": "Keep existing",
       "replace": "Replace",
-      "analyzeBtn": "AI ile analiz et ve öğrenci oluştur",
+      "analyzeBtn": "Analyze Documents & Prefill Form",
       "noDocsToAnalyze": "Add at least one chat document first",
+      "submitEmpty": "Analyze documents first — click Analyze to prefill the student form.",
       "noDocReqs": "No document requirements for this level",
       "reviewTitle": "Review & Create Student",
       "extracting": "Analyzing documents…",
@@ -3675,11 +3678,15 @@
     "passport": "Passport",
     "diploma": "Diploma",
     "transcript": "Transcript",
+    "photograph": "Photograph",
     "photo": "Photo",
     "language_certificate": "Language Certificate",
     "cv": "CV / Resume",
     "motivation_letter": "Motivation Letter",
     "recommendation": "Recommendation Letter",
+    "diploma_certificate": "Diploma Certificate",
+    "diploma_transcript": "Diploma Transcript",
+    "other_certificates_documents": "Other Certificates / Documents",
     "other": "Other"
   },
   "account": {

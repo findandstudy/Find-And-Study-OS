@@ -2655,8 +2655,8 @@ router.post(
     const { ownerType, ownerId: ownerIdRaw, documentType, force, setAsPhoto = true } = req.body;
     const ownerId = Number(ownerIdRaw);
 
-    if (!SAVE_AS_DOC_ALLOWED_TYPES.includes(documentType as SaveAsDocType)) {
-      res.status(400).json({ error: "documentType must be one of: diploma, transcript, passport, photograph" });
+    if (!documentType || typeof documentType !== "string" || !documentType.trim()) {
+      res.status(400).json({ error: "documentType is required" });
       return;
     }
     if (ownerType !== "lead" && ownerType !== "student") {

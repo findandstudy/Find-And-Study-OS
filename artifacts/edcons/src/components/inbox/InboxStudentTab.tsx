@@ -1,18 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useCreateStudent, customFetch } from "@workspace/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
-import { isNonLatinNameError } from "@/lib/latinNameError";
 import type { InboxConversationDetailResponse } from "@workspace/api-client-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -21,11 +13,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Loader2,
-  Sparkles,
   FileText,
   GraduationCap,
   ScrollText,
@@ -34,7 +30,6 @@ import {
   CheckCircle2,
   Circle,
   Paperclip,
-  Bot,
   X as XIcon,
 } from "lucide-react";
 
@@ -42,7 +37,7 @@ const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface ChatAttachment {
+export interface ChatAttachment {
   msgId: number;
   attachIdx: number;
   url: string;
@@ -125,19 +120,13 @@ const EMPTY_STUDENT_FORM = {
   gpa: "",
 };
 
-// ── AiTag — module-level to prevent remount on each render ────────────────────
+// ── SubmitReadyData ───────────────────────────────────────────────────────────
 
-function AiTag({
-  field,
-  aiFields,
-}: {
-  field: string;
+export interface SubmitReadyData {
+  form: typeof EMPTY_STUDENT_FORM;
+  staging: Record<string, ChatAttachment>;
   aiFields: Set<string>;
-}) {
-  if (!aiFields.has(field)) return null;
-  return (
-    <Sparkles className="w-3 h-3 text-violet-500 shrink-0 inline-block ms-1" />
-  );
+  selectedLevel: string;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -146,16 +135,17 @@ interface InboxStudentTabProps {
   detail: InboxConversationDetailResponse;
   conversationId: number;
   onUpdated?: () => void;
+  onReadyToSubmit?: (data: SubmitReadyData) => void;
 }
 
 export function InboxStudentTab({
   detail,
   conversationId,
   onUpdated,
+  onReadyToSubmit,
 }: InboxStudentTabProps) {
   const { t } = useI18n();
   const { toast } = useToast();
-  const createStudent = useCreateStudent();
   const { levels, isLoading: levelsLoading } = useStudyLevels();
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -169,14 +159,8 @@ export function InboxStudentTab({
     docType: string;
     incomingAtt: ChatAttachment;
   } | null>(null);
-  // dialog: student creation flow
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createStep, setCreateStep] = useState<
-    "extracting" | "form" | "saving"
-  >("extracting");
-  const [studentForm, setStudentForm] = useState(EMPTY_STUDENT_FORM);
-  const [aiFields, setAiFields] = useState<Set<string>>(new Set());
-  const [saveSubmitting, setSaveSubmitting] = useState(false);
+  // extracting state for analyze button
+  const [extracting, setExtracting] = useState(false);
 
   // ── Default level to Bachelor when levels load ─────────────────────────────
   useEffect(() => {
@@ -273,8 +257,7 @@ export function InboxStudentTab({
       });
       return;
     }
-    setCreateStep("extracting");
-    setCreateOpen(true);
+    setExtracting(true);
 
     const extracted: Record<string, string> = {};
     const extractedFieldsSet = new Set<string>();
@@ -325,126 +308,38 @@ export function InboxStudentTab({
     const gpaMatch = gpaRaw.match(/^([\d.]+)\s*\/\s*\d+$/);
     const gpaNorm = gpaMatch ? gpaMatch[1] : gpaRaw;
 
-    setStudentForm({
-      firstName: extracted.firstName || parts[0] || "",
-      lastName: extracted.lastName || parts.slice(1).join(" ") || "",
-      email: extracted.email || String(ext?.email ?? ""),
-      phone: extracted.phone || String(ext?.phone ?? ""),
-      motherName: extracted.motherName || "",
-      fatherName: extracted.fatherName || "",
-      nationality: extracted.nationality || "",
-      dateOfBirth: extracted.dateOfBirth || "",
-      passportNumber: extracted.passportNumber || "",
-      passportExpiry: extracted.passportExpiry || "",
-      school1: extracted.highSchool || "",
-      school2: "",
-      gpa: gpaNorm,
+    setExtracting(false);
+    onReadyToSubmit?.({
+      form: {
+        firstName: extracted.firstName || parts[0] || "",
+        lastName: extracted.lastName || parts.slice(1).join(" ") || "",
+        email: extracted.email || String(ext?.email ?? ""),
+        phone: extracted.phone || String(ext?.phone ?? ""),
+        motherName: extracted.motherName || "",
+        fatherName: extracted.fatherName || "",
+        nationality: extracted.nationality || "",
+        dateOfBirth: extracted.dateOfBirth || "",
+        passportNumber: extracted.passportNumber || "",
+        passportExpiry: extracted.passportExpiry || "",
+        school1: extracted.highSchool || "",
+        school2: "",
+        gpa: gpaNorm,
+      },
+      staging,
+      aiFields: extractedFieldsSet,
+      selectedLevel,
     });
-    setAiFields(extractedFieldsSet);
-    setCreateStep("form");
-  }
-
-  async function handleCreateStudent() {
-    if (!studentForm.firstName.trim() || !studentForm.lastName.trim()) {
-      toast({
-        title: t("inbox.studentTab.fillRequired"),
-        variant: "destructive",
-      });
-      return;
-    }
-    setSaveSubmitting(true);
-    setCreateStep("saving");
-    try {
-      const phd = isDoctorate(selectedLevel);
-      const s1 = studentForm.school1.trim();
-      const s2 = studentForm.school2.trim();
-      const schoolInfo =
-        phd && s2 ? [s1, s2].filter(Boolean).join(" | ") : s1 || null;
-
-      const created = (await createStudent.mutateAsync({
-        data: {
-          firstName: studentForm.firstName.trim(),
-          lastName: studentForm.lastName.trim(),
-          email: studentForm.email.trim() || null,
-          phone: studentForm.phone.trim() || null,
-          nationality: studentForm.nationality.trim() || null,
-          dateOfBirth: studentForm.dateOfBirth.trim() || null,
-          passportNumber: studentForm.passportNumber.trim() || null,
-          passportExpiry: studentForm.passportExpiry.trim() || null,
-          motherName: studentForm.motherName.trim() || null,
-          fatherName: studentForm.fatherName.trim() || null,
-          highSchool: schoolInfo,
-          gpa: studentForm.gpa.trim() || null,
-          interestedLevel: selectedLevel || null,
-          status: "active",
-        } as any,
-      })) as any;
-      const studentId: number = created.id;
-
-      // Link conversation to the new student
-      await customFetch(
-        `/api/inbox/conversations/${conversationId}/match`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "student", entityId: studentId }),
-        }
-      );
-
-      // Save staged docs to the new student
-      let docsSaved = 0;
-      for (const [docType, att] of Object.entries(staging)) {
-        try {
-          await customFetch(
-            `/api/inbox/conversations/${conversationId}/messages/${att.msgId}/attachments/${att.attachIdx}/save-as-document`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                documentType: docType,
-                ownerType: "student",
-                ownerId: studentId,
-                setAsPhoto: docType === "photograph",
-              }),
-            }
-          );
-          docsSaved++;
-        } catch {
-          /* doc save failed — continue */
-        }
-      }
-
-      toast({
-        title: t("inbox.studentTab.created"),
-        description:
-          docsSaved > 0
-            ? t("inbox.studentTab.docsSaved", { count: String(docsSaved) })
-            : undefined,
-      });
-      setCreateOpen(false);
-      setStaging({});
-      onUpdated?.();
-    } catch (err: any) {
-      const isLatin = isNonLatinNameError(err);
-      const msg = isLatin
-        ? t("common.latinOnlyName")
-        : String(
-            err?.data?.error ?? err?.body?.error ?? err?.message ?? ""
-          );
-      toast({
-        title: t("inbox.studentTab.createFailed"),
-        description: msg || undefined,
-        variant: "destructive",
-      });
-      setCreateStep("form");
-    } finally {
-      setSaveSubmitting(false);
-    }
   }
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const isHigherLevel = isMasterOrHigher(selectedLevel);
   const isPhd = isDoctorate(selectedLevel);
+
+  const docLabel = (docType: string) => {
+    const k = `docTypes.${docType.toLowerCase()}`;
+    const v = t(k);
+    return v !== k ? v : docType;
+  };
 
   const school1Label = isHigherLevel
     ? t("inbox.studentTab.bachelorUni")
@@ -524,7 +419,7 @@ export function InboxStudentTab({
                             : "text-muted-foreground"
                         }`}
                       >
-                        {req.documentType}
+                        {docLabel(req.documentType)}
                       </span>
                       {req.mandatory && !staged && (
                         <span className="ms-1.5 text-[10px] bg-rose-100 text-rose-600 px-1 py-0.5 rounded-full">
@@ -622,12 +517,18 @@ export function InboxStudentTab({
           onClick={() => {
             void handleAnalyzeAndCreate();
           }}
-          disabled={stagedCount === 0}
+          disabled={stagedCount === 0 || extracting}
         >
-          <Bot className="w-3.5 h-3.5 shrink-0" />
-          {t("inbox.studentTab.analyzeBtn")}
+          {extracting ? (
+            <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+          ) : (
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+          )}
+          {extracting
+            ? t("inbox.studentTab.extracting")
+            : t("inbox.studentTab.analyzeBtn")}
         </Button>
-        {stagedCount === 0 && (
+        {stagedCount === 0 && !extracting && (
           <p className="text-center text-[10px] text-muted-foreground mt-1">
             {t("inbox.studentTab.noDocsToAnalyze")}
           </p>
@@ -675,7 +576,7 @@ export function InboxStudentTab({
                     >
                       <Icon className="w-5 h-5" />
                       <span className="text-xs font-medium">
-                        {req.documentType}
+                        {docLabel(req.documentType)}
                       </span>
                       {filled && (
                         <span className="text-[10px] text-emerald-600">
@@ -730,341 +631,6 @@ export function InboxStudentTab({
               {t("inbox.studentTab.replace")}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Student creation dialog ─────────────────────────────────────────── */}
-      <Dialog
-        open={createOpen}
-        onOpenChange={(open) => {
-          if (!open && createStep === "form" && !saveSubmitting)
-            setCreateOpen(false);
-        }}
-      >
-        <DialogContent
-          className="sm:max-w-lg max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden"
-          onInteractOutside={(e) => {
-            if (createStep === "extracting" || saveSubmitting)
-              e.preventDefault();
-          }}
-          onEscapeKeyDown={(e) => {
-            if (createStep === "extracting" || saveSubmitting)
-              e.preventDefault();
-          }}
-        >
-          <DialogHeader className="px-5 pt-4 pb-3 border-b shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-sm">
-              <Bot className="w-4 h-4 shrink-0" />
-              {t("inbox.studentTab.reviewTitle")}
-            </DialogTitle>
-          </DialogHeader>
-
-          {createStep === "extracting" && (
-            <div className="flex flex-col items-center justify-center py-16 gap-4 px-5">
-              <div className="relative">
-                <Loader2 className="w-9 h-9 animate-spin text-primary" />
-                <Sparkles className="w-3.5 h-3.5 text-violet-500 absolute -top-0.5 -right-0.5" />
-              </div>
-              <p className="text-sm font-medium">
-                {t("inbox.studentTab.extracting")}
-              </p>
-              <p className="text-xs text-muted-foreground text-center max-w-xs">
-                {t("inbox.studentTab.extractingDesc")}
-              </p>
-            </div>
-          )}
-
-          {(createStep === "form" || createStep === "saving") && (
-            <>
-              <div className="overflow-y-auto flex-1 px-5 py-4 space-y-3">
-                {aiFields.size > 0 && (
-                  <div className="flex items-center gap-1.5 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-md px-3 py-2">
-                    <Sparkles className="w-3 h-3 shrink-0" />
-                    {t("inbox.studentTab.aiExtracted", {
-                      count: String(aiFields.size),
-                    })}
-                  </div>
-                )}
-
-                {/* Basic info */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.firstName")}
-                      <span className="text-destructive ms-0.5">*</span>
-                      <AiTag field="firstName" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      value={studentForm.firstName}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          firstName: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.lastName")}
-                      <span className="text-destructive ms-0.5">*</span>
-                      <AiTag field="lastName" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      value={studentForm.lastName}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          lastName: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.email")}
-                      <AiTag field="email" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      type="email"
-                      value={studentForm.email}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          email: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.phone")}
-                      <AiTag field="phone" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      value={studentForm.phone}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          phone: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.motherName")}
-                      <AiTag field="motherName" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      value={studentForm.motherName}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          motherName: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.fatherName")}
-                      <AiTag field="fatherName" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      value={studentForm.fatherName}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          fatherName: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.nationality")}
-                      <AiTag field="nationality" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      value={studentForm.nationality}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          nationality: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.dateOfBirth")}
-                      <AiTag field="dateOfBirth" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      type="date"
-                      value={studentForm.dateOfBirth}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          dateOfBirth: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Passport */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.passportNumber")}
-                      <AiTag field="passportNumber" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      value={studentForm.passportNumber}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          passportNumber: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs flex items-center">
-                      {t("apply.passportExpiryDate")}
-                      <AiTag field="passportExpiry" aiFields={aiFields} />
-                    </Label>
-                    <Input
-                      className="h-7 text-sm"
-                      type="date"
-                      value={studentForm.passportExpiry}
-                      onChange={(e) =>
-                        setStudentForm((f) => ({
-                          ...f,
-                          passportExpiry: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* School info — level-aware */}
-                <div className="space-y-2">
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                    {t("inbox.studentTab.schoolInfo")}
-                  </div>
-                  <div
-                    className={`grid gap-2 ${
-                      isPhd ? "grid-cols-1" : "grid-cols-2"
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      <Label className="text-xs flex items-center">
-                        {school1Label}
-                        <AiTag field="highSchool" aiFields={aiFields} />
-                      </Label>
-                      <Input
-                        className="h-7 text-sm"
-                        placeholder={school1Placeholder}
-                        value={studentForm.school1}
-                        onChange={(e) =>
-                          setStudentForm((f) => ({
-                            ...f,
-                            school1: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    {isPhd && (
-                      <div className="space-y-1">
-                        <Label className="text-xs">
-                          {t("inbox.studentTab.masterUni")}
-                        </Label>
-                        <Input
-                          className="h-7 text-sm"
-                          placeholder={t(
-                            "inbox.studentTab.masterUniPlaceholder"
-                          )}
-                          value={studentForm.school2}
-                          onChange={(e) =>
-                            setStudentForm((f) => ({
-                              ...f,
-                              school2: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                    )}
-                    <div className="space-y-1">
-                      <Label className="text-xs flex items-center">
-                        {t("apply.gpa")}
-                        <AiTag field="gpa" aiFields={aiFields} />
-                      </Label>
-                      <Input
-                        className="h-7 text-sm"
-                        value={studentForm.gpa}
-                        onChange={(e) =>
-                          setStudentForm((f) => ({
-                            ...f,
-                            gpa: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <DialogFooter className="px-5 py-3 border-t shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreateOpen(false)}
-                  disabled={saveSubmitting}
-                >
-                  {t("inbox.studentTab.cancel")}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    void handleCreateStudent();
-                  }}
-                  disabled={
-                    saveSubmitting ||
-                    !studentForm.firstName.trim() ||
-                    !studentForm.lastName.trim()
-                  }
-                >
-                  {saveSubmitting && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin me-1.5" />
-                  )}
-                  {saveSubmitting
-                    ? t("inbox.studentTab.creating")
-                    : t("inbox.studentTab.createBtn")}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
         </DialogContent>
       </Dialog>
     </div>
