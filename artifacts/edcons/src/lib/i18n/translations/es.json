@@ -967,6 +967,7 @@
         "notes": "Notas",
         "matchExisting": "Emparejar con existente",
         "addAsLead": "Agregar como prospecto",
+        "createLead": "Crear Lead",
         "addStudentAI": "Agregar estudiante (IA)",
         "submitting": "Creando...",
         "added": "Prospecto creado",
@@ -982,6 +983,7 @@
       "tabs": {
         "lead": "Lead",
         "student": "Estudiante",
+        "submit": "Enviar",
         "application": "Solicitud",
         "comingSoon": "Próximamente"
       }
@@ -1200,6 +1202,7 @@
       "replace": "Reemplazar",
       "analyzeBtn": "Analizar con IA y crear estudiante",
       "noDocsToAnalyze": "Agregue al menos un documento del chat primero",
+      "submitEmpty": "Analice primero los documentos — haga clic en Analizar para completar el formulario.",
       "noDocReqs": "No hay requisitos de documentos para este nivel",
       "reviewTitle": "Revisar y crear estudiante",
       "extracting": "Analizando documentos…",
@@ -3176,7 +3179,11 @@
     "cv": "CV",
     "motivation_letter": "Carta de motivación",
     "recommendation": "Carta de recomendación",
-    "other": "Otro"
+    "other": "Otro",
+    "photograph": "Fotografía",
+    "diploma_certificate": "Certificado de Diploma",
+    "diploma_transcript": "Expediente Académico",
+    "other_certificates_documents": "Otros certificados / documentos"
   },
   "account": {
     "profileTab": "Perfil",

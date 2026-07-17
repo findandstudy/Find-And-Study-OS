@@ -967,6 +967,7 @@
         "notes": "یادداشت‌ها",
         "matchExisting": "تطبیق با موجود",
         "addAsLead": "افزودن به عنوان سرنخ",
+        "createLead": "ایجاد لید",
         "addStudentAI": "افزودن دانش‌آموز (هوش مصنوعی)",
         "submitting": "در حال ایجاد...",
         "added": "سرنخ ایجاد شد",
@@ -982,6 +983,7 @@
       "tabs": {
         "lead": "لید",
         "student": "دانشجو",
+        "submit": "ارسال",
         "application": "درخواست",
         "comingSoon": "به زودی"
       }
@@ -1200,6 +1202,7 @@
       "replace": "جایگزینی",
       "analyzeBtn": "تحلیل با هوش مصنوعی و ایجاد دانشجو",
       "noDocsToAnalyze": "ابتدا حداقل یک سند چت اضافه کنید",
+      "submitEmpty": "ابتدا اسناد را تجزیه کنید — برای پیش‌پر کردن فرم روی تجزیه کلیک کنید.",
       "noDocReqs": "نیازمندی سند برای این مقطع تعریف نشده",
       "reviewTitle": "بررسی و ایجاد دانشجو",
       "extracting": "در حال تحلیل اسناد…",
@@ -3176,7 +3179,11 @@
     "cv": "رزومه",
     "motivation_letter": "انگیزه‌نامه",
     "recommendation": "توصیه‌نامه",
-    "other": "سایر"
+    "other": "سایر",
+    "photograph": "عکس",
+    "diploma_certificate": "گواهی دیپلم",
+    "diploma_transcript": "ریزنمرات",
+    "other_certificates_documents": "سایر گواهی‌ها / مدارک"
   },
   "account": {
     "profileTab": "پروفایل",

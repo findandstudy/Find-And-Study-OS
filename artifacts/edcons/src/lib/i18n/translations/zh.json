@@ -967,6 +967,7 @@
         "notes": "备注",
         "matchExisting": "匹配现有记录",
         "addAsLead": "添加为潜在客户",
+        "createLead": "创建线索",
         "addStudentAI": "添加学生（AI）",
         "submitting": "创建中...",
         "added": "潜在客户已创建",
@@ -982,6 +983,7 @@
       "tabs": {
         "lead": "潜在客户",
         "student": "学生",
+        "submit": "提交",
         "application": "申请",
         "comingSoon": "即将推出"
       }
@@ -1200,6 +1202,7 @@
       "replace": "替换",
       "analyzeBtn": "AI分析并创建学生",
       "noDocsToAnalyze": "请先添加至少一个聊天文件",
+      "submitEmpty": "请先分析文档 — 点击「分析」以预填学生表单。",
       "noDocReqs": "该层次未配置文件要求",
       "reviewTitle": "审核并创建学生",
       "extracting": "正在分析文件…",
@@ -3176,7 +3179,11 @@
     "cv": "简历",
     "motivation_letter": "动机信",
     "recommendation": "推荐信",
-    "other": "其他"
+    "other": "其他",
+    "photograph": "照片",
+    "diploma_certificate": "毕业证书",
+    "diploma_transcript": "成绩单",
+    "other_certificates_documents": "其他证书 / 文件"
   },
   "account": {
     "profileTab": "个人资料",

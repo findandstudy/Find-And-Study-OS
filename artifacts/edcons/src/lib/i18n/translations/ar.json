@@ -967,6 +967,7 @@
         "notes": "ملاحظات",
         "matchExisting": "مطابقة موجود",
         "addAsLead": "إضافة كعميل محتمل",
+        "createLead": "إنشاء عميل محتمل",
         "addStudentAI": "إضافة طالب (ذكاء اصطناعي)",
         "submitting": "جارٍ الإنشاء...",
         "added": "تم إنشاء العميل المحتمل",
@@ -982,6 +983,7 @@
       "tabs": {
         "lead": "بطاقة",
         "student": "طالب",
+        "submit": "إرسال",
         "application": "طلب",
         "comingSoon": "قريبًا"
       }
@@ -1200,6 +1202,7 @@
       "replace": "استبدال",
       "analyzeBtn": "تحليل وإنشاء طالب بالذكاء الاصطناعي",
       "noDocsToAnalyze": "أضف مستندًا واحدًا على الأقل أولاً",
+      "submitEmpty": "حلل المستندات أولاً — انقر على تحليل لملء نموذج الطالب.",
       "noDocReqs": "لا توجد متطلبات مستندات لهذا المستوى",
       "reviewTitle": "مراجعة وإنشاء الطالب",
       "extracting": "جاري تحليل المستندات…",
@@ -3227,7 +3230,11 @@
     "cv": "السيرة الذاتية",
     "motivation_letter": "خطاب الدافع",
     "recommendation": "خطاب التوصية",
-    "other": "أخرى"
+    "other": "أخرى",
+    "photograph": "صورة شخصية",
+    "diploma_certificate": "شهادة الدبلوم",
+    "diploma_transcript": "كشف الدرجات",
+    "other_certificates_documents": "شهادات / وثائق أخرى"
   },
   "account": {
     "profileTab": "الملف الشخصي",

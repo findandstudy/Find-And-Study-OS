@@ -967,6 +967,7 @@
         "notes": "Catatan",
         "matchExisting": "Cocokkan yang Ada",
         "addAsLead": "Tambahkan sebagai Prospek",
+        "createLead": "Buat Lead",
         "addStudentAI": "Tambahkan Siswa (AI)",
         "submitting": "Membuat...",
         "added": "Prospek dibuat",
@@ -982,6 +983,7 @@
       "tabs": {
         "lead": "Lead",
         "student": "Siswa",
+        "submit": "Kirim",
         "application": "Lamaran",
         "comingSoon": "Segera hadir"
       }
@@ -1200,6 +1202,7 @@
       "replace": "Ganti",
       "analyzeBtn": "Analisis dengan AI dan buat mahasiswa",
       "noDocsToAnalyze": "Tambahkan setidaknya satu dokumen obrolan terlebih dahulu",
+      "submitEmpty": "Analisis dokumen terlebih dahulu — klik Analisis untuk mengisi formulir siswa.",
       "noDocReqs": "Tidak ada persyaratan dokumen untuk jenjang ini",
       "reviewTitle": "Tinjau dan Buat Mahasiswa",
       "extracting": "Menganalisis dokumen…",
@@ -3176,7 +3179,11 @@
     "cv": "CV",
     "motivation_letter": "Surat motivasi",
     "recommendation": "Surat rekomendasi",
-    "other": "Lainnya"
+    "other": "Lainnya",
+    "photograph": "Foto",
+    "diploma_certificate": "Sertifikat Diploma",
+    "diploma_transcript": "Transkrip Diploma",
+    "other_certificates_documents": "Sertifikat / Dokumen Lainnya"
   },
   "account": {
     "profileTab": "Profil",

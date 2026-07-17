@@ -967,6 +967,7 @@
         "notes": "नोट्स",
         "matchExisting": "मौजूदा से मिलाएँ",
         "addAsLead": "लीड के रूप में जोड़ें",
+        "createLead": "लीड बनाएं",
         "addStudentAI": "छात्र जोड़ें (AI)",
         "submitting": "बनाया जा रहा है...",
         "added": "लीड बनाई गई",
@@ -982,6 +983,7 @@
       "tabs": {
         "lead": "लीड",
         "student": "छात्र",
+        "submit": "सबमिट",
         "application": "आवेदन",
         "comingSoon": "जल्द आ रहा है"
       }
@@ -1200,6 +1202,7 @@
       "replace": "बदलें",
       "analyzeBtn": "AI से विश्लेषण करें और छात्र बनाएं",
       "noDocsToAnalyze": "पहले कम से कम एक चैट दस्तावेज़ जोड़ें",
+      "submitEmpty": "पहले दस्तावेज़ विश्लेषण करें — छात्र फ़ॉर्म भरने के लिए विश्लेषण पर क्लिक करें।",
       "noDocReqs": "इस स्तर के लिए कोई दस्तावेज़ आवश्यकता नहीं",
       "reviewTitle": "समीक्षा करें और छात्र बनाएं",
       "extracting": "दस्तावेज़ों का विश्लेषण हो रहा है…",
@@ -3176,7 +3179,11 @@
     "cv": "बायोडाटा",
     "motivation_letter": "उद्देश्य पत्र",
     "recommendation": "अनुशंसा पत्र",
-    "other": "अन्य"
+    "other": "अन्य",
+    "photograph": "फ़ोटो",
+    "diploma_certificate": "डिप्लोमा प्रमाणपत्र",
+    "diploma_transcript": "डिप्लोमा ट्रांसक्रिप्ट",
+    "other_certificates_documents": "अन्य प्रमाणपत्र / दस्तावेज़"
   },
   "account": {
     "profileTab": "प्रोफ़ाइल",

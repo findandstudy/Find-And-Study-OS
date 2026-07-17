@@ -967,6 +967,7 @@
         "notes": "Notlar",
         "matchExisting": "Mevcut ile Eşleştir",
         "addAsLead": "Lead Ekle",
+        "createLead": "Lead Oluştur",
         "addStudentAI": "Öğrenci Ekle (AI)",
         "submitting": "Oluşturuluyor...",
         "added": "Lead oluşturuldu",
@@ -982,6 +983,7 @@
       "tabs": {
         "lead": "Lead",
         "student": "Öğrenci",
+        "submit": "Gönder",
         "application": "Başvuru",
         "comingSoon": "Yakında"
       }
@@ -1200,6 +1202,7 @@
       "replace": "Değiştir",
       "analyzeBtn": "AI ile analiz et ve öğrenci oluştur",
       "noDocsToAnalyze": "Önce en az bir sohbet belgesi ekleyin",
+      "submitEmpty": "Önce belgeleri analiz edin — öğrenci formunu doldurmak için Analiz butonuna tıklayın.",
       "noDocReqs": "Bu seviye için belge gereksinimi tanımlanmamış",
       "reviewTitle": "İncele ve Öğrenci Oluştur",
       "extracting": "Belgeler analiz ediliyor…",
@@ -3621,7 +3624,11 @@
     "cv": "CV / Özgeçmiş",
     "motivation_letter": "Motivasyon Mektubu",
     "recommendation": "Tavsiye Mektubu",
-    "other": "Diğer"
+    "other": "Diğer",
+    "photograph": "Fotoğraf",
+    "diploma_certificate": "Diploma Belgesi",
+    "diploma_transcript": "Diploma Transkripti",
+    "other_certificates_documents": "Diğer Sertifikalar / Belgeler"
   },
   "account": {
     "profileTab": "Profil",
