@@ -153,6 +153,12 @@ interface InboxConversation {
 // safety margin before alerting staff.
 const STALE_AFTER_MS = 60_000;
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function formatLastUpdate(lastEventAt: number | null, now: number): string {
   if (!lastEventAt) return "no updates received yet";
   const diffMs = Math.max(0, now - lastEventAt);
@@ -1467,7 +1473,7 @@ function InboxTab() {
                                 const waFilename = i === 0 ? (waMedia?.filename ?? waMedia?.file_name ?? null) : null;
                                 const name = a.name ?? a.fileName ?? waFilename ?? (a.type && a.type !== "file" ? a.type : null) ?? "file";
                                 const isUnmatched = Boolean((detail as any).conversation?.unmatched);
-                                const canAdd = !out && (Boolean(detail.student) || isUnmatched);
+                                const canAdd = !out && (Boolean(detail.student) || Boolean(detail.lead) || isUnmatched);
                                 const _btnCls = "inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors";
                                 const actionRow = (
                                   <div className="flex items-center gap-1 flex-wrap mt-0.5">
@@ -1515,24 +1521,30 @@ function InboxTab() {
                                   </div>
                                 );
                                 const fileExt = name.includes(".") ? (name.split(".").pop() ?? "").toUpperCase() : "";
+                                const fileSizeStr = a.fileSize ? formatBytes(a.fileSize) : null;
+                                const metaParts = [fileExt, fileSizeStr].filter(Boolean);
                                 return (
                                   <div key={i} className="space-y-1">
                                     <button
                                       type="button"
                                       onClick={() => setAttachPreview({ url, name, isImage: false, isPdf: fileExt === "PDF" })}
-                                      className={`flex items-center gap-2 rounded-xl px-2.5 py-2 w-full text-left transition-colors border ${
+                                      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 w-full text-left transition-colors border min-w-[180px] ${
                                         out
                                           ? "border-primary-foreground/25 bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground"
                                           : "border-border bg-muted/50 hover:bg-muted text-foreground"
                                       }`}
                                     >
-                                      <FileText className="w-4 h-4 shrink-0 opacity-70" />
-                                      <span className="text-xs flex-1 min-w-0 truncate font-medium">{name}</span>
-                                      {fileExt && (
-                                        <span className={`text-[9px] uppercase font-bold shrink-0 px-1 py-0.5 rounded ${out ? "bg-primary-foreground/20" : "bg-muted-foreground/15"}`}>
-                                          {fileExt}
-                                        </span>
-                                      )}
+                                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${out ? "bg-primary-foreground/15" : "bg-muted"}`}>
+                                        <FileText className="w-5 h-5 opacity-70" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium truncate">{name}</p>
+                                        {metaParts.length > 0 && (
+                                          <p className={`text-[10px] mt-0.5 ${out ? "opacity-60" : "text-muted-foreground"}`}>
+                                            {metaParts.join(" · ")}
+                                          </p>
+                                        )}
+                                      </div>
                                     </button>
                                     {actionRow}
                                   </div>
@@ -1875,9 +1887,21 @@ function InboxTab() {
         <AssignDocumentFromMessageModal
           convId={selectedId}
           target={addDocTarget}
-          student={detail.student}
+          ownerType="student"
+          owner={detail.student}
           onClose={() => setAddDocTarget(null)}
           onSaved={() => { /* doc saved to student — no additional refresh needed */ }}
+        />
+      )}
+
+      {addDocTarget && detail?.lead && !detail?.student && selectedId && (
+        <AssignDocumentFromMessageModal
+          convId={selectedId}
+          target={addDocTarget}
+          ownerType="lead"
+          owner={{ id: detail.lead.id, interestedLevel: null }}
+          onClose={() => setAddDocTarget(null)}
+          onSaved={() => {}}
         />
       )}
 

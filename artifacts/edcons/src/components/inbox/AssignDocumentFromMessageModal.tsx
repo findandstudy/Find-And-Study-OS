@@ -7,6 +7,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
   FileText,
@@ -20,6 +27,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { customFetch } from "@workspace/api-client-react";
+import { useStudyLevels } from "@/hooks/useStudyLevels";
 import type { AddDocTarget } from "./AddAsDocumentModal";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -44,7 +52,8 @@ function getDocIcon(key: string): typeof FileText {
 interface AssignDocumentFromMessageModalProps {
   convId: number;
   target: AddDocTarget;
-  student: { id: number; interestedLevel?: string | null };
+  ownerType?: "lead" | "student";
+  owner: { id: number; interestedLevel?: string | null };
   onClose: () => void;
   onSaved: () => void;
 }
@@ -52,7 +61,8 @@ interface AssignDocumentFromMessageModalProps {
 export function AssignDocumentFromMessageModal({
   convId,
   target,
-  student,
+  ownerType = "student",
+  owner,
   onClose,
   onSaved,
 }: AssignDocumentFromMessageModalProps) {
@@ -60,8 +70,11 @@ export function AssignDocumentFromMessageModal({
   const { toast } = useToast();
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [localLevel, setLocalLevel] = useState<string>("");
 
-  const level = student.interestedLevel ?? "";
+  const { levels } = useStudyLevels({ onlyEnabled: true });
+
+  const level = owner.interestedLevel ?? localLevel;
 
   const { data: docReqs = [], isLoading } = useQuery<DocReq[]>({
     queryKey: ["degree-doc-reqs-assign-msg", level],
@@ -85,8 +98,8 @@ export function AssignDocumentFromMessageModal({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ownerType: "student",
-            ownerId: student.id,
+            ownerType,
+            ownerId: owner.id,
             documentType: docType,
             setAsPhoto: docType === "photograph",
           }),
@@ -106,28 +119,6 @@ export function AssignDocumentFromMessageModal({
     }
   }
 
-  if (!level) {
-    return (
-      <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">
-              {t("inbox.studentTab.selectDocType")}
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground py-2">
-            {t("inbox.studentTab.selectLevelFirst")}
-          </p>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={onClose}>
-              {t("inbox.studentTab.cancel")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
     <Dialog open onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
       <DialogContent className="max-w-sm">
@@ -144,52 +135,74 @@ export function AssignDocumentFromMessageModal({
             </p>
           )}
 
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>…</span>
+          {!level && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">
+                {t("inbox.studentTab.selectLevelFirst")}
+              </p>
+              <Select value={localLevel} onValueChange={setLocalLevel}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder={t("inbox.studentTab.selectLevel")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {levels.map((l) => (
+                    <SelectItem key={l.key} value={l.key} className="text-xs">
+                      {l.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          ) : sortedReqs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("inbox.studentTab.noDocReqs")}
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {sortedReqs.map((req) => {
-                const Icon = getDocIcon(req.documentType);
-                const isSaved = saved.has(req.documentType);
-                const isSaving = saving === req.documentType;
-                return (
-                  <button
-                    key={req.documentType}
-                    type="button"
-                    onClick={() => void handlePick(req.documentType)}
-                    disabled={!!saving}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center cursor-pointer transition-colors disabled:opacity-60 ${
-                      isSaved
-                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                        : "border-border hover:border-primary hover:bg-primary/5"
-                    }`}
-                  >
-                    {isSaving ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : isSaved ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    ) : (
-                      <Icon className="w-5 h-5" />
-                    )}
-                    <span className="text-xs font-medium leading-tight">
-                      {req.documentType}
-                    </span>
-                    {isSaved && (
-                      <span className="text-[10px] text-emerald-600">
-                        {t("inbox.studentTab.filled")}
+          )}
+
+          {level && (
+            isLoading ? (
+              <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>…</span>
+              </div>
+            ) : sortedReqs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t("inbox.studentTab.noDocReqs")}
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {sortedReqs.map((req) => {
+                  const Icon = getDocIcon(req.documentType);
+                  const isSaved = saved.has(req.documentType);
+                  const isSaving = saving === req.documentType;
+                  return (
+                    <button
+                      key={req.documentType}
+                      type="button"
+                      onClick={() => void handlePick(req.documentType)}
+                      disabled={!!saving}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center cursor-pointer transition-colors disabled:opacity-60 ${
+                        isSaved
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                          : "border-border hover:border-primary hover:bg-primary/5"
+                      }`}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : isSaved ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                      ) : (
+                        <Icon className="w-5 h-5" />
+                      )}
+                      <span className="text-xs font-medium leading-tight">
+                        {req.documentType}
                       </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                      {isSaved && (
+                        <span className="text-[10px] text-emerald-600">
+                          {t("inbox.studentTab.filled")}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
 
