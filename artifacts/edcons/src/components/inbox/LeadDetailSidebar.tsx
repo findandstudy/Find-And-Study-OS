@@ -33,7 +33,7 @@ interface LeadDetailSidebarProps {
 }
 
 type LinkedType = "lead" | "student" | "agent";
-type SidebarTab = "lead" | "student" | "submit" | "application";
+type SidebarTab = "lead" | "documents" | "student" | "application";
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -192,7 +192,7 @@ export function LeadDetailSidebar({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
 
-  const TABS: SidebarTab[] = ["lead", "student", "submit", "application"];
+  const TABS: SidebarTab[] = ["lead", "documents", "student", "application"];
 
   const tabBar = (
     <div className="flex shrink-0 border-b">
@@ -219,7 +219,7 @@ export function LeadDetailSidebar({
     </div>
   );
 
-  if (activeTab === "student") {
+  if (activeTab === "documents") {
     return (
       <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
         {tabBar}
@@ -230,7 +230,7 @@ export function LeadDetailSidebar({
             onUpdated={onUpdated}
             onReadyToSubmit={(data) => {
               setSubmitData(data);
-              setActiveTab("submit");
+              setActiveTab("student");
             }}
           />
         ) : (
@@ -240,7 +240,7 @@ export function LeadDetailSidebar({
     );
   }
 
-  if (activeTab === "submit") {
+  if (activeTab === "student") {
     return (
       <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
         {tabBar}
@@ -253,7 +253,7 @@ export function LeadDetailSidebar({
               setActiveTab("lead");
               onUpdated?.();
             }}
-            onBack={() => setActiveTab("student")}
+            onBack={() => setActiveTab("documents")}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-8 text-center">

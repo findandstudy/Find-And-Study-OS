@@ -5,7 +5,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Sparkles, ArrowLeft } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Sparkles } from "lucide-react";
 import type { SubmitReadyData } from "./InboxStudentTab";
 
 interface InboxSubmitTabProps {
@@ -15,10 +16,24 @@ interface InboxSubmitTabProps {
   onBack: () => void;
 }
 
+const GRADING_SYSTEMS = [
+  { value: "4", label: "/ 4" },
+  { value: "5", label: "/ 5" },
+  { value: "10", label: "/ 10" },
+  { value: "20", label: "/ 20" },
+  { value: "100", label: "/ 100" },
+];
+
 function AiTag({ field, aiFields }: { field: string; aiFields: Set<string> }) {
   if (!aiFields.has(field)) return null;
+  return <Sparkles className="w-3 h-3 text-violet-500 shrink-0 inline-block ms-1" />;
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <Sparkles className="w-3 h-3 text-violet-500 shrink-0 inline-block ms-1" />
+    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest pt-2 pb-0.5 border-b mb-1">
+      {children}
+    </div>
   );
 }
 
@@ -26,7 +41,6 @@ export function InboxSubmitTab({
   conversationId,
   data,
   onCreated,
-  onBack,
 }: InboxSubmitTabProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -34,29 +48,28 @@ export function InboxSubmitTab({
   const [form, setForm] = useState(data.form);
   const [saving, setSaving] = useState(false);
 
-  const isPhd =
-    data.selectedLevel.toLowerCase().includes("phd") ||
-    data.selectedLevel.toLowerCase().includes("doctor");
-  const isHigher =
-    data.selectedLevel.toLowerCase().includes("master") ||
-    data.selectedLevel.toLowerCase().includes("phd") ||
-    data.selectedLevel.toLowerCase().includes("doctor") ||
-    data.selectedLevel.toLowerCase().includes("mba");
+  const level = data.selectedLevel.toLowerCase();
+  const isMaster = level.includes("master") || level.includes("mba");
+  const isPhd = level.includes("phd") || level.includes("doctor");
+  const isHigher = isMaster || isPhd;
+
+  function field(key: keyof typeof form) {
+    return (val: string) => setForm((f) => ({ ...f, [key]: val }));
+  }
 
   async function handleCreate() {
     if (!form.firstName.trim() || !form.lastName.trim()) {
-      toast({
-        title: t("inbox.studentTab.fillRequired"),
-        variant: "destructive",
-      });
+      toast({ title: t("inbox.studentTab.fillRequired"), variant: "destructive" });
       return;
     }
     setSaving(true);
     try {
       const s1 = form.school1.trim();
       const s2 = form.school2.trim();
-      const schoolInfo =
-        isPhd && s2 ? [s1, s2].filter(Boolean).join(" | ") : s1 || null;
+      const schoolInfo = isPhd && s2 ? [s1, s2].filter(Boolean).join(" | ") : s1 || null;
+      const gpaStr = form.gpa.trim()
+        ? `${form.gpa.trim()} / ${form.gradingSystem}`
+        : null;
 
       const created = (await createStudent.mutateAsync({
         data: {
@@ -64,28 +77,33 @@ export function InboxSubmitTab({
           lastName: form.lastName.trim(),
           email: form.email.trim() || null,
           phone: form.phone.trim() || null,
+          gender: form.gender || null,
           nationality: form.nationality.trim() || null,
           dateOfBirth: form.dateOfBirth.trim() || null,
-          passportNumber: form.passportNumber.trim() || null,
-          passportExpiry: form.passportExpiry.trim() || null,
+          address: form.address.trim() || null,
           motherName: form.motherName.trim() || null,
           fatherName: form.fatherName.trim() || null,
+          passportNumber: form.passportNumber.trim() || null,
+          passportIssueDate: form.passportIssueDate.trim() || null,
+          passportExpiry: form.passportExpiry.trim() || null,
           highSchool: schoolInfo,
-          gpa: form.gpa.trim() || null,
+          graduationYear: form.graduationYear.trim()
+            ? parseInt(form.graduationYear.trim(), 10)
+            : null,
+          gpa: gpaStr,
+          languageScore: form.languageScore.trim() || null,
+          notes: form.notes.trim() || null,
           interestedLevel: data.selectedLevel || null,
           status: "active",
         } as any,
       })) as any;
       const studentId: number = created.id;
 
-      await customFetch(
-        `/api/inbox/conversations/${conversationId}/match`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "student", entityId: studentId }),
-        }
-      );
+      await customFetch(`/api/inbox/conversations/${conversationId}/match`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "student", entityId: studentId }),
+      });
 
       let docsSaved = 0;
       for (const [docType, att] of Object.entries(data.staging)) {
@@ -95,25 +113,17 @@ export function InboxSubmitTab({
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                ownerType: "student",
-                ownerId: studentId,
-                documentType: docType,
-              }),
+              body: JSON.stringify({ ownerType: "student", ownerId: studentId, documentType: docType }),
             }
           );
           docsSaved++;
-        } catch {
-        }
+        } catch { }
       }
 
       toast({
-        title:
-          docsSaved > 0
-            ? t("inbox.studentTab.studentCreatedWithDocs", {
-                count: String(docsSaved),
-              })
-            : t("inbox.studentTab.studentCreated"),
+        title: docsSaved > 0
+          ? t("inbox.studentTab.studentCreatedWithDocs", { count: String(docsSaved) })
+          : t("inbox.studentTab.studentCreated"),
       });
       onCreated();
     } catch (err: any) {
@@ -130,60 +140,34 @@ export function InboxSubmitTab({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b shrink-0">
-        <button
-          type="button"
-          onClick={onBack}
-          className="p-0.5 rounded hover:bg-muted transition-colors"
-          aria-label="Back"
-        >
-          <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-        </button>
-        <span className="text-sm font-semibold">
-          {t("inbox.studentTab.reviewTitle")}
-        </span>
-      </div>
-
       {/* Form */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         {data.aiFields.size > 0 && (
           <div className="flex items-center gap-1.5 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-md px-3 py-2">
             <Sparkles className="w-3 h-3 shrink-0" />
-            {t("inbox.studentTab.aiExtracted", {
-              count: String(data.aiFields.size),
-            })}
+            {t("inbox.studentTab.aiExtracted", { count: String(data.aiFields.size) })}
           </div>
         )}
+
+        {/* ── Personal ───────────────────────────────────────────── */}
+        <SectionLabel>{t("inbox.studentTab.sectionPersonal")}</SectionLabel>
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Label className="text-xs flex items-center">
-              {t("apply.firstName")}
-              <span className="text-destructive ms-0.5">*</span>
+              {t("apply.firstName")}<span className="text-destructive ms-0.5">*</span>
               <AiTag field="firstName" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              value={form.firstName}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, firstName: e.target.value }))
-              }
-            />
+            <Input className="h-7 text-sm" value={form.firstName}
+              onChange={(e) => field("firstName")(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs flex items-center">
-              {t("apply.lastName")}
-              <span className="text-destructive ms-0.5">*</span>
+              {t("apply.lastName")}<span className="text-destructive ms-0.5">*</span>
               <AiTag field="lastName" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              value={form.lastName}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, lastName: e.target.value }))
-              }
-            />
+            <Input className="h-7 text-sm" value={form.lastName}
+              onChange={(e) => field("lastName")(e.target.value)} />
           </div>
         </div>
 
@@ -193,56 +177,42 @@ export function InboxSubmitTab({
               {t("apply.email")}
               <AiTag field="email" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              type="email"
-              value={form.email}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, email: e.target.value }))
-              }
-            />
+            <Input className="h-7 text-sm" type="email" value={form.email}
+              onChange={(e) => field("email")(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs flex items-center">
               {t("apply.phone")}
               <AiTag field="phone" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              value={form.phone}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, phone: e.target.value }))
-              }
-            />
+            <Input className="h-7 text-sm" value={form.phone}
+              onChange={(e) => field("phone")(e.target.value)} />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Label className="text-xs flex items-center">
-              {t("apply.motherName")}
-              <AiTag field="motherName" aiFields={data.aiFields} />
+              {t("apply.gender")}
+              <AiTag field="gender" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              value={form.motherName}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, motherName: e.target.value }))
-              }
-            />
+            <select
+              className="w-full h-7 text-sm rounded-md border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+              value={form.gender}
+              onChange={(e) => field("gender")(e.target.value)}
+            >
+              <option value="">{t("apply.selectGender")}</option>
+              <option value="male">{t("apply.genderMale")}</option>
+              <option value="female">{t("apply.genderFemale")}</option>
+            </select>
           </div>
           <div className="space-y-1">
             <Label className="text-xs flex items-center">
-              {t("apply.fatherName")}
-              <AiTag field="fatherName" aiFields={data.aiFields} />
+              {t("apply.dateOfBirth")}
+              <AiTag field="dateOfBirth" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              value={form.fatherName}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, fatherName: e.target.value }))
-              }
-            />
+            <Input className="h-7 text-sm" type="date" value={form.dateOfBirth}
+              onChange={(e) => field("dateOfBirth")(e.target.value)} />
           </div>
         </div>
 
@@ -252,29 +222,38 @@ export function InboxSubmitTab({
               {t("apply.nationality")}
               <AiTag field="nationality" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              value={form.nationality}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, nationality: e.target.value }))
-              }
-            />
+            <Input className="h-7 text-sm" value={form.nationality}
+              onChange={(e) => field("nationality")(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs flex items-center">
-              {t("apply.dateOfBirth")}
-              <AiTag field="dateOfBirth" aiFields={data.aiFields} />
+              {t("apply.motherName")}
+              <AiTag field="motherName" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              type="date"
-              value={form.dateOfBirth}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, dateOfBirth: e.target.value }))
-              }
-            />
+            <Input className="h-7 text-sm" value={form.motherName}
+              onChange={(e) => field("motherName")(e.target.value)} />
           </div>
         </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs flex items-center">
+              {t("apply.fatherName")}
+              <AiTag field="fatherName" aiFields={data.aiFields} />
+            </Label>
+            <Input className="h-7 text-sm" value={form.fatherName}
+              onChange={(e) => field("fatherName")(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{t("apply.address")}</Label>
+            <Input className="h-7 text-sm" value={form.address}
+              placeholder={t("apply.addressPlaceholder")}
+              onChange={(e) => field("address")(e.target.value)} />
+          </div>
+        </div>
+
+        {/* ── Passport ───────────────────────────────────────────── */}
+        <SectionLabel>{t("inbox.studentTab.sectionPassport")}</SectionLabel>
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
@@ -282,110 +261,139 @@ export function InboxSubmitTab({
               {t("apply.passportNumber")}
               <AiTag field="passportNumber" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              value={form.passportNumber}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, passportNumber: e.target.value }))
-              }
-            />
+            <Input className="h-7 text-sm" value={form.passportNumber}
+              onChange={(e) => field("passportNumber")(e.target.value)} />
           </div>
+          <div className="space-y-1">
+            <Label className="text-xs flex items-center">
+              {t("apply.passportIssueDate")}
+              <AiTag field="passportIssueDate" aiFields={data.aiFields} />
+            </Label>
+            <Input className="h-7 text-sm" type="date" value={form.passportIssueDate}
+              onChange={(e) => field("passportIssueDate")(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <Label className="text-xs flex items-center">
               {t("apply.passportExpiryDate")}
               <AiTag field="passportExpiry" aiFields={data.aiFields} />
             </Label>
-            <Input
-              className="h-7 text-sm"
-              type="date"
-              value={form.passportExpiry}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, passportExpiry: e.target.value }))
-              }
-            />
+            <Input className="h-7 text-sm" type="date" value={form.passportExpiry}
+              onChange={(e) => field("passportExpiry")(e.target.value)} />
           </div>
         </div>
 
+        {/* ── Education ──────────────────────────────────────────── */}
+        <SectionLabel>{t("inbox.studentTab.schoolInfo")}</SectionLabel>
+
         <div className="space-y-2">
-          <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
-            {t("inbox.studentTab.schoolInfo")}
+          <div className="space-y-1">
+            <Label className="text-xs flex items-center">
+              {isHigher
+                ? t("inbox.studentTab.bachelorUni")
+                : t("inbox.studentTab.highSchool")}
+              <AiTag field="school1" aiFields={data.aiFields} />
+            </Label>
+            <Input
+              className="h-7 text-sm"
+              placeholder={isHigher
+                ? t("inbox.studentTab.bachelorUniPlaceholder")
+                : t("inbox.studentTab.highSchoolPlaceholder")}
+              value={form.school1}
+              onChange={(e) => field("school1")(e.target.value)}
+            />
           </div>
-          <div className={`grid gap-2 ${isPhd ? "grid-cols-1" : "grid-cols-2"}`}>
+
+          {isPhd && (
             <div className="space-y-1">
               <Label className="text-xs flex items-center">
-                {isHigher
-                  ? t("inbox.studentTab.bachelorUni")
-                  : t("inbox.studentTab.highSchool")}
-                <AiTag field="highSchool" aiFields={data.aiFields} />
+                {t("inbox.studentTab.masterUni")}
+                <AiTag field="school2" aiFields={data.aiFields} />
               </Label>
               <Input
                 className="h-7 text-sm"
-                placeholder={
-                  isHigher
-                    ? t("inbox.studentTab.bachelorUniPlaceholder")
-                    : t("inbox.studentTab.highSchoolPlaceholder")
-                }
-                value={form.school1}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, school1: e.target.value }))
-                }
+                placeholder={t("inbox.studentTab.masterUniPlaceholder")}
+                value={form.school2}
+                onChange={(e) => field("school2")(e.target.value)}
               />
             </div>
-            {isPhd && (
-              <div className="space-y-1">
-                <Label className="text-xs">
-                  {t("inbox.studentTab.masterUni")}
-                </Label>
-                <Input
-                  className="h-7 text-sm"
-                  placeholder={t("inbox.studentTab.masterUniPlaceholder")}
-                  value={form.school2}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, school2: e.target.value }))
-                  }
-                />
-              </div>
-            )}
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs flex items-center">
+                {t("apply.graduationYear")}
+                <AiTag field="graduationYear" aiFields={data.aiFields} />
+              </Label>
+              <Input
+                className="h-7 text-sm"
+                placeholder={t("apply.gradYearPlaceholder")}
+                value={form.graduationYear}
+                onChange={(e) => field("graduationYear")(e.target.value)}
+              />
+            </div>
             <div className="space-y-1">
               <Label className="text-xs flex items-center">
                 {t("apply.gpa")}
                 <AiTag field="gpa" aiFields={data.aiFields} />
               </Label>
-              <Input
-                className="h-7 text-sm"
-                value={form.gpa}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, gpa: e.target.value }))
-                }
-              />
+              <div className="flex gap-1">
+                <Input
+                  className="h-7 text-sm flex-1 min-w-0"
+                  placeholder={t("apply.gpaPlaceholder")}
+                  value={form.gpa}
+                  onChange={(e) => field("gpa")(e.target.value)}
+                />
+                <select
+                  className="h-7 text-xs rounded-md border border-input bg-background px-1 shrink-0 focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={form.gradingSystem}
+                  onChange={(e) => field("gradingSystem")(e.target.value)}
+                >
+                  {GRADING_SYSTEMS.map((g) => (
+                    <option key={g.value} value={g.value}>{g.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs flex items-center">
+              {t("apply.languageScore")}
+              <AiTag field="languageScore" aiFields={data.aiFields} />
+            </Label>
+            <Input
+              className="h-7 text-sm"
+              placeholder={t("apply.languageScorePlaceholder")}
+              value={form.languageScore}
+              onChange={(e) => field("languageScore")(e.target.value)}
+            />
+          </div>
         </div>
+
+        {/* ── Notes ──────────────────────────────────────────────── */}
+        <SectionLabel>{t("apply.additionalNotes")}</SectionLabel>
+
+        <Textarea
+          className="text-sm min-h-[64px] resize-none"
+          placeholder={t("apply.notesPlaceholder")}
+          value={form.notes}
+          onChange={(e) => field("notes")(e.target.value)}
+        />
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t shrink-0 flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onBack}
-          disabled={saving}
-          className="flex-1"
-        >
-          {t("inbox.studentTab.cancel")}
-        </Button>
+      <div className="px-4 py-3 border-t shrink-0">
         <Button
           size="sm"
+          className="w-full"
           onClick={() => void handleCreate()}
           disabled={saving || !form.firstName.trim() || !form.lastName.trim()}
-          className="flex-1"
         >
-          {saving && (
-            <Loader2 className="w-3.5 h-3.5 animate-spin me-1.5" />
-          )}
-          {saving
-            ? t("inbox.studentTab.creating")
-            : t("inbox.studentTab.createBtn")}
+          {saving && <Loader2 className="w-3.5 h-3.5 animate-spin me-1.5" />}
+          {saving ? t("inbox.studentTab.creating") : t("inbox.studentTab.createBtn")}
         </Button>
       </div>
     </div>

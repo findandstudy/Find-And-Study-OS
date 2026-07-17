@@ -982,6 +982,7 @@
       },
       "tabs": {
         "lead": "潜在客户",
+        "documents": "文件",
         "student": "学生",
         "submit": "提交",
         "application": "申请",
@@ -1200,7 +1201,9 @@
       "conflictBody": "\"{type}\"槽位已有文件，是否替换？",
       "keepExisting": "保留现有",
       "replace": "替换",
-      "analyzeBtn": "AI分析并创建学生",
+      "analyzeBtn": "用AI创建学生",
+      "sectionPersonal": "个人信息",
+      "sectionPassport": "护照",
       "noDocsToAnalyze": "请先添加至少一个聊天文件",
       "submitEmpty": "请先分析文档 — 点击「分析」以预填学生表单。",
       "noDocReqs": "该层次未配置文件要求",

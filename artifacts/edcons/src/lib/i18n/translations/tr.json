@@ -982,6 +982,7 @@
       },
       "tabs": {
         "lead": "Lead",
+        "documents": "Belgeler",
         "student": "Öğrenci",
         "submit": "Gönder",
         "application": "Başvuru",
@@ -1200,7 +1201,9 @@
       "conflictBody": "\"{type}\" slotu zaten dolu. Değiştirilsin mi?",
       "keepExisting": "Mevcut kalsın",
       "replace": "Değiştir",
-      "analyzeBtn": "AI ile analiz et ve öğrenci oluştur",
+      "analyzeBtn": "Yapay Zekayla Öğrenci Oluştur",
+      "sectionPersonal": "Kişisel Bilgiler",
+      "sectionPassport": "Pasaport",
       "noDocsToAnalyze": "Önce en az bir sohbet belgesi ekleyin",
       "submitEmpty": "Önce belgeleri analiz edin — öğrenci formunu doldurmak için Analiz butonuna tıklayın.",
       "noDocReqs": "Bu seviye için belge gereksinimi tanımlanmamış",

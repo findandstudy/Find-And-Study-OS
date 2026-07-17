@@ -982,6 +982,7 @@
       },
       "tabs": {
         "lead": "Lead",
+        "documents": "Documents",
         "student": "Student",
         "submit": "Submit",
         "application": "Application",
@@ -1200,7 +1201,9 @@
       "conflictBody": "\"{type}\" slot is already staged. Replace it?",
       "keepExisting": "Keep existing",
       "replace": "Replace",
-      "analyzeBtn": "Analyze Documents & Prefill Form",
+      "analyzeBtn": "Create Student with AI",
+      "sectionPersonal": "Personal Info",
+      "sectionPassport": "Passport",
       "noDocsToAnalyze": "Add at least one chat document first",
       "submitEmpty": "Analyze documents first — click Analyze to prefill the student form.",
       "noDocReqs": "No document requirements for this level",

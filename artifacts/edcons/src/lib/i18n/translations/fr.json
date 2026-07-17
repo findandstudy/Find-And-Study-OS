@@ -982,6 +982,7 @@
       },
       "tabs": {
         "lead": "Lead",
+        "documents": "Documents",
         "student": "Étudiant",
         "submit": "Soumettre",
         "application": "Candidature",
@@ -1200,7 +1201,9 @@
       "conflictBody": "L'emplacement \"{type}\" est déjà rempli. Le remplacer ?",
       "keepExisting": "Conserver l'existant",
       "replace": "Remplacer",
-      "analyzeBtn": "Analyser avec l'IA et créer un étudiant",
+      "analyzeBtn": "Créer un étudiant avec IA",
+      "sectionPersonal": "Informations Personnelles",
+      "sectionPassport": "Passeport",
       "noDocsToAnalyze": "Ajoutez au moins un document de chat d'abord",
       "submitEmpty": "Analysez d'abord les documents — cliquez sur Analyser pour pré-remplir le formulaire.",
       "noDocReqs": "Aucune exigence de document pour ce niveau",

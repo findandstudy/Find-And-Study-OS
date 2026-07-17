@@ -982,6 +982,7 @@
       },
       "tabs": {
         "lead": "Lead",
+        "documents": "Dokumen",
         "student": "Siswa",
         "submit": "Kirim",
         "application": "Lamaran",
@@ -1200,7 +1201,9 @@
       "conflictBody": "Slot \"{type}\" sudah terisi. Ganti?",
       "keepExisting": "Pertahankan yang ada",
       "replace": "Ganti",
-      "analyzeBtn": "Analisis dengan AI dan buat mahasiswa",
+      "analyzeBtn": "Buat Siswa dengan AI",
+      "sectionPersonal": "Informasi Pribadi",
+      "sectionPassport": "Paspor",
       "noDocsToAnalyze": "Tambahkan setidaknya satu dokumen obrolan terlebih dahulu",
       "submitEmpty": "Analisis dokumen terlebih dahulu — klik Analisis untuk mengisi formulir siswa.",
       "noDocReqs": "Tidak ada persyaratan dokumen untuk jenjang ini",
