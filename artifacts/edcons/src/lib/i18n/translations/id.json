@@ -1036,7 +1036,9 @@
       "unanswered": "Belum Dibalas",
       "subscribed": "Berlangganan",
       "starred": "Berbintang",
-      "archived": "Diarsipkan"
+      "archived": "Diarsipkan",
+      "pinDefault": "Sematkan sebagai default",
+      "unpinDefault": "Lepas sematan default"
     },
     "channels": {
       "all": "Semua",

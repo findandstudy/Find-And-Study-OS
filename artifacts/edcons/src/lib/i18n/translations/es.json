@@ -1036,7 +1036,9 @@
       "unanswered": "Sin respuesta",
       "subscribed": "Suscrito",
       "starred": "Destacado",
-      "archived": "Archivadas"
+      "archived": "Archivadas",
+      "pinDefault": "Fijar como predeterminado",
+      "unpinDefault": "Quitar fijado predeterminado"
     },
     "channels": {
       "all": "Todos",

@@ -1036,7 +1036,9 @@
       "unanswered": "بلا رد",
       "subscribed": "مشترك",
       "starred": "مميز بنجمة",
-      "archived": "المؤرشفة"
+      "archived": "المؤرشفة",
+      "pinDefault": "تثبيت كافتراضي",
+      "unpinDefault": "إلغاء التثبيت الافتراضي"
     },
     "channels": {
       "all": "الكل",

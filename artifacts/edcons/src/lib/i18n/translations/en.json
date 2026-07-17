@@ -1036,7 +1036,9 @@
       "unanswered": "Unanswered",
       "subscribed": "Subscribed",
       "starred": "Starred",
-      "archived": "Archived"
+      "archived": "Archived",
+      "pinDefault": "Pin as default",
+      "unpinDefault": "Unpin default"
     },
     "channels": {
       "all": "All",

@@ -41,7 +41,7 @@ import {
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
   Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical,
-  UserPlus, FilePlus2, SmilePlus, CornerUpLeft,
+  UserPlus, FilePlus2, SmilePlus, CornerUpLeft, Pin,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -257,12 +257,27 @@ function LiveStatusIndicator({
   );
 }
 
+type InboxTabKey = "mine" | "unassigned" | "unmatched" | "all" | "open" | "unanswered" | "subscribed" | "starred" | "archived";
+
+const INBOX_TAB_KEYS: InboxTabKey[] = ["mine", "unassigned", "unmatched", "all", "open", "unanswered", "subscribed", "starred", "archived"];
+const PINNED_INBOX_TAB_STORAGE_KEY = "inbox.pinnedTab";
+
+function readPinnedInboxTab(): InboxTabKey | null {
+  try {
+    const v = localStorage.getItem(PINNED_INBOX_TAB_STORAGE_KEY);
+    return v && (INBOX_TAB_KEYS as string[]).includes(v) ? (v as InboxTabKey) : null;
+  } catch {
+    return null;
+  }
+}
+
 function InboxTab() {
   const { t, isRTL } = useI18n();
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<"mine" | "unassigned" | "unmatched" | "all" | "open" | "unanswered" | "subscribed" | "starred" | "archived">("mine");
+  const [tab, setTab] = useState<InboxTabKey>(() => readPinnedInboxTab() ?? "mine");
+  const [pinnedTab, setPinnedTab] = useState<InboxTabKey | null>(() => readPinnedInboxTab());
   const [assignedNotice, setAssignedNotice] = useState(false);
   const [channel, setChannel] = useState<string>("all");
   const [convs, setConvs] = useState<InboxConversation[]>([]);
@@ -903,6 +918,19 @@ function InboxTab() {
     }
   }
 
+  function togglePinnedTab(key: InboxTabKey) {
+    setPinnedTab((prev) => {
+      const next = prev === key ? null : key;
+      try {
+        if (next) localStorage.setItem(PINNED_INBOX_TAB_STORAGE_KEY, next);
+        else localStorage.removeItem(PINNED_INBOX_TAB_STORAGE_KEY);
+      } catch {
+        // localStorage unavailable — pin just won't persist
+      }
+      return next;
+    });
+  }
+
   const channelOptions = ["all", "whatsapp", "messenger", "instagram", "web_form", "email", "sms", "telegram"];
   const tabs: Array<{ key: typeof tab; label: string; icon: any }> = [
     { key: "all", label: t("messagesPage.all"), icon: Hash },
@@ -1089,28 +1117,62 @@ function InboxTab() {
               />
             </div>
 
-            <div className="flex flex-wrap w-full rounded-lg bg-muted/50 p-1 gap-1">
-              {tabs.map((tb) => {
-                const Icon = tb.icon;
-                const active = tab === tb.key;
-                return (
-                  <button
-                    key={tb.key}
-                    onClick={() => setTab(tb.key)}
-                    aria-pressed={active}
-                    className={cn(
-                      "shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-1.5 whitespace-nowrap",
-                      active
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                    )}
-                  >
-                    <Icon className={cn("w-3.5 h-3.5 shrink-0", !active && "opacity-60")} />
-                    <span>{tb.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between gap-2 h-8">
+                  <span className="flex items-center gap-2 min-w-0">
+                    {(() => {
+                      const current = tabs.find((tb) => tb.key === tab) ?? tabs[0];
+                      const Icon = current.icon;
+                      return (
+                        <>
+                          <Icon className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{current.label}</span>
+                          {pinnedTab === tab && (
+                            <Pin className="w-3 h-3 shrink-0 text-primary fill-current" />
+                          )}
+                        </>
+                      );
+                    })()}
+                  </span>
+                  <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                {tabs.map((tb) => {
+                  const Icon = tb.icon;
+                  const active = tab === tb.key;
+                  const pinned = pinnedTab === tb.key;
+                  return (
+                    <DropdownMenuItem
+                      key={tb.key}
+                      onClick={() => setTab(tb.key)}
+                      className={cn("flex items-center gap-2", active && "bg-accent")}
+                    >
+                      <Icon className={cn("w-3.5 h-3.5 shrink-0", !active && "opacity-60")} />
+                      <span className="flex-1 truncate">{tb.label}</span>
+                      {active && <Check className="w-3.5 h-3.5 shrink-0 opacity-70" />}
+                      <button
+                        type="button"
+                        aria-pressed={pinned}
+                        title={pinned ? t("inbox.tabs.unpinDefault") : t("inbox.tabs.pinDefault")}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          togglePinnedTab(tb.key);
+                        }}
+                        className={cn(
+                          "p-1 rounded hover:bg-muted shrink-0",
+                          pinned ? "text-primary" : "text-muted-foreground opacity-50 hover:opacity-100"
+                        )}
+                      >
+                        <Pin className={cn("w-3.5 h-3.5", pinned && "fill-current")} />
+                      </button>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

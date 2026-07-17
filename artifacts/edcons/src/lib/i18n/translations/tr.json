@@ -1036,7 +1036,9 @@
       "unanswered": "Cevaplanmamış",
       "subscribed": "Abone",
       "starred": "Yıldızlı",
-      "archived": "Arşiv"
+      "archived": "Arşiv",
+      "pinDefault": "Varsayılan olarak sabitle",
+      "unpinDefault": "Sabitlemeyi kaldır"
     },
     "channels": {
       "all": "Tümü",

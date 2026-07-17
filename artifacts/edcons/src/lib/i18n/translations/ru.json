@@ -1036,7 +1036,9 @@
       "unanswered": "Без ответа",
       "subscribed": "Подписки",
       "starred": "Избранные",
-      "archived": "Архив"
+      "archived": "Архив",
+      "pinDefault": "Закрепить по умолчанию",
+      "unpinDefault": "Открепить по умолчанию"
     },
     "channels": {
       "all": "Все",

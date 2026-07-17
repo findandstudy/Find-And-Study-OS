@@ -1036,7 +1036,9 @@
       "unanswered": "بی‌پاسخ",
       "subscribed": "اشتراک",
       "starred": "ستاره‌دار",
-      "archived": "بایگانی"
+      "archived": "بایگانی",
+      "pinDefault": "سنجاق به‌عنوان پیش‌فرض",
+      "unpinDefault": "برداشتن سنجاق پیش‌فرض"
     },
     "channels": {
       "all": "همه",

@@ -1036,7 +1036,9 @@
       "unanswered": "未回复",
       "subscribed": "已订阅",
       "starred": "已收藏",
-      "archived": "已归档"
+      "archived": "已归档",
+      "pinDefault": "固定为默认",
+      "unpinDefault": "取消默认固定"
     },
     "channels": {
       "all": "全部",

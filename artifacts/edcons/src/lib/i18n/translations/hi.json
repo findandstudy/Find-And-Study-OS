@@ -1036,7 +1036,9 @@
       "unanswered": "अनुत्तरित",
       "subscribed": "सब्स्क्राइब्ड",
       "starred": "स्टार किए",
-      "archived": "संग्रहीत"
+      "archived": "संग्रहीत",
+      "pinDefault": "डिफ़ॉल्ट के रूप में पिन करें",
+      "unpinDefault": "डिफ़ॉल्ट पिन हटाएँ"
     },
     "channels": {
       "all": "सभी",
