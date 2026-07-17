@@ -1225,7 +1225,8 @@
       "docsSaved": "{count} document(s) saved",
       "fillRequired": "Please fill in first and last name",
       "createFailed": "Failed to create student",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "docsSaveFailed": "{count} document(s) could not be saved to the student profile."
     },
     "applicationTab": {
       "noStudent": "No student linked",

@@ -112,6 +112,7 @@ export function InboxSubmitTab({
       });
 
       let docsSaved = 0;
+      let docsFailed = 0;
       for (const [docType, att] of Object.entries(data.staging)) {
         try {
           await customFetch(
@@ -123,14 +124,24 @@ export function InboxSubmitTab({
             }
           );
           docsSaved++;
-        } catch { }
+        } catch {
+          docsFailed++;
+        }
       }
 
-      toast({
-        title: docsSaved > 0
-          ? t("inbox.studentTab.studentCreatedWithDocs", { count: String(docsSaved) })
-          : t("inbox.studentTab.studentCreated"),
-      });
+      if (docsFailed > 0) {
+        toast({
+          title: t("inbox.studentTab.studentCreated"),
+          description: t("inbox.studentTab.docsSaveFailed", { count: String(docsFailed) }),
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: docsSaved > 0
+            ? t("inbox.studentTab.studentCreatedWithDocs", { count: String(docsSaved) })
+            : t("inbox.studentTab.studentCreated"),
+        });
+      }
       onCreated(studentId);
     } catch (err: any) {
       const msg = err?.data?.error || err?.body?.error || err?.message;

@@ -1225,7 +1225,8 @@
       "docsSaved": "已保存{count}个文件",
       "fillRequired": "请填写姓名",
       "createFailed": "创建学生失败",
-      "cancel": "取消"
+      "cancel": "取消",
+      "docsSaveFailed": "{count} 个文件未能保存到学生档案。"
     },
     "applicationTab": {
       "noStudent": "未关联学生",

@@ -112,7 +112,7 @@ export function normalizeAndValidateNames(
           normalized: result,
         };
       }
-      result[field] = toLatinUpper(trimmed);
+      result[field] = trimmed;
     }
   }
   return { error: null, normalized: result };

@@ -1225,7 +1225,8 @@
       "docsSaved": "{count} document(s) sauvegardé(s)",
       "fillRequired": "Veuillez saisir le prénom et le nom",
       "createFailed": "Échec de la création de l'étudiant",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "docsSaveFailed": "{count} document(s) n'ont pas pu être enregistrés dans le profil étudiant."
     },
     "applicationTab": {
       "noStudent": "Aucun étudiant lié",

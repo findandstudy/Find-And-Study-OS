@@ -1225,7 +1225,8 @@
       "docsSaved": "تم حفظ {count} مستند/مستندات",
       "fillRequired": "يرجى إدخال الاسم الأول والأخير",
       "createFailed": "فشل إنشاء الطالب",
-      "cancel": "إلغاء"
+      "cancel": "إلغاء",
+      "docsSaveFailed": "تعذّر حفظ {count} مستند في ملف الطالب."
     },
     "applicationTab": {
       "noStudent": "لا يوجد طالب مرتبط",

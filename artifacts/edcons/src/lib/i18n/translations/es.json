@@ -1225,7 +1225,8 @@
       "docsSaved": "{count} documento(s) guardado(s)",
       "fillRequired": "Por favor ingrese nombre y apellido",
       "createFailed": "Error al crear el estudiante",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "docsSaveFailed": "No se pudieron guardar {count} documento(s) en el perfil del estudiante."
     },
     "applicationTab": {
       "noStudent": "Ningún estudiante vinculado",

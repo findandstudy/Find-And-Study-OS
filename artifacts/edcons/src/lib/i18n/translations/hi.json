@@ -1225,7 +1225,8 @@
       "docsSaved": "{count} दस्तावेज़ सहेजे गए",
       "fillRequired": "कृपया पहला और अंतिम नाम भरें",
       "createFailed": "छात्र बनाने में विफल",
-      "cancel": "रद्द करें"
+      "cancel": "रद्द करें",
+      "docsSaveFailed": "{count} दस्तावेज़ छात्र प्रोफ़ाइल में सहेजे नहीं जा सके।"
     },
     "applicationTab": {
       "noStudent": "कोई छात्र लिंक नहीं",

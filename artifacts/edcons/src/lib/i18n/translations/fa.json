@@ -1225,7 +1225,8 @@
       "docsSaved": "{count} سند ذخیره شد",
       "fillRequired": "لطفاً نام و نام خانوادگی را وارد کنید",
       "createFailed": "ایجاد دانشجو ناموفق بود",
-      "cancel": "انصراف"
+      "cancel": "انصراف",
+      "docsSaveFailed": "{count} سند در پروفایل دانشجو ذخیره نشد."
     },
     "applicationTab": {
       "noStudent": "دانشجویی لینک نشده",

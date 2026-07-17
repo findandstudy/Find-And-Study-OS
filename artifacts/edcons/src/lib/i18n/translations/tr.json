@@ -1225,7 +1225,8 @@
       "docsSaved": "{count} belge kaydedildi",
       "fillRequired": "Lütfen ad ve soyadını girin",
       "createFailed": "Öğrenci oluşturulamadı",
-      "cancel": "İptal"
+      "cancel": "İptal",
+      "docsSaveFailed": "{count} belge öğrenci profiline kaydedilemedi."
     },
     "applicationTab": {
       "noStudent": "Birştirilmiş öğrenci yok",

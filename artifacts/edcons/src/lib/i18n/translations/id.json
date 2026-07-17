@@ -1225,7 +1225,8 @@
       "docsSaved": "{count} dokumen disimpan",
       "fillRequired": "Mohon isi nama depan dan belakang",
       "createFailed": "Gagal membuat mahasiswa",
-      "cancel": "Batal"
+      "cancel": "Batal",
+      "docsSaveFailed": "{count} dokumen gagal disimpan ke profil siswa."
     },
     "applicationTab": {
       "noStudent": "Belum ada mahasiswa yang ditautkan",
