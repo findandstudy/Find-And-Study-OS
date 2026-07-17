@@ -1268,6 +1268,9 @@
       "cancel": "لغو",
       "replyingTo": "در پاسخ به",
       "repliedTo": "پاسخ به"
+    },
+    "resizer": {
+      "resetHint": "برای بازنشانی عرض دوبار کلیک کنید"
     }
   },
   "integrations": {

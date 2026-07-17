@@ -1268,6 +1268,9 @@
       "cancel": "Batal",
       "replyingTo": "Membalas",
       "repliedTo": "Membalas"
+    },
+    "resizer": {
+      "resetHint": "Klik dua kali untuk mengatur ulang lebar"
     }
   },
   "integrations": {

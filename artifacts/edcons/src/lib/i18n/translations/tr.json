@@ -1268,6 +1268,9 @@
       "cancel": "İptal",
       "replyingTo": "Yanıtlanıyor",
       "repliedTo": "Yanıtlandı"
+    },
+    "resizer": {
+      "resetHint": "Genişliği sıfırlamak için çift tıklayın"
     }
   },
   "integrations": {

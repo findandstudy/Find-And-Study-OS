@@ -1268,6 +1268,9 @@
       "cancel": "Отмена",
       "replyingTo": "Ответ на",
       "repliedTo": "Ответил на"
+    },
+    "resizer": {
+      "resetHint": "Дважды щёлкните, чтобы сбросить ширину"
     }
   },
   "integrations": {

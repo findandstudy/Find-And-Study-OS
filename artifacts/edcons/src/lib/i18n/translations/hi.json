@@ -1268,6 +1268,9 @@
       "cancel": "रद्द करें",
       "replyingTo": "जवाब दे रहे हैं",
       "repliedTo": "जवाब दिया"
+    },
+    "resizer": {
+      "resetHint": "चौड़ाई रीसेट करने के लिए डबल-क्लिक करें"
     }
   },
   "integrations": {

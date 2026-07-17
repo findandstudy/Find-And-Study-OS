@@ -1268,6 +1268,9 @@
       "cancel": "取消回复",
       "replyingTo": "正在回复",
       "repliedTo": "回复了"
+    },
+    "resizer": {
+      "resetHint": "双击以重置宽度"
     }
   },
   "integrations": {

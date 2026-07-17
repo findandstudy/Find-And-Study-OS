@@ -1268,6 +1268,9 @@
       "cancel": "Cancel reply",
       "replyingTo": "Replying to",
       "repliedTo": "Replied to"
+    },
+    "resizer": {
+      "resetHint": "Double-click to reset width"
     }
   },
   "integrations": {

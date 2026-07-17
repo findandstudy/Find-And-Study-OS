@@ -980,6 +980,16 @@ function InboxTab() {
     document.addEventListener("pointercancel", onEnd);
   }
 
+  function resetListWidth() {
+    if (listResizeCleanupRef.current) listResizeCleanupRef.current();
+    setListWidth(INBOX_LIST_DEFAULT_WIDTH);
+    try {
+      localStorage.setItem(INBOX_LIST_WIDTH_STORAGE_KEY, String(INBOX_LIST_DEFAULT_WIDTH));
+    } catch {
+      // localStorage unavailable — width just won't persist
+    }
+  }
+
   function togglePinnedTab(key: InboxTabKey) {
     setPinnedTab((prev) => {
       const next = prev === key ? null : key;
@@ -1442,6 +1452,8 @@ function InboxTab() {
           role="separator"
           aria-orientation="vertical"
           onPointerDown={startListResize}
+          onDoubleClick={resetListWidth}
+          title={t("inbox.resizer.resetHint")}
           className="hidden lg:flex shrink-0 w-[7px] -mx-[3px] z-10 cursor-col-resize items-stretch justify-center group touch-none"
         >
           <div className="w-px bg-border/50 group-hover:bg-primary/60 group-active:bg-primary transition-colors" />

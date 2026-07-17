@@ -1268,6 +1268,9 @@
       "cancel": "إلغاء الرد",
       "replyingTo": "ردًا على",
       "repliedTo": "رد على"
+    },
+    "resizer": {
+      "resetHint": "انقر نقرًا مزدوجًا لإعادة تعيين العرض"
     }
   },
   "integrations": {

@@ -1268,6 +1268,9 @@
       "cancel": "Cancelar",
       "replyingTo": "Respondiendo a",
       "repliedTo": "Respondió a"
+    },
+    "resizer": {
+      "resetHint": "Haz doble clic para restablecer el ancho"
     }
   },
   "integrations": {
