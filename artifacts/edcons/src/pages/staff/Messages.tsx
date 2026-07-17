@@ -263,6 +263,7 @@ const INBOX_TAB_KEYS: InboxTabKey[] = ["mine", "unassigned", "unmatched", "all",
 const PINNED_INBOX_TAB_STORAGE_KEY = "inbox.pinnedTab";
 
 const INBOX_LIST_WIDTH_STORAGE_KEY = "inbox.listWidth";
+const INTERNAL_LIST_WIDTH_STORAGE_KEY = "internal.listWidth";
 const INBOX_LIST_MIN_WIDTH = 220;
 const INBOX_LIST_DEFAULT_WIDTH = 280;
 
@@ -270,14 +271,18 @@ function inboxListMaxWidth(): number {
   return Math.max(INBOX_LIST_MIN_WIDTH, Math.floor((typeof window !== "undefined" ? window.innerWidth : 1280) * 0.5));
 }
 
-function readInboxListWidth(): number {
+function readStoredListWidth(storageKey: string): number {
   try {
-    const v = Number(localStorage.getItem(INBOX_LIST_WIDTH_STORAGE_KEY));
+    const v = Number(localStorage.getItem(storageKey));
     if (!Number.isFinite(v) || v <= 0) return INBOX_LIST_DEFAULT_WIDTH;
     return Math.min(inboxListMaxWidth(), Math.max(INBOX_LIST_MIN_WIDTH, Math.round(v)));
   } catch {
     return INBOX_LIST_DEFAULT_WIDTH;
   }
+}
+
+function readInboxListWidth(): number {
+  return readStoredListWidth(INBOX_LIST_WIDTH_STORAGE_KEY);
 }
 
 function readPinnedInboxTab(): InboxTabKey | null {
@@ -3879,7 +3884,7 @@ function MessageConvTracker({ convId }: { convId: number | null }) {
 }
 
 export default function MessagesPage() {
-  const { t } = useI18n();
+  const { t, isRTL } = useI18n();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -3898,6 +3903,50 @@ export default function MessagesPage() {
   const [internalSelectedIds, setInternalSelectedIds] = useState<Set<number>>(new Set());
   const [internalBulkConfirm, setInternalBulkConfirm] = useState<null | { type: "archive" | "delete"; step: 1 | 2 }>(null);
   const [internalBulkBusy, setInternalBulkBusy] = useState(false);
+  const [internalListWidth, setInternalListWidth] = useState<number>(() => readStoredListWidth(INTERNAL_LIST_WIDTH_STORAGE_KEY));
+  const internalListResizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => {
+    if (internalListResizeCleanupRef.current) internalListResizeCleanupRef.current();
+  }, []);
+
+  function startInternalListResize(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    if (internalListResizeCleanupRef.current) internalListResizeCleanupRef.current();
+    const startX = e.clientX;
+    const startW = internalListWidth;
+    const maxW = inboxListMaxWidth();
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (ev: PointerEvent) => {
+      const delta = isRTL ? startX - ev.clientX : ev.clientX - startX;
+      setInternalListWidth(Math.min(maxW, Math.max(INBOX_LIST_MIN_WIDTH, startW + delta)));
+    };
+    const cleanup = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onEnd);
+      document.removeEventListener("pointercancel", onEnd);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      internalListResizeCleanupRef.current = null;
+    };
+    const onEnd = () => {
+      cleanup();
+      setInternalListWidth((w) => {
+        try {
+          localStorage.setItem(INTERNAL_LIST_WIDTH_STORAGE_KEY, String(w));
+        } catch {
+          // localStorage unavailable — width just won't persist
+        }
+        return w;
+      });
+    };
+    internalListResizeCleanupRef.current = cleanup;
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onEnd);
+    document.addEventListener("pointercancel", onEnd);
+  }
 
   useEffect(() => { try { localStorage.setItem("internal_sort_order", internalSort); } catch {} }, [internalSort]);
 
@@ -4026,8 +4075,11 @@ export default function MessagesPage() {
 
           <TabsContent value="messages">
             <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 120px)" }}>
-              <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
-                <div className={`lg:col-span-4 h-full min-h-0 border-r border-border/50 ${selectedConv !== null ? "hidden lg:block" : ""}`}>
+              <div className="flex h-full min-h-0">
+                <div
+                  className={`h-full min-h-0 min-w-0 overflow-hidden w-full lg:w-[var(--internal-list-w)] lg:shrink-0 ${selectedConv !== null ? "hidden lg:block" : ""}`}
+                  style={{ "--internal-list-w": `${internalListWidth}px` } as React.CSSProperties}
+                >
                   <ConversationList
                     conversations={conversations}
                     selectedId={selectedConv}
@@ -4056,7 +4108,17 @@ export default function MessagesPage() {
                     bulkBusy={internalBulkBusy}
                   />
                 </div>
-                <div className={`lg:col-span-8 h-full min-h-0 ${selectedConv === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
+
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  onPointerDown={startInternalListResize}
+                  className="hidden lg:flex shrink-0 w-[7px] -mx-[3px] z-10 cursor-col-resize items-stretch justify-center group touch-none"
+                >
+                  <div className="w-px bg-border/50 group-hover:bg-primary/60 group-active:bg-primary transition-colors" />
+                </div>
+
+                <div className={`flex-1 min-w-0 h-full min-h-0 ${selectedConv === null ? "hidden lg:flex lg:items-center lg:justify-center" : ""}`}>
                   {selectedConv === null ? (
                     <div className="text-center text-muted-foreground">
                       <MessageCircle className="w-16 h-16 mx-auto mb-3 opacity-20" />
