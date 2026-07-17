@@ -2655,8 +2655,15 @@ router.post(
     const { ownerType, ownerId: ownerIdRaw, documentType, force, setAsPhoto = true } = req.body;
     const ownerId = Number(ownerIdRaw);
 
+    const VALID_SAVE_AS_DOC_TYPES = ["diploma", "transcript", "passport", "photograph"] as const;
     if (!documentType || typeof documentType !== "string" || !documentType.trim()) {
       res.status(400).json({ error: "documentType is required" });
+      return;
+    }
+    if (!(VALID_SAVE_AS_DOC_TYPES as readonly string[]).includes(documentType.trim())) {
+      res.status(400).json({
+        error: `documentType must be one of: ${VALID_SAVE_AS_DOC_TYPES.join(", ")}`,
+      });
       return;
     }
     if (ownerType !== "lead" && ownerType !== "student") {

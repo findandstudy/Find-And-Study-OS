@@ -39,6 +39,9 @@ import { processInboundMessage } from "../src/lib/inbox/processInbound.js";
 // ---------------------------------------------------------------------------
 
 const RUN_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+// Unique per-run email/phone so parallel or back-to-back runs never collide on the lead dedup guard.
+const TEST_LEAD_EMAIL = `ayse.demir.${RUN_ID}@example.com`;
+const TEST_LEAD_PHONE = `+1555${String(Math.floor(Math.random() * 9_000_000) + 1_000_000)}`;
 
 // Real DB user seeded before tests so logAudit FK constraint is satisfied.
 let ACTOR_USER_ID = 0;
@@ -272,8 +275,8 @@ test("(3) POST create-lead creates lead, links external_contacts.leadId, marks c
   const app = buildApp();
   const res = await request(app, "POST", `/api/inbox/conversations/${conv.conversationId}/create-lead`, {
     fullName: "Ayse Demir",
-    email: "ayse.demir@example.com",
-    phone: "+90 532 111 2233",
+    email: TEST_LEAD_EMAIL,
+    phone: TEST_LEAD_PHONE,
   });
 
   assert.equal(res.status, 201, `expected 201, got ${res.status}: ${JSON.stringify(res.body)}`);
@@ -303,7 +306,7 @@ test("(3) POST create-lead creates lead, links external_contacts.leadId, marks c
   assert.ok(lead, "lead row must exist in DB");
   assert.equal(lead.firstName, "AYSE", "firstName must be uppercased (toLatinUpper)");
   assert.equal(lead.lastName, "DEMIR", "lastName must be uppercased");
-  assert.equal(lead.email, "ayse.demir@example.com");
+  assert.equal(lead.email, TEST_LEAD_EMAIL);
 
   console.log(`  ✓ leadId=${body.leadId}  firstName=${lead.firstName}  lastName=${lead.lastName}`);
   console.log(`  ✓ external_contacts.leadId=${contact.leadId}  (linked)`);
@@ -331,8 +334,8 @@ test("(4) second POST create-lead with same phone/email returns 409 LEAD_EXISTS"
   const app = buildApp();
   const body = {
     fullName: "Ayse Demir",
-    email: "ayse.demir@example.com",
-    phone: "+90 532 111 2233",
+    email: TEST_LEAD_EMAIL,
+    phone: TEST_LEAD_PHONE,
   };
 
   // First call — must succeed
