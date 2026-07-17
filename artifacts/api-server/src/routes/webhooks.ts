@@ -134,6 +134,39 @@ async function ensureChannelAccount(channel: string, displayName: string, extern
   }
 }
 
+const MIME_EXT: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "video/mp4": "mp4",
+  "audio/ogg": "ogg",
+  "audio/mpeg": "mp3",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+};
+
+/**
+ * Derive a meaningful attachment name when the provider payload carries no
+ * explicit filename: prefer the last URL path segment (when it has an
+ * extension), otherwise "<type>.<ext>" from the mime type, otherwise the type.
+ */
+function deriveAttachmentName(url: string, type: string, mimeType?: string): string | undefined {
+  try {
+    const seg = decodeURIComponent(new URL(String(url)).pathname.split("/").pop() ?? "");
+    if (seg && /\.[A-Za-z0-9]{2,5}$/.test(seg)) return seg;
+  } catch {
+    // not a parseable URL — fall through to mime-based naming
+  }
+  const ext = mimeType ? MIME_EXT[String(mimeType).split(";")[0].trim().toLowerCase()] : undefined;
+  const base = type && type !== "file" ? type : "document";
+  if (ext) return `${base}.${ext}`;
+  return type && type !== "file" ? type : undefined;
+}
+
 function asRec(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
 }
@@ -693,13 +726,28 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
       const attachments = Array.isArray(m.attachments) && m.attachments.length > 0
         ? {
             attachments: m.attachments
-              .map((att: any) => ({
-                url: att.url ?? att.link ?? att.mediaUrl ?? "",
-                type: (att.type ?? "file") as "image" | "video" | "audio" | "file",
-                name: att.name ?? att.filename ?? undefined,
-                fileSize: att.size ?? att.fileSize ?? undefined,
-                mimeType: att.mimeType ?? att.contentType ?? att.content_type ?? att.mime_type ?? undefined,
-              }))
+              .map((att: any) => {
+                const url = att.url ?? att.link ?? att.mediaUrl ?? "";
+                const type = (att.type ?? "file") as "image" | "video" | "audio" | "file";
+                const mimeType = att.mimeType ?? att.contentType ?? att.content_type ?? att.mime_type ?? undefined;
+                // Real filename: the proxy uses several field spellings, and the
+                // WA Cloud document payload carries `filename`. Fall back to a
+                // meaningful name derived from the URL path or the mime type —
+                // never leave a bare "file" for documents.
+                const explicitName =
+                  att.name ?? att.filename ?? att.fileName ?? att.file_name ??
+                  att.originalName ?? att.original_name ?? att.title ?? undefined;
+                const name = (typeof explicitName === "string" && explicitName.trim())
+                  ? explicitName.trim()
+                  : deriveAttachmentName(url, type, mimeType);
+                return {
+                  url,
+                  type,
+                  name,
+                  fileSize: att.size ?? att.fileSize ?? undefined,
+                  mimeType,
+                };
+              })
               .filter((a: any) => a.url),
           }
         : {};

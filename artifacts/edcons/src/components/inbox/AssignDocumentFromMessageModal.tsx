@@ -59,6 +59,10 @@ interface AssignDocumentFromMessageModalProps {
   target: AddDocTarget;
   ownerType?: "lead" | "student" | "unmatched";
   owner: { id: number; interestedLevel?: string | null };
+  /** Level remembered from a previous "Add" in the same conversation. */
+  rememberedLevel?: string | null;
+  /** Called when the user picks a study level, so the parent can remember it. */
+  onLevelChange?: (level: string) => void;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -68,6 +72,8 @@ export function AssignDocumentFromMessageModal({
   target,
   ownerType = "student",
   owner,
+  rememberedLevel = null,
+  onLevelChange,
   onClose,
   onSaved,
 }: AssignDocumentFromMessageModalProps) {
@@ -76,11 +82,16 @@ export function AssignDocumentFromMessageModal({
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<Set<string>>(new Set());
-  const [localLevel, setLocalLevel] = useState<string>("");
+  const [localLevel, setLocalLevel] = useState<string>(rememberedLevel ?? "");
 
   const { levels } = useStudyLevels({ onlyEnabled: true });
 
   const level = owner.interestedLevel ?? localLevel;
+
+  function pickLevel(next: string) {
+    setLocalLevel(next);
+    onLevelChange?.(next);
+  }
 
   const docLabel = (docType: string) => {
     const k = `docTypes.${docType.toLowerCase()}`;
@@ -187,12 +198,14 @@ export function AssignDocumentFromMessageModal({
             </p>
           )}
 
-          {!level && (
+          {!owner.interestedLevel && (
             <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground">
-                {t("inbox.studentTab.selectLevelFirst")}
-              </p>
-              <Select value={localLevel} onValueChange={setLocalLevel}>
+              {!level && (
+                <p className="text-xs text-muted-foreground">
+                  {t("inbox.studentTab.selectLevelFirst")}
+                </p>
+              )}
+              <Select value={localLevel} onValueChange={pickLevel}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder={t("inbox.studentTab.selectLevel")} />
                 </SelectTrigger>

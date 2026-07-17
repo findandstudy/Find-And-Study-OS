@@ -1261,7 +1261,8 @@
     },
     "react": {
       "button": "تفاعل",
-      "free": "مخصص"
+      "free": "مخصص",
+      "failed": "تعذر تحديث التفاعل"
     },
     "replyAction": {
       "button": "رد",

@@ -392,6 +392,9 @@ function InboxTab() {
   const [newBelow, setNewBelow] = useState(0);
   const [retryingId, setRetryingId] = useState<number | null>(null);
   const [addDocTarget, setAddDocTarget] = useState<AddDocTarget | null>(null);
+  // Study level picked in the "Add as document" modal, remembered per
+  // conversation so the second and later files skip the level question.
+  const [assignDocLevels, setAssignDocLevels] = useState<Record<number, string>>({});
   const msgScrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const prevLastMsgIdRef = useRef<number | null>(null);
@@ -757,17 +760,42 @@ function InboxTab() {
 
   async function toggleReaction(msgId: number, emoji: string) {
     if (!selectedId) return;
+    const convId = selectedId;
+    const uid = user?.id ?? -1;
+    setEmojiPaletteFor(null);
+    // Optimistic toggle: update the bubble immediately instead of waiting for
+    // a full conversation refetch (which made reactions feel laggy).
+    setDetail((prev: any) => {
+      if (!prev?.messages) return prev;
+      const messages = prev.messages.map((m: any) => {
+        if (m.id !== msgId) return m;
+        const reactions: Array<{ emoji: string; count: number; userIds: number[] }> =
+          (m.reactions ?? []).map((r: any) => ({ ...r, userIds: [...(r.userIds ?? [])] }));
+        const idx = reactions.findIndex((r) => r.emoji === emoji);
+        if (idx >= 0 && reactions[idx].userIds.includes(uid)) {
+          reactions[idx].userIds = reactions[idx].userIds.filter((u) => u !== uid);
+          reactions[idx].count = Math.max(0, reactions[idx].count - 1);
+          if (reactions[idx].count === 0) reactions.splice(idx, 1);
+        } else if (idx >= 0) {
+          reactions[idx].userIds.push(uid);
+          reactions[idx].count += 1;
+        } else {
+          reactions.push({ emoji, count: 1, userIds: [uid] });
+        }
+        return { ...m, reactions };
+      });
+      return { ...prev, messages };
+    });
     try {
-      await customFetch(`/api/inbox/conversations/${selectedId}/messages/${msgId}/react`, {
+      await customFetch(`/api/inbox/conversations/${convId}/messages/${msgId}/react`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emoji }),
       });
-      fetchDetail(selectedId);
     } catch {
-      toast({ title: t("inbox.react.button"), variant: "destructive" });
-    } finally {
-      setEmojiPaletteFor(null);
+      // Revert to server truth on failure.
+      fetchDetail(convId);
+      toast({ title: t("inbox.react.failed"), variant: "destructive" });
     }
   }
 
@@ -1656,8 +1684,15 @@ function InboxTab() {
                             <TooltipTrigger asChild>
                               <button
                                 type="button"
+                                aria-label={t("inbox.react.button")}
                                 className="h-6 w-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                                onClick={() => setEmojiPaletteFor(prev => prev === m.id ? null : m.id)}
+                                onClick={(e) => {
+                                  // Stop the opening click from bubbling to the document-level
+                                  // outside-close listener (it runs in the same event cycle and
+                                  // would instantly close the palette we just opened).
+                                  e.stopPropagation();
+                                  setEmojiPaletteFor(prev => prev === m.id ? null : m.id);
+                                }}
                               >
                                 <SmilePlus className="w-3.5 h-3.5" />
                               </button>
@@ -1721,7 +1756,20 @@ function InboxTab() {
                                     return seg.includes(".") ? decodeURIComponent(seg) : null;
                                   } catch { return null; }
                                 })();
-                                const name = a.name ?? a.fileName ?? waFilename ?? nameFromUrl ?? (a.type && a.type !== "file" ? a.type : null) ?? "file";
+                                const mimeExt = (() => {
+                                  const mm = String((a as any).mimeType ?? a.fileType ?? "").split(";")[0].trim().toLowerCase();
+                                  const map: Record<string, string> = {
+                                    "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png",
+                                    "image/webp": "webp", "video/mp4": "mp4", "audio/ogg": "ogg", "audio/mpeg": "mp3",
+                                    "application/msword": "doc",
+                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+                                  };
+                                  return map[mm] ?? null;
+                                })();
+                                const typedName = mimeExt
+                                  ? `${type !== "file" ? type : "document"}.${mimeExt}`
+                                  : (type !== "file" ? type : null);
+                                const name = a.name ?? a.fileName ?? waFilename ?? nameFromUrl ?? typedName ?? "file";
                                 // "Add" is always available on inbound attachments: with a
                                 // linked student/lead it saves directly; otherwise it opens
                                 // the create-and-assign flow (unmatched fallback modal).
@@ -2182,6 +2230,8 @@ function InboxTab() {
           target={addDocTarget}
           ownerType="student"
           owner={detail.student}
+          rememberedLevel={assignDocLevels[selectedId] ?? null}
+          onLevelChange={(lvl) => setAssignDocLevels((prev) => ({ ...prev, [selectedId]: lvl }))}
           onClose={() => setAddDocTarget(null)}
           onSaved={() => { if (selectedId) fetchDetail(selectedId); }}
         />
@@ -2193,6 +2243,8 @@ function InboxTab() {
           target={addDocTarget}
           ownerType="lead"
           owner={{ id: detail.lead.id, interestedLevel: null }}
+          rememberedLevel={assignDocLevels[selectedId] ?? null}
+          onLevelChange={(lvl) => setAssignDocLevels((prev) => ({ ...prev, [selectedId]: lvl }))}
           onClose={() => setAddDocTarget(null)}
           onSaved={() => { if (selectedId) fetchDetail(selectedId); }}
         />
@@ -2204,6 +2256,8 @@ function InboxTab() {
           target={addDocTarget}
           ownerType="unmatched"
           owner={{ id: 0, interestedLevel: null }}
+          rememberedLevel={assignDocLevels[selectedId] ?? null}
+          onLevelChange={(lvl) => setAssignDocLevels((prev) => ({ ...prev, [selectedId]: lvl }))}
           onClose={() => setAddDocTarget(null)}
           onSaved={() => {
             setAddDocTarget(null);

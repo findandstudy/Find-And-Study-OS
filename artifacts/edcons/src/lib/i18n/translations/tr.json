@@ -1261,7 +1261,8 @@
     },
     "react": {
       "button": "Tepki",
-      "free": "Özel"
+      "free": "Özel",
+      "failed": "Tepki güncellenemedi"
     },
     "replyAction": {
       "button": "Yanıtla",

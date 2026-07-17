@@ -1261,7 +1261,8 @@
     },
     "react": {
       "button": "回应",
-      "free": "自定义"
+      "free": "自定义",
+      "failed": "无法更新表情回应"
     },
     "replyAction": {
       "button": "回复",

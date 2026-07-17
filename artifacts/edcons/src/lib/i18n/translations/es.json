@@ -1261,7 +1261,8 @@
     },
     "react": {
       "button": "Reaccionar",
-      "free": "Personalizado"
+      "free": "Personalizado",
+      "failed": "No se pudo actualizar la reacción"
     },
     "replyAction": {
       "button": "Responder",

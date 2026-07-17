@@ -1261,7 +1261,8 @@
     },
     "react": {
       "button": "Réagir",
-      "free": "Personnalisé"
+      "free": "Personnalisé",
+      "failed": "Impossible de mettre à jour la réaction"
     },
     "replyAction": {
       "button": "Répondre",

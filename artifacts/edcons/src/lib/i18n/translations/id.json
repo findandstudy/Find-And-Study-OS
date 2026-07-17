@@ -1261,7 +1261,8 @@
     },
     "react": {
       "button": "Reaksi",
-      "free": "Kustom"
+      "free": "Kustom",
+      "failed": "Tidak dapat memperbarui reaksi"
     },
     "replyAction": {
       "button": "Balas",
