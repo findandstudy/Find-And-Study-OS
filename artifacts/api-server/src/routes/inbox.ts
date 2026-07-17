@@ -2637,8 +2637,6 @@ function mimeToExt(mime: string): string {
   return "bin";
 }
 
-const SAVE_AS_DOC_ALLOWED_TYPES = ["diploma", "transcript", "passport", "photograph"] as const;
-type SaveAsDocType = typeof SAVE_AS_DOC_ALLOWED_TYPES[number];
 
 router.post(
   "/inbox/conversations/:id/messages/:msgId/attachments/:attachId/save-as-document",

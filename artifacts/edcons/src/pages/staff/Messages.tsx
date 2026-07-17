@@ -408,8 +408,12 @@ function InboxTab() {
   }, []);
 
   useEffect(() => {
-    if (selectedId) fetchDetail(selectedId);
-    else setDetail(null);
+    if (selectedId) {
+      setDetail(null);
+      fetchDetail(selectedId);
+    } else {
+      setDetail(null);
+    }
     // Reset compose drafts when switching conversations so a half-written
     // note/task/reply doesn't leak across tickets.
     setComposeTab("chat");
