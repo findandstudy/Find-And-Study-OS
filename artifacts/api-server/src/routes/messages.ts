@@ -100,6 +100,11 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
     .where(
       and(
         inArray(conversationsTable.id, myConvIds),
+        // Internal messaging list must never surface external-channel
+        // conversations (WhatsApp/Messenger/Instagram/web_form). Staff become
+        // "participants" of external conversations via star/subscribe, which
+        // would otherwise leak them into this list.
+        eq(conversationsTable.channel, "internal"),
         eq(conversationsTable.isArchived, archived),
         search ? ilike(conversationsTable.title, `%${search}%`) : undefined,
         // Hide test/junk conversations by default (quick-contact WhatsApp
@@ -1118,7 +1123,7 @@ router.get("/student/conversations", requireAuth, async (req, res): Promise<void
   const conversations = await db
     .select()
     .from(conversationsTable)
-    .where(inArray(conversationsTable.id, convIds))
+    .where(and(inArray(conversationsTable.id, convIds), eq(conversationsTable.channel, "internal")))
     .orderBy(desc(conversationsTable.lastMessageAt));
 
   const result = [];
@@ -1317,7 +1322,7 @@ router.get("/agent/conversations", requireAuth, requireAgentStaffPermission("mes
   const conversations = await db
     .select()
     .from(conversationsTable)
-    .where(inArray(conversationsTable.id, convIds))
+    .where(and(inArray(conversationsTable.id, convIds), eq(conversationsTable.channel, "internal")))
     .orderBy(desc(conversationsTable.lastMessageAt));
 
   const result = [];
