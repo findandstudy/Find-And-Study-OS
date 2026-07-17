@@ -1081,7 +1081,8 @@
       "unsubscribe": "取消订阅"
     },
     "attachment": {
-      "download": "下载"
+      "download": "下载",
+      "pageCount": "{count} 页"
     },
     "error": {
       "window24h": "超出 WhatsApp 24 小时回复窗口，请使用模板。",

@@ -1081,7 +1081,8 @@
       "unsubscribe": "Cancelar suscripción"
     },
     "attachment": {
-      "download": "Descargar"
+      "download": "Descargar",
+      "pageCount": "{count} páginas"
     },
     "error": {
       "window24h": "Fuera de la ventana de respuesta de 24h de WhatsApp. Usa una plantilla.",

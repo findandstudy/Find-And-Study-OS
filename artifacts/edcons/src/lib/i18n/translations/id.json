@@ -1081,7 +1081,8 @@
       "unsubscribe": "Berhenti berlangganan"
     },
     "attachment": {
-      "download": "Unduh"
+      "download": "Unduh",
+      "pageCount": "{count} halaman"
     },
     "error": {
       "window24h": "Di luar jendela balasan 24 jam WhatsApp. Gunakan template.",

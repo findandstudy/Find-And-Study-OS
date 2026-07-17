@@ -1081,7 +1081,8 @@
       "unsubscribe": "لغو اشتراک"
     },
     "attachment": {
-      "download": "دانلود"
+      "download": "دانلود",
+      "pageCount": "{count} صفحه"
     },
     "error": {
       "window24h": "خارج از پنجره 24 ساعته پاسخ واتساپ. از قالب استفاده کنید.",

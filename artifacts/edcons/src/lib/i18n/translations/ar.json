@@ -1081,7 +1081,8 @@
       "unsubscribe": "إلغاء الاشتراك"
     },
     "attachment": {
-      "download": "تحميل"
+      "download": "تحميل",
+      "pageCount": "{count} صفحة"
     },
     "error": {
       "window24h": "خارج نافذة الرد البالغة 24 ساعة على واتساب. استخدم نموذجاً.",

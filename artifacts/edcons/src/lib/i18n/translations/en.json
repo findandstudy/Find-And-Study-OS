@@ -1081,7 +1081,8 @@
       "unsubscribe": "Unsubscribe"
     },
     "attachment": {
-      "download": "Download"
+      "download": "Download",
+      "pageCount": "{count} pages"
     },
     "error": {
       "window24h": "Outside the WhatsApp 24-hour reply window. Use a template instead.",

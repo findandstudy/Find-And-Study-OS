@@ -1081,7 +1081,8 @@
       "unsubscribe": "अनसब्स्क्राइब करें"
     },
     "attachment": {
-      "download": "डाउनलोड"
+      "download": "डाउनलोड",
+      "pageCount": "{count} पृष्ठ"
     },
     "error": {
       "window24h": "WhatsApp 24-घंटे की रिप्लाई विंडो के बाहर। टेम्पलेट उपयोग करें।",

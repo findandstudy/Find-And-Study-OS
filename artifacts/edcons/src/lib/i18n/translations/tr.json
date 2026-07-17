@@ -1081,7 +1081,8 @@
       "unsubscribe": "Aboneliği bırak"
     },
     "attachment": {
-      "download": "İndir"
+      "download": "İndir",
+      "pageCount": "{count} sayfa"
     },
     "error": {
       "window24h": "WhatsApp 24 saatlik cevap penceresi dışında. Lütfen şablon kullanın.",
