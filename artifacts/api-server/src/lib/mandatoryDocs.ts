@@ -1,6 +1,7 @@
 import { db, programDocumentRequirementsTable, applicationsTable, documentsTable } from "@workspace/db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
+import { adoptLeadDocsForStudent } from "./leadDocAdoption";
 
 /**
  * Returns mandatory document types for a program that the given upload set
@@ -47,19 +48,30 @@ export async function checkMandatoryDocsForStudent(
   programId: number | null,
   studentId: number,
 ): Promise<{ missing: string[] }> {
-  const rows = await db
-    .select({ type: documentsTable.type })
-    .from(documentsTable)
-    .where(and(
-      eq(documentsTable.studentId, studentId),
-      isNull(documentsTable.deletedAt),
-      // Rejected documents do not satisfy mandatory requirements — the student
-      // must upload a replacement before the application can advance.
-      sql`${documentsTable.status} != 'rejected'`,
-    ));
+  const fetchTypes = async () => {
+    const rows = await db
+      .select({ type: documentsTable.type })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.studentId, studentId),
+        isNull(documentsTable.deletedAt),
+        // Rejected documents do not satisfy mandatory requirements — the student
+        // must upload a replacement before the application can advance.
+        sql`${documentsTable.status} != 'rejected'`,
+      ));
+    return rows.map((r) => String(r.type || "")).filter(Boolean);
+  };
 
-  const uploadedTypes = rows.map((r) => String(r.type || "")).filter(Boolean);
-  return checkMandatoryDocs(programId, uploadedTypes);
+  let result = await checkMandatoryDocs(programId, await fetchTypes());
+  if (result.missing.length > 0) {
+    // Docs may still be staged on a linked lead (inbox flows). Adopt them
+    // onto the student, then re-check before reporting them missing.
+    const adopted = await adoptLeadDocsForStudent(studentId);
+    if (adopted > 0) {
+      result = await checkMandatoryDocs(programId, await fetchTypes());
+    }
+  }
+  return result;
 }
 
 /**

@@ -916,6 +916,34 @@ router.post(
     if (type === "lead") updates.leadId = entityId;
     if (type === "student") updates.studentId = entityId;
     if (type === "agent") updates.agentId = entityId;
+
+    // When re-matching a lead-linked conversation to a student, the previous
+    // lead link is dropped below — adopt the lead's staged documents onto the
+    // student first so the application mandatory-doc gate keeps seeing them.
+    if (type === "student") {
+      const [contact] = await db
+        .select({ leadId: externalContactsTable.leadId })
+        .from(externalContactsTable)
+        .where(eq(externalContactsTable.id, conv.externalContactId));
+      if (contact?.leadId != null) {
+        await db
+          .update(documentsTable)
+          .set({ studentId: entityId })
+          .where(and(
+            eq(documentsTable.leadId, contact.leadId),
+            isNull(documentsTable.studentId),
+            isNull(documentsTable.deletedAt),
+          ));
+        // Record the lead→student relationship (fill-only) so future doc
+        // adoption and cross-entity lookups can traverse it.
+        await db
+          .update(leadsTable)
+          .set({ convertedStudentId: entityId })
+          .where(and(eq(leadsTable.id, contact.leadId), isNull(leadsTable.convertedStudentId)));
+        await recomputeStudentPhoto(entityId);
+      }
+    }
+
     await db.update(externalContactsTable).set(updates).where(eq(externalContactsTable.id, conv.externalContactId));
     await db.update(conversationsTable).set({ unmatched: false }).where(eq(conversationsTable.id, id));
     await logAudit(req.user!.id, "match_conversation", "conversation", id, { type, entityId }, req.ip);

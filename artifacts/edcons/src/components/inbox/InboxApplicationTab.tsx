@@ -96,12 +96,18 @@ export function InboxApplicationTab({
     staleTime: 30_000,
   });
 
+  // Study level comes from the student and is locked in the UI — programs
+  // must be filtered to that level (server-side via the `degree` param).
+  const level = student?.interestedLevel ?? "";
+
   // Programs — server-side, enabled when university selected
   const { data: progData, isLoading: progsLoading } = useQuery<{ data: ProgRow[] }>({
-    queryKey: ["inbox-app-programs", selectedUniversityId],
+    queryKey: ["inbox-app-programs", selectedUniversityId, level],
     queryFn: () =>
       fetch(
-        `${BASE_URL}/api/programs?universityId=${selectedUniversityId}&limit=100`,
+        `${BASE_URL}/api/programs?universityId=${selectedUniversityId}&limit=100${
+          level ? `&degree=${encodeURIComponent(level)}` : ""
+        }`,
         { credentials: "include" }
       ).then((r) => r.json()),
     enabled: !!selectedUniversityId,
@@ -129,7 +135,6 @@ export function InboxApplicationTab({
   const uniOptions = universities.map((u) => ({ value: String(u.id), label: u.name }));
   const progOptions = programs.map((p) => ({ value: String(p.id), label: p.name }));
 
-  const level = student?.interestedLevel ?? "";
   const canAdd = !!selectedCountry && !!studentId && !submitting;
 
   // ── Handlers ──────────────────────────────────────────────────────────────

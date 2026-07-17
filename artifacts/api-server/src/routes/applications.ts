@@ -23,6 +23,7 @@ import { getCurrentSeason } from "../lib/season";
 import { maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { maybeFanOutSitStudentForApplication } from "./portalAutomation.js";
 import { enqueuePortalSubmissions } from "../lib/portalManualEnqueue.js";
+import { adoptLeadDocsForStudent } from "../lib/leadDocAdoption";
 
 const router: IRouter = Router();
 
@@ -430,7 +431,22 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
 
     if (allMandatoryTypes.length > 0) {
       const uploadedTypes = new Set<string>(studentDocs.map((d: { type: string | null }) => (d.type || "").toLowerCase()));
-      const missingDocTypes = findMissingMandatoryTypes(allMandatoryTypes, uploadedTypes);
+      let missingDocTypes = findMissingMandatoryTypes(allMandatoryTypes, uploadedTypes);
+      if (missingDocTypes.length > 0) {
+        // Docs may still be staged on a linked lead (inbox flows). Adopt them
+        // onto the student, then re-check before rejecting.
+        const adopted = await adoptLeadDocsForStudent(studentIdNum);
+        if (adopted > 0) {
+          const refreshedDocs = await db.select({ type: documentsTable.type })
+            .from(documentsTable)
+            .where(and(
+              eq(documentsTable.studentId, studentIdNum),
+              isNull(documentsTable.deletedAt),
+            ));
+          const refreshedTypes = new Set<string>(refreshedDocs.map((d) => (d.type || "").toLowerCase()));
+          missingDocTypes = findMissingMandatoryTypes(allMandatoryTypes, refreshedTypes);
+        }
+      }
       if (missingDocTypes.length > 0) {
         res.status(422).json({
           error: "Mandatory student documents are missing for this application",
@@ -995,10 +1011,29 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       // equivalent name (e.g. "hs_diploma" apply key OR
       // "class_12th_hsc_certificate" canonical type) satisfies the
       // mandatory canonical requirement.
-      const missingDocTypes = findMissingMandatoryTypes(
+      let missingDocTypes = findMissingMandatoryTypes(
         mandatoryReqs.map(r => r.documentType),
         uploadedTypes,
       );
+
+      if (missingDocTypes.length > 0) {
+        // Docs may still be staged on a linked lead (inbox flows). Adopt them
+        // onto the student, then re-check before rejecting.
+        const adopted = await adoptLeadDocsForStudent(currentApp.studentId);
+        if (adopted > 0) {
+          const refreshedDocs = await db.select({ type: documentsTable.type })
+            .from(documentsTable)
+            .where(and(
+              eq(documentsTable.studentId, currentApp.studentId),
+              isNull(documentsTable.deletedAt),
+            ));
+          const refreshedTypes = new Set<string>(refreshedDocs.map((d) => (d.type || "").toLowerCase()));
+          missingDocTypes = findMissingMandatoryTypes(
+            mandatoryReqs.map(r => r.documentType),
+            refreshedTypes,
+          );
+        }
+      }
 
       if (missingDocTypes.length > 0) {
         res.status(422).json({

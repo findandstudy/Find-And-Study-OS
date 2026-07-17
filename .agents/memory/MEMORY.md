@@ -150,4 +150,5 @@
 - [Shared contract-perm backfill scope](edcons-shared-perm-backfill-scope.md) — boot-DDL perm backfill merges multi-group newPerms; keep WHERE=admin/super_admin, grant extra roles in a separate loop.
 - [SIT contact/family data gaps](sit-contact-family-data-gaps.md) — CRM only has address/phone/parent names; don't fabricate missing fields; country defaults to nationality; fill parent-mobile once via everSet.
 - [SIT Step-2 id-less controls & date widgets](sit-step2-idless-controls.md) — Gender/Nationality/date fields have NO id, scope by form-item label; dates are custom widgets, DATEHTML-log first.
+- [Inbox match drops lead link; lead-doc adoption](inbox-match-lead-doc-adoption.md) — mandatory-doc gates read student docs only; adopt lead docs then re-check before 422.
 - [Phone validation & phone_e164 dual-write](phone-validation-e164.md) — @workspace/phone + 422 phone.invalid guard; EVERY phone write must also set phoneE164; embed /lead intentionally lenient.
