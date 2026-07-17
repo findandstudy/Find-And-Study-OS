@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
@@ -168,6 +168,55 @@ export function InboxStudentTab({
   } | null>(null);
   // extracting state for analyze button
   const [extracting, setExtracting] = useState(false);
+
+  // ── Backend docs — pre-populate staging for persistence across reloads ───────
+  const leadId = (detail as any).lead?.id as number | undefined;
+  const studentId = (detail as any).student?.id as number | undefined;
+  const ownerKey = leadId ? `lead:${leadId}` : studentId ? `student:${studentId}` : null;
+  const docsEndpoint = leadId
+    ? `${BASE_URL}/api/leads/${leadId}/documents`
+    : studentId
+    ? `${BASE_URL}/api/students/${studentId}/documents`
+    : null;
+
+  const { data: backendDocs = [] } = useQuery<Array<{ type: string; sourceAttachmentId?: string | null }>>({
+    queryKey: ["inbox-staging-docs", ownerKey],
+    queryFn: () =>
+      fetch(docsEndpoint!, { credentials: "include" }).then((r) =>
+        r.ok ? r.json() : []
+      ),
+    enabled: !!docsEndpoint,
+    staleTime: 30_000,
+  });
+
+  const initializedOwnerRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!ownerKey || backendDocs.length === 0) return;
+    if (initializedOwnerRef.current === ownerKey) return;
+    initializedOwnerRef.current = ownerKey;
+
+    const allAtts = extractChatAttachments((detail as any).messages ?? []);
+    const attMap = new Map<string, ChatAttachment>();
+    for (const att of allAtts) {
+      attMap.set(`${att.msgId}:${att.attachIdx}`, att);
+    }
+
+    setStaging((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const doc of backendDocs) {
+        if (!doc.sourceAttachmentId || !doc.type) continue;
+        if (next[doc.type]) continue;
+        const att = attMap.get(doc.sourceAttachmentId);
+        if (!att) continue;
+        next[doc.type] = att;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerKey, backendDocs]);
 
   // ── Default level to Bachelor when levels load ─────────────────────────────
   useEffect(() => {

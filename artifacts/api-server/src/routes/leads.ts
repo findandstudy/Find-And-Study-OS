@@ -583,6 +583,7 @@ router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...A
     applicationId: documentsTable.applicationId,
     leadId: documentsTable.leadId,
     createdAt: documentsTable.createdAt,
+    sourceAttachmentId: documentsTable.sourceAttachmentId,
   })
     .from(documentsTable)
     .where(and(isNull(documentsTable.deletedAt), or(...orConds)!))

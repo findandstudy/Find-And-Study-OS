@@ -555,6 +555,7 @@ router.get("/students/:id/documents", requireAuth, requireAgentStaffPermission("
       fileName: documentsTable.name,
       mimeType: documentsTable.mimeType,
       sizeBytes: documentsTable.sizeBytes,
+      sourceAttachmentId: documentsTable.sourceAttachmentId,
     })
     .from(documentsTable)
     .where(and(
@@ -574,6 +575,7 @@ router.get("/students/:id/documents", requireAuth, requireAgentStaffPermission("
     fileName: d.fileName,
     mimeType: d.mimeType,
     sizeBytes: d.sizeBytes,
+    sourceAttachmentId: d.sourceAttachmentId ?? null,
     downloadUrl: buildPublicApiUrl(req, `/api/students/${studentId}/documents/${d.id}/download`),
   })));
 });

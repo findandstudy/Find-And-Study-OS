@@ -57,7 +57,7 @@ function getDocIcon(key: string): typeof FileText {
 interface AssignDocumentFromMessageModalProps {
   convId: number;
   target: AddDocTarget;
-  ownerType?: "lead" | "student";
+  ownerType?: "lead" | "student" | "unmatched";
   owner: { id: number; interestedLevel?: string | null };
   onClose: () => void;
   onSaved: () => void;
@@ -99,6 +99,8 @@ export function AssignDocumentFromMessageModal({
     staleTime: 30_000,
   });
 
+  const isUnmatched = ownerType === "unmatched";
+
   const existingDocsKey = ["existing-doc-types-assign", ownerType, owner.id];
   const { data: existingDocs = [] } = useQuery<Array<{ type: string }>>({
     queryKey: existingDocsKey,
@@ -107,6 +109,7 @@ export function AssignDocumentFromMessageModal({
         `${BASE_URL}/api/${ownerType === "student" ? "students" : "leads"}/${owner.id}/documents`,
         { credentials: "include" }
       ).then((r) => (r.ok ? r.json() : [])),
+    enabled: !isUnmatched && owner.id > 0,
     staleTime: 10_000,
   });
 
@@ -115,22 +118,36 @@ export function AssignDocumentFromMessageModal({
   const sortedReqs = [...docReqs].sort((a, b) => a.sortOrder - b.sortOrder);
 
   async function handlePick(docType: string) {
-    if (filledTypes.has(docType)) return;
+    if (!isUnmatched && filledTypes.has(docType)) return;
     setSaving(docType);
     try {
+      let resolvedOwnerType: "lead" | "student" = ownerType === "student" ? "student" : "lead";
+      let resolvedOwnerId = owner.id;
+
+      if (isUnmatched) {
+        const matchRes = (await customFetch(
+          `/api/inbox/conversations/${convId}/match/new-lead`,
+          { method: "POST", headers: { "Content-Type": "application/json" } }
+        )) as any;
+        resolvedOwnerId = matchRes?.leadId ?? matchRes?.id;
+        if (!resolvedOwnerId) throw new Error("lead_create_failed");
+        resolvedOwnerType = "lead";
+      }
+
       const result = (await customFetch(
         `/api/inbox/conversations/${convId}/messages/${target.msgId}/attachments/${target.attachIdx}/save-as-document`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ownerType,
-            ownerId: owner.id,
+            ownerType: resolvedOwnerType,
+            ownerId: resolvedOwnerId,
             documentType: docType,
             setAsPhoto: docType === "photo" || docType === "photograph",
           }),
         }
       )) as any;
+
       void queryClient.invalidateQueries({ queryKey: existingDocsKey });
       if (result?.conflict) {
         onSaved();
@@ -206,7 +223,7 @@ export function AssignDocumentFromMessageModal({
                   const Icon = getDocIcon(req.documentType);
                   const isSaved = saved.has(req.documentType);
                   const isSaving = saving === req.documentType;
-                  const isFilled = filledTypes.has(req.documentType);
+                  const isFilled = !isUnmatched && filledTypes.has(req.documentType);
                   const isDisabled = !!saving || isFilled;
                   return (
                     <button
@@ -252,9 +269,7 @@ export function AssignDocumentFromMessageModal({
             onClick={onClose}
             disabled={!!saving}
           >
-            {saved.size > 0
-              ? t("inbox.addAsDoc.done")
-              : t("inbox.studentTab.cancel")}
+            {t("inbox.studentTab.cancel")}
           </Button>
         </DialogFooter>
       </DialogContent>

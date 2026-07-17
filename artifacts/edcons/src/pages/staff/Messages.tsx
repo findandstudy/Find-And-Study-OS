@@ -49,7 +49,6 @@ import { useI18n } from "@/hooks/use-i18n";
 import { AddStudentModal } from "@/components/AddStudentModal";
 import type { AddDocTarget } from "@/components/inbox/AddAsDocumentModal";
 import { AssignDocumentFromMessageModal } from "@/components/inbox/AssignDocumentFromMessageModal";
-import { CreateStudentAndAddDocumentModal } from "@/components/inbox/CreateStudentAndAddDocumentModal";
 
 interface Conversation {
   id: number;
@@ -2031,16 +2030,16 @@ function InboxTab() {
       )}
 
       {addDocTarget && detail && selectedId && (detail as any).conversation?.unmatched && !detail.lead && !detail.student && (
-        <CreateStudentAndAddDocumentModal
+        <AssignDocumentFromMessageModal
           convId={selectedId}
           target={addDocTarget}
-          detail={detail}
+          ownerType="unmatched"
+          owner={{ id: 0, interestedLevel: null }}
           onClose={() => setAddDocTarget(null)}
-          onCreated={(studentId) => {
-            void studentId;
+          onSaved={() => {
             setAddDocTarget(null);
             fetchInbox();
-            fetchDetail(selectedId);
+            if (selectedId) fetchDetail(selectedId);
           }}
         />
       )}
