@@ -66,8 +66,15 @@ export async function resolveZernioAccount(
   return { id: acct.id, externalAccountId: acct.externalAccountId };
 }
 
+// Test injection seam — unit tests bypass the DB-backed integrations read.
+let __zernioApiKeyOverride: string | null = null;
+export function __setZernioApiKeyOverrideForTests(key: string | null): void {
+  __zernioApiKeyOverride = key;
+}
+
 /** Read the (encrypted) Zernio API key from the integrations row. */
 export async function getZernioApiKey(): Promise<string | null> {
+  if (__zernioApiKeyOverride) return __zernioApiKeyOverride;
   const [row] = await db
     .select()
     .from(integrationsTable)
@@ -175,90 +182,228 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
   return { ok, error, externalMessageId };
 }
 
-// ── Template send via Zernio ─────────────────────────────────────────────────
+// ── Template send via Zernio (BROADCAST flow) ───────────────────────────────
+//
+// Zernio's inbox messages endpoint ONLY accepts free text ({accountId,
+// message}) — posting a Meta Cloud API-shaped template body returns
+// 400 "Message, attachment, or interactive content is required".
+// Per Zernio docs the ONLY way to send an approved WhatsApp template (even to
+// a single recipient) is the 3-step broadcast flow:
+//   1. POST /api/v1/broadcasts { profileId, accountId, platform, name, template }
+//   2. POST /api/v1/broadcasts/{id}/recipients { phones: [E.164] }
+//   3. POST /api/v1/broadcasts/{id}/send → { sent, failed }
+
+/** In-memory cache for the resolved Zernio profile id (broadcasts need it). */
+let _profileIdCache: { id: string; fetchedAt: number } | null = null;
+const PROFILE_ID_TTL_MS = 60 * 60 * 1000; // 1h — profiles virtually never change
+
+export function __clearZernioProfileCacheForTests(): void {
+  _profileIdCache = null;
+}
+
+/**
+ * Resolve the Zernio profile id via GET /api/v1/profiles.
+ * Picks the profile with isDefault: true, else the first one. Cached in
+ * memory with a TTL so we don't hit the endpoint on every send.
+ */
+export async function resolveZernioProfileId(apiKey: string): Promise<{ id: string | null; error?: string }> {
+  if (_profileIdCache && Date.now() - _profileIdCache.fetchedAt < PROFILE_ID_TTL_MS) {
+    return { id: _profileIdCache.id };
+  }
+  const url = "https://zernio.com/api/v1/profiles";
+  try {
+    console.log("[ZERNIO] resolve profile request:", JSON.stringify({ url, auth: `Bearer ${maskApiKey(apiKey)}` }));
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+    const bodyText = await resp.text().catch(() => "");
+    console.log(`[ZERNIO] resolve profile response (${resp.status}):`, bodyText.slice(0, 600));
+    if (!resp.ok) {
+      return { id: null, error: `Zernio profili çözümlenemedi (HTTP ${resp.status})` };
+    }
+    let data: any = {};
+    try { data = JSON.parse(bodyText); } catch { /* non-JSON */ }
+    const profiles: any[] = Array.isArray(data) ? data : (data?.profiles || data?.data || []);
+    if (!Array.isArray(profiles) || profiles.length === 0) {
+      return { id: null, error: "Zernio profili çözümlenemedi (hesapta profil bulunamadı)" };
+    }
+    const chosen = profiles.find((p) => p?.isDefault === true) || profiles[0];
+    const id = chosen?._id ? String(chosen._id) : chosen?.id ? String(chosen.id) : null;
+    if (!id) return { id: null, error: "Zernio profili çözümlenemedi (profil id alanı yok)" };
+    _profileIdCache = { id, fetchedAt: Date.now() };
+    return { id };
+  } catch (err: any) {
+    return { id: null, error: `Zernio profili çözümlenemedi: ${err?.message || "bilinmeyen hata"}` };
+  }
+}
+
+/** One entry of Zernio's broadcast variableMapping. */
+export interface ZernioVariableMapping {
+  field: "name" | "phone" | "email" | "company" | "custom";
+  customValue?: string;
+}
 
 export interface ZernioTemplateSendParams {
-  /** Zernio conversation id (conversations.external_thread_id). */
-  externalThreadId: string;
   /** Zernio account id (channel_accounts.external_account_id). */
   externalAccountId: string;
   templateName: string;
   language: string;
+  /** Recipient phone in E.164 (leading +). */
+  toPhoneE164: string;
+  /**
+   * Positional template parameters ({{1}}, {{2}}, …). Mapped to Zernio's
+   * variableMapping as { "<n>": { field: "custom", customValue } }.
+   * The CALLER must validate the count against the template's placeholder
+   * count BEFORE calling (Meta rejects mismatches with error 132000).
+   */
   parameters?: string[];
+  /** Human-readable label (student name / phone) for the broadcast name. */
+  recipientLabel?: string;
+}
+
+export interface ZernioTemplateSendOutcome extends ZernioSendOutcome {
+  /** Zernio broadcast id — persisted in message metadata for webhook matching. */
+  broadcastId?: string;
+  /** Result of the final send step, when it was reached. */
+  sent?: number;
+  failed?: number;
+}
+
+/** Turn a raw step failure into a human-readable (Turkish) user message. */
+function humanizeZernioTemplateError(raw: string): string {
+  const s = raw.toLowerCase();
+  if (s.includes("131047") || s.includes("24 hour") || s.includes("24-hour") || s.includes("re-engagement")) {
+    return "Template gönderilemedi: 24 saat kuralı — müşteri son 24 saat içinde yazmadığı için yalnızca onaylı template gönderilebilir; template'in Meta onayının geçerli olduğundan emin olun.";
+  }
+  if (s.includes("not approved") || s.includes("132001") || s.includes("template not found") || s.includes("does not exist")) {
+    return "Template gönderilemedi: template Meta tarafından onaylı değil veya bu isim/dilde bulunamadı.";
+  }
+  if (s.includes("132000") || s.includes("parameter")) {
+    return "Template gönderilemedi: parametre sayısı template ile uyuşmuyor.";
+  }
+  return `Template gönderilemedi: ${raw}`;
 }
 
 /**
- * Send a WhatsApp template message through Zernio's conversation messages
- * endpoint (same URL as text sends, different body shape). This must be used
- * instead of the direct Meta Graph API for Zernio-hosted numbers.
+ * Send a WhatsApp template to a single recipient through Zernio's broadcast
+ * flow (create → add recipient → send). This must be used instead of the
+ * direct Meta Graph API for Zernio-hosted numbers.
+ *
+ * STRICT CONTRACT: only a send step that reports sent >= 1 and failed === 0
+ * counts as delivered — `{ sent: 0, failed: 1 }` is a failure.
  */
-export async function sendZernioTemplate(params: ZernioTemplateSendParams): Promise<ZernioSendOutcome> {
+export async function sendZernioTemplate(params: ZernioTemplateSendParams): Promise<ZernioTemplateSendOutcome> {
   const apiKey = await getZernioApiKey();
-  if (!apiKey) return { ok: false, error: "zernio_api_key_not_configured" };
-  if (!params.externalThreadId) return { ok: false, error: "zernio_no_external_thread" };
+  if (!apiKey) return { ok: false, error: "Template gönderilemedi: Zernio API anahtarı yapılandırılmamış." };
+  if (!params.toPhoneE164 || !params.toPhoneE164.startsWith("+")) {
+    return { ok: false, error: "Template gönderilemedi: alıcının E.164 formatında telefon numarası yok." };
+  }
 
-  const url = `https://zernio.com/api/v1/inbox/conversations/${encodeURIComponent(params.externalThreadId)}/messages`;
+  const profile = await resolveZernioProfileId(apiKey);
+  if (!profile.id) {
+    return { ok: false, error: `Template gönderilemedi: ${profile.error || "Zernio profili çözümlenemedi"}` };
+  }
 
-  const components =
+  const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+  const baseUrl = "https://zernio.com/api/v1/broadcasts";
+
+  // Readable name so the broadcast is identifiable in the Zernio panel.
+  const label = (params.recipientLabel || params.toPhoneE164).slice(0, 60);
+  const broadcastName = `CRM template — ${params.templateName} — ${label} — ${new Date().toISOString()}`;
+
+  const variableMapping =
     params.parameters && params.parameters.length > 0
-      ? [{ type: "body", parameters: params.parameters.map((p) => ({ type: "text", text: p })) }]
+      ? Object.fromEntries(
+          params.parameters.map((p, i) => [String(i + 1), { field: "custom", customValue: p } satisfies ZernioVariableMapping]),
+        )
       : undefined;
 
-  const body: Record<string, unknown> = {
-    accountId: params.externalAccountId,
-    type: "template",
-    template: {
-      name: params.templateName,
-      language: { code: params.language },
-      ...(components ? { components } : {}),
-    },
-  };
-
-  console.log("[ZERNIO] send template request:", JSON.stringify({
-    url,
-    accountId: params.externalAccountId,
-    externalThreadId: params.externalThreadId,
-    templateName: params.templateName,
-    language: params.language,
-    paramCount: params.parameters?.length ?? 0,
-    auth: `Bearer ${maskApiKey(apiKey)}`,
-  }));
-
   try {
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const bodyText = await resp.text().catch(() => "");
-    console.log(`[ZERNIO] send template response (${resp.status}):`, bodyText.slice(0, 600));
-
-    if (!resp.ok) {
-      const error = `Zernio template send failed (${resp.status}): ${bodyText}`;
-      console.error("[ZERNIO] " + error);
-      return { ok: false, error };
+    // ── Step 1: create broadcast ─────────────────────────────────────────
+    const createBody = {
+      profileId: profile.id,
+      accountId: params.externalAccountId,
+      platform: "whatsapp",
+      name: broadcastName,
+      template: {
+        name: params.templateName,
+        language: params.language,
+        ...(variableMapping ? { variableMapping } : {}),
+      },
+    };
+    console.log("[ZERNIO] broadcast create request:", JSON.stringify({
+      url: baseUrl,
+      accountId: params.externalAccountId,
+      templateName: params.templateName,
+      language: params.language,
+      paramCount: params.parameters?.length ?? 0,
+      broadcastName,
+      auth: `Bearer ${maskApiKey(apiKey)}`,
+    }));
+    const createResp = await fetch(baseUrl, { method: "POST", headers, body: JSON.stringify(createBody) });
+    const createText = await createResp.text().catch(() => "");
+    console.log(`[ZERNIO] broadcast create response (${createResp.status}):`, createText.slice(0, 600));
+    if (!createResp.ok) {
+      console.error(`[ZERNIO] broadcast create failed (${createResp.status}):`, createText.slice(0, 600));
+      return { ok: false, error: humanizeZernioTemplateError(`broadcast oluşturulamadı (HTTP ${createResp.status}) — ${createText.slice(0, 300)}`) };
+    }
+    let createData: any = {};
+    try { createData = JSON.parse(createText); } catch { /* non-JSON */ }
+    const broadcastId: string | undefined =
+      createData?.broadcast?.id ?? createData?.broadcast?._id ?? createData?.id ?? createData?._id ?? undefined;
+    if (!broadcastId) {
+      console.error("[ZERNIO] broadcast create returned no id:", createText.slice(0, 300));
+      return { ok: false, error: "Template gönderilemedi: broadcast oluşturulamadı (Zernio yanıtında broadcast id yok)." };
     }
 
-    let data: any = {};
-    try { data = JSON.parse(bodyText); } catch { /* non-JSON */ }
-    const messageId = data?.data?.messageId
-      ? String(data.data.messageId)
-      : data?.messageId
-        ? String(data.messageId)
-        : undefined;
-
-    if (messageId) {
-      return { ok: true, externalMessageId: messageId };
+    // ── Step 2: add recipient ────────────────────────────────────────────
+    const recUrl = `${baseUrl}/${encodeURIComponent(String(broadcastId))}/recipients`;
+    console.log("[ZERNIO] broadcast recipients request:", JSON.stringify({ url: recUrl, phones: [params.toPhoneE164] }));
+    const recResp = await fetch(recUrl, { method: "POST", headers, body: JSON.stringify({ phones: [params.toPhoneE164] }) });
+    const recText = await recResp.text().catch(() => "");
+    console.log(`[ZERNIO] broadcast recipients response (${recResp.status}):`, recText.slice(0, 600));
+    if (!recResp.ok) {
+      console.error(`[ZERNIO] broadcast recipients failed (${recResp.status}):`, recText.slice(0, 600));
+      return {
+        ok: false,
+        broadcastId: String(broadcastId),
+        error: humanizeZernioTemplateError(`alıcı eklenemedi (HTTP ${recResp.status}) — ${recText.slice(0, 300)}`),
+      };
     }
 
-    // Some Zernio versions return 2xx with no messageId for template sends —
-    // treat as success (template was accepted) but without a trackable id.
-    console.warn("[ZERNIO] template send returned", resp.status, "but no messageId:", bodyText.slice(0, 200));
-    return { ok: true, externalMessageId: undefined };
+    // ── Step 3: send ─────────────────────────────────────────────────────
+    const sendUrl = `${baseUrl}/${encodeURIComponent(String(broadcastId))}/send`;
+    console.log("[ZERNIO] broadcast send request:", JSON.stringify({ url: sendUrl }));
+    const sendResp = await fetch(sendUrl, { method: "POST", headers, body: JSON.stringify({}) });
+    const sendText = await sendResp.text().catch(() => "");
+    console.log(`[ZERNIO] broadcast send response (${sendResp.status}):`, sendText.slice(0, 600));
+    if (!sendResp.ok) {
+      console.error(`[ZERNIO] broadcast send failed (${sendResp.status}):`, sendText.slice(0, 600));
+      return {
+        ok: false,
+        broadcastId: String(broadcastId),
+        error: humanizeZernioTemplateError(`gönderilemedi (HTTP ${sendResp.status}) — ${sendText.slice(0, 300)}`),
+      };
+    }
+    let sendData: any = {};
+    try { sendData = JSON.parse(sendText); } catch { /* non-JSON */ }
+    const sent = Number(sendData?.sent ?? sendData?.data?.sent ?? 0);
+    const failed = Number(sendData?.failed ?? sendData?.data?.failed ?? 0);
+
+    // {sent:0, failed:1} (or any zero-sent outcome) must NOT be marked sent.
+    if (sent < 1 || failed > 0) {
+      console.error(`[ZERNIO] broadcast send reported sent=${sent} failed=${failed} for broadcast ${broadcastId}`);
+      return {
+        ok: false,
+        broadcastId: String(broadcastId),
+        sent,
+        failed,
+        error: humanizeZernioTemplateError(`gönderilemedi (Zernio raporu: sent=${sent}, failed=${failed})`),
+      };
+    }
+
+    return { ok: true, broadcastId: String(broadcastId), sent, failed };
   } catch (err: any) {
-    const error = `Zernio template send error: ${err?.message || "Unknown"}`;
-    console.error("[ZERNIO] " + error, err?.stack || "");
-    return { ok: false, error };
+    console.error("[ZERNIO] template broadcast exception:", err?.stack || err);
+    return { ok: false, error: `Template gönderilemedi: ${err?.message || "bilinmeyen hata"}` };
   }
 }
 

@@ -153,3 +153,4 @@
 - [Dev-DB notification bloat & connect timeouts](dev-db-notification-bloat.md) — leaked test notifications make webhook-dedup grind; connect timeout <10s gives spurious failures under load.
 - [Inbox unread lastReadAt upsert](inbox-unread-lastreadat.md) — mark-read must be atomic ON CONFLICT upsert on cp_conv_user_uniq; scalar last_read_at subqueries break on duplicates.
 - [Topkapı Step 5 upload gate](topkapi-step5-upload-gate.md) — verify uploads + 4-slot gate before final submit; uploadedSlots evidence in result_json; redact signed URLs in download errors.
+- [Zernio template = broadcast flow](zernio-template-broadcast.md) — inbox endpoint is text-only; templates use 3-step broadcast (profiles→create→recipients→send), sent<1 ⇒ failed.

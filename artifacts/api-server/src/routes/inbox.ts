@@ -47,6 +47,7 @@ import { sendEmail } from "../lib/email";
 import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
 import { decryptConfig } from "../lib/encryption";
 import { sendViaZernio, getZernioApiKey, resolveZernioAccount, sendZernioTemplate } from "../lib/inbox/zernioSend";
+import { toE164 } from "../lib/inbox/phone";
 import { parseContentDispositionFilename, persistAttachmentMeta, backfillConversationAttachmentNames } from "../lib/inbox/attachmentNames";
 import { getChainOwner, syncConversationOwner, loadLink } from "../lib/inbox/assignmentSync";
 import {
@@ -1962,30 +1963,43 @@ router.post(
       res.status(400).json({ error: "Template missing externalTemplateName" });
       return;
     }
+
+    // Pre-send guard: the number of provided parameters MUST exactly match
+    // the template body's placeholder count ({{1}}, {{2}}, …) — otherwise
+    // Meta rejects the send with the opaque error 132000. Fail early with a
+    // human-readable message instead.
+    const placeholderMatches = (tpl.content || "").match(/\{\{\s*\d+\s*\}\}/g);
+    const placeholderCount = placeholderMatches ? new Set(placeholderMatches.map((m) => m.replace(/\D/g, ""))).size : 0;
+    const providedParams = parameters || [];
+    if (providedParams.length !== placeholderCount) {
+      res.status(400).json({
+        error: `Template gönderilemedi: şablonda ${placeholderCount} değişken var, ${providedParams.length} değer girildi. Lütfen tüm değişkenleri doldurun.`,
+      });
+      return;
+    }
+
     // Route through Zernio for Zernio-hosted numbers; fall back to Meta Cloud
     // only when the account is not Zernio (which currently never applies — we
     // have no direct Meta Cloud credentials).
     const zernioAcctForTpl = await resolveZernioAccount(conv.channelAccountId);
-    let result: { ok: boolean; externalMessageId?: string; error?: string; simulated: boolean };
-    if (zernioAcctForTpl && conv.externalThreadId) {
+    let result: { ok: boolean; externalMessageId?: string; error?: string; simulated: boolean; broadcastId?: string };
+    if (zernioAcctForTpl) {
+      // Zernio has no per-conversation template endpoint — templates go out
+      // through the 3-step broadcast flow keyed by the recipient's phone.
+      const phoneE164 = toE164(contact.phoneE164) || (contact.phoneE164.startsWith("+") ? contact.phoneE164 : null);
+      if (!phoneE164) {
+        res.status(400).json({ error: "Template gönderilemedi: alıcının telefon numarası E.164 formatına çevrilemedi." });
+        return;
+      }
       const zr = await sendZernioTemplate({
-        externalThreadId: conv.externalThreadId,
         externalAccountId: zernioAcctForTpl.externalAccountId,
         templateName: tpl.externalTemplateName,
         language: tpl.language || "en",
-        parameters: parameters || [],
+        toPhoneE164: phoneE164,
+        parameters: providedParams,
+        recipientLabel: contact.displayName || phoneE164,
       });
-      result = { ...zr, simulated: false };
-    } else if (zernioAcctForTpl && !conv.externalThreadId) {
-      // Zernio-hosted number but the conversation has no Zernio thread id —
-      // never silently fall back to Meta Cloud (no direct Meta credentials
-      // exist); surface an honest, actionable error instead.
-      console.error(`[INBOX template] conversation ${id} has no externalThreadId — cannot send via Zernio`);
-      result = {
-        ok: false,
-        simulated: false,
-        error: "Conversation is not linked to a Zernio thread (missing externalThreadId) — template cannot be sent",
-      };
+      result = { ok: zr.ok, externalMessageId: zr.externalMessageId, error: zr.error, broadcastId: zr.broadcastId, simulated: false };
     } else {
       const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
       result = await sendWhatsAppTemplate({
@@ -2014,7 +2028,13 @@ router.post(
         externalMessageId: result.externalMessageId || null,
         failedReason: result.ok ? null : result.error || "send_failed",
         sentAt: result.ok ? new Date() : null,
-        metadata: { simulated: result.simulated, template: tpl.externalTemplateName },
+        metadata: {
+          simulated: result.simulated,
+          template: tpl.externalTemplateName,
+          // Broadcast is asynchronous — the delivery/read webhook is matched
+          // back to this message via the Zernio broadcast id.
+          ...(result.broadcastId ? { broadcastId: result.broadcastId } : {}),
+        },
       })
       .returning();
     if (result.ok) {
