@@ -5985,6 +5985,24 @@
         "ready": "Ready",
         "error": "Error"
       }
+    },
+    "schedule": {
+      "title": "Working hours",
+      "hint": "Limit when the AI agent auto-replies. Outside these hours the bot stays fully silent; messages still arrive in the inbox.",
+      "statusActive": "ACTIVE",
+      "statusInactive": "PASSIVE",
+      "nextOff": "Turns off {when}.",
+      "nextOn": "Turns on {when}.",
+      "whenToday": "today at {time}",
+      "whenTomorrow": "tomorrow at {time}",
+      "whenOnDay": "on {day} at {time}",
+      "timezoneLabel": "Timezone",
+      "timezoneSearch": "Search timezone…",
+      "nowInTz": "Current time in this timezone: {time}",
+      "applyToAll": "Apply Monday to all days",
+      "closed": "Closed",
+      "invalidRange": "Start and end times must be different.",
+      "overnightHint": "If the end time is earlier than the start time, the window runs past midnight into the next day (e.g. 09:00–04:00)."
     }
   },
   "portalFallback": {

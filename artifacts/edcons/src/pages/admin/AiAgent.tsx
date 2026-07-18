@@ -3,12 +3,24 @@ import { customFetch } from "@workspace/api-client-react";
 import type {
   AiAgentConfig,
   AiAgentConfigUpdate,
+  AiAgentScheduleDay,
   AiAgentTestResult,
   AiAgentTestRequestHistoryItem,
   KnowledgeSourceProgramScope,
   ProgramScope,
 } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
+import { getLocale } from "@/lib/i18n";
+import {
+  UI_DAY_ORDER,
+  type WeekDayKey,
+  listTimeZones,
+  scheduleStatus,
+  currentTimeInZone,
+  weekdayLabel,
+  weekdayLabelAtOffset,
+} from "@/lib/aiSchedule";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -35,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Clock,
   MessageSquare,
   Save,
   Play,
@@ -65,7 +78,7 @@ function parseKeywords(raw: string): string[] {
 }
 
 export default function AiAgent() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { toast } = useToast();
 
   const [config, setConfig] = useState<AiAgentConfig | null>(null);
@@ -158,6 +171,60 @@ export default function AiAgent() {
   const patch = (p: Partial<AiAgentConfig>) =>
     setConfig((prev) => (prev ? { ...prev, ...p } : prev));
 
+  // Working-hours schedule helpers -----------------------------------------
+  const locale = getLocale(lang);
+  const timeZoneOptions = listTimeZones().map((tz) => ({ value: tz, label: tz }));
+
+  // Live clock tick so the "current time in timezone" preview and the
+  // ACTIVE/PASSIVE badge stay fresh without a reload.
+  const [nowTick, setNowTick] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(new Date()), 15000);
+    return () => clearInterval(id);
+  }, []);
+
+  const patchScheduleDay = (day: WeekDayKey, p: Partial<AiAgentScheduleDay>) =>
+    setConfig((prev) =>
+      prev
+        ? {
+            ...prev,
+            schedule: { ...prev.schedule, [day]: { ...prev.schedule[day], ...p } },
+          }
+        : prev,
+    );
+
+  // "Apply Monday to all days" convenience.
+  const applyMondayToAll = () =>
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const src = prev.schedule.mon;
+      const next = { ...prev.schedule };
+      for (const k of UI_DAY_ORDER) next[k] = { ...src };
+      return { ...prev, schedule: next };
+    });
+
+  const scheduleInvalidDays = config
+    ? UI_DAY_ORDER.filter(
+        (k) => config.schedule[k].enabled && config.schedule[k].start === config.schedule[k].end,
+      )
+    : [];
+
+  const status =
+    config && config.scheduleEnabled
+      ? scheduleStatus(config.schedule, config.timezone, nowTick)
+      : null;
+
+  const nextChangeLabel = (() => {
+    if (!status || !status.next || !config) return null;
+    const time = status.next.time;
+    if (status.next.dayOffset === 0) return t("aiAgentAdmin.schedule.whenToday", { time });
+    if (status.next.dayOffset === 1) return t("aiAgentAdmin.schedule.whenTomorrow", { time });
+    return t("aiAgentAdmin.schedule.whenOnDay", {
+      day: weekdayLabelAtOffset(config.timezone, status.next.dayOffset, locale, nowTick),
+      time,
+    });
+  })();
+
   const patchScope = (p: Partial<ProgramScope>) =>
     setProgramScopeSource((prev) =>
       prev ? { ...prev, scope: { ...prev.scope, ...p } } : prev,
@@ -189,6 +256,13 @@ export default function AiAgent() {
 
   const save = async () => {
     if (!config) return;
+    if (config.scheduleEnabled && scheduleInvalidDays.length > 0) {
+      toast({
+        title: t("aiAgentAdmin.schedule.invalidRange"),
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
     try {
       const body: AiAgentConfigUpdate = {
@@ -199,6 +273,9 @@ export default function AiAgent() {
         maxConsecutiveReplies: config.maxConsecutiveReplies,
         handoffMessage: config.handoffMessage,
         knowledgeBase: config.knowledgeBase,
+        scheduleEnabled: config.scheduleEnabled,
+        timezone: config.timezone,
+        schedule: config.schedule,
         escalationKeywords: {
           contract: parseKeywords(keywordText.contract),
           payment: parseKeywords(keywordText.payment),
@@ -391,6 +468,126 @@ export default function AiAgent() {
             <p className="text-xs text-muted-foreground">
               {t("aiAgentAdmin.handoffMessageHint")}
             </p>
+          </div>
+
+          <Separator />
+
+          {/* Working-hours schedule */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-medium flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  {t("aiAgentAdmin.schedule.title")}
+                </p>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {t("aiAgentAdmin.schedule.hint")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {config.scheduleEnabled && status && (
+                  <Badge variant={status.active ? "default" : "secondary"}>
+                    {status.active
+                      ? t("aiAgentAdmin.schedule.statusActive")
+                      : t("aiAgentAdmin.schedule.statusInactive")}
+                  </Badge>
+                )}
+                <Switch
+                  checked={config.scheduleEnabled}
+                  onCheckedChange={(v) => patch({ scheduleEnabled: v })}
+                />
+              </div>
+            </div>
+
+            {config.scheduleEnabled && (
+              <>
+                {status && nextChangeLabel && (
+                  <p className="text-sm text-muted-foreground">
+                    {status.active
+                      ? t("aiAgentAdmin.schedule.nextOff", { when: nextChangeLabel })
+                      : t("aiAgentAdmin.schedule.nextOn", { when: nextChangeLabel })}
+                  </p>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                  <div className="space-y-1.5">
+                    <Label>{t("aiAgentAdmin.schedule.timezoneLabel")}</Label>
+                    <SearchableSelect
+                      value={config.timezone}
+                      onChange={(v) => v && patch({ timezone: v })}
+                      options={timeZoneOptions}
+                      placeholder={t("aiAgentAdmin.schedule.timezoneLabel")}
+                      searchPlaceholder={t("aiAgentAdmin.schedule.timezoneSearch")}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("aiAgentAdmin.schedule.nowInTz", {
+                        time: currentTimeInZone(config.timezone, locale, nowTick),
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex sm:justify-end">
+                    <Button type="button" variant="outline" size="sm" onClick={applyMondayToAll}>
+                      {t("aiAgentAdmin.schedule.applyToAll")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {UI_DAY_ORDER.map((day) => {
+                    const row = config.schedule[day];
+                    const invalid = row.enabled && row.start === row.end;
+                    return (
+                      <div
+                        key={day}
+                        className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2"
+                      >
+                        <Switch
+                          checked={row.enabled}
+                          onCheckedChange={(v) => patchScheduleDay(day, { enabled: v })}
+                        />
+                        <span className="w-28 text-sm font-medium capitalize">
+                          {weekdayLabel(day, locale)}
+                        </span>
+                        {row.enabled ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="time"
+                              className="w-28"
+                              value={row.start}
+                              onChange={(e) =>
+                                patchScheduleDay(day, { start: e.target.value })
+                              }
+                            />
+                            <span className="text-muted-foreground">–</span>
+                            <Input
+                              type="time"
+                              className="w-28"
+                              value={row.end}
+                              onChange={(e) =>
+                                patchScheduleDay(day, { end: e.target.value })
+                              }
+                            />
+                            {invalid && (
+                              <span className="text-xs text-destructive">
+                                {t("aiAgentAdmin.schedule.invalidRange")}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {t("aiAgentAdmin.schedule.closed")}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {t("aiAgentAdmin.schedule.overnightHint")}
+                </p>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AiAgentConfigUpdateLanguagesItem } from "./aiAgentConfigUpdateLanguagesItem";
+import type { AiAgentWeeklySchedule } from "./aiAgentWeeklySchedule";
 import type { EscalationKeywords } from "./escalationKeywords";
 
 /**
@@ -21,4 +22,7 @@ export interface AiAgentConfigUpdate {
   languages?: AiAgentConfigUpdateLanguagesItem[];
   escalationKeywords?: EscalationKeywords;
   knowledgeBase?: string;
+  scheduleEnabled?: boolean;
+  timezone?: string;
+  schedule?: AiAgentWeeklySchedule;
 }

@@ -5654,6 +5654,12 @@ components:
           type: string
         programScope:
           $ref: "#/components/schemas/ProgramScope"
+        scheduleEnabled:
+          type: boolean
+        timezone:
+          type: string
+        schedule:
+          $ref: "#/components/schemas/AiAgentWeeklySchedule"
       required:
         - enabled
         - defaultOnForNew
@@ -5665,6 +5671,55 @@ components:
         - escalationKeywords
         - knowledgeBase
         - programScope
+        - scheduleEnabled
+        - timezone
+        - schedule
+
+    AiAgentScheduleDay:
+      type: object
+      description: >-
+        One weekday's working window ("HH:mm" local times in the config
+        timezone). end < start means the window runs past midnight into the
+        next day and is owned by the day it starts on.
+      properties:
+        enabled:
+          type: boolean
+        start:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        end:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+      required:
+        - enabled
+        - start
+        - end
+
+    AiAgentWeeklySchedule:
+      type: object
+      properties:
+        mon:
+          $ref: "#/components/schemas/AiAgentScheduleDay"
+        tue:
+          $ref: "#/components/schemas/AiAgentScheduleDay"
+        wed:
+          $ref: "#/components/schemas/AiAgentScheduleDay"
+        thu:
+          $ref: "#/components/schemas/AiAgentScheduleDay"
+        fri:
+          $ref: "#/components/schemas/AiAgentScheduleDay"
+        sat:
+          $ref: "#/components/schemas/AiAgentScheduleDay"
+        sun:
+          $ref: "#/components/schemas/AiAgentScheduleDay"
+      required:
+        - mon
+        - tue
+        - wed
+        - thu
+        - fri
+        - sat
+        - sun
 
     ProgramScope:
       type: object
@@ -5760,6 +5815,12 @@ components:
           $ref: "#/components/schemas/EscalationKeywords"
         knowledgeBase:
           type: string
+        scheduleEnabled:
+          type: boolean
+        timezone:
+          type: string
+        schedule:
+          $ref: "#/components/schemas/AiAgentWeeklySchedule"
 
     AiAgentTestRequest:
       type: object

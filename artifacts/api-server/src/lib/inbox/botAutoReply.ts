@@ -23,6 +23,7 @@ import {
   buildMissingDocsInstruction,
 } from "./leadCapture";
 import { inboxBus } from "./eventBus";
+import { isAiAgentWithinWorkingHours } from "./botSchedule";
 import {
   buildBotSystemPrompt,
   DEFAULT_ESCALATION_KEYWORDS,
@@ -428,6 +429,7 @@ export interface AutoReplyOutcome {
     | "escalated"
     | "handoff"
     | "outside_window"
+    | "outside_working_hours"
     | "template_sent"
     | "no_phone"
     | "send_failed"
@@ -464,6 +466,15 @@ export async function maybeAutoReply(opts: {
   // Global master switch: when the bot is off agency-wide, no auto-replies are
   // sent regardless of the per-conversation toggle.
   if (!config.enabled) return { acted: false, reason: "globally_disabled" };
+
+  // Working-hours schedule gate: outside the configured windows the bot is
+  // FULLY silent — no reply, no greeting, no "we're closed" message. The
+  // inbound message still lands in the inbox for staff. When scheduleEnabled
+  // is false this is always true (24/7, pre-existing behavior).
+  if (!isAiAgentWithinWorkingHours(config)) {
+    console.log(`[bot] mesai disi — atlandi (conv=${conversationId})`);
+    return { acted: false, reason: "outside_working_hours" };
+  }
 
   // Human takeover / per-conversation opt-in gate.
   if (!conv.botEnabled) return { acted: false, reason: "bot_disabled" };

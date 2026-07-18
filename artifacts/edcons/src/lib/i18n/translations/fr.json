@@ -5985,6 +5985,24 @@
         "ready": "Prêt",
         "error": "Erreur"
       }
+    },
+    "schedule": {
+      "title": "Heures de travail",
+      "hint": "Limitez les horaires de réponse automatique de l'agent IA. En dehors de ces heures, le bot reste totalement silencieux ; les messages arrivent toujours dans la boîte de réception.",
+      "statusActive": "ACTIF",
+      "statusInactive": "INACTIF",
+      "nextOff": "Se désactive {when}.",
+      "nextOn": "S'active {when}.",
+      "whenToday": "aujourd'hui à {time}",
+      "whenTomorrow": "demain à {time}",
+      "whenOnDay": "{day} à {time}",
+      "timezoneLabel": "Fuseau horaire",
+      "timezoneSearch": "Rechercher un fuseau horaire…",
+      "nowInTz": "Heure actuelle dans ce fuseau : {time}",
+      "applyToAll": "Appliquer lundi à tous les jours",
+      "closed": "Fermé",
+      "invalidRange": "Les heures de début et de fin doivent être différentes.",
+      "overnightHint": "Si l'heure de fin est antérieure à l'heure de début, la plage dépasse minuit et déborde sur le jour suivant (ex. 09:00–04:00)."
     }
   },
   "portalFallback": {

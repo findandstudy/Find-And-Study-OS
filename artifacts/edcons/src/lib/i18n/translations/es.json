@@ -5985,6 +5985,24 @@
         "ready": "Listo",
         "error": "Error"
       }
+    },
+    "schedule": {
+      "title": "Horario laboral",
+      "hint": "Limite cuándo responde automáticamente el agente de IA. Fuera de estas horas el bot permanece en silencio total; los mensajes siguen llegando a la bandeja de entrada.",
+      "statusActive": "ACTIVO",
+      "statusInactive": "INACTIVO",
+      "nextOff": "Se desactiva {when}.",
+      "nextOn": "Se activa {when}.",
+      "whenToday": "hoy a las {time}",
+      "whenTomorrow": "mañana a las {time}",
+      "whenOnDay": "el {day} a las {time}",
+      "timezoneLabel": "Zona horaria",
+      "timezoneSearch": "Buscar zona horaria…",
+      "nowInTz": "Hora actual en esta zona horaria: {time}",
+      "applyToAll": "Aplicar lunes a todos los días",
+      "closed": "Cerrado",
+      "invalidRange": "Las horas de inicio y fin deben ser diferentes.",
+      "overnightHint": "Si la hora de fin es anterior a la de inicio, la franja pasa la medianoche y continúa al día siguiente (p. ej. 09:00–04:00)."
     }
   },
   "portalFallback": {

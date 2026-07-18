@@ -154,3 +154,4 @@
 - [Inbox unread lastReadAt upsert](inbox-unread-lastreadat.md) — mark-read must be atomic ON CONFLICT upsert on cp_conv_user_uniq; scalar last_read_at subqueries break on duplicates.
 - [Topkapı Step 5 upload gate](topkapi-step5-upload-gate.md) — verify uploads + 4-slot gate before final submit; uploadedSlots evidence in result_json; redact signed URLs in download errors.
 - [Zernio template = broadcast flow](zernio-template-broadcast.md) — inbox endpoint is text-only; templates use 3-step broadcast (profiles→create→recipients→send), sent<1 ⇒ failed.
+- [AI agent working-hours gate](ai-agent-working-hours.md) — schedule gate lives in maybeAutoReply only (test console ungated); overnight window owned by START day; dual logic copies botSchedule.ts ↔ edcons aiSchedule.ts must stay in sync.

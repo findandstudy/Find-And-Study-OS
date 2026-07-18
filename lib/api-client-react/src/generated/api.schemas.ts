@@ -1688,6 +1688,27 @@ export interface ProgramScope {
   universityTypes: string[] | "all";
 }
 
+/**
+ * One weekday's working window ("HH:mm" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.
+ */
+export interface AiAgentScheduleDay {
+  enabled: boolean;
+  /** @pattern ^([01][0-9]|2[0-3]):[0-5][0-9]$ */
+  start: string;
+  /** @pattern ^([01][0-9]|2[0-3]):[0-5][0-9]$ */
+  end: string;
+}
+
+export interface AiAgentWeeklySchedule {
+  mon: AiAgentScheduleDay;
+  tue: AiAgentScheduleDay;
+  wed: AiAgentScheduleDay;
+  thu: AiAgentScheduleDay;
+  fri: AiAgentScheduleDay;
+  sat: AiAgentScheduleDay;
+  sun: AiAgentScheduleDay;
+}
+
 export interface AiAgentConfig {
   enabled: boolean;
   defaultOnForNew: boolean;
@@ -1699,6 +1720,9 @@ export interface AiAgentConfig {
   escalationKeywords: EscalationKeywords;
   knowledgeBase: string;
   programScope: ProgramScope;
+  scheduleEnabled: boolean;
+  timezone: string;
+  schedule: AiAgentWeeklySchedule;
 }
 
 export interface KnowledgeSourceProgramScope {
@@ -1745,6 +1769,9 @@ export interface AiAgentConfigUpdate {
   languages?: AiAgentConfigUpdateLanguagesItem[];
   escalationKeywords?: EscalationKeywords;
   knowledgeBase?: string;
+  scheduleEnabled?: boolean;
+  timezone?: string;
+  schedule?: AiAgentWeeklySchedule;
 }
 
 export type AiAgentTestRequestLanguage =

@@ -5985,6 +5985,24 @@
         "ready": "就绪",
         "error": "错误"
       }
+    },
+    "schedule": {
+      "title": "工作时间",
+      "hint": "限制 AI 客服自动回复的时间。超出这些时间后，机器人将完全保持静默；消息仍会进入收件箱。",
+      "statusActive": "启用中",
+      "statusInactive": "未启用",
+      "nextOff": "将于{when}关闭。",
+      "nextOn": "将于{when}开启。",
+      "whenToday": "今天 {time}",
+      "whenTomorrow": "明天 {time}",
+      "whenOnDay": "{day} {time}",
+      "timezoneLabel": "时区",
+      "timezoneSearch": "搜索时区…",
+      "nowInTz": "该时区当前时间：{time}",
+      "applyToAll": "将周一应用到所有日期",
+      "closed": "休息",
+      "invalidRange": "开始时间和结束时间必须不同。",
+      "overnightHint": "如果结束时间早于开始时间，时段将跨过午夜延续到第二天（例如 09:00–04:00）。"
     }
   },
   "portalFallback": {

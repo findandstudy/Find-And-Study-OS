@@ -5985,6 +5985,24 @@
         "ready": "Hazır",
         "error": "Hata"
       }
+    },
+    "schedule": {
+      "title": "Çalışma saatleri",
+      "hint": "AI asistanın otomatik yanıt verdiği saatleri sınırlayın. Bu saatler dışında bot tamamen sessiz kalır; mesajlar gelen kutusuna düşmeye devam eder.",
+      "statusActive": "AKTİF",
+      "statusInactive": "PASİF",
+      "nextOff": "{when} kapanacak.",
+      "nextOn": "{when} açılacak.",
+      "whenToday": "bugün {time}",
+      "whenTomorrow": "yarın {time}",
+      "whenOnDay": "{day} {time}",
+      "timezoneLabel": "Saat dilimi",
+      "timezoneSearch": "Saat dilimi ara…",
+      "nowInTz": "Bu saat diliminde şu anki saat: {time}",
+      "applyToAll": "Pazartesi'yi tüm günlere uygula",
+      "closed": "Kapalı",
+      "invalidRange": "Başlangıç ve bitiş saatleri farklı olmalıdır.",
+      "overnightHint": "Bitiş saati başlangıçtan erkense aralık gece yarısını aşıp ertesi güne taşar (örn. 09:00–04:00)."
     }
   },
   "portalFallback": {

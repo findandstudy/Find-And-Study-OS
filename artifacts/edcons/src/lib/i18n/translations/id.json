@@ -5985,6 +5985,24 @@
         "ready": "Siap",
         "error": "Kesalahan"
       }
+    },
+    "schedule": {
+      "title": "Jam kerja",
+      "hint": "Batasi kapan agen AI membalas otomatis. Di luar jam ini bot sepenuhnya diam; pesan tetap masuk ke kotak masuk.",
+      "statusActive": "AKTIF",
+      "statusInactive": "PASIF",
+      "nextOff": "Nonaktif {when}.",
+      "nextOn": "Aktif {when}.",
+      "whenToday": "hari ini pukul {time}",
+      "whenTomorrow": "besok pukul {time}",
+      "whenOnDay": "{day} pukul {time}",
+      "timezoneLabel": "Zona waktu",
+      "timezoneSearch": "Cari zona waktu…",
+      "nowInTz": "Waktu saat ini di zona ini: {time}",
+      "applyToAll": "Terapkan Senin ke semua hari",
+      "closed": "Tutup",
+      "invalidRange": "Waktu mulai dan selesai harus berbeda.",
+      "overnightHint": "Jika waktu selesai lebih awal dari waktu mulai, rentang melewati tengah malam ke hari berikutnya (mis. 09:00–04:00)."
     }
   },
   "portalFallback": {

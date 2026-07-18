@@ -58,7 +58,33 @@ export interface AiAgentConfig {
    * scoring batch worker and the /api/quality routes.
    */
   quality: QualityScoringConfig;
+  /**
+   * Working-hours schedule. When scheduleEnabled=false (the backward-
+   * compatible default) the bot runs 24/7 exactly as before. When true, the
+   * bot only auto-replies inside the per-weekday windows below, interpreted
+   * in `timezone` (IANA, DST-aware). Outside the window the bot is FULLY
+   * silent — no reply, no greeting; messages still land in the inbox.
+   */
+  scheduleEnabled: boolean;
+  /** IANA timezone the schedule times are interpreted in. */
+  timezone: string;
+  /** Per-weekday working windows. Overnight windows (end < start) spill into
+   *  the next day and belong to the day they START on (see botSchedule.ts). */
+  schedule: WeeklySchedule;
 }
+
+export type WeekDayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+export interface ScheduleDayConfig {
+  /** false = the bot never runs on windows starting this day. */
+  enabled: boolean;
+  /** "HH:mm" local time in `timezone`. */
+  start: string;
+  /** "HH:mm" local time; end < start means the window runs past midnight. */
+  end: string;
+}
+
+export type WeeklySchedule = Record<WeekDayKey, ScheduleDayConfig>;
 
 export interface QualityScoringConfig {
   /** Master switch for the nightly quality-scoring batch. */
@@ -102,6 +128,15 @@ export const DEFAULT_QUALITY_CONFIG: QualityScoringConfig = {
   selfVisible: false,
 };
 
+export const DEFAULT_TIMEZONE = "Europe/Istanbul";
+
+const WEEK_DAYS: WeekDayKey[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+function defaultWeeklySchedule(): WeeklySchedule {
+  const day = (): ScheduleDayConfig => ({ enabled: true, start: "09:00", end: "18:00" });
+  return { mon: day(), tue: day(), wed: day(), thu: day(), fri: day(), sat: day(), sun: day() };
+}
+
 export const DEFAULT_AI_AGENT_CONFIG: AiAgentConfig = {
   // enabled defaults TRUE so existing #530 behavior (per-conversation toggle
   // decides) is preserved; an admin can flip the master switch off to silence
@@ -120,6 +155,11 @@ export const DEFAULT_AI_AGENT_CONFIG: AiAgentConfig = {
   knowledgeBase: DEFAULT_KNOWLEDGE_BASE,
   programScope: DEFAULT_PROGRAM_SCOPE,
   quality: DEFAULT_QUALITY_CONFIG,
+  // scheduleEnabled defaults FALSE — existing installs keep 24/7 behavior
+  // until an admin explicitly turns the schedule on.
+  scheduleEnabled: false,
+  timezone: DEFAULT_TIMEZONE,
+  schedule: defaultWeeklySchedule(),
 };
 
 // ---------------------------------------------------------------------------
@@ -143,6 +183,43 @@ const qualityConfigSchema = z.object({
   selfVisible: z.boolean(),
 });
 
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function isValidTz(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const scheduleDaySchema = z
+  .object({
+    enabled: z.boolean(),
+    start: z.string().regex(TIME_RE, "Invalid time (HH:mm)"),
+    end: z.string().regex(TIME_RE, "Invalid time (HH:mm)"),
+  })
+  .refine((d) => !d.enabled || d.start !== d.end, {
+    message: "start and end must differ",
+  });
+
+const weeklyScheduleSchema = z.object({
+  mon: scheduleDaySchema,
+  tue: scheduleDaySchema,
+  wed: scheduleDaySchema,
+  thu: scheduleDaySchema,
+  fri: scheduleDaySchema,
+  sat: scheduleDaySchema,
+  sun: scheduleDaySchema,
+});
+
+const timezoneSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .refine(isValidTz, { message: "Invalid IANA timezone" });
+
 const programScopeSchema = z.object({
   enabled: z.boolean(),
   countries: z.union([z.array(z.string()), z.literal("all")]),
@@ -161,6 +238,9 @@ export const aiAgentConfigSchema = z.object({
   knowledgeBase: z.string().min(1).max(200000),
   programScope: programScopeSchema,
   quality: qualityConfigSchema,
+  scheduleEnabled: z.boolean(),
+  timezone: timezoneSchema,
+  schedule: weeklyScheduleSchema,
 });
 
 export const aiAgentConfigPatchSchema = aiAgentConfigSchema.partial();
@@ -236,6 +316,28 @@ function mergeQuality(raw: unknown): QualityScoringConfig {
   };
 }
 
+function cloneSchedule(s: WeeklySchedule): WeeklySchedule {
+  const out = {} as WeeklySchedule;
+  for (const k of WEEK_DAYS) out[k] = { ...s[k] };
+  return out;
+}
+
+function mergeSchedule(raw: unknown): WeeklySchedule {
+  const d = defaultWeeklySchedule();
+  if (!raw || typeof raw !== "object") return d;
+  const r = raw as Partial<Record<WeekDayKey, Partial<ScheduleDayConfig>>>;
+  const out = {} as WeeklySchedule;
+  for (const k of WEEK_DAYS) {
+    const v = r[k];
+    out[k] = {
+      enabled: typeof v?.enabled === "boolean" ? v.enabled : d[k].enabled,
+      start: typeof v?.start === "string" && TIME_RE.test(v.start) ? v.start : d[k].start,
+      end: typeof v?.end === "string" && TIME_RE.test(v.end) ? v.end : d[k].end,
+    };
+  }
+  return out;
+}
+
 function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiAgentConfig {
   const d = DEFAULT_AI_AGENT_CONFIG;
   if (!raw || typeof raw !== "object") {
@@ -245,6 +347,7 @@ function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiA
       escalationKeywords: cloneKeywords(d.escalationKeywords),
       programScope: cloneProgramScope(d.programScope),
       quality: { ...d.quality },
+      schedule: cloneSchedule(d.schedule),
     };
   }
   const r = raw as Partial<AiAgentConfig>;
@@ -267,6 +370,9 @@ function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiA
     knowledgeBase: typeof r.knowledgeBase === "string" && r.knowledgeBase.trim() ? r.knowledgeBase : d.knowledgeBase,
     programScope: mergeProgramScope(r.programScope),
     quality: mergeQuality(r.quality),
+    scheduleEnabled: typeof r.scheduleEnabled === "boolean" ? r.scheduleEnabled : d.scheduleEnabled,
+    timezone: typeof r.timezone === "string" && isValidTz(r.timezone) ? r.timezone : d.timezone,
+    schedule: mergeSchedule(r.schedule),
   };
 }
 
@@ -320,6 +426,10 @@ export async function writeAiAgentConfig(patch: AiAgentConfigPatch): Promise<AiA
     quality: {
       ...current.quality,
       ...(patch.quality ?? {}),
+    },
+    schedule: {
+      ...cloneSchedule(current.schedule),
+      ...(patch.schedule ?? {}),
     },
   });
   const validated = aiAgentConfigSchema.parse(merged);

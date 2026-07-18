@@ -2400,6 +2400,49 @@ export const SummarizeInboxConversationResponse = zod.object({
 /**
  * @summary Read the AI intake agent configuration (admin only)
  */
+export const getAiAgentConfigResponseConfigScheduleMonStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleMonEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleTueStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleTueEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleWedStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleWedEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleThuStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleThuEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleFriStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleFriEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleSatStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleSatEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleSunStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const getAiAgentConfigResponseConfigScheduleSunEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+
 export const GetAiAgentConfigResponse = zod.object({
   config: zod.object({
     enabled: zod.boolean(),
@@ -2428,12 +2471,150 @@ export const GetAiAgentConfigResponse = zod.object({
       .describe(
         'Country \/ university-type scope for the live searchPrograms tool (FAZ 1). \"all\" means no restriction on that axis.',
       ),
+    scheduleEnabled: zod.boolean(),
+    timezone: zod.string(),
+    schedule: zod.object({
+      mon: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleMonStartRegExp),
+          end: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleMonEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      tue: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleTueStartRegExp),
+          end: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleTueEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      wed: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleWedStartRegExp),
+          end: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleWedEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      thu: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleThuStartRegExp),
+          end: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleThuEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      fri: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleFriStartRegExp),
+          end: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleFriEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      sat: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleSatStartRegExp),
+          end: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleSatEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      sun: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleSunStartRegExp),
+          end: zod
+            .string()
+            .regex(getAiAgentConfigResponseConfigScheduleSunEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+    }),
   }),
 });
 
 /**
  * @summary Update the AI intake agent configuration (admin only)
  */
+export const updateAiAgentConfigBodyScheduleMonStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleMonEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleTueStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleTueEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleWedStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleWedEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleThuStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleThuEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleFriStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleFriEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleSatStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleSatEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleSunStartRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigBodyScheduleSunEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+
 export const UpdateAiAgentConfigBody = zod
   .object({
     enabled: zod.boolean().optional(),
@@ -2452,8 +2633,141 @@ export const UpdateAiAgentConfigBody = zod
       })
       .optional(),
     knowledgeBase: zod.string().optional(),
+    scheduleEnabled: zod.boolean().optional(),
+    timezone: zod.string().optional(),
+    schedule: zod
+      .object({
+        mon: zod
+          .object({
+            enabled: zod.boolean(),
+            start: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleMonStartRegExp),
+            end: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleMonEndRegExp),
+          })
+          .describe(
+            'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+          ),
+        tue: zod
+          .object({
+            enabled: zod.boolean(),
+            start: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleTueStartRegExp),
+            end: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleTueEndRegExp),
+          })
+          .describe(
+            'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+          ),
+        wed: zod
+          .object({
+            enabled: zod.boolean(),
+            start: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleWedStartRegExp),
+            end: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleWedEndRegExp),
+          })
+          .describe(
+            'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+          ),
+        thu: zod
+          .object({
+            enabled: zod.boolean(),
+            start: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleThuStartRegExp),
+            end: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleThuEndRegExp),
+          })
+          .describe(
+            'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+          ),
+        fri: zod
+          .object({
+            enabled: zod.boolean(),
+            start: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleFriStartRegExp),
+            end: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleFriEndRegExp),
+          })
+          .describe(
+            'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+          ),
+        sat: zod
+          .object({
+            enabled: zod.boolean(),
+            start: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleSatStartRegExp),
+            end: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleSatEndRegExp),
+          })
+          .describe(
+            'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+          ),
+        sun: zod
+          .object({
+            enabled: zod.boolean(),
+            start: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleSunStartRegExp),
+            end: zod
+              .string()
+              .regex(updateAiAgentConfigBodyScheduleSunEndRegExp),
+          })
+          .describe(
+            'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+          ),
+      })
+      .optional(),
   })
   .describe("Partial update of the AI agent config; all fields optional.");
+
+export const updateAiAgentConfigResponseConfigScheduleMonStartRegExp =
+  new RegExp("^([01][0-9]|2[0-3]):[0-5][0-9]$");
+export const updateAiAgentConfigResponseConfigScheduleMonEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigResponseConfigScheduleTueStartRegExp =
+  new RegExp("^([01][0-9]|2[0-3]):[0-5][0-9]$");
+export const updateAiAgentConfigResponseConfigScheduleTueEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigResponseConfigScheduleWedStartRegExp =
+  new RegExp("^([01][0-9]|2[0-3]):[0-5][0-9]$");
+export const updateAiAgentConfigResponseConfigScheduleWedEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigResponseConfigScheduleThuStartRegExp =
+  new RegExp("^([01][0-9]|2[0-3]):[0-5][0-9]$");
+export const updateAiAgentConfigResponseConfigScheduleThuEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigResponseConfigScheduleFriStartRegExp =
+  new RegExp("^([01][0-9]|2[0-3]):[0-5][0-9]$");
+export const updateAiAgentConfigResponseConfigScheduleFriEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigResponseConfigScheduleSatStartRegExp =
+  new RegExp("^([01][0-9]|2[0-3]):[0-5][0-9]$");
+export const updateAiAgentConfigResponseConfigScheduleSatEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+export const updateAiAgentConfigResponseConfigScheduleSunStartRegExp =
+  new RegExp("^([01][0-9]|2[0-3]):[0-5][0-9]$");
+export const updateAiAgentConfigResponseConfigScheduleSunEndRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
 
 export const UpdateAiAgentConfigResponse = zod.object({
   config: zod.object({
@@ -2483,6 +2797,101 @@ export const UpdateAiAgentConfigResponse = zod.object({
       .describe(
         'Country \/ university-type scope for the live searchPrograms tool (FAZ 1). \"all\" means no restriction on that axis.',
       ),
+    scheduleEnabled: zod.boolean(),
+    timezone: zod.string(),
+    schedule: zod.object({
+      mon: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleMonStartRegExp),
+          end: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleMonEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      tue: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleTueStartRegExp),
+          end: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleTueEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      wed: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleWedStartRegExp),
+          end: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleWedEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      thu: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleThuStartRegExp),
+          end: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleThuEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      fri: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleFriStartRegExp),
+          end: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleFriEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      sat: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleSatStartRegExp),
+          end: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleSatEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+      sun: zod
+        .object({
+          enabled: zod.boolean(),
+          start: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleSunStartRegExp),
+          end: zod
+            .string()
+            .regex(updateAiAgentConfigResponseConfigScheduleSunEndRegExp),
+        })
+        .describe(
+          'One weekday\'s working window (\"HH:mm\" local times in the config timezone). end < start means the window runs past midnight into the next day and is owned by the day it starts on.',
+        ),
+    }),
   }),
 });
 
