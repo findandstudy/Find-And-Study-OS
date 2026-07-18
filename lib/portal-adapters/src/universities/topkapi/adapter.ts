@@ -2269,19 +2269,89 @@ export const topkapiAdapter: UniversityAdapter = {
     { const s = await takeShot(page, "step4-program"); if (s) screenshots.push(s); }
 
     // ── STEP 5: document uploads ─────────────────────────────────────────────
+    // Every slot logs its own attempt + outcome, and each upload is POSITIVELY
+    // verified (the file input must actually report a selected file) — "clicked
+    // setInputFiles, hopefully it worked" is never assumed. Without all four
+    // mandatory documents the final submit is NOT clicked (silent-success class
+    // of bug: submissions previously went through with zero documents and the
+    // CRM stage advanced to awaiting_offer while the university saw "Missing").
     logger.info("[topkapi] Step 5: document uploads");
     await page.waitForSelector("input[name=filePassport]", { state: "attached", timeout: 10000 });
 
-    if (files.photo)      { try { await page.setInputFiles("input[name=filePhoto]",      files.photo);      } catch { /* optional */ } }
-    if (files.passport)   { try { await page.setInputFiles("input[name=filePassport]",   files.passport);   } catch { /* optional */ } }
-    if (files.transcript) { try { await page.setInputFiles("input[name=fileTranscript]", files.transcript); } catch { /* optional */ } }
-    if (files.diploma)    { try { await page.setInputFiles("input[name=fileDiploma]",    files.diploma);    } catch { /* optional */ } }
+    const DOC_INPUTS: Array<{ slot: keyof SubmitFiles; selector: string }> = [
+      { slot: "photo",      selector: "input[name=filePhoto]" },
+      { slot: "passport",   selector: "input[name=filePassport]" },
+      { slot: "transcript", selector: "input[name=fileTranscript]" },
+      { slot: "diploma",    selector: "input[name=fileDiploma]" },
+    ];
+    const uploadedSlots: string[] = [];
+    const slotFailures: string[] = [];
+    for (const { slot, selector } of DOC_INPUTS) {
+      const localPath = files[slot];
+      if (!localPath) {
+        logger.warn(`[topkapi] Step 5: ${slot} — yerel dosya yok (indirme başarısız veya CRM'de belge yok)`);
+        slotFailures.push(`${slot}: dosya yok`);
+        continue;
+      }
+      logger.info(`[topkapi] Step 5: ${slot} yükleniyor (${path.basename(localPath)})`);
+      try {
+        await page.setInputFiles(selector, localPath);
+        // Positive verification: the input element must report a selected file.
+        const attachedCount = await page
+          .$eval(selector, (el) => (el as HTMLInputElement).files?.length ?? 0)
+          .catch(() => 0);
+        if (attachedCount > 0) {
+          uploadedSlots.push(slot);
+          logger.info(`[topkapi] Step 5: ${slot} → ok`);
+        } else {
+          slotFailures.push(`${slot}: input dosyayı kabul etmedi`);
+          logger.warn(`[topkapi] Step 5: ${slot} → hata(input dosyayı kabul etmedi)`);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        slotFailures.push(`${slot}: ${msg}`);
+        logger.warn(`[topkapi] Step 5: ${slot} → hata(${msg})`);
+      }
+    }
+    logger.info(
+      `[topkapi] Step 5 özet: ${uploadedSlots.length}/${DOC_INPUTS.length} yüklendi` +
+      ` [${uploadedSlots.join(", ")}]` +
+      (slotFailures.length ? ` | eksik/hata: [${slotFailures.join("; ")}]` : ""),
+    );
 
     { const s = await takeShot(page, "step5-docs"); if (s) screenshots.push(s); }
 
     if (!doSubmit) {
       logger.info("[topkapi] doSubmit=false — stopping before final submit (dry run)");
-      return { submitted: false, alreadyExists: false, programMissing: false, screenshots };
+      return { submitted: false, alreadyExists: false, programMissing: false, uploadedSlots, screenshots };
+    }
+
+    // MANDATORY-DOCUMENT GATE: all four slots (photo, passport, transcript,
+    // diploma) must be verified-attached before "Başvuruyu Tamamla" may be
+    // clicked. Otherwise fail loudly — submitted=false, real reason in detail —
+    // so the writeback marks the submission failed and the CRM stage does NOT
+    // advance. No silent success, ever.
+    const missingDocuments = DOC_INPUTS
+      .map((d) => d.slot as string)
+      .filter((slot) => !uploadedSlots.includes(slot));
+    if (missingDocuments.length > 0) {
+      logger.warn(
+        "[topkapi] zorunlu belgeler eksik — Başvuruyu Tamamla TIKLANMADI: " +
+        slotFailures.join("; "),
+      );
+      { const s = await takeShot(page, "step5-docs-missing").catch(() => null); if (s) screenshots.push(s); }
+      return {
+        submitted: false,
+        alreadyExists: false,
+        programMissing: false,
+        missingDocuments,
+        uploadedSlots,
+        detail:
+          `Belgeler yüklenemedi — başvuru gönderilmedi. ` +
+          `Yüklenen: [${uploadedSlots.join(", ") || "yok"}]. ` +
+          `Eksik/hata: ${slotFailures.join("; ")}`,
+        screenshots,
+      };
     }
 
     // ── FINAL SUBMIT ─────────────────────────────────────────────────────────
@@ -2384,7 +2454,7 @@ export const topkapiAdapter: UniversityAdapter = {
       } else {
         logger.warn("[topkapi] saved but success-url not captured — save=" + saveStatus + " url=" + page.url());
       }
-      return { submitted: true, alreadyExists: false, programMissing: false, externalRef, screenshots };
+      return { submitted: true, alreadyExists: false, programMissing: false, externalRef, uploadedSlots, screenshots };
     }
 
     // Reactive exclusive-region safety net: some restricted nationalities are

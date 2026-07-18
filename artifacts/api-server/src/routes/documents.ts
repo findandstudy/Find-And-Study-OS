@@ -511,8 +511,15 @@ router.get("/documents/:id/file", async (req, res): Promise<void> => {
     })
     .from(documentsTable)
     .where(and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)));
-  if (!doc || (!doc.fileKey && !doc.fileData && !doc.fileUrl)) {
-    res.status(404).json({ error: "Document not found" }); return;
+  if (!doc) {
+    // Row missing or soft-deleted — distinct from "row exists but storage
+    // object is gone" so 404s are diagnosable from logs (e.g. doc 5045).
+    console.warn(`[DOCUMENTS] signed file #${id} 404 — document row missing or deleted`);
+    res.status(404).json({ error: `Document #${id} not found (row missing or deleted)` }); return;
+  }
+  if (!doc.fileKey && !doc.fileData && !doc.fileUrl) {
+    console.warn(`[DOCUMENTS] signed file #${id} 404 — row exists but has no content (empty stub)`);
+    res.status(404).json({ error: `Document #${id} has no file content (empty stub)` }); return;
   }
   // fileUrl-only rows (no object key / base64): redirect, but only to http(s)
   // to prevent SSRF via data:/file: URIs.
@@ -525,7 +532,16 @@ router.get("/documents/:id/file", async (req, res): Promise<void> => {
   res.setHeader("Cache-Control", "private, max-age=300");
   try {
     const sent = await streamDocumentToResponse(doc, res);
-    if (!sent && !res.headersSent) res.status(404).json({ error: "No file content available" });
+    if (!sent && !res.headersSent) {
+      // Row exists but the storage object behind fileKey is gone and there is
+      // no base64 fallback — include the fileKey so the 404 is actionable.
+      console.warn(
+        `[DOCUMENTS] signed file #${id} 404 — storage object missing (fileKey=${doc.fileKey ?? "-"}, hasFileData=${!!doc.fileData})`,
+      );
+      res.status(404).json({
+        error: `Document #${id} file missing in storage (fileKey=${doc.fileKey ?? "-"})`,
+      });
+    }
   } catch (err) {
     console.error(`[DOCUMENTS] signed file #${id} failed:`, err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to load document" });

@@ -152,3 +152,4 @@
 - [Follow-up/note orphan visibility](followup-orphan-visibility.md) — follow_ups/notes have no deleted_at; every surface needs a parent-alive filter; dual-linked rows visible while ≥1 parent alive.
 - [Dev-DB notification bloat & connect timeouts](dev-db-notification-bloat.md) — leaked test notifications make webhook-dedup grind; connect timeout <10s gives spurious failures under load.
 - [Inbox unread lastReadAt upsert](inbox-unread-lastreadat.md) — mark-read must be atomic ON CONFLICT upsert on cp_conv_user_uniq; scalar last_read_at subqueries break on duplicates.
+- [Topkapı Step 5 upload gate](topkapi-step5-upload-gate.md) — verify uploads + 4-slot gate before final submit; uploadedSlots evidence in result_json; redact signed URLs in download errors.

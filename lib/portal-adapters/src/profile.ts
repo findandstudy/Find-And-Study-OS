@@ -164,6 +164,10 @@ export function extractStudentDocumentRefs(rows: RawDocumentRow[]): {
   let photoUrl: string | undefined;
   let hasPhotoDoc = false;
   const documents: StudentDocumentRef[] = [];
+  // One document per type: callers pass rows ordered newest-first
+  // (created_at DESC), so the FIRST fetchable row per type wins — duplicate
+  // older uploads of the same type are skipped instead of all being sent.
+  const seenTypes = new Set<string>();
 
   for (const r of rows) {
     const type = (r.type ?? "").trim();
@@ -179,8 +183,11 @@ export function extractStudentDocumentRefs(rows: RawDocumentRow[]): {
       continue;
     }
 
+    const typeKey = type.toLowerCase();
+    if (seenTypes.has(typeKey)) continue;
     const url = docFetchUrl(r);
     if (!url) continue;
+    seenTypes.add(typeKey);
     documents.push({
       type,
       name: r.name ?? undefined,

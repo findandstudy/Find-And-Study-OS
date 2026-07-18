@@ -51,6 +51,14 @@ export interface SubmitResult {
    */
   missingDocuments?: string[];
   /**
+   * Document slots the adapter attached to the portal form AND positively
+   * verified (e.g. the file input reports a selected file). Persisted into
+   * portal_submissions.result_json so reconcile reports can detect
+   * submissions that went through without document uploads. Optional —
+   * currently set by upload-verifying adapters (Topkapı).
+   */
+  uploadedSlots?: string[];
+  /**
    * True when the matched programme exists in the portal but its quota is full
    * ("Kontenjan Dolu"). The submission did NOT proceed. Defaults to false/absent.
    * Set together with requestedProgram + openPrograms so downstream

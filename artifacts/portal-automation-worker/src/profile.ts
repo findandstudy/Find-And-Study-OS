@@ -252,7 +252,7 @@ export async function buildStudentProfile(
             return;
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            downloadErrors[docKey] = `type=${doc.type}: ${msg}`;
+            downloadErrors[docKey] = `doc #${doc.id} type=${doc.type} fileKey=${doc.fileKey ?? "-"}: ${msg}`;
             // Fall through to base64 fallback
           }
         } else {
@@ -271,11 +271,11 @@ export async function buildStudentProfile(
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        downloadErrors[docKey] = `type=${doc.type}: ${msg}`;
+        downloadErrors[docKey] = `doc #${doc.id} type=${doc.type} fileKey=${doc.fileKey ?? "-"}: ${msg}`;
         docKeyStatus[docKey] = "err";
         console.warn(
           `[portal-profile] #${submissionId} doc download failed` +
-          ` — slot=${docKey} type=${doc.type}: ${msg}`,
+          ` — slot=${docKey} doc #${doc.id} type=${doc.type} fileKey=${doc.fileKey ?? "-"}: ${msg}`,
         );
       }
     }),
@@ -341,14 +341,41 @@ function safeDocExt(mimeType?: string | null, name?: string | null): string {
 // Internal: download helper
 // ---------------------------------------------------------------------------
 
+// Strip the query string before embedding a URL in any error/log message —
+// document fetch URLs may carry a signed ?exp=&sig= pair that must NEVER be
+// logged or persisted (downloadErrors end up in result_json).
+function redactedUrl(u: string): string {
+  const q = u.indexOf("?");
+  return q === -1 ? u : u.slice(0, q) + "?<redacted>";
+}
+
 async function downloadFile(url: string, dest: string): Promise<void> {
   // Relative /objects/... URLs must be absolutized — Node fetch() cannot parse relative URLs.
   // The api-server serves /objects/ on its own origin (proven: curl 127.0.0.1:PORT/objects/... = 200).
   const base = (process.env.OBJECT_BASE_URL || `http://127.0.0.1:${process.env.PORT || "5057"}`).replace(/\/$/, "");
   const absUrl = /^https?:\/\//i.test(url) ? url : base + (url.startsWith("/") ? url : "/" + url);
-  const res = await fetch(absUrl);
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} downloading ${absUrl}`);
+  // Retry transient failures (network errors, 5xx, 404 races) with a short
+  // backoff before giving up — a single hiccup must not cost the upload slot.
+  const MAX_ATTEMPTS = 3;
+  let res: Awaited<ReturnType<typeof fetch>> | null = null;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      res = await fetch(absUrl);
+      if (res.ok) break;
+      lastErr = new Error(`HTTP ${res.status} downloading ${redactedUrl(absUrl)}`);
+    } catch (err) {
+      res = null;
+      lastErr = err;
+    }
+    if (attempt < MAX_ATTEMPTS) {
+      await new Promise((r) => setTimeout(r, attempt * 700));
+    }
+  }
+  if (!res || !res.ok) {
+    throw lastErr instanceof Error
+      ? new Error(`${lastErr.message} (after ${MAX_ATTEMPTS} attempts)`)
+      : new Error(`download failed after ${MAX_ATTEMPTS} attempts: ${String(lastErr)} — ${redactedUrl(absUrl)}`);
   }
 
   // A 200 alone is not proof of success: unknown /objects/... paths (and any
@@ -358,13 +385,13 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   // few tell-tale HTML/SPA markers as a fallback for mislabeled responses.
   const contentType = (res.headers.get("content-type") || "").toLowerCase();
   if (contentType.includes("text/html") || contentType.includes("application/xhtml+xml")) {
-    throw new Error(`refusing HTML response (content-type: ${contentType || "unknown"}) from ${absUrl} — likely SPA fallback, not the file`);
+    throw new Error(`refusing HTML response (content-type: ${contentType || "unknown"}) from ${redactedUrl(absUrl)} — likely SPA fallback, not the file`);
   }
 
   const buf = Buffer.from(await res.arrayBuffer());
 
   if (looksLikeHtmlShell(buf)) {
-    throw new Error(`refusing HTML/SPA-shell body from ${absUrl} — not real file content`);
+    throw new Error(`refusing HTML/SPA-shell body from ${redactedUrl(absUrl)} — not real file content`);
   }
 
   await fs.writeFile(dest, buf);
