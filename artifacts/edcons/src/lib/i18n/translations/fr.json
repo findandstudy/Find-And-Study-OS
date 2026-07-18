@@ -515,7 +515,8 @@
     "staffCards": "Fiches du personnel",
     "apiTokens": "Jetons API",
     "portalAutomation": "Portal Automation",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "Rapport de qualité"
   },
   "notFound": {
     "title": "Page introuvable",
@@ -3803,7 +3804,8 @@
       "students": "Étudiants affectés",
       "activity": "Rapport d'activité",
       "salary": "Salaire",
-      "commissions": "Commissions"
+      "commissions": "Commissions",
+      "quality": "Qualité"
     },
     "section": {
       "profile": "Profil et contact",
@@ -6051,5 +6053,51 @@
     "invalid": "Enter a valid phone number for the selected country",
     "selectCountry": "Select country",
     "required": "Phone number is required"
+  },
+  "quality": {
+    "title": "Rapport de qualité des conversations",
+    "subtitle": "Évaluation par IA de la qualité des conversations du personnel",
+    "loadFailed": "Échec du chargement des données de qualité",
+    "settingsSaved": "Paramètres enregistrés",
+    "settingsSaveFailed": "Échec de l'enregistrement des paramètres",
+    "batchDone": "Évaluation terminée : {scored} notées / {scanned} analysées",
+    "batchFailed": "Échec de l'évaluation",
+    "runBatch": "Lancer l'évaluation maintenant",
+    "running": "En cours...",
+    "exportExcel": "Exporter vers Excel",
+    "enabledToggle": "Évaluation de la qualité activée",
+    "selfVisibleToggle": "Le personnel peut voir son propre score",
+    "teamTrend": "Tendance de l'équipe",
+    "topicAnalysis": "Analyse des sujets",
+    "allLanguages": "Toutes",
+    "topic": "Sujet",
+    "count": "Nombre",
+    "avgScore": "Score moyen",
+    "ranking": "Classement du personnel",
+    "staffMember": "Membre du personnel",
+    "conversations": "Conversations",
+    "overall": "Global",
+    "trend": "Tendance",
+    "dim": {
+      "accuracy": "Exactitude",
+      "completeness": "Exhaustivité",
+      "speed": "Rapidité",
+      "tone": "Ton",
+      "outcome": "Résultat"
+    },
+    "coachingQueue": "File de coaching (scores les plus bas)",
+    "coachingEmpty": "Aucune conversation à faible score. Bravo !",
+    "showDetail": "Afficher les détails",
+    "hideDetail": "Masquer les détails",
+    "openConversation": "Ouvrir la conversation",
+    "noData": "Pas encore de données",
+    "notVisible": "Les scores de qualité ne sont pas visibles pour votre rôle",
+    "staffSectionTitle": "Qualité des conversations (30 jours)",
+    "scoredConversations": "{count} conversations évaluées",
+    "dimBreakdown": "Répartition par dimension",
+    "sourceConversations": "Conversations évaluées",
+    "days7": "7 derniers jours",
+    "days30": "30 derniers jours",
+    "days90": "90 derniers jours"
   }
 }

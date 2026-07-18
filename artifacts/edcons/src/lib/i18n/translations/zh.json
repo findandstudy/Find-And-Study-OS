@@ -515,7 +515,8 @@
     "staffCards": "员工卡片",
     "apiTokens": "API 令牌",
     "portalAutomation": "Portal Automation",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "质量报告"
   },
   "notFound": {
     "title": "页面未找到",
@@ -3752,7 +3753,8 @@
       "students": "分配的学生",
       "activity": "活动报告",
       "salary": "薪资",
-      "commissions": "佣金"
+      "commissions": "佣金",
+      "quality": "质量"
     },
     "section": {
       "profile": "资料与联系方式",
@@ -6051,5 +6053,51 @@
     "invalid": "Enter a valid phone number for the selected country",
     "selectCountry": "Select country",
     "required": "Phone number is required"
+  },
+  "quality": {
+    "title": "会话质量报告",
+    "subtitle": "基于AI的员工会话质量评分",
+    "loadFailed": "加载质量数据失败",
+    "settingsSaved": "设置已保存",
+    "settingsSaveFailed": "保存设置失败",
+    "batchDone": "评分完成：已评分 {scored} / 已扫描 {scanned}",
+    "batchFailed": "评分运行失败",
+    "runBatch": "立即运行评分",
+    "running": "运行中...",
+    "exportExcel": "导出到Excel",
+    "enabledToggle": "已启用质量评分",
+    "selfVisibleToggle": "员工可查看自己的分数",
+    "teamTrend": "团队趋势",
+    "topicAnalysis": "主题分析",
+    "allLanguages": "全部",
+    "topic": "主题",
+    "count": "数量",
+    "avgScore": "平均分",
+    "ranking": "员工排名",
+    "staffMember": "员工",
+    "conversations": "会话",
+    "overall": "总分",
+    "trend": "趋势",
+    "dim": {
+      "accuracy": "准确性",
+      "completeness": "完整性",
+      "speed": "速度",
+      "tone": "语气",
+      "outcome": "结果"
+    },
+    "coachingQueue": "辅导队列（最低分）",
+    "coachingEmpty": "没有低分会话。干得好！",
+    "showDetail": "显示详情",
+    "hideDetail": "隐藏详情",
+    "openConversation": "打开会话",
+    "noData": "暂无数据",
+    "notVisible": "您的角色无法查看质量分数",
+    "staffSectionTitle": "会话质量（30天）",
+    "scoredConversations": "{count} 个已评分会话",
+    "dimBreakdown": "维度细分",
+    "sourceConversations": "已评分会话",
+    "days7": "最近7天",
+    "days30": "最近30天",
+    "days90": "最近90天"
   }
 }

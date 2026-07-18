@@ -515,7 +515,8 @@
     "aiActionQueue": "AI Aksiyon Kuyruğu",
     "apiTokens": "API Anahtarları",
     "portalAutomation": "Portal Otomasyonu",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "Kalite Raporu"
   },
   "notFound": {
     "title": "Sayfa Bulunamadı",
@@ -3501,7 +3502,8 @@
       "students": "Atanmış Öğrenciler",
       "activity": "Etkinlik Raporu",
       "salary": "Maaş",
-      "commissions": "Komisyonlar"
+      "commissions": "Komisyonlar",
+      "quality": "Kalite"
     },
     "section": {
       "profile": "Profil & İletişim",
@@ -6051,5 +6053,51 @@
     "invalid": "Seçilen ülke için geçerli bir telefon numarası girin",
     "selectCountry": "Ülke seçin",
     "required": "Telefon numarası zorunludur"
+  },
+  "quality": {
+    "title": "Sohbet Kalite Raporu",
+    "subtitle": "Personel görüşmelerinin yapay zeka tabanlı kalite puanlaması",
+    "loadFailed": "Kalite verileri yüklenemedi",
+    "settingsSaved": "Ayarlar kaydedildi",
+    "settingsSaveFailed": "Ayarlar kaydedilemedi",
+    "batchDone": "Puanlama tamamlandı: {scored} puanlandı / {scanned} tarandı",
+    "batchFailed": "Puanlama çalıştırılamadı",
+    "runBatch": "Puanlamayı şimdi çalıştır",
+    "running": "Çalışıyor...",
+    "exportExcel": "Excel'e aktar",
+    "enabledToggle": "Kalite puanlama etkin",
+    "selfVisibleToggle": "Personel kendi puanını görebilir",
+    "teamTrend": "Ekip trendi",
+    "topicAnalysis": "Konu analizi",
+    "allLanguages": "Tümü",
+    "topic": "Konu",
+    "count": "Adet",
+    "avgScore": "Ortalama puan",
+    "ranking": "Personel sıralaması",
+    "staffMember": "Personel",
+    "conversations": "Görüşme",
+    "overall": "Genel",
+    "trend": "Trend",
+    "dim": {
+      "accuracy": "Doğruluk",
+      "completeness": "Eksiksizlik",
+      "speed": "Hız",
+      "tone": "Üslup",
+      "outcome": "Sonuç"
+    },
+    "coachingQueue": "Koçluk kuyruğu (en düşük puanlar)",
+    "coachingEmpty": "Düşük puanlı görüşme yok. Harika iş!",
+    "showDetail": "Detayları göster",
+    "hideDetail": "Detayları gizle",
+    "openConversation": "Görüşmeyi aç",
+    "noData": "Henüz veri yok",
+    "notVisible": "Kalite puanları rolünüz için görünür değil",
+    "staffSectionTitle": "Görüşme kalitesi (30 gün)",
+    "scoredConversations": "{count} puanlanmış görüşme",
+    "dimBreakdown": "Boyut dağılımı",
+    "sourceConversations": "Puanlanan görüşmeler",
+    "days7": "Son 7 gün",
+    "days30": "Son 30 gün",
+    "days90": "Son 90 gün"
   }
 }

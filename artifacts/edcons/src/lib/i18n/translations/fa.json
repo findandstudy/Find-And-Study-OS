@@ -515,7 +515,8 @@
     "staffCards": "کارت‌های کارکنان",
     "apiTokens": "توکن‌های API",
     "portalAutomation": "Portal Automation",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "گزارش کیفیت"
   },
   "notFound": {
     "title": "صفحه یافت نشد",
@@ -3752,7 +3753,8 @@
       "students": "دانشجویان تخصیص‌یافته",
       "activity": "گزارش فعالیت",
       "salary": "حقوق",
-      "commissions": "کمیسیون‌ها"
+      "commissions": "کمیسیون‌ها",
+      "quality": "کیفیت"
     },
     "section": {
       "profile": "پروفایل و اطلاعات تماس",
@@ -6051,5 +6053,51 @@
     "invalid": "Enter a valid phone number for the selected country",
     "selectCountry": "Select country",
     "required": "Phone number is required"
+  },
+  "quality": {
+    "title": "گزارش کیفیت گفتگوها",
+    "subtitle": "امتیازدهی کیفیت گفتگوهای کارکنان با هوش مصنوعی",
+    "loadFailed": "بارگیری داده‌های کیفیت ناموفق بود",
+    "settingsSaved": "تنظیمات ذخیره شد",
+    "settingsSaveFailed": "ذخیره تنظیمات ناموفق بود",
+    "batchDone": "امتیازدهی کامل شد: {scored} امتیاز داده شد / {scanned} بررسی شد",
+    "batchFailed": "اجرای امتیازدهی ناموفق بود",
+    "runBatch": "اجرای امتیازدهی اکنون",
+    "running": "در حال اجرا...",
+    "exportExcel": "خروجی Excel",
+    "enabledToggle": "امتیازدهی کیفیت فعال است",
+    "selfVisibleToggle": "کارمند می‌تواند امتیاز خود را ببیند",
+    "teamTrend": "روند تیم",
+    "topicAnalysis": "تحلیل موضوعات",
+    "allLanguages": "همه",
+    "topic": "موضوع",
+    "count": "تعداد",
+    "avgScore": "میانگین امتیاز",
+    "ranking": "رتبه‌بندی کارکنان",
+    "staffMember": "کارمند",
+    "conversations": "گفتگوها",
+    "overall": "کلی",
+    "trend": "روند",
+    "dim": {
+      "accuracy": "دقت",
+      "completeness": "کامل بودن",
+      "speed": "سرعت",
+      "tone": "لحن",
+      "outcome": "نتیجه"
+    },
+    "coachingQueue": "صف مربی‌گری (کمترین امتیازها)",
+    "coachingEmpty": "گفتگویی با امتیاز پایین وجود ندارد. آفرین!",
+    "showDetail": "نمایش جزئیات",
+    "hideDetail": "پنهان کردن جزئیات",
+    "openConversation": "باز کردن گفتگو",
+    "noData": "هنوز داده‌ای نیست",
+    "notVisible": "امتیازهای کیفیت برای نقش شما قابل مشاهده نیست",
+    "staffSectionTitle": "کیفیت گفتگوها (۳۰ روز)",
+    "scoredConversations": "{count} گفتگوی امتیازدهی‌شده",
+    "dimBreakdown": "تفکیک ابعاد",
+    "sourceConversations": "گفتگوهای امتیازدهی‌شده",
+    "days7": "۷ روز اخیر",
+    "days30": "۳۰ روز اخیر",
+    "days90": "۹۰ روز اخیر"
   }
 }

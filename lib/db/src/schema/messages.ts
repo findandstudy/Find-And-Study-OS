@@ -124,6 +124,39 @@ export const messageReactionsTable = pgTable("message_reactions", {
   index("message_reactions_message_id_idx").on(table.messageId),
 ]);
 
+// Conversation quality scoring (Faz 1). One row per (conversation, staff user)
+// scored by the nightly LLM batch. Bot messages are excluded from scoring;
+// `speed` is computed from real reply-pair timing data, not by the LLM.
+// rationales holds { accuracy: { rationale, evidence[] }, ... } with PII-masked
+// evidence quotes. contentHash dedups re-scoring of unchanged conversations.
+export const conversationQualityScoresTable = pgTable("conversation_quality_scores", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull().references(() => conversationsTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  accuracy: integer("accuracy").notNull(),
+  completeness: integer("completeness").notNull(),
+  speed: integer("speed").notNull(),
+  tone: integer("tone").notNull(),
+  outcome: integer("outcome").notNull(),
+  overall: integer("overall").notNull(),
+  rationales: jsonb("rationales").notNull().default({}),
+  topic: text("topic"),
+  language: text("language"),
+  staffMessageCount: integer("staff_message_count").notNull().default(0),
+  avgReplySeconds: integer("avg_reply_seconds"),
+  contentHash: text("content_hash").notNull(),
+  model: text("model"),
+  scoredAt: timestamp("scored_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => [
+  uniqueIndex("conv_quality_conv_user_idx").on(table.conversationId, table.userId),
+  index("conv_quality_user_id_idx").on(table.userId),
+  index("conv_quality_scored_at_idx").on(table.scoredAt),
+]);
+
+export type ConversationQualityScore = typeof conversationQualityScoresTable.$inferSelect;
+
 export type Conversation = typeof conversationsTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
 export type Broadcast = typeof broadcastsTable.$inferSelect;

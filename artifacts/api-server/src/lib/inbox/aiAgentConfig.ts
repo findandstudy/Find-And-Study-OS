@@ -53,6 +53,29 @@ export interface AiAgentConfig {
    * knowledgeSources.ts / routes/inbox.ts knowledge-sources endpoints).
    */
   programScope: ProgramScope;
+  /**
+   * Sohbet kalite puanlama (Faz 1) settings. Read by the nightly quality
+   * scoring batch worker and the /api/quality routes.
+   */
+  quality: QualityScoringConfig;
+}
+
+export interface QualityScoringConfig {
+  /** Master switch for the nightly quality-scoring batch. */
+  enabled: boolean;
+  /** Anthropic model used for scoring (defaults to the intake bot model). */
+  model: string;
+  /** Minimum staff (human outbound) messages a conversation must have. */
+  minStaffMessages: number;
+  /** Conversation must be idle at least this many hours before scoring. */
+  idleHours: number;
+  /** Max conversations scored per batch run. */
+  batchSize: number;
+  /** UTC hour of day when the nightly batch fires. */
+  runHourUtc: number;
+  /** When true, staff can see their OWN quality scores. Default OFF —
+   *  only admin/manager roles see quality data. */
+  selfVisible: boolean;
 }
 
 export interface ProgramScope {
@@ -67,6 +90,16 @@ export const DEFAULT_PROGRAM_SCOPE: ProgramScope = {
   enabled: true,
   countries: "all",
   universityTypes: "all",
+};
+
+export const DEFAULT_QUALITY_CONFIG: QualityScoringConfig = {
+  enabled: true,
+  model: DEFAULT_BOT_MODEL,
+  minStaffMessages: 3,
+  idleHours: 24,
+  batchSize: 30,
+  runHourUtc: 2,
+  selfVisible: false,
 };
 
 export const DEFAULT_AI_AGENT_CONFIG: AiAgentConfig = {
@@ -86,6 +119,7 @@ export const DEFAULT_AI_AGENT_CONFIG: AiAgentConfig = {
   escalationKeywords: DEFAULT_ESCALATION_KEYWORDS,
   knowledgeBase: DEFAULT_KNOWLEDGE_BASE,
   programScope: DEFAULT_PROGRAM_SCOPE,
+  quality: DEFAULT_QUALITY_CONFIG,
 };
 
 // ---------------------------------------------------------------------------
@@ -97,6 +131,16 @@ const escalationKeywordsSchema = z.object({
   payment: z.array(z.string()),
   commission: z.array(z.string()),
   partner: z.array(z.string()),
+});
+
+const qualityConfigSchema = z.object({
+  enabled: z.boolean(),
+  model: z.string().min(1).max(200),
+  minStaffMessages: z.number().int().min(1).max(100),
+  idleHours: z.number().int().min(0).max(720),
+  batchSize: z.number().int().min(1).max(500),
+  runHourUtc: z.number().int().min(0).max(23),
+  selfVisible: z.boolean(),
 });
 
 const programScopeSchema = z.object({
@@ -116,6 +160,7 @@ export const aiAgentConfigSchema = z.object({
   escalationKeywords: escalationKeywordsSchema,
   knowledgeBase: z.string().min(1).max(200000),
   programScope: programScopeSchema,
+  quality: qualityConfigSchema,
 });
 
 export const aiAgentConfigPatchSchema = aiAgentConfigSchema.partial();
@@ -174,6 +219,23 @@ function mergeProgramScope(raw: unknown): ProgramScope {
   };
 }
 
+function mergeQuality(raw: unknown): QualityScoringConfig {
+  const d = DEFAULT_QUALITY_CONFIG;
+  if (!raw || typeof raw !== "object") return { ...d };
+  const r = raw as Partial<QualityScoringConfig>;
+  const num = (v: unknown, fallback: number): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+  return {
+    enabled: typeof r.enabled === "boolean" ? r.enabled : d.enabled,
+    model: typeof r.model === "string" && r.model.trim() ? r.model : d.model,
+    minStaffMessages: num(r.minStaffMessages, d.minStaffMessages),
+    idleHours: num(r.idleHours, d.idleHours),
+    batchSize: num(r.batchSize, d.batchSize),
+    runHourUtc: num(r.runHourUtc, d.runHourUtc),
+    selfVisible: typeof r.selfVisible === "boolean" ? r.selfVisible : d.selfVisible,
+  };
+}
+
 function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiAgentConfig {
   const d = DEFAULT_AI_AGENT_CONFIG;
   if (!raw || typeof raw !== "object") {
@@ -182,6 +244,7 @@ function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiA
       languages: [...d.languages],
       escalationKeywords: cloneKeywords(d.escalationKeywords),
       programScope: cloneProgramScope(d.programScope),
+      quality: { ...d.quality },
     };
   }
   const r = raw as Partial<AiAgentConfig>;
@@ -203,6 +266,7 @@ function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiA
     escalationKeywords: mergeKeywords(r.escalationKeywords),
     knowledgeBase: typeof r.knowledgeBase === "string" && r.knowledgeBase.trim() ? r.knowledgeBase : d.knowledgeBase,
     programScope: mergeProgramScope(r.programScope),
+    quality: mergeQuality(r.quality),
   };
 }
 
@@ -252,6 +316,10 @@ export async function writeAiAgentConfig(patch: AiAgentConfigPatch): Promise<AiA
     escalationKeywords: {
       ...current.escalationKeywords,
       ...(patch.escalationKeywords ?? {}),
+    },
+    quality: {
+      ...current.quality,
+      ...(patch.quality ?? {}),
     },
   });
   const validated = aiAgentConfigSchema.parse(merged);

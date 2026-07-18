@@ -515,7 +515,8 @@
     "aiActionQueue": "AI Action Queue",
     "apiTokens": "API Tokens",
     "portalAutomation": "Portal Automation",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "Quality Report"
   },
   "notFound": {
     "title": "Page Not Found",
@@ -3560,7 +3561,8 @@
       "students": "Assigned Students",
       "activity": "Activity Report",
       "salary": "Salary",
-      "commissions": "Commissions"
+      "commissions": "Commissions",
+      "quality": "Quality"
     },
     "section": {
       "profile": "Profile & Contact",
@@ -6051,5 +6053,51 @@
     "invalid": "Enter a valid phone number for the selected country",
     "selectCountry": "Select country",
     "required": "Phone number is required"
+  },
+  "quality": {
+    "title": "Chat Quality Report",
+    "subtitle": "AI-based quality scoring of staff conversations",
+    "loadFailed": "Failed to load quality data",
+    "settingsSaved": "Settings saved",
+    "settingsSaveFailed": "Failed to save settings",
+    "batchDone": "Scoring completed: {scored} scored / {scanned} scanned",
+    "batchFailed": "Scoring run failed",
+    "runBatch": "Run scoring now",
+    "running": "Running...",
+    "exportExcel": "Export to Excel",
+    "enabledToggle": "Quality scoring enabled",
+    "selfVisibleToggle": "Staff can see their own score",
+    "teamTrend": "Team trend",
+    "topicAnalysis": "Topic analysis",
+    "allLanguages": "All",
+    "topic": "Topic",
+    "count": "Count",
+    "avgScore": "Average score",
+    "ranking": "Staff ranking",
+    "staffMember": "Staff member",
+    "conversations": "Conversations",
+    "overall": "Overall",
+    "trend": "Trend",
+    "dim": {
+      "accuracy": "Accuracy",
+      "completeness": "Completeness",
+      "speed": "Speed",
+      "tone": "Tone",
+      "outcome": "Outcome"
+    },
+    "coachingQueue": "Coaching queue (lowest scores)",
+    "coachingEmpty": "No low-scoring conversations. Great job!",
+    "showDetail": "Show details",
+    "hideDetail": "Hide details",
+    "openConversation": "Open conversation",
+    "noData": "No data yet",
+    "notVisible": "Quality scores are not visible for your role",
+    "staffSectionTitle": "Conversation quality (30 days)",
+    "scoredConversations": "{count} scored conversations",
+    "dimBreakdown": "Dimension breakdown",
+    "sourceConversations": "Scored conversations",
+    "days7": "Last 7 days",
+    "days30": "Last 30 days",
+    "days90": "Last 90 days"
   }
 }

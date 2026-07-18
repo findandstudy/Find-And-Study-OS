@@ -909,6 +909,41 @@ async function seedClaudeIntegration() {
     console.error("[migrate] portal_adapter_specs table:", err);
   }
 
+  // Step 2b2b2c: Conversation quality scoring (Faz 1). One row per
+  // (conversation, staff user). Mirrors lib/db schema
+  // conversationQualityScoresTable. Idempotent — boot DDL is the only prod
+  // migration path (deploys run no Drizzle migrate step).
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS conversation_quality_scores (
+        id SERIAL PRIMARY KEY,
+        conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        accuracy INTEGER NOT NULL,
+        completeness INTEGER NOT NULL,
+        speed INTEGER NOT NULL,
+        tone INTEGER NOT NULL,
+        outcome INTEGER NOT NULL,
+        overall INTEGER NOT NULL,
+        rationales JSONB NOT NULL DEFAULT '{}',
+        topic TEXT,
+        language TEXT,
+        staff_message_count INTEGER NOT NULL DEFAULT 0,
+        avg_reply_seconds INTEGER,
+        content_hash TEXT NOT NULL,
+        model TEXT,
+        scored_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS conv_quality_conv_user_idx ON conversation_quality_scores(conversation_id, user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS conv_quality_user_id_idx ON conversation_quality_scores(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS conv_quality_scored_at_idx ON conversation_quality_scores(scored_at)`);
+  } catch (err) {
+    console.error("[migrate] conversation_quality_scores table:", err);
+  }
+
   // Step 2b2b3: Phase 3 multi-portal membership. Junction
   // portal_account_universities (catalog university ↔ multi-portal account) +
   // member dimension on portal_program_mapping. Mirrors lib/db migration 0025.
@@ -2542,6 +2577,10 @@ async function seedClaudeIntegration() {
     staggerStart("stuckConversationSweep", 34_000, async () => {
       const { startStuckConversationSweep } = await import("./lib/stuckConversationAssigner");
       startStuckConversationSweep();
+    });
+    staggerStart("qualityScoringWorker", 37_000, async () => {
+      const { startQualityScoringWorker } = await import("./lib/inbox/qualityScoring");
+      startQualityScoringWorker();
     });
   }
 

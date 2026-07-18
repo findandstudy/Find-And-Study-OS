@@ -560,16 +560,17 @@ router.get(
             WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
           ), 'epoch'::timestamptz)
         )`.as("unread_count"),
-        // Persistent "awaiting reply" flag: last message is inbound; clears
-        // only when an outbound/internal message is sent (not on open).
+        // Persistent "awaiting reply" flag derived from the LAST message's
+        // direction (not lastInboundAt, which can drift out of sync with the
+        // messages table — e.g. backfilled/imported rows). Orange dot shows
+        // iff the newest message in the conversation is inbound.
         awaitingReply: sql<boolean>`(
-          ${conversationsTable.lastInboundAt} IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM messages m
+          COALESCE((
+            SELECT m.direction FROM messages m
             WHERE m.conversation_id = ${conversationsTable.id}
-            AND m.direction IN ('outbound', 'internal')
-            AND m.created_at > ${conversationsTable.lastInboundAt}
-          )
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT 1
+          ), '') = 'inbound'
         )`.as("awaiting_reply"),
       })
       .from(conversationsTable)

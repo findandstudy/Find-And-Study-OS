@@ -515,7 +515,8 @@
     "staffCards": "स्टाफ़ कार्ड",
     "apiTokens": "API टोकन",
     "portalAutomation": "Portal Automation",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "गुणवत्ता रिपोर्ट"
   },
   "notFound": {
     "title": "पृष्ठ नहीं मिला",
@@ -3752,7 +3753,8 @@
       "students": "नियुक्त छात्र",
       "activity": "गतिविधि रिपोर्ट",
       "salary": "वेतन",
-      "commissions": "कमीशन"
+      "commissions": "कमीशन",
+      "quality": "गुणवत्ता"
     },
     "section": {
       "profile": "प्रोफ़ाइल और संपर्क",
@@ -6051,5 +6053,51 @@
     "invalid": "Enter a valid phone number for the selected country",
     "selectCountry": "Select country",
     "required": "Phone number is required"
+  },
+  "quality": {
+    "title": "चैट गुणवत्ता रिपोर्ट",
+    "subtitle": "स्टाफ बातचीत की AI-आधारित गुणवत्ता स्कोरिंग",
+    "loadFailed": "गुणवत्ता डेटा लोड नहीं हो सका",
+    "settingsSaved": "सेटिंग्स सहेजी गईं",
+    "settingsSaveFailed": "सेटिंग्स सहेजने में विफल",
+    "batchDone": "स्कोरिंग पूर्ण: {scored} स्कोर किए गए / {scanned} स्कैन किए गए",
+    "batchFailed": "स्कोरिंग चलाने में विफल",
+    "runBatch": "अभी स्कोरिंग चलाएं",
+    "running": "चल रहा है...",
+    "exportExcel": "Excel में निर्यात करें",
+    "enabledToggle": "गुणवत्ता स्कोरिंग सक्षम",
+    "selfVisibleToggle": "स्टाफ अपना स्कोर देख सकता है",
+    "teamTrend": "टीम रुझान",
+    "topicAnalysis": "विषय विश्लेषण",
+    "allLanguages": "सभी",
+    "topic": "विषय",
+    "count": "संख्या",
+    "avgScore": "औसत स्कोर",
+    "ranking": "स्टाफ रैंकिंग",
+    "staffMember": "स्टाफ सदस्य",
+    "conversations": "बातचीत",
+    "overall": "कुल",
+    "trend": "रुझान",
+    "dim": {
+      "accuracy": "सटीकता",
+      "completeness": "पूर्णता",
+      "speed": "गति",
+      "tone": "लहजा",
+      "outcome": "परिणाम"
+    },
+    "coachingQueue": "कोचिंग कतार (सबसे कम स्कोर)",
+    "coachingEmpty": "कोई कम-स्कोर वाली बातचीत नहीं। बढ़िया काम!",
+    "showDetail": "विवरण दिखाएं",
+    "hideDetail": "विवरण छिपाएं",
+    "openConversation": "बातचीत खोलें",
+    "noData": "अभी कोई डेटा नहीं",
+    "notVisible": "आपकी भूमिका के लिए गुणवत्ता स्कोर दृश्यमान नहीं हैं",
+    "staffSectionTitle": "बातचीत गुणवत्ता (30 दिन)",
+    "scoredConversations": "{count} स्कोर की गई बातचीत",
+    "dimBreakdown": "आयाम विश्लेषण",
+    "sourceConversations": "स्कोर की गई बातचीत",
+    "days7": "पिछले 7 दिन",
+    "days30": "पिछले 30 दिन",
+    "days90": "पिछले 90 दिन"
   }
 }

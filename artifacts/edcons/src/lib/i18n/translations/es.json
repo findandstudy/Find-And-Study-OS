@@ -515,7 +515,8 @@
     "staffCards": "Fichas del personal",
     "apiTokens": "Tokens de API",
     "portalAutomation": "Portal Automation",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "Informe de calidad"
   },
   "notFound": {
     "title": "Página no encontrada",
@@ -3752,7 +3753,8 @@
       "students": "Estudiantes asignados",
       "activity": "Informe de actividad",
       "salary": "Salario",
-      "commissions": "Comisiones"
+      "commissions": "Comisiones",
+      "quality": "Calidad"
     },
     "section": {
       "profile": "Perfil y contacto",
@@ -6051,5 +6053,51 @@
     "invalid": "Enter a valid phone number for the selected country",
     "selectCountry": "Select country",
     "required": "Phone number is required"
+  },
+  "quality": {
+    "title": "Informe de calidad de conversaciones",
+    "subtitle": "Puntuación de calidad basada en IA de las conversaciones del personal",
+    "loadFailed": "Error al cargar los datos de calidad",
+    "settingsSaved": "Configuración guardada",
+    "settingsSaveFailed": "Error al guardar la configuración",
+    "batchDone": "Puntuación completada: {scored} puntuadas / {scanned} analizadas",
+    "batchFailed": "Error al ejecutar la puntuación",
+    "runBatch": "Ejecutar puntuación ahora",
+    "running": "Ejecutando...",
+    "exportExcel": "Exportar a Excel",
+    "enabledToggle": "Puntuación de calidad habilitada",
+    "selfVisibleToggle": "El personal puede ver su propia puntuación",
+    "teamTrend": "Tendencia del equipo",
+    "topicAnalysis": "Análisis de temas",
+    "allLanguages": "Todos",
+    "topic": "Tema",
+    "count": "Cantidad",
+    "avgScore": "Puntuación media",
+    "ranking": "Ranking del personal",
+    "staffMember": "Miembro del personal",
+    "conversations": "Conversaciones",
+    "overall": "General",
+    "trend": "Tendencia",
+    "dim": {
+      "accuracy": "Precisión",
+      "completeness": "Exhaustividad",
+      "speed": "Velocidad",
+      "tone": "Tono",
+      "outcome": "Resultado"
+    },
+    "coachingQueue": "Cola de coaching (puntuaciones más bajas)",
+    "coachingEmpty": "No hay conversaciones con puntuación baja. ¡Buen trabajo!",
+    "showDetail": "Mostrar detalles",
+    "hideDetail": "Ocultar detalles",
+    "openConversation": "Abrir conversación",
+    "noData": "Aún no hay datos",
+    "notVisible": "Las puntuaciones de calidad no son visibles para tu rol",
+    "staffSectionTitle": "Calidad de conversaciones (30 días)",
+    "scoredConversations": "{count} conversaciones puntuadas",
+    "dimBreakdown": "Desglose por dimensión",
+    "sourceConversations": "Conversaciones puntuadas",
+    "days7": "Últimos 7 días",
+    "days30": "Últimos 30 días",
+    "days90": "Últimos 90 días"
   }
 }

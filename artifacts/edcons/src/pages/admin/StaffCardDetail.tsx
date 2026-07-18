@@ -20,6 +20,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { CountryFlag } from "@/components/CountryFlag";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
+import StaffQualityTab from "@/components/quality/StaffQualityTab";
 import {
   ArrowLeft, Trash2, Plus, Upload, Download, Loader2, FileText, BadgeCheck, AlertTriangle,
   Search, ArrowUpDown, ArrowUp, ArrowDown, Clock, Activity, Monitor, Pause, BarChart3, TrendingUp,
@@ -116,6 +117,7 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
           <TabsTrigger value="activity">{t("staffCards.tab.activity")}</TabsTrigger>
           <TabsTrigger value="salary">{t("staffCards.tab.salary")}</TabsTrigger>
           <TabsTrigger value="commissions">{t("staffCards.tab.commissions")}</TabsTrigger>
+          <TabsTrigger value="quality">{t("staffCards.tab.quality")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-4">
@@ -157,6 +159,7 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
         <TabsContent value="activity" className="mt-4"><ActivityTab userId={userId} /></TabsContent>
         <TabsContent value="salary" className="mt-4"><SalaryTab payments={data.salaryPayments} totals={data.salaryTotals} userId={userId} onSaved={refresh} /></TabsContent>
         <TabsContent value="commissions" className="mt-4"><CommissionsTab commissions={data.commissions} totals={data.commissionTotals} userId={userId} onSaved={refresh} /></TabsContent>
+        <TabsContent value="quality" className="mt-4"><StaffQualityTab userId={userId} /></TabsContent>
       </Tabs>
     </div>
   );

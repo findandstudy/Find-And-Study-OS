@@ -841,6 +841,9 @@ function InboxTab() {
       setReply("");
       setPendingFiles([]);
       setReplyToMsg(null);
+      // Optimistic: the newest message is now outbound, so the orange
+      // "awaiting reply" dot clears immediately without waiting for a refetch.
+      setConvs(prev => prev.map(c => c.id === selectedId ? { ...c, awaitingReply: false } : c));
       fetchDetail(selectedId);
     } catch (err: any) {
       const body = err?.body;

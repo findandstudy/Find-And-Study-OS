@@ -515,7 +515,8 @@
     "staffCards": "بطاقات الموظفين",
     "apiTokens": "رموز API",
     "portalAutomation": "Portal Automation",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "تقرير الجودة"
   },
   "notFound": {
     "title": "الصفحة غير موجودة",
@@ -3803,7 +3804,8 @@
       "students": "الطلاب المعيّنون",
       "activity": "تقرير النشاط",
       "salary": "الراتب",
-      "commissions": "العمولات"
+      "commissions": "العمولات",
+      "quality": "الجودة"
     },
     "section": {
       "profile": "الملف وجهات الاتصال",
@@ -6051,5 +6053,51 @@
     "invalid": "Enter a valid phone number for the selected country",
     "selectCountry": "Select country",
     "required": "Phone number is required"
+  },
+  "quality": {
+    "title": "تقرير جودة المحادثات",
+    "subtitle": "تقييم جودة محادثات الموظفين بالذكاء الاصطناعي",
+    "loadFailed": "تعذر تحميل بيانات الجودة",
+    "settingsSaved": "تم حفظ الإعدادات",
+    "settingsSaveFailed": "تعذر حفظ الإعدادات",
+    "batchDone": "اكتمل التقييم: {scored} تم تقييمها / {scanned} تم فحصها",
+    "batchFailed": "فشل تشغيل التقييم",
+    "runBatch": "تشغيل التقييم الآن",
+    "running": "قيد التشغيل...",
+    "exportExcel": "تصدير إلى Excel",
+    "enabledToggle": "تقييم الجودة مفعّل",
+    "selfVisibleToggle": "يمكن للموظف رؤية درجته",
+    "teamTrend": "اتجاه الفريق",
+    "topicAnalysis": "تحليل المواضيع",
+    "allLanguages": "الكل",
+    "topic": "الموضوع",
+    "count": "العدد",
+    "avgScore": "متوسط الدرجة",
+    "ranking": "ترتيب الموظفين",
+    "staffMember": "الموظف",
+    "conversations": "المحادثات",
+    "overall": "الإجمالي",
+    "trend": "الاتجاه",
+    "dim": {
+      "accuracy": "الدقة",
+      "completeness": "الاكتمال",
+      "speed": "السرعة",
+      "tone": "الأسلوب",
+      "outcome": "النتيجة"
+    },
+    "coachingQueue": "قائمة التدريب (أدنى الدرجات)",
+    "coachingEmpty": "لا توجد محادثات منخفضة الدرجة. عمل رائع!",
+    "showDetail": "عرض التفاصيل",
+    "hideDetail": "إخفاء التفاصيل",
+    "openConversation": "فتح المحادثة",
+    "noData": "لا توجد بيانات بعد",
+    "notVisible": "درجات الجودة غير مرئية لدورك",
+    "staffSectionTitle": "جودة المحادثات (30 يومًا)",
+    "scoredConversations": "{count} محادثة مقيّمة",
+    "dimBreakdown": "توزيع الأبعاد",
+    "sourceConversations": "المحادثات المقيّمة",
+    "days7": "آخر 7 أيام",
+    "days30": "آخر 30 يومًا",
+    "days90": "آخر 90 يومًا"
   }
 }

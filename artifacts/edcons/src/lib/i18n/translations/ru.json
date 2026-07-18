@@ -515,7 +515,8 @@
     "staffCards": "Карточки сотрудников",
     "apiTokens": "API-токены",
     "portalAutomation": "Portal Automation",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "Отчёт о качестве"
   },
   "notFound": {
     "title": "Страница не найдена",
@@ -3803,7 +3804,8 @@
       "students": "Назначенные студенты",
       "activity": "Отчёт об активности",
       "salary": "Зарплата",
-      "commissions": "Комиссии"
+      "commissions": "Комиссии",
+      "quality": "Качество"
     },
     "section": {
       "profile": "Профиль и контакты",
@@ -6051,5 +6053,51 @@
     "invalid": "Enter a valid phone number for the selected country",
     "selectCountry": "Select country",
     "required": "Phone number is required"
+  },
+  "quality": {
+    "title": "Отчёт о качестве чатов",
+    "subtitle": "ИИ-оценка качества переписок сотрудников",
+    "loadFailed": "Не удалось загрузить данные о качестве",
+    "settingsSaved": "Настройки сохранены",
+    "settingsSaveFailed": "Не удалось сохранить настройки",
+    "batchDone": "Оценка завершена: {scored} оценено / {scanned} проверено",
+    "batchFailed": "Ошибка запуска оценки",
+    "runBatch": "Запустить оценку сейчас",
+    "running": "Выполняется...",
+    "exportExcel": "Экспорт в Excel",
+    "enabledToggle": "Оценка качества включена",
+    "selfVisibleToggle": "Сотрудник видит свой балл",
+    "teamTrend": "Тренд команды",
+    "topicAnalysis": "Анализ тем",
+    "allLanguages": "Все",
+    "topic": "Тема",
+    "count": "Кол-во",
+    "avgScore": "Средний балл",
+    "ranking": "Рейтинг сотрудников",
+    "staffMember": "Сотрудник",
+    "conversations": "Беседы",
+    "overall": "Общий",
+    "trend": "Тренд",
+    "dim": {
+      "accuracy": "Точность",
+      "completeness": "Полнота",
+      "speed": "Скорость",
+      "tone": "Тон",
+      "outcome": "Результат"
+    },
+    "coachingQueue": "Очередь коучинга (низшие баллы)",
+    "coachingEmpty": "Нет бесед с низким баллом. Отличная работа!",
+    "showDetail": "Показать детали",
+    "hideDetail": "Скрыть детали",
+    "openConversation": "Открыть беседу",
+    "noData": "Данных пока нет",
+    "notVisible": "Баллы качества недоступны для вашей роли",
+    "staffSectionTitle": "Качество бесед (30 дней)",
+    "scoredConversations": "{count} оценённых бесед",
+    "dimBreakdown": "Разбивка по критериям",
+    "sourceConversations": "Оценённые беседы",
+    "days7": "Последние 7 дней",
+    "days30": "Последние 30 дней",
+    "days90": "Последние 90 дней"
   }
 }

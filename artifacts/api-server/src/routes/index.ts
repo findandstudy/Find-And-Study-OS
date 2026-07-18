@@ -54,6 +54,7 @@ import staffCardsRouter from "./staffCards";
 import apiTokensRouter from "./apiTokens";
 import cmsRouter from "./cms";
 import portalAutomationRouter from "./portalAutomation";
+import qualityRouter from "./quality";
 import portalMgmtRouter from "./portalMgmt";
 import portalProgramFallbacksRouter from "./portalProgramFallbacks";
 import portalUniversityExclusionsRouter from "./portalUniversityExclusions";
@@ -202,6 +203,7 @@ router.use(portalMgmtRouter);
 router.use(portalProgramFallbacksRouter);
 router.use(portalUniversityExclusionsRouter);
 router.use(personFeedRouter);
+router.use(qualityRouter);
 router.use(academySsoRouter);
 
 export default router;

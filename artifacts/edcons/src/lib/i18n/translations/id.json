@@ -515,7 +515,8 @@
     "staffCards": "Kartu Staf",
     "apiTokens": "Token API",
     "portalAutomation": "Portal Automation",
-    "academy": "Academy"
+    "academy": "Academy",
+    "qualityReport": "Laporan Kualitas"
   },
   "notFound": {
     "title": "Halaman Tidak Ditemukan",
@@ -3752,7 +3753,8 @@
       "students": "Siswa yang Ditugaskan",
       "activity": "Laporan Aktivitas",
       "salary": "Gaji",
-      "commissions": "Komisi"
+      "commissions": "Komisi",
+      "quality": "Kualitas"
     },
     "section": {
       "profile": "Profil & Kontak",
@@ -6051,5 +6053,51 @@
     "invalid": "Enter a valid phone number for the selected country",
     "selectCountry": "Select country",
     "required": "Phone number is required"
+  },
+  "quality": {
+    "title": "Laporan Kualitas Percakapan",
+    "subtitle": "Penilaian kualitas percakapan staf berbasis AI",
+    "loadFailed": "Gagal memuat data kualitas",
+    "settingsSaved": "Pengaturan disimpan",
+    "settingsSaveFailed": "Gagal menyimpan pengaturan",
+    "batchDone": "Penilaian selesai: {scored} dinilai / {scanned} dipindai",
+    "batchFailed": "Gagal menjalankan penilaian",
+    "runBatch": "Jalankan penilaian sekarang",
+    "running": "Berjalan...",
+    "exportExcel": "Ekspor ke Excel",
+    "enabledToggle": "Penilaian kualitas aktif",
+    "selfVisibleToggle": "Staf dapat melihat skornya sendiri",
+    "teamTrend": "Tren tim",
+    "topicAnalysis": "Analisis topik",
+    "allLanguages": "Semua",
+    "topic": "Topik",
+    "count": "Jumlah",
+    "avgScore": "Skor rata-rata",
+    "ranking": "Peringkat staf",
+    "staffMember": "Anggota staf",
+    "conversations": "Percakapan",
+    "overall": "Keseluruhan",
+    "trend": "Tren",
+    "dim": {
+      "accuracy": "Akurasi",
+      "completeness": "Kelengkapan",
+      "speed": "Kecepatan",
+      "tone": "Nada",
+      "outcome": "Hasil"
+    },
+    "coachingQueue": "Antrean pembinaan (skor terendah)",
+    "coachingEmpty": "Tidak ada percakapan berskor rendah. Kerja bagus!",
+    "showDetail": "Tampilkan detail",
+    "hideDetail": "Sembunyikan detail",
+    "openConversation": "Buka percakapan",
+    "noData": "Belum ada data",
+    "notVisible": "Skor kualitas tidak terlihat untuk peran Anda",
+    "staffSectionTitle": "Kualitas percakapan (30 hari)",
+    "scoredConversations": "{count} percakapan dinilai",
+    "dimBreakdown": "Rincian dimensi",
+    "sourceConversations": "Percakapan yang dinilai",
+    "days7": "7 hari terakhir",
+    "days30": "30 hari terakhir",
+    "days90": "90 hari terakhir"
   }
 }
