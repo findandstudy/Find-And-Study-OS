@@ -1043,7 +1043,9 @@
       "starred": "مميز بنجمة",
       "archived": "المؤرشفة",
       "pinDefault": "تثبيت كافتراضي",
-      "unpinDefault": "إلغاء التثبيت الافتراضي"
+      "unpinDefault": "إلغاء التثبيت الافتراضي",
+      "unread": "غير مقروء",
+      "awaiting": "بانتظار الرد"
     },
     "channels": {
       "all": "الكل",
@@ -1240,7 +1242,9 @@
       "cancel": "إلغاء",
       "docsSaveFailed": "تعذّر حفظ {count} مستند في ملف الطالب.",
       "studentCreated": "تم إنشاء الطالب",
-      "studentCreatedWithDocs": "تم إنشاء الطالب — تم حفظ {count} مستند(ات) في الملف"
+      "studentCreatedWithDocs": "تم إنشاء الطالب — تم حفظ {count} مستند(ات) في الملف",
+      "programPendingNote": "سيتم تحديث القائمة عند اختيار البرنامج",
+      "programScopedNote": "متطلبات {name}"
     },
     "applicationTab": {
       "noStudent": "لا يوجد طالب مرتبط",
@@ -1268,7 +1272,9 @@
       "added": "تمت إضافة الطلب",
       "addFailed": "فشل إضافة الطلب",
       "deleted": "تم حذف الطلب",
-      "deleteFailed": "فشل حذف الطلب"
+      "deleteFailed": "فشل حذف الطلب",
+      "missingDocsBlocked": "مستندات إلزامية ناقصة",
+      "missingDocsWarning": "يرجى رفع المستندات التالية أولاً: {docs}"
     },
     "react": {
       "button": "تفاعل",

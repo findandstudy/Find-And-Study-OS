@@ -1043,7 +1043,9 @@
       "starred": "Suivi",
       "archived": "Archivées",
       "pinDefault": "Épingler par défaut",
-      "unpinDefault": "Désépingler le défaut"
+      "unpinDefault": "Désépingler le défaut",
+      "unread": "Non lus",
+      "awaiting": "En attente de réponse"
     },
     "channels": {
       "all": "Tous",
@@ -1240,7 +1242,9 @@
       "cancel": "Annuler",
       "docsSaveFailed": "{count} document(s) n'ont pas pu être enregistrés dans le profil étudiant.",
       "studentCreated": "Étudiant créé",
-      "studentCreatedWithDocs": "Étudiant créé — {count} document(s) enregistré(s) dans le profil"
+      "studentCreatedWithDocs": "Étudiant créé — {count} document(s) enregistré(s) dans le profil",
+      "programPendingNote": "La liste sera mise à jour une fois le programme sélectionné",
+      "programScopedNote": "Exigences pour {name}"
     },
     "applicationTab": {
       "noStudent": "Aucun étudiant lié",
@@ -1268,7 +1272,9 @@
       "added": "Candidature ajoutée",
       "addFailed": "Échec de l’ajout",
       "deleted": "Candidature supprimée",
-      "deleteFailed": "Échec de la suppression"
+      "deleteFailed": "Échec de la suppression",
+      "missingDocsBlocked": "Documents obligatoires manquants",
+      "missingDocsWarning": "Veuillez d'abord téléverser les documents suivants : {docs}"
     },
     "react": {
       "button": "Réagir",

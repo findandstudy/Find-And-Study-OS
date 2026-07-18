@@ -50,6 +50,15 @@ interface DocReq {
   documentType: string;
   mandatory: boolean;
   sortOrder: number;
+  label?: string;
+  source?: string;
+}
+
+interface EffectiveDocReqsResponse {
+  programId: number | null;
+  level: string | null;
+  programSpecific: boolean;
+  requirements: DocReq[];
 }
 
 // ── Icon map ──────────────────────────────────────────────────────────────────
@@ -67,7 +76,48 @@ function getDocIcon(key: string): typeof FileText {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function extractChatAttachments(messages: any[]): ChatAttachment[] {
+const MIME_EXT_MAP: Record<string, string> = {
+  "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png",
+  "image/webp": "webp", "video/mp4": "mp4", "audio/ogg": "ogg", "audio/mpeg": "mp3",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+};
+
+// Same attachment name-resolution chain as the chat bubbles in Messages.tsx:
+// explicit name/fileName → WhatsApp raw filename → URL basename → localized
+// type label + mime extension. Never a bare "file".
+function resolveAttachmentName(
+  a: any,
+  i: number,
+  meta: Record<string, any>,
+  url: string,
+  t: (k: string) => string,
+): string {
+  const rawMeta = meta?.raw;
+  const waRawType = rawMeta?.type;
+  const waMedia = waRawType ? (rawMeta[waRawType] as any) : null;
+  const waFilename = i === 0 ? (waMedia?.filename ?? waMedia?.file_name ?? null) : null;
+  const nameFromUrl = (() => {
+    try {
+      const seg = new URL(String(url)).pathname.split("/").pop() ?? "";
+      return seg.includes(".") ? decodeURIComponent(seg) : null;
+    } catch { return null; }
+  })();
+  const mm = String(a?.mimeType ?? a?.mime_type ?? a?.fileType ?? "").split(";")[0].trim().toLowerCase();
+  const mimeExt = MIME_EXT_MAP[mm] ?? null;
+  const type = a?.type ?? a?.fileType ?? "file";
+  const attTypeLabel = type === "image" ? t("inbox.attachment.photo")
+    : type === "video" ? t("inbox.attachment.video")
+    : type === "audio" ? t("inbox.attachment.audio")
+    : t("inbox.attachment.document");
+  const typedName = mimeExt ? `${attTypeLabel}.${mimeExt}` : attTypeLabel;
+  const explicitName = [a?.name, a?.fileName, waFilename, nameFromUrl].find(
+    (v) => typeof v === "string" && v.trim() && v.trim().toLowerCase() !== "file",
+  ) as string | undefined;
+  return explicitName ?? typedName;
+}
+
+function extractChatAttachments(messages: any[], t: (k: string) => string): ChatAttachment[] {
   const result: ChatAttachment[] = [];
   for (const msg of messages ?? []) {
     const meta = (msg?.metadata ?? {}) as Record<string, any>;
@@ -78,7 +128,7 @@ function extractChatAttachments(messages: any[]): ChatAttachment[] {
     atts.forEach((a, idx) => {
       const url = String(a?.url ?? a?.fileUrl ?? "").trim();
       if (!url) return;
-      const name = String(a?.name ?? a?.fileName ?? a?.type ?? "file").trim();
+      const name = resolveAttachmentName(a, idx, meta, url, t);
       const mime = String(a?.mimeType ?? a?.mime_type ?? a?.type ?? "").toLowerCase();
       const isImage =
         mime.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
@@ -142,6 +192,8 @@ export interface SubmitReadyData {
 interface InboxStudentTabProps {
   detail: InboxConversationDetailResponse;
   conversationId: number;
+  programId?: number | null;
+  programName?: string | null;
   onUpdated?: () => void;
   onReadyToSubmit?: (data: SubmitReadyData) => void;
 }
@@ -149,6 +201,8 @@ interface InboxStudentTabProps {
 export function InboxStudentTab({
   detail,
   conversationId,
+  programId,
+  programName,
   onUpdated,
   onReadyToSubmit,
 }: InboxStudentTabProps) {
@@ -197,7 +251,7 @@ export function InboxStudentTab({
     if (initializedOwnerRef.current === ownerKey) return;
     initializedOwnerRef.current = ownerKey;
 
-    const allAtts = extractChatAttachments((detail as any).messages ?? []);
+    const allAtts = extractChatAttachments((detail as any).messages ?? [], t);
     const attMap = new Map<string, ChatAttachment>();
     for (const att of allAtts) {
       attMap.set(`${att.msgId}:${att.attachIdx}`, att);
@@ -229,26 +283,30 @@ export function InboxStudentTab({
     }
   }, [levels, selectedLevel]);
 
-  // ── Doc requirements for selected level ───────────────────────────────────
-  const { data: docReqs = [], isLoading: docReqsLoading } = useQuery<
-    DocReq[]
-  >({
-    queryKey: ["degree-doc-reqs-inbox", selectedLevel],
-    queryFn: () =>
-      fetch(
-        `${BASE_URL}/api/degrees/by-value/${encodeURIComponent(
-          selectedLevel
-        )}/document-requirements`,
-        { credentials: "include" }
-      ).then((r) => (r.ok ? r.json() : [])),
-    enabled: !!selectedLevel,
+  // ── Effective doc requirements (merged program + degree — the SAME set the
+  // POST /applications mandatory-doc gate enforces). Falls back to level-only
+  // when no program is selected yet.
+  const { data: effReqs, isLoading: docReqsLoading } = useQuery<EffectiveDocReqsResponse>({
+    queryKey: ["effective-doc-reqs", programId ?? null, selectedLevel],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (programId) params.set("programId", String(programId));
+      if (selectedLevel) params.set("level", selectedLevel);
+      return fetch(`${BASE_URL}/api/document-requirements/effective?${params.toString()}`, {
+        credentials: "include",
+      }).then((r) =>
+        r.ok ? r.json() : { programId: null, level: null, programSpecific: false, requirements: [] }
+      );
+    },
+    enabled: !!selectedLevel || !!programId,
     staleTime: 30_000,
   });
+  const docReqs: DocReq[] = effReqs?.requirements ?? [];
 
   // ── Chat attachments from conversation messages ────────────────────────────
   const attachments = useMemo(
-    () => extractChatAttachments((detail as any).messages ?? []),
-    [detail]
+    () => extractChatAttachments((detail as any).messages ?? [], t),
+    [detail, t]
   );
 
   const sortedDocReqs = useMemo(
@@ -402,6 +460,10 @@ export function InboxStudentTab({
   const isPhd = isDoctorate(selectedLevel);
 
   const docLabel = (docType: string) => {
+    const fromBackend = docReqs.find(
+      (r) => r.documentType.toLowerCase() === docType.toLowerCase()
+    )?.label;
+    if (fromBackend) return fromBackend;
     const k = `docTypes.${docType.toLowerCase()}`;
     const v = t(k);
     return v !== k ? v : docType;
@@ -452,6 +514,15 @@ export function InboxStudentTab({
             <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-2">
               {t("inbox.studentTab.requiredDocs")}
             </div>
+            {programId && programName ? (
+              <p className="text-[10px] text-primary/80 mb-1.5" data-testid="doc-reqs-program-note">
+                {t("inbox.studentTab.programScopedNote", { name: programName })}
+              </p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground mb-1.5" data-testid="doc-reqs-pending-note">
+                {t("inbox.studentTab.programPendingNote")}
+              </p>
+            )}
             {docReqsLoading ? (
               <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -482,7 +553,9 @@ export function InboxStudentTab({
                         className={`text-xs ${
                           staged
                             ? "text-foreground font-medium"
-                            : "text-muted-foreground"
+                            : req.mandatory
+                              ? "text-rose-600 font-medium"
+                              : "text-muted-foreground"
                         }`}
                       >
                         {docLabel(req.documentType)}

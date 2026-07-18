@@ -1043,7 +1043,9 @@
       "starred": "已收藏",
       "archived": "已归档",
       "pinDefault": "固定为默认",
-      "unpinDefault": "取消默认固定"
+      "unpinDefault": "取消默认固定",
+      "unread": "未读",
+      "awaiting": "待回复"
     },
     "channels": {
       "all": "全部",
@@ -1240,7 +1242,9 @@
       "cancel": "取消",
       "docsSaveFailed": "{count} 个文件未能保存到学生档案。",
       "studentCreated": "学生已创建",
-      "studentCreatedWithDocs": "学生已创建 — {count} 个文件已保存到档案"
+      "studentCreatedWithDocs": "学生已创建 — {count} 个文件已保存到档案",
+      "programPendingNote": "选择专业后列表将更新",
+      "programScopedNote": "{name} 的要求"
     },
     "applicationTab": {
       "noStudent": "未关联学生",
@@ -1268,7 +1272,9 @@
       "added": "申请已添加",
       "addFailed": "添加申请失败",
       "deleted": "申请已删除",
-      "deleteFailed": "删除申请失败"
+      "deleteFailed": "删除申请失败",
+      "missingDocsBlocked": "缺少必需文件",
+      "missingDocsWarning": "请先上传以下文件：{docs}"
     },
     "react": {
       "button": "回应",

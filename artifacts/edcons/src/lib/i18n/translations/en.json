@@ -1043,7 +1043,9 @@
       "starred": "Starred",
       "archived": "Archived",
       "pinDefault": "Pin as default",
-      "unpinDefault": "Unpin default"
+      "unpinDefault": "Unpin default",
+      "unread": "Unread",
+      "awaiting": "Awaiting reply"
     },
     "channels": {
       "all": "All",
@@ -1240,7 +1242,9 @@
       "cancel": "Cancel",
       "docsSaveFailed": "{count} document(s) could not be saved to the student profile.",
       "studentCreated": "Student created",
-      "studentCreatedWithDocs": "Student created — {count} document(s) saved to profile"
+      "studentCreatedWithDocs": "Student created — {count} document(s) saved to profile",
+      "programPendingNote": "The list will update once a program is selected",
+      "programScopedNote": "Requirements for {name}"
     },
     "applicationTab": {
       "noStudent": "No student linked",
@@ -1268,7 +1272,9 @@
       "added": "Application added",
       "addFailed": "Failed to add application",
       "deleted": "Application deleted",
-      "deleteFailed": "Failed to delete application"
+      "deleteFailed": "Failed to delete application",
+      "missingDocsBlocked": "Missing mandatory documents",
+      "missingDocsWarning": "Upload the following documents first: {docs}"
     },
     "react": {
       "button": "React",

@@ -154,6 +154,14 @@ export function LeadDetailSidebar({
   const [unmSubmitting, setUnmSubmitting] = useState(false);
   const [submitData, setSubmitData] = useState<SubmitReadyData | null>(null);
   const [pendingStudentId, setPendingStudentId] = useState<number | null>(null);
+  // Program selected in the APPLICATION tab — shared with the DOCUMENTS tab so
+  // the requirements list reflects the merged program+degree set.
+  const [selectedProgram, setSelectedProgram] = useState<{ id: number; name: string } | null>(null);
+
+  // Reset shared program selection when switching conversations
+  useEffect(() => {
+    setSelectedProgram(null);
+  }, [conversationId]);
 
   // Clear pendingStudentId once detail.student catches up
   useEffect(() => {
@@ -235,6 +243,8 @@ export function LeadDetailSidebar({
           <InboxStudentTab
             detail={detail}
             conversationId={conversationId}
+            programId={selectedProgram?.id ?? null}
+            programName={selectedProgram?.name ?? null}
             onUpdated={onUpdated}
             onReadyToSubmit={(data) => {
               setSubmitData(data);
@@ -283,6 +293,7 @@ export function LeadDetailSidebar({
             conversationId={conversationId}
             overrideStudentId={pendingStudentId ?? undefined}
             onUpdated={onUpdated}
+            onProgramSelected={setSelectedProgram}
           />
         ) : (
           placeholder

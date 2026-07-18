@@ -1043,7 +1043,9 @@
       "starred": "Yıldızlı",
       "archived": "Arşiv",
       "pinDefault": "Varsayılan olarak sabitle",
-      "unpinDefault": "Sabitlemeyi kaldır"
+      "unpinDefault": "Sabitlemeyi kaldır",
+      "unread": "Okunmamış",
+      "awaiting": "Yanıt bekliyor"
     },
     "channels": {
       "all": "Tümü",
@@ -1240,7 +1242,9 @@
       "cancel": "İptal",
       "docsSaveFailed": "{count} belge öğrenci profiline kaydedilemedi.",
       "studentCreated": "Öğrenci oluşturuldu",
-      "studentCreatedWithDocs": "Öğrenci oluşturuldu — {count} belge profile kaydedildi"
+      "studentCreatedWithDocs": "Öğrenci oluşturuldu — {count} belge profile kaydedildi",
+      "programPendingNote": "Program seçilince liste güncellenecek",
+      "programScopedNote": "{name} için gereksinimler"
     },
     "applicationTab": {
       "noStudent": "Birştirilmiş öğrenci yok",
@@ -1268,7 +1272,9 @@
       "added": "Başvuru eklendi",
       "addFailed": "Başvuru eklenemedi",
       "deleted": "Başvuru silindi",
-      "deleteFailed": "Başvuru silinemedi"
+      "deleteFailed": "Başvuru silinemedi",
+      "missingDocsBlocked": "Zorunlu belgeler eksik",
+      "missingDocsWarning": "Önce şu belgeleri yükleyin: {docs}"
     },
     "react": {
       "button": "Tepki",

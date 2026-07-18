@@ -20,7 +20,64 @@ import { recomputeStudentPhoto } from "./studentPhoto";
  *
  * Returns the number of documents adopted. Never throws — failures are
  * logged and reported as 0 so callers can proceed with their own checks.
+ * (See `adoptLeadDocsForStudent` below.)
  */
+
+/**
+ * Read-only preview of the lead-owned document TYPES that
+ * `adoptLeadDocsForStudent` would move onto this student. Used by the
+ * application pre-flight check so the UI never warns about a document that
+ * the gate would adopt automatically at submit time. Never throws.
+ */
+export async function getAdoptableLeadDocTypes(studentId: number): Promise<string[]> {
+  try {
+    const leadIds = await findCandidateLeadIds(studentId);
+    if (leadIds.length === 0) return [];
+    const rows = await db
+      .select({ type: documentsTable.type })
+      .from(documentsTable)
+      .where(and(
+        inArray(documentsTable.leadId, leadIds),
+        isNull(documentsTable.studentId),
+        isNull(documentsTable.deletedAt),
+      ));
+    return rows.map((r) => r.type || "").filter(Boolean);
+  } catch (err: any) {
+    console.error("[leadDocAdoption:preview]", err?.message || err);
+    return [];
+  }
+}
+
+async function findCandidateLeadIds(studentId: number): Promise<number[]> {
+  const [student] = await db
+    .select({
+      id: studentsTable.id,
+      email: studentsTable.email,
+      phoneE164: studentsTable.phoneE164,
+    })
+    .from(studentsTable)
+    .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+  if (!student) return [];
+
+  const matchConds = [eq(leadsTable.convertedStudentId, studentId)];
+  const contactConds = [];
+  if (student.email) {
+    contactConds.push(and(isNotNull(leadsTable.email), eq(leadsTable.email, student.email))!);
+  }
+  if (student.phoneE164) {
+    contactConds.push(and(isNotNull(leadsTable.phoneE164), eq(leadsTable.phoneE164, student.phoneE164))!);
+  }
+  if (contactConds.length > 0) {
+    matchConds.push(and(isNull(leadsTable.convertedStudentId), or(...contactConds))!);
+  }
+
+  const candidateLeads = await db
+    .select({ id: leadsTable.id })
+    .from(leadsTable)
+    .where(and(or(...matchConds), isNull(leadsTable.deletedAt)));
+  return candidateLeads.map((l) => l.id);
+}
+
 export async function adoptLeadDocsForStudent(studentId: number): Promise<number> {
   try {
     const [student] = await db

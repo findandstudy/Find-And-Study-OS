@@ -1043,7 +1043,9 @@
       "starred": "Избранные",
       "archived": "Архив",
       "pinDefault": "Закрепить по умолчанию",
-      "unpinDefault": "Открепить по умолчанию"
+      "unpinDefault": "Открепить по умолчанию",
+      "unread": "Непрочитанные",
+      "awaiting": "Ожидает ответа"
     },
     "channels": {
       "all": "Все",
@@ -1240,7 +1242,9 @@
       "cancel": "Отмена",
       "docsSaveFailed": "{count} документ(ов) не удалось сохранить в профиле студента.",
       "studentCreated": "Студент создан",
-      "studentCreatedWithDocs": "Студент создан — {count} документ(ов) сохранено в профиле"
+      "studentCreatedWithDocs": "Студент создан — {count} документ(ов) сохранено в профиле",
+      "programPendingNote": "Список обновится после выбора программы",
+      "programScopedNote": "Требования для {name}"
     },
     "applicationTab": {
       "noStudent": "Студент не привязан",
@@ -1268,7 +1272,9 @@
       "added": "Заявка добавлена",
       "addFailed": "Не удалось добавить",
       "deleted": "Заявка удалена",
-      "deleteFailed": "Не удалось удалить"
+      "deleteFailed": "Не удалось удалить",
+      "missingDocsBlocked": "Отсутствуют обязательные документы",
+      "missingDocsWarning": "Сначала загрузите следующие документы: {docs}"
     },
     "react": {
       "button": "Реакция",

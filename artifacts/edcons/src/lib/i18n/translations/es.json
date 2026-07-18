@@ -1043,7 +1043,9 @@
       "starred": "Destacado",
       "archived": "Archivadas",
       "pinDefault": "Fijar como predeterminado",
-      "unpinDefault": "Quitar fijado predeterminado"
+      "unpinDefault": "Quitar fijado predeterminado",
+      "unread": "No leídos",
+      "awaiting": "Esperando respuesta"
     },
     "channels": {
       "all": "Todos",
@@ -1240,7 +1242,9 @@
       "cancel": "Cancelar",
       "docsSaveFailed": "No se pudieron guardar {count} documento(s) en el perfil del estudiante.",
       "studentCreated": "Estudiante creado",
-      "studentCreatedWithDocs": "Estudiante creado — {count} documento(s) guardado(s) en el perfil"
+      "studentCreatedWithDocs": "Estudiante creado — {count} documento(s) guardado(s) en el perfil",
+      "programPendingNote": "La lista se actualizará al seleccionar un programa",
+      "programScopedNote": "Requisitos para {name}"
     },
     "applicationTab": {
       "noStudent": "Ningún estudiante vinculado",
@@ -1268,7 +1272,9 @@
       "added": "Solicitud añadida",
       "addFailed": "Error al añadir solicitud",
       "deleted": "Solicitud eliminada",
-      "deleteFailed": "Error al eliminar solicitud"
+      "deleteFailed": "Error al eliminar solicitud",
+      "missingDocsBlocked": "Faltan documentos obligatorios",
+      "missingDocsWarning": "Primero suba los siguientes documentos: {docs}"
     },
     "react": {
       "button": "Reaccionar",

@@ -1043,7 +1043,9 @@
       "starred": "स्टार किए",
       "archived": "संग्रहीत",
       "pinDefault": "डिफ़ॉल्ट के रूप में पिन करें",
-      "unpinDefault": "डिफ़ॉल्ट पिन हटाएँ"
+      "unpinDefault": "डिफ़ॉल्ट पिन हटाएँ",
+      "unread": "अपठित",
+      "awaiting": "उत्तर की प्रतीक्षा में"
     },
     "channels": {
       "all": "सभी",
@@ -1240,7 +1242,9 @@
       "cancel": "रद्द करें",
       "docsSaveFailed": "{count} दस्तावेज़ छात्र प्रोफ़ाइल में सहेजे नहीं जा सके।",
       "studentCreated": "छात्र बनाया गया",
-      "studentCreatedWithDocs": "छात्र बनाया गया — {count} दस्तावेज़ प्रोफ़ाइल में सहेजे गए"
+      "studentCreatedWithDocs": "छात्र बनाया गया — {count} दस्तावेज़ प्रोफ़ाइल में सहेजे गए",
+      "programPendingNote": "प्रोग्राम चुनने पर सूची अपडेट होगी",
+      "programScopedNote": "{name} के लिए आवश्यकताएँ"
     },
     "applicationTab": {
       "noStudent": "कोई छात्र लिंक नहीं",
@@ -1268,7 +1272,9 @@
       "added": "आवेदन जोड़ा गया",
       "addFailed": "आवेदन जोड़ने में विफल",
       "deleted": "आवेدन हटाया गया",
-      "deleteFailed": "आवेदन हटाने में विफल"
+      "deleteFailed": "आवेदन हटाने में विफल",
+      "missingDocsBlocked": "अनिवार्य दस्तावेज़ गायब हैं",
+      "missingDocsWarning": "पहले निम्न दस्तावेज़ अपलोड करें: {docs}"
     },
     "react": {
       "button": "प्रतिक्रिया",

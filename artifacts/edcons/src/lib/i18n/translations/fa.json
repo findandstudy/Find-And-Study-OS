@@ -1043,7 +1043,9 @@
       "starred": "ستاره‌دار",
       "archived": "بایگانی",
       "pinDefault": "سنجاق به‌عنوان پیش‌فرض",
-      "unpinDefault": "برداشتن سنجاق پیش‌فرض"
+      "unpinDefault": "برداشتن سنجاق پیش‌فرض",
+      "unread": "خوانده‌نشده",
+      "awaiting": "در انتظار پاسخ"
     },
     "channels": {
       "all": "همه",
@@ -1240,7 +1242,9 @@
       "cancel": "انصراف",
       "docsSaveFailed": "{count} سند در پروفایل دانشجو ذخیره نشد.",
       "studentCreated": "دانشجو ایجاد شد",
-      "studentCreatedWithDocs": "دانشجو ایجاد شد — {count} سند در پروفایل ذخیره شد"
+      "studentCreatedWithDocs": "دانشجو ایجاد شد — {count} سند در پروفایل ذخیره شد",
+      "programPendingNote": "پس از انتخاب برنامه، فهرست به‌روزرسانی می‌شود",
+      "programScopedNote": "الزامات {name}"
     },
     "applicationTab": {
       "noStudent": "دانشجویی لینک نشده",
@@ -1268,7 +1272,9 @@
       "added": "درخواست اضافه شد",
       "addFailed": "افزودن درخواست ناموفق",
       "deleted": "درخواست حذف شد",
-      "deleteFailed": "حذف درخواست ناموفق"
+      "deleteFailed": "حذف درخواست ناموفق",
+      "missingDocsBlocked": "مدارک اجباری ناقص است",
+      "missingDocsWarning": "ابتدا مدارک زیر را بارگذاری کنید: {docs}"
     },
     "react": {
       "button": "واکنش",

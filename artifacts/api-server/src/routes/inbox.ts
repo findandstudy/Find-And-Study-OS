@@ -501,6 +501,27 @@ router.get(
         WHERE cp.conversation_id = ${conversationsTable.id}
         AND cp.user_id = ${userId} AND cp.is_starred = true
       )`);
+    } else if (tab === "unread") {
+      // Conversations with at least one inbound message the current user
+      // hasn't seen (after their participant last_read_at, or ever if none).
+      where.push(sql`EXISTS (
+        SELECT 1 FROM messages m
+        WHERE m.conversation_id = ${conversationsTable.id}
+        AND m.direction = 'inbound'
+        AND m.created_at > COALESCE((
+          SELECT cp.last_read_at FROM conversation_participants cp
+          WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
+        ), 'epoch'::timestamptz)
+      )`);
+    } else if (tab === "awaiting") {
+      // Last message is inbound → the contact is waiting on a staff reply.
+      where.push(isNotNull(conversationsTable.lastInboundAt));
+      where.push(sql`NOT EXISTS (
+        SELECT 1 FROM messages m
+        WHERE m.conversation_id = ${conversationsTable.id}
+        AND m.direction IN ('outbound', 'internal')
+        AND m.created_at > ${conversationsTable.lastInboundAt}
+      )`);
     }
     // tab === "open" or "all": no extra filter beyond isArchived=false
 
@@ -528,6 +549,28 @@ router.get(
           SELECT 1 FROM conversation_participants cp
           WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
         )`.as("is_subscribed"),
+        // Per-user unread inbound count (WhatsApp-style badge). Correlated
+        // subquery inside the SAME select — no N+1 round trips.
+        unreadCount: sql<number>`(
+          SELECT COUNT(*)::int FROM messages m
+          WHERE m.conversation_id = ${conversationsTable.id}
+          AND m.direction = 'inbound'
+          AND m.created_at > COALESCE((
+            SELECT cp.last_read_at FROM conversation_participants cp
+            WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
+          ), 'epoch'::timestamptz)
+        )`.as("unread_count"),
+        // Persistent "awaiting reply" flag: last message is inbound; clears
+        // only when an outbound/internal message is sent (not on open).
+        awaitingReply: sql<boolean>`(
+          ${conversationsTable.lastInboundAt} IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM messages m
+            WHERE m.conversation_id = ${conversationsTable.id}
+            AND m.direction IN ('outbound', 'internal')
+            AND m.created_at > ${conversationsTable.lastInboundAt}
+          )
+        )`.as("awaiting_reply"),
       })
       .from(conversationsTable)
       .where(and(...where))
@@ -605,6 +648,15 @@ router.get(
     // Old Zernio attachments were stored without name/size — opportunistically
     // backfill them for this conversation in the background (rate-limited).
     void backfillConversationAttachmentNames(id);
+    // Opening a conversation marks it read for THIS staff user: bump their
+    // participant lastReadAt. Atomic upsert (cp_conv_user_uniq unique index)
+    // so concurrent opens can never race into duplicates. Powers unread badge.
+    await db.execute(sql`
+      INSERT INTO conversation_participants (conversation_id, user_id, last_read_at)
+      VALUES (${id}, ${req.user!.id}, now())
+      ON CONFLICT (conversation_id, user_id)
+      DO UPDATE SET last_read_at = EXCLUDED.last_read_at
+    `);
     const [assignedTo] = conv.assignedToId
       ? await db
           .select({

@@ -1043,7 +1043,9 @@
       "starred": "Berbintang",
       "archived": "Diarsipkan",
       "pinDefault": "Sematkan sebagai default",
-      "unpinDefault": "Lepas sematan default"
+      "unpinDefault": "Lepas sematan default",
+      "unread": "Belum dibaca",
+      "awaiting": "Menunggu balasan"
     },
     "channels": {
       "all": "Semua",
@@ -1240,7 +1242,9 @@
       "cancel": "Batal",
       "docsSaveFailed": "{count} dokumen gagal disimpan ke profil siswa.",
       "studentCreated": "Siswa dibuat",
-      "studentCreatedWithDocs": "Siswa dibuat — {count} dokumen disimpan ke profil"
+      "studentCreatedWithDocs": "Siswa dibuat — {count} dokumen disimpan ke profil",
+      "programPendingNote": "Daftar akan diperbarui setelah program dipilih",
+      "programScopedNote": "Persyaratan untuk {name}"
     },
     "applicationTab": {
       "noStudent": "Belum ada mahasiswa yang ditautkan",
@@ -1268,7 +1272,9 @@
       "added": "Pendaftaran berhasil ditambahkan",
       "addFailed": "Gagal menambahkan pendaftaran",
       "deleted": "Pendaftaran dihapus",
-      "deleteFailed": "Gagal menghapus pendaftaran"
+      "deleteFailed": "Gagal menghapus pendaftaran",
+      "missingDocsBlocked": "Dokumen wajib belum lengkap",
+      "missingDocsWarning": "Unggah dokumen berikut terlebih dahulu: {docs}"
     },
     "react": {
       "button": "Reaksi",

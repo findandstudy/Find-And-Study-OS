@@ -156,3 +156,4 @@
 - [Deploy healthcheck & port 8080 contention](deploy-healthcheck-port8080.md) — deploy probes GET /api (keep it DB-free 200); inbox-e2e workflow spawns its own api-server on 8080, blocking dev restarts until killed.
 - [Follow-up/note orphan visibility](followup-orphan-visibility.md) — follow_ups/notes have no deleted_at; every surface needs a parent-alive filter; dual-linked rows visible while ≥1 parent alive.
 - [Dev-DB notification bloat & connect timeouts](dev-db-notification-bloat.md) — leaked test notifications make webhook-dedup grind; connect timeout <10s gives spurious failures under load.
+- [Inbox unread lastReadAt upsert](inbox-unread-lastreadat.md) — mark-read must be atomic ON CONFLICT upsert on cp_conv_user_uniq; scalar last_read_at subqueries break on duplicates.

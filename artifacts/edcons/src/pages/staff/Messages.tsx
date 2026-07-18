@@ -145,6 +145,8 @@ interface InboxConversation {
   assignedTo: { id: number; firstName: string; lastName: string; avatarUrl: string | null } | null;
   isStarred?: boolean;
   isSubscribed?: boolean;
+  unreadCount?: number;
+  awaitingReply?: boolean;
 }
 
 // If no event/heartbeat arrives within this window, the indicator switches
@@ -257,9 +259,9 @@ function LiveStatusIndicator({
   );
 }
 
-type InboxTabKey = "mine" | "unassigned" | "unmatched" | "all" | "open" | "unanswered" | "subscribed" | "starred" | "archived";
+type InboxTabKey = "mine" | "unassigned" | "unmatched" | "all" | "open" | "unanswered" | "unread" | "awaiting" | "subscribed" | "starred" | "archived";
 
-const INBOX_TAB_KEYS: InboxTabKey[] = ["mine", "unassigned", "unmatched", "all", "open", "unanswered", "subscribed", "starred", "archived"];
+const INBOX_TAB_KEYS: InboxTabKey[] = ["mine", "unassigned", "unmatched", "all", "open", "unanswered", "unread", "awaiting", "subscribed", "starred", "archived"];
 const PINNED_INBOX_TAB_STORAGE_KEY = "inbox.pinnedTab";
 
 const INBOX_LIST_WIDTH_STORAGE_KEY = "inbox.listWidth";
@@ -467,6 +469,9 @@ function InboxTab() {
     if (selectedId) {
       setDetail(null);
       fetchDetail(selectedId);
+      // Opening a conversation marks it read server-side (lastReadAt is
+      // bumped by the messages fetch) — zero the badge immediately in the UI.
+      setConvs((prev) => prev.map((c) => (c.id === selectedId && (c.unreadCount ?? 0) > 0 ? { ...c, unreadCount: 0 } : c)));
     } else {
       setDetail(null);
     }
@@ -1059,6 +1064,8 @@ function InboxTab() {
     { key: "unassigned", label: t("messagesPage.unassigned"), icon: InboxIcon },
     { key: "open", label: t("inbox.tabs.open"), icon: MessageCircle },
     { key: "unanswered", label: t("inbox.tabs.unanswered"), icon: Clock },
+    { key: "unread", label: t("inbox.tabs.unread"), icon: MessageSquare },
+    { key: "awaiting", label: t("inbox.tabs.awaiting"), icon: CornerUpLeft },
     { key: "subscribed", label: t("inbox.tabs.subscribed"), icon: Bell },
     { key: "starred", label: t("inbox.tabs.starred"), icon: Star },
     { key: "unmatched", label: t("messagesPage.unmatched"), icon: AlertTriangle },
@@ -1474,13 +1481,32 @@ function InboxTab() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-medium text-sm truncate">
+                      <p className={`text-sm truncate ${(c.unreadCount ?? 0) > 0 ? "font-bold" : "font-medium"}`}>
                         {c.externalContact?.displayName || c.title || "(unknown)"}
                       </p>
                       {c.unmatched && <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-700 px-1">unmatched</Badge>}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{c.lastMessagePreview || "—"}</p>
+                    <p className={`text-xs truncate ${(c.unreadCount ?? 0) > 0 ? "text-foreground font-semibold" : "text-muted-foreground"}`}>{c.lastMessagePreview || "—"}</p>
                   </div>
+                  {!selectMode && (c.awaitingReply || (c.unreadCount ?? 0) > 0) && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {c.awaitingReply && (
+                        <span
+                          className="w-2 h-2 rounded-full bg-orange-500 shrink-0"
+                          title={t("inbox.tabs.awaiting")}
+                          data-testid={`awaiting-dot-${c.id}`}
+                        />
+                      )}
+                      {(c.unreadCount ?? 0) > 0 && (
+                        <span
+                          className="min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0"
+                          data-testid={`unread-badge-${c.id}`}
+                        >
+                          {(c.unreadCount ?? 0) > 99 ? "99+" : c.unreadCount}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {!selectMode && (
                     <button
                       type="button"

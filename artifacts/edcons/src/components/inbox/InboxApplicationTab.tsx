@@ -41,17 +41,25 @@ interface AppRow {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+interface DocPreflight {
+  missingDocTypes: string[];
+  missingDocs: Array<{ type: string; label: string }>;
+  mandatoryCount: number;
+}
+
 interface InboxApplicationTabProps {
   detail: InboxConversationDetailResponse;
   conversationId: number;
   overrideStudentId?: number;
   onUpdated?: () => void;
+  onProgramSelected?: (p: { id: number; name: string } | null) => void;
 }
 
 export function InboxApplicationTab({
   detail,
   overrideStudentId,
   onUpdated,
+  onProgramSelected,
 }: InboxApplicationTabProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -126,6 +134,27 @@ export function InboxApplicationTab({
     staleTime: 15_000,
   });
 
+  // ── Mandatory-document preflight — mirrors the POST /applications gate so
+  // staff see the block BEFORE hitting the 422 (includes adoptable lead docs).
+  const { data: preflight, isLoading: preflightLoading } = useQuery<DocPreflight>({
+    queryKey: ["app-doc-preflight", studentId, selectedProgramId || null, level],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (selectedProgramId) params.set("programId", selectedProgramId);
+      if (level) params.set("level", level);
+      return fetch(
+        `${BASE_URL}/api/students/${studentId}/application-doc-preflight?${params.toString()}`,
+        { credentials: "include" }
+      ).then((r) =>
+        r.ok ? r.json() : { missingDocTypes: [], missingDocs: [], mandatoryCount: 0 }
+      );
+    },
+    enabled: !!studentId && (!!selectedProgramId || !!level),
+    staleTime: 15_000,
+  });
+  const missingDocs = preflight?.missingDocs ?? [];
+  const docsBlocked = missingDocs.length > 0;
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const universities: UniRow[] = uniData?.data ?? [];
   const programs: ProgRow[] = progData?.data ?? [];
@@ -135,7 +164,7 @@ export function InboxApplicationTab({
   const uniOptions = universities.map((u) => ({ value: String(u.id), label: u.name }));
   const progOptions = programs.map((p) => ({ value: String(p.id), label: p.name }));
 
-  const canAdd = !!selectedCountry && !!studentId && !submitting;
+  const canAdd = !!selectedCountry && !!studentId && !submitting && !docsBlocked;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -145,6 +174,7 @@ export function InboxApplicationTab({
     setSelectedUniversityName("");
     setSelectedProgramId("");
     setSelectedProgramName("");
+    onProgramSelected?.(null);
   }
 
   function handleUniversityChange(v: string) {
@@ -153,12 +183,16 @@ export function InboxApplicationTab({
     setSelectedUniversityName(uni?.name ?? "");
     setSelectedProgramId("");
     setSelectedProgramName("");
+    onProgramSelected?.(null);
   }
 
   function handleProgramChange(v: string) {
     const prog = programs.find((p) => String(p.id) === v);
     setSelectedProgramId(v);
     setSelectedProgramName(prog?.name ?? "");
+    onProgramSelected?.(
+      v && prog ? { id: prog.id, name: prog.name } : null
+    );
   }
 
   async function handleAdd() {
@@ -195,18 +229,32 @@ export function InboxApplicationTab({
       setSelectedUniversityName("");
       setSelectedProgramId("");
       setSelectedProgramName("");
+      onProgramSelected?.(null);
       onUpdated?.();
     } catch (err: any) {
+      // Human-readable missing-docs 422: prefer backend-provided labels
+      const errData = err?.data ?? err?.body ?? null;
+      const labels: string[] | undefined = errData?.missingDocLabels;
       let msg = String(
-        err?.data?.error ?? err?.body?.error ?? err?.message ?? ""
+        errData?.error ?? err?.message ?? ""
       );
-      try {
-        const parsed = JSON.parse(msg);
-        if (parsed?.missingFields)
-          msg = `Missing fields: ${(parsed.missingFields as string[]).join(", ")}`;
-        else if (parsed?.error) msg = parsed.error;
-      } catch {
-        /* not JSON */
+      if (Array.isArray(labels) && labels.length > 0) {
+        msg = t("inbox.applicationTab.missingDocsWarning", {
+          docs: labels.join(", "),
+        });
+      } else {
+        try {
+          const parsed = JSON.parse(msg);
+          if (parsed?.missingDocLabels?.length)
+            msg = t("inbox.applicationTab.missingDocsWarning", {
+              docs: (parsed.missingDocLabels as string[]).join(", "),
+            });
+          else if (parsed?.missingFields)
+            msg = `Missing fields: ${(parsed.missingFields as string[]).join(", ")}`;
+          else if (parsed?.error) msg = parsed.error;
+        } catch {
+          /* not JSON */
+        }
       }
       toast({
         title: t("inbox.applicationTab.addFailed"),
@@ -346,6 +394,23 @@ export function InboxApplicationTab({
             />
           )}
         </div>
+
+        {/* Missing mandatory documents pre-warning */}
+        {docsBlocked && !preflightLoading && (
+          <div
+            className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-2 space-y-0.5"
+            data-testid="app-missing-docs-warning"
+          >
+            <p className="text-[11px] font-semibold text-rose-700">
+              {t("inbox.applicationTab.missingDocsBlocked")}
+            </p>
+            <p className="text-[11px] text-rose-600">
+              {t("inbox.applicationTab.missingDocsWarning", {
+                docs: missingDocs.map((d) => d.label).join(", "),
+              })}
+            </p>
+          </div>
+        )}
 
         {/* Add button */}
         <Button
