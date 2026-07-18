@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -71,13 +71,45 @@ export function AllMessagingHistory({ type, id }: AllMessagingHistoryProps) {
     );
   }
 
-  const convMap = new Map(conversations.map((c) => [c.id, c]));
+  return <AllMessagingHistoryList conversations={conversations} messages={messages} />;
+}
+
+// The API returns messages newest-first (DESC createdAt, capped at 500) so it
+// always keeps the most recent history. For display we mirror the Inbox chat
+// flow: per conversation take the 20 NEWEST messages, then render them in
+// ascending time order (oldest at top, newest at bottom), with a stable id
+// tie-break for same-second messages.
+function messageTime(m: any): number {
+  const ts = Date.parse(m.createdAt);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function latestTwentyAscending(all: any[], conversationId: number): any[] {
+  return all
+    .filter((m) => m.conversationId === conversationId)
+    .sort((a, b) => messageTime(b) - messageTime(a) || (b.id ?? 0) - (a.id ?? 0))
+    .slice(0, 20)
+    .reverse();
+}
+
+function AllMessagingHistoryList({
+  conversations,
+  messages,
+}: {
+  conversations: any[];
+  messages: any[];
+}) {
+  // Start each conversation's scroll area at the bottom (chat-like), without
+  // touching the page-level scroll position.
+  const scrollToBottom = useCallback((el: HTMLDivElement | null) => {
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
 
   return (
     <div className="space-y-4">
       {conversations.map((conv) => {
         const Icon = CHANNEL_ICON[conv.channel] || MessageCircle;
-        const convMessages = messages.filter((m) => m.conversationId === conv.id).slice(0, 20);
+        const convMessages = latestTwentyAscending(messages, conv.id);
         return (
           <Card key={conv.id} className="overflow-hidden">
             <div className="px-4 py-3 border-b border-border/50 flex items-center gap-3">
@@ -98,7 +130,7 @@ export function AllMessagingHistory({ type, id }: AllMessagingHistoryProps) {
                 Open
               </a>
             </div>
-            <div className="p-4 space-y-2 max-h-72 overflow-y-auto">
+            <div ref={scrollToBottom} className="p-4 space-y-2 max-h-72 overflow-y-auto">
               {convMessages.length === 0 && (
                 <p className="text-xs text-muted-foreground">No messages.</p>
               )}
