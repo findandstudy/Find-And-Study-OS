@@ -1087,47 +1087,156 @@ async function dumpWizardForm(
       .locator('input[type="file"]')
       .count()
       .catch(() => 0);
-    const dump = await page.$$eval("input, select, textarea", (els) =>
-      els.slice(0, 60).map((e) => {
-        const input = e as HTMLInputElement;
-        const forLabel = e.id
-          ? document.querySelector(`label[for="${CSS.escape(e.id)}"]`)
-          : null;
-        const label = (
-          e.closest("label")?.textContent ||
-          forLabel?.textContent ||
-          e.parentElement?.querySelector("label")?.textContent ||
-          ""
-        )
-          .trim()
-          .replace(/\s+/g, " ")
-          .slice(0, 40);
-        return {
-          tag: e.tagName,
-          type: input.type || "",
-          name: e.getAttribute("name") || "",
-          id: e.id || "",
-          ph: input.placeholder || "",
-          aria: e.getAttribute("aria-label") || "",
-          label,
-          vis: !!(input.offsetParent !== null || e.getClientRects().length),
-          opts:
-            e.tagName === "SELECT"
-              ? Array.from((e as unknown as HTMLSelectElement).options)
-                  .slice(0, 6)
-                  .map((o) => (o.textContent || "").trim())
-              : undefined,
-        };
-      }),
-    );
+    // Traverse EVERY frame and (open) shadow root — the earlier top-document
+    // querySelectorAll missed controls rendered inside shadow DOM / iframes
+    // (the contact-step dump only ever saw a menu search box).
+    const collected: any[] = [];
+    for (const frame of page.frames()) {
+      const frameName = frame === page.mainFrame() ? "" : (frame.url() || frame.name() || "sub").slice(0, 60);
+      const dump = (await frame
+        .evaluate(DEEP_CONTROL_DUMP_JS)
+        .catch(() => [])) as any[];
+      for (const d of dump) {
+        if (frameName) d.frame = frameName;
+        collected.push(d);
+        if (collected.length >= 80) break;
+      }
+      if (collected.length >= 80) break;
+    }
     logger.info(
       `[sit] wizard FORM DUMP adım=${step}${heading ? ` (${heading})` : ""} ` +
-        `file-input=${fileInputs}: ${JSON.stringify(dump)}`,
+        `file-input=${fileInputs} frames=${page.frames().length}: ${JSON.stringify(collected)}`,
     );
   } catch {
     /* best-effort — never fatal */
   }
 }
+
+// In-page collector: walks the document INCLUDING open shadow roots and
+// returns PII-free control metadata (no values). String form avoids esbuild
+// __name injection issues inside evaluate.
+const DEEP_CONTROL_DUMP_JS =
+  "(() => {" +
+  "  const out = [];" +
+  "  const walk = (root, inShadow) => {" +
+  "    let els = [];" +
+  "    try { els = Array.from(root.querySelectorAll('input, select, textarea')); } catch {}" +
+  "    for (const e of els) {" +
+  "      if (out.length >= 80) return;" +
+  "      const forLabel = e.id && root.querySelector ? root.querySelector('label[for=\"' + (window.CSS && CSS.escape ? CSS.escape(e.id) : e.id) + '\"]') : null;" +
+  "      const label = ((e.closest && e.closest('label') ? e.closest('label').textContent : '') ||" +
+  "        (forLabel ? forLabel.textContent : '') ||" +
+  "        (e.parentElement && e.parentElement.querySelector('label') ? e.parentElement.querySelector('label').textContent : '') ||" +
+  "        '').trim().replace(/\\s+/g, ' ').slice(0, 40);" +
+  "      out.push({" +
+  "        tag: e.tagName, type: e.type || '', name: e.getAttribute('name') || ''," +
+  "        id: e.id || '', ph: e.placeholder || '', aria: e.getAttribute('aria-label') || ''," +
+  "        label, shadow: inShadow || undefined," +
+  "        vis: !!(e.offsetParent !== null || (e.getClientRects && e.getClientRects().length))," +
+  "        opts: e.tagName === 'SELECT' ? Array.from(e.options).slice(0, 6).map((o) => (o.textContent || '').trim()) : undefined," +
+  "      });" +
+  "    }" +
+  "    let all = [];" +
+  "    try { all = Array.from(root.querySelectorAll('*')); } catch {}" +
+  "    for (const el of all) {" +
+  "      if (out.length >= 80) return;" +
+  "      if (el.shadowRoot) walk(el.shadowRoot, true);" +
+  "    }" +
+  "  };" +
+  "  walk(document, false);" +
+  "  return out;" +
+  "})()";
+
+// In-page deep fill: finds a VISIBLE input matching {labelRe} by label text /
+// aria-label / placeholder / name / type=tel (excluding {excludeRe} matches,
+// e.g. country-code boxes), including open shadow roots. Sets the value via
+// the native setter + input/change/blur, then reads the value BACK so the
+// caller can verify the fill actually landed ("val=<readback>").
+const DEEP_FILL_INPUT_JS =
+  "(args) => {" +
+  "  const labelRe = new RegExp(args.labelRe, 'i');" +
+  "  const excludeRe = args.excludeRe ? new RegExp(args.excludeRe, 'i') : null;" +
+  "  const cands = [];" +
+  "  const textFor = (e, root) => {" +
+  "    const forLabel = e.id && root.querySelector ? root.querySelector('label[for=\"' + (window.CSS && CSS.escape ? CSS.escape(e.id) : e.id) + '\"]') : null;" +
+  "    const fi = e.closest ? e.closest('[data-slot=\"form-item\"], .form-item, .form-group, [class*=field]') : null;" +
+  "    return [" +
+  "      e.getAttribute('aria-label') || ''," +
+  "      e.placeholder || ''," +
+  "      e.getAttribute('name') || ''," +
+  "      forLabel ? forLabel.textContent : ''," +
+  "      e.closest && e.closest('label') ? e.closest('label').textContent : ''," +
+  "      fi && fi.querySelector('label') ? fi.querySelector('label').textContent : ''," +
+  "    ].join(' | ');" +
+  "  };" +
+  "  const walk = (root) => {" +
+  "    let els = [];" +
+  "    try { els = Array.from(root.querySelectorAll('input, textarea')); } catch {}" +
+  "    for (const e of els) {" +
+  "      if (e.type === 'hidden' || e.disabled || e.readOnly) continue;" +
+  "      if (!(e.offsetParent !== null || (e.getClientRects && e.getClientRects().length))) continue;" +
+  "      const t = textFor(e, root);" +
+  "      const isTel = e.type === 'tel';" +
+  "      if (!isTel && !labelRe.test(t)) continue;" +
+  "      if (excludeRe && excludeRe.test(t)) continue;" +
+  "      cands.push(e);" +
+  "    }" +
+  "    let all = [];" +
+  "    try { all = Array.from(root.querySelectorAll('*')); } catch {}" +
+  "    for (const el of all) { if (el.shadowRoot) walk(el.shadowRoot); }" +
+  "  };" +
+  "  walk(document);" +
+  "  if (!cands.length) return 'no-el';" +
+  "  const el = cands[0];" +
+  "  el.focus();" +
+  "  const proto = Object.getPrototypeOf(el);" +
+  "  const d = Object.getOwnPropertyDescriptor(proto, 'value');" +
+  "  if (d && d.set) d.set.call(el, args.val); else el.value = args.val;" +
+  "  el.dispatchEvent(new Event('input', { bubbles: true }));" +
+  "  el.dispatchEvent(new Event('change', { bubbles: true }));" +
+  "  el.dispatchEvent(new Event('blur', { bubbles: true }));" +
+  "  return 'val=' + el.value;" +
+  "}";
+
+// In-page deep select: finds a VISIBLE <select> whose label matches {labelRe}
+// (incl. open shadow roots), picks the option whose text equals/contains
+// {optionText} (case-insensitive), fires change, and returns the selected
+// option's text as proof ("sel=<text>").
+const DEEP_SELECT_JS =
+  "(args) => {" +
+  "  const labelRe = new RegExp(args.labelRe, 'i');" +
+  "  const want = (args.optionText || '').toLowerCase();" +
+  "  const found = [];" +
+  "  const walk = (root) => {" +
+  "    let els = [];" +
+  "    try { els = Array.from(root.querySelectorAll('select')); } catch {}" +
+  "    for (const e of els) {" +
+  "      if (e.disabled) continue;" +
+  "      const fi = e.closest ? e.closest('[data-slot=\"form-item\"], .form-item, .form-group, [class*=field]') : null;" +
+  "      const t = [" +
+  "        e.getAttribute('aria-label') || ''," +
+  "        e.getAttribute('name') || ''," +
+  "        fi && fi.querySelector('label') ? fi.querySelector('label').textContent : ''," +
+  "        e.closest && e.closest('label') ? e.closest('label').textContent : ''," +
+  "      ].join(' | ');" +
+  "      if (labelRe.test(t)) found.push(e);" +
+  "    }" +
+  "    let all = [];" +
+  "    try { all = Array.from(root.querySelectorAll('*')); } catch {}" +
+  "    for (const el of all) { if (el.shadowRoot) walk(el.shadowRoot); }" +
+  "  };" +
+  "  walk(document);" +
+  "  if (!found.length) return 'no-el';" +
+  "  const sel = found[0];" +
+  "  const opts = Array.from(sel.options);" +
+  "  let hit = opts.find((o) => (o.textContent || '').trim().toLowerCase() === want);" +
+  "  if (!hit) hit = opts.find((o) => (o.textContent || '').trim().toLowerCase().includes(want));" +
+  "  if (!hit) return 'no-opt';" +
+  "  sel.value = hit.value;" +
+  "  sel.dispatchEvent(new Event('change', { bubbles: true }));" +
+  "  const cur = sel.options[sel.selectedIndex];" +
+  "  return 'sel=' + (cur ? (cur.textContent || '').trim() : '');" +
+  "}";
 
 /** Capture a full-page screenshot of the stuck/failed wizard to /tmp. */
 async function captureWizardFail(
@@ -1790,6 +1899,16 @@ export const sitAdapter: SitAdapter = {
       passportNo: !!profile.passportNumber,
       issueDate: !!passportIssue,
       expiryDate: !!passportExpiry,
+      // Tracked so a never-filled phone yields the honest
+      // "zorunlu alan doldurulamadı (telefon)" failure detail.
+      phone: !!cleanPhone(
+        (profile as any).phoneE164 ||
+          (profile as any).phone_e164 ||
+          profile.phone ||
+          (profile as any).mobile ||
+          (profile as any).whatsapp ||
+          "",
+      ),
     };
     let reachedDocuments = false;
     // Consecutive same-step validation failures → cap in-step retries (item 5:
@@ -2040,6 +2159,23 @@ export const sitAdapter: SitAdapter = {
             }
           }
         }
+        // Deep fallback: the residence select may live in a shadow root /
+        // frame (selIdx=-1 historically) — match it by label text instead.
+        if (!cOk && cval2) {
+          for (const frame of page.frames()) {
+            const r = (await frame
+              .evaluate(DEEP_SELECT_JS, {
+                labelRe: "(residence|country)",
+                optionText: cval2,
+              })
+              .catch(() => "eval-err")) as string;
+            if (r && r.startsWith("sel=")) {
+              cOk = true;
+              logger.info("[sit] CONTACTFIX2 deep-select " + r);
+              break;
+            }
+          }
+        }
         // Mobile — student's number. Runs unconditionally (not gated by selIdx)
         // so the phone is filled even when the residence-country select is absent
         // or its label doesn't include "residence" (selIdx=-1 historically
@@ -2054,20 +2190,27 @@ export const sitAdapter: SitAdapter = {
               "",
           );
           if (phoneVal) {
-            telDbg = await page.evaluate((val: string) => {
-              const el = document.querySelector(
-                'input[type="tel"], input[placeholder*="mobile" i], input[placeholder*="phone" i]',
-              ) as HTMLInputElement | null;
-              if (!el) return "no-el";
-              el.focus();
-              const proto = Object.getPrototypeOf(el);
-              const d = Object.getOwnPropertyDescriptor(proto, "value");
-              if (d && d.set) d.set.call(el, val);
-              el.dispatchEvent(new Event("input", { bubbles: true }));
-              el.dispatchEvent(new Event("change", { bubbles: true }));
-              el.dispatchEvent(new Event("blur", { bubbles: true }));
-              return "val=" + el.value;
-            }, phoneVal);
+            // Deep label/aria-based lookup across all frames + open shadow
+            // roots — SIT renders inputs without stable ids ("_r_3_" style)
+            // so matching must go by label text / aria-label / placeholder,
+            // and read the value BACK to prove the fill landed.
+            telDbg = "no-el";
+            for (const frame of page.frames()) {
+              const r = (await frame
+                .evaluate(DEEP_FILL_INPUT_JS, {
+                  val: phoneVal,
+                  labelRe: "(mobile|phone|telefon|tel\\b|gsm|whatsapp)",
+                  excludeRe: "(code|kod|dial|country)",
+                })
+                .catch(() => "eval-err")) as string;
+              // Only POSITIVE proof ("val=<readback>") stops the frame scan —
+              // an eval error / miss in one frame must not abort the others.
+              if (r && r.startsWith("val=")) {
+                telDbg = r;
+                break;
+              }
+              if (r && r !== "no-el" && telDbg === "no-el") telDbg = r;
+            }
             telOk = telDbg.startsWith("val=") && telDbg.length > 4;
             if (telOk) everSet.add("phone");
           }
@@ -2468,6 +2611,8 @@ export const sitAdapter: SitAdapter = {
     //     create. ---
     let saved = false;
     let duplicateSeen = false;
+    let lastInlineErrors = "";
+    const wizardUrlBefore = page.url();
     for (let attempt = 0; attempt < 2 && !saved; attempt++) {
       await dismissInactivityModal(page);
       const clicked = await clickButton(page, SIT_BUTTONS.saveStudent);
@@ -2487,6 +2632,16 @@ export const sitAdapter: SitAdapter = {
         duplicateSeen = true;
         break;
       }
+      // ALWAYS capture inline validation ([aria-invalid], .error,
+      // [role=alert]) after a save click — the body-regex checks alone missed
+      // component-level validation and produced phantom "saved" results.
+      lastInlineErrors = await readInlineErrors(page).catch(() => "");
+      if (lastInlineErrors) {
+        logger.warn(
+          `[sit] kayıt inline doğrulama hatası (deneme ${attempt + 1}): ${lastInlineErrors}`,
+        );
+        continue;
+      }
       if (SIT_ERRORS.serverError.test(txt)) {
         logger.warn(`[sit] kayıt sunucu hatası (deneme ${attempt + 1})`);
         continue;
@@ -2495,20 +2650,56 @@ export const sitAdapter: SitAdapter = {
         logger.warn(`[sit] kayıt doğrulama hatası (deneme ${attempt + 1})`);
         continue;
       }
-      saved = true;
+      // POSITIVE proof required — never assume success just because no error
+      // text matched. Proof = the wizard actually went away: navigated off the
+      // create route, or the Save button/step heading disappeared.
+      const urlNow = page.url();
+      const navigatedAway =
+        urlNow !== wizardUrlBefore &&
+        !/\/(new|create|add)\b/i.test(urlNow);
+      const saveBtnStillThere = await page
+        .getByRole("button", { name: SIT_BUTTONS.saveStudent })
+        .first()
+        .isVisible()
+        .catch(() => false);
+      if (navigatedAway) {
+        saved = true;
+        logger.info(
+          `[sit] kayıt kanıtı: yönlendirme (url=${urlNow})`,
+        );
+      } else {
+        // Save button gone alone is NOT proof (it can be transiently hidden
+        // by an overlay). Without a redirect, a quick identity lookup is the
+        // final arbiter — the student must actually be findable.
+        const quick = await resolveCreatedStudentId(page, {
+          email: profile.email,
+          passportNumber: profile.passportNumber,
+        }).catch(() => null);
+        if (quick) {
+          saved = true;
+          logger.info(
+            `[sit] kayıt kanıtı: hızlı arama id=${quick} (saveBtnGone=${!saveBtnStillThere})`,
+          );
+        } else {
+          logger.warn(
+            `[sit] kayıt kanıtı YOK (deneme ${attempt + 1}) — yönlendirme yok, öğrenci bulunamadı (saveBtnGone=${!saveBtnStillThere})`,
+          );
+        }
+      }
     }
 
     // Save neither succeeded nor hit a duplicate → capture the failed final
     // state and surface any critical fields that were never entered, so the
     // stuck field/step is diagnosable before the retry.
+    const unsetCritical =
+      !saved && !duplicateSeen
+        ? Object.keys(critical).filter((k) => critical[k] && !everSet.has(k))
+        : [];
     if (!saved && !duplicateSeen) {
       await captureWizardFail(page, idToken, "save-failed");
-      const unset = Object.keys(critical).filter(
-        (k) => critical[k] && !everSet.has(k),
-      );
-      if (unset.length) {
+      if (unsetCritical.length) {
         logger.warn(
-          `[sit] wizard kaydedilemedi — ayarlanamayan alanlar: ${unset.join(", ")}`,
+          `[sit] wizard kaydedilemedi — ayarlanamayan alanlar: ${unsetCritical.join(", ")}`,
         );
       }
     }
@@ -2570,9 +2761,32 @@ export const sitAdapter: SitAdapter = {
     logger.warn(
       `[sit] create-fail teşhis — url=${diagUrl} inline=${JSON.stringify(diagInline)} step="${diagTitle}" saved=${saved}`,
     );
-    const diagDetail = diagInline
-      ? `SIT create reddetti: ${diagInline}`
-      : `SIT öğrenci oluşturulamadı — son adım: "${diagTitle}", url: ${diagUrl}`;
+    // Honest failure message: name the concrete blocker when known —
+    // never-filled critical fields or the captured inline validation error.
+    const TR_FIELD: Record<string, string> = {
+      email: "e-posta",
+      gender: "cinsiyet",
+      dob: "doğum tarihi",
+      nationality: "uyruk",
+      passportNo: "pasaport no",
+      issueDate: "pasaport veriliş tarihi",
+      expiryDate: "pasaport bitiş tarihi",
+      phone: "telefon",
+      transferStudent: "transfer öğrenci seçimi",
+      haveTc: "TC seçimi",
+      blueCard: "mavi kart seçimi",
+    };
+    const unsetTr = unsetCritical.map((k) => TR_FIELD[k] || k);
+    const inlineMsg = lastInlineErrors || diagInline;
+    let diagDetail: string;
+    if (unsetTr.length) {
+      diagDetail = `öğrenci kaydedilemedi: zorunlu alan doldurulamadı (${unsetTr.join(", ")})`;
+      if (inlineMsg) diagDetail += ` — portal hatası: ${inlineMsg}`;
+    } else if (inlineMsg) {
+      diagDetail = `öğrenci kaydedilemedi — portal doğrulama hatası: ${inlineMsg}`;
+    } else {
+      diagDetail = `SIT öğrenci oluşturulamadı — son adım: "${diagTitle}", url: ${diagUrl}`;
+    }
 
     return {
       studentId: null,

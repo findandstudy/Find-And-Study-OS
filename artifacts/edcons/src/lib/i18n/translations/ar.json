@@ -301,7 +301,8 @@
     "quotaFull": "حصة البرنامج ممتلئة",
     "quotaFullDesc": "لقد وصل هذا البرنامج إلى حصة القبول لهذا العام.",
     "quota": "الحصة",
-    "quotaLabel": "الحصة (كونتنجان)"
+    "quotaLabel": "الحصة (كونتنجان)",
+    "programDetails": "تفاصيل البرنامج"
   },
   "apply": {
     "title": "تقديم — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} selected",
     "deleteSelected": "Delete selected ({n})",
     "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
-    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted",
+    "done": "تم",
+    "remove": "إزالة",
+    "retry": "إعادة المحاولة",
+    "saveFailed": "فشل الحفظ"
   },
   "seo": {
     "homeTitle": "استشارات التعليم العالمي",
@@ -1233,7 +1238,9 @@
       "fillRequired": "يرجى إدخال الاسم الأول والأخير",
       "createFailed": "فشل إنشاء الطالب",
       "cancel": "إلغاء",
-      "docsSaveFailed": "تعذّر حفظ {count} مستند في ملف الطالب."
+      "docsSaveFailed": "تعذّر حفظ {count} مستند في ملف الطالب.",
+      "studentCreated": "تم إنشاء الطالب",
+      "studentCreatedWithDocs": "تم إنشاء الطالب — تم حفظ {count} مستند(ات) في الملف"
     },
     "applicationTab": {
       "noStudent": "لا يوجد طالب مرتبط",

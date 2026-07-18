@@ -301,7 +301,8 @@
     "quotaFull": "Quota du programme atteint",
     "quotaFullDesc": "Ce programme a atteint son quota d'inscription pour cette année.",
     "quota": "Quota",
-    "quotaLabel": "Quota (Kontenjan)"
+    "quotaLabel": "Quota (Kontenjan)",
+    "programDetails": "Détails du programme"
   },
   "apply": {
     "title": "Postuler — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} selected",
     "deleteSelected": "Delete selected ({n})",
     "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
-    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted",
+    "done": "Terminé",
+    "remove": "Supprimer",
+    "retry": "Réessayer",
+    "saveFailed": "Échec de l'enregistrement"
   },
   "seo": {
     "homeTitle": "Conseil en éducation mondiale",
@@ -1233,7 +1238,9 @@
       "fillRequired": "Veuillez saisir le prénom et le nom",
       "createFailed": "Échec de la création de l'étudiant",
       "cancel": "Annuler",
-      "docsSaveFailed": "{count} document(s) n'ont pas pu être enregistrés dans le profil étudiant."
+      "docsSaveFailed": "{count} document(s) n'ont pas pu être enregistrés dans le profil étudiant.",
+      "studentCreated": "Étudiant créé",
+      "studentCreatedWithDocs": "Étudiant créé — {count} document(s) enregistré(s) dans le profil"
     },
     "applicationTab": {
       "noStudent": "Aucun étudiant lié",

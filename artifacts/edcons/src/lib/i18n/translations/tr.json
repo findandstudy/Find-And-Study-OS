@@ -301,7 +301,8 @@
     "quotaFull": "Program Kontenjanı Dolu",
     "quotaFullDesc": "Bu program bu yıl için kayıt kontenjanına ulaştı.",
     "quota": "Kontenjan",
-    "quotaLabel": "Kontenjan"
+    "quotaLabel": "Kontenjan",
+    "programDetails": "Program Detayları"
   },
   "apply": {
     "title": "Başvur — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} seçildi",
     "deleteSelected": "Seçilenleri sil ({n})",
     "confirmBulkDelete": "{n} kayıt silinsin mi? Bu işlem geri alınamaz.",
-    "bulkDeletePartialFailure": "{n} kayıt silinemedi"
+    "bulkDeletePartialFailure": "{n} kayıt silinemedi",
+    "done": "Tamam",
+    "remove": "Kaldır",
+    "retry": "Tekrar dene",
+    "saveFailed": "Kaydetme başarısız"
   },
   "seo": {
     "homeTitle": "Küresel Eğitim Danışmanlığı",
@@ -1233,7 +1238,9 @@
       "fillRequired": "Lütfen ad ve soyadını girin",
       "createFailed": "Öğrenci oluşturulamadı",
       "cancel": "İptal",
-      "docsSaveFailed": "{count} belge öğrenci profiline kaydedilemedi."
+      "docsSaveFailed": "{count} belge öğrenci profiline kaydedilemedi.",
+      "studentCreated": "Öğrenci oluşturuldu",
+      "studentCreatedWithDocs": "Öğrenci oluşturuldu — {count} belge profile kaydedildi"
     },
     "applicationTab": {
       "noStudent": "Birştirilmiş öğrenci yok",

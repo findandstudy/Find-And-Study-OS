@@ -505,7 +505,7 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id, disabled: !canMoveCards });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const [contactOpen, setContactOpen] = useState(false);
-  const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "internal">("internal");
+  const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "instagram" | "internal">("internal");
   const [uniInfoOpen, setUniInfoOpen] = useState(false);
   const [progInfoId, setProgInfoId] = useState<number | null>(null);
   const [, setLoc] = useLocation();
@@ -2094,8 +2094,8 @@ export default function ApplicationsPage() {
                               { value: "mine_unassigned", label: t("applicationsPage.meUnassigned") },
                               ...(canViewOthers
                                 ? staffUsersList
-                                    .filter(u => u.id !== user?.id)
-                                    .map(u => ({ value: String(u.id), label: u.name }))
+                                    .filter((u: { id: number; name: string }) => u.id !== user?.id)
+                                    .map((u: { id: number; name: string }) => ({ value: String(u.id), label: u.name }))
                                 : []),
                             ],
                             allLabel: t("applicationsPage.all"),

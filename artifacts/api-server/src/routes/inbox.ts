@@ -1923,6 +1923,16 @@ router.post(
         parameters: parameters || [],
       });
       result = { ...zr, simulated: false };
+    } else if (zernioAcctForTpl && !conv.externalThreadId) {
+      // Zernio-hosted number but the conversation has no Zernio thread id —
+      // never silently fall back to Meta Cloud (no direct Meta credentials
+      // exist); surface an honest, actionable error instead.
+      console.error(`[INBOX template] conversation ${id} has no externalThreadId — cannot send via Zernio`);
+      result = {
+        ok: false,
+        simulated: false,
+        error: "Conversation is not linked to a Zernio thread (missing externalThreadId) — template cannot be sent",
+      };
     } else {
       const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
       result = await sendWhatsAppTemplate({
@@ -2913,7 +2923,14 @@ router.post(
         isNull(documentsTable.deletedAt)
       ));
     if (dupDoc) {
-      res.status(409).json({ error: "This attachment has already been saved as a document for this owner", existingDocumentId: dupDoc.id });
+      // Not an error from the caller's perspective — the attachment already
+      // lives on this owner (e.g. it was saved to the lead and then adopted
+      // onto the student by the match flow). Report it as already saved.
+      res.status(409).json({
+        error: "This attachment has already been saved as a document for this owner",
+        alreadySaved: true,
+        existingDocumentId: dupDoc.id,
+      });
       return;
     }
 
@@ -2935,12 +2952,39 @@ router.post(
       }
     }
 
+    // ── Reuse already-stored bytes when available ───────────────────────────
+    // If this exact attachment was previously saved as a document for ANY
+    // owner (e.g. staged on the lead before the student existed), reuse its
+    // stored fileKey instead of re-downloading — WhatsApp media URLs expire,
+    // which used to make every re-save fail with a download error.
+    const [storedTwin] = await db.select({
+      fileKey: documentsTable.fileKey,
+      mimeType: documentsTable.mimeType,
+      sizeBytes: documentsTable.sizeBytes,
+      name: documentsTable.name,
+    })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.sourceAttachmentId, sourceAttachmentId),
+        eq(documentsTable.sourceMessageId, msgId),
+        isNotNull(documentsTable.fileKey),
+        isNull(documentsTable.deletedAt),
+      ))
+      .limit(1);
+
     // ── Download media bytes ────────────────────────────────────────────────
-    let fileBuffer: Buffer;
+    let fileBuffer: Buffer | null = null;
     let resolvedMimeType: string;
     let resolvedFilename: string;
+    let reusedFileKey: string | null = null;
+    let reusedSizeBytes: number | null = null;
 
-    try {
+    if (storedTwin?.fileKey) {
+      reusedFileKey = storedTwin.fileKey;
+      reusedSizeBytes = storedTwin.sizeBytes ?? null;
+      resolvedMimeType = storedTwin.mimeType || attachMimeType || "application/octet-stream";
+      resolvedFilename = sanitizeFileName(attachName || `attachment.${mimeToExt(resolvedMimeType)}`);
+    } else try {
       if (waMediaId) {
         // WhatsApp Cloud API: resolve download URL then download with Bearer token
         const waConfig = await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId);
@@ -3006,26 +3050,35 @@ router.post(
       return;
     }
 
-    // ── Validate file type and size ─────────────────────────────────────────
-    const validationError = validateUploadedFile(resolvedFilename, resolvedMimeType, fileBuffer.length);
-    if (validationError) {
-      res.status(validationError.type === "size_exceeded" ? 413 : 400).json({ error: validationError.message });
-      return;
-    }
-    const bufferError = await validateUploadedFileBuffer(resolvedFilename, resolvedMimeType, fileBuffer.slice(0, 4100));
-    if (bufferError) {
-      res.status(bufferError.type === "size_exceeded" ? 413 : 400).json({ error: bufferError.message });
-      return;
-    }
+    // ── Validate file type and size (skipped for reused, already-validated bytes)
+    let fileKey: string;
+    let finalSizeBytes: number;
+    if (reusedFileKey) {
+      fileKey = reusedFileKey;
+      finalSizeBytes = reusedSizeBytes ?? 0;
+    } else {
+      const buf = fileBuffer!;
+      const validationError = validateUploadedFile(resolvedFilename, resolvedMimeType, buf.length);
+      if (validationError) {
+        res.status(validationError.type === "size_exceeded" ? 413 : 400).json({ error: validationError.message });
+        return;
+      }
+      const bufferError = await validateUploadedFileBuffer(resolvedFilename, resolvedMimeType, buf.slice(0, 4100));
+      if (bufferError) {
+        res.status(bufferError.type === "size_exceeded" ? 413 : 400).json({ error: bufferError.message });
+        return;
+      }
 
-    // ── Upload to object storage ────────────────────────────────────────────
-    const storage = new ObjectStorageService();
-    const fileKey = await storage.uploadBuffer({
-      subdir: "inbox-docs",
-      filename: resolvedFilename,
-      buffer: fileBuffer,
-      contentType: resolvedMimeType,
-    });
+      // ── Upload to object storage ──────────────────────────────────────────
+      const storage = new ObjectStorageService();
+      fileKey = await storage.uploadBuffer({
+        subdir: "inbox-docs",
+        filename: resolvedFilename,
+        buffer: buf,
+        contentType: resolvedMimeType,
+      });
+      finalSizeBytes = buf.length;
+    }
 
     // ── Resolve owner name for descriptive document name ────────────────────
     let ownerFirstName: string | null = null;
@@ -3053,7 +3106,7 @@ router.post(
       applicationId: null,
       fileKey,
       mimeType: resolvedMimeType,
-      sizeBytes: fileBuffer.length,
+      sizeBytes: finalSizeBytes,
       source: "inbox",
       sourceConversationId: conversationId,
       sourceMessageId: msgId,

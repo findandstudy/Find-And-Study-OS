@@ -301,7 +301,8 @@
     "quotaFull": "Квота программы заполнена",
     "quotaFullDesc": "Эта программа достигла квоты зачисления на этот год.",
     "quota": "Квота",
-    "quotaLabel": "Квота (Kontенjan)"
+    "quotaLabel": "Квота (Kontенjan)",
+    "programDetails": "Детали программы"
   },
   "apply": {
     "title": "Заявка — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} selected",
     "deleteSelected": "Delete selected ({n})",
     "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
-    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted",
+    "done": "Готово",
+    "remove": "Удалить",
+    "retry": "Повторить",
+    "saveFailed": "Не удалось сохранить"
   },
   "seo": {
     "homeTitle": "Консалтинг в сфере образования",
@@ -1233,7 +1238,9 @@
       "fillRequired": "Пожалуйста, введите имя и фамилию",
       "createFailed": "Не удалось создать студента",
       "cancel": "Отмена",
-      "docsSaveFailed": "{count} документ(ов) не удалось сохранить в профиле студента."
+      "docsSaveFailed": "{count} документ(ов) не удалось сохранить в профиле студента.",
+      "studentCreated": "Студент создан",
+      "studentCreatedWithDocs": "Студент создан — {count} документ(ов) сохранено в профиле"
     },
     "applicationTab": {
       "noStudent": "Студент не привязан",

@@ -301,7 +301,8 @@
     "quotaFull": "Kuota Program Penuh",
     "quotaFullDesc": "Program ini telah mencapai kuota pendaftaran untuk tahun ini.",
     "quota": "Kuota",
-    "quotaLabel": "Kuota (Kontenjan)"
+    "quotaLabel": "Kuota (Kontenjan)",
+    "programDetails": "Detail Program"
   },
   "apply": {
     "title": "Daftar — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} selected",
     "deleteSelected": "Delete selected ({n})",
     "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
-    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted",
+    "done": "Selesai",
+    "remove": "Hapus",
+    "retry": "Coba lagi",
+    "saveFailed": "Gagal menyimpan"
   },
   "seo": {
     "homeTitle": "Konsultasi Pendidikan Global",
@@ -1233,7 +1238,9 @@
       "fillRequired": "Mohon isi nama depan dan belakang",
       "createFailed": "Gagal membuat mahasiswa",
       "cancel": "Batal",
-      "docsSaveFailed": "{count} dokumen gagal disimpan ke profil siswa."
+      "docsSaveFailed": "{count} dokumen gagal disimpan ke profil siswa.",
+      "studentCreated": "Siswa dibuat",
+      "studentCreatedWithDocs": "Siswa dibuat — {count} dokumen disimpan ke profil"
     },
     "applicationTab": {
       "noStudent": "Belum ada mahasiswa yang ditautkan",

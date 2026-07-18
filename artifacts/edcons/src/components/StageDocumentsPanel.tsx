@@ -517,7 +517,7 @@ function MissingDocsSection({
   notes: any[];
   isAdmin: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { toast } = useToast();
   const qc = useQueryClient();
 

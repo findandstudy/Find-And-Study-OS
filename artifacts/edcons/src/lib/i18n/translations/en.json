@@ -301,7 +301,8 @@
     "quotaFull": "Program Quota Full",
     "quotaFullDesc": "This program has reached its enrollment quota for this year.",
     "quota": "Quota",
-    "quotaLabel": "Quota (Kontenjan)"
+    "quotaLabel": "Quota (Kontenjan)",
+    "programDetails": "Program Details"
   },
   "apply": {
     "title": "Apply — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} selected",
     "deleteSelected": "Delete selected ({n})",
     "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
-    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted",
+    "done": "Done",
+    "remove": "Remove",
+    "retry": "Retry",
+    "saveFailed": "Save failed"
   },
   "seo": {
     "homeTitle": "Global Education Consultancy",
@@ -1233,7 +1238,9 @@
       "fillRequired": "Please fill in first and last name",
       "createFailed": "Failed to create student",
       "cancel": "Cancel",
-      "docsSaveFailed": "{count} document(s) could not be saved to the student profile."
+      "docsSaveFailed": "{count} document(s) could not be saved to the student profile.",
+      "studentCreated": "Student created",
+      "studentCreatedWithDocs": "Student created — {count} document(s) saved to profile"
     },
     "applicationTab": {
       "noStudent": "No student linked",

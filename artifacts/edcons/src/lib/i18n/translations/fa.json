@@ -301,7 +301,8 @@
     "quotaFull": "سهمیه برنامه پر شده",
     "quotaFullDesc": "این برنامه به سهمیه ثبت‌نام خود برای امسال رسیده است.",
     "quota": "سهمیه",
-    "quotaLabel": "سهمیه (کونتنجان)"
+    "quotaLabel": "سهمیه (کونتنجان)",
+    "programDetails": "جزئیات برنامه"
   },
   "apply": {
     "title": "درخواست — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} selected",
     "deleteSelected": "Delete selected ({n})",
     "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
-    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted",
+    "done": "انجام شد",
+    "remove": "حذف",
+    "retry": "تلاش مجدد",
+    "saveFailed": "ذخیره ناموفق بود"
   },
   "seo": {
     "homeTitle": "مشاوره آموزش جهانی",
@@ -1233,7 +1238,9 @@
       "fillRequired": "لطفاً نام و نام خانوادگی را وارد کنید",
       "createFailed": "ایجاد دانشجو ناموفق بود",
       "cancel": "انصراف",
-      "docsSaveFailed": "{count} سند در پروفایل دانشجو ذخیره نشد."
+      "docsSaveFailed": "{count} سند در پروفایل دانشجو ذخیره نشد.",
+      "studentCreated": "دانشجو ایجاد شد",
+      "studentCreatedWithDocs": "دانشجو ایجاد شد — {count} سند در پروفایل ذخیره شد"
     },
     "applicationTab": {
       "noStudent": "دانشجویی لینک نشده",

@@ -301,7 +301,8 @@
     "quotaFull": "项目名额已满",
     "quotaFullDesc": "该项目今年的招生名额已满。",
     "quota": "名额",
-    "quotaLabel": "名额（Kontenjan）"
+    "quotaLabel": "名额（Kontenjan）",
+    "programDetails": "课程详情"
   },
   "apply": {
     "title": "申请 — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} selected",
     "deleteSelected": "Delete selected ({n})",
     "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
-    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted",
+    "done": "完成",
+    "remove": "移除",
+    "retry": "重试",
+    "saveFailed": "保存失败"
   },
   "seo": {
     "homeTitle": "全球教育咨询",
@@ -1233,7 +1238,9 @@
       "fillRequired": "请填写姓名",
       "createFailed": "创建学生失败",
       "cancel": "取消",
-      "docsSaveFailed": "{count} 个文件未能保存到学生档案。"
+      "docsSaveFailed": "{count} 个文件未能保存到学生档案。",
+      "studentCreated": "学生已创建",
+      "studentCreatedWithDocs": "学生已创建 — {count} 个文件已保存到档案"
     },
     "applicationTab": {
       "noStudent": "未关联学生",

@@ -301,7 +301,8 @@
     "quotaFull": "Cuota del programa llena",
     "quotaFullDesc": "Este programa ha alcanzado su cuota de inscripción para este año.",
     "quota": "Cuota",
-    "quotaLabel": "Cuota (Kontenjan)"
+    "quotaLabel": "Cuota (Kontenjan)",
+    "programDetails": "Detalles del programa"
   },
   "apply": {
     "title": "Aplicar — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} selected",
     "deleteSelected": "Delete selected ({n})",
     "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
-    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted",
+    "done": "Hecho",
+    "remove": "Eliminar",
+    "retry": "Reintentar",
+    "saveFailed": "Error al guardar"
   },
   "seo": {
     "homeTitle": "Consultoría de educación global",
@@ -1233,7 +1238,9 @@
       "fillRequired": "Por favor ingrese nombre y apellido",
       "createFailed": "Error al crear el estudiante",
       "cancel": "Cancelar",
-      "docsSaveFailed": "No se pudieron guardar {count} documento(s) en el perfil del estudiante."
+      "docsSaveFailed": "No se pudieron guardar {count} documento(s) en el perfil del estudiante.",
+      "studentCreated": "Estudiante creado",
+      "studentCreatedWithDocs": "Estudiante creado — {count} documento(s) guardado(s) en el perfil"
     },
     "applicationTab": {
       "noStudent": "Ningún estudiante vinculado",

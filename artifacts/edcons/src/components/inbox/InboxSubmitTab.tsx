@@ -113,6 +113,7 @@ export function InboxSubmitTab({
 
       let docsSaved = 0;
       let docsFailed = 0;
+      const docErrors: string[] = [];
       for (const [docType, att] of Object.entries(data.staging)) {
         try {
           await customFetch(
@@ -124,15 +125,24 @@ export function InboxSubmitTab({
             }
           );
           docsSaved++;
-        } catch {
-          docsFailed++;
+        } catch (docErr: any) {
+          // 409 alreadySaved = the doc was staged on the lead and adopted onto
+          // the student during matching — it IS on the profile, not a failure.
+          const body = docErr?.data ?? docErr?.body;
+          if (docErr?.status === 409 && body?.alreadySaved) {
+            docsSaved++;
+          } else {
+            docsFailed++;
+            const emsg = body?.error || docErr?.message;
+            docErrors.push(`${docType}: ${typeof emsg === "string" ? emsg : "unknown error"}`);
+          }
         }
       }
 
       if (docsFailed > 0) {
         toast({
           title: t("inbox.studentTab.studentCreated"),
-          description: t("inbox.studentTab.docsSaveFailed", { count: String(docsFailed) }),
+          description: `${t("inbox.studentTab.docsSaveFailed", { count: String(docsFailed) })} — ${docErrors.join("; ")}`,
           variant: "destructive",
         });
       } else {

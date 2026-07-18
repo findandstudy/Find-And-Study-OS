@@ -981,7 +981,12 @@ function InboxTab() {
       setTemplateQuery("");
       fetchDetail(selectedId);
     } catch (err: any) {
-      toast({ title: err?.body?.error || "Failed to send template", variant: "destructive" });
+      const realErr = err?.data?.error || err?.body?.error;
+      toast({
+        title: t("messagesPage.failedToSendTemplate"),
+        description: typeof realErr === "string" ? realErr : undefined,
+        variant: "destructive",
+      });
     }
   }
 

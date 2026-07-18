@@ -301,7 +301,8 @@
     "quotaFull": "कार्यक्रम कोटा भरा हुआ",
     "quotaFullDesc": "इस कार्यक्रम की इस वर्ष के लिए नामांकन सीमा पूरी हो चुकी है।",
     "quota": "कोटा",
-    "quotaLabel": "कोटा (कोंतेनजान)"
+    "quotaLabel": "कोटा (कोंतेनजान)",
+    "programDetails": "प्रोग्राम विवरण"
   },
   "apply": {
     "title": "आवेदन — {name}",
@@ -720,7 +721,11 @@
     "selectedCount": "{n} selected",
     "deleteSelected": "Delete selected ({n})",
     "confirmBulkDelete": "Delete {n} item(s)? This cannot be undone.",
-    "bulkDeletePartialFailure": "{n} item(s) could not be deleted"
+    "bulkDeletePartialFailure": "{n} item(s) could not be deleted",
+    "done": "हो गया",
+    "remove": "हटाएं",
+    "retry": "पुनः प्रयास करें",
+    "saveFailed": "सहेजना विफल"
   },
   "seo": {
     "homeTitle": "वैश्विक शिक्षा परामर्श",
@@ -1233,7 +1238,9 @@
       "fillRequired": "कृपया पहला और अंतिम नाम भरें",
       "createFailed": "छात्र बनाने में विफल",
       "cancel": "रद्द करें",
-      "docsSaveFailed": "{count} दस्तावेज़ छात्र प्रोफ़ाइल में सहेजे नहीं जा सके।"
+      "docsSaveFailed": "{count} दस्तावेज़ छात्र प्रोफ़ाइल में सहेजे नहीं जा सके।",
+      "studentCreated": "छात्र बनाया गया",
+      "studentCreatedWithDocs": "छात्र बनाया गया — {count} दस्तावेज़ प्रोफ़ाइल में सहेजे गए"
     },
     "applicationTab": {
       "noStudent": "कोई छात्र लिंक नहीं",
