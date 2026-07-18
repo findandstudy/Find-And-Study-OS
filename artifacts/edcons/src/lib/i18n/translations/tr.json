@@ -1290,6 +1290,17 @@
     },
     "resizer": {
       "resetHint": "Genişliği sıfırlamak için çift tıklayın"
+    },
+    "forward": {
+      "button": "İlet",
+      "label": "İletildi",
+      "title": "Mesajı ilet",
+      "searchPlaceholder": "Sohbetlerde ara...",
+      "noConversations": "Başka sohbet yok",
+      "sent": "{count} sohbete iletildi",
+      "partial": "İletildi: {ok} başarılı, {failed} başarısız",
+      "error": "İletme başarısız",
+      "send": "İlet ({count})"
     }
   },
   "integrations": {

@@ -451,6 +451,7 @@ function normalizePublicObjectKey(raw: string): string {
  */
 async function downloadAttachmentBytes(
   attUrl: string,
+  apiKey?: string,
 ): Promise<{ buf: Buffer; contentType: string } | null> {
   try {
     const withoutQuery = attUrl.split("?")[0];
@@ -469,8 +470,18 @@ async function downloadAttachmentBytes(
       const [meta] = await file.getMetadata();
       return { buf, contentType: meta.contentType || "application/octet-stream" };
     }
-    // External URL — fetch without credentials.
-    const resp = await fetch(attUrl);
+    // External URL. Zernio-hosted media requires the Bearer key (forwarded
+    // attachments reference zernio.com URLs); everything else is fetched
+    // without credentials.
+    let isZernioHost = false;
+    try {
+      const u = new URL(attUrl);
+      isZernioHost = u.protocol === "https:" && u.hostname === "zernio.com";
+    } catch { /* not a valid absolute URL — plain fetch will fail below */ }
+    const resp = await fetch(attUrl, {
+      headers: isZernioHost && apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+      redirect: "follow",
+    });
     if (!resp.ok) {
       console.warn(`[ZERNIO] attachment fetch failed (${resp.status}) for external URL`);
       return null;
@@ -511,7 +522,7 @@ async function sendZernioAttachment(
   att: ZernioAttachment,
 ): Promise<ZernioSendOutcome> {
   const name = att.name || "attachment";
-  const bytes = await downloadAttachmentBytes(att.url);
+  const bytes = await downloadAttachmentBytes(att.url, apiKey);
 
   if (!bytes) {
     const error = `Zernio attachment bytes unavailable for "${name}" (source url: ${att.url})`;

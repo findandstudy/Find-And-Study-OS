@@ -5,6 +5,7 @@
  * Education Consultancy Operating System API
  * OpenAPI spec version: 0.1.0
  */
+import type { KommoSummaryChannelsItem } from "./kommoSummaryChannelsItem";
 
 export interface KommoSummary {
   /** Average reply time in seconds (0 if no data) */
@@ -16,4 +17,6 @@ export interface KommoSummary {
   lostLeads: number;
   incomingMessages: number;
   outgoingMessages: number;
+  /** Per-channel message breakdown over the same date range as incoming/outgoing totals */
+  channels?: KommoSummaryChannelsItem[];
 }

@@ -27,6 +27,8 @@ function PdfIcon() {
 
 interface PdfAttachmentCardProps {
   url: string;
+  /** Server-rendered cached thumbnail (JPEG) endpoint; tried before pdfjs. */
+  serverThumbUrl?: string | null;
   name: string;
   fileSize?: number | null;
   outbound?: boolean;
@@ -39,7 +41,7 @@ interface PdfAttachmentCardProps {
  * Thumbnail + page count render lazily via pdfjs; on failure the card
  * degrades gracefully to icon + name + size.
  */
-export default function PdfAttachmentCard({ url, name, fileSize, outbound, onClick }: PdfAttachmentCardProps) {
+export default function PdfAttachmentCard({ url, serverThumbUrl, name, fileSize, outbound, onClick }: PdfAttachmentCardProps) {
   const { t } = useI18n();
   const rootRef = useRef<HTMLButtonElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -48,6 +50,8 @@ export default function PdfAttachmentCard({ url, name, fileSize, outbound, onCli
   const [failed, setFailed] = useState(false);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [sizeBytes, setSizeBytes] = useState<number | null>(fileSize ?? null);
+  const [serverThumb, setServerThumb] = useState<string | null>(null);
+  const [serverThumbFailed, setServerThumbFailed] = useState(false);
 
   // Defer PDF download/render until the card scrolls into view so long
   // chats with many PDFs don't fetch everything at once.
@@ -61,12 +65,37 @@ export default function PdfAttachmentCard({ url, name, fileSize, outbound, onCli
     return () => obs.disconnect();
   }, []);
 
+  // Server-side cached thumbnail: much cheaper than downloading + rendering
+  // the whole PDF in the browser. Falls back to pdfjs when it 404s.
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !serverThumbUrl) { if (!serverThumbUrl) setServerThumbFailed(true); return; }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    (async () => {
+      try {
+        const resp = await fetch(serverThumbUrl, { credentials: "include" });
+        if (!resp.ok) throw new Error(String(resp.status));
+        const pages = Number(resp.headers.get("X-Pdf-Page-Count"));
+        const blob = await resp.blob();
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setServerThumb(objectUrl);
+        if (Number.isFinite(pages) && pages > 0) setPageCount(pages);
+      } catch {
+        if (!cancelled) setServerThumbFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [serverThumbUrl, visible]);
+
+  useEffect(() => {
+    if (!visible || serverThumb || !serverThumbFailed) return;
     let cancelled = false;
     setRendered(false);
     setFailed(false);
-    setPageCount(null);
 
     async function render() {
       try {
@@ -111,7 +140,7 @@ export default function PdfAttachmentCard({ url, name, fileSize, outbound, onCli
     render();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, visible]);
+  }, [url, visible, serverThumb, serverThumbFailed]);
 
   const metaParts: string[] = [];
   if (pageCount != null) metaParts.push(t("inbox.attachment.pageCount", { count: String(pageCount) }));
@@ -129,7 +158,13 @@ export default function PdfAttachmentCard({ url, name, fileSize, outbound, onCli
           : "border-border bg-muted/40 hover:bg-muted text-foreground"
       }`}
     >
-      {!failed && (
+      {serverThumb ? (
+        <img
+          src={serverThumb}
+          alt={name}
+          className="w-full block bg-white object-cover object-top max-h-[130px]"
+        />
+      ) : !failed && (
         <canvas
           ref={canvasRef}
           className="w-full block bg-white"

@@ -1290,6 +1290,17 @@
     },
     "resizer": {
       "resetHint": "Haz doble clic para restablecer el ancho"
+    },
+    "forward": {
+      "button": "Reenviar",
+      "label": "Reenviado",
+      "title": "Reenviar mensaje",
+      "searchPlaceholder": "Buscar conversaciones...",
+      "noConversations": "No hay otras conversaciones",
+      "sent": "Reenviado a {count} conversación(es)",
+      "partial": "Reenvío: {ok} enviados, {failed} fallidos",
+      "error": "Error al reenviar",
+      "send": "Reenviar ({count})"
     }
   },
   "integrations": {

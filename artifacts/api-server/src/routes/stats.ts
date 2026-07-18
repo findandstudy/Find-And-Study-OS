@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, applicationsTable, agentsTable, documentsTable, commissionsTable, pipelineStagesTable, messagesTable, conversationsTable } from "@workspace/db";
+import { db, leadsTable, studentsTable, applicationsTable, agentsTable, documentsTable, commissionsTable, pipelineStagesTable, messagesTable, conversationsTable, channelAccountsTable } from "@workspace/db";
 import { sql, eq, and, isNull, inArray, or, gte, ne, notInArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
@@ -259,7 +259,7 @@ router.get("/stats/kommo-summary", requireAuth, requireRole(...STAFF_ROLES, ...A
   } else if (isAgent) {
     agentIds = await getAgentVisibleIds(user.id, user.role);
     if (agentIds.length === 0) {
-      res.json({ avgReplyTime: 0, medianReplyTime: 0, activeLeads: 0, wonLeads: 0, lostLeads: 0, incomingMessages: 0, outgoingMessages: 0 });
+      res.json({ avgReplyTime: 0, medianReplyTime: 0, activeLeads: 0, wonLeads: 0, lostLeads: 0, incomingMessages: 0, outgoingMessages: 0, channels: [] });
       return;
     }
   } else {
@@ -314,6 +314,36 @@ router.get("/stats/kommo-summary", requireAuth, requireRole(...STAFF_ROLES, ...A
     outgoing: sql<number>`coalesce(sum(case when direction='outbound' then 1 else 0 end),0)`,
   }).from(messagesTable).where(sql`created_at >= ${dateFrom} AND created_at <= ${dateTo}`);
 
+  // Per-channel breakdown over the SAME filter as the totals above so the
+  // section 4b cards always sum to the top MESSAGES card.
+  const channelRows = await db.select({
+    channel: messagesTable.channel,
+    incoming: sql<number>`coalesce(sum(case when direction='inbound' then 1 else 0 end),0)`,
+    outgoing: sql<number>`coalesce(sum(case when direction='outbound' then 1 else 0 end),0)`,
+  }).from(messagesTable)
+    .where(sql`created_at >= ${dateFrom} AND created_at <= ${dateTo}`)
+    .groupBy(messagesTable.channel);
+
+  // "Connected" = an active channel_accounts row exists for that channel.
+  const connectedRows = await db.select({ channel: channelAccountsTable.channel })
+    .from(channelAccountsTable)
+    .where(eq(channelAccountsTable.isActive, true))
+    .groupBy(channelAccountsTable.channel);
+  const connectedSet = new Set(connectedRows.map((r) => String(r.channel)));
+
+  const channels = channelRows.map((r) => ({
+    channel: String(r.channel ?? "other"),
+    incoming: Number(r.incoming ?? 0),
+    outgoing: Number(r.outgoing ?? 0),
+    connected: connectedSet.has(String(r.channel)),
+  }));
+  // Include connected-but-silent channels so the UI can show them as 0/0 connected.
+  for (const ch of connectedSet) {
+    if (!channels.some((c) => c.channel === ch)) {
+      channels.push({ channel: ch, incoming: 0, outgoing: 0, connected: true });
+    }
+  }
+
   const replyRows = await db.execute<{ reply_seconds: string | null }>(sql`
     WITH reply_pairs AS (
       SELECT
@@ -347,6 +377,7 @@ router.get("/stats/kommo-summary", requireAuth, requireRole(...STAFF_ROLES, ...A
     lostLeads: Number(lost),
     incomingMessages: Number(msgCounts?.incoming ?? 0),
     outgoingMessages: Number(msgCounts?.outgoing ?? 0),
+    channels,
   });
 });
 

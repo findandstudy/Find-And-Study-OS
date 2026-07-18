@@ -50,6 +50,35 @@ else
   echo "     Nginx not found or config test failed — skipping reload."
 fi
 
+# --- Rotate old deploy backups ------------------------------------------------
+# Every deploy leaves a full copy under /var/www as <live>.old-YYYYMMDD-HHMMSS.
+# Keep the LIVE dir + the 2 most recent .old-* backups (rollback safety),
+# delete anything older. Only touches directories we created ourselves
+# (".old-*" pattern). Manually parked dirs (.broken-*, .failed-*, apply_build_*,
+# old findandstudy.cloud-* copies, etc.) are NEVER touched here.
+echo "==> [5/5] Rotating old deploy backups..."
+LIVE_DIR="/var/www/apply.findandstudy.com"
+KEEP_BACKUPS=2
+if [ -d "$(dirname "$LIVE_DIR")" ]; then
+  # Newest first (timestamp suffix sorts lexicographically); skip the first
+  # $KEEP_BACKUPS entries, delete the rest.
+  ls -1d "${LIVE_DIR}.old-"* 2>/dev/null | sort -r | tail -n "+$((KEEP_BACKUPS + 1))" | while read -r OLD_DIR; do
+    # Hard safety guards: never the live dir, only our own .old-* pattern.
+    case "$OLD_DIR" in
+      "$LIVE_DIR") continue ;;
+      "${LIVE_DIR}.old-"*) ;;
+      *) continue ;;
+    esac
+    [ -d "$OLD_DIR" ] || continue
+    SIZE="$(du -sh "$OLD_DIR" 2>/dev/null | cut -f1)"
+    echo "     [deploy] eski kopya siliniyor: $OLD_DIR (${SIZE:-?})"
+    rm -rf "$OLD_DIR"
+  done
+  echo "     Rotation done (live dir + last $KEEP_BACKUPS backups kept)."
+else
+  echo "     $(dirname "$LIVE_DIR") not found — skipping rotation (dev environment)."
+fi
+
 echo ""
 echo "✓ Deploy complete."
 pm2 status findandstudy-api

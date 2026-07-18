@@ -6048,6 +6048,17 @@ components:
         lostLeads: { type: integer }
         incomingMessages: { type: integer }
         outgoingMessages: { type: integer }
+        channels:
+          type: array
+          description: "Per-channel message breakdown over the same date range as incoming/outgoing totals"
+          items:
+            type: object
+            properties:
+              channel: { type: string }
+              incoming: { type: integer }
+              outgoing: { type: integer }
+              connected: { type: boolean }
+            required: [channel, incoming, outgoing, connected]
       required: [avgReplyTime, medianReplyTime, activeLeads, wonLeads, lostLeads, incomingMessages, outgoingMessages]
 
     RecordEntityViewBody:

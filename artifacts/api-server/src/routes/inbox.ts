@@ -378,6 +378,175 @@ router.get(
 );
 
 /**
+ * WhatsApp-Web-style PDF preview: renders page 1 of a PDF attachment to a
+ * JPEG thumbnail on the server and caches it on disk. The client shows the
+ * <img> instantly and only falls back to client-side pdfjs rendering when
+ * this endpoint 404s. Same SSRF guard as the media proxy (zernio.com only).
+ * Page count (best-effort via pdfinfo) is exposed as X-Pdf-Page-Count.
+ */
+router.get(
+  "/inbox/media/:messageId/:index/pdf-thumb",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const messageId = Number(req.params.messageId);
+    const index = Number(req.params.index);
+    if (!Number.isInteger(messageId) || !Number.isInteger(index) || index < 0 || index > 50) {
+      res.status(400).json({ error: "Invalid message or attachment index" });
+      return;
+    }
+
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const fs = await import("node:fs/promises");
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+
+    const cacheDir = path.join(os.tmpdir(), "edcons-pdf-thumbs");
+    const thumbPath = path.join(cacheDir, `${messageId}-${index}.jpg`);
+    const metaPath = path.join(cacheDir, `${messageId}-${index}.json`);
+
+    const sendThumb = async (): Promise<boolean> => {
+      try {
+        const buf = await fs.readFile(thumbPath);
+        let pages: number | null = null;
+        try {
+          const metaRaw = await fs.readFile(metaPath, "utf8");
+          pages = (JSON.parse(metaRaw) as { pages?: number }).pages ?? null;
+        } catch { /* meta is best-effort */ }
+        res.status(200);
+        res.setHeader("Content-Type", "image/jpeg");
+        res.setHeader("Cache-Control", "private, max-age=86400");
+        if (pages && Number.isFinite(pages)) res.setHeader("X-Pdf-Page-Count", String(pages));
+        res.end(buf);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    if (await sendThumb()) return;
+
+    const [msg] = await db
+      .select({ metadata: messagesTable.metadata })
+      .from(messagesTable)
+      .where(eq(messagesTable.id, messageId));
+    if (!msg) {
+      res.status(404).json({ error: "Message not found" });
+      return;
+    }
+    const meta = (msg.metadata ?? {}) as {
+      attachment?: { url?: string; fileUrl?: string };
+      attachments?: Array<{ url?: string; fileUrl?: string }>;
+    };
+    const allAtts = [
+      ...(meta.attachment ? [meta.attachment] : []),
+      ...(meta.attachments ?? []),
+    ];
+    const rawUrl = allAtts[index]?.url ?? allAtts[index]?.fileUrl ?? "";
+
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      res.status(404).json({ error: "Attachment not found" });
+      return;
+    }
+    if (parsed.protocol !== "https:" || parsed.hostname !== "zernio.com") {
+      res.status(404).json({ error: "Attachment not proxied" });
+      return;
+    }
+    const apiKey = await getZernioApiKey();
+    if (!apiKey) {
+      res.status(502).json({ error: "Zernio API key not configured" });
+      return;
+    }
+
+    let tmpPdf: string | null = null;
+    let tmpOutBase: string | null = null;
+    try {
+      // Follow redirects manually so every hop stays on https://zernio.com (SSRF guard).
+      let hopUrl = parsed;
+      let upstream: Response | null = null;
+      for (let hop = 0; hop < 4; hop++) {
+        const r = await fetch(hopUrl.toString(), {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          redirect: "manual",
+        });
+        if (r.status >= 300 && r.status < 400) {
+          const loc = r.headers.get("location");
+          if (!loc) break;
+          let next: URL;
+          try {
+            next = new URL(loc, hopUrl);
+          } catch {
+            break;
+          }
+          if (next.protocol !== "https:" || next.hostname !== "zernio.com") {
+            res.status(404).json({ error: "Attachment not proxied" });
+            return;
+          }
+          hopUrl = next;
+          continue;
+        }
+        upstream = r;
+        break;
+      }
+      if (!upstream || !upstream.ok) {
+        res.status(404).json({ error: "Failed to fetch media" });
+        return;
+      }
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      // Only render actual PDFs (magic check) and cap at 25 MB.
+      if (buf.length > 25 * 1024 * 1024 || !buf.subarray(0, 5).toString("latin1").startsWith("%PDF")) {
+        res.status(404).json({ error: "Not a renderable PDF" });
+        return;
+      }
+
+      await fs.mkdir(cacheDir, { recursive: true });
+      tmpPdf = path.join(cacheDir, `src-${messageId}-${index}-${Date.now()}.pdf`);
+      tmpOutBase = path.join(cacheDir, `out-${messageId}-${index}-${Date.now()}`);
+      await fs.writeFile(tmpPdf, buf);
+
+      let rendered = false;
+      try {
+        await execFileAsync("pdftoppm", ["-jpeg", "-f", "1", "-l", "1", "-scale-to", "480", "-singlefile", tmpPdf, tmpOutBase], { timeout: 20000 });
+        await fs.rename(`${tmpOutBase}.jpg`, thumbPath);
+        rendered = true;
+      } catch {
+        // Fallback: ghostscript
+        try {
+          await execFileAsync("gs", ["-dSAFER", "-dBATCH", "-dNOPAUSE", "-dFirstPage=1", "-dLastPage=1", "-sDEVICE=jpeg", "-r72", `-sOutputFile=${tmpOutBase}.jpg`, tmpPdf], { timeout: 20000 });
+          await fs.rename(`${tmpOutBase}.jpg`, thumbPath);
+          rendered = true;
+        } catch { /* both renderers failed */ }
+      }
+      if (!rendered) {
+        res.status(404).json({ error: "Thumbnail render failed" });
+        return;
+      }
+
+      // Best-effort page count for the "N pages" label.
+      try {
+        const { stdout } = await execFileAsync("pdfinfo", [tmpPdf], { timeout: 10000 });
+        const m = /^Pages:\s+(\d+)/m.exec(stdout);
+        if (m) await fs.writeFile(metaPath, JSON.stringify({ pages: Number(m[1]) }));
+      } catch { /* label is optional */ }
+
+      if (!(await sendThumb())) {
+        res.status(404).json({ error: "Thumbnail render failed" });
+      }
+    } catch (err: any) {
+      console.error(`[INBOX] pdf-thumb error for message ${messageId}[${index}]:`, err?.message || err);
+      res.status(404).json({ error: "Thumbnail render failed" });
+    } finally {
+      if (tmpPdf) void fs.unlink(tmpPdf).catch(() => {});
+      if (tmpOutBase) void fs.unlink(`${tmpOutBase}.jpg`).catch(() => {});
+    }
+  },
+);
+
+/**
  * Live inbox stream (Server-Sent Events). Pushes `inbox_message` and
  * `inbox_assigned` frames to the client so the UI can refresh without
  * polling. Payloads carry just enough context for the client to decide
@@ -1313,6 +1482,116 @@ router.post(
     await syncConversationOwner(id, req.user!.id, req.ip);
     await logAudit(req.user!.id, "create_lead_from_inbox", "lead", lead.id, { conversationId: id }, req.ip);
     res.status(201).json({ ok: true, leadId: lead.id });
+  },
+);
+
+/**
+ * Forward an existing message (content + attachments) to other conversations.
+ * Body: { conversationIds: number[] } — max 10 targets per call.
+ * Only Zernio-routed target conversations are supported (the shared transport
+ * can deliver both text and re-hosted attachments); others fail per-target
+ * with `unsupported_channel`. Meta-windowed channels enforce the 24h rule.
+ */
+router.post(
+  "/inbox/messages/:messageId/forward",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const messageId = Number(req.params.messageId);
+    const conversationIds = (req.body as { conversationIds?: unknown })?.conversationIds;
+    if (
+      !Number.isInteger(messageId) ||
+      !Array.isArray(conversationIds) ||
+      conversationIds.length === 0 ||
+      conversationIds.length > 10 ||
+      !conversationIds.every((v) => Number.isInteger(v) && v > 0)
+    ) {
+      res.status(400).json({ error: "conversationIds must be 1-10 conversation ids" });
+      return;
+    }
+
+    const [src] = await db.select().from(messagesTable).where(eq(messagesTable.id, messageId));
+    if (!src) {
+      res.status(404).json({ error: "Message not found" });
+      return;
+    }
+    const srcMeta = (src.metadata ?? {}) as {
+      attachment?: { url?: string; fileUrl?: string; type?: string; fileType?: string; name?: string; fileName?: string };
+      attachments?: Array<{ url?: string; fileUrl?: string; type?: string; fileType?: string; name?: string; fileName?: string }>;
+    };
+    const attachments = [
+      ...(srcMeta.attachment ? [srcMeta.attachment] : []),
+      ...(srcMeta.attachments ?? []),
+    ]
+      .map((a) => ({
+        url: a.url ?? a.fileUrl ?? "",
+        type: a.type ?? a.fileType,
+        name: a.name ?? a.fileName,
+      }))
+      .filter((a) => a.url);
+    const content = src.content && src.content !== "[attachment]" ? src.content : undefined;
+    if (!content && attachments.length === 0) {
+      res.status(400).json({ error: "Message has no forwardable content" });
+      return;
+    }
+
+    const results: Array<{ conversationId: number; ok: boolean; error?: string }> = [];
+    for (const targetId of conversationIds as number[]) {
+      const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, targetId));
+      if (!conv) {
+        results.push({ conversationId: targetId, ok: false, error: "not_found" });
+        continue;
+      }
+
+      let zernioAcct: typeof channelAccountsTable.$inferSelect | undefined;
+      if (conv.channelAccountId != null) {
+        [zernioAcct] = await db
+          .select()
+          .from(channelAccountsTable)
+          .where(
+            and(
+              eq(channelAccountsTable.id, conv.channelAccountId),
+              eq(channelAccountsTable.provider, "zernio"),
+            ),
+          );
+      }
+      if (!zernioAcct) {
+        results.push({ conversationId: targetId, ok: false, error: "unsupported_channel" });
+        continue;
+      }
+      if (CHANNELS_WITH_24H_WINDOW.has(conv.channel) && !isWithin24hWindow(conv.lastInboundAt)) {
+        results.push({ conversationId: targetId, ok: false, error: "outside_24h_window" });
+        continue;
+      }
+
+      const result = await sendZernioConversationMessage({
+        conv: {
+          id: conv.id,
+          channel: conv.channel,
+          externalThreadId: conv.externalThreadId,
+          assignedToId: conv.assignedToId ?? null,
+          unmatched: conv.unmatched,
+        },
+        externalAccountId: zernioAcct.externalAccountId!,
+        senderId: req.user!.id,
+        content,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      });
+
+      if (result.ok && result.message?.id) {
+        // Mark the new row as forwarded so the UI can show the label.
+        await pool.query(
+          `UPDATE messages SET metadata = coalesce(metadata, '{}'::jsonb) || $1::jsonb WHERE id = $2`,
+          [JSON.stringify({ forwarded: true, forwardedFromMessageId: messageId }), result.message.id],
+        );
+        results.push({ conversationId: targetId, ok: true });
+      } else {
+        results.push({ conversationId: targetId, ok: false, error: result.precondition ?? result.error ?? "send_failed" });
+      }
+    }
+
+    await logAudit(req.user!.id, "forward_inbox_message", "message", messageId, { targets: conversationIds }, req.ip);
+    res.status(200).json({ results });
   },
 );
 

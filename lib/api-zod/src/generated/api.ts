@@ -1989,6 +1989,19 @@ export const GetKommoSummaryResponse = zod.object({
   lostLeads: zod.number(),
   incomingMessages: zod.number(),
   outgoingMessages: zod.number(),
+  channels: zod
+    .array(
+      zod.object({
+        channel: zod.string(),
+        incoming: zod.number(),
+        outgoing: zod.number(),
+        connected: zod.boolean(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Per-channel message breakdown over the same date range as incoming\/outgoing totals",
+    ),
 });
 
 /**

@@ -41,7 +41,7 @@ import {
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
   Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical,
-  UserPlus, FilePlus2, SmilePlus, CornerUpLeft, Pin,
+  UserPlus, FilePlus2, SmilePlus, CornerUpLeft, Pin, Forward,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -324,6 +324,10 @@ function InboxTab() {
     notes: "",
   });
   const [matchOpen, setMatchOpen] = useState(false);
+  const [forwardMsgId, setForwardMsgId] = useState<number | null>(null);
+  const [forwardTargets, setForwardTargets] = useState<Set<number>>(new Set());
+  const [forwardSearch, setForwardSearch] = useState("");
+  const [forwardSending, setForwardSending] = useState(false);
   const [matchSuggestions, setMatchSuggestions] = useState<any | null>(null);
   const [sidebarSheetOpen, setSidebarSheetOpen] = useState(false);
   const [createLeadOpen, setCreateLeadOpen] = useState(false);
@@ -1733,6 +1737,23 @@ function InboxTab() {
                           </TooltipTrigger>
                           <TooltipContent side="top"><p>{t("inbox.replyAction.button")}</p></TooltipContent>
                         </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={t("inbox.forward.button")}
+                              className="h-6 w-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                              onClick={() => {
+                                setForwardTargets(new Set());
+                                setForwardSearch("");
+                                setForwardMsgId(m.id);
+                              }}
+                            >
+                              <Forward className="w-3.5 h-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>{t("inbox.forward.button")}</p></TooltipContent>
+                        </Tooltip>
                         <div className="relative">
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1774,6 +1795,12 @@ function InboxTab() {
                       </div>
                       <div className="flex flex-col max-w-[75%]">
                       <div className={`rounded-2xl px-3 py-2 text-sm ${out ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
+                        {(m.metadata as any)?.forwarded && (
+                          <div className={`flex items-center gap-1 text-[10px] italic mb-1 ${out ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                            <Forward className="w-3 h-3" />
+                            {t("inbox.forward.label")}
+                          </div>
+                        )}
                         {m.repliedMessage && (
                           <div className={`mb-2 pl-2 border-l-2 rounded-sm text-xs py-1 pr-2 ${out ? "border-primary-foreground/40 bg-primary-foreground/10 opacity-75" : "border-foreground/30 bg-background/50 opacity-80"}`}>
                             <div className="font-semibold truncate">{m.repliedMessage.senderName}</div>
@@ -1888,6 +1915,7 @@ function InboxTab() {
                                   <div key={i} className="space-y-1">
                                     <PdfAttachmentCard
                                       url={url}
+                                      serverThumbUrl={rawUrl.startsWith("https://zernio.com/") ? `/api/inbox/media/${m.id}/${i}/pdf-thumb` : null}
                                       name={name}
                                       fileSize={a.fileSize ?? null}
                                       outbound={out}
@@ -2134,6 +2162,98 @@ function InboxTab() {
           </SheetContent>
         </Sheet>
       )}
+
+      <Dialog open={forwardMsgId !== null} onOpenChange={(o) => { if (!o && !forwardSending) setForwardMsgId(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("inbox.forward.title")}</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={forwardSearch}
+            onChange={(e) => setForwardSearch(e.target.value)}
+            placeholder={t("inbox.forward.searchPlaceholder")}
+            className="mb-2"
+          />
+          <div className="max-h-64 overflow-y-auto space-y-1">
+            {convs
+              .filter((c) => c.id !== selectedId)
+              .filter((c) => {
+                const q = forwardSearch.trim().toLowerCase();
+                if (!q) return true;
+                const name = (c.externalContact?.displayName || c.title || "").toLowerCase();
+                return name.includes(q);
+              })
+              .slice(0, 50)
+              .map((c) => {
+                const name = c.externalContact?.displayName || c.title || "(unknown)";
+                const checked = forwardTargets.has(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setForwardTargets((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(c.id)) next.delete(c.id);
+                        else if (next.size < 10) next.add(c.id);
+                        return next;
+                      });
+                    }}
+                    className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
+                      checked ? "bg-primary/10 border border-primary/40" : "hover:bg-muted border border-transparent"
+                    }`}
+                  >
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${checked ? "bg-primary border-primary" : "border-border"}`}>
+                      {checked && <Check className="w-3 h-3 text-primary-foreground" />}
+                    </span>
+                    <span className="truncate flex-1">{name}</span>
+                    <Badge variant="outline" className="text-[9px] shrink-0">{c.channel}</Badge>
+                  </button>
+                );
+              })}
+            {convs.filter((c) => c.id !== selectedId).length === 0 && (
+              <p className="text-sm text-muted-foreground py-4 text-center">{t("inbox.forward.noConversations")}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setForwardMsgId(null)} disabled={forwardSending}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!forwardMsgId || forwardTargets.size === 0) return;
+                setForwardSending(true);
+                try {
+                  const r: any = await customFetch(`/api/inbox/messages/${forwardMsgId}/forward`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ conversationIds: Array.from(forwardTargets) }),
+                  });
+                  const results: Array<{ conversationId: number; ok: boolean; error?: string }> = r?.results ?? [];
+                  const okCount = results.filter((x) => x.ok).length;
+                  const failCount = results.length - okCount;
+                  if (failCount === 0) {
+                    toast({ title: t("inbox.forward.sent", { count: String(okCount) }) });
+                  } else {
+                    toast({
+                      title: t("inbox.forward.partial", { ok: String(okCount), failed: String(failCount) }),
+                      variant: okCount > 0 ? "default" : "destructive",
+                    });
+                  }
+                  setForwardMsgId(null);
+                } catch {
+                  toast({ title: t("inbox.forward.error"), variant: "destructive" });
+                } finally {
+                  setForwardSending(false);
+                }
+              }}
+              disabled={forwardSending || forwardTargets.size === 0}
+            >
+              {forwardSending ? <Loader2 className="w-4 h-4 animate-spin" /> : t("inbox.forward.send", { count: String(forwardTargets.size) })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={matchOpen} onOpenChange={setMatchOpen}>
         <DialogContent className="max-w-md">

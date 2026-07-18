@@ -1290,6 +1290,17 @@
     },
     "resizer": {
       "resetHint": "Double-cliquez pour réinitialiser la largeur"
+    },
+    "forward": {
+      "button": "Transférer",
+      "label": "Transféré",
+      "title": "Transférer le message",
+      "searchPlaceholder": "Rechercher des conversations...",
+      "noConversations": "Aucune autre conversation",
+      "sent": "Transféré à {count} conversation(s)",
+      "partial": "Transfert : {ok} réussi(s), {failed} échoué(s)",
+      "error": "Échec du transfert",
+      "send": "Transférer ({count})"
     }
   },
   "integrations": {

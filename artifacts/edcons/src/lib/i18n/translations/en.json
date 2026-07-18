@@ -1290,6 +1290,17 @@
     },
     "resizer": {
       "resetHint": "Double-click to reset width"
+    },
+    "forward": {
+      "button": "Forward",
+      "label": "Forwarded",
+      "title": "Forward message",
+      "searchPlaceholder": "Search conversations...",
+      "noConversations": "No other conversations",
+      "sent": "Forwarded to {count} conversation(s)",
+      "partial": "Forwarded: {ok} sent, {failed} failed",
+      "error": "Forwarding failed",
+      "send": "Forward ({count})"
     }
   },
   "integrations": {

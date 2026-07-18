@@ -1290,6 +1290,17 @@
     },
     "resizer": {
       "resetHint": "Klik dua kali untuk mengatur ulang lebar"
+    },
+    "forward": {
+      "button": "Teruskan",
+      "label": "Diteruskan",
+      "title": "Teruskan pesan",
+      "searchPlaceholder": "Cari percakapan...",
+      "noConversations": "Tidak ada percakapan lain",
+      "sent": "Diteruskan ke {count} percakapan",
+      "partial": "Diteruskan: {ok} berhasil, {failed} gagal",
+      "error": "Gagal meneruskan",
+      "send": "Teruskan ({count})"
     }
   },
   "integrations": {

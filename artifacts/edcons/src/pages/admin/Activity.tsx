@@ -412,7 +412,18 @@ function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
           <MessageSquare className="w-3.5 h-3.5" /> {t("adminActivity.messagesSection")} — {t("adminActivity.incoming")} / {t("adminActivity.outgoing")}
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {CHANNELS.map(({ key, i18nKey, icon: ChIcon }) => (
+          {CHANNELS.map(({ key, i18nKey, icon: ChIcon }) => {
+            const rows = (kom?.channels ?? []) as Array<{ channel: string; incoming: number; outgoing: number; connected: boolean }>;
+            const knownKeys = CHANNELS.filter((c) => c.key !== "other").map((c) => c.key as string);
+            // "other" bucket aggregates every channel not shown as its own card
+            // (messenger, internal, ...) so the cards always sum to the totals.
+            const matched = key === "other"
+              ? rows.filter((r) => !knownKeys.includes(r.channel))
+              : rows.filter((r) => r.channel === key);
+            const incoming = matched.reduce((s, r) => s + (r.incoming || 0), 0);
+            const outgoing = matched.reduce((s, r) => s + (r.outgoing || 0), 0);
+            const connected = matched.some((r) => r.connected) || incoming + outgoing > 0;
+            return (
             <Card key={key} className="p-4 border-none shadow-sm shadow-black/5">
               <div className="flex items-center gap-2 mb-2">
                 <ChIcon className="w-4 h-4 text-muted-foreground" />
@@ -421,18 +432,21 @@ function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-muted-foreground">{t("adminActivity.incoming")}</span>
-                  <span className="text-xs font-mono font-semibold">0</span>
+                  <span className="text-xs font-mono font-semibold">{loadingKom ? "..." : incoming}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-muted-foreground">{t("adminActivity.outgoing")}</span>
-                  <span className="text-xs font-mono font-semibold">0</span>
+                  <span className="text-xs font-mono font-semibold">{loadingKom ? "..." : outgoing}</span>
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground/70 mt-2 leading-tight">
-                {t("adminActivity.notConnected")} · {t("adminActivity.connectNote")}
-              </p>
+              {!connected && !loadingKom && (
+                <p className="text-[10px] text-muted-foreground/70 mt-2 leading-tight">
+                  {t("adminActivity.notConnected")} · {t("adminActivity.connectNote")}
+                </p>
+              )}
             </Card>
-          ))}
+            );
+          })}
         </div>
       </div>
 

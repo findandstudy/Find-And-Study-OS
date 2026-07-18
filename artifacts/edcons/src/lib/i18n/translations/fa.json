@@ -1290,6 +1290,17 @@
     },
     "resizer": {
       "resetHint": "برای بازنشانی عرض دوبار کلیک کنید"
+    },
+    "forward": {
+      "button": "باز‌ارسال",
+      "label": "باز‌ارسال شده",
+      "title": "باز‌ارسال پیام",
+      "searchPlaceholder": "جستجوی گفتگوها...",
+      "noConversations": "گفتگوی دیگری وجود ندارد",
+      "sent": "به {count} گفتگو باز‌ارسال شد",
+      "partial": "باز‌ارسال: {ok} موفق، {failed} ناموفق",
+      "error": "باز‌ارسال ناموفق بود",
+      "send": "باز‌ارسال ({count})"
     }
   },
   "integrations": {

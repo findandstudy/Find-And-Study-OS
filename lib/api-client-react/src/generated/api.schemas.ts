@@ -1928,6 +1928,13 @@ export interface AddInboxConversationTaskBody {
   notes?: string;
 }
 
+export type KommoSummaryChannelsItem = {
+  channel: string;
+  incoming: number;
+  outgoing: number;
+  connected: boolean;
+};
+
 export interface KommoSummary {
   /** Average reply time in seconds (0 if no data) */
   avgReplyTime: number;
@@ -1938,6 +1945,8 @@ export interface KommoSummary {
   lostLeads: number;
   incomingMessages: number;
   outgoingMessages: number;
+  /** Per-channel message breakdown over the same date range as incoming/outgoing totals */
+  channels?: KommoSummaryChannelsItem[];
 }
 
 export type RecordEntityViewBodyEntityType =

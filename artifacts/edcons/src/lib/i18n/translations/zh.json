@@ -1290,6 +1290,17 @@
     },
     "resizer": {
       "resetHint": "双击以重置宽度"
+    },
+    "forward": {
+      "button": "转发",
+      "label": "已转发",
+      "title": "转发消息",
+      "searchPlaceholder": "搜索会话...",
+      "noConversations": "没有其他会话",
+      "sent": "已转发到 {count} 个会话",
+      "partial": "转发结果：成功 {ok}，失败 {failed}",
+      "error": "转发失败",
+      "send": "转发（{count}）"
     }
   },
   "integrations": {
