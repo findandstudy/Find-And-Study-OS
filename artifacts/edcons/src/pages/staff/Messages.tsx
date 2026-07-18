@@ -701,21 +701,32 @@ function InboxTab() {
     }
   }
 
-  async function assignToMe() {
-    if (!selectedId || !user) return;
+  async function assignTo(userId: number | null) {
+    if (!selectedId) return;
     try {
       await customFetch(`/api/inbox/conversations/${selectedId}/assign`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ userId }),
       });
-      setAssignedNotice(true);
-      setTimeout(() => setAssignedNotice(false), 3000);
+      if (userId === user?.id) {
+        setAssignedNotice(true);
+        setTimeout(() => setAssignedNotice(false), 3000);
+      }
       fetchInbox();
       fetchDetail(selectedId);
-    } catch {
-      toast({ title: t("messagesPage.failedToAssign"), variant: "destructive" });
+    } catch (err: any) {
+      const locked = err?.status === 403 && String(err?.data?.error ?? "") === "ASSIGNMENT_LOCKED";
+      toast({
+        title: locked ? t("messagesPage.assignmentLocked") : t("messagesPage.failedToAssign"),
+        variant: "destructive",
+      });
     }
+  }
+
+  async function assignToMe() {
+    if (!user) return;
+    await assignTo(user.id);
   }
 
   async function toggleBot(enabled: boolean) {
@@ -1560,10 +1571,19 @@ function InboxTab() {
                       <Bot className="w-3 h-3" /> {conv.botEnabled ? t("messagesPage.aiOn") : t("messagesPage.aiOff")}
                     </Button>
                   )}
-                  {conv.assignedToId !== user?.id && (
-                    <Button size="sm" variant="outline" onClick={assignToMe} className="h-7 text-xs gap-1">
-                      <UserCheck className="w-3 h-3" /> Assign to me
-                    </Button>
+                  {(user?.role === "super_admin" || user?.role === "admin") ? (
+                    <AssignStaffDropdown
+                      currentId={conv.assignedToId ?? null}
+                      currentName={conv.assignedTo ? `${conv.assignedTo.firstName ?? ""} ${conv.assignedTo.lastName ?? ""}`.trim() : null}
+                      onSelect={assignTo}
+                      t={t}
+                    />
+                  ) : (
+                    conv.assignedToId == null && (
+                      <Button size="sm" variant="outline" onClick={assignToMe} className="h-7 text-xs gap-1">
+                        <UserCheck className="w-3 h-3" /> {t("messagesPage.assignToMe")}
+                      </Button>
+                    )
                   )}
                   {assignedNotice && (
                     <span className="text-xs text-green-600 font-medium">{t("messagesPage.assignedToYou")}</span>
@@ -1766,10 +1786,18 @@ function InboxTab() {
                                   };
                                   return map[mm] ?? null;
                                 })();
-                                const typedName = mimeExt
-                                  ? `${type !== "file" ? type : "document"}.${mimeExt}`
-                                  : (type !== "file" ? type : null);
-                                const name = a.name ?? a.fileName ?? waFilename ?? nameFromUrl ?? typedName ?? "file";
+                                // Never show a bare "file" label: fall back to a
+                                // localized type label (Document/Photo/Video/Audio)
+                                // plus the mime-derived extension when known.
+                                const attTypeLabel = type === "image" ? t("inbox.attachment.photo")
+                                  : type === "video" ? t("inbox.attachment.video")
+                                  : type === "audio" ? t("inbox.attachment.audio")
+                                  : t("inbox.attachment.document");
+                                const typedName = mimeExt ? `${attTypeLabel}.${mimeExt}` : attTypeLabel;
+                                const explicitName = [a.name, a.fileName, waFilename, nameFromUrl].find(
+                                  (v) => typeof v === "string" && v.trim() && v.trim().toLowerCase() !== "file",
+                                ) as string | undefined;
+                                const name = explicitName ?? typedName;
                                 // "Add" is always available on inbound attachments: with a
                                 // linked student/lead it saves directly; otherwise it opens
                                 // the create-and-assign flow (unmatched fallback modal).
@@ -4320,5 +4348,106 @@ export default function MessagesPage() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * Admin/super-admin conversation owner picker: searchable staff dropdown that
+ * replaces "Assign to me". Selecting a person reassigns the conversation (and
+ * the linked lead/student/application chain, server-side); "Unassign" clears it.
+ */
+function AssignStaffDropdown({
+  currentId,
+  currentName,
+  onSelect,
+  t,
+}: {
+  currentId: number | null;
+  currentName: string | null;
+  onSelect: (userId: number | null) => void;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [staff, setStaff] = useState<Array<{ id: number; firstName: string | null; lastName: string | null; role: string; isActive?: boolean }>>([]);
+  const [loading, setLoading] = useState(false);
+  const loadedRef = useRef(false);
+
+  useEffect(() => {
+    if (!open || loadedRef.current) return;
+    loadedRef.current = true;
+    setLoading(true);
+    customFetch(`/api/users?roles=super_admin,admin,manager,staff,consultant,editor,accountant&limit=200`)
+      .then((res: any) => {
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setStaff(list.filter((u: any) => u.isActive !== false));
+      })
+      .catch(() => setStaff([]))
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? staff.filter((u) => `${u.firstName ?? ""} ${u.lastName ?? ""}`.toLowerCase().includes(q))
+    : staff;
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" data-testid="button-assign-staff">
+          <UserCheck className="w-3 h-3" />
+          <span className="max-w-[140px] truncate">
+            {currentId != null && currentName ? currentName : t("messagesPage.assignOwner")}
+          </span>
+          <ChevronDown className="w-3 h-3" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64 p-0">
+        <div className="p-2 border-b">
+          <Input
+            autoFocus
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("messagesPage.searchStaff")}
+            className="h-8 text-xs"
+            onKeyDown={(e) => e.stopPropagation()}
+            data-testid="input-assign-staff-search"
+          />
+        </div>
+        <div className="max-h-64 overflow-y-auto py-1">
+          {currentId != null && (
+            <DropdownMenuItem
+              className="text-xs text-destructive"
+              onClick={() => { setOpen(false); onSelect(null); }}
+              data-testid="option-unassign"
+            >
+              <X className="w-3 h-3 mr-1.5" /> {t("messagesPage.unassign")}
+            </DropdownMenuItem>
+          )}
+          {loading && (
+            <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-1.5">
+              <Loader2 className="w-3 h-3 animate-spin" /> {t("common.loading")}
+            </div>
+          )}
+          {!loading && filtered.length === 0 && (
+            <div className="px-3 py-2 text-xs text-muted-foreground">{t("messagesPage.noStaffFound")}</div>
+          )}
+          {filtered.map((u) => {
+            const nm = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || `#${u.id}`;
+            return (
+              <DropdownMenuItem
+                key={u.id}
+                className="text-xs"
+                onClick={() => { setOpen(false); if (u.id !== currentId) onSelect(u.id); }}
+                data-testid={`option-assign-${u.id}`}
+              >
+                <span className="flex-1 truncate">{nm}</span>
+                {u.id === currentId && <Check className="w-3 h-3 ml-1.5 text-primary" />}
+              </DropdownMenuItem>
+            );
+          })}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

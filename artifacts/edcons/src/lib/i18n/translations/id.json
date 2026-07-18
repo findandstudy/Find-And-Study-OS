@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "Unduh",
-      "pageCount": "{count} halaman"
+      "pageCount": "{count} halaman",
+      "document": "Dokumen",
+      "photo": "Foto",
+      "video": "Video",
+      "audio": "Audio"
     },
     "error": {
       "window24h": "Di luar jendela balasan 24 jam WhatsApp. Gunakan template.",
@@ -2379,7 +2383,12 @@
     "readReceiptsOn": "Tanda baca aktif",
     "readReceiptsOff": "Tanda baca nonaktif",
     "readReceiptsToggleFailed": "Tidak dapat memperbarui pengaturan tanda baca",
-    "replyPlaceholder": "Ketik balasan…"
+    "replyPlaceholder": "Ketik balasan…",
+    "assignmentLocked": "Percakapan ini mengikuti pemilik catatan. Hanya admin yang dapat mengubah penugasan.",
+    "unassign": "Batalkan penugasan",
+    "assignOwner": "Tugaskan",
+    "searchStaff": "Cari staf...",
+    "noStaffFound": "Staf tidak ditemukan"
   },
   "settingsPage": {
     "navProfile": "Profil",

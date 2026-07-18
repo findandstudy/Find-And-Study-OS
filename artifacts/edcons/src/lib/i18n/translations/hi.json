@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "डाउनलोड",
-      "pageCount": "{count} पृष्ठ"
+      "pageCount": "{count} पृष्ठ",
+      "document": "दस्तावेज़",
+      "photo": "फ़ोटो",
+      "video": "वीडियो",
+      "audio": "ऑडियो"
     },
     "error": {
       "window24h": "WhatsApp 24-घंटे की रिप्लाई विंडो के बाहर। टेम्पलेट उपयोग करें।",
@@ -2379,7 +2383,12 @@
     "readReceiptsOn": "पठन रसीदें चालू",
     "readReceiptsOff": "पठन रसीदें बंद",
     "readReceiptsToggleFailed": "रीड रिसीप्ट सेटिंग अपडेट नहीं हो सकी",
-    "replyPlaceholder": "जवाब लिखें…"
+    "replyPlaceholder": "जवाब लिखें…",
+    "assignmentLocked": "यह वार्तालाप रिकॉर्ड स्वामी का अनुसरण करता है। केवल व्यवस्थापक ही असाइनमेंट बदल सकते हैं।",
+    "unassign": "असाइनमेंट हटाएं",
+    "assignOwner": "असाइन करें",
+    "searchStaff": "स्टाफ खोजें...",
+    "noStaffFound": "कोई स्टाफ नहीं मिला"
   },
   "settingsPage": {
     "navProfile": "प्रोफ़ाइल",

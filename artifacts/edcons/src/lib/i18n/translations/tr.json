@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "İndir",
-      "pageCount": "{count} sayfa"
+      "pageCount": "{count} sayfa",
+      "document": "Belge",
+      "photo": "Fotoğraf",
+      "video": "Video",
+      "audio": "Ses"
     },
     "error": {
       "window24h": "WhatsApp 24 saatlik cevap penceresi dışında. Lütfen şablon kullanın.",
@@ -2627,7 +2631,12 @@
     "readReceiptsOn": "Okundu bilgisi açık",
     "readReceiptsOff": "Okundu bilgisi kapalı",
     "readReceiptsToggleFailed": "Okundu bilgisi ayarı güncellenemedi",
-    "replyPlaceholder": "Yanıt yazın…"
+    "replyPlaceholder": "Yanıt yazın…",
+    "assignmentLocked": "Bu sohbet kayıt sahibini takip eder. Atamayı yalnızca yöneticiler değiştirebilir.",
+    "unassign": "Atamayı kaldır",
+    "assignOwner": "Ata",
+    "searchStaff": "Personel ara...",
+    "noStaffFound": "Personel bulunamadı"
   },
   "settingsPage": {
     "navProfile": "Profil",

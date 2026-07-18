@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "Télécharger",
-      "pageCount": "{count} pages"
+      "pageCount": "{count} pages",
+      "document": "Document",
+      "photo": "Photo",
+      "video": "Vidéo",
+      "audio": "Audio"
     },
     "error": {
       "window24h": "Hors de la fenêtre de réponse WhatsApp de 24h. Utilisez un modèle.",
@@ -2430,7 +2434,12 @@
     "readReceiptsOn": "Accusés de lecture activés",
     "readReceiptsOff": "Accusés de lecture désactivés",
     "readReceiptsToggleFailed": "Impossible de mettre à jour le paramètre d'accusé de lecture",
-    "replyPlaceholder": "Écrivez une réponse…"
+    "replyPlaceholder": "Écrivez une réponse…",
+    "assignmentLocked": "Cette conversation suit le propriétaire du dossier. Seuls les administrateurs peuvent modifier l'attribution.",
+    "unassign": "Désattribuer",
+    "assignOwner": "Attribuer",
+    "searchStaff": "Rechercher un membre du personnel...",
+    "noStaffFound": "Aucun membre trouvé"
   },
   "settingsPage": {
     "navProfile": "Profil",

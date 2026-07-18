@@ -47,6 +47,8 @@ import { sendEmail } from "../lib/email";
 import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
 import { decryptConfig } from "../lib/encryption";
 import { sendViaZernio, getZernioApiKey, resolveZernioAccount, sendZernioTemplate } from "../lib/inbox/zernioSend";
+import { parseContentDispositionFilename, persistAttachmentMeta, backfillConversationAttachmentNames } from "../lib/inbox/attachmentNames";
+import { getChainOwner, syncConversationOwner, loadLink } from "../lib/inbox/assignmentSync";
 import {
   listZernioWhatsAppTemplates,
   createZernioWhatsAppTemplate,
@@ -347,6 +349,20 @@ router.get(
       const len = upstream.headers.get("content-length");
       if (len) res.setHeader("Content-Length", len);
       res.setHeader("Cache-Control", "private, max-age=300");
+      // Forward the upstream filename (RFC 5987 aware) so browser downloads
+      // get the real name, and persist name+size onto message.metadata so the
+      // UI stops showing generic labels. Both steps are best-effort and can
+      // never break the proxy stream.
+      try {
+        const dispo = upstream.headers.get("content-disposition");
+        const filename = parseContentDispositionFilename(dispo);
+        if (dispo) res.setHeader("Content-Disposition", dispo);
+        const sizeNum = Number(len);
+        void persistAttachmentMeta(messageId, index, {
+          name: filename,
+          size: Number.isFinite(sizeNum) && sizeNum > 0 ? sizeNum : null,
+        });
+      } catch { /* best-effort only */ }
       if (upstream.body) {
         const { Readable } = await import("node:stream");
         Readable.fromWeb(upstream.body as unknown as Parameters<typeof Readable.fromWeb>[0]).pipe(res);
@@ -577,6 +593,18 @@ router.get(
     const [externalContact] = conv.externalContactId
       ? await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId))
       : [null];
+    // Single-owner rule: keep the conversation owner in lockstep with the CRM
+    // chain owner (chain wins) so the header always shows the true owner. Runs
+    // inline (cheap: 2-3 point selects) so THIS response already reflects it.
+    if (conv.externalContactId) {
+      const syncedOwner = await syncConversationOwner(id, req.user!.id, req.ip);
+      if (syncedOwner !== (conv.assignedToId ?? null)) {
+        conv.assignedToId = syncedOwner;
+      }
+    }
+    // Old Zernio attachments were stored without name/size — opportunistically
+    // backfill them for this conversation in the background (rate-limited).
+    void backfillConversationAttachmentNames(id);
     const [assignedTo] = conv.assignedToId
       ? await db
           .select({
@@ -784,6 +812,23 @@ router.patch(
       .select({ assignedToId: conversationsTable.assignedToId })
       .from(conversationsTable)
       .where(eq(conversationsTable.id, id));
+    // Single-owner rule: when the linked CRM chain (lead/student) already has
+    // an owner, only users with the cascade permission (admins/managers) may
+    // change the assignment — everyone else gets a 403 with the owner id so
+    // the UI can explain who owns the record.
+    const chainLink = await loadConversationLink(id);
+    const chainOwnerId = chainLink ? await getChainOwner(chainLink) : null;
+    const actorIsAdmin = req.user!.role === "admin" || req.user!.role === "super_admin";
+    const actorCanCascade = actorIsAdmin || await userHasPermission(
+      { id: req.user!.id, role: req.user!.role },
+      "records.cascade_assignment",
+    );
+    // Single-owner lock: only admins may override an existing chain owner
+    // (matches the UI, where only admin/super_admin get the staff dropdown).
+    if (chainOwnerId != null && assignedToId !== chainOwnerId && !actorIsAdmin) {
+      res.status(403).json({ error: "ASSIGNMENT_LOCKED", ownerId: chainOwnerId });
+      return;
+    }
     const [updated] = await db
       .update(conversationsTable)
       .set({ assignedToId, status: assignedToId ? "open" : "open" })
@@ -796,18 +841,16 @@ router.patch(
     await logAudit(req.user!.id, "assign_conversation", "conversation", id, { assignedToId }, req.ip);
 
     // Cascade to linked lead / student (and their sibling applications).
-    // Fire-and-forget so this never blocks the HTTP response.
+    // Awaited BEFORE responding: the conversation-detail route runs a
+    // chain-wins owner sync, so if the chain still held the old owner when
+    // the client refetched, the reassignment would be silently reverted.
     const assignmentActuallyChanged = assignedToId !== (previous?.assignedToId ?? null);
     if (assignmentActuallyChanged) {
-      void (async () => {
-        try {
-          const link = await loadConversationLink(id);
-          if (!link) return;
+      try {
+        const link = chainLink ?? await loadConversationLink(id);
+        if (link) {
           const actor = req.user!;
-          const canCascade = await userHasPermission(
-            { id: actor.id, role: actor.role },
-            "records.cascade_assignment",
-          );
+          const canCascade = actorCanCascade;
           if (link.leadId != null) {
             const [lead] = await db
               .select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
@@ -832,10 +875,10 @@ router.patch(
               nullFillOnly: !canCascade,
             });
           }
-        } catch (err: any) {
-          console.error("[inbox assign cascade]", err?.message || err);
         }
-      })();
+      } catch (err: any) {
+        console.error("[inbox assign cascade]", err?.message || err);
+      }
     }
 
     inboxBus.publish({
@@ -946,6 +989,9 @@ router.post(
 
     await db.update(externalContactsTable).set(updates).where(eq(externalContactsTable.id, conv.externalContactId));
     await db.update(conversationsTable).set({ unmatched: false }).where(eq(conversationsTable.id, id));
+    // Single-owner rule: adopt the chain owner onto the conversation (or
+    // null-fill the chain from the conversation owner) right after linking.
+    await syncConversationOwner(id, req.user!.id, req.ip);
     await logAudit(req.user!.id, "match_conversation", "conversation", id, { type, entityId }, req.ip);
     res.json({ ok: true });
   },
@@ -1153,6 +1199,8 @@ router.post(
     });
 
     await applyLeadAssignmentRules(lead, req.ip);
+    // Single-owner rule: sync conversation ⇄ freshly created lead ownership.
+    await syncConversationOwner(id, req.user!.id, req.ip);
     logAudit(
       req.user!.id,
       "create_lead_from_inbox_smart",
@@ -1207,6 +1255,8 @@ router.post(
     await db.update(externalContactsTable).set({ leadId: lead.id }).where(eq(externalContactsTable.id, contact.id));
     await db.update(conversationsTable).set({ unmatched: false }).where(eq(conversationsTable.id, id));
     await applyLeadAssignmentRules(lead, req.ip);
+    // Single-owner rule: sync conversation ⇄ freshly created lead ownership.
+    await syncConversationOwner(id, req.user!.id, req.ip);
     await logAudit(req.user!.id, "create_lead_from_inbox", "lead", lead.id, { conversationId: id }, req.ip);
     res.status(201).json({ ok: true, leadId: lead.id });
   },

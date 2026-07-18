@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "Download",
-      "pageCount": "{count} pages"
+      "pageCount": "{count} pages",
+      "document": "Document",
+      "photo": "Photo",
+      "video": "Video",
+      "audio": "Audio"
     },
     "error": {
       "window24h": "Outside the WhatsApp 24-hour reply window. Use a template instead.",
@@ -2686,7 +2690,12 @@
     "readReceiptsOn": "Read receipts on",
     "readReceiptsOff": "Read receipts off",
     "readReceiptsToggleFailed": "Could not update read receipts setting",
-    "replyPlaceholder": "Type a reply…"
+    "replyPlaceholder": "Type a reply…",
+    "assignmentLocked": "This conversation follows its record owner. Only admins can change the assignment.",
+    "unassign": "Unassign",
+    "assignOwner": "Assign",
+    "searchStaff": "Search staff...",
+    "noStaffFound": "No staff found"
   },
   "settingsPage": {
     "navProfile": "Profile",

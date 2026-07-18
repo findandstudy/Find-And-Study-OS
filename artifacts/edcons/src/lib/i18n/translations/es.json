@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "Descargar",
-      "pageCount": "{count} páginas"
+      "pageCount": "{count} páginas",
+      "document": "Documento",
+      "photo": "Foto",
+      "video": "Vídeo",
+      "audio": "Audio"
     },
     "error": {
       "window24h": "Fuera de la ventana de respuesta de 24h de WhatsApp. Usa una plantilla.",
@@ -2379,7 +2383,12 @@
     "readReceiptsOn": "Confirmaciones de lectura activadas",
     "readReceiptsOff": "Confirmaciones de lectura desactivadas",
     "readReceiptsToggleFailed": "No se pudo actualizar la configuración de confirmación de lectura",
-    "replyPlaceholder": "Escribe una respuesta…"
+    "replyPlaceholder": "Escribe una respuesta…",
+    "assignmentLocked": "Esta conversación sigue al propietario del registro. Solo los administradores pueden cambiar la asignación.",
+    "unassign": "Desasignar",
+    "assignOwner": "Asignar",
+    "searchStaff": "Buscar personal...",
+    "noStaffFound": "No se encontró personal"
   },
   "settingsPage": {
     "navProfile": "Perfil",

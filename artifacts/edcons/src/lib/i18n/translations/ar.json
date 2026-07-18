@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "تحميل",
-      "pageCount": "{count} صفحة"
+      "pageCount": "{count} صفحة",
+      "document": "مستند",
+      "photo": "صورة",
+      "video": "فيديو",
+      "audio": "صوت"
     },
     "error": {
       "window24h": "خارج نافذة الرد البالغة 24 ساعة على واتساب. استخدم نموذجاً.",
@@ -2430,7 +2434,12 @@
     "readReceiptsOn": "إيصالات القراءة مفعّلة",
     "readReceiptsOff": "إيصالات القراءة معطّلة",
     "readReceiptsToggleFailed": "تعذر تحديث إعداد إيصالات القراءة",
-    "replyPlaceholder": "اكتب ردًا…"
+    "replyPlaceholder": "اكتب ردًا…",
+    "assignmentLocked": "تتبع هذه المحادثة مالك السجل. يمكن للمسؤولين فقط تغيير التعيين.",
+    "unassign": "إلغاء التعيين",
+    "assignOwner": "تعيين",
+    "searchStaff": "البحث عن الموظفين...",
+    "noStaffFound": "لم يتم العثور على موظفين"
   },
   "settingsPage": {
     "navProfile": "الملف الشخصي",

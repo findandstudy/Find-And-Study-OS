@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "دانلود",
-      "pageCount": "{count} صفحه"
+      "pageCount": "{count} صفحه",
+      "document": "سند",
+      "photo": "عکس",
+      "video": "ویدئو",
+      "audio": "صدا"
     },
     "error": {
       "window24h": "خارج از پنجره 24 ساعته پاسخ واتساپ. از قالب استفاده کنید.",
@@ -2379,7 +2383,12 @@
     "readReceiptsOn": "تاییدیه خواندن فعال",
     "readReceiptsOff": "تاییدیه خواندن غیرفعال",
     "readReceiptsToggleFailed": "به‌روزرسانی تنظیمات تأیید خواندن ممکن نشد",
-    "replyPlaceholder": "پاسخی بنویسید…"
+    "replyPlaceholder": "پاسخی بنویسید…",
+    "assignmentLocked": "این گفتگو از مالک پرونده پیروی می‌کند. فقط مدیران می‌توانند تخصیص را تغییر دهند.",
+    "unassign": "لغو تخصیص",
+    "assignOwner": "تخصیص",
+    "searchStaff": "جستجوی کارکنان...",
+    "noStaffFound": "کارمندی یافت نشد"
   },
   "settingsPage": {
     "navProfile": "پروفایل",

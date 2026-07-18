@@ -2521,6 +2521,10 @@ async function seedClaudeIntegration() {
     staggerStart("backfillNullAssignments", 22_000, async () => {
       const { backfillNullAssignments } = await import("./lib/leadAssignment");
       await backfillNullAssignments(null);
+      // Then pull every linked inbox conversation onto its CRM chain owner
+      // (chain wins). Pure idempotent SQL — a second run is a no-op.
+      const { reconcileConversationOwners } = await import("./lib/inbox/assignmentSync");
+      await reconcileConversationOwners(pool);
     });
     staggerStart("followUpChecker", 25_000, async () => {
       const { startFollowUpChecker } = await import("./lib/followUpChecker");

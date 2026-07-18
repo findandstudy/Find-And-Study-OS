@@ -154,6 +154,9 @@ const MIME_EXT: Record<string, string> = {
  * explicit filename: prefer the last URL path segment (when it has an
  * extension), otherwise "<type>.<ext>" from the mime type, otherwise the type.
  */
+// One-time-per-boot flag for the inbound-attachment key diagnostic log.
+let attachmentKeysLogged = false;
+
 function deriveAttachmentName(url: string, type: string, mimeType?: string): string | undefined {
   try {
     const seg = decodeURIComponent(new URL(String(url)).pathname.split("/").pop() ?? "");
@@ -723,6 +726,14 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
         return;
       }
 
+      // One-time diagnostic: log the exact field names Zernio sends on an
+      // attachment so we can see whether a real filename/size field exists.
+      if (Array.isArray(m.attachments) && m.attachments.length > 0 && !attachmentKeysLogged) {
+        attachmentKeysLogged = true;
+        try {
+          console.log("[ZERNIO] inbound attachment keys:", JSON.stringify(Object.keys(m.attachments[0] ?? {})));
+        } catch { /* diagnostic only */ }
+      }
       const attachments = Array.isArray(m.attachments) && m.attachments.length > 0
         ? {
             attachments: m.attachments

@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "下载",
-      "pageCount": "{count} 页"
+      "pageCount": "{count} 页",
+      "document": "文档",
+      "photo": "照片",
+      "video": "视频",
+      "audio": "音频"
     },
     "error": {
       "window24h": "超出 WhatsApp 24 小时回复窗口，请使用模板。",
@@ -2379,7 +2383,12 @@
     "readReceiptsOn": "已开启已读回执",
     "readReceiptsOff": "已关闭已读回执",
     "readReceiptsToggleFailed": "无法更新已读回执设置",
-    "replyPlaceholder": "输入回复…"
+    "replyPlaceholder": "输入回复…",
+    "assignmentLocked": "此对话跟随记录负责人。只有管理员可以更改分配。",
+    "unassign": "取消分配",
+    "assignOwner": "分配",
+    "searchStaff": "搜索员工...",
+    "noStaffFound": "未找到员工"
   },
   "settingsPage": {
     "navProfile": "个人资料",

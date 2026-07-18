@@ -1084,7 +1084,11 @@
     },
     "attachment": {
       "download": "Скачать",
-      "pageCount": "{count} стр."
+      "pageCount": "{count} стр.",
+      "document": "Документ",
+      "photo": "Фото",
+      "video": "Видео",
+      "audio": "Аудио"
     },
     "error": {
       "window24h": "За пределами 24-часового окна ответа WhatsApp. Используйте шаблон.",
@@ -2430,7 +2434,12 @@
     "readReceiptsOn": "Уведомления о прочтении включены",
     "readReceiptsOff": "Уведомления о прочтении отключены",
     "readReceiptsToggleFailed": "Не удалось обновить настройку подтверждения прочтения",
-    "replyPlaceholder": "Введите ответ…"
+    "replyPlaceholder": "Введите ответ…",
+    "assignmentLocked": "Этот чат следует за владельцем записи. Изменить назначение могут только администраторы.",
+    "unassign": "Снять назначение",
+    "assignOwner": "Назначить",
+    "searchStaff": "Поиск сотрудников...",
+    "noStaffFound": "Сотрудники не найдены"
   },
   "settingsPage": {
     "navProfile": "Профиль",
