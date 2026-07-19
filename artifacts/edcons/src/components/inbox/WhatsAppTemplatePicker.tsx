@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,14 +49,24 @@ export function WhatsAppTemplatePicker({ open, onClose, onSend, sending }: Whats
     }
   }
 
-  function handleOpenChange(open: boolean) {
+  // useEffect is the correct way to react to a controlled `open` prop change.
+  // Dialog's onOpenChange is only fired when the Dialog itself initiates a close
+  // (Escape, overlay click) — it is NOT called when the parent flips open false→true.
+  useEffect(() => {
     if (open) {
       loadTemplates();
     } else {
-      onClose();
       setTplId("");
       setTplVars([]);
       setTemplateQuery("");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  function handleOpenChange(isOpen: boolean) {
+    // Only reached via Dialog's own close gestures (Escape / overlay click).
+    if (!isOpen) {
+      onClose();
     }
   }
 
