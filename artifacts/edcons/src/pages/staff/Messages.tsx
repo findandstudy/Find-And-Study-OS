@@ -1684,7 +1684,7 @@ function InboxTab() {
                     {linked && linkedHref && (
                       <button type="button" onClick={() => setLocation(linkedHref)}>
                         <Badge variant="outline" className="text-[10px] gap-1 cursor-pointer hover:bg-primary/10">
-                          <Link2 className="w-3 h-3" /> {linkedLabel} #{ext.leadId || ext.studentId || ext.agentId}
+                          <Link2 className="w-3 h-3" /> {linkedLabel} #{ext.studentId || ext.leadId || ext.agentId}
                         </Badge>
                       </button>
                     )}
