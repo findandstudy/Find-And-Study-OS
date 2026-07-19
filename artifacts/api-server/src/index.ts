@@ -419,6 +419,112 @@ async function backfillStudentPhotoFlags() {
   }
 }
 
+async function backfillWaOutExternalContacts() {
+  // Merge placeholder "wa_out:<digits>" external_contacts with their real
+  // counterparts that were created when the student actually replied via
+  // WhatsApp.  Without this, the CRM-initiated conversation and the real inbound
+  // conversation sit in two separate rows and the right-panel tabs (STUDENT /
+  // APPLICATION / DOCUMENTS) show "No student linked" for the real conversation.
+  //
+  // Runs on EVERY boot (idempotent — once the wa_out rows are gone there's
+  // nothing left to merge).
+  try {
+    // Step 1: find all (wa_out contact, real contact) pairs for the same
+    // channel + phone_e164.
+    const { rows } = await pool.query(`
+      SELECT
+        wo.id           AS wa_out_id,
+        rc.id           AS real_id,
+        wo.lead_id      AS wa_lead_id,
+        wo.student_id   AS wa_student_id,
+        wo.agent_id     AS wa_agent_id,
+        rc.lead_id      AS real_lead_id,
+        rc.student_id   AS real_student_id,
+        rc.agent_id     AS real_agent_id
+      FROM external_contacts wo
+      JOIN external_contacts rc
+        ON  rc.channel    = wo.channel
+        AND rc.phone_e164 = wo.phone_e164
+        AND rc.id        <> wo.id
+        AND rc.external_id NOT LIKE 'wa\\_out:%'
+      WHERE wo.external_id LIKE 'wa\\_out:%'
+        AND wo.phone_e164 IS NOT NULL
+      ORDER BY wo.id
+    `);
+
+    let mergedCount = 0;
+    for (const pair of rows as Array<{
+      wa_out_id: number; real_id: number;
+      wa_lead_id: number | null; wa_student_id: number | null; wa_agent_id: number | null;
+      real_lead_id: number | null; real_student_id: number | null; real_agent_id: number | null;
+    }>) {
+      try {
+        // Step 2: copy entity links to the real contact if it's missing them.
+        const setFields: string[] = [];
+        if (!pair.real_lead_id    && pair.wa_lead_id)    setFields.push(`lead_id    = ${pair.wa_lead_id}`);
+        if (!pair.real_student_id && pair.wa_student_id) setFields.push(`student_id = ${pair.wa_student_id}`);
+        if (!pair.real_agent_id   && pair.wa_agent_id)   setFields.push(`agent_id   = ${pair.wa_agent_id}`);
+        if (setFields.length > 0) {
+          await pool.query(`UPDATE external_contacts SET ${setFields.join(", ")} WHERE id = $1`, [pair.real_id]);
+        }
+
+        // Step 3: For each conversation that belongs to the wa_out contact,
+        // find the best matching real conversation and merge messages into it.
+        const { rows: waConvs } = await pool.query<{ id: number; channel_account_id: number | null }>(
+          `SELECT id, channel_account_id FROM conversations WHERE external_contact_id = $1`,
+          [pair.wa_out_id]
+        );
+        for (const waConv of waConvs) {
+          const caFilter = waConv.channel_account_id != null
+            ? `AND channel_account_id = ${waConv.channel_account_id}`
+            : `AND channel_account_id IS NULL`;
+          const { rows: realConvs } = await pool.query<{ id: number }>(
+            `SELECT id FROM conversations
+             WHERE external_contact_id = $1 ${caFilter}
+             ORDER BY last_message_at DESC NULLS LAST LIMIT 1`,
+            [pair.real_id]
+          );
+          if (realConvs.length > 0) {
+            const realConvId = realConvs[0].id;
+            // Move messages from the wa_out conversation into the real one.
+            await pool.query(
+              `UPDATE messages SET conversation_id = $1 WHERE conversation_id = $2`,
+              [realConvId, waConv.id]
+            );
+            // Move conversation_participants (ignore conflicts with real conv participants).
+            // Use only the universally-present columns to stay schema-agnostic.
+            await pool.query(
+              `INSERT INTO conversation_participants (conversation_id, user_id, last_read_at)
+               SELECT $1, user_id, last_read_at
+               FROM   conversation_participants
+               WHERE  conversation_id = $2
+               ON CONFLICT (conversation_id, user_id) DO NOTHING`,
+              [realConvId, waConv.id]
+            );
+          }
+          // Delete participants then the wa_out conversation (FK safe now).
+          await pool.query(`DELETE FROM conversation_participants WHERE conversation_id = $1`, [waConv.id]);
+          await pool.query(`DELETE FROM conversations WHERE id = $1`, [waConv.id]);
+        }
+
+        // Step 4: delete the now-orphaned wa_out external_contact.
+        await pool.query(`DELETE FROM external_contacts WHERE id = $1`, [pair.wa_out_id]);
+        mergedCount++;
+      } catch (pairErr) {
+        console.error(
+          `[backfill] wa_out merge failed for pair (wa_out=${pair.wa_out_id} → real=${pair.real_id}):`,
+          pairErr
+        );
+      }
+    }
+    if (mergedCount > 0) {
+      console.log(`[backfill] Merged ${mergedCount} wa_out: duplicate external_contact pair(s) into their real counterparts`);
+    }
+  } catch (err) {
+    console.error("[backfill] backfillWaOutExternalContacts error:", err);
+  }
+}
+
 async function seedClaudeIntegration() {
   const envKey = process.env.ANTHROPIC_API_KEY;
   if (!envKey) return;
@@ -2103,6 +2209,11 @@ async function seedClaudeIntegration() {
     // existing/prod data, not just freshly seeded environments. Idempotent and
     // WHERE-guarded — only writes the handful of students whose flag has drifted.
     await backfillStudentPhotoFlags();
+
+    // Merge placeholder "wa_out:<digits>" external_contacts with real contacts
+    // that were created when the student replied via WhatsApp.  Idempotent —
+    // once all wa_out: rows are merged away this becomes a no-op on each boot.
+    await backfillWaOutExternalContacts();
 
     // Documents catalog: add metadata jsonb column if missing, then seed.
     // Runs on every boot (idempotent per-row), outside the bootstrap_done

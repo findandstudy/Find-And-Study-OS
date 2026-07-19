@@ -245,12 +245,16 @@ async function loadConversationLink(id: number): Promise<ConversationLink | null
   // 400 they already return for an unmatched conversation. This keeps deleted
   // personal data from being re-attached to new notes/tasks.
   let liveLeadId: number | null = null;
+  let leadConvertedStudentId: number | null = null;
   if (contact?.leadId != null) {
     const [row] = await db
-      .select({ id: leadsTable.id })
+      .select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
       .from(leadsTable)
       .where(and(eq(leadsTable.id, contact.leadId), isNull(leadsTable.deletedAt)));
-    if (row) liveLeadId = row.id;
+    if (row) {
+      liveLeadId = row.id;
+      leadConvertedStudentId = row.convertedStudentId ?? null;
+    }
   }
   let liveStudentId: number | null = null;
   if (contact?.studentId != null) {
@@ -258,6 +262,17 @@ async function loadConversationLink(id: number): Promise<ConversationLink | null
       .select({ id: studentsTable.id })
       .from(studentsTable)
       .where(and(eq(studentsTable.id, contact.studentId), isNull(studentsTable.deletedAt)));
+    if (row) liveStudentId = row.id;
+  }
+  // If the external_contact points only to a lead that has already been
+  // converted to a student, surface the student so that the STUDENT /
+  // APPLICATION / DOCUMENTS panels display the real profile instead of
+  // showing "No student linked / Analyze documents first".
+  if (liveStudentId == null && leadConvertedStudentId != null) {
+    const [row] = await db
+      .select({ id: studentsTable.id })
+      .from(studentsTable)
+      .where(and(eq(studentsTable.id, leadConvertedStudentId), isNull(studentsTable.deletedAt)));
     if (row) liveStudentId = row.id;
   }
   return {

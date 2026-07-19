@@ -49,6 +49,10 @@ export async function resolveIdentity(opts: {
       .where(
         and(
           isNull(leadsTable.deletedAt),
+          // Leads that have already been converted to a student record are the
+          // SAME person — the student entry takes over as the canonical candidate.
+          // Counting them separately would make a single person look "ambiguous".
+          isNull(leadsTable.convertedStudentId),
           or(
             phoneE164 ? eq(leadsTable.phoneE164, phoneE164) : sql`false`,
             email ? eq(sql`lower(${leadsTable.email})`, email) : sql`false`,

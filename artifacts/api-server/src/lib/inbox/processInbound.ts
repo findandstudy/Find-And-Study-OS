@@ -188,6 +188,73 @@ export async function processInboundMessage(opts: {
     }
   }
 
+  // ── wa_out: reconciliation ────────────────────────────────────────────────
+  // When the CRM initiates an outbound conversation (POST /inbox/conversations/
+  // start) it creates a placeholder external_contact with
+  //   externalId = "wa_out:<digits>"  (no real wa_id yet).
+  // When the student replies, processInbound upserts a NEW contact row using
+  // the real externalId — creating a duplicate pair and a second conversation.
+  //
+  // This block detects that situation and merges the placeholder conversation
+  // into the real one so both sides of the thread stay in the same conversation:
+  //   1. Copy entity links (leadId / studentId) from wa_out to real contact.
+  //   2. Re-key the wa_out conversation (externalThreadId IS NULL) to the real
+  //      thread ID + real contact, so the upcoming conversation-upsert finds IT
+  //      instead of creating a fresh row.
+  //   3. Reassign any other conversations still pointing at the wa_out contact.
+  //   4. Delete the now-orphaned wa_out external_contact row.
+  if (phoneE164 && !contact.externalId.startsWith("wa_out:")) {
+    try {
+      const waOutExternalId = `wa_out:${phoneE164.replace(/\+/, "")}`;
+      const [waOutContact] = await db
+        .select()
+        .from(externalContactsTable)
+        .where(and(
+          eq(externalContactsTable.channel, channel),
+          eq(externalContactsTable.externalId, waOutExternalId),
+        ))
+        .limit(1);
+
+      if (waOutContact && waOutContact.id !== externalContact.id) {
+        // 1. Copy entity links to real contact if not already set.
+        const mergeFields: { leadId?: number | null; studentId?: number | null; agentId?: number | null } = {};
+        if (!externalContact.leadId && waOutContact.leadId) mergeFields.leadId = waOutContact.leadId;
+        if (!externalContact.studentId && waOutContact.studentId) mergeFields.studentId = waOutContact.studentId;
+        if (!externalContact.agentId && waOutContact.agentId) mergeFields.agentId = waOutContact.agentId;
+        if (Object.keys(mergeFields).length > 0) {
+          await db.update(externalContactsTable).set(mergeFields).where(eq(externalContactsTable.id, externalContact.id));
+          externalContact = { ...externalContact, ...mergeFields };
+        }
+
+        // 2. Re-key the CRM-started conversation (externalThreadId IS NULL) to
+        //    the real thread + real contact.  This makes the conversation-upsert
+        //    below find the outbound conversation and add the inbound reply to it
+        //    instead of opening a second conversation.
+        const realThreadId = message.externalThreadId || contact.externalId;
+        await db
+          .update(conversationsTable)
+          .set({ externalContactId: externalContact.id, externalThreadId: realThreadId })
+          .where(and(
+            eq(conversationsTable.externalContactId, waOutContact.id),
+            isNull(conversationsTable.externalThreadId),
+          ));
+
+        // 3. Move any remaining conversations (edge-case: non-null threadId rows).
+        await db
+          .update(conversationsTable)
+          .set({ externalContactId: externalContact.id })
+          .where(eq(conversationsTable.externalContactId, waOutContact.id));
+
+        // 4. Remove the now-orphaned wa_out contact.
+        await db.delete(externalContactsTable).where(eq(externalContactsTable.id, waOutContact.id));
+      }
+    } catch (err) {
+      // Non-fatal — a unique-index conflict means a real conversation already
+      // exists for this thread; the inbound message will still land correctly.
+      console.error("[processInbound] wa_out contact merge failed (non-fatal):", err);
+    }
+  }
+
   const isLinked = Boolean(externalContact.leadId || externalContact.studentId || externalContact.agentId);
 
   const externalThreadId = message.externalThreadId || contact.externalId;
