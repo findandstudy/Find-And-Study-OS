@@ -246,6 +246,14 @@ export function InboxStudentTab({
     staleTime: 30_000,
   });
 
+  // Set of doc types already present in the student/lead profile (regardless of
+  // how they were uploaded — includes docs with sourceAttachmentId: null).
+  // Used to mark checklist rows "done" even when there is no matching chat attachment.
+  const backendDocTypes = useMemo(
+    () => new Set(backendDocs.map((d) => d.type).filter(Boolean)),
+    [backendDocs]
+  );
+
   const initializedOwnerRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -537,7 +545,11 @@ export function InboxStudentTab({
             ) : (
               sortedDocReqs.map((req) => {
                 const Icon = getDocIcon(req.documentType);
+                // staged: a ChatAttachment linked via this conversation (has a name + removable)
                 const staged = staging[req.documentType];
+                // isDone: "tamamlandı" — either a chat attachment staged OR already in the
+                // student/lead profile from any upload path (incl. sourceAttachmentId: null)
+                const isDone = !!staged || backendDocTypes.has(req.documentType);
                 return (
                   <div
                     key={req.documentType}
@@ -545,7 +557,7 @@ export function InboxStudentTab({
                   >
                     <Icon
                       className={`w-3.5 h-3.5 shrink-0 ${
-                        staged
+                        isDone
                           ? "text-emerald-600"
                           : "text-muted-foreground/50"
                       }`}
@@ -553,7 +565,7 @@ export function InboxStudentTab({
                     <div className="flex-1 min-w-0">
                       <span
                         className={`text-xs ${
-                          staged
+                          isDone
                             ? "text-foreground font-medium"
                             : req.mandatory
                               ? "text-rose-600 font-medium"
@@ -562,7 +574,7 @@ export function InboxStudentTab({
                       >
                         {docLabel(req.documentType)}
                       </span>
-                      {req.mandatory && !staged && (
+                      {req.mandatory && !isDone && (
                         <span className="ms-1.5 text-[10px] bg-rose-100 text-rose-600 px-1 py-0.5 rounded-full">
                           {t("inbox.studentTab.required")}
                         </span>
@@ -583,7 +595,7 @@ export function InboxStudentTab({
                         <XIcon className="w-3 h-3 text-muted-foreground hover:text-destructive" />
                       </button>
                     ) : null}
-                    {staged ? (
+                    {isDone ? (
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     ) : (
                       <Circle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
@@ -703,7 +715,7 @@ export function InboxStudentTab({
               <div className="grid grid-cols-2 gap-2">
                 {sortedDocReqs.map((req) => {
                   const Icon = getDocIcon(req.documentType);
-                  const filled = !!staging[req.documentType];
+                  const filled = !!staging[req.documentType] || backendDocTypes.has(req.documentType);
                   return (
                     <button
                       key={req.documentType}
