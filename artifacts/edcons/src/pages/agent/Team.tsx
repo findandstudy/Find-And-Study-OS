@@ -88,6 +88,7 @@ const PERMISSION_OPTIONS: PermissionOption[] = [
   },
   { key: "messages", labelKey: "teamPage.permMessages", descKey: "teamPage.permMessagesDesc" },
   { key: "commissions", labelKey: "teamPage.permCommissions", descKey: "teamPage.permCommissionsDesc" },
+  { key: "academy", labelKey: "teamPage.permAcademy", descKey: "teamPage.permAcademyDesc" },
 ];
 
 function allPermissionKeys(options: PermissionOption[]): string[] {

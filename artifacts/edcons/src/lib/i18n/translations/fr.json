@@ -1588,7 +1588,14 @@
     "colUniversity": "Université",
     "colCountry": "Pays",
     "view": "Voir",
-    "agent": "Agent"
+    "agent": "Agent",
+    "settingsTab": "Paramètres",
+    "academyAccess": "Accès Academy",
+    "academyAccessDesc": "Autoriser cet agent à accéder à Academy Find And Study",
+    "subAgentsSettings": "Accès Academy des sous-agents",
+    "noSubAgents": "Aucun sous-agent",
+    "academyAccessSaved": "Accès Academy mis à jour",
+    "academyAccessFailed": "Échec de la mise à jour de l'accès Academy"
   },
   "adminAudit": {
     "title": "Journal d'audit",
@@ -3988,7 +3995,11 @@
       "desc": "Contrôlez les menus de contrats visibles par ce membre du personnel dans la barre latérale.",
       "saved": "Permissions enregistrées",
       "saveFailed": "Échec de l'enregistrement des permissions",
-      "save": "Enregistrer"
+      "save": "Enregistrer",
+      "academyAccess": "Accès Academy",
+      "academyAccessDesc": "Autoriser l'accès à Academy Find And Study",
+      "academyAccessSaved": "Accès Academy mis à jour",
+      "academyAccessFailed": "Échec de la mise à jour"
     }
   },
   "notificationRules": {
@@ -4769,7 +4780,10 @@
     "toastDeactivated": "Sous-agent désactivé",
     "toastLogoUploaded": "Logo téléversé",
     "uploadFailed": "Échec du téléversement",
-    "phonePlaceholder": "555 123 4567"
+    "phonePlaceholder": "555 123 4567",
+    "academy": "Academy",
+    "academyAccessSaved": "Accès mis à jour",
+    "academyAccessFailed": "Échec de la mise à jour"
   },
   "teamPage": {
     "addStaff": "Ajouter un membre du personnel",
@@ -4831,7 +4845,9 @@
     "passwordUpdatedDesc": "Le mot de passe de {name} a été modifié.",
     "setPasswordDescription": "Définir un nouveau mot de passe pour {name}",
     "newPassword": "Nouveau mot de passe",
-    "updatePassword": "Mettre à jour le mot de passe"
+    "updatePassword": "Mettre à jour le mot de passe",
+    "permAcademy": "Academy",
+    "permAcademyDesc": "Accès à Academy Find And Study"
   },
   "websiteForms": {
     "title": "Formulaires",

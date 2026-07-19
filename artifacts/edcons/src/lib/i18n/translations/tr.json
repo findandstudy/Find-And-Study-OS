@@ -1529,7 +1529,14 @@
     "colUniversity": "Üniversite",
     "colCountry": "Ülke",
     "view": "Görüntüle",
-    "agent": "Acente"
+    "agent": "Acente",
+    "settingsTab": "Ayarlar",
+    "academyAccess": "Academy Erişimi",
+    "academyAccessDesc": "Bu acentenin Academy Find And Study'e erişmesine izin ver",
+    "subAgentsSettings": "Alt Acente Academy Erişimi",
+    "noSubAgents": "Alt acente bulunamadı",
+    "academyAccessSaved": "Academy erişimi güncellendi",
+    "academyAccessFailed": "Academy erişimi güncellenemedi"
   },
   "adminAudit": {
     "title": "Denetim Kayıtları",
@@ -3687,7 +3694,11 @@
       "desc": "Bu personelin kenar çubuğunda hangi sözleşme menülerini göreceğini belirleyin.",
       "saved": "İzinler kaydedildi",
       "saveFailed": "İzinler kaydedilemedi",
-      "save": "Kaydet"
+      "save": "Kaydet",
+      "academyAccess": "Academy Erişimi",
+      "academyAccessDesc": "Academy Find And Study'e erişime izin ver",
+      "academyAccessSaved": "Academy erişimi güncellendi",
+      "academyAccessFailed": "Academy erişimi güncellenemedi"
     }
   },
   "docTypes": {
@@ -4710,7 +4721,10 @@
     "toastActivated": "Alt acente aktifleştirildi",
     "toastDeactivated": "Alt acente pasifleştirildi",
     "toastLogoUploaded": "Logo yüklendi",
-    "uploadFailed": "Yükleme başarısız"
+    "uploadFailed": "Yükleme başarısız",
+    "academy": "Academy",
+    "academyAccessSaved": "Academy erişimi güncellendi",
+    "academyAccessFailed": "Academy erişimi güncellenemedi"
   },
   "teamPage": {
     "addStaff": "Personel Ekle",
@@ -4772,7 +4786,9 @@
     "passwordUpdatedDesc": "{name} için parola değiştirildi.",
     "setPasswordDescription": "{name} için yeni bir parola belirleyin",
     "newPassword": "Yeni Parola",
-    "updatePassword": "Parolayı Güncelle"
+    "updatePassword": "Parolayı Güncelle",
+    "permAcademy": "Academy",
+    "permAcademyDesc": "Academy Find And Study'e erişim"
   },
   "websiteForms": {
     "title": "Formlar",

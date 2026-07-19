@@ -1588,7 +1588,14 @@
     "colUniversity": "विश्वविद्यालय",
     "colCountry": "देश",
     "view": "देखें",
-    "agent": "एजेंट"
+    "agent": "एजेंट",
+    "settingsTab": "सेटिंग्स",
+    "academyAccess": "अकादमी एक्सेस",
+    "academyAccessDesc": "इस एजेंट को Academy Find And Study तक पहुंचने की अनुमति दें",
+    "subAgentsSettings": "उप-एजेंट अकादमी एक्सेस",
+    "noSubAgents": "कोई उप-एजेंट नहीं",
+    "academyAccessSaved": "अकादमी एक्सेस अपडेट किया गया",
+    "academyAccessFailed": "अकादमी एक्सेस अपडेट करने में विफल"
   },
   "adminAudit": {
     "title": "ऑडिट लॉग",
@@ -3937,7 +3944,11 @@
       "desc": "नियंत्रित करें कि यह कर्मचारी साइडबार में कौन से अनुबंध मेनू देख सकता है।",
       "saved": "अनुमतियाँ सहेजी गईं",
       "saveFailed": "अनुमतियाँ सहेजने में विफल",
-      "save": "सहेजें"
+      "save": "सहेजें",
+      "academyAccess": "अकादमी एक्सेस",
+      "academyAccessDesc": "Academy Find And Study तक पहुंच की अनुमति दें",
+      "academyAccessSaved": "अकादमी एक्सेस अपडेट किया गया",
+      "academyAccessFailed": "अपडेट करने में विफल"
     }
   },
   "notificationRules": {
@@ -4769,7 +4780,10 @@
     "toastDeactivated": "सब-एजेंट निष्क्रिय किया गया",
     "toastLogoUploaded": "लोगो अपलोड किया गया",
     "uploadFailed": "अपलोड विफल",
-    "phonePlaceholder": "555 123 4567"
+    "phonePlaceholder": "555 123 4567",
+    "academy": "अकादमी",
+    "academyAccessSaved": "एक्सेस अपडेट किया गया",
+    "academyAccessFailed": "अपडेट विफल"
   },
   "teamPage": {
     "addStaff": "स्टाफ जोड़ें",
@@ -4831,7 +4845,9 @@
     "passwordUpdatedDesc": "{name} के लिए पासवर्ड बदल दिया गया है।",
     "setPasswordDescription": "{name} के लिए नया पासवर्ड सेट करें",
     "newPassword": "नया पासवर्ड",
-    "updatePassword": "पासवर्ड अपडेट करें"
+    "updatePassword": "पासवर्ड अपडेट करें",
+    "permAcademy": "अकादमी",
+    "permAcademyDesc": "Academy Find And Study तक पहुंच"
   },
   "websiteForms": {
     "title": "फ़ॉर्म",

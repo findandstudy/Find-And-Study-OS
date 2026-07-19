@@ -1588,7 +1588,14 @@
     "colUniversity": "University",
     "colCountry": "Country",
     "view": "View",
-    "agent": "Agent"
+    "agent": "Agent",
+    "settingsTab": "Settings",
+    "academyAccess": "Academy Access",
+    "academyAccessDesc": "Allow this agent to access Academy Find And Study",
+    "subAgentsSettings": "Sub-Agents Academy Access",
+    "noSubAgents": "No sub-agents",
+    "academyAccessSaved": "Academy access updated",
+    "academyAccessFailed": "Failed to update academy access"
   },
   "adminAudit": {
     "title": "Audit Log",
@@ -3746,7 +3753,11 @@
       "desc": "Control which contract-related menu items this staff member can see in the sidebar.",
       "saved": "Permissions saved",
       "saveFailed": "Failed to save permissions",
-      "save": "Save Permissions"
+      "save": "Save Permissions",
+      "academyAccess": "Academy Access",
+      "academyAccessDesc": "Allow access to Academy Find And Study",
+      "academyAccessSaved": "Academy access updated",
+      "academyAccessFailed": "Failed to update academy access"
     }
   },
   "docTypes": {
@@ -4769,7 +4780,10 @@
     "toastActivated": "Sub-agent activated",
     "toastDeactivated": "Sub-agent deactivated",
     "toastLogoUploaded": "Logo uploaded",
-    "uploadFailed": "Upload failed"
+    "uploadFailed": "Upload failed",
+    "academy": "Academy",
+    "academyAccessSaved": "Academy access updated",
+    "academyAccessFailed": "Failed to update academy access"
   },
   "teamPage": {
     "addStaff": "Add Staff",
@@ -4831,7 +4845,9 @@
     "passwordUpdatedDesc": "Password for {name} has been changed.",
     "setPasswordDescription": "Set a new password for {name}",
     "newPassword": "New Password",
-    "updatePassword": "Update Password"
+    "updatePassword": "Update Password",
+    "permAcademy": "Academy",
+    "permAcademyDesc": "Access to Academy Find And Study"
   },
   "websiteForms": {
     "title": "Forms",

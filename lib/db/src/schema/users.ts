@@ -31,6 +31,7 @@ export const usersTable = pgTable("users", {
   emailVerificationToken: text("email_verification_token"),
   createdFromSource: text("created_from_source"),
   managingAgentId: integer("managing_agent_id"),
+  academyAccess: boolean("academy_access"),
   agentStaffPermissions: jsonb("agent_staff_permissions"),
   permissionOverrides: jsonb("permission_overrides"),
   branchId: integer("branch_id"),

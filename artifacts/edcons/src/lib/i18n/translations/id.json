@@ -1588,7 +1588,14 @@
     "colUniversity": "Universitas",
     "colCountry": "Negara",
     "view": "Lihat",
-    "agent": "Agen"
+    "agent": "Agen",
+    "settingsTab": "Pengaturan",
+    "academyAccess": "Akses Academy",
+    "academyAccessDesc": "Izinkan agen ini mengakses Academy Find And Study",
+    "subAgentsSettings": "Akses Academy Sub-Agen",
+    "noSubAgents": "Tidak ada sub-agen",
+    "academyAccessSaved": "Akses Academy diperbarui",
+    "academyAccessFailed": "Gagal memperbarui akses Academy"
   },
   "adminAudit": {
     "title": "Log Audit",
@@ -3937,7 +3944,11 @@
       "desc": "Kendalikan menu kontrak mana yang dapat dilihat staf ini di bilah sisi.",
       "saved": "Izin disimpan",
       "saveFailed": "Gagal menyimpan izin",
-      "save": "Simpan"
+      "save": "Simpan",
+      "academyAccess": "Akses Academy",
+      "academyAccessDesc": "Izinkan akses ke Academy Find And Study",
+      "academyAccessSaved": "Akses Academy diperbarui",
+      "academyAccessFailed": "Gagal memperbarui"
     }
   },
   "notificationRules": {
@@ -4769,7 +4780,10 @@
     "toastDeactivated": "Sub-agen dinonaktifkan",
     "toastLogoUploaded": "Logo diunggah",
     "uploadFailed": "Unggah gagal",
-    "phonePlaceholder": "555 123 4567"
+    "phonePlaceholder": "555 123 4567",
+    "academy": "Academy",
+    "academyAccessSaved": "Akses diperbarui",
+    "academyAccessFailed": "Gagal memperbarui"
   },
   "teamPage": {
     "addStaff": "Tambah Staf",
@@ -4831,7 +4845,9 @@
     "passwordUpdatedDesc": "Kata sandi untuk {name} telah diubah.",
     "setPasswordDescription": "Tetapkan kata sandi baru untuk {name}",
     "newPassword": "Kata Sandi Baru",
-    "updatePassword": "Perbarui Kata Sandi"
+    "updatePassword": "Perbarui Kata Sandi",
+    "permAcademy": "Academy",
+    "permAcademyDesc": "Akses ke Academy Find And Study"
   },
   "websiteForms": {
     "title": "Formulir",

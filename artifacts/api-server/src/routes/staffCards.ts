@@ -242,6 +242,24 @@ router.put("/staff-cards/:userId/profile", requireAuth, requireStaffCardAdmin, a
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Academy erişimi — internal staff (users.academyAccess boolean)
+// ─────────────────────────────────────────────────────────────────────────────
+router.patch("/staff-cards/:userId/academy-access", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
+  const userId = parseInt(String(req.params.userId), 10);
+  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const parsed = z.object({ academyAccess: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const [u] = await db
+    .update(usersTable)
+    .set({ academyAccess: parsed.data.academyAccess })
+    .where(eq(usersTable.id, userId))
+    .returning({ id: usersTable.id });
+  if (!u) { res.status(404).json({ error: "User not found" }); return; }
+  logAudit(req.user!.id, "staff_card.academy_access.update", "user", userId, { academyAccess: parsed.data.academyAccess }, req.ip);
+  res.json({ success: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sidebar izinleri (agentStaffPermissions — sözleşme menü grubu)
 // ─────────────────────────────────────────────────────────────────────────────
 const ALLOWED_STAFF_SIDEBAR_PERMS = new Set([

@@ -1588,7 +1588,14 @@
     "colUniversity": "Университет",
     "colCountry": "Страна",
     "view": "Просмотр",
-    "agent": "Агент"
+    "agent": "Агент",
+    "settingsTab": "Настройки",
+    "academyAccess": "Доступ к Academy",
+    "academyAccessDesc": "Разрешить этому агенту доступ к Academy Find And Study",
+    "subAgentsSettings": "Доступ к Academy для субагентов",
+    "noSubAgents": "Нет субагентов",
+    "academyAccessSaved": "Доступ к Academy обновлён",
+    "academyAccessFailed": "Не удалось обновить доступ к Academy"
   },
   "adminAudit": {
     "title": "Журнал аудита",
@@ -3988,7 +3995,11 @@
       "desc": "Управляйте тем, какие меню контрактов видит этот сотрудник на боковой панели.",
       "saved": "Права сохранены",
       "saveFailed": "Не удалось сохранить права",
-      "save": "Сохранить"
+      "save": "Сохранить",
+      "academyAccess": "Доступ к Academy",
+      "academyAccessDesc": "Разрешить доступ к Academy Find And Study",
+      "academyAccessSaved": "Доступ к Academy обновлён",
+      "academyAccessFailed": "Не удалось обновить доступ"
     }
   },
   "notificationRules": {
@@ -4769,7 +4780,10 @@
     "toastDeactivated": "Субагент деактивирован",
     "toastLogoUploaded": "Логотип загружен",
     "uploadFailed": "Не удалось загрузить",
-    "phonePlaceholder": "555 123 4567"
+    "phonePlaceholder": "555 123 4567",
+    "academy": "Academy",
+    "academyAccessSaved": "Доступ обновлён",
+    "academyAccessFailed": "Ошибка обновления"
   },
   "teamPage": {
     "addStaff": "Добавить сотрудника",
@@ -4831,7 +4845,9 @@
     "passwordUpdatedDesc": "Пароль для {name} изменён.",
     "setPasswordDescription": "Задайте новый пароль для {name}",
     "newPassword": "Новый пароль",
-    "updatePassword": "Обновить пароль"
+    "updatePassword": "Обновить пароль",
+    "permAcademy": "Academy",
+    "permAcademyDesc": "Доступ к Academy Find And Study"
   },
   "websiteForms": {
     "title": "Формы",

@@ -1,5 +1,6 @@
 import { Router, type IRouter, json, raw } from "express";
 import crypto from "crypto";
+import { z } from "zod";
 import {
   emptySummary,
   tallyResult,
@@ -1185,7 +1186,40 @@ router.get("/agents/:id/sub-agents", requireAuth, requireRole(...STAFF_ROLES), a
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
   const subs = await db.select().from(agentsTable).where(eq(agentsTable.parentAgentId, parentId)).orderBy(desc(agentsTable.createdAt)).limit(limitNum).offset(offset);
-  res.json(subs);
+  // Attach academyAccess from users table (single batch lookup)
+  const userIds = subs.map(s => s.userId).filter((id): id is number => id != null);
+  const userMap = new Map<number, boolean | null>();
+  if (userIds.length > 0) {
+    const rows = await db.select({ id: usersTable.id, academyAccess: usersTable.academyAccess }).from(usersTable).where(inArray(usersTable.id, userIds));
+    for (const r of rows) userMap.set(r.id, r.academyAccess ?? null);
+  }
+  res.json(subs.map(s => ({ ...s, academyAccess: s.userId != null ? (userMap.get(s.userId) ?? null) : null })));
+});
+
+// PATCH /agents/:id/academy-access — süper admin (herkes için) veya agent (sadece kendi sub_agent'ı için)
+router.patch("/agents/:id/academy-access", requireAuth, async (req, res): Promise<void> => {
+  const agentId = parseInt(String(req.params.id), 10);
+  if (Number.isNaN(agentId)) { res.status(400).json({ error: "Invalid agent id" }); return; }
+  const parsed = z.object({ academyAccess: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+  const actor = req.user!;
+  const [targetAgent] = await db
+    .select({ id: agentsTable.id, userId: agentsTable.userId, parentAgentId: agentsTable.parentAgentId })
+    .from(agentsTable)
+    .where(and(eq(agentsTable.id, agentId), isNull(agentsTable.deletedAt)));
+  if (!targetAgent) { res.status(404).json({ error: "Agent not found" }); return; }
+  if (!targetAgent.userId) { res.status(404).json({ error: "Agent has no user account" }); return; }
+  const isStaffActor = (STAFF_ROLES as readonly string[]).includes(actor.role);
+  if (!isStaffActor) {
+    if (actor.role !== "agent") { res.status(403).json({ error: "Forbidden" }); return; }
+    const [actingAgent] = await db.select({ id: agentsTable.id }).from(agentsTable).where(and(eq(agentsTable.userId, actor.id), isNull(agentsTable.deletedAt)));
+    if (!actingAgent || targetAgent.parentAgentId !== actingAgent.id) { res.status(403).json({ error: "Not your sub-agent" }); return; }
+  } else if (!(await isAgentInScope(actor.id, actor.role, agentId))) {
+    res.status(403).json({ error: "Agent not in your branch scope" }); return;
+  }
+  await db.update(usersTable).set({ academyAccess: parsed.data.academyAccess }).where(eq(usersTable.id, targetAgent.userId));
+  logAudit(actor.id, "agent.academy_access.update", "agent", agentId, { academyAccess: parsed.data.academyAccess }, req.ip);
+  res.json({ success: true });
 });
 
 router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
@@ -1458,8 +1492,15 @@ router.get("/agents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, 
   const links = await db.select({ branchId: agentBranchesTable.branchId }).from(agentBranchesTable).where(eq(agentBranchesTable.agentId, id));
   const assignedStaffList = await getAgencyStaffWithLegacy(id, agent.assignedStaffId ?? null);
   const primary = assignedStaffList.find(s => s.isPrimary) || assignedStaffList[0] || null;
+  // Include academyAccess from users table so AgentDetail can show/edit it
+  let academyAccess: boolean | null = null;
+  if (agent.userId) {
+    const [uRow] = await db.select({ academyAccess: usersTable.academyAccess }).from(usersTable).where(eq(usersTable.id, agent.userId));
+    academyAccess = uRow?.academyAccess ?? null;
+  }
   res.json({
     ...agent,
+    academyAccess,
     branchIds: links.map(l => l.branchId),
     assignedStaffList,
     assignedStaffName: primary ? staffDisplayName(primary) : null,

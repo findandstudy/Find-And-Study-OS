@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
+import { customFetch } from "@workspace/api-client-react";
 import {
-  ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, GraduationCap, FileText, ExternalLink, MessageSquare
+  ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, GraduationCap, FileText, ExternalLink, MessageSquare, Settings, Loader2
 } from "lucide-react";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
@@ -27,6 +30,8 @@ const STAFF_ROLES = _STAFF_ROLES;
 
 export default function AgentDetailPage() {
   const { t } = useI18n();
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const [, params] = useRoute("/staff/agents/:id");
   const [, setLocation] = useLocation();
   const { season } = useSeason();
@@ -36,6 +41,7 @@ export default function AgentDetailPage() {
   const [tab, setTab] = useState("leads");
   const [contactOpen, setContactOpen] = useState(false);
   const [contactChannel, setContactChannel] = useState<"email" | "whatsapp" | "instagram" | "internal">("internal");
+  const [academySaving, setAcademySaving] = useState<number | "main" | null>(null);
 
   const { data: agent, isLoading: agentLoading } = useQuery<any>({
     queryKey: ["agent-detail", agentId],
@@ -61,9 +67,33 @@ export default function AgentDetailPage() {
     enabled: !!agentId && tab === "applications",
   });
 
+  const { data: subAgents } = useQuery<any[]>({
+    queryKey: ["agent-sub-agents", agentId],
+    queryFn: () => apiFetch(`${BASE_URL}/api/agents/${agentId}/sub-agents?limit=200`),
+    enabled: !!agentId && tab === "settings",
+  });
+
   const leads = leadsData?.data || leadsData || [];
   const students = studentsData?.data || studentsData || [];
   const apps = appsData?.data || appsData || [];
+
+  const toggleAcademy = useCallback(async (targetAgentId: number, value: boolean, label: number | "main") => {
+    setAcademySaving(label);
+    try {
+      await customFetch(`/api/agents/${targetAgentId}/academy-access`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ academyAccess: value }),
+      });
+      toast({ title: t("staffAgentDetail.academyAccessSaved") });
+      qc.invalidateQueries({ queryKey: ["agent-detail", agentId] });
+      qc.invalidateQueries({ queryKey: ["agent-sub-agents", agentId] });
+    } catch (e: any) {
+      toast({ title: t("staffAgentDetail.academyAccessFailed"), description: e?.message, variant: "destructive" });
+    } finally {
+      setAcademySaving(null);
+    }
+  }, [agentId, qc, t, toast]);
 
   if (!agentId) return null;
 
@@ -135,7 +165,7 @@ export default function AgentDetailPage() {
             )}
 
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="leads" className="gap-1.5">
                   <Users className="w-4 h-4" /> {t("staffAgentDetail.leadsTab")} {Array.isArray(leads) && leads.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{leads.length}</Badge>}
                 </TabsTrigger>
@@ -147,6 +177,9 @@ export default function AgentDetailPage() {
                 </TabsTrigger>
                 <TabsTrigger value="messaging" className="gap-1.5">
                   <MessageSquare className="w-4 h-4" /> {t("staffAgentDetail.messagingTab")}
+                </TabsTrigger>
+                <TabsTrigger value="settings" className="gap-1.5">
+                  <Settings className="w-4 h-4" /> {t("staffAgentDetail.settingsTab")}
                 </TabsTrigger>
               </TabsList>
 
@@ -262,6 +295,57 @@ export default function AgentDetailPage() {
 
               <TabsContent value="messaging" className="mt-4">
                 <AllMessagingHistory type="agent" id={Number(agentId)} />
+              </TabsContent>
+
+              <TabsContent value="settings" className="mt-4 space-y-4">
+                {/* Main agent academy toggle */}
+                <div className="bg-card border rounded-xl p-5">
+                  <h3 className="text-sm font-semibold mb-1">{t("staffAgentDetail.academyAccess")}</h3>
+                  <p className="text-xs text-muted-foreground mb-4">{t("staffAgentDetail.academyAccessDesc")}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-foreground">{agent.companyName}</span>
+                    <div className="flex items-center gap-2">
+                      {academySaving === "main" && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                      <Switch
+                        checked={agent.academyAccess === true}
+                        disabled={academySaving === "main"}
+                        onCheckedChange={(v) => toggleAcademy(agentId!, v, "main")}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub-agents academy toggles */}
+                <div className="bg-card border rounded-xl p-5">
+                  <h3 className="text-sm font-semibold mb-1">{t("staffAgentDetail.subAgentsSettings")}</h3>
+                  <p className="text-xs text-muted-foreground mb-4">{t("staffAgentDetail.academyAccessDesc")}</p>
+                  {!subAgents ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : subAgents.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">{t("staffAgentDetail.noSubAgents")}</p>
+                  ) : (
+                    <div className="divide-y divide-border/50">
+                      {subAgents.map((sa: any) => (
+                        <div key={sa.id} className="flex items-center justify-between py-3">
+                          <div>
+                            <p className="text-sm font-medium">{sa.firstName} {sa.lastName}</p>
+                            {sa.email && <p className="text-xs text-muted-foreground">{sa.email}</p>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {academySaving === sa.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                            <Switch
+                              checked={sa.academyAccess === true}
+                              disabled={academySaving === sa.id}
+                              onCheckedChange={(v) => toggleAcademy(sa.id, v, sa.id)}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </TabsContent>
             </Tabs>
           </>

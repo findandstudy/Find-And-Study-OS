@@ -2180,6 +2180,23 @@ async function seedClaudeIntegration() {
     console.error("[migrate] message_reactions:", err);
   }
 
+  // Step 2b20: academy_access — per-user Academy SSO toggle.
+  // agent/sub_agent: preserve existing open access (true).
+  // agent_staff: add 'academy' to existing agentStaffPermissions so no one loses access.
+  // internal staff: default NULL = no access (new feature; admin must explicitly enable).
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS academy_access BOOLEAN`);
+    await pool.query(`UPDATE users SET academy_access = true WHERE role IN ('agent', 'sub_agent') AND academy_access IS NULL`);
+    await pool.query(`
+      UPDATE users
+      SET agent_staff_permissions = COALESCE(agent_staff_permissions, '[]'::jsonb) || '["academy"]'::jsonb
+      WHERE role = 'agent_staff'
+        AND NOT (COALESCE(agent_staff_permissions, '[]'::jsonb) @> '["academy"]'::jsonb)
+    `);
+  } catch (err) {
+    console.error("[migrate] academy_access:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

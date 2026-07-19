@@ -1588,7 +1588,14 @@
     "colUniversity": "大学",
     "colCountry": "国家",
     "view": "查看",
-    "agent": "代理"
+    "agent": "代理",
+    "settingsTab": "设置",
+    "academyAccess": "学院访问",
+    "academyAccessDesc": "允许该代理访问Academy Find And Study",
+    "subAgentsSettings": "子代理学院访问权限",
+    "noSubAgents": "没有子代理",
+    "academyAccessSaved": "学院访问权限已更新",
+    "academyAccessFailed": "更新学院访问权限失败"
   },
   "adminAudit": {
     "title": "审计日志",
@@ -3937,7 +3944,11 @@
       "desc": "控制该员工在侧边栏中可见的合同菜单项。",
       "saved": "权限已保存",
       "saveFailed": "保存权限失败",
-      "save": "保存"
+      "save": "保存",
+      "academyAccess": "学院访问",
+      "academyAccessDesc": "允许访问Academy Find And Study",
+      "academyAccessSaved": "学院访问权限已更新",
+      "academyAccessFailed": "更新失败"
     }
   },
   "notificationRules": {
@@ -4769,7 +4780,10 @@
     "toastDeactivated": "子代理已停用",
     "toastLogoUploaded": "徽标已上传",
     "uploadFailed": "上传失败",
-    "phonePlaceholder": "555 123 4567"
+    "phonePlaceholder": "555 123 4567",
+    "academy": "学院",
+    "academyAccessSaved": "访问权限已更新",
+    "academyAccessFailed": "更新失败"
   },
   "teamPage": {
     "addStaff": "添加员工",
@@ -4831,7 +4845,9 @@
     "passwordUpdatedDesc": "{name} 的密码已更改。",
     "setPasswordDescription": "为 {name} 设置新密码",
     "newPassword": "新密码",
-    "updatePassword": "更新密码"
+    "updatePassword": "更新密码",
+    "permAcademy": "学院",
+    "permAcademyDesc": "访问Academy Find And Study"
   },
   "websiteForms": {
     "title": "表单",

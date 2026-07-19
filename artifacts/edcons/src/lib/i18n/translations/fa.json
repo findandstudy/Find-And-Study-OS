@@ -1588,7 +1588,14 @@
     "colUniversity": "دانشگاه",
     "colCountry": "کشور",
     "view": "مشاهده",
-    "agent": "نماینده"
+    "agent": "نماینده",
+    "settingsTab": "تنظیمات",
+    "academyAccess": "دسترسی به آکادمی",
+    "academyAccessDesc": "اجازه دسترسی این نماینده به Academy Find And Study",
+    "subAgentsSettings": "دسترسی آکادمی نمایندگان فرعی",
+    "noSubAgents": "هیچ نمایندهٔ فرعی وجود ندارد",
+    "academyAccessSaved": "دسترسی آکادمی بروزرسانی شد",
+    "academyAccessFailed": "بروزرسانی دسترسی آکادمی ناموفق بود"
   },
   "adminAudit": {
     "title": "گزارش حسابرسی",
@@ -3937,7 +3944,11 @@
       "desc": "کنترل کنید کدام منوهای قراردادی این کارمند در نوار کناری می‌بیند.",
       "saved": "مجوزها ذخیره شد",
       "saveFailed": "ذخیره مجوزها ناموفق بود",
-      "save": "ذخیره"
+      "save": "ذخیره",
+      "academyAccess": "دسترسی به آکادمی",
+      "academyAccessDesc": "اجازه دسترسی به Academy Find And Study",
+      "academyAccessSaved": "دسترسی آکادمی بروزرسانی شد",
+      "academyAccessFailed": "بروزرسانی ناموفق بود"
     }
   },
   "notificationRules": {
@@ -4769,7 +4780,10 @@
     "toastDeactivated": "زیرنماینده غیرفعال شد",
     "toastLogoUploaded": "لوگو بارگذاری شد",
     "uploadFailed": "بارگذاری ناموفق بود",
-    "phonePlaceholder": "555 123 4567"
+    "phonePlaceholder": "555 123 4567",
+    "academy": "آکادمی",
+    "academyAccessSaved": "دسترسی بروزرسانی شد",
+    "academyAccessFailed": "بروزرسانی ناموفق"
   },
   "teamPage": {
     "addStaff": "افزودن کارمند",
@@ -4831,7 +4845,9 @@
     "passwordUpdatedDesc": "گذرواژه برای {name} تغییر کرد.",
     "setPasswordDescription": "یک گذرواژه جدید برای {name} تنظیم کنید",
     "newPassword": "گذرواژه جدید",
-    "updatePassword": "به‌روزرسانی گذرواژه"
+    "updatePassword": "به‌روزرسانی گذرواژه",
+    "permAcademy": "آکادمی",
+    "permAcademyDesc": "دسترسی به Academy Find And Study"
   },
   "websiteForms": {
     "title": "فرم‌ها",

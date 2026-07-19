@@ -72,6 +72,7 @@ type SubAgent = {
   logoUrl: string | null;
   hideServiceFees: boolean;
   canManageStaff: boolean;
+  academyAccess: boolean | null;
   status: string;
   createdAt: string;
 };
@@ -317,6 +318,21 @@ export default function AgentSubAgents() {
     }
   }
 
+  async function handleToggleAcademy(sa: SubAgent) {
+    const newAccess = !(sa.academyAccess === true);
+    try {
+      await customFetch(`/api/agents/${sa.id}/academy-access`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ academyAccess: newAccess }),
+      });
+      await qc.invalidateQueries({ queryKey: ["my-sub-agents"] });
+      toast({ title: t("subAgentsPage.academyAccessSaved") });
+    } catch (err: any) {
+      toast({ title: t("subAgentsPage.academyAccessFailed"), description: err.message, variant: "destructive" });
+    }
+  }
+
   async function handleToggleStatus(sa: SubAgent) {
     const newStatus = sa.status === "active" ? "inactive" : "active";
     try {
@@ -417,6 +433,7 @@ export default function AgentSubAgents() {
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("common.phone")}</th>
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("subAgentsPage.commission")}</th>
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("common.status")}</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("subAgentsPage.academy")}</th>
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("subAgentsPage.createdCol")}</th>
                       <th className="text-right px-4 py-3 font-medium text-muted-foreground">{t("common.actions")}</th>
                     </tr>
@@ -460,6 +477,12 @@ export default function AgentSubAgents() {
                           }>
                             {sa.status === "active" ? t("common.active") : t("common.inactive")}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Switch
+                            checked={sa.academyAccess === true}
+                            onCheckedChange={() => handleToggleAcademy(sa)}
+                          />
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">
                           <span className="flex items-center gap-1.5">

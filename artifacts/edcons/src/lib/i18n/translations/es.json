@@ -1588,7 +1588,14 @@
     "colUniversity": "Universidad",
     "colCountry": "País",
     "view": "Ver",
-    "agent": "Agente"
+    "agent": "Agente",
+    "settingsTab": "Configuración",
+    "academyAccess": "Acceso a Academy",
+    "academyAccessDesc": "Permitir a este agente acceder a Academy Find And Study",
+    "subAgentsSettings": "Acceso Academy de Sub-Agentes",
+    "noSubAgents": "Sin sub-agentes",
+    "academyAccessSaved": "Acceso Academy actualizado",
+    "academyAccessFailed": "Error al actualizar el acceso a Academy"
   },
   "adminAudit": {
     "title": "Registro de auditoría",
@@ -3937,7 +3944,11 @@
       "desc": "Controla qué menús de contratos ve este miembro del personal en la barra lateral.",
       "saved": "Permisos guardados",
       "saveFailed": "Error al guardar permisos",
-      "save": "Guardar"
+      "save": "Guardar",
+      "academyAccess": "Acceso a Academy",
+      "academyAccessDesc": "Permitir el acceso a Academy Find And Study",
+      "academyAccessSaved": "Acceso Academy actualizado",
+      "academyAccessFailed": "Error al actualizar"
     }
   },
   "notificationRules": {
@@ -4769,7 +4780,10 @@
     "toastDeactivated": "Subagente desactivado",
     "toastLogoUploaded": "Logotipo subido",
     "uploadFailed": "Error al subir",
-    "phonePlaceholder": "555 123 4567"
+    "phonePlaceholder": "555 123 4567",
+    "academy": "Academy",
+    "academyAccessSaved": "Acceso actualizado",
+    "academyAccessFailed": "Error al actualizar"
   },
   "teamPage": {
     "addStaff": "Añadir personal",
@@ -4831,7 +4845,9 @@
     "passwordUpdatedDesc": "La contraseña de {name} ha sido cambiada.",
     "setPasswordDescription": "Establece una nueva contraseña para {name}",
     "newPassword": "Nueva contraseña",
-    "updatePassword": "Actualizar contraseña"
+    "updatePassword": "Actualizar contraseña",
+    "permAcademy": "Academy",
+    "permAcademyDesc": "Acceso a Academy Find And Study"
   },
   "websiteForms": {
     "title": "Formularios",

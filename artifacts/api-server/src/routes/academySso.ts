@@ -40,7 +40,7 @@ function signHs256(payload: Record<string, unknown>, secret: string): string {
   return data + "." + sig;
 }
 
-router.get("/academy-sso", requireAuth, requireRole("agent", "sub_agent", "agent_staff"), async (req: Request, res: Response) => {
+router.get("/academy-sso", requireAuth, requireRole("agent", "sub_agent", "agent_staff", "staff", "consultant", "accountant", "editor"), async (req: Request, res: Response) => {
   const secret = process.env.SSO_SHARED_SECRET;
   if (!secret) {
     res.status(500).send("SSO not configured");
@@ -51,6 +51,22 @@ router.get("/academy-sso", requireAuth, requireRole("agent", "sub_agent", "agent
     res.status(400).send("email required");
     return;
   }
+
+  // Access gate: fetch fresh user row (session may not carry new columns).
+  const [freshUser] = await db
+    .select({ agentStaffPermissions: usersTable.agentStaffPermissions, academyAccess: usersTable.academyAccess })
+    .from(usersTable)
+    .where(eq(usersTable.id, u.id));
+
+  const allowed = u.role === "agent_staff"
+    ? Array.isArray(freshUser?.agentStaffPermissions) && (freshUser.agentStaffPermissions as string[]).includes("academy")
+    : freshUser?.academyAccess === true;
+
+  if (!allowed) {
+    res.status(403).send("Academy access not granted");
+    return;
+  }
+
   const company = await resolveCompanyName(u.id, u.role);
   const token = signHs256(
     {

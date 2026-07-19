@@ -1588,7 +1588,14 @@
     "colUniversity": "الجامعة",
     "colCountry": "الدولة",
     "view": "عرض",
-    "agent": "وكيل"
+    "agent": "وكيل",
+    "settingsTab": "الإعدادات",
+    "academyAccess": "الوصول إلى الأكاديمية",
+    "academyAccessDesc": "السماح لهذا الوكيل بالوصول إلى Academy Find And Study",
+    "subAgentsSettings": "الوصول إلى الأكاديمية للوكلاء الفرعيين",
+    "noSubAgents": "لا يوجد وكلاء فرعيون",
+    "academyAccessSaved": "تم تحديث الوصول إلى الأكاديمية",
+    "academyAccessFailed": "فشل تحديث الوصول إلى الأكاديمية"
   },
   "adminAudit": {
     "title": "سجل التدقيق",
@@ -3988,7 +3995,11 @@
       "desc": "حدد قوائم العقود التي سيراها هذا الموظف في الشريط الجانبي.",
       "saved": "تم حفظ الأذونات",
       "saveFailed": "فشل حفظ الأذونات",
-      "save": "حفظ"
+      "save": "حفظ",
+      "academyAccess": "الوصول إلى الأكاديمية",
+      "academyAccessDesc": "السماح بالوصول إلى Academy Find And Study",
+      "academyAccessSaved": "تم تحديث الوصول إلى الأكاديمية",
+      "academyAccessFailed": "فشل تحديث الوصول"
     }
   },
   "notificationRules": {
@@ -4769,7 +4780,10 @@
     "toastDeactivated": "تم إلغاء تفعيل الوكيل الفرعي",
     "toastLogoUploaded": "تم رفع الشعار",
     "uploadFailed": "فشل الرفع",
-    "phonePlaceholder": "555 123 4567"
+    "phonePlaceholder": "555 123 4567",
+    "academy": "الأكاديمية",
+    "academyAccessSaved": "تم تحديث الوصول",
+    "academyAccessFailed": "فشل التحديث"
   },
   "teamPage": {
     "addStaff": "إضافة موظف",
@@ -4831,7 +4845,9 @@
     "passwordUpdatedDesc": "تم تغيير كلمة المرور لـ {name}.",
     "setPasswordDescription": "تعيين كلمة مرور جديدة لـ {name}",
     "newPassword": "كلمة المرور الجديدة",
-    "updatePassword": "تحديث كلمة المرور"
+    "updatePassword": "تحديث كلمة المرور",
+    "permAcademy": "الأكاديمية",
+    "permAcademyDesc": "الوصول إلى Academy Find And Study"
   },
   "websiteForms": {
     "title": "النماذج",

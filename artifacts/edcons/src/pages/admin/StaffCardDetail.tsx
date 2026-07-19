@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
@@ -1222,6 +1223,8 @@ function PermissionsSection({ user, userId, onSaved }: { user: any; userId: numb
     () => new Set((user.agentStaffPermissions ?? []).filter((p: string) => SIDEBAR_PERM_KEYS.includes(p as SidebarPermKey)) as SidebarPermKey[])
   );
   const [saving, setSaving] = useState(false);
+  const [academyAccess, setAcademyAccess] = useState<boolean>(user.academyAccess === true);
+  const [academySaving, setAcademySaving] = useState(false);
 
   const toggle = (key: SidebarPermKey) => {
     setSelected(prev => {
@@ -1229,6 +1232,25 @@ function PermissionsSection({ user, userId, onSaved }: { user: any; userId: numb
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
+  };
+
+  const saveAcademy = async (val: boolean) => {
+    setAcademyAccess(val);
+    setAcademySaving(true);
+    try {
+      await customFetch(`/api/staff-cards/${userId}/academy-access`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ academyAccess: val }),
+      });
+      toast({ title: t("staffCards.permissions.academyAccessSaved") });
+      onSaved();
+    } catch (e: any) {
+      setAcademyAccess(!val);
+      toast({ title: t("staffCards.permissions.academyAccessFailed"), description: e?.message, variant: "destructive" });
+    } finally {
+      setAcademySaving(false);
+    }
   };
 
   const save = async () => {
@@ -1250,6 +1272,16 @@ function PermissionsSection({ user, userId, onSaved }: { user: any; userId: numb
 
   return (
     <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between rounded-lg border p-3 mb-2">
+        <div>
+          <p className="text-sm font-medium">{t("staffCards.permissions.academyAccess")}</p>
+          <p className="text-xs text-muted-foreground">{t("staffCards.permissions.academyAccessDesc")}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {academySaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          <Switch checked={academyAccess} onCheckedChange={saveAcademy} disabled={academySaving} />
+        </div>
+      </div>
       <p className="text-sm text-muted-foreground">{t("staffCards.permissions.desc")}</p>
       <div className="space-y-2">
         {SIDEBAR_PERM_KEYS.map((key) => (
