@@ -173,10 +173,12 @@ export function LeadDetailSidebar({
   const { data: countries = [] } = useCountrySearch("");
   const countryOptions = countries.map((c) => ({ value: c.name, label: c.name }));
 
-  const linkedType: LinkedType | null = detail.lead
-    ? "lead"
-    : detail.student
-      ? "student"
+  // Student wins over lead: if a person has been converted (lead → student),
+  // the student record is the canonical identity. Lead is kept for history only.
+  const linkedType: LinkedType | null = detail.student
+    ? "student"
+    : detail.lead
+      ? "lead"
       : detail.agent
         ? "agent"
         : null;
@@ -259,10 +261,12 @@ export function LeadDetailSidebar({
   }
 
   if (activeTab === "student") {
-    return (
-      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
-        {tabBar}
-        {conversationId && submitData ? (
+    const studentForTab = detail.student;
+    if (conversationId && submitData) {
+      // New-student creation draft is ready — show the submit form.
+      return (
+        <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+          {tabBar}
           <InboxSubmitTab
             conversationId={conversationId}
             data={submitData}
@@ -274,11 +278,54 @@ export function LeadDetailSidebar({
             }}
             onBack={() => setActiveTab("documents")}
           />
-        ) : (
-          <div className="flex-1 flex items-center justify-center p-8 text-center">
-            <p className="text-sm text-muted-foreground">{t("inbox.studentTab.submitEmpty")}</p>
+        </div>
+      );
+    }
+    if (studentForTab) {
+      // Person is already a student — show their existing profile card.
+      return (
+        <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+          {tabBar}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div>
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h3 className="font-semibold text-base leading-tight break-words">
+                  {studentForTab.firstName} {studentForTab.lastName}
+                </h3>
+                <PipelineStageBadge stage={detail.stage} size="md" />
+              </div>
+              <Badge variant="secondary" className="text-[10px]">
+                {t("inbox.sidebar.typeStudent")}
+              </Badge>
+            </div>
+            <div className="space-y-2.5 border-t pt-3">
+              {studentForTab.email && <Field label={t("inbox.sidebar.email")} value={studentForTab.email} />}
+              {studentForTab.phone && <Field label={t("inbox.sidebar.phone")} value={studentForTab.phone} />}
+              {studentForTab.interestedLevel && <Field label={t("inbox.sidebar.interestedLevel")} value={studentForTab.interestedLevel} />}
+              {studentForTab.originDisplayName && <Field label={t("inbox.sidebar.origin")} value={studentForTab.originDisplayName} />}
+            </div>
+            <div className="pt-3 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => navigate(`/staff/students/${studentForTab.id}`)}
+              >
+                {t("inbox.sidebar.viewFullDetail")}
+                <ArrowRight className="w-3.5 h-3.5 ms-1.5 rtl:rotate-180" />
+              </Button>
+            </div>
           </div>
-        )}
+        </div>
+      );
+    }
+    // No student yet and no draft — prompt to analyse documents first.
+    return (
+      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+        {tabBar}
+        <div className="flex-1 flex items-center justify-center p-8 text-center">
+          <p className="text-sm text-muted-foreground">{t("inbox.studentTab.submitEmpty")}</p>
+        </div>
       </div>
     );
   }

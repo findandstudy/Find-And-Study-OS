@@ -1334,10 +1334,11 @@ function InboxTab() {
   const conv = detail?.conversation!;
   const ext = detail?.externalContact;
   const linked = ext && (ext.leadId || ext.studentId || ext.agentId);
-  const linkedLabel = ext?.leadId ? "Lead" : ext?.studentId ? "Student" : ext?.agentId ? "Agent" : null;
+  // Student wins over lead (converted leads have both leadId and studentId set).
+  const linkedLabel = ext?.studentId ? "Student" : ext?.leadId ? "Lead" : ext?.agentId ? "Agent" : null;
   const linkedHref =
-    ext?.leadId ? `/staff/leads/${ext.leadId}` :
     ext?.studentId ? `/staff/students/${ext.studentId}` :
+    ext?.leadId ? `/staff/leads/${ext.leadId}` :
     ext?.agentId ? `/staff/agents/${ext.agentId}` : null;
 
   return (

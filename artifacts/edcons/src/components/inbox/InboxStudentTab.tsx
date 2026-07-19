@@ -227,11 +227,13 @@ export function InboxStudentTab({
   // ── Backend docs — pre-populate staging for persistence across reloads ───────
   const leadId = (detail as any).lead?.id as number | undefined;
   const studentId = (detail as any).student?.id as number | undefined;
-  const ownerKey = leadId ? `lead:${leadId}` : studentId ? `student:${studentId}` : null;
-  const docsEndpoint = leadId
-    ? `${BASE_URL}/api/leads/${leadId}/documents`
-    : studentId
+  // Student wins: if both exist, fetch the student's documents (the canonical
+  // record after lead→student conversion) instead of the lead's documents.
+  const ownerKey = studentId ? `student:${studentId}` : leadId ? `lead:${leadId}` : null;
+  const docsEndpoint = studentId
     ? `${BASE_URL}/api/students/${studentId}/documents`
+    : leadId
+    ? `${BASE_URL}/api/leads/${leadId}/documents`
     : null;
 
   const { data: backendDocs = [] } = useQuery<Array<{ type: string; sourceAttachmentId?: string | null }>>({
