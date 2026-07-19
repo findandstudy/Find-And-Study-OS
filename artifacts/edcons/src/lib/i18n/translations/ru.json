@@ -1588,14 +1588,7 @@
     "colUniversity": "Университет",
     "colCountry": "Страна",
     "view": "Просмотр",
-    "agent": "Агент",
-    "settingsTab": "Настройки",
-    "academyAccess": "Доступ к Academy",
-    "academyAccessDesc": "Разрешить этому агенту доступ к Academy Find And Study",
-    "subAgentsSettings": "Доступ к Academy для субагентов",
-    "noSubAgents": "Нет субагентов",
-    "academyAccessSaved": "Доступ к Academy обновлён",
-    "academyAccessFailed": "Не удалось обновить доступ к Academy"
+    "agent": "Агент"
   },
   "adminAudit": {
     "title": "Журнал аудита",
@@ -3990,16 +3983,6 @@
     "countries": {
       "hint": "Страны, которые обслуживает этот сотрудник. Используется для автоматического назначения бесед.",
       "placeholder": "Выберите страны..."
-    },
-    "permissions": {
-      "desc": "Управляйте тем, какие меню контрактов видит этот сотрудник на боковой панели.",
-      "saved": "Права сохранены",
-      "saveFailed": "Не удалось сохранить права",
-      "save": "Сохранить",
-      "academyAccess": "Доступ к Academy",
-      "academyAccessDesc": "Разрешить доступ к Academy Find And Study",
-      "academyAccessSaved": "Доступ к Academy обновлён",
-      "academyAccessFailed": "Не удалось обновить доступ"
     }
   },
   "notificationRules": {

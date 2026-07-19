@@ -1588,14 +1588,7 @@
     "colUniversity": "الجامعة",
     "colCountry": "الدولة",
     "view": "عرض",
-    "agent": "وكيل",
-    "settingsTab": "الإعدادات",
-    "academyAccess": "الوصول إلى الأكاديمية",
-    "academyAccessDesc": "السماح لهذا الوكيل بالوصول إلى Academy Find And Study",
-    "subAgentsSettings": "الوصول إلى الأكاديمية للوكلاء الفرعيين",
-    "noSubAgents": "لا يوجد وكلاء فرعيون",
-    "academyAccessSaved": "تم تحديث الوصول إلى الأكاديمية",
-    "academyAccessFailed": "فشل تحديث الوصول إلى الأكاديمية"
+    "agent": "وكيل"
   },
   "adminAudit": {
     "title": "سجل التدقيق",
@@ -3990,16 +3983,6 @@
     "countries": {
       "hint": "الدول التي يتعامل معها هذا الموظف. تُستخدم للتخصيص التلقائي للمحادثات.",
       "placeholder": "اختر الدول..."
-    },
-    "permissions": {
-      "desc": "حدد قوائم العقود التي سيراها هذا الموظف في الشريط الجانبي.",
-      "saved": "تم حفظ الأذونات",
-      "saveFailed": "فشل حفظ الأذونات",
-      "save": "حفظ",
-      "academyAccess": "الوصول إلى الأكاديمية",
-      "academyAccessDesc": "السماح بالوصول إلى Academy Find And Study",
-      "academyAccessSaved": "تم تحديث الوصول إلى الأكاديمية",
-      "academyAccessFailed": "فشل تحديث الوصول"
     }
   },
   "notificationRules": {

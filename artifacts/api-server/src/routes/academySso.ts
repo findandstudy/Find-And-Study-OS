@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { requireAuth, requireRole } from "../lib/auth";
+import { userHasPermission } from "../lib/permissions";
 import { db, agentsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
@@ -54,13 +55,13 @@ router.get("/academy-sso", requireAuth, requireRole("agent", "sub_agent", "agent
 
   // Access gate: fetch fresh user row (session may not carry new columns).
   const [freshUser] = await db
-    .select({ agentStaffPermissions: usersTable.agentStaffPermissions, academyAccess: usersTable.academyAccess })
+    .select({ agentStaffPermissions: usersTable.agentStaffPermissions })
     .from(usersTable)
     .where(eq(usersTable.id, u.id));
 
   const allowed = u.role === "agent_staff"
     ? Array.isArray(freshUser?.agentStaffPermissions) && (freshUser.agentStaffPermissions as string[]).includes("academy")
-    : freshUser?.academyAccess === true;
+    : await userHasPermission(u, "academy.access");
 
   if (!allowed) {
     res.status(403).send("Academy access not granted");

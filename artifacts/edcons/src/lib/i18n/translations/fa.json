@@ -1588,14 +1588,7 @@
     "colUniversity": "دانشگاه",
     "colCountry": "کشور",
     "view": "مشاهده",
-    "agent": "نماینده",
-    "settingsTab": "تنظیمات",
-    "academyAccess": "دسترسی به آکادمی",
-    "academyAccessDesc": "اجازه دسترسی این نماینده به Academy Find And Study",
-    "subAgentsSettings": "دسترسی آکادمی نمایندگان فرعی",
-    "noSubAgents": "هیچ نمایندهٔ فرعی وجود ندارد",
-    "academyAccessSaved": "دسترسی آکادمی بروزرسانی شد",
-    "academyAccessFailed": "بروزرسانی دسترسی آکادمی ناموفق بود"
+    "agent": "نماینده"
   },
   "adminAudit": {
     "title": "گزارش حسابرسی",
@@ -3939,16 +3932,6 @@
     "countries": {
       "hint": "کشورهایی که این کارمند رسیدگی می‌کند. برای تخصیص خودکار مکالمات استفاده می‌شود.",
       "placeholder": "کشورها را انتخاب کنید..."
-    },
-    "permissions": {
-      "desc": "کنترل کنید کدام منوهای قراردادی این کارمند در نوار کناری می‌بیند.",
-      "saved": "مجوزها ذخیره شد",
-      "saveFailed": "ذخیره مجوزها ناموفق بود",
-      "save": "ذخیره",
-      "academyAccess": "دسترسی به آکادمی",
-      "academyAccessDesc": "اجازه دسترسی به Academy Find And Study",
-      "academyAccessSaved": "دسترسی آکادمی بروزرسانی شد",
-      "academyAccessFailed": "بروزرسانی ناموفق بود"
     }
   },
   "notificationRules": {

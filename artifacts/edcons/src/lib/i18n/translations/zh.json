@@ -1588,14 +1588,7 @@
     "colUniversity": "大学",
     "colCountry": "国家",
     "view": "查看",
-    "agent": "代理",
-    "settingsTab": "设置",
-    "academyAccess": "学院访问",
-    "academyAccessDesc": "允许该代理访问Academy Find And Study",
-    "subAgentsSettings": "子代理学院访问权限",
-    "noSubAgents": "没有子代理",
-    "academyAccessSaved": "学院访问权限已更新",
-    "academyAccessFailed": "更新学院访问权限失败"
+    "agent": "代理"
   },
   "adminAudit": {
     "title": "审计日志",
@@ -3939,16 +3932,6 @@
     "countries": {
       "hint": "该员工负责的国家。用于对话自动分配。",
       "placeholder": "选择国家..."
-    },
-    "permissions": {
-      "desc": "控制该员工在侧边栏中可见的合同菜单项。",
-      "saved": "权限已保存",
-      "saveFailed": "保存权限失败",
-      "save": "保存",
-      "academyAccess": "学院访问",
-      "academyAccessDesc": "允许访问Academy Find And Study",
-      "academyAccessSaved": "学院访问权限已更新",
-      "academyAccessFailed": "更新失败"
     }
   },
   "notificationRules": {

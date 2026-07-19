@@ -178,6 +178,12 @@ export const PERMISSION_CATEGORIES = {
       "company_contracts.manage": "Manage Company Contracts",
     },
   },
+  academy: {
+    label: "Academy",
+    permissions: {
+      "academy.access": "Access Academy Find And Study (SSO)",
+    },
+  },
 } as const;
 
 export function getAllPermissions(): string[] {
@@ -287,6 +293,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "documents.download",
     "finance.commissions_view",
     "agents.manage_sub_agents",
+    "academy.access",
   ],
   manager: getAllPermissions().filter(
     (p) =>
@@ -318,6 +325,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "documents.view",
     "documents.upload",
     "documents.download",
+    "academy.access",
   ],
   agent_staff: [
     "dashboard.view",

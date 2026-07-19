@@ -2197,6 +2197,21 @@ async function seedClaudeIntegration() {
     console.error("[migrate] academy_access:", err);
   }
 
+  // Step 2b21: Migrate academy_access=false users to permissionOverrides.
+  // agent/sub_agent have academy.access=true by default; only explicitly
+  // disabled users need an override entry.
+  try {
+    await pool.query(`
+      UPDATE users
+      SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb) || '{"academy.access": false}'::jsonb
+      WHERE academy_access = false
+        AND role IN ('agent', 'sub_agent')
+        AND (permission_overrides IS NULL OR NOT (permission_overrides ? 'academy.access'))
+    `);
+  } catch (err) {
+    console.error("[migrate] academy_access_to_overrides:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

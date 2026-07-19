@@ -89,7 +89,7 @@ type TFunc = (key: string, params?: Record<string, string | number>) => string;
 // Sidebar groups that start collapsed by default (long, less-frequently used).
 const DEFAULT_CLOSED_GROUPS = new Set(["website", "ai", "system"]);
 
-function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], academyAccess?: boolean | null): { groups: { id?: string; label: string; items: MenuItem[] }[] } {
+function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], hasPermFn?: (key: string) => boolean): { groups: { id?: string; label: string; items: MenuItem[] }[] } {
   const showFinance = (FINANCE_ROLES as readonly string[]).includes(role);
 
   if (role === 'super_admin' || role === 'admin' || role === 'manager') {
@@ -181,7 +181,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], acad
       { title: t("dashboard.tasks"), icon: ClipboardList, url: '/staff/tasks' },
     ];
     if (showFinance) workItems.push({ title: t("dashboard.finance"), icon: Briefcase, url: '/staff/finance' });
-    if (academyAccess === true) workItems.push({ title: t("dashboard.academy"), icon: ExternalLink, url: '/staff/__academy__', externalHref: '/api/academy-sso' });
+    if (hasPermFn?.('academy.access')) workItems.push({ title: t("dashboard.academy"), icon: ExternalLink, url: '/staff/__academy__', externalHref: '/api/academy-sso' });
     return {
       groups: [
         {
@@ -195,13 +195,12 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], acad
           items: workItems
         },
         ...(() => {
-          const sp = agentStaffPerms || [];
           const contractItems: MenuItem[] = [
-            ...(sp.includes('contracts.view') ? [{ title: t("dashboard.contracts"), icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' }] : []),
-            ...(sp.includes('contract_templates.view') ? [{ title: t("dashboard.contractTemplates"), icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' }] : []),
-            ...(sp.includes('university_contracts.view') ? [{ title: t("dashboard.universityContracts"), icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' }] : []),
-            ...(sp.includes('company_contracts.view') ? [{ title: t("dashboard.companyContracts"), icon: Building, url: '/admin/company-contracts', permKey: 'company_contracts.view' }] : []),
-            ...(sp.includes('self_fill_links.view') ? [{ title: t("dashboard.selfFillLinks"), icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' }] : []),
+            ...(hasPermFn?.('contracts.view') ? [{ title: t("dashboard.contracts"), icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' }] : []),
+            ...(hasPermFn?.('contract_templates.view') ? [{ title: t("dashboard.contractTemplates"), icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' }] : []),
+            ...(hasPermFn?.('university_contracts.view') ? [{ title: t("dashboard.universityContracts"), icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' }] : []),
+            ...(hasPermFn?.('company_contracts.view') ? [{ title: t("dashboard.companyContracts"), icon: Building, url: '/admin/company-contracts', permKey: 'company_contracts.view' }] : []),
+            ...(hasPermFn?.('self_fill_links.view') ? [{ title: t("dashboard.selfFillLinks"), icon: Link2, url: '/admin/self-fill-links', permKey: 'self_fill_links.view' }] : []),
           ];
           return contractItems.length ? [{ label: t("dashboard.groupAgentNetwork"), items: contractItems }] : [];
         })(),
@@ -250,7 +249,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], acad
       ...(
         role === 'agent_staff'
           ? [{ title: t("dashboard.academy"), icon: ExternalLink, url: '/agent/__academy__', externalHref: '/api/academy-sso', permKey: 'academy' }]
-          : academyAccess === true
+          : hasPermFn?.('academy.access')
             ? [{ title: t("dashboard.academy"), icon: ExternalLink, url: '/agent/__academy__', externalHref: '/api/academy-sso' }]
             : []
       ),
@@ -298,7 +297,7 @@ const ROLE_COLORS: Record<string, string> = {
 export function DashboardLayout({ children }: { children: ReactNode }) {
   // useAuth returns liveUser ?? getStickyUser() — never undefined after first
   // authentication. prevUserRef adds one more layer of defense.
-  const { user: liveUser, isLoading } = useAuth(true);
+  const { user: liveUser, isLoading, hasPermission } = useAuth(true);
   const prevUserRef = useRef(liveUser);
   if (liveUser) prevUserRef.current = liveUser;
   const user = prevUserRef.current ?? liveUser;
@@ -478,8 +477,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   const staffPerms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
-  const academyAccess = (user as unknown as Record<string, unknown>).academyAccess as boolean | null | undefined;
-  const { groups } = getMenuForRole(user.role, t, staffPerms, academyAccess);
+  const { groups } = getMenuForRole(user.role, t, staffPerms, hasPermission);
   const allItems = groups.flatMap(g => g.items);
 
   const togglePin = (url: string) => {

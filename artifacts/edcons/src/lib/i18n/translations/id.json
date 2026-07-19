@@ -1588,14 +1588,7 @@
     "colUniversity": "Universitas",
     "colCountry": "Negara",
     "view": "Lihat",
-    "agent": "Agen",
-    "settingsTab": "Pengaturan",
-    "academyAccess": "Akses Academy",
-    "academyAccessDesc": "Izinkan agen ini mengakses Academy Find And Study",
-    "subAgentsSettings": "Akses Academy Sub-Agen",
-    "noSubAgents": "Tidak ada sub-agen",
-    "academyAccessSaved": "Akses Academy diperbarui",
-    "academyAccessFailed": "Gagal memperbarui akses Academy"
+    "agent": "Agen"
   },
   "adminAudit": {
     "title": "Log Audit",
@@ -3939,16 +3932,6 @@
     "countries": {
       "hint": "Negara yang ditangani oleh staf ini. Digunakan untuk penugasan percakapan otomatis.",
       "placeholder": "Pilih negara..."
-    },
-    "permissions": {
-      "desc": "Kendalikan menu kontrak mana yang dapat dilihat staf ini di bilah sisi.",
-      "saved": "Izin disimpan",
-      "saveFailed": "Gagal menyimpan izin",
-      "save": "Simpan",
-      "academyAccess": "Akses Academy",
-      "academyAccessDesc": "Izinkan akses ke Academy Find And Study",
-      "academyAccessSaved": "Akses Academy diperbarui",
-      "academyAccessFailed": "Gagal memperbarui"
     }
   },
   "notificationRules": {

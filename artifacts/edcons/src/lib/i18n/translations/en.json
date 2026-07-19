@@ -1588,14 +1588,7 @@
     "colUniversity": "University",
     "colCountry": "Country",
     "view": "View",
-    "agent": "Agent",
-    "settingsTab": "Settings",
-    "academyAccess": "Academy Access",
-    "academyAccessDesc": "Allow this agent to access Academy Find And Study",
-    "subAgentsSettings": "Sub-Agents Academy Access",
-    "noSubAgents": "No sub-agents",
-    "academyAccessSaved": "Academy access updated",
-    "academyAccessFailed": "Failed to update academy access"
+    "agent": "Agent"
   },
   "adminAudit": {
     "title": "Audit Log",
@@ -3748,17 +3741,7 @@
       "confirmed": "Confirmed",
       "pending": "Pending"
     },
-    "tzVsAdmin": "vs admin",
-    "permissions": {
-      "desc": "Control which contract-related menu items this staff member can see in the sidebar.",
-      "saved": "Permissions saved",
-      "saveFailed": "Failed to save permissions",
-      "save": "Save Permissions",
-      "academyAccess": "Academy Access",
-      "academyAccessDesc": "Allow access to Academy Find And Study",
-      "academyAccessSaved": "Academy access updated",
-      "academyAccessFailed": "Failed to update academy access"
-    }
+    "tzVsAdmin": "vs admin"
   },
   "docTypes": {
     "passport": "Passport",

@@ -1588,14 +1588,7 @@
     "colUniversity": "Universidad",
     "colCountry": "País",
     "view": "Ver",
-    "agent": "Agente",
-    "settingsTab": "Configuración",
-    "academyAccess": "Acceso a Academy",
-    "academyAccessDesc": "Permitir a este agente acceder a Academy Find And Study",
-    "subAgentsSettings": "Acceso Academy de Sub-Agentes",
-    "noSubAgents": "Sin sub-agentes",
-    "academyAccessSaved": "Acceso Academy actualizado",
-    "academyAccessFailed": "Error al actualizar el acceso a Academy"
+    "agent": "Agente"
   },
   "adminAudit": {
     "title": "Registro de auditoría",
@@ -3939,16 +3932,6 @@
     "countries": {
       "hint": "Países que atiende este miembro del personal. Se usa para la asignación automática de conversaciones.",
       "placeholder": "Seleccionar países..."
-    },
-    "permissions": {
-      "desc": "Controla qué menús de contratos ve este miembro del personal en la barra lateral.",
-      "saved": "Permisos guardados",
-      "saveFailed": "Error al guardar permisos",
-      "save": "Guardar",
-      "academyAccess": "Acceso a Academy",
-      "academyAccessDesc": "Permitir el acceso a Academy Find And Study",
-      "academyAccessSaved": "Acceso Academy actualizado",
-      "academyAccessFailed": "Error al actualizar"
     }
   },
   "notificationRules": {

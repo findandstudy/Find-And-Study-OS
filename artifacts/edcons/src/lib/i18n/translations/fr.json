@@ -1588,14 +1588,7 @@
     "colUniversity": "Université",
     "colCountry": "Pays",
     "view": "Voir",
-    "agent": "Agent",
-    "settingsTab": "Paramètres",
-    "academyAccess": "Accès Academy",
-    "academyAccessDesc": "Autoriser cet agent à accéder à Academy Find And Study",
-    "subAgentsSettings": "Accès Academy des sous-agents",
-    "noSubAgents": "Aucun sous-agent",
-    "academyAccessSaved": "Accès Academy mis à jour",
-    "academyAccessFailed": "Échec de la mise à jour de l'accès Academy"
+    "agent": "Agent"
   },
   "adminAudit": {
     "title": "Journal d'audit",
@@ -3990,16 +3983,6 @@
     "countries": {
       "hint": "Pays gérés par ce membre du personnel. Utilisé pour l'assignation automatique des conversations.",
       "placeholder": "Sélectionner des pays..."
-    },
-    "permissions": {
-      "desc": "Contrôlez les menus de contrats visibles par ce membre du personnel dans la barre latérale.",
-      "saved": "Permissions enregistrées",
-      "saveFailed": "Échec de l'enregistrement des permissions",
-      "save": "Enregistrer",
-      "academyAccess": "Accès Academy",
-      "academyAccessDesc": "Autoriser l'accès à Academy Find And Study",
-      "academyAccessSaved": "Accès Academy mis à jour",
-      "academyAccessFailed": "Échec de la mise à jour"
     }
   },
   "notificationRules": {

@@ -19,7 +19,7 @@ import {
   toAgentInsertValues,
   type AgentCatalog,
 } from "../lib/exportImportExcel";
-import { db, agentsTable, usersTable, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
+import { db, agentsTable, usersTable, DEFAULT_ROLE_PERMISSIONS, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
 import { getNewestSignedContractUrl } from "../lib/signContract";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
@@ -1190,8 +1190,12 @@ router.get("/agents/:id/sub-agents", requireAuth, requireRole(...STAFF_ROLES), a
   const userIds = subs.map(s => s.userId).filter((id): id is number => id != null);
   const userMap = new Map<number, boolean | null>();
   if (userIds.length > 0) {
-    const rows = await db.select({ id: usersTable.id, academyAccess: usersTable.academyAccess }).from(usersTable).where(inArray(usersTable.id, userIds));
-    for (const r of rows) userMap.set(r.id, r.academyAccess ?? null);
+    const rows = await db.select({ id: usersTable.id, role: usersTable.role, permissionOverrides: usersTable.permissionOverrides }).from(usersTable).where(inArray(usersTable.id, userIds));
+    for (const r of rows) {
+      const overrides = (r.permissionOverrides as Record<string, boolean> | null) ?? {};
+      const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[r.role] ?? []).includes("academy.access");
+      userMap.set(r.id, "academy.access" in overrides ? overrides["academy.access"] : roleDefault);
+    }
   }
   res.json(subs.map(s => ({ ...s, academyAccess: s.userId != null ? (userMap.get(s.userId) ?? null) : null })));
 });
@@ -1217,7 +1221,13 @@ router.patch("/agents/:id/academy-access", requireAuth, async (req, res): Promis
   } else if (!(await isAgentInScope(actor.id, actor.role, agentId))) {
     res.status(403).json({ error: "Agent not in your branch scope" }); return;
   }
-  await db.update(usersTable).set({ academyAccess: parsed.data.academyAccess }).where(eq(usersTable.id, targetAgent.userId));
+  const [uRow] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, targetAgent.userId));
+  const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[uRow?.role ?? ""] ?? []).includes("academy.access");
+  if (parsed.data.academyAccess === roleDefault) {
+    await db.execute(sql`UPDATE users SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb) - 'academy.access' WHERE id = ${targetAgent.userId}`);
+  } else {
+    await db.execute(sql`UPDATE users SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb) || ${JSON.stringify({ "academy.access": parsed.data.academyAccess })}::jsonb WHERE id = ${targetAgent.userId}`);
+  }
   logAudit(actor.id, "agent.academy_access.update", "agent", agentId, { academyAccess: parsed.data.academyAccess }, req.ip);
   res.json({ success: true });
 });
@@ -1492,11 +1502,15 @@ router.get("/agents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, 
   const links = await db.select({ branchId: agentBranchesTable.branchId }).from(agentBranchesTable).where(eq(agentBranchesTable.agentId, id));
   const assignedStaffList = await getAgencyStaffWithLegacy(id, agent.assignedStaffId ?? null);
   const primary = assignedStaffList.find(s => s.isPrimary) || assignedStaffList[0] || null;
-  // Include academyAccess from users table so AgentDetail can show/edit it
+  // Include academyAccess computed from permissionOverrides + role default
   let academyAccess: boolean | null = null;
   if (agent.userId) {
-    const [uRow] = await db.select({ academyAccess: usersTable.academyAccess }).from(usersTable).where(eq(usersTable.id, agent.userId));
-    academyAccess = uRow?.academyAccess ?? null;
+    const [uRow] = await db.select({ role: usersTable.role, permissionOverrides: usersTable.permissionOverrides }).from(usersTable).where(eq(usersTable.id, agent.userId));
+    if (uRow) {
+      const overrides = (uRow.permissionOverrides as Record<string, boolean> | null) ?? {};
+      const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[uRow.role] ?? []).includes("academy.access");
+      academyAccess = "academy.access" in overrides ? overrides["academy.access"] : roleDefault;
+    }
   }
   res.json({
     ...agent,

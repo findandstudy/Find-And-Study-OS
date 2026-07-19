@@ -1588,14 +1588,7 @@
     "colUniversity": "विश्वविद्यालय",
     "colCountry": "देश",
     "view": "देखें",
-    "agent": "एजेंट",
-    "settingsTab": "सेटिंग्स",
-    "academyAccess": "अकादमी एक्सेस",
-    "academyAccessDesc": "इस एजेंट को Academy Find And Study तक पहुंचने की अनुमति दें",
-    "subAgentsSettings": "उप-एजेंट अकादमी एक्सेस",
-    "noSubAgents": "कोई उप-एजेंट नहीं",
-    "academyAccessSaved": "अकादमी एक्सेस अपडेट किया गया",
-    "academyAccessFailed": "अकादमी एक्सेस अपडेट करने में विफल"
+    "agent": "एजेंट"
   },
   "adminAudit": {
     "title": "ऑडिट लॉग",
@@ -3939,16 +3932,6 @@
     "countries": {
       "hint": "इस स्टाफ सदस्य द्वारा संभाले गए देश। स्वचालित बातचीत असाइनमेंट के लिए उपयोग किया जाता है।",
       "placeholder": "देश चुनें..."
-    },
-    "permissions": {
-      "desc": "नियंत्रित करें कि यह कर्मचारी साइडबार में कौन से अनुबंध मेनू देख सकता है।",
-      "saved": "अनुमतियाँ सहेजी गईं",
-      "saveFailed": "अनुमतियाँ सहेजने में विफल",
-      "save": "सहेजें",
-      "academyAccess": "अकादमी एक्सेस",
-      "academyAccessDesc": "Academy Find And Study तक पहुंच की अनुमति दें",
-      "academyAccessSaved": "अकादमी एक्सेस अपडेट किया गया",
-      "academyAccessFailed": "अपडेट करने में विफल"
     }
   },
   "notificationRules": {

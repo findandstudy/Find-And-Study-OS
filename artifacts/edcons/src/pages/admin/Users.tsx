@@ -119,6 +119,7 @@ interface PermCategory {
 type PermSchema = Record<string, PermCategory>;
 
 const OVERRIDE_PERMISSION_KEYS: { key: string; label: string }[] = [
+  { key: "academy.access", label: "Academy Find And Study access" },
   { key: "leads.change_stage", label: "Change lead stage/status" },
   { key: "students.change_stage", label: "Change student stage/status" },
   { key: "applications.change_stage", label: "Change application stage" },
