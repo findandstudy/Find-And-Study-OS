@@ -152,6 +152,12 @@ export default function StaffCardDetailPage({ userId }: { userId: number }) {
                 <DocumentsSection documents={data.documents} userId={userId} onSaved={refresh} />
               </AccordionContent>
             </AccordionItem>
+            <AccordionItem value="permissions" className="border rounded-md bg-card">
+              <AccordionTrigger className="px-4 py-3 hover:no-underline">{t("staffCards.section.permissions")}</AccordionTrigger>
+              <AccordionContent className="px-1 pb-1">
+                <PermissionsSection user={data.user} userId={userId} onSaved={refresh} />
+              </AccordionContent>
+            </AccordionItem>
           </Accordion>
         </TabsContent>
         <TabsContent value="agents" className="mt-4"><AgentsTab assignedAgents={data.assignedAgents} userId={userId} onSaved={refresh} /></TabsContent>
@@ -1186,6 +1192,82 @@ function CommissionsTab({ commissions, totals, userId, onSaved }: { commissions:
           </tbody>
         </table>
       </Card>
+    </div>
+  );
+}
+
+// ─── Section: Sidebar İzinleri ────────────────────────────────────────────────
+const SIDEBAR_PERM_KEYS = [
+  "contracts.view",
+  "contract_templates.view",
+  "university_contracts.view",
+  "company_contracts.view",
+  "self_fill_links.view",
+] as const;
+
+type SidebarPermKey = typeof SIDEBAR_PERM_KEYS[number];
+
+const PERM_LABEL_KEYS: Record<SidebarPermKey, string> = {
+  "contracts.view": "dashboard.contracts",
+  "contract_templates.view": "dashboard.contractTemplates",
+  "university_contracts.view": "dashboard.universityContracts",
+  "company_contracts.view": "dashboard.companyContracts",
+  "self_fill_links.view": "dashboard.selfFillLinks",
+};
+
+function PermissionsSection({ user, userId, onSaved }: { user: any; userId: number; onSaved: () => void }) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const [selected, setSelected] = useState<Set<SidebarPermKey>>(
+    () => new Set((user.agentStaffPermissions ?? []).filter((p: string) => SIDEBAR_PERM_KEYS.includes(p as SidebarPermKey)) as SidebarPermKey[])
+  );
+  const [saving, setSaving] = useState(false);
+
+  const toggle = (key: SidebarPermKey) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await customFetch(`/api/staff-cards/${userId}/permissions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions: Array.from(selected) }),
+      });
+      toast({ title: t("staffCards.permissions.saved") });
+      onSaved();
+    } catch (e: any) {
+      toast({ title: t("staffCards.permissions.saveFailed"), description: e?.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <p className="text-sm text-muted-foreground">{t("staffCards.permissions.desc")}</p>
+      <div className="space-y-2">
+        {SIDEBAR_PERM_KEYS.map((key) => (
+          <label key={key} className="flex items-center gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-gray-300 text-primary accent-primary"
+              checked={selected.has(key)}
+              onChange={() => toggle(key)}
+            />
+            <span className="text-sm">{t(PERM_LABEL_KEYS[key])}</span>
+          </label>
+        ))}
+      </div>
+      <Button size="sm" onClick={save} disabled={saving}>
+        {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+        {t("staffCards.permissions.save")}
+      </Button>
     </div>
   );
 }

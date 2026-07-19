@@ -3834,7 +3834,8 @@
       "schedule": "Heures de travail",
       "languages": "Langues",
       "documents": "Documents",
-      "countries": "Pays gérés"
+      "countries": "Pays gérés",
+      "permissions": "Permissions de la barre latérale"
     },
     "filters": {
       "search": "Rechercher…",
@@ -3982,6 +3983,12 @@
     "countries": {
       "hint": "Pays gérés par ce membre du personnel. Utilisé pour l'assignation automatique des conversations.",
       "placeholder": "Sélectionner des pays..."
+    },
+    "permissions": {
+      "desc": "Contrôlez les menus de contrats visibles par ce membre du personnel dans la barre latérale.",
+      "saved": "Permissions enregistrées",
+      "saveFailed": "Échec de l'enregistrement des permissions",
+      "save": "Enregistrer"
     }
   },
   "notificationRules": {

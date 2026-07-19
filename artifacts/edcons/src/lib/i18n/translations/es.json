@@ -3783,7 +3783,8 @@
       "schedule": "Horario laboral",
       "languages": "Idiomas",
       "documents": "Documentos",
-      "countries": "Países atendidos"
+      "countries": "Países atendidos",
+      "permissions": "Permisos de la barra lateral"
     },
     "filters": {
       "search": "Buscar…",
@@ -3931,6 +3932,12 @@
     "countries": {
       "hint": "Países que atiende este miembro del personal. Se usa para la asignación automática de conversaciones.",
       "placeholder": "Seleccionar países..."
+    },
+    "permissions": {
+      "desc": "Controla qué menús de contratos ve este miembro del personal en la barra lateral.",
+      "saved": "Permisos guardados",
+      "saveFailed": "Error al guardar permisos",
+      "save": "Guardar"
     }
   },
   "notificationRules": {

@@ -3532,7 +3532,8 @@
       "schedule": "Çalışma Saatleri",
       "languages": "Diller",
       "documents": "Belgeler",
-      "countries": "İlgilendiği Ülkeler"
+      "countries": "İlgilendiği Ülkeler",
+      "permissions": "Kenar Çubuğu İzinleri"
     },
     "filters": {
       "search": "Ara…",
@@ -3681,6 +3682,12 @@
     "countries": {
       "hint": "Bu personelin ilgilendiği ülkeler. Otomatik sohbet atama için kullanılır.",
       "placeholder": "Ülke seçin..."
+    },
+    "permissions": {
+      "desc": "Bu personelin kenar çubuğunda hangi sözleşme menülerini göreceğini belirleyin.",
+      "saved": "İzinler kaydedildi",
+      "saveFailed": "İzinler kaydedilemedi",
+      "save": "Kaydet"
     }
   },
   "docTypes": {

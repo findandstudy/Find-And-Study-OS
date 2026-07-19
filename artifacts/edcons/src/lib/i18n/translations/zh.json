@@ -3783,7 +3783,8 @@
       "schedule": "工作时间",
       "languages": "语言",
       "documents": "文件",
-      "countries": "负责的国家"
+      "countries": "负责的国家",
+      "permissions": "侧边栏权限"
     },
     "filters": {
       "search": "搜索…",
@@ -3931,6 +3932,12 @@
     "countries": {
       "hint": "该员工负责的国家。用于对话自动分配。",
       "placeholder": "选择国家..."
+    },
+    "permissions": {
+      "desc": "控制该员工在侧边栏中可见的合同菜单项。",
+      "saved": "权限已保存",
+      "saveFailed": "保存权限失败",
+      "save": "保存"
     }
   },
   "notificationRules": {

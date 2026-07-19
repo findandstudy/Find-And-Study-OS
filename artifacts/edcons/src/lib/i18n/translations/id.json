@@ -3783,7 +3783,8 @@
       "schedule": "Jam Kerja",
       "languages": "Bahasa",
       "documents": "Dokumen",
-      "countries": "Negara yang Ditangani"
+      "countries": "Negara yang Ditangani",
+      "permissions": "Izin Bilah Sisi"
     },
     "filters": {
       "search": "Cari…",
@@ -3931,6 +3932,12 @@
     "countries": {
       "hint": "Negara yang ditangani oleh staf ini. Digunakan untuk penugasan percakapan otomatis.",
       "placeholder": "Pilih negara..."
+    },
+    "permissions": {
+      "desc": "Kendalikan menu kontrak mana yang dapat dilihat staf ini di bilah sisi.",
+      "saved": "Izin disimpan",
+      "saveFailed": "Gagal menyimpan izin",
+      "save": "Simpan"
     }
   },
   "notificationRules": {

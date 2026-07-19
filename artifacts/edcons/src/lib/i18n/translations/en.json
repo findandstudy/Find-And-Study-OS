@@ -3591,7 +3591,8 @@
       "schedule": "Work Hours",
       "languages": "Languages",
       "countries": "Handled Countries",
-      "documents": "Documents"
+      "documents": "Documents",
+      "permissions": "Sidebar Permissions"
     },
     "filters": {
       "search": "Search…",
@@ -3740,7 +3741,13 @@
       "confirmed": "Confirmed",
       "pending": "Pending"
     },
-    "tzVsAdmin": "vs admin"
+    "tzVsAdmin": "vs admin",
+    "permissions": {
+      "desc": "Control which contract-related menu items this staff member can see in the sidebar.",
+      "saved": "Permissions saved",
+      "saveFailed": "Failed to save permissions",
+      "save": "Save Permissions"
+    }
   },
   "docTypes": {
     "passport": "Passport",
