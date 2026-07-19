@@ -2418,7 +2418,12 @@
     "matchStudentSearchHint": "मौजूदा छात्रों को नाम, फ़ोन या पासपोर्ट नंबर से खोजें। डुप्लिकेट से बचने के लिए मेल को लिंक करें, या नया छात्र बनाएं।",
     "matchStudentSearchPlaceholder": "नाम, फ़ोन या पासपोर्ट नंबर...",
     "matchStudentNoResults": "कोई मेल खाने वाला छात्र नहीं मिला। आप नया छात्र बना सकते हैं।",
-    "matchStudentCreateNew": "नया छात्र बनाएं"
+    "matchStudentCreateNew": "नया छात्र बनाएं",
+    "newConvTitle": "नई WhatsApp बातचीत",
+    "newConvSearchPlaceholder": "नाम या फ़ोन से छात्रों या लीड्स को खोजें...",
+    "newConvSent": "टेम्पलेट भेजा गया! बातचीत खुल रही है...",
+    "noResults": "कोई परिणाम नहीं मिला",
+    "templateVariable": "चर {n}"
   },
   "settingsPage": {
     "navProfile": "प्रोफ़ाइल",
@@ -4394,7 +4399,12 @@
     "errSendFailed": "संदेश नहीं भेजा जा सका",
     "dispatchedTitle": "संदेश भेजा गया",
     "dispatchedDesc": "{channel} संदेश इनबॉक्स वार्तालाप के माध्यम से {name} को भेजा गया।",
-    "openConversation": "वार्तालाप खोलें"
+    "openConversation": "वार्तालाप खोलें",
+    "wa24hWindowOutside": "24 घंटे की विंडो के बाहर",
+    "wa24hUseTemplate": "इस संपर्क ने पिछले 24 घंटों में आपको संदेश नहीं भेजा है। बातचीत शुरू करने के लिए WhatsApp टेम्पलेट का उपयोग करें।",
+    "checkingWindow": "विंडो स्थिति जांच रहे हैं...",
+    "selectTemplate": "टेम्पलेट चुनें",
+    "templateSent": "WhatsApp टेम्पलेट भेजा गया"
   },
   "catalogPage": {
     "activeInSystem": "सिस्टम में सक्रिय",

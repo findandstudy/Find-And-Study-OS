@@ -2418,7 +2418,12 @@
     "matchStudentSearchHint": "按姓名、电话或护照号码搜索现有学生。链接匹配项以避免重复，或创建新学生。",
     "matchStudentSearchPlaceholder": "姓名、电话或护照号码...",
     "matchStudentNoResults": "未找到匹配的学生。您可以创建新学生。",
-    "matchStudentCreateNew": "创建新学生"
+    "matchStudentCreateNew": "创建新学生",
+    "newConvTitle": "新建WhatsApp对话",
+    "newConvSearchPlaceholder": "按姓名或电话搜索学生或线索...",
+    "newConvSent": "模板已发送！正在打开对话...",
+    "noResults": "未找到结果",
+    "templateVariable": "变量 {n}"
   },
   "settingsPage": {
     "navProfile": "个人资料",
@@ -4394,7 +4399,12 @@
     "errSendFailed": "消息发送失败",
     "dispatchedTitle": "消息已发送",
     "dispatchedDesc": "已通过收件箱会话将 {channel} 消息发送给 {name}。",
-    "openConversation": "打开会话"
+    "openConversation": "打开会话",
+    "wa24hWindowOutside": "超出24小时窗口",
+    "wa24hUseTemplate": "该联系人在过去24小时内未向您发送消息。请使用WhatsApp模板发起对话。",
+    "checkingWindow": "正在检查窗口状态...",
+    "selectTemplate": "选择模板",
+    "templateSent": "WhatsApp模板已发送"
   },
   "catalogPage": {
     "activeInSystem": "系统中启用",

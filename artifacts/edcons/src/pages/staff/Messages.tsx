@@ -50,6 +50,7 @@ import { AddStudentModal } from "@/components/AddStudentModal";
 import type { AddDocTarget } from "@/components/inbox/AddAsDocumentModal";
 import { AssignDocumentFromMessageModal } from "@/components/inbox/AssignDocumentFromMessageModal";
 import PdfAttachmentCard from "@/components/inbox/PdfAttachmentCard";
+import { WhatsAppTemplatePicker } from "@/components/inbox/WhatsAppTemplatePicker";
 
 interface Conversation {
   id: number;
@@ -344,11 +345,14 @@ function InboxTab() {
   const [studentSearchLoading, setStudentSearchLoading] = useState(false);
   const [studentLinking, setStudentLinking] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
-  const [templates, setTemplates] = useState<any[]>([]);
-  const [tplId, setTplId] = useState<string>("");
-  const [tplVars, setTplVars] = useState<string[]>([]);
-  const [templateQuery, setTemplateQuery] = useState("");
-  const [tplLoading, setTplLoading] = useState(false);
+  const [tplSending, setTplSending] = useState(false);
+  const [newWaConvOpen, setNewWaConvOpen] = useState(false);
+  const [newWaConvSearch, setNewWaConvSearch] = useState("");
+  const [newWaConvResults, setNewWaConvResults] = useState<{ entityType: string; entityId: number; name: string; phone: string }[]>([]);
+  const [newWaConvLoading, setNewWaConvLoading] = useState(false);
+  const [newWaConvSelected, setNewWaConvSelected] = useState<{ entityType: string; entityId: number; name: string; phone: string } | null>(null);
+  const [newWaConvTplOpen, setNewWaConvTplOpen] = useState(false);
+  const [newWaConvSending, setNewWaConvSending] = useState(false);
   const [liveStatus, setLiveStatus] = useState<"connecting" | "open" | "offline">("connecting");
   const [reconnectKey, setReconnectKey] = useState(0);
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
@@ -1011,44 +1015,99 @@ function InboxTab() {
     });
   };
 
-  async function openTemplateDialog() {
-    setTplId("");
-    setTplVars([]);
-    setTemplateQuery("");
-    setTplLoading(true);
+  function openTemplateDialog() {
     setTplOpen(true);
-    try {
-      const r = await customFetch(`/api/inbox/whatsapp-templates`);
-      setTemplates((r as any)?.data || []);
-    } catch {
-      toast({ title: t("messagesPage.failedToLoadTemplates"), variant: "destructive" });
-    } finally {
-      setTplLoading(false);
-    }
   }
 
-  async function sendTemplate() {
-    if (!selectedId || !tplId) return;
+  async function sendTemplate(templateId: number, parameters: string[]) {
+    if (!selectedId) return;
+    setTplSending(true);
     try {
       const res: any = await customFetch(`/api/inbox/conversations/${selectedId}/templates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId: parseInt(tplId, 10), parameters: tplVars.map(v => v.trim()) }),
+        body: JSON.stringify({ templateId, parameters }),
       });
       if (res?.simulated) toast({ title: t("messagesPage.templateSentSimulated") });
       else toast({ title: t("messagesPage.templateSent") });
       setTplOpen(false);
-      setTplId("");
-      setTplVars([]);
-      setTemplateQuery("");
       fetchDetail(selectedId);
-    } catch (err: any) {
-      const realErr = err?.data?.error || err?.body?.error;
-      toast({
-        title: t("messagesPage.failedToSendTemplate"),
-        description: typeof realErr === "string" ? realErr : undefined,
-        variant: "destructive",
+    } finally {
+      setTplSending(false);
+    }
+  }
+
+  const newWaConvSearchDebounced = useCallback(
+    async (q: string) => {
+      if (!q.trim()) { setNewWaConvResults([]); return; }
+      setNewWaConvLoading(true);
+      try {
+        const [stuRes, leadRes] = await Promise.all([
+          customFetch(`/api/students?search=${encodeURIComponent(q)}&limit=8`).catch(() => null),
+          customFetch(`/api/leads?search=${encodeURIComponent(q)}&limit=8`).catch(() => null),
+        ]);
+        const students: any[] = (stuRes as any)?.data || [];
+        const leads: any[] = (leadRes as any)?.data || [];
+        const mapped: typeof newWaConvResults = [
+          ...students
+            .filter(s => s.phoneE164 || s.phone)
+            .map(s => ({
+              entityType: "student",
+              entityId: s.id,
+              name: `${s.firstName || ""} ${s.lastName || ""}`.trim() || `#${s.id}`,
+              phone: s.phoneE164 || s.phone || "",
+            })),
+          ...leads
+            .filter(l => l.phoneE164 || l.phone)
+            .map(l => ({
+              entityType: "lead",
+              entityId: l.id,
+              name: `${l.firstName || ""} ${l.lastName || ""}`.trim() || `#${l.id}`,
+              phone: l.phoneE164 || l.phone || "",
+            })),
+        ];
+        setNewWaConvResults(mapped);
+      } catch {
+        setNewWaConvResults([]);
+      } finally {
+        setNewWaConvLoading(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const t = setTimeout(() => { newWaConvSearchDebounced(newWaConvSearch); }, 300);
+    return () => clearTimeout(t);
+  }, [newWaConvSearch, newWaConvSearchDebounced]);
+
+  async function handleNewWaConvSend(templateId: number, parameters: string[]) {
+    if (!newWaConvSelected) return;
+    setNewWaConvSending(true);
+    try {
+      const res: any = await customFetch(`/api/inbox/conversations/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entityType: newWaConvSelected.entityType,
+          entityId: newWaConvSelected.entityId,
+          templateId,
+          parameters,
+        }),
       });
+      toast({ title: t("messagesPage.newConvSent") });
+      setNewWaConvTplOpen(false);
+      setNewWaConvOpen(false);
+      setNewWaConvSelected(null);
+      setNewWaConvSearch("");
+      setNewWaConvResults([]);
+      if (res?.conversationId) {
+        setLocation(`/staff/messages?conversation=${res.conversationId}`);
+      } else {
+        fetchInbox();
+      }
+    } finally {
+      setNewWaConvSending(false);
     }
   }
 
@@ -1297,12 +1356,24 @@ function InboxTab() {
                   {t("messagesPage.inbox")}
                 </span>
               </div>
-              <LiveStatusIndicator
-                status={effectiveLiveStatus}
-                lastEventAt={lastEventAt}
-                now={now}
-                onReconnect={reconnectLive}
-              />
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1 text-green-700 hover:text-green-800 hover:bg-green-50"
+                  onClick={() => setNewWaConvOpen(true)}
+                  title={t("messagesPage.newConversation")}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  {t("messagesPage.newConversation")}
+                </Button>
+                <LiveStatusIndicator
+                  status={effectiveLiveStatus}
+                  lastEventAt={lastEventAt}
+                  now={now}
+                  onReconnect={reconnectLive}
+                />
+              </div>
             </div>
 
             <DropdownMenu>
@@ -2544,136 +2615,80 @@ function InboxTab() {
         />
       )}
 
-      <Dialog open={tplOpen} onOpenChange={(open) => { setTplOpen(open); if (!open) { setTplId(""); setTplVars([]); setTemplateQuery(""); } }}>
-        <DialogContent className="sm:max-w-lg">
+      <WhatsAppTemplatePicker
+        open={tplOpen}
+        onClose={() => setTplOpen(false)}
+        onSend={sendTemplate}
+        sending={tplSending}
+      />
+
+      {/* ── "Yeni sohbet" person picker ─────────────────────────── */}
+      <Dialog open={newWaConvOpen} onOpenChange={(open) => {
+        setNewWaConvOpen(open);
+        if (!open) { setNewWaConvSearch(""); setNewWaConvResults([]); setNewWaConvSelected(null); }
+      }}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><FileText className="w-4 h-4" /> {t("messagesPage.whatsappTemplate")}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="w-4 h-4" />
+              {t("messagesPage.newConvTitle")}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            {/* Search */}
+          <div className="space-y-3 py-1">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
-              <Input className="pl-8 h-9 rounded-lg" placeholder={t("messagesPage.searchTemplates")} value={templateQuery} onChange={(e) => setTemplateQuery(e.target.value)} />
+              <Input
+                className="pl-8 h-9 rounded-lg"
+                autoFocus
+                placeholder={t("messagesPage.newConvSearchPlaceholder")}
+                value={newWaConvSearch}
+                onChange={(e) => setNewWaConvSearch(e.target.value)}
+              />
             </div>
-
-            {/* Template list */}
-            {tplLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            {newWaConvLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
               </div>
-            ) : (() => {
-              const approved = templates.filter(tpl =>
-                tpl.externalTemplateName &&
-                (tpl.approvalStatus ?? tpl.status ?? "").toLowerCase() === "approved"
-              );
-              if (approved.length === 0) {
-                return <p className="text-sm text-muted-foreground text-center py-6">{t("messagesPage.noApprovedTemplates")}</p>;
-              }
-              const q = templateQuery.toLowerCase();
-              const filtered = approved.filter(tpl =>
-                !q ||
-                (tpl.externalTemplateName || tpl.name || "").toLowerCase().includes(q) ||
-                (tpl.category || "").toLowerCase().includes(q) ||
-                (tpl.language || "").toLowerCase().includes(q) ||
-                (tpl.content ?? tpl.bodyText ?? "").toLowerCase().includes(q)
-              );
-              if (filtered.length === 0) {
-                return <p className="text-sm text-muted-foreground text-center py-6">{t("messagesPage.noTemplatesMatchSearch")}</p>;
-              }
-              return (
-                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
-                  {filtered.map(tpl => {
-                    const isSelected = tplId === String(tpl.id);
-                    const rawStatus = (tpl.approvalStatus ?? tpl.status ?? "").toUpperCase();
-                    const body = tpl.content ?? tpl.bodyText ?? "";
-                    const varCount = Array.isArray(tpl.variables) ? tpl.variables.length : (tpl.variableCount ?? (body.match(/\{\{\d+\}\}/g) || []).length);
-                    return (
-                      <button
-                        key={tpl.id}
-                        type="button"
-                        onClick={() => {
-                          setTplId(String(tpl.id));
-                          setTplVars(Array.from({ length: varCount }, () => ""));
-                        }}
-                        className={cn(
-                          "w-full text-left rounded-lg border p-2.5 transition-colors hover:bg-muted/50",
-                          isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
-                        )}
-                      >
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-medium text-sm flex-1 min-w-0 truncate">{tpl.externalTemplateName || tpl.name}</span>
-                          {tpl.language && <Badge variant="secondary" className="text-[10px] px-1.5 h-4 shrink-0">{tpl.language.toUpperCase()}</Badge>}
-                          {tpl.category && <Badge variant="outline" className="text-[10px] px-1.5 h-4 shrink-0">{tpl.category}</Badge>}
-                          {rawStatus && (
-                            <Badge variant="outline" className={cn("text-[10px] px-1.5 h-4 shrink-0",
-                              rawStatus === "APPROVED" ? "bg-green-50 text-green-700 border-green-200" :
-                              rawStatus === "PENDING" ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
-                              "bg-gray-50 text-gray-600"
-                            )}>{rawStatus}</Badge>
-                          )}
-                        </div>
-                        {body && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{body}</p>}
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-
-            {/* Variable inputs */}
-            {(() => {
-              const sel = templates.find(tpl => String(tpl.id) === tplId);
-              const selBody = sel ? (sel.content ?? sel.bodyText ?? "") : "";
-              const varCount = sel ? (Array.isArray(sel.variables) ? sel.variables.length : (sel.variableCount ?? (selBody.match(/\{\{\d+\}\}/g) || []).length)) : 0;
-              if (!sel || varCount === 0) return null;
-              return (
-                <div className="space-y-2">
-                  {Array.from({ length: varCount }, (_, i) => (
-                    <div key={i}>
-                      <Label className="text-xs">Variable {i + 1} {`({{${i + 1}}})`}</Label>
-                      <Input
-                        className="h-9 rounded-lg mt-0.5"
-                        placeholder={`Value for {{${i + 1}}}`}
-                        value={tplVars[i] ?? ""}
-                        onChange={(e) => setTplVars(prev => { const next = [...prev]; next[i] = e.target.value; return next; })}
-                      />
+            ) : newWaConvResults.length === 0 && newWaConvSearch.trim() ? (
+              <p className="text-sm text-muted-foreground text-center py-4">{t("messagesPage.noResults")}</p>
+            ) : (
+              <div className="max-h-72 overflow-y-auto space-y-1">
+                {newWaConvResults.map(r => (
+                  <button
+                    key={`${r.entityType}-${r.entityId}`}
+                    type="button"
+                    onClick={() => {
+                      setNewWaConvSelected(r);
+                      setNewWaConvOpen(false);
+                      setNewWaConvTplOpen(true);
+                    }}
+                    className="w-full text-left flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{r.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{r.phone}</p>
                     </div>
-                  ))}
-                </div>
-              );
-            })()}
-
-            {/* Live preview */}
-            {(() => {
-              const sel = templates.find(tpl => String(tpl.id) === tplId);
-              const previewBody = sel ? (sel.content ?? sel.bodyText ?? "") : "";
-              if (!previewBody) return null;
-              const preview = previewBody.replace(/\{\{(\d+)\}\}/g, (_: string, n: string) => {
-                const val = tplVars[parseInt(n, 10) - 1];
-                return val?.trim() ? val.trim() : `{{${n}}}`;
-              });
-              return (
-                <div>
-                  <Label className="text-xs">{t("messagesPage.preview")}</Label>
-                  <div className="mt-1 rounded-xl bg-green-50 border border-green-200 px-3 py-2.5">
-                    <p className="text-sm whitespace-pre-wrap text-green-900">{preview}</p>
-                  </div>
-                </div>
-              );
-            })()}
+                    <Badge variant="outline" className="text-[10px] shrink-0">
+                      {r.entityType === "student" ? t("common.student") : t("common.lead")}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTplOpen(false)}>{t("messagesPage.cancel")}</Button>
-            <Button
-              onClick={sendTemplate}
-              disabled={!tplId || ((templates.find(tpl => String(tpl.id) === tplId)?.variables || []).length > 0 && tplVars.some(v => !v.trim()))}
-              className="gap-1"
-            >
-              <Send className="w-3 h-3" /> {t("messagesPage.send")}
-            </Button>
+            <Button variant="outline" onClick={() => setNewWaConvOpen(false)}>{t("messagesPage.cancel")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── "Yeni sohbet" template picker (after person selected) ── */}
+      <WhatsAppTemplatePicker
+        open={newWaConvTplOpen}
+        onClose={() => { setNewWaConvTplOpen(false); setNewWaConvSelected(null); }}
+        onSend={handleNewWaConvSend}
+        sending={newWaConvSending}
+      />
 
       <Dialog open={bulkConfirm !== null} onOpenChange={(open) => { if (!open && !bulkBusy) setBulkConfirm(null); }}>
         <DialogContent className="max-w-md">

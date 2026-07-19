@@ -2666,7 +2666,12 @@
     "matchStudentSearchHint": "Mevcut öğrencileri ad, telefon veya pasaport numarasıyla arayın. Mükerrer kaydı önlemek için eşleşeni bağlayın ya da yeni öğrenci oluşturun.",
     "matchStudentSearchPlaceholder": "Ad, telefon veya pasaport numarası...",
     "matchStudentNoResults": "Eşleşen öğrenci bulunamadı. Yeni bir öğrenci oluşturabilirsiniz.",
-    "matchStudentCreateNew": "Yeni Öğrenci Oluştur"
+    "matchStudentCreateNew": "Yeni Öğrenci Oluştur",
+    "newConvTitle": "Yeni WhatsApp Sohbeti",
+    "newConvSearchPlaceholder": "Ad veya telefon ile öğrenci ya da lead ara...",
+    "newConvSent": "Şablon gönderildi! Sohbet açılıyor...",
+    "noResults": "Sonuç bulunamadı",
+    "templateVariable": "{n}. değişken"
   },
   "settingsPage": {
     "navProfile": "Profil",
@@ -4276,7 +4281,12 @@
     "errSendFailed": "Mesaj gönderilemedi",
     "dispatchedTitle": "Mesaj gönderildi",
     "dispatchedDesc": "{channel} mesajı gelen kutusu görüşmesi üzerinden {name} kişisine iletildi.",
-    "openConversation": "Görüşmeyi aç"
+    "openConversation": "Görüşmeyi aç",
+    "wa24hWindowOutside": "24 saatlik pencere dışında",
+    "wa24hUseTemplate": "Bu kişi son 24 saatte size mesaj atmamış. Sohbeti başlatmak için bir WhatsApp şablonu kullanabilirsiniz.",
+    "checkingWindow": "Pencere durumu kontrol ediliyor...",
+    "selectTemplate": "Şablon Seç",
+    "templateSent": "WhatsApp şablonu gönderildi"
   },
   "catalogPage": {
     "activeInSystem": "Sistemde aktif",

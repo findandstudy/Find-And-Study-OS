@@ -81,6 +81,7 @@ import { buildDocNameFromParts } from "../lib/docNaming";
 import { writeAudit } from "../lib/auditLog";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
+import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 
 const router: IRouter = Router();
 
@@ -3781,6 +3782,364 @@ router.post(
     } else {
       await db.insert(conversationParticipantsTable).values({ conversationId: id, userId, isStarred: false });
       res.json({ subscribed: true });
+    }
+  },
+);
+
+/* ─── START OUTBOUND WHATSAPP CONVERSATION ───────────────────── */
+
+/**
+ * POST /api/inbox/conversations/start
+ *
+ * Idempotent: if the entity already has a WhatsApp conversation (with a real
+ * externalThreadId) this returns that conversation instead of creating a new
+ * one. If the conversation exists we also send the template through it so the
+ * message appears in the existing thread.
+ *
+ * If no conversation exists we:
+ *   1. Create an external_contact keyed by phone (externalId = "wa_out:<e164>")
+ *   2. Create a conversation with externalThreadId = null (no Zernio thread yet)
+ *   3. Send the template via the Zernio broadcast flow
+ *   4. Record the outbound message (sent or failed)
+ *   5. Sync the assignment cascade
+ *
+ * The conversation can be navigated to immediately. When the contact replies
+ * Zernio will send an inbound webhook that creates the real thread — the inbox
+ * will show a separate conversation for that (standard inbound path).
+ */
+router.post(
+  "/inbox/conversations/start",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const userId = req.user!.id;
+    const { entityType, entityId: rawId, templateId: rawTplId, parameters } = req.body as {
+      entityType: string;
+      entityId: number | string;
+      templateId: number | string;
+      parameters?: string[];
+    };
+
+    const entityId = parseInt(String(rawId || ""), 10);
+    const templateId = parseInt(String(rawTplId || ""), 10);
+
+    if (!entityType || !entityId || !templateId) {
+      res.status(400).json({ error: "entityType, entityId and templateId are required" });
+      return;
+    }
+
+    try {
+      // ── 1. Entity lookup + IDOR guard ─────────────────────────────────────
+      const contactConds: any[] = [];
+      let entityAgentId: number | null | undefined;
+      let entityPhoneE164: string | null = null;
+      let entityDisplayName = "";
+
+      if (entityType === "lead") {
+        const [row] = await db
+          .select({ agentId: leadsTable.agentId, phoneE164: leadsTable.phoneE164, phone: leadsTable.phone, firstName: leadsTable.firstName, lastName: leadsTable.lastName })
+          .from(leadsTable)
+          .where(eq(leadsTable.id, entityId));
+        if (!row) { res.status(404).json({ error: "entity_not_found" }); return; }
+        entityAgentId = row.agentId;
+        entityPhoneE164 = row.phoneE164 || (row.phone ? toE164(String(row.phone)) : null);
+        entityDisplayName = `${row.firstName || ""} ${row.lastName || ""}`.trim();
+        contactConds.push(eq(externalContactsTable.leadId, entityId));
+      } else if (entityType === "student") {
+        const [row] = await db
+          .select({ agentId: studentsTable.agentId, phoneE164: studentsTable.phoneE164, phone: studentsTable.phone, firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, entityId));
+        if (!row) { res.status(404).json({ error: "entity_not_found" }); return; }
+        entityAgentId = row.agentId;
+        entityPhoneE164 = row.phoneE164 || (row.phone ? toE164(String(row.phone)) : null);
+        entityDisplayName = `${row.firstName || ""} ${row.lastName || ""}`.trim();
+        contactConds.push(eq(externalContactsTable.studentId, entityId));
+      } else {
+        res.status(400).json({ error: "entityType must be lead or student" });
+        return;
+      }
+
+      if (entityAgentId !== undefined && isAgentSourcedAndBlockedForStaff(req.user!, entityAgentId)) {
+        res.status(404).json({ error: "entity_not_found" });
+        return;
+      }
+
+      if (!entityPhoneE164) {
+        res.status(422).json({ error: "no_phone", detail: "Entity has no E.164 phone number" });
+        return;
+      }
+      const phoneE164 = toE164(entityPhoneE164) || entityPhoneE164;
+
+      // ── 2. Template validation ─────────────────────────────────────────────
+      const [tpl] = await db
+        .select()
+        .from(messageTemplatesTable)
+        .where(eq(messageTemplatesTable.id, templateId));
+      if (!tpl || !tpl.externalTemplateName) {
+        res.status(400).json({ error: "Template not found or missing externalTemplateName" });
+        return;
+      }
+
+      const placeholderMatches = (tpl.content || "").match(/\{\{\s*\d+\s*\}\}/g);
+      const placeholderCount = placeholderMatches
+        ? new Set(placeholderMatches.map((m) => m.replace(/\D/g, ""))).size
+        : 0;
+      const providedParams: string[] = parameters || [];
+      if (providedParams.length !== placeholderCount) {
+        res.status(400).json({
+          error: `Template gönderilemedi: şablonda ${placeholderCount} değişken var, ${providedParams.length} değer girildi.`,
+        });
+        return;
+      }
+
+      // ── 3. Check for existing WhatsApp conversation ────────────────────────
+      let existingConvId: number | null = null;
+      let existingConvExternalAccountId: string | null = null;
+      let existingConvChannelAccountId: number | null = null;
+
+      if (contactConds.length > 0) {
+        const contacts = await db
+          .select({ id: externalContactsTable.id })
+          .from(externalContactsTable)
+          .where(and(
+            eq(externalContactsTable.channel, "whatsapp"),
+            contactConds.length === 1 ? contactConds[0] : or(...contactConds),
+          ));
+        const contactIds = contacts.map(c => c.id);
+        if (contactIds.length > 0) {
+          const rows = await db
+            .select({
+              id: conversationsTable.id,
+              externalAccountId: channelAccountsTable.externalAccountId,
+              channelAccountId: channelAccountsTable.id,
+            })
+            .from(conversationsTable)
+            .innerJoin(channelAccountsTable, eq(conversationsTable.channelAccountId, channelAccountsTable.id))
+            .where(and(
+              inArray(conversationsTable.externalContactId, contactIds),
+              eq(conversationsTable.channel, "whatsapp"),
+              eq(channelAccountsTable.provider, "zernio"),
+              sql`${conversationsTable.externalThreadId} IS NOT NULL`,
+            ))
+            .orderBy(desc(conversationsTable.lastMessageAt))
+            .limit(1);
+          if (rows.length > 0) {
+            existingConvId = rows[0].id;
+            existingConvExternalAccountId = rows[0].externalAccountId;
+            existingConvChannelAccountId = rows[0].channelAccountId;
+          }
+        }
+      }
+
+      // ── 4a. Existing conversation → send template on it, return ───────────
+      if (existingConvId && existingConvExternalAccountId) {
+        const zr = await sendZernioTemplate({
+          externalAccountId: existingConvExternalAccountId,
+          templateName: tpl.externalTemplateName,
+          language: tpl.language || "en",
+          toPhoneE164: phoneE164,
+          parameters: providedParams,
+          recipientLabel: entityDisplayName || phoneE164,
+        });
+
+        const renderedContent = providedParams.reduce<string>(
+          (acc, val, idx) => acc.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, "g"), val),
+          tpl.content || "",
+        );
+
+        await db.insert(messagesTable).values({
+          conversationId: existingConvId,
+          senderId: userId,
+          content: renderedContent,
+          channel: "whatsapp",
+          direction: "outbound",
+          status: zr.ok ? "sent" : "failed",
+          externalMessageId: zr.externalMessageId || null,
+          failedReason: zr.ok ? null : zr.error || "send_failed",
+          sentAt: zr.ok ? new Date() : null,
+          metadata: {
+            template: tpl.externalTemplateName,
+            ...(zr.broadcastId ? { broadcastId: zr.broadcastId } : {}),
+          },
+        });
+
+        if (zr.ok) {
+          await db
+            .update(conversationsTable)
+            .set({ lastMessageAt: new Date(), lastMessagePreview: renderedContent.slice(0, 200) })
+            .where(eq(conversationsTable.id, existingConvId));
+          inboxBus.publish({
+            type: "message",
+            conversationId: existingConvId,
+            channel: "whatsapp",
+            assignedToId: null,
+            unmatched: false,
+            direction: "outbound",
+          });
+          await logAudit(userId, "inbox.start_conversation", entityType, entityId, { channel: "whatsapp", templateName: tpl.externalTemplateName, conversationId: existingConvId }, req.ip);
+          res.status(201).json({ conversationId: existingConvId, alreadyExists: true });
+        } else {
+          res.status(502).json({ error: "template_send_failed", detail: zr.error || null, conversationId: existingConvId });
+        }
+        return;
+      }
+
+      // ── 4b. No existing conversation → create one + send template ─────────
+      const account = await resolveZernioWhatsAppAccount();
+      if (!account) {
+        res.status(400).json({ error: "no_zernio_account", detail: "No Zernio WhatsApp account configured" });
+        return;
+      }
+
+      // Find or create external_contact by phone.
+      // We use a stable externalId derived from the phone so that repeated calls
+      // don't create duplicate contacts. When the contact replies, processInbound
+      // will upsert its own row with the real Zernio contact ID.
+      const outboundExternalId = `wa_out:${phoneE164.replace(/\+/, "")}`;
+
+      let externalContactId: number;
+      const [existingContact] = await db
+        .select({ id: externalContactsTable.id })
+        .from(externalContactsTable)
+        .where(and(
+          eq(externalContactsTable.channel, "whatsapp"),
+          eq(externalContactsTable.externalId, outboundExternalId),
+        ))
+        .limit(1);
+
+      if (existingContact) {
+        externalContactId = existingContact.id;
+        // Keep the entity link up-to-date.
+        const updates: Record<string, number | null> = {};
+        if (entityType === "student") updates.studentId = entityId;
+        else if (entityType === "lead") updates.leadId = entityId;
+        if (Object.keys(updates).length > 0) {
+          await db.update(externalContactsTable).set(updates).where(eq(externalContactsTable.id, externalContactId));
+        }
+      } else {
+        const [newContact] = await db
+          .insert(externalContactsTable)
+          .values({
+            channel: "whatsapp",
+            externalId: outboundExternalId,
+            phoneE164,
+            displayName: entityDisplayName || phoneE164,
+            leadId: entityType === "lead" ? entityId : null,
+            studentId: entityType === "student" ? entityId : null,
+          })
+          .onConflictDoNothing({ target: [externalContactsTable.channel, externalContactsTable.externalId] })
+          .returning({ id: externalContactsTable.id });
+        if (!newContact) {
+          // Concurrent insert — refetch.
+          const [refetched] = await db.select({ id: externalContactsTable.id }).from(externalContactsTable)
+            .where(and(eq(externalContactsTable.channel, "whatsapp"), eq(externalContactsTable.externalId, outboundExternalId)));
+          if (!refetched) { res.status(500).json({ error: "Failed to create external contact" }); return; }
+          externalContactId = refetched.id;
+        } else {
+          externalContactId = newContact.id;
+        }
+      }
+
+      // Check if there's already an outbound-initiated conversation for this contact.
+      const [existingOutboundConv] = await db
+        .select({ id: conversationsTable.id })
+        .from(conversationsTable)
+        .where(and(
+          eq(conversationsTable.externalContactId, externalContactId),
+          eq(conversationsTable.channel, "whatsapp"),
+          eq(conversationsTable.channelAccountId, account.id),
+        ))
+        .orderBy(desc(conversationsTable.lastMessageAt))
+        .limit(1);
+
+      let convId: number;
+      if (existingOutboundConv) {
+        convId = existingOutboundConv.id;
+      } else {
+        const [newConv] = await db
+          .insert(conversationsTable)
+          .values({
+            type: "external",
+            title: entityDisplayName || phoneE164,
+            channel: "whatsapp",
+            channelAccountId: account.id,
+            externalContactId,
+            externalThreadId: null,
+            unmatched: false,
+            status: "open",
+            createdById: userId,
+            lastMessageAt: new Date(),
+            lastMessagePreview: "",
+            metadata: { source: "outbound_start" },
+          })
+          .returning({ id: conversationsTable.id });
+        convId = newConv.id;
+      }
+
+      // Send template via Zernio broadcast.
+      const zr = await sendZernioTemplate({
+        externalAccountId: account.externalAccountId,
+        templateName: tpl.externalTemplateName,
+        language: tpl.language || "en",
+        toPhoneE164: phoneE164,
+        parameters: providedParams,
+        recipientLabel: entityDisplayName || phoneE164,
+      });
+
+      const renderedContent = providedParams.reduce<string>(
+        (acc, val, idx) => acc.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, "g"), val),
+        tpl.content || "",
+      );
+
+      await db.insert(messagesTable).values({
+        conversationId: convId,
+        senderId: userId,
+        content: renderedContent,
+        channel: "whatsapp",
+        direction: "outbound",
+        status: zr.ok ? "sent" : "failed",
+        externalMessageId: zr.externalMessageId || null,
+        failedReason: zr.ok ? null : zr.error || "send_failed",
+        sentAt: zr.ok ? new Date() : null,
+        metadata: {
+          template: tpl.externalTemplateName,
+          ...(zr.broadcastId ? { broadcastId: zr.broadcastId } : {}),
+        },
+      });
+
+      if (!zr.ok) {
+        // Conversation exists but template send failed — be explicit.
+        res.status(502).json({
+          error: "template_send_failed",
+          detail: zr.error || null,
+          conversationId: convId,
+        });
+        return;
+      }
+
+      await db
+        .update(conversationsTable)
+        .set({ lastMessageAt: new Date(), lastMessagePreview: renderedContent.slice(0, 200) })
+        .where(eq(conversationsTable.id, convId));
+
+      await syncConversationOwner(convId, userId, req.ip);
+
+      inboxBus.publish({
+        type: "message",
+        conversationId: convId,
+        channel: "whatsapp",
+        assignedToId: null,
+        unmatched: false,
+        direction: "outbound",
+      });
+
+      await logAudit(userId, "inbox.start_conversation", entityType, entityId, { channel: "whatsapp", templateName: tpl.externalTemplateName, conversationId: convId }, req.ip);
+
+      res.status(201).json({ conversationId: convId, alreadyExists: false });
+    } catch (err: any) {
+      console.error("[inbox/conversations/start]", err);
+      res.status(500).json({ error: "Failed to start conversation" });
     }
   },
 );

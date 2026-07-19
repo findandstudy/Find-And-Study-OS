@@ -21,6 +21,8 @@ import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from 
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
+import { sendZernioTemplate } from "../lib/inbox/zernioSend";
+import { resolveZernioWhatsAppAccount } from "../lib/inbox/zernioTemplates";
 import { isWithin24hWindow } from "../lib/inbox/channels/whatsapp";
 import { toE164 } from "../lib/inbox/phone";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
@@ -999,6 +1001,120 @@ router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_
     res.status(500).json({ error: "Failed to send message" });
   }
 });
+
+/* ─── QUICK-CONTACT WINDOW CHECK ────────────────────────────── */
+
+/**
+ * GET /api/quick-contact/window
+ * Returns the 24-hour WhatsApp reply-window status for an entity so the UI can
+ * decide whether to show a free-text input or the template picker before the
+ * user even tries to send.
+ */
+router.get(
+  "/quick-contact/window",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const { entityType, entityId: rawId } = req.query as Record<string, string>;
+    const entityId = parseInt(rawId || "", 10);
+
+    if (!entityType || !entityId) {
+      res.status(400).json({ error: "entityType and entityId are required" });
+      return;
+    }
+
+    try {
+      const contactConds: any[] = [];
+      let entityAgentId: number | null | undefined;
+
+      if (entityType === "lead") {
+        const [row] = await db
+          .select({ agentId: leadsTable.agentId })
+          .from(leadsTable)
+          .where(eq(leadsTable.id, entityId));
+        if (!row) { res.json({ hasConversation: false, isWithin24h: false }); return; }
+        entityAgentId = row.agentId;
+        contactConds.push(eq(externalContactsTable.leadId, entityId));
+      } else if (entityType === "student") {
+        const [row] = await db
+          .select({ agentId: studentsTable.agentId })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, entityId));
+        if (!row) { res.json({ hasConversation: false, isWithin24h: false }); return; }
+        entityAgentId = row.agentId;
+        contactConds.push(eq(externalContactsTable.studentId, entityId));
+      } else if (entityType === "agent") {
+        contactConds.push(eq(externalContactsTable.agentId, entityId));
+      } else if (entityType === "application") {
+        const [app] = await db
+          .select({ studentId: applicationsTable.studentId, agentId: applicationsTable.agentId })
+          .from(applicationsTable)
+          .where(eq(applicationsTable.id, entityId));
+        if (!app?.studentId) { res.json({ hasConversation: false, isWithin24h: false }); return; }
+        entityAgentId = app.agentId;
+        contactConds.push(eq(externalContactsTable.studentId, app.studentId));
+      } else {
+        res.json({ hasConversation: false, isWithin24h: false });
+        return;
+      }
+
+      if (entityAgentId !== undefined && isAgentSourcedAndBlockedForStaff(req.user!, entityAgentId)) {
+        res.json({ hasConversation: false, isWithin24h: false });
+        return;
+      }
+
+      if (contactConds.length === 0) {
+        res.json({ hasConversation: false, isWithin24h: false });
+        return;
+      }
+
+      const contacts = await db
+        .select({ id: externalContactsTable.id })
+        .from(externalContactsTable)
+        .where(and(
+          eq(externalContactsTable.channel, "whatsapp"),
+          contactConds.length === 1 ? contactConds[0] : or(...contactConds),
+        ));
+
+      const contactIds = contacts.map(c => c.id);
+      if (contactIds.length === 0) {
+        res.json({ hasConversation: false, isWithin24h: false });
+        return;
+      }
+
+      const rows = await db
+        .select({
+          id: conversationsTable.id,
+          lastInboundAt: conversationsTable.lastInboundAt,
+        })
+        .from(conversationsTable)
+        .innerJoin(channelAccountsTable, eq(conversationsTable.channelAccountId, channelAccountsTable.id))
+        .where(and(
+          inArray(conversationsTable.externalContactId, contactIds),
+          eq(conversationsTable.channel, "whatsapp"),
+          eq(channelAccountsTable.provider, "zernio"),
+          sql`${conversationsTable.externalThreadId} IS NOT NULL`,
+        ))
+        .orderBy(desc(conversationsTable.lastMessageAt))
+        .limit(1);
+
+      if (rows.length === 0) {
+        res.json({ hasConversation: false, isWithin24h: false });
+        return;
+      }
+
+      const conv = rows[0];
+      res.json({
+        hasConversation: true,
+        isWithin24h: isWithin24hWindow(conv.lastInboundAt),
+        conversationId: conv.id,
+      });
+    } catch (err: any) {
+      console.error("[quick-contact/window]", err);
+      res.status(500).json({ error: "Failed to check window status" });
+    }
+  },
+);
 
 /* ─── MESSAGE TEMPLATES ─────────────────────────────────────── */
 

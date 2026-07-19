@@ -2418,7 +2418,12 @@
     "matchStudentSearchHint": "Busca estudiantes existentes por nombre, teléfono o número de pasaporte. Vincula una coincidencia para evitar duplicados, o crea un nuevo estudiante.",
     "matchStudentSearchPlaceholder": "Nombre, teléfono o número de pasaporte...",
     "matchStudentNoResults": "No se encontraron estudiantes coincidentes. Puedes crear un nuevo estudiante.",
-    "matchStudentCreateNew": "Crear nuevo estudiante"
+    "matchStudentCreateNew": "Crear nuevo estudiante",
+    "newConvTitle": "Nueva conversación de WhatsApp",
+    "newConvSearchPlaceholder": "Buscar estudiantes o leads por nombre o teléfono...",
+    "newConvSent": "¡Plantilla enviada! Abriendo conversación...",
+    "noResults": "No se encontraron resultados",
+    "templateVariable": "Variable {n}"
   },
   "settingsPage": {
     "navProfile": "Perfil",
@@ -4394,7 +4399,12 @@
     "errSendFailed": "No se pudo enviar el mensaje",
     "dispatchedTitle": "Mensaje enviado",
     "dispatchedDesc": "Mensaje de {channel} entregado a {name} a través de la conversación de la bandeja de entrada.",
-    "openConversation": "Abrir conversación"
+    "openConversation": "Abrir conversación",
+    "wa24hWindowOutside": "Fuera de la ventana de 24 horas",
+    "wa24hUseTemplate": "Este contacto no te ha enviado mensajes en las últimas 24 horas. Usa una plantilla de WhatsApp para iniciar la conversación.",
+    "checkingWindow": "Comprobando el estado de la ventana...",
+    "selectTemplate": "Seleccionar plantilla",
+    "templateSent": "Plantilla de WhatsApp enviada"
   },
   "catalogPage": {
     "activeInSystem": "Activo en el sistema",

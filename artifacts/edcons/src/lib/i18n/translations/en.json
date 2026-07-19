@@ -2725,7 +2725,12 @@
     "matchStudentSearchHint": "Search existing students by name, phone, or passport number. Link a match to avoid duplicates, or create a new student.",
     "matchStudentSearchPlaceholder": "Name, phone or passport number...",
     "matchStudentNoResults": "No matching students found. You can create a new student.",
-    "matchStudentCreateNew": "Create New Student"
+    "matchStudentCreateNew": "Create New Student",
+    "newConvTitle": "New WhatsApp Conversation",
+    "newConvSearchPlaceholder": "Search students or leads by name or phone...",
+    "newConvSent": "Template sent! Opening conversation...",
+    "noResults": "No results found",
+    "templateVariable": "Variable {n}"
   },
   "settingsPage": {
     "navProfile": "Profile",
@@ -4335,7 +4340,12 @@
     "errSendFailed": "Message could not be sent",
     "dispatchedTitle": "Message sent",
     "dispatchedDesc": "{channel} message delivered to {name} via the inbox conversation.",
-    "openConversation": "Open conversation"
+    "openConversation": "Open conversation",
+    "wa24hWindowOutside": "Outside 24-hour WhatsApp window",
+    "wa24hUseTemplate": "This contact hasn't messaged you in the past 24 hours. Use a WhatsApp template to start or resume the conversation.",
+    "checkingWindow": "Checking window status...",
+    "selectTemplate": "Select Template",
+    "templateSent": "WhatsApp template sent"
   },
   "catalogPage": {
     "activeInSystem": "Active in system",

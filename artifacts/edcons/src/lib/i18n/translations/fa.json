@@ -2418,7 +2418,12 @@
     "matchStudentSearchHint": "دانشجویان موجود را با نام، تلفن یا شماره گذرنامه جستجو کنید. برای جلوگیری از تکرار، مورد منطبق را پیوند دهید یا دانشجوی جدیدی بسازید.",
     "matchStudentSearchPlaceholder": "نام، تلفن یا شماره گذرنامه...",
     "matchStudentNoResults": "دانشجوی منطبقی یافت نشد. می‌توانید دانشجوی جدیدی بسازید.",
-    "matchStudentCreateNew": "ایجاد دانشجوی جدید"
+    "matchStudentCreateNew": "ایجاد دانشجوی جدید",
+    "newConvTitle": "گفتگوی جدید واتساپ",
+    "newConvSearchPlaceholder": "جستجوی دانشجو یا سرنخ با نام یا تلفن...",
+    "newConvSent": "قالب ارسال شد! درحال باز کردن گفتگو...",
+    "noResults": "نتیجه‌ای یافت نشد",
+    "templateVariable": "متغیر {n}"
   },
   "settingsPage": {
     "navProfile": "پروفایل",
@@ -4394,7 +4399,12 @@
     "errSendFailed": "پیام ارسال نشد",
     "dispatchedTitle": "پیام ارسال شد",
     "dispatchedDesc": "پیام {channel} از طریق گفتگوی صندوق ورودی به {name} تحویل شد.",
-    "openConversation": "باز کردن گفتگو"
+    "openConversation": "باز کردن گفتگو",
+    "wa24hWindowOutside": "خارج از پنجره ۲۴ ساعته",
+    "wa24hUseTemplate": "این مخاطب در ۲۴ ساعت گذشته به شما پیام نداده است. برای شروع گفتگو از یک قالب واتساپ استفاده کنید.",
+    "checkingWindow": "در حال بررسی وضعیت پنجره...",
+    "selectTemplate": "انتخاب قالب",
+    "templateSent": "قالب واتساپ ارسال شد"
   },
   "catalogPage": {
     "activeInSystem": "فعال در سیستم",

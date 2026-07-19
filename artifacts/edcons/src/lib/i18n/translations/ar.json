@@ -2469,7 +2469,12 @@
     "matchStudentSearchHint": "ابحث عن الطلاب الحاليين بالاسم أو الهاتف أو رقم جواز السفر. اربط المطابق لتجنب التكرار أو أنشئ طالبًا جديدًا.",
     "matchStudentSearchPlaceholder": "الاسم أو الهاتف أو رقم جواز السفر...",
     "matchStudentNoResults": "لم يتم العثور على طلاب مطابقين. يمكنك إنشاء طالب جديد.",
-    "matchStudentCreateNew": "إنشاء طالب جديد"
+    "matchStudentCreateNew": "إنشاء طالب جديد",
+    "newConvTitle": "محادثة واتساب جديدة",
+    "newConvSearchPlaceholder": "ابحث عن طلاب أو عملاء محتملين بالاسم أو الهاتف...",
+    "newConvSent": "تم إرسال القالب! جارٍ فتح المحادثة...",
+    "noResults": "لا توجد نتائج",
+    "templateVariable": "متغير {n}"
   },
   "settingsPage": {
     "navProfile": "الملف الشخصي",
@@ -4394,7 +4399,12 @@
     "errSendFailed": "تعذر إرسال الرسالة",
     "dispatchedTitle": "تم إرسال الرسالة",
     "dispatchedDesc": "تم تسليم رسالة {channel} إلى {name} عبر محادثة صندوق الوارد.",
-    "openConversation": "فتح المحادثة"
+    "openConversation": "فتح المحادثة",
+    "wa24hWindowOutside": "خارج نافذة 24 ساعة",
+    "wa24hUseTemplate": "لم يتواصل معك هذا الشخص خلال الـ 24 ساعة الماضية. استخدم قالب واتساب لبدء المحادثة.",
+    "checkingWindow": "جارٍ التحقق من حالة النافذة...",
+    "selectTemplate": "اختر قالبًا",
+    "templateSent": "تم إرسال قالب واتساب"
   },
   "catalogPage": {
     "activeInSystem": "نشط في النظام",

@@ -2418,7 +2418,12 @@
     "matchStudentSearchHint": "Cari siswa yang ada berdasarkan nama, telepon, atau nomor paspor. Tautkan yang cocok untuk menghindari duplikat, atau buat siswa baru.",
     "matchStudentSearchPlaceholder": "Nama, telepon, atau nomor paspor...",
     "matchStudentNoResults": "Tidak ditemukan siswa yang cocok. Anda dapat membuat siswa baru.",
-    "matchStudentCreateNew": "Buat Siswa Baru"
+    "matchStudentCreateNew": "Buat Siswa Baru",
+    "newConvTitle": "Percakapan WhatsApp Baru",
+    "newConvSearchPlaceholder": "Cari siswa atau prospek berdasarkan nama atau telepon...",
+    "newConvSent": "Template terkirim! Membuka percakapan...",
+    "noResults": "Tidak ada hasil ditemukan",
+    "templateVariable": "Variabel {n}"
   },
   "settingsPage": {
     "navProfile": "Profil",
@@ -4394,7 +4399,12 @@
     "errSendFailed": "Pesan tidak dapat dikirim",
     "dispatchedTitle": "Pesan terkirim",
     "dispatchedDesc": "Pesan {channel} terkirim ke {name} melalui percakapan kotak masuk.",
-    "openConversation": "Buka percakapan"
+    "openConversation": "Buka percakapan",
+    "wa24hWindowOutside": "Di luar jendela 24 jam",
+    "wa24hUseTemplate": "Kontak ini belum mengirim pesan kepada Anda dalam 24 jam terakhir. Gunakan template WhatsApp untuk memulai percakapan.",
+    "checkingWindow": "Memeriksa status jendela...",
+    "selectTemplate": "Pilih Template",
+    "templateSent": "Template WhatsApp terkirim"
   },
   "catalogPage": {
     "activeInSystem": "Aktif dalam sistem",

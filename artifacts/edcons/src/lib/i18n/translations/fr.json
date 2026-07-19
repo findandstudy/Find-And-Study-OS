@@ -2469,7 +2469,12 @@
     "matchStudentSearchHint": "Recherchez les étudiants existants par nom, téléphone ou numéro de passeport. Liez une correspondance pour éviter les doublons, ou créez un nouvel étudiant.",
     "matchStudentSearchPlaceholder": "Nom, téléphone ou numéro de passeport...",
     "matchStudentNoResults": "Aucun étudiant correspondant trouvé. Vous pouvez créer un nouvel étudiant.",
-    "matchStudentCreateNew": "Créer un nouvel étudiant"
+    "matchStudentCreateNew": "Créer un nouvel étudiant",
+    "newConvTitle": "Nouvelle conversation WhatsApp",
+    "newConvSearchPlaceholder": "Rechercher des étudiants ou des prospects par nom ou téléphone...",
+    "newConvSent": "Modèle envoyé ! Ouverture de la conversation...",
+    "noResults": "Aucun résultat trouvé",
+    "templateVariable": "Variable {n}"
   },
   "settingsPage": {
     "navProfile": "Profil",
@@ -4394,7 +4399,12 @@
     "errSendFailed": "Le message n'a pas pu être envoyé",
     "dispatchedTitle": "Message envoyé",
     "dispatchedDesc": "Message {channel} envoyé à {name} via la conversation de la boîte de réception.",
-    "openConversation": "Ouvrir la conversation"
+    "openConversation": "Ouvrir la conversation",
+    "wa24hWindowOutside": "Hors de la fenêtre de 24 heures",
+    "wa24hUseTemplate": "Ce contact ne vous a pas écrit dans les 24 dernières heures. Utilisez un modèle WhatsApp pour initier la conversation.",
+    "checkingWindow": "Vérification du statut de la fenêtre...",
+    "selectTemplate": "Choisir un modèle",
+    "templateSent": "Modèle WhatsApp envoyé"
   },
   "catalogPage": {
     "activeInSystem": "Actif dans le système",

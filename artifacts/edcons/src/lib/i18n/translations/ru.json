@@ -2469,7 +2469,12 @@
     "matchStudentSearchHint": "Найдите существующих студентов по имени, телефону или номеру паспорта. Свяжите совпадение, чтобы избежать дублей, или создайте нового студента.",
     "matchStudentSearchPlaceholder": "Имя, телефон или номер паспорта...",
     "matchStudentNoResults": "Совпадающих студентов не найдено. Вы можете создать нового студента.",
-    "matchStudentCreateNew": "Создать нового студента"
+    "matchStudentCreateNew": "Создать нового студента",
+    "newConvTitle": "Новый чат WhatsApp",
+    "newConvSearchPlaceholder": "Поиск студентов или лидов по имени или телефону...",
+    "newConvSent": "Шаблон отправлен! Открытие чата...",
+    "noResults": "Результатов не найдено",
+    "templateVariable": "Переменная {n}"
   },
   "settingsPage": {
     "navProfile": "Профиль",
@@ -4394,7 +4399,12 @@
     "errSendFailed": "Не удалось отправить сообщение",
     "dispatchedTitle": "Сообщение отправлено",
     "dispatchedDesc": "Сообщение {channel} доставлено {name} через беседу входящих.",
-    "openConversation": "Открыть беседу"
+    "openConversation": "Открыть беседу",
+    "wa24hWindowOutside": "Вне 24-часового окна",
+    "wa24hUseTemplate": "Этот контакт не писал вам последние 24 часа. Используйте шаблон WhatsApp для начала разговора.",
+    "checkingWindow": "Проверка статуса окна...",
+    "selectTemplate": "Выбрать шаблон",
+    "templateSent": "Шаблон WhatsApp отправлен"
   },
   "catalogPage": {
     "activeInSystem": "Активно в системе",
