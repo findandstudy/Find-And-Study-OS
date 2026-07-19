@@ -816,14 +816,14 @@ async function seedClaudeIntegration() {
     await pool.query(`CREATE INDEX IF NOT EXISTS company_contracts_expiry_date_idx ON company_contracts(expiry_date)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS company_contracts_deleted_at_idx ON company_contracts(deleted_at)`);
 
-    // Backfill the contract permissions for the default admin roles. This block
-    // is scoped to admin/super_admin only — DO NOT add other roles here or they
-    // silently inherit the whole set (contract_templates/contracts/self_fill).
+    // Backfill the full contract permission set for admin/super_admin roles.
+    // Other roles get scoped grants in the dedicated loops below.
     const newPerms = [
       "contract_templates.view", "contract_templates.manage",
       "contracts.view", "contracts.manage",
       "self_fill_links.view", "self_fill_links.manage",
       "company_contracts.view", "company_contracts.manage",
+      "university_contracts.view", "university_contracts.manage",
     ];
     const adminRoleRes = await pool.query(`SELECT id, permissions FROM roles WHERE name IN ('admin', 'super_admin')`);
     for (const row of adminRoleRes.rows) {
@@ -834,15 +834,27 @@ async function seedClaudeIntegration() {
       }
     }
 
-    // Company Contracts recipients include the manager role (see
-    // universityContractChecker ADMIN_ROLES = super_admin/admin/manager), so
-    // grant manager ONLY the company_contracts perms — not the other contract
-    // perms above — to keep parity without over-expanding manager's access.
-    const companyContractPerms = ["company_contracts.view", "company_contracts.manage"];
+    // Contract menus default access = ADMIN + MANAGER + FINANCE (accountant).
+    // Manager: full view+manage across all five contract areas (mirrors the
+    // DEFAULT_ROLE_PERMISSIONS manager filter which includes them all).
+    // Accountant: view-only across the five areas.
+    const managerContractPerms = [...newPerms];
     const managerRoleRes = await pool.query(`SELECT id, permissions FROM roles WHERE name = 'manager'`);
     for (const row of managerRoleRes.rows) {
       const existing: string[] = Array.isArray(row.permissions) ? row.permissions : [];
-      const merged = Array.from(new Set([...existing, ...companyContractPerms]));
+      const merged = Array.from(new Set([...existing, ...managerContractPerms]));
+      if (merged.length !== existing.length) {
+        await pool.query(`UPDATE roles SET permissions = $1::jsonb WHERE id = $2`, [JSON.stringify(merged), row.id]);
+      }
+    }
+    const accountantContractPerms = [
+      "contract_templates.view", "contracts.view", "self_fill_links.view",
+      "company_contracts.view", "university_contracts.view",
+    ];
+    const accountantRoleRes = await pool.query(`SELECT id, permissions FROM roles WHERE name = 'accountant'`);
+    for (const row of accountantRoleRes.rows) {
+      const existing: string[] = Array.isArray(row.permissions) ? row.permissions : [];
+      const merged = Array.from(new Set([...existing, ...accountantContractPerms]));
       if (merged.length !== existing.length) {
         await pool.query(`UPDATE roles SET permissions = $1::jsonb WHERE id = $2`, [JSON.stringify(merged), row.id]);
       }

@@ -2413,7 +2413,12 @@
     "unassign": "Batalkan penugasan",
     "assignOwner": "Tugaskan",
     "searchStaff": "Cari staf...",
-    "noStaffFound": "Staf tidak ditemukan"
+    "noStaffFound": "Staf tidak ditemukan",
+    "matchStudentSearchTitle": "Tambah Siswa",
+    "matchStudentSearchHint": "Cari siswa yang ada berdasarkan nama, telepon, atau nomor paspor. Tautkan yang cocok untuk menghindari duplikat, atau buat siswa baru.",
+    "matchStudentSearchPlaceholder": "Nama, telepon, atau nomor paspor...",
+    "matchStudentNoResults": "Tidak ditemukan siswa yang cocok. Anda dapat membuat siswa baru.",
+    "matchStudentCreateNew": "Buat Siswa Baru"
   },
   "settingsPage": {
     "navProfile": "Profil",

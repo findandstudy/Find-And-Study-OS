@@ -2661,7 +2661,12 @@
     "unassign": "Atamayı kaldır",
     "assignOwner": "Ata",
     "searchStaff": "Personel ara...",
-    "noStaffFound": "Personel bulunamadı"
+    "noStaffFound": "Personel bulunamadı",
+    "matchStudentSearchTitle": "Öğrenci Ekle",
+    "matchStudentSearchHint": "Mevcut öğrencileri ad, telefon veya pasaport numarasıyla arayın. Mükerrer kaydı önlemek için eşleşeni bağlayın ya da yeni öğrenci oluşturun.",
+    "matchStudentSearchPlaceholder": "Ad, telefon veya pasaport numarası...",
+    "matchStudentNoResults": "Eşleşen öğrenci bulunamadı. Yeni bir öğrenci oluşturabilirsiniz.",
+    "matchStudentCreateNew": "Yeni Öğrenci Oluştur"
   },
   "settingsPage": {
     "navProfile": "Profil",

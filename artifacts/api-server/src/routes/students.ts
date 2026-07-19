@@ -294,6 +294,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
         ilike(studentsTable.lastName, `%${t}%`),
         ilike(studentsTable.email, `%${t}%`),
         ilike(studentsTable.phone, `%${t}%`),
+        ilike(studentsTable.passportNumber, `%${t}%`),
         sql`(coalesce(${studentsTable.firstName},'') || ' ' || coalesce(${studentsTable.lastName},'')) ILIKE ${'%' + t + '%'}`,
         sql`(coalesce(${studentsTable.lastName},'') || ' ' || coalesce(${studentsTable.firstName},'')) ILIKE ${'%' + t + '%'}`,
       );

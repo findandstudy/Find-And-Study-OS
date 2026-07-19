@@ -2413,7 +2413,12 @@
     "unassign": "取消分配",
     "assignOwner": "分配",
     "searchStaff": "搜索员工...",
-    "noStaffFound": "未找到员工"
+    "noStaffFound": "未找到员工",
+    "matchStudentSearchTitle": "添加学生",
+    "matchStudentSearchHint": "按姓名、电话或护照号码搜索现有学生。链接匹配项以避免重复，或创建新学生。",
+    "matchStudentSearchPlaceholder": "姓名、电话或护照号码...",
+    "matchStudentNoResults": "未找到匹配的学生。您可以创建新学生。",
+    "matchStudentCreateNew": "创建新学生"
   },
   "settingsPage": {
     "navProfile": "个人资料",

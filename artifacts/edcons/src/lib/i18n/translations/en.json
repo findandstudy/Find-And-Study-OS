@@ -2720,7 +2720,12 @@
     "unassign": "Unassign",
     "assignOwner": "Assign",
     "searchStaff": "Search staff...",
-    "noStaffFound": "No staff found"
+    "noStaffFound": "No staff found",
+    "matchStudentSearchTitle": "Add Student",
+    "matchStudentSearchHint": "Search existing students by name, phone, or passport number. Link a match to avoid duplicates, or create a new student.",
+    "matchStudentSearchPlaceholder": "Name, phone or passport number...",
+    "matchStudentNoResults": "No matching students found. You can create a new student.",
+    "matchStudentCreateNew": "Create New Student"
   },
   "settingsPage": {
     "navProfile": "Profile",

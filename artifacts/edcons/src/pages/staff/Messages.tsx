@@ -338,6 +338,11 @@ function InboxTab() {
   const [createLeadDuplicate, setCreateLeadDuplicate] = useState<null | { id: number; firstName: string; lastName: string; email: string | null; phone: string | null; status: string }>(null);
   const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [addStudentPrefill, setAddStudentPrefill] = useState<{ firstName?: string; lastName?: string; email?: string; phone?: string }>({});
+  const [studentSearchOpen, setStudentSearchOpen] = useState(false);
+  const [studentSearchQuery, setStudentSearchQuery] = useState("");
+  const [studentSearchResults, setStudentSearchResults] = useState<any[]>([]);
+  const [studentSearchLoading, setStudentSearchLoading] = useState(false);
+  const [studentLinking, setStudentLinking] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [tplId, setTplId] = useState<string>("");
@@ -612,6 +617,18 @@ function InboxTab() {
   }
 
   function openAddStudentDialog() {
+    // Step 1: search existing students (name/phone/passport) before offering
+    // to create a new one. Prefill the search with the contact's phone so
+    // potential duplicates surface immediately.
+    const currentExt = detail?.externalContact;
+    const initialQuery = (currentExt?.phone || currentExt?.displayName || "").trim();
+    setStudentSearchQuery(initialQuery);
+    setStudentSearchResults([]);
+    setMatchOpen(false);
+    setStudentSearchOpen(true);
+  }
+
+  function openCreateStudentModal() {
     const currentExt = detail?.externalContact;
     const currentConv = detail?.conversation;
     const name = (currentExt?.displayName || currentConv?.title || "").trim();
@@ -622,9 +639,42 @@ function InboxTab() {
       email: currentExt?.email || "",
       phone: currentExt?.phone || "",
     });
-    setMatchOpen(false);
+    setStudentSearchOpen(false);
     setAddStudentOpen(true);
   }
+
+  async function linkExistingStudent(studentId: number) {
+    setStudentLinking(true);
+    try {
+      await applyMatch("student", studentId);
+      setStudentSearchOpen(false);
+    } finally {
+      setStudentLinking(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!studentSearchOpen) return;
+    const q = studentSearchQuery.trim();
+    if (q.length < 2) {
+      setStudentSearchResults([]);
+      setStudentSearchLoading(false);
+      return;
+    }
+    setStudentSearchLoading(true);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const r: any = await customFetch(`/api/students?search=${encodeURIComponent(q)}&limit=8`);
+        if (!cancelled) setStudentSearchResults(Array.isArray(r?.data) ? r.data : []);
+      } catch {
+        if (!cancelled) setStudentSearchResults([]);
+      } finally {
+        if (!cancelled) setStudentSearchLoading(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [studentSearchOpen, studentSearchQuery]);
 
   async function openCreateLeadDialog() {
     if (!selectedId) return;
@@ -2284,6 +2334,51 @@ function InboxTab() {
             <Button variant="outline" onClick={() => setMatchOpen(false)}>{t("messagesPage.cancel")}</Button>
             <Button variant="outline" onClick={openCreateLeadDialog} className="gap-1"><Plus className="w-3 h-3" /> {t("messagesPage.newLead")}</Button>
             <Button onClick={openAddStudentDialog} className="gap-1"><UserPlus className="w-3 h-3" /> {t("messagesPage.addStudentBtn")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={studentSearchOpen} onOpenChange={(open) => { if (!studentLinking) setStudentSearchOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><UserPlus className="w-4 h-4" /> {t("messagesPage.matchStudentSearchTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">{t("messagesPage.matchStudentSearchHint")}</p>
+            <Input
+              value={studentSearchQuery}
+              onChange={(e) => setStudentSearchQuery(e.target.value)}
+              placeholder={t("messagesPage.matchStudentSearchPlaceholder")}
+              className="h-9"
+              autoFocus
+            />
+            {studentSearchLoading && (
+              <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+            )}
+            {!studentSearchLoading && studentSearchQuery.trim().length >= 2 && studentSearchResults.length === 0 && (
+              <p className="text-xs text-muted-foreground bg-secondary p-2 rounded">{t("messagesPage.matchStudentNoResults")}</p>
+            )}
+            {!studentSearchLoading && studentSearchResults.length > 0 && (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {studentSearchResults.map((s: any) => (
+                  <div key={s.id} className="flex items-center justify-between p-2 border rounded-lg gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{`${s.firstName || ""} ${s.lastName || ""}`.trim() || "(unnamed)"}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {[s.phone, s.email, s.passportNumber].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" disabled={studentLinking} onClick={() => linkExistingStudent(s.id)}>
+                      {t("messagesPage.link")}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStudentSearchOpen(false)} disabled={studentLinking}>{t("messagesPage.cancel")}</Button>
+            <Button onClick={openCreateStudentModal} disabled={studentLinking} className="gap-1"><Plus className="w-3 h-3" /> {t("messagesPage.matchStudentCreateNew")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

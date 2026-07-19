@@ -2464,7 +2464,12 @@
     "unassign": "Снять назначение",
     "assignOwner": "Назначить",
     "searchStaff": "Поиск сотрудников...",
-    "noStaffFound": "Сотрудники не найдены"
+    "noStaffFound": "Сотрудники не найдены",
+    "matchStudentSearchTitle": "Добавить студента",
+    "matchStudentSearchHint": "Найдите существующих студентов по имени, телефону или номеру паспорта. Свяжите совпадение, чтобы избежать дублей, или создайте нового студента.",
+    "matchStudentSearchPlaceholder": "Имя, телефон или номер паспорта...",
+    "matchStudentNoResults": "Совпадающих студентов не найдено. Вы можете создать нового студента.",
+    "matchStudentCreateNew": "Создать нового студента"
   },
   "settingsPage": {
     "navProfile": "Профиль",

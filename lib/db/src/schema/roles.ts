@@ -257,6 +257,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "leads.view_commission",
     "applications.view_commission",
     "students.view_commission",
+    "contracts.view",
+    "contract_templates.view",
+    "university_contracts.view",
+    "company_contracts.view",
+    "self_fill_links.view",
   ],
   student: [
     "dashboard.view",

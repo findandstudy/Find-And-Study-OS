@@ -2464,7 +2464,12 @@
     "unassign": "إلغاء التعيين",
     "assignOwner": "تعيين",
     "searchStaff": "البحث عن الموظفين...",
-    "noStaffFound": "لم يتم العثور على موظفين"
+    "noStaffFound": "لم يتم العثور على موظفين",
+    "matchStudentSearchTitle": "إضافة طالب",
+    "matchStudentSearchHint": "ابحث عن الطلاب الحاليين بالاسم أو الهاتف أو رقم جواز السفر. اربط المطابق لتجنب التكرار أو أنشئ طالبًا جديدًا.",
+    "matchStudentSearchPlaceholder": "الاسم أو الهاتف أو رقم جواز السفر...",
+    "matchStudentNoResults": "لم يتم العثور على طلاب مطابقين. يمكنك إنشاء طالب جديد.",
+    "matchStudentCreateNew": "إنشاء طالب جديد"
   },
   "settingsPage": {
     "navProfile": "الملف الشخصي",

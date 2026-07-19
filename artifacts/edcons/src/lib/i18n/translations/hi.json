@@ -2413,7 +2413,12 @@
     "unassign": "असाइनमेंट हटाएं",
     "assignOwner": "असाइन करें",
     "searchStaff": "स्टाफ खोजें...",
-    "noStaffFound": "कोई स्टाफ नहीं मिला"
+    "noStaffFound": "कोई स्टाफ नहीं मिला",
+    "matchStudentSearchTitle": "छात्र जोड़ें",
+    "matchStudentSearchHint": "मौजूदा छात्रों को नाम, फ़ोन या पासपोर्ट नंबर से खोजें। डुप्लिकेट से बचने के लिए मेल को लिंक करें, या नया छात्र बनाएं।",
+    "matchStudentSearchPlaceholder": "नाम, फ़ोन या पासपोर्ट नंबर...",
+    "matchStudentNoResults": "कोई मेल खाने वाला छात्र नहीं मिला। आप नया छात्र बना सकते हैं।",
+    "matchStudentCreateNew": "नया छात्र बनाएं"
   },
   "settingsPage": {
     "navProfile": "प्रोफ़ाइल",

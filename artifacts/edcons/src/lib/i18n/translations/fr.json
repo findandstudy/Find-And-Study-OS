@@ -2464,7 +2464,12 @@
     "unassign": "Désattribuer",
     "assignOwner": "Attribuer",
     "searchStaff": "Rechercher un membre du personnel...",
-    "noStaffFound": "Aucun membre trouvé"
+    "noStaffFound": "Aucun membre trouvé",
+    "matchStudentSearchTitle": "Ajouter un étudiant",
+    "matchStudentSearchHint": "Recherchez les étudiants existants par nom, téléphone ou numéro de passeport. Liez une correspondance pour éviter les doublons, ou créez un nouvel étudiant.",
+    "matchStudentSearchPlaceholder": "Nom, téléphone ou numéro de passeport...",
+    "matchStudentNoResults": "Aucun étudiant correspondant trouvé. Vous pouvez créer un nouvel étudiant.",
+    "matchStudentCreateNew": "Créer un nouvel étudiant"
   },
   "settingsPage": {
     "navProfile": "Profil",

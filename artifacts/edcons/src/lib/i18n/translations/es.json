@@ -2413,7 +2413,12 @@
     "unassign": "Desasignar",
     "assignOwner": "Asignar",
     "searchStaff": "Buscar personal...",
-    "noStaffFound": "No se encontró personal"
+    "noStaffFound": "No se encontró personal",
+    "matchStudentSearchTitle": "Añadir estudiante",
+    "matchStudentSearchHint": "Busca estudiantes existentes por nombre, teléfono o número de pasaporte. Vincula una coincidencia para evitar duplicados, o crea un nuevo estudiante.",
+    "matchStudentSearchPlaceholder": "Nombre, teléfono o número de pasaporte...",
+    "matchStudentNoResults": "No se encontraron estudiantes coincidentes. Puedes crear un nuevo estudiante.",
+    "matchStudentCreateNew": "Crear nuevo estudiante"
   },
   "settingsPage": {
     "navProfile": "Perfil",

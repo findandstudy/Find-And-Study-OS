@@ -2413,7 +2413,12 @@
     "unassign": "لغو تخصیص",
     "assignOwner": "تخصیص",
     "searchStaff": "جستجوی کارکنان...",
-    "noStaffFound": "کارمندی یافت نشد"
+    "noStaffFound": "کارمندی یافت نشد",
+    "matchStudentSearchTitle": "افزودن دانشجو",
+    "matchStudentSearchHint": "دانشجویان موجود را با نام، تلفن یا شماره گذرنامه جستجو کنید. برای جلوگیری از تکرار، مورد منطبق را پیوند دهید یا دانشجوی جدیدی بسازید.",
+    "matchStudentSearchPlaceholder": "نام، تلفن یا شماره گذرنامه...",
+    "matchStudentNoResults": "دانشجوی منطبقی یافت نشد. می‌توانید دانشجوی جدیدی بسازید.",
+    "matchStudentCreateNew": "ایجاد دانشجوی جدید"
   },
   "settingsPage": {
     "navProfile": "پروفایل",
