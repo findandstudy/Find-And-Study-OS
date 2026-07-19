@@ -1139,6 +1139,8 @@ router.get("/message-templates", requireAuth, requireRole(...ADMIN_ROLES, ...STA
       language: messageTemplatesTable.language,
       variables: messageTemplatesTable.variables,
       isActive: messageTemplatesTable.isActive,
+      externalTemplateName: messageTemplatesTable.externalTemplateName,
+      approvalStatus: messageTemplatesTable.approvalStatus,
       createdById: messageTemplatesTable.createdById,
       createdAt: messageTemplatesTable.createdAt,
       updatedAt: messageTemplatesTable.updatedAt,

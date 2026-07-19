@@ -38,7 +38,9 @@ export function WhatsAppTemplatePicker({ open, onClose, onSend, sending }: Whats
     setTemplateQuery("");
     setTplLoading(true);
     try {
-      const r = await customFetch(`/api/inbox/whatsapp-templates`);
+      // Use /api/message-templates (DB) instead of /api/inbox/whatsapp-templates
+      // (which calls Zernio API and fails with 400/502 outside of Templates tab context).
+      const r = await customFetch(`/api/message-templates?channel=whatsapp`);
       setTemplates((r as any)?.data || []);
     } catch {
       toast({ title: t("messagesPage.failedToLoadTemplates"), variant: "destructive" });

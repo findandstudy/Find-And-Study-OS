@@ -2662,13 +2662,13 @@ function InboxTab() {
                       setNewWaConvOpen(false);
                       setNewWaConvTplOpen(true);
                     }}
-                    className="w-full text-left flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors"
+                    className="w-full min-w-0 flex items-center gap-2 rounded-lg border border-border px-3 py-2.5 hover:bg-muted/50 transition-colors overflow-hidden"
                   >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{r.name}</p>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-sm font-medium truncate" title={r.name}>{r.name}</p>
                       <p className="text-xs text-muted-foreground truncate">{r.phone}</p>
                     </div>
-                    <Badge variant="outline" className="text-[10px] shrink-0">
+                    <Badge variant="outline" className="text-[10px] shrink-0 ml-auto">
                       {r.entityType === "student" ? t("common.student") : t("common.lead")}
                     </Badge>
                   </button>
