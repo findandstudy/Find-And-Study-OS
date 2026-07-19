@@ -2625,16 +2625,20 @@ function InboxTab() {
       {/* ── "Yeni sohbet" person picker ─────────────────────────── */}
       <Dialog open={newWaConvOpen} onOpenChange={(open) => {
         setNewWaConvOpen(open);
-        if (!open) { setNewWaConvSearch(""); setNewWaConvResults([]); setNewWaConvSelected(null); }
+        // NOTE: do NOT reset newWaConvSelected here — Radix fires onOpenChange(false)
+        // when the controlled `open` prop changes, which would null out the selection
+        // before handleNewWaConvSend can read it. Reset happens in the template
+        // picker's onClose instead.
+        if (!open) { setNewWaConvSearch(""); setNewWaConvResults([]); }
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md overflow-x-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MessageCircle className="w-4 h-4" />
               {t("messagesPage.newConvTitle")}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-1">
+          <div className="space-y-3 py-1 overflow-x-hidden">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input
@@ -2652,7 +2656,7 @@ function InboxTab() {
             ) : newWaConvResults.length === 0 && newWaConvSearch.trim() ? (
               <p className="text-sm text-muted-foreground text-center py-4">{t("messagesPage.noResults")}</p>
             ) : (
-              <div className="max-h-72 overflow-y-auto space-y-1">
+              <div className="max-h-72 overflow-y-auto overflow-x-hidden space-y-1">
                 {newWaConvResults.map(r => (
                   <button
                     key={`${r.entityType}-${r.entityId}`}
