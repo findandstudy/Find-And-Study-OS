@@ -3164,6 +3164,7 @@
     "lastNamePlaceholder": "Фамилия",
     "interestedProgramPlaceholder": "напр. Информатика",
     "estimatedValuePlaceholder": "напр. 5000",
+    "priorEducation": "Предыдущее образование",
     "creating": "Создание…",
     "createLead": "Создать лид",
     "bulkImport": "Массовый импорт",

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, index, jsonb } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -35,6 +35,7 @@ export const leadsTable = pgTable("leads", {
   originEntityId: integer("origin_entity_id"),
   originDisplayName: text("origin_display_name"),
   originLocked: boolean("origin_locked").notNull().default(false),
+  educationData: jsonb("education_data"),
   branchId: integer("branch_id"),
   sourcePageUrl: text("source_page_url"),
   utmSource: text("utm_source"),

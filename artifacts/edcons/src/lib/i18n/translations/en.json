@@ -3420,6 +3420,7 @@
     "lastNamePlaceholder": "Last name",
     "interestedProgramPlaceholder": "e.g. Computer Science",
     "estimatedValuePlaceholder": "e.g. 5000",
+    "priorEducation": "Prior Education",
     "creating": "Creating…",
     "createLead": "Create Lead",
     "bulkImport": "Bulk Import",

@@ -763,6 +763,7 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
 
   useEffect(() => {
     if (open && lead) {
+      const edu = (lead.educationData as any) ?? {};
       setForm({
         firstName: lead.firstName || "",
         lastName: lead.lastName || "",
@@ -776,16 +777,37 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
         estimatedValue: lead.estimatedValue ? String(lead.estimatedValue) : "",
         status: lead.status || "new",
         interestedLevel: lead.interestedLevel || "",
+        eduSchoolName: edu.schoolName || "",
+        eduCountry: edu.country || "",
+        eduCity: edu.city || "",
+        eduFieldOfStudy: edu.fieldOfStudy || "",
+        eduStartYear: edu.startYear ? String(edu.startYear) : "",
+        eduEndYear: edu.endYear ? String(edu.endYear) : "",
+        eduGpa: edu.gpa || "",
+        eduLanguageScore: edu.languageScore || "",
       });
     }
   }, [open, lead]);
 
   function handleSave() {
     if (!lead || !form.firstName || !form.lastName || !isPhoneFieldValid(form.phone)) return;
-    const payload: any = { ...form, phone: form.phone || "" };
+    const { eduSchoolName, eduCountry, eduCity, eduFieldOfStudy, eduStartYear, eduEndYear, eduGpa, eduLanguageScore, ...rest } = form;
+    const payload: any = { ...rest, phone: form.phone || "" };
     const parsedVal = parseFloat(form.estimatedValue);
     if (form.estimatedValue && !isNaN(parsedVal)) payload.estimatedValue = parsedVal;
     else delete payload.estimatedValue;
+    if (eduSchoolName || eduCountry || eduCity || eduFieldOfStudy || eduStartYear || eduEndYear || eduGpa || eduLanguageScore) {
+      payload.educationData = {
+        schoolName: eduSchoolName || null,
+        country: eduCountry || null,
+        city: eduCity || null,
+        fieldOfStudy: eduFieldOfStudy || null,
+        startYear: eduStartYear ? Number(eduStartYear) : null,
+        endYear: eduEndYear ? Number(eduEndYear) : null,
+        gpa: eduGpa || null,
+        languageScore: eduLanguageScore || null,
+      };
+    }
 
     updateLead.mutate(
       { id: lead.id, data: payload },
@@ -871,6 +893,29 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
               </SelectContent>
             </Select>
           </div>
+          {(() => {
+            const lvl = (form.interestedLevel || "").toLowerCase();
+            const isBachelor = /bachelor|associate|certificate/.test(lvl);
+            const isMaster = /master/.test(lvl);
+            const isPhd = /phd|doctor|doctorate/.test(lvl);
+            if (!isBachelor && !isMaster && !isPhd) return null;
+            const priorLabel = isBachelor ? t("studentDetailPage.eduLevelHS") : isMaster ? t("studentDetailPage.eduLevelBachelor") : t("studentDetailPage.eduLevelMaster");
+            return (
+              <div className="col-span-2 space-y-2 pt-1 border-t">
+                <p className="text-xs font-medium text-muted-foreground">{t("leadsPage.priorEducation")} — {priorLabel}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduSchoolName")}</Label><Input className="h-8 text-sm" value={form.eduSchoolName} onChange={e => setForm({ ...form, eduSchoolName: e.target.value })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduCountry")}</Label><Input className="h-8 text-sm" value={form.eduCountry} onChange={e => setForm({ ...form, eduCountry: e.target.value })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduCity")}</Label><Input className="h-8 text-sm" value={form.eduCity} onChange={e => setForm({ ...form, eduCity: e.target.value })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduFieldOfStudy")}</Label><Input className="h-8 text-sm" value={form.eduFieldOfStudy} onChange={e => setForm({ ...form, eduFieldOfStudy: e.target.value })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduStartYear")}</Label><Input type="number" className="h-8 text-sm" value={form.eduStartYear} onChange={e => setForm({ ...form, eduStartYear: e.target.value })} placeholder="2018" /></div>
+                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduEndYear")}</Label><Input type="number" className="h-8 text-sm" value={form.eduEndYear} onChange={e => setForm({ ...form, eduEndYear: e.target.value })} placeholder="2022" /></div>
+                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduGpa")}</Label><Input className="h-8 text-sm" value={form.eduGpa} onChange={e => setForm({ ...form, eduGpa: e.target.value })} placeholder="3.50 / 85" /></div>
+                  <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduLanguageScore")}</Label><Input className="h-8 text-sm" value={form.eduLanguageScore} onChange={e => setForm({ ...form, eduLanguageScore: e.target.value })} placeholder="IELTS 6.5" /></div>
+                </div>
+              </div>
+            );
+          })()}
           {canSeeRevenue && (
             <div className="space-y-1.5 col-span-2">
               <Label className="flex items-center gap-1.5">
@@ -966,6 +1011,15 @@ const EMPTY_FORM = {
   estimatedValue: "",
   status: "new",
   interestedLevel: "",
+  // Prior-education fields (level-conditional)
+  eduSchoolName: "",
+  eduCountry: "",
+  eduCity: "",
+  eduFieldOfStudy: "",
+  eduStartYear: "",
+  eduEndYear: "",
+  eduGpa: "",
+  eduLanguageScore: "",
 };
 
 /* ── LeadsPage ────────────────────────────────────────────── */
@@ -1535,10 +1589,23 @@ export default function LeadsPage() {
   function handleCreate() {
     if (!form.firstName || !form.lastName || !form.email || !isPhoneFieldValid(form.phone, true)) return;
     const defaultStatus = pipelineStages.length > 0 ? pipelineStages[0].key : "new";
-    const payload: any = { ...form, status: defaultStatus, season };
+    const { eduSchoolName, eduCountry, eduCity, eduFieldOfStudy, eduStartYear, eduEndYear, eduGpa, eduLanguageScore, ...restForm } = form;
+    const payload: any = { ...restForm, status: defaultStatus, season };
     const parsedCreate = parseFloat(form.estimatedValue);
     if (form.estimatedValue && !isNaN(parsedCreate)) payload.estimatedValue = parsedCreate;
     else delete payload.estimatedValue;
+    if (eduSchoolName || eduCountry || eduCity || eduFieldOfStudy || eduStartYear || eduEndYear || eduGpa || eduLanguageScore) {
+      payload.educationData = {
+        schoolName: eduSchoolName || null,
+        country: eduCountry || null,
+        city: eduCity || null,
+        fieldOfStudy: eduFieldOfStudy || null,
+        startYear: eduStartYear ? Number(eduStartYear) : null,
+        endYear: eduEndYear ? Number(eduEndYear) : null,
+        gpa: eduGpa || null,
+        languageScore: eduLanguageScore || null,
+      };
+    }
 
     createLead.mutate(
       { data: payload },
@@ -2009,11 +2076,34 @@ export default function LeadsPage() {
                 </SelectContent>
               </Select>
             </div>
+            {(() => {
+              const lvl = (form.interestedLevel || "").toLowerCase();
+              const isBachelor = /bachelor|associate|certificate/.test(lvl);
+              const isMaster = /master/.test(lvl);
+              const isPhd = /phd|doctor|doctorate/.test(lvl);
+              if (!isBachelor && !isMaster && !isPhd) return null;
+              const priorLabel = isBachelor ? t("studentDetailPage.eduLevelHS") : isMaster ? t("studentDetailPage.eduLevelBachelor") : t("studentDetailPage.eduLevelMaster");
+              return (
+                <div className="col-span-2 space-y-2 pt-1 border-t">
+                  <p className="text-xs font-medium text-muted-foreground">{t("leadsPage.priorEducation")} — {priorLabel}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduSchoolName")}</Label><Input className="h-8 text-sm" value={form.eduSchoolName} onChange={e => setForm({ ...form, eduSchoolName: e.target.value })} /></div>
+                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduCountry")}</Label><Input className="h-8 text-sm" value={form.eduCountry} onChange={e => setForm({ ...form, eduCountry: e.target.value })} /></div>
+                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduCity")}</Label><Input className="h-8 text-sm" value={form.eduCity} onChange={e => setForm({ ...form, eduCity: e.target.value })} /></div>
+                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduFieldOfStudy")}</Label><Input className="h-8 text-sm" value={form.eduFieldOfStudy} onChange={e => setForm({ ...form, eduFieldOfStudy: e.target.value })} /></div>
+                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduStartYear")}</Label><Input type="number" className="h-8 text-sm" value={form.eduStartYear} onChange={e => setForm({ ...form, eduStartYear: e.target.value })} placeholder="2018" /></div>
+                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduEndYear")}</Label><Input type="number" className="h-8 text-sm" value={form.eduEndYear} onChange={e => setForm({ ...form, eduEndYear: e.target.value })} placeholder="2022" /></div>
+                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduGpa")}</Label><Input className="h-8 text-sm" value={form.eduGpa} onChange={e => setForm({ ...form, eduGpa: e.target.value })} placeholder="3.50 / 85" /></div>
+                    <div className="space-y-1"><Label className="text-xs">{t("studentDetailPage.eduLanguageScore")}</Label><Input className="h-8 text-sm" value={form.eduLanguageScore} onChange={e => setForm({ ...form, eduLanguageScore: e.target.value })} placeholder="IELTS 6.5" /></div>
+                  </div>
+                </div>
+              );
+            })()}
             {canSeeRevenue && (
               <div className="space-y-1.5 col-span-2">
                 <Label className="flex items-center gap-1.5">
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                  Estimated Value (USD)
+                  {t("leadsPage.estimatedValueUsd")}
                 </Label>
                 <Input type="number" min="0" step="100" value={form.estimatedValue} onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })} placeholder={t("leadsPage.estimatedValuePlaceholder")} />
               </div>
