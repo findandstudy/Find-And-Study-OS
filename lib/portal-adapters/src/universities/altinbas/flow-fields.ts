@@ -203,6 +203,7 @@ export interface EduRecord {
   level: string;
   schoolName?: string | null;
   country?: string | null;
+  city?: string | null;
   fieldOfStudy?: string | null;
   startMonth?: string | null;
   startYear?: number | null;
@@ -210,6 +211,7 @@ export interface EduRecord {
   endYear?: number | null;
   gpa?: string | null;
   gpaType?: string | null;
+  languageScore?: string | null;
 }
 
 /**

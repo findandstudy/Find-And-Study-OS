@@ -2987,7 +2987,9 @@
     "eduSourceManual": "Manual",
     "eduSourceAI": "Extraído por IA",
     "eduSourceMigrated": "Migrado",
-    "eduEditTitle": "Editar registro educativo"
+    "eduEditTitle": "Editar registro educativo",
+    "eduCity": "Ciudad",
+    "eduLanguageScore": "Puntuación de idioma"
   },
   "agentsPage": {
     "assignContactPerson": "Asignar persona de contacto",

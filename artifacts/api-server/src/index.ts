@@ -2240,6 +2240,9 @@ async function seedClaudeIntegration() {
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS education_records_student_id_idx ON education_records (student_id)`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS education_records_student_level_uniq ON education_records (student_id, level)`);
+    // FIX-17 İŞ 2: add city + language_score columns (idempotent).
+    await pool.query(`ALTER TABLE education_records ADD COLUMN IF NOT EXISTS city TEXT`);
+    await pool.query(`ALTER TABLE education_records ADD COLUMN IF NOT EXISTS language_score TEXT`);
     // Migrate flat columns → education_records (source=migrated, skip if already present).
     await pool.query(`
       INSERT INTO education_records (student_id, level, school_name, source)

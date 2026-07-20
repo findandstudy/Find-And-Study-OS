@@ -11,6 +11,8 @@ export const educationRecordsTable = pgTable("education_records", {
   startYear: integer("start_year"),
   endMonth: text("end_month"),
   endYear: integer("end_year"),
+  city: text("city"),
+  languageScore: text("language_score"),
   gpa: text("gpa"),
   gpaType: text("gpa_type"),
   source: text("source").notNull().default("manual"),

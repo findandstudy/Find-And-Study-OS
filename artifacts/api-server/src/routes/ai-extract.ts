@@ -98,7 +98,15 @@ Extract ALL of the following fields if visible in the document. Return a JSON ob
   "languageScore": "string or null",
   "documentType": "passport|diploma|transcript|photo|other",
   "confidence": "high|medium|low",
-  "extractedNotes": "any additional relevant notes found in the document"
+  "extractedNotes": "any additional relevant notes found in the document",
+  "institutionName": "string or null - name of the school/university on a diploma or transcript",
+  "fieldOfStudy": "string or null - major, department, or program name (diploma/transcript)",
+  "country": "string or null - country where the institution is located (diploma/transcript)",
+  "eduCity": "string or null - city where the institution is located (diploma/transcript)",
+  "eduStartMonth": "string or null - English month name when studies started (e.g. 'September')",
+  "eduStartYear": "number or null - 4-digit year when studies started",
+  "eduEndMonth": "string or null - English month name of graduation/completion (e.g. 'June')",
+  "eduLanguageScore": "string or null - language proficiency test score visible on the document (e.g. 'IELTS 6.5', 'TOEFL 90')"
 }
 
 Rules:
@@ -111,9 +119,10 @@ Rules:
   * When a date is ambiguous (e.g. 03/04/2025 could be March 4 or April 3), use the issuing country's convention
   * Always output dates in YYYY-MM-DD format after correctly interpreting the source format
 - CRITICAL - Passport expiry: Check if the passport expiry date has passed relative to today's date. Set passportExpired to true if expired, false if still valid.
+- CRITICAL - Never fabricate values: if you cannot confidently read a field, set it to null. Do not guess.
 - For passport documents: extract all passport fields, name, DOB, nationality, issue/expiry dates, mother name, father name (often listed on passport identity pages)
-- For diplomas: extract school name, graduation year, GPA, student name, parent names if visible
-- For transcripts: extract school name, GPA, graduation year, student name, courses if relevant
+- For diplomas: extract institutionName, country, eduCity, fieldOfStudy, eduStartMonth, eduStartYear, eduEndMonth, graduationYear (=eduEndYear), GPA, student name, parent names if visible
+- For transcripts: extract institutionName, country, eduCity, fieldOfStudy, GPA, graduationYear, student name; include eduLanguageScore if a language test appears
 - For photos: only set confidence to "low", documentType to "photo", everything else null
 - For nationality: always return the full country name (e.g. "Afghanistan" not "Afghan", "Turkey" not "Turkish", "Iran" not "Iranian", "Pakistan" not "Pakistani", "Uzbekistan" not "Uzbek", "India" not "Indian"). Convert any demonym/adjective form to the full country name.
 - Always normalize dates to YYYY-MM-DD format
@@ -272,30 +281,37 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
             ? Number(String(extracted.graduationYear).slice(0, 4))
             : null;
 
+          // Parse start year from extracted data
+          const startYearRaw = extracted.eduStartYear
+            ? Number(String(extracted.eduStartYear).slice(0, 4))
+            : null;
+          const startYear = Number.isFinite(startYearRaw) && startYearRaw! > 1900 ? startYearRaw : null;
+
+          const upsertRow = {
+            studentId,
+            level,
+            schoolName:    extracted.institutionName ?? extracted.schoolName ?? null,
+            country:       extracted.country ?? null,
+            city:          extracted.eduCity ?? null,
+            fieldOfStudy:  extracted.fieldOfStudy ?? extracted.major ?? null,
+            startMonth:    extracted.eduStartMonth ?? null,
+            startYear,
+            endMonth:      extracted.eduEndMonth ?? null,
+            endYear:       Number.isFinite(endYear) ? endYear : null,
+            gpa:           extracted.gpa ? String(extracted.gpa) : null,
+            gpaType,
+            languageScore: extracted.eduLanguageScore ?? null,
+            source:        "ai_extracted" as const,
+          };
+
           await db
             .insert(educationRecordsTable)
-            .values({
-              studentId,
-              level,
-              schoolName:   extracted.institutionName ?? extracted.schoolName ?? null,
-              country:      extracted.country ?? null,
-              fieldOfStudy: extracted.fieldOfStudy ?? extracted.major ?? null,
-              endYear:      Number.isFinite(endYear) ? endYear : null,
-              gpa:          extracted.gpa ? String(extracted.gpa) : null,
-              gpaType,
-              source:       "ai_extracted",
-            })
+            .values(upsertRow)
             .onConflictDoUpdate({
               target: [educationRecordsTable.studentId, educationRecordsTable.level],
               set: {
-                schoolName:   extracted.institutionName ?? extracted.schoolName ?? null,
-                country:      extracted.country ?? null,
-                fieldOfStudy: extracted.fieldOfStudy ?? extracted.major ?? null,
-                endYear:      Number.isFinite(endYear) ? endYear : null,
-                gpa:          extracted.gpa ? String(extracted.gpa) : null,
-                gpaType,
-                source:       "ai_extracted",
-                updatedAt:    new Date(),
+                ...upsertRow,
+                updatedAt: new Date(),
               },
             });
           eduUpserted.skipped = false;

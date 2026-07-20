@@ -3038,7 +3038,9 @@
     "eduSourceManual": "Вручную",
     "eduSourceAI": "Извлечено ИИ",
     "eduSourceMigrated": "Перенесено",
-    "eduEditTitle": "Изменить запись об образовании"
+    "eduEditTitle": "Изменить запись об образовании",
+    "eduCity": "Город",
+    "eduLanguageScore": "Языковой балл"
   },
   "agentsPage": {
     "assignContactPerson": "Назначить контактное лицо",

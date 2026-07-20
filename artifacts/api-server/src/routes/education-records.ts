@@ -74,9 +74,9 @@ router.put(
       return;
     }
     const {
-      schoolName, country, fieldOfStudy,
+      schoolName, country, city, fieldOfStudy,
       startMonth, startYear, endMonth, endYear,
-      gpa, gpaType,
+      gpa, gpaType, languageScore,
     } = req.body as Record<string, unknown>;
 
     const [existing] = await db
@@ -92,17 +92,19 @@ router.put(
     const payload = {
       studentId,
       level,
-      schoolName:   typeof schoolName   === "string" ? schoolName   : null,
-      country:      typeof country      === "string" ? country      : null,
-      fieldOfStudy: typeof fieldOfStudy === "string" ? fieldOfStudy : null,
-      startMonth:   typeof startMonth   === "string" ? startMonth   : null,
-      startYear:    typeof startYear    === "number" ? startYear    : null,
-      endMonth:     typeof endMonth     === "string" ? endMonth     : null,
-      endYear:      typeof endYear      === "number" ? endYear      : null,
-      gpa:          typeof gpa          === "string" ? gpa          : null,
-      gpaType:      typeof gpaType      === "string" ? gpaType      : null,
-      source:       "manual" as const,
-      updatedAt:    new Date(),
+      schoolName:    typeof schoolName    === "string" ? schoolName    : null,
+      country:       typeof country       === "string" ? country       : null,
+      city:          typeof city          === "string" ? city          : null,
+      fieldOfStudy:  typeof fieldOfStudy  === "string" ? fieldOfStudy  : null,
+      startMonth:    typeof startMonth    === "string" ? startMonth    : null,
+      startYear:     typeof startYear     === "number" ? startYear     : null,
+      endMonth:      typeof endMonth      === "string" ? endMonth      : null,
+      endYear:       typeof endYear       === "number" ? endYear       : null,
+      gpa:           typeof gpa           === "string" ? gpa           : null,
+      gpaType:       typeof gpaType       === "string" ? gpaType       : null,
+      languageScore: typeof languageScore === "string" ? languageScore : null,
+      source:        "manual" as const,
+      updatedAt:     new Date(),
     };
 
     if (existing) {

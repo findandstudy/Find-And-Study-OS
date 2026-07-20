@@ -30,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { CountryFlag } from "@/components/CountryFlag";
 import { useCountrySearch } from "@/hooks/use-countries";
+import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { OriginBadge, OriginSection } from "@/components/OriginBadge";
 import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 import { AuditLogSection } from "@/components/AuditLogSection";
@@ -1183,10 +1184,12 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "",
     source: "website", interestedProgram: "", interestedUniversity: "", interestedCountry: "", nationality: "", estimatedValue: "",
+    interestedLevel: "",
   });
   const updateLead = useUpdateLead();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { levels: studyLevels } = useStudyLevels();
 
   useEffect(() => {
     if (open && lead) {
@@ -1197,6 +1200,7 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
         interestedUniversity: lead.interestedUniversity || "",
         interestedCountry: lead.interestedCountry || "", nationality: lead.nationality || "",
         estimatedValue: lead.estimatedValue ? String(lead.estimatedValue) : "",
+        interestedLevel: lead.interestedLevel || "",
       });
     }
   }, [open, lead]);
@@ -1272,6 +1276,15 @@ function EditLeadDetailDialog({ open, onClose, lead, leadId }: {
           <div className="space-y-1.5">
             <Label>{t("leadDetailPage.interestedCountry")}</Label>
             <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label>{t("studentsPage.interestedLevel")}</Label>
+            <Select value={form.interestedLevel} onValueChange={v => setForm({ ...form, interestedLevel: v })}>
+              <SelectTrigger><SelectValue placeholder="Select level..." /></SelectTrigger>
+              <SelectContent>
+                {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           {canSeeRevenue && (
             <div className="space-y-1.5 col-span-2">

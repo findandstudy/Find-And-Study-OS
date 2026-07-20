@@ -784,6 +784,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
     highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
     universityBachelor: "", universityMaster: "",
     languageScore: "", notes: "", interestedLevel: "",
+    eduCity: "", eduCountry: "", eduField: "",
   });
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
@@ -835,6 +836,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         languageScore: student.languageScore || "",
         notes: student.notes || "",
         interestedLevel: student.interestedLevel || "",
+        eduCity: "", eduCountry: "", eduField: "",
       });
     }
   }, [open, student]);
@@ -870,6 +872,33 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Also write education_records for the prior level based on interestedLevel
+      const lvl = form.interestedLevel;
+      const isBachelorApp = /bachelor|associate|certificate/.test(lvl);
+      const isMasterApp = /master/.test(lvl);
+      const isPhdApp = /phd|doctor/.test(lvl);
+      if (isBachelorApp || isMasterApp || isPhdApp) {
+        const priorLevel = isBachelorApp ? "high_school" : isMasterApp ? "bachelor" : "master";
+        const schoolName = isBachelorApp ? form.highSchool : isMasterApp ? form.universityBachelor : form.universityMaster;
+        if (schoolName || form.eduCity || form.eduCountry || form.eduField) {
+          try {
+            await fetch(`${BASE_URL}/api/students/${student.id}/education-records/${priorLevel}`, {
+              method: "PUT", credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                schoolName: schoolName || null,
+                city: form.eduCity || null,
+                country: form.eduCountry || null,
+                fieldOfStudy: form.eduField || null,
+                graduationYear: form.graduationYear ? parseInt(form.graduationYear) : null,
+                gpa: form.gpa || null,
+                gpaType: form.gpa ? form.gradingSystem : null,
+                languageScore: form.languageScore || null,
+              }),
+            });
+          } catch { /* non-blocking */ }
+        }
+      }
       toast({ title: "Student updated" });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
       onClose();
@@ -956,9 +985,37 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                   </SelectContent>
                 </Select>
               </div>
-              <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" className="col-span-2" />
-              <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" className="col-span-2" />
-              <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" className="col-span-2" />
+              {(() => {
+                const lvl = form.interestedLevel;
+                const isBachelorApp = /bachelor|associate|certificate/.test(lvl);
+                const isMasterApp = /master/.test(lvl);
+                const isPhdApp = /phd|doctor/.test(lvl);
+                const showLevelSpecific = isBachelorApp || isMasterApp || isPhdApp;
+                const priorLabel = isBachelorApp ? "High School" : isMasterApp ? "University (Bachelor)" : "University (Master)";
+                const priorField = isBachelorApp ? "highSchool" : isMasterApp ? "universityBachelor" : "universityMaster";
+                const priorValue = isBachelorApp ? form.highSchool : isMasterApp ? form.universityBachelor : form.universityMaster;
+                const priorPlaceholder = isBachelorApp ? "e.g. Ankara Fen Lisesi" : isMasterApp ? "e.g. Istanbul University" : "e.g. Bogazici University";
+                if (showLevelSpecific) return (
+                  <>
+                    <F label={priorLabel} value={priorValue} onChange={field(priorField)} placeholder={priorPlaceholder} className="col-span-2" />
+                    <F label="City" value={form.eduCity} onChange={field("eduCity")} placeholder="e.g. Istanbul" />
+                    <div className="space-y-1.5">
+                      <Label className="font-semibold text-sm">Country</Label>
+                      <NationalityCombobox value={form.eduCountry} onChange={field("eduCountry")} countries={allCountries} />
+                    </div>
+                    {!isBachelorApp && (
+                      <F label="Field of Study" value={form.eduField} onChange={field("eduField")} placeholder="e.g. Computer Engineering" className="col-span-2" />
+                    )}
+                  </>
+                );
+                return (
+                  <>
+                    <F label="High School" value={form.highSchool} onChange={field("highSchool")} placeholder="e.g. Ankara Fen Lisesi" className="col-span-2" />
+                    <F label="University (Bachelor)" value={form.universityBachelor} onChange={field("universityBachelor")} placeholder="e.g. Istanbul University" className="col-span-2" />
+                    <F label="University (Master)" value={form.universityMaster} onChange={field("universityMaster")} placeholder="e.g. Bogazici University" className="col-span-2" />
+                  </>
+                );
+              })()}
               <F label="Graduation Year" value={form.graduationYear} onChange={field("graduationYear")} placeholder="e.g. 2022" />
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">GPA</Label>

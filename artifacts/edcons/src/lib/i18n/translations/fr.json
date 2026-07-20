@@ -3038,7 +3038,9 @@
     "eduSourceManual": "Manuel",
     "eduSourceAI": "Extrait par IA",
     "eduSourceMigrated": "Migré",
-    "eduEditTitle": "Modifier le dossier de formation"
+    "eduEditTitle": "Modifier le dossier de formation",
+    "eduCity": "Ville",
+    "eduLanguageScore": "Score de langue"
   },
   "agentsPage": {
     "assignContactPerson": "Assigner la personne de contact",

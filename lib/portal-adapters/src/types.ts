@@ -185,6 +185,7 @@ export interface SubmitProfile {
     level: string;
     schoolName?: string | null;
     country?: string | null;
+    city?: string | null;
     fieldOfStudy?: string | null;
     startMonth?: string | null;
     startYear?: number | null;
@@ -192,6 +193,7 @@ export interface SubmitProfile {
     endYear?: number | null;
     gpa?: string | null;
     gpaType?: string | null;
+    languageScore?: string | null;
   }>;
   // ---------------------------------------------------------------------------
   // Panel-managed mapping data (sourced from portal_program_mapping by the

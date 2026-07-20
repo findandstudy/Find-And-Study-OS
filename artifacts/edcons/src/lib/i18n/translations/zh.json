@@ -2987,7 +2987,9 @@
     "eduSourceManual": "手动",
     "eduSourceAI": "AI提取",
     "eduSourceMigrated": "迁移",
-    "eduEditTitle": "编辑教育记录"
+    "eduEditTitle": "编辑教育记录",
+    "eduCity": "城市",
+    "eduLanguageScore": "语言成绩"
   },
   "agentsPage": {
     "assignContactPerson": "分配联系人",

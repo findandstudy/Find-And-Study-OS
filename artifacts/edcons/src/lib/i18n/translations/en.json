@@ -3294,7 +3294,9 @@
     "eduSourceManual": "Manual",
     "eduSourceAI": "AI Extracted",
     "eduSourceMigrated": "Migrated",
-    "eduEditTitle": "Edit Education Record"
+    "eduEditTitle": "Edit Education Record",
+    "eduCity": "City",
+    "eduLanguageScore": "Language Score"
   },
   "agentsPage": {
     "assignContactPerson": "Assign Contact Person",

@@ -33,7 +33,7 @@ const LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "motherName", "fatherName",
   "interestedProgram", "interestedUniversity", "interestedCountry", "source",
-  "status", "assignedTo", "notes", "estimatedValue", "season", "agentId",
+  "status", "assignedTo", "notes", "estimatedValue", "season", "agentId", "interestedLevel",
 ];
 
 router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
@@ -360,7 +360,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
 
 router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedUniversity, interestedCountry, source, notes, assignedTo, season, agentId } = req.body;
+  const { firstName, lastName, status = "new", email, phone, nationality, interestedProgram, interestedUniversity, interestedCountry, source, notes, assignedTo, season, agentId, interestedLevel } = req.body;
   if (!firstName || !lastName || !email || !phone) {
     res.status(400).json({ error: "firstName, lastName, email, and phone are required" });
     return;
@@ -396,6 +396,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     assignedToId: assignedTo || null,
     agentId: resolvedAgentId,
     season: season || currentYear,
+    interestedLevel: interestedLevel || null,
     ...origin,
   }).returning();
   await applyLeadAssignmentRules(lead, req.ip);
@@ -699,7 +700,7 @@ const AGENT_LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "motherName", "fatherName",
   "interestedProgram", "interestedUniversity", "interestedCountry", "source",
-  "notes", "estimatedValue",
+  "notes", "estimatedValue", "interestedLevel",
 ];
 
 router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {

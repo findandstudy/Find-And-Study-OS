@@ -3038,7 +3038,9 @@
     "eduSourceManual": "يدوي",
     "eduSourceAI": "مستخرج بالذكاء الاصطناعي",
     "eduSourceMigrated": "منقول",
-    "eduEditTitle": "تعديل السجل التعليمي"
+    "eduEditTitle": "تعديل السجل التعليمي",
+    "eduCity": "المدينة",
+    "eduLanguageScore": "درجة اللغة"
   },
   "agentsPage": {
     "assignContactPerson": "تعيين شخص الاتصال",

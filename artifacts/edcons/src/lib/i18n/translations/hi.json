@@ -2987,7 +2987,9 @@
     "eduSourceManual": "मैनुअल",
     "eduSourceAI": "AI द्वारा निकाला गया",
     "eduSourceMigrated": "माइग्रेट किया",
-    "eduEditTitle": "शिक्षा रिकॉर्ड संपादित करें"
+    "eduEditTitle": "शिक्षा रिकॉर्ड संपादित करें",
+    "eduCity": "शहर",
+    "eduLanguageScore": "भाषा स्कोर"
   },
   "agentsPage": {
     "assignContactPerson": "संपर्क व्यक्ति असाइन करें",

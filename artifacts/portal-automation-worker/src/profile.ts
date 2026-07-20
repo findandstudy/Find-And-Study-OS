@@ -165,16 +165,18 @@ export async function buildStudentProfile(
 
   // FIX-15D: attach education_records after buildProfile (buildProfile ignores unknown fields).
   profile.educationRecords = eduRows.map((r) => ({
-    level:        r.level,
-    schoolName:   r.schoolName ?? null,
-    country:      r.country ?? null,
-    fieldOfStudy: r.fieldOfStudy ?? null,
-    startMonth:   r.startMonth ?? null,
-    startYear:    r.startYear ?? null,
-    endMonth:     r.endMonth ?? null,
-    endYear:      r.endYear ?? null,
-    gpa:          r.gpa ?? null,
-    gpaType:      r.gpaType ?? null,
+    level:         r.level,
+    schoolName:    r.schoolName    ?? null,
+    country:       r.country       ?? null,
+    city:          r.city          ?? null,
+    fieldOfStudy:  r.fieldOfStudy  ?? null,
+    startMonth:    r.startMonth    ?? null,
+    startYear:     r.startYear     ?? null,
+    endMonth:      r.endMonth      ?? null,
+    endYear:       r.endYear       ?? null,
+    gpa:           r.gpa           ?? null,
+    gpaType:       r.gpaType       ?? null,
+    languageScore: r.languageScore ?? null,
   }));
 
   // ----- 5. Download documents to temp dir ---------------------------------

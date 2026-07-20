@@ -27,6 +27,7 @@ import { PhoneField, isPhoneFieldValid, toPhoneFieldValue } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { CountryFlag } from "@/components/CountryFlag";
 import { useCountrySearch } from "@/hooks/use-countries";
+import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { OriginBadge } from "@/components/OriginBadge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ColumnHeader } from "@/components/ui/column-header";
@@ -758,6 +759,7 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
   const updateLead = useUpdateLead();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { levels: studyLevels } = useStudyLevels();
 
   useEffect(() => {
     if (open && lead) {
@@ -773,6 +775,7 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
         nationality: lead.nationality || "",
         estimatedValue: lead.estimatedValue ? String(lead.estimatedValue) : "",
         status: lead.status || "new",
+        interestedLevel: lead.interestedLevel || "",
       });
     }
   }, [open, lead]);
@@ -858,6 +861,15 @@ function EditLeadDialogBody({ open, onClose, lead, canSeeRevenue, columns, t }: 
           <div className="space-y-1.5 col-span-2">
             <Label>{t("leadsPage.interestedCountry")}</Label>
             <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label>{t("studentsPage.interestedLevel")}</Label>
+            <Select value={form.interestedLevel} onValueChange={v => setForm({ ...form, interestedLevel: v })}>
+              <SelectTrigger className="rounded-xl h-9"><SelectValue placeholder="Select level..." /></SelectTrigger>
+              <SelectContent>
+                {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           {canSeeRevenue && (
             <div className="space-y-1.5 col-span-2">
@@ -953,6 +965,7 @@ const EMPTY_FORM = {
   nationality: "",
   estimatedValue: "",
   status: "new",
+  interestedLevel: "",
 };
 
 /* ── LeadsPage ────────────────────────────────────────────── */
@@ -1250,6 +1263,7 @@ export default function LeadsPage() {
   }, [setPersistedAssignment]);
 
   const { season } = useSeason();
+  const { levels: studyLevels } = useStudyLevels();
   const { data, isLoading } = useListLeads({ search, season, limit: 100000 } as any);
 
   const { data: staffUsersData } = useQuery({
@@ -1985,6 +1999,15 @@ export default function LeadsPage() {
             <div className="space-y-1.5 col-span-2">
               <Label>{t("leadsPage.interestedCountry")}</Label>
               <MultiCountrySelect value={form.interestedCountry} onChange={v => setForm({ ...form, interestedCountry: v })} />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>{t("studentsPage.interestedLevel")}</Label>
+              <Select value={form.interestedLevel} onValueChange={v => setForm({ ...form, interestedLevel: v })}>
+                <SelectTrigger><SelectValue placeholder="Select level..." /></SelectTrigger>
+                <SelectContent>
+                  {studyLevels.map(l => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             {canSeeRevenue && (
               <div className="space-y-1.5 col-span-2">

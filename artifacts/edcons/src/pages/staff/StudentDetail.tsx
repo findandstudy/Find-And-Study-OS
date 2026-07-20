@@ -117,26 +117,28 @@ function EducationRecordsTab({ studentId }: { studentId: number }) {
 
   const [editLevel, setEditLevel] = useState<string | null>(null);
   const [form, setForm] = useState({
-    schoolName: "", country: "", fieldOfStudy: "",
-    startYear: "", endYear: "", gpa: "", gpaType: "",
+    schoolName: "", country: "", city: "", fieldOfStudy: "",
+    startYear: "", endYear: "", gpa: "", gpaType: "", languageScore: "",
   });
   const [saving, setSaving] = useState(false);
 
   function openEdit(rec: any) {
     setEditLevel(rec.level);
     setForm({
-      schoolName:   rec.schoolName   ?? "",
-      country:      rec.country      ?? "",
-      fieldOfStudy: rec.fieldOfStudy ?? "",
-      startYear:    rec.startYear    != null ? String(rec.startYear) : "",
-      endYear:      rec.endYear      != null ? String(rec.endYear)   : "",
-      gpa:          rec.gpa          ?? "",
-      gpaType:      rec.gpaType      ?? "",
+      schoolName:    rec.schoolName    ?? "",
+      country:       rec.country       ?? "",
+      city:          rec.city          ?? "",
+      fieldOfStudy:  rec.fieldOfStudy  ?? "",
+      startYear:     rec.startYear     != null ? String(rec.startYear) : "",
+      endYear:       rec.endYear       != null ? String(rec.endYear)   : "",
+      gpa:           rec.gpa           ?? "",
+      gpaType:       rec.gpaType       ?? "",
+      languageScore: rec.languageScore ?? "",
     });
   }
   function openNew(level: string) {
     setEditLevel(level);
-    setForm({ schoolName: "", country: "", fieldOfStudy: "", startYear: "", endYear: "", gpa: "", gpaType: "" });
+    setForm({ schoolName: "", country: "", city: "", fieldOfStudy: "", startYear: "", endYear: "", gpa: "", gpaType: "", languageScore: "" });
   }
 
   async function handleSave() {
@@ -144,13 +146,15 @@ function EducationRecordsTab({ studentId }: { studentId: number }) {
     setSaving(true);
     try {
       const body = {
-        schoolName:   form.schoolName   || null,
-        country:      form.country      || null,
-        fieldOfStudy: form.fieldOfStudy || null,
-        startYear:    form.startYear    ? Number(form.startYear) : null,
-        endYear:      form.endYear      ? Number(form.endYear)   : null,
-        gpa:          form.gpa          || null,
-        gpaType:      form.gpaType      || null,
+        schoolName:    form.schoolName    || null,
+        country:       form.country       || null,
+        city:          form.city          || null,
+        fieldOfStudy:  form.fieldOfStudy  || null,
+        startYear:     form.startYear     ? Number(form.startYear) : null,
+        endYear:       form.endYear       ? Number(form.endYear)   : null,
+        gpa:           form.gpa           || null,
+        gpaType:       form.gpaType       || null,
+        languageScore: form.languageScore || null,
       };
       await apiFetch(`${BASE}/api/students/${studentId}/education-records/${editLevel}`, {
         method: "PUT",
@@ -198,10 +202,12 @@ function EducationRecordsTab({ studentId }: { studentId: number }) {
               {rec.fieldOfStudy && <p className="text-sm text-muted-foreground">{rec.fieldOfStudy}</p>}
               <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
                 {rec.country  && <span>{rec.country}</span>}
+                {rec.city     && <span>{rec.city}</span>}
                 {(rec.startYear || rec.endYear) && (
                   <span>{rec.startYear ?? "?"} – {rec.endYear ?? "?"}</span>
                 )}
                 {rec.gpa && <span>{t("studentDetailPage.eduGpa")}: {rec.gpa}{rec.gpaType ? ` (${rec.gpaType})` : ""}</span>}
+                {rec.languageScore && <span>{t("studentDetailPage.eduLanguageScore")}: {rec.languageScore}</span>}
               </div>
             </div>
           ))}
@@ -226,9 +232,15 @@ function EducationRecordsTab({ studentId }: { studentId: number }) {
               <Label className="text-xs font-medium">{t("studentDetailPage.eduSchoolName")}</Label>
               <Input value={form.schoolName} onChange={e => setForm(f => ({ ...f, schoolName: e.target.value }))} />
             </div>
-            <div>
-              <Label className="text-xs font-medium">{t("studentDetailPage.eduCountry")}</Label>
-              <Input value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} />
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <Label className="text-xs font-medium">{t("studentDetailPage.eduCountry")}</Label>
+                <Input value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} />
+              </div>
+              <div className="flex-1">
+                <Label className="text-xs font-medium">{t("studentDetailPage.eduCity")}</Label>
+                <Input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
+              </div>
             </div>
             <div>
               <Label className="text-xs font-medium">{t("studentDetailPage.eduFieldOfStudy")}</Label>
@@ -260,6 +272,10 @@ function EducationRecordsTab({ studentId }: { studentId: number }) {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div>
+              <Label className="text-xs font-medium">{t("studentDetailPage.eduLanguageScore")}</Label>
+              <Input value={form.languageScore} onChange={e => setForm(f => ({ ...f, languageScore: e.target.value }))} placeholder="e.g. IELTS 6.5, TOEFL 90" />
             </div>
           </div>
           <DialogFooter>

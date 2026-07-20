@@ -2987,7 +2987,9 @@
     "eduSourceManual": "دستی",
     "eduSourceAI": "استخراج‌شده توسط هوش مصنوعی",
     "eduSourceMigrated": "منتقل‌شده",
-    "eduEditTitle": "ویرایش سابقه تحصیلی"
+    "eduEditTitle": "ویرایش سابقه تحصیلی",
+    "eduCity": "شهر",
+    "eduLanguageScore": "نمره زبان"
   },
   "agentsPage": {
     "assignContactPerson": "انتخاب شخص تماس",

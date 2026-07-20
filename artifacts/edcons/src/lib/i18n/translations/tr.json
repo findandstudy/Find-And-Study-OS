@@ -3235,7 +3235,9 @@
     "eduSourceManual": "Manuel",
     "eduSourceAI": "AI Çıkardı",
     "eduSourceMigrated": "Taşındı",
-    "eduEditTitle": "Eğitim Kaydını Düzenle"
+    "eduEditTitle": "Eğitim Kaydını Düzenle",
+    "eduCity": "Şehir",
+    "eduLanguageScore": "Dil Puanı"
   },
   "agentsPage": {
     "assignContactPerson": "İletişim Kişisi Ata",
