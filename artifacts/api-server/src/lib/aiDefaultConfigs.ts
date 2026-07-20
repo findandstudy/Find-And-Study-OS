@@ -26,9 +26,19 @@ export const HARDCODED_EXTRACTOR_FIELDS: ExtractorFieldDef[] = [
   // Education record fields — extracted from diploma / transcript documents.
   // Only populated when documentType is "diploma" or "transcript".
   { key: "eduLevel", label: "Education level", type: "enum", enumValues: ["high_school", "bachelor", "master"], description: "Level of the degree shown on this document (high_school / bachelor / master)." },
-  { key: "eduSchoolName", label: "School / university name", type: "string", description: "Official institution name as printed on the document." },
-  { key: "eduCountry", label: "School country", type: "string", description: "Country where the institution is located." },
-  { key: "eduFieldOfStudy", label: "Field of study / major", type: "string", description: "Degree programme or major (e.g. 'Computer Engineering')." },
+  // Primary keys read by the ai-extract upsert block:
+  { key: "institutionName", label: "Institution name", type: "string", description: "Official name of the school or university as printed on the document." },
+  { key: "country", label: "Institution country", type: "string", description: "Country where the institution is located (diploma/transcript)." },
+  { key: "eduCity", label: "Institution city", type: "string", description: "City where the institution is located (diploma/transcript)." },
+  { key: "fieldOfStudy", label: "Field of study / major", type: "string", description: "Degree programme or major (e.g. 'Computer Engineering')." },
+  { key: "eduStartMonth", label: "Study start month", type: "string", description: "English month name when studies started (e.g. 'September')." },
+  { key: "eduStartYear", label: "Study start year", type: "number", description: "4-digit year when studies started." },
+  { key: "eduEndMonth", label: "Graduation month", type: "string", description: "English month name of graduation/completion (e.g. 'June')." },
+  { key: "eduLanguageScore", label: "Language test score", type: "string", description: "Language proficiency test score visible on the document (e.g. 'IELTS 6.5', 'TOEFL 90')." },
+  // Legacy keys kept for backwards-compat with custom DB-configured extractors:
+  { key: "eduSchoolName", label: "School / university name (legacy)", type: "string", description: "Alias for institutionName — prefer institutionName." },
+  { key: "eduCountry", label: "School country (legacy)", type: "string", description: "Alias for country — prefer country." },
+  { key: "eduFieldOfStudy", label: "Field of study (legacy)", type: "string", description: "Alias for fieldOfStudy — prefer fieldOfStudy." },
   { key: "eduGraduationYear", label: "Graduation year", type: "number", description: "4-digit year of graduation / degree completion." },
   { key: "eduGpa", label: "GPA / grade", type: "string", description: "Raw GPA or overall grade as printed on the document (e.g. '3.5', '85.4', 'A')." },
   { key: "eduGpaType", label: "GPA scale type", type: "enum", enumValues: ["4.0", "percentage", "letter"], description: "Scale the GPA is expressed on: 4.0 for 0–4 scale, percentage for 0–100, letter for letter grade." },
