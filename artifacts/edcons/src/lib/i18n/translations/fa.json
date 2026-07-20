@@ -4269,7 +4269,18 @@
     "sigTooLarge": "Image is too large. Please use a smaller file.",
     "fillDetailsFor": "Please fill in your details for:",
     "footerNote": "Your information will be used to generate the contract.",
-    "selectPlaceholder": "انتخاب کنید..."
+    "selectPlaceholder": "انتخاب کنید...",
+    "priorEducation": "تحصیلات قبلی",
+    "eduSchoolName": "مدرسه / دانشگاه",
+    "eduCountry": "کشور",
+    "eduCity": "شهر",
+    "eduFieldOfStudy": "رشته تحصیلی",
+    "eduGraduationYear": "سال فارغ‌التحصیلی",
+    "eduGpa": "معدل / نمره",
+    "eduLanguageScore": "نمره زبان",
+    "eduLevelHS": "دبیرستان",
+    "eduLevelBachelor": "کارشناسی",
+    "eduLevelMaster": "کارشناسی ارشد"
   },
   "languages": {
     "tr": "ترکی",

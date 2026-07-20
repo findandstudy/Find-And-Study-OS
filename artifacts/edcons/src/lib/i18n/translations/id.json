@@ -4269,7 +4269,18 @@
     "sigTooLarge": "Image is too large. Please use a smaller file.",
     "fillDetailsFor": "Please fill in your details for:",
     "footerNote": "Your information will be used to generate the contract.",
-    "selectPlaceholder": "Pilih..."
+    "selectPlaceholder": "Pilih...",
+    "priorEducation": "Pendidikan sebelumnya",
+    "eduSchoolName": "Sekolah / Universitas",
+    "eduCountry": "Negara",
+    "eduCity": "Kota",
+    "eduFieldOfStudy": "Bidang studi",
+    "eduGraduationYear": "Tahun kelulusan",
+    "eduGpa": "IPK / Nilai",
+    "eduLanguageScore": "Skor bahasa",
+    "eduLevelHS": "SMA",
+    "eduLevelBachelor": "Sarjana",
+    "eduLevelMaster": "Magister"
   },
   "languages": {
     "tr": "Turki",

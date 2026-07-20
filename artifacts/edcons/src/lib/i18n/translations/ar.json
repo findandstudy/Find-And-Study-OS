@@ -2268,7 +2268,18 @@
     "sigTooLarge": "الصورة كبيرة جدًا. استخدم ملفًا أصغر.",
     "fillDetailsFor": "يرجى إدخال بياناتك من أجل:",
     "footerNote": "ستُستخدم معلوماتك لإنشاء العقد.",
-    "selectPlaceholder": "اختر..."
+    "selectPlaceholder": "اختر...",
+    "priorEducation": "التعليم السابق",
+    "eduSchoolName": "المدرسة / الجامعة",
+    "eduCountry": "الدولة",
+    "eduCity": "المدينة",
+    "eduFieldOfStudy": "التخصص",
+    "eduGraduationYear": "سنة التخرج",
+    "eduGpa": "المعدل / الدرجة",
+    "eduLanguageScore": "درجة اللغة",
+    "eduLevelHS": "الثانوية",
+    "eduLevelBachelor": "البكالوريوس",
+    "eduLevelMaster": "الماجستير"
   },
   "messagesPage": {
     "messages": "الرسائل",
