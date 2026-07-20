@@ -2721,6 +2721,8 @@
     "emergencyContactDesc": "Bir akraba veya acil durum iletişim kişisi için iletişim bilgileri.",
     "languageRegion": "Dil ve Bölge",
     "languageRegionDesc": "Tercih ettiğiniz arayüz dilini seçin.",
+    "dateFormat": "Tarih Biçimi",
+    "dateFormatDesc": "Tarihlerin sistem genelinde nasıl gösterileceğini seçin.",
     "systemLogos": "Sistem Logoları",
     "systemLogosDesc": "Farklı bağlamlar için şirket logolarınızı yükleyin. Şeffaf arka planlı PNG veya SVG kullanın.",
     "themeColors": "Tema Renkleri",

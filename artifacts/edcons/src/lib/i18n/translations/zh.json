@@ -2473,6 +2473,8 @@
     "emergencyContactDesc": "亲属或紧急联系人的联系信息。",
     "languageRegion": "语言和区域",
     "languageRegionDesc": "选择您首选的界面语言。",
+    "dateFormat": "日期格式",
+    "dateFormatDesc": "选择日期在系统中的显示方式。",
     "systemLogos": "系统徽标",
     "systemLogosDesc": "上传公司徽标以用于不同场景。使用透明背景的 PNG 或 SVG。",
     "themeColors": "主题颜色",

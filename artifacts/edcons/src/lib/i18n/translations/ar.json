@@ -2524,6 +2524,8 @@
     "emergencyContactDesc": "معلومات الاتصال لأحد الأقارب أو شخص للطوارئ.",
     "languageRegion": "اللغة والمنطقة",
     "languageRegionDesc": "اختر لغة الواجهة المفضلة.",
+    "dateFormat": "تنسيق التاريخ",
+    "dateFormatDesc": "اختر كيفية عرض التواريخ في جميع أنحاء النظام.",
     "systemLogos": "شعارات النظام",
     "systemLogosDesc": "قم بتحميل شعارات شركتك لسياقات مختلفة. استخدم PNG أو SVG بخلفيات شفافة.",
     "themeColors": "ألوان السمة",

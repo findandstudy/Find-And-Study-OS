@@ -2524,6 +2524,8 @@
     "emergencyContactDesc": "Coordonnées d'un parent ou d'une personne à contacter en cas d'urgence.",
     "languageRegion": "Langue et région",
     "languageRegionDesc": "Choisissez la langue d'interface préférée.",
+    "dateFormat": "Format de date",
+    "dateFormatDesc": "Choisissez comment les dates sont affichées dans tout le système.",
     "systemLogos": "Logos du système",
     "systemLogosDesc": "Téléchargez les logos de votre entreprise pour différents contextes. Utilisez PNG ou SVG avec fond transparent.",
     "themeColors": "Couleurs du thème",

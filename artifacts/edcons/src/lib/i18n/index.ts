@@ -119,19 +119,25 @@ export function getLocale(lang: Language): string {
   return LOCALE_MAP[lang] || "en-US";
 }
 
-/** Format a date as dd.mm.yyyy (e.g. 15.07.2026). Locale-independent. */
+/** Format a date respecting the org dateFormat setting (DD.MM.YYYY default). */
 export function formatDate(
   lang: Language,
   date: string | number | Date,
   options?: Intl.DateTimeFormatOptions,
+  dateFormat?: string | null,
 ): string {
   if (date == null) return "";
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d.getTime())) return "";
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${dd}.${mm}.${yyyy}`;
+  const yyyy = String(d.getFullYear());
+  switch (dateFormat) {
+    case "DD/MM/YYYY": return `${dd}/${mm}/${yyyy}`;
+    case "MM/DD/YYYY": return `${mm}/${dd}/${yyyy}`;
+    case "YYYY-MM-DD": return `${yyyy}-${mm}-${dd}`;
+    default:           return `${dd}.${mm}.${yyyy}`;
+  }
 }
 
 /** Format a time with the given language's locale. */

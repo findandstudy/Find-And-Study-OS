@@ -149,6 +149,10 @@ export const settingsTable = pgTable("settings", {
   // Default true = otomasyon başvuruları bildirim göndermez (mail seli önlenir).
   suppressAutomationAppNotifications: boolean("suppress_automation_app_notifications").notNull().default(true),
 
+  // Date display format — org-wide setting for how dates are shown everywhere.
+  // Allowed values: "DD.MM.YYYY" | "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD"
+  dateFormat: text("date_format").notNull().default("DD.MM.YYYY"),
+
   // Auto-assign stuck (needsHuman=true, unassigned, open) inbox conversations to eligible staff via
   // the periodic assignStuckConversation sweep. Default false = feature is opt-in.
   autoAssignStuckConversationsEnabled: boolean("auto_assign_stuck_conversations_enabled").notNull().default(false),

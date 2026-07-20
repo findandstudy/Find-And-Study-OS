@@ -23,7 +23,9 @@ import {
   ExternalLink, Eye, Info, AlertTriangle, Instagram, Linkedin,
   Youtube, Facebook, Twitter, Camera, Kanban, Pencil, ChevronDown,
   CalendarDays, Plus, Trash2, GripVertical, Power, PowerOff, Link as LinkIcon,
+  Calendar,
 } from "lucide-react";
+import { DATE_FORMAT_OPTIONS, type DateFormatKey } from "@workspace/i18n";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -603,26 +605,74 @@ export default function SettingsPage() {
     </>);
   }
 
+  async function handleSaveDateFormat(fmt: DateFormatKey) {
+    if (!isManager) return;
+    try {
+      await saveSection("dateFormat", { dateFormat: fmt });
+    } catch {}
+  }
+
   function LanguageTab() {
+    const currentDateFormat = (settings.dateFormat as DateFormatKey) || "DD.MM.YYYY";
+    const today = new Date();
+
     return (
-      <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <SectionHeader title={t("settingsPage.languageRegion")} description={t("settingsPage.languageRegionDesc")} />
-        <div className="grid sm:grid-cols-2 gap-3">
-          {LANGUAGES.map(l => (
-            <button key={l.code} onClick={() => handleSaveLang(l.code)}
-              className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:border-primary/50
-                ${lang === l.code ? "border-primary bg-primary/5 shadow-sm shadow-primary/10" : "border-border hover:bg-secondary/30"}`}>
-              <CountryFlag code={l.country} size="xl" />
-              <div className="flex-1">
-                <p className="font-bold text-foreground">{l.label}</p>
-                <p className="text-xs text-muted-foreground">{l.code.toUpperCase()}</p>
-              </div>
-              {lang === l.code && <Check className="w-5 h-5 text-primary" />}
-            </button>
-          ))}
-        </div>
-        <p className="text-muted-foreground text-sm mt-4">{t("settingsPage.rtlNote")}</p>
-      </Card>
+      <div className="space-y-4">
+        <Card className="border-none shadow-lg shadow-black/5 p-6">
+          <SectionHeader title={t("settingsPage.languageRegion")} description={t("settingsPage.languageRegionDesc")} />
+          <div className="grid sm:grid-cols-2 gap-3">
+            {LANGUAGES.map(l => (
+              <button key={l.code} onClick={() => handleSaveLang(l.code)}
+                className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:border-primary/50
+                  ${lang === l.code ? "border-primary bg-primary/5 shadow-sm shadow-primary/10" : "border-border hover:bg-secondary/30"}`}>
+                <CountryFlag code={l.country} size="xl" />
+                <div className="flex-1">
+                  <p className="font-bold text-foreground">{l.label}</p>
+                  <p className="text-xs text-muted-foreground">{l.code.toUpperCase()}</p>
+                </div>
+                {lang === l.code && <Check className="w-5 h-5 text-primary" />}
+              </button>
+            ))}
+          </div>
+          <p className="text-muted-foreground text-sm mt-4">{t("settingsPage.rtlNote")}</p>
+        </Card>
+
+        {isManager && (
+          <Card className="border-none shadow-lg shadow-black/5 p-6">
+            <SectionHeader title={t("settingsPage.dateFormat")} description={t("settingsPage.dateFormatDesc")} />
+            <div className="grid sm:grid-cols-2 gap-3">
+              {DATE_FORMAT_OPTIONS.map(fmt => {
+                const dd = String(today.getDate()).padStart(2, "0");
+                const mm = String(today.getMonth() + 1).padStart(2, "0");
+                const yyyy = String(today.getFullYear());
+                const preview =
+                  fmt === "DD/MM/YYYY" ? `${dd}/${mm}/${yyyy}` :
+                  fmt === "MM/DD/YYYY" ? `${mm}/${dd}/${yyyy}` :
+                  fmt === "YYYY-MM-DD" ? `${yyyy}-${mm}-${dd}` :
+                  `${dd}.${mm}.${yyyy}`;
+                const isSelected = currentDateFormat === fmt;
+                return (
+                  <button
+                    key={fmt}
+                    onClick={() => handleSaveDateFormat(fmt)}
+                    className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:border-primary/50
+                      ${isSelected ? "border-primary bg-primary/5 shadow-sm shadow-primary/10" : "border-border hover:bg-secondary/30"}`}
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Calendar className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold text-foreground font-mono">{fmt}</p>
+                      <p className="text-xs text-muted-foreground">{preview}</p>
+                    </div>
+                    {isSelected && <Check className="w-5 h-5 text-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+      </div>
     );
   }
 

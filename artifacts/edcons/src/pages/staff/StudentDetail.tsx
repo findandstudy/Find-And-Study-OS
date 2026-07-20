@@ -10,6 +10,8 @@ import {
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatDate } from "@workspace/i18n";
+import { fmtDate } from "@/lib/formatDate";
+import { useDateFormat } from "@/hooks/use-date-format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -274,7 +276,8 @@ function EducationRecordsTab({ studentId }: { studentId: number }) {
 }
 
 export default function StudentDetail({ id, basePath = "/staff" }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const dateFormat = useDateFormat();
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
   useEntityViewTracker("student", id);
@@ -1018,7 +1021,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   </div>
                 ) : (
                   <div className="space-y-3 text-sm">
-                    <InfoRow icon={<Calendar className="w-4 h-4" />} label={t("studentDetailPage.dateOfBirth")} value={student?.dateOfBirth} />
+                    <InfoRow icon={<Calendar className="w-4 h-4" />} label={t("studentDetailPage.dateOfBirth")} value={fmtDate(student?.dateOfBirth, dateFormat) || undefined} />
                     <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.gender")} value={student?.gender === "female" ? t("studentDetailPage.female") : student?.gender === "male" ? t("studentDetailPage.male") : null} />
                     <InfoRow icon={<Globe className="w-4 h-4" />} label={t("studentDetailPage.nationality")} value={student?.nationality} />
                     <InfoRow icon={<Mail className="w-4 h-4" />} label={t("studentDetailPage.email")} value={student?.email} />
@@ -1040,8 +1043,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   ) : (
                     <div className="space-y-3 text-sm">
                       <InfoRow icon={<FileText className="w-4 h-4" />} label="Passport No" value={student?.passportNumber} />
-                      <InfoRow icon={<Calendar className="w-4 h-4" />} label="Issue Date" value={student?.passportIssueDate} />
-                      <InfoRow icon={<Calendar className="w-4 h-4" />} label="Expiry Date" value={student?.passportExpiry} />
+                      <InfoRow icon={<Calendar className="w-4 h-4" />} label="Issue Date" value={fmtDate(student?.passportIssueDate, dateFormat) || undefined} />
+                      <InfoRow icon={<Calendar className="w-4 h-4" />} label="Expiry Date" value={fmtDate(student?.passportExpiry, dateFormat) || undefined} />
                     </div>
                   )}
                 </div>
@@ -1521,9 +1524,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                             <span className={`text-xs ${
                               fu.completed ? "text-muted-foreground" : isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"
                             }`}>
-                              {formatDate(fu.scheduledAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              {fmtDate(fu.scheduledAt, dateFormat)}
                               {" "}
-                              {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(fu.scheduledAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })}
                               {!fu.completed && isOverdue(fu.scheduledAt) && " — Overdue"}
                             </span>
                           </div>
@@ -1534,16 +1537,16 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                             )}
                             {fu.createdAt && (
                               <span className="text-xs text-muted-foreground/50">
-                                {formatDate(fu.createdAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                {fmtDate(fu.createdAt, dateFormat)}
                                 {" "}
-                                {new Date(fu.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                                {new Date(fu.createdAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })}
                               </span>
                             )}
                             {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
                               <span className="text-xs text-amber-500/70" data-testid="fu-edited-by">
-                                (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {fmtDate(fu.updatedAt, dateFormat)}
                                 {" "}
-                                {new Date(fu.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})
+                                {new Date(fu.updatedAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })})
                               </span>
                             )}
                           </div>

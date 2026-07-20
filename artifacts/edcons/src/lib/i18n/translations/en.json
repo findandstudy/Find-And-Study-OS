@@ -2780,6 +2780,8 @@
     "emergencyContactDesc": "Contact information for a relative or emergency contact person.",
     "languageRegion": "Language & Region",
     "languageRegionDesc": "Choose your preferred interface language.",
+    "dateFormat": "Date Format",
+    "dateFormatDesc": "Choose how dates are displayed throughout the system.",
     "systemLogos": "System Logos",
     "systemLogosDesc": "Upload your company logos for different contexts. Use PNG or SVG with transparent backgrounds.",
     "themeColors": "Theme Colors",

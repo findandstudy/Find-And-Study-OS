@@ -58,6 +58,7 @@ import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stag
 import { usePersistedFilterValue } from "@/hooks/use-table-prefs";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { useI18n } from "@/hooks/use-i18n";
+import { useDateFormat } from "@/hooks/use-date-format";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -103,9 +104,19 @@ function formatCurrency(value: number | string | null | undefined): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(num);
 }
 
-function formatDate(dateStr: string | null | undefined): string {
+function formatDate(dateStr: string | null | undefined, dateFormat?: string | null): string {
   if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "-";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getFullYear());
+  switch (dateFormat) {
+    case "DD/MM/YYYY": return `${dd}/${mm}/${yyyy}`;
+    case "MM/DD/YYYY": return `${mm}/${dd}/${yyyy}`;
+    case "YYYY-MM-DD": return `${yyyy}-${mm}-${dd}`;
+    default:           return `${dd}.${mm}.${yyyy}`;
+  }
 }
 
 const LEAD_STAGE_COLORS = [
@@ -1185,6 +1196,7 @@ function LeadBulkImportModal({ open, onClose, onSuccess }: { open: boolean; onCl
 
 export default function LeadsPage() {
   const { t } = useI18n();
+  const dateFormat = useDateFormat();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
@@ -1868,7 +1880,7 @@ export default function LeadsPage() {
                         className="text-muted-foreground text-xs"
                         onClick={() => setLocation(`/staff/leads/${lead.id}`)}
                       >
-                        {formatDate(lead.createdAt)}
+                        {formatDate(lead.createdAt, dateFormat)}
                       </TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                         <RowActionsMenu

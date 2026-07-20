@@ -10,6 +10,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatDate } from "@workspace/i18n";
+import { useDateFormat } from "@/hooks/use-date-format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -73,6 +74,7 @@ interface Props {
 
 export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const { t, lang } = useI18n();
+  const dateFormat = useDateFormat();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, hasPermission } = useAuth(true);
@@ -728,7 +730,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                           <span className={`text-xs ${
                             fu.completed ? "text-muted-foreground" : isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"
                           }`}>
-                            {formatDate(fu.scheduledAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                            {formatDate(fu.scheduledAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" }, dateFormat)}
                             {" "}
                             {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                             {!fu.completed && isOverdue(fu.scheduledAt) && " — Overdue"}
@@ -741,16 +743,16 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                           )}
                           {fu.createdAt && (
                             <span className="text-xs text-muted-foreground/50">
-                              {formatDate(fu.createdAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              {formatDate(fu.createdAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" }, dateFormat)}
                               {" "}
-                              {new Date(fu.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(fu.createdAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })}
                             </span>
                           )}
                           {fu.updatedAt && fu.createdAt && new Date(fu.updatedAt).getTime() - new Date(fu.createdAt).getTime() > 2000 && (
                             <span className="text-xs text-amber-500/70">
-                              (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                              (edited{fu.updatedByName ? ` by ${fu.updatedByName}` : ""} {formatDate(fu.updatedAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" }, dateFormat)}
                               {" "}
-                              {new Date(fu.updatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })})
+                              {new Date(fu.updatedAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })})
                             </span>
                           )}
                         </div>
@@ -996,9 +998,9 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   <div>
                     <p className="text-sm font-medium">{next.title}</p>
                     <p className={`text-xs mt-1 ${isOverdue(next.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
-                      {formatDate(next.scheduledAt, "tr", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                      {formatDate(next.scheduledAt, lang, { day: "2-digit", month: "2-digit", year: "numeric" }, dateFormat)}
                       {" "}
-                      {new Date(next.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                      {new Date(next.scheduledAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })}
                       {isOverdue(next.scheduledAt) && " — Overdue!"}
                     </p>
                   </div>

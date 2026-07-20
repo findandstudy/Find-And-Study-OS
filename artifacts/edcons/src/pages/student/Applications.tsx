@@ -6,6 +6,7 @@ import { StageDocumentsPanel } from "@/components/StageDocumentsPanel";
 import { ApplicationDocumentsPanel, APPLICATION_DOC_STAGES } from "@/components/ApplicationDocumentsPanel";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatDate } from "@/lib/i18n";
+import { useDateFormatPublic } from "@/hooks/use-date-format";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 
 // Translation key + visual style overrides for built-in default stages.
@@ -65,6 +66,7 @@ function resolveStageIcon(name: string | null | undefined): typeof CheckCircle |
 
 export default function StudentApplications() {
   const { t, lang } = useI18n();
+  const dateFormat = useDateFormatPublic();
   const { data: resp, isLoading } = useListApplications(undefined, { query: { queryKey: ["student-apps-list"] } as any });
   const applications: any[] = (resp as any)?.data || resp || [];
   const { stages: pipelineStages } = usePipelineStages("application");
@@ -173,12 +175,12 @@ export default function StudentApplications() {
                           {app.intakeDate && (
                             <span className="flex items-center gap-1">
                               <Calendar className="w-3.5 h-3.5" />
-                              {t("studentApps.intake", { date: formatDate(lang, app.intakeDate, { month: "long", year: "numeric" }) })}
+                              {t("studentApps.intake", { date: formatDate(lang, app.intakeDate, { month: "long", year: "numeric" }, dateFormat) })}
                             </span>
                           )}
                           <span className="flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5" />
-                            {t("studentApps.started", { date: formatDate(lang, app.createdAt, { month: "short", day: "numeric", year: "numeric" }) })}
+                            {t("studentApps.started", { date: formatDate(lang, app.createdAt, { month: "short", day: "numeric", year: "numeric" }, dateFormat) })}
                           </span>
                         </div>
                       </div>

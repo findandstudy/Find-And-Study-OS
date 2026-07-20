@@ -57,14 +57,47 @@ const PRESETS: Record<DatePresetName, Intl.DateTimeFormatOptions> = {
 export type FormatDateOptions = DatePresetName | Intl.DateTimeFormatOptions;
 
 /**
+ * Allowed org-wide date format keys.
+ * Default is DD.MM.YYYY (dot-separated European).
+ */
+export type DateFormatKey = "DD.MM.YYYY" | "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
+
+export const DATE_FORMAT_OPTIONS: DateFormatKey[] = [
+  "DD.MM.YYYY",
+  "DD/MM/YYYY",
+  "MM/DD/YYYY",
+  "YYYY-MM-DD",
+];
+
+/**
+ * Apply an org date-format key to a resolved Date, producing a short date string.
+ * Falls back to DD.MM.YYYY for unknown/null formats.
+ */
+export function applyDateFormat(d: Date, fmt?: string | null): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getFullYear());
+  switch (fmt) {
+    case "DD/MM/YYYY": return `${dd}/${mm}/${yyyy}`;
+    case "MM/DD/YYYY": return `${mm}/${dd}/${yyyy}`;
+    case "YYYY-MM-DD": return `${yyyy}-${mm}-${dd}`;
+    default:           return `${dd}.${mm}.${yyyy}`;
+  }
+}
+
+/**
  * Format a Date / ISO string / epoch ms as dd.mm.yyyy (e.g. 15.07.2026).
  * When opts is "time" or a time-only options object, falls back to locale time.
  * Returns "" for null/undefined/invalid input.
+ *
+ * @param dateFormat  Optional org-wide date format key (e.g. "MM/DD/YYYY").
+ *                    When provided, overrides the separator/order for plain date output.
  */
 export function formatDate(
   value: Date | string | number | null | undefined,
   lang?: string | null,
   opts: FormatDateOptions = "date",
+  dateFormat?: string | null,
 ): string {
   if (value == null || value === "") return "";
   const d = value instanceof Date ? value : new Date(value);
@@ -74,16 +107,21 @@ export function formatDate(
   if (options && !options.year && !options.month && !options.day) {
     return getFormatter(toLocale(lang), options).format(d);
   }
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
+  // When opts is a named/custom long-month preset (dateLong, or custom month:"long"/"short"),
+  // keep the locale-aware Intl output — dateFormat only applies to numeric short dates.
+  const isLongMonth =
+    opts === "dateLong" ||
+    (typeof opts === "object" && (opts.month === "long" || opts.month === "short") && opts.day);
+  if (isLongMonth) {
+    return getFormatter(toLocale(lang), options!).format(d);
+  }
   // Include time when options ask for it
   if (options?.hour !== undefined || options?.minute !== undefined || opts === "dateTime") {
     const hh = String(d.getHours()).padStart(2, "0");
     const mi = String(d.getMinutes()).padStart(2, "0");
-    return `${dd}.${mm}.${yyyy} ${hh}:${mi}`;
+    return `${applyDateFormat(d, dateFormat)} ${hh}:${mi}`;
   }
-  return `${dd}.${mm}.${yyyy}`;
+  return applyDateFormat(d, dateFormat);
 }
 
 /** Convenience: relative formatting (e.g. "2 days ago"). */

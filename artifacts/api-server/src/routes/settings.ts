@@ -48,6 +48,7 @@ const SETTINGS_PATCH_FIELDS = [
   "stuckAssignConsiderWorkingHours",
   "stuckAssignConsiderCountryMatch",
   "stuckAssignOffHoursBehavior",
+  "dateFormat",
 ];
 
 const CREDENTIAL_FIELDS = ["smtpPassword", "whatsappToken"];
@@ -86,6 +87,7 @@ router.get("/settings/branding", async (req, res): Promise<void> => {
     socialTwitter: settingsTable.socialTwitter,
     socialYoutube: settingsTable.socialYoutube,
     socialTiktok: settingsTable.socialTiktok,
+    dateFormat: settingsTable.dateFormat,
   }).from(settingsTable);
   res.json(settings || {});
 });

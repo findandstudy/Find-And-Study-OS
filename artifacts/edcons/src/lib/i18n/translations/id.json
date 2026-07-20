@@ -2473,6 +2473,8 @@
     "emergencyContactDesc": "Informasi kontak untuk kerabat atau orang kontak darurat.",
     "languageRegion": "Bahasa & Wilayah",
     "languageRegionDesc": "Pilih bahasa antarmuka pilihan Anda.",
+    "dateFormat": "Format Tanggal",
+    "dateFormatDesc": "Pilih cara tanggal ditampilkan di seluruh sistem.",
     "systemLogos": "Logo Sistem",
     "systemLogosDesc": "Unggah logo perusahaan Anda untuk konteks berbeda. Gunakan PNG atau SVG dengan latar belakang transparan.",
     "themeColors": "Warna Tema",

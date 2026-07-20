@@ -769,6 +769,7 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS stuck_assign_consider_working_hours BOOLEAN NOT NULL DEFAULT true`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS stuck_assign_consider_country_match BOOLEAN NOT NULL DEFAULT true`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS stuck_assign_off_hours_behavior TEXT NOT NULL DEFAULT 'assign_anyway'`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS date_format TEXT NOT NULL DEFAULT 'DD.MM.YYYY'`);
     // Zernio omnichannel provider — per-account provider tagging.
     await pool.query(`ALTER TABLE channel_accounts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'direct'`);
     await pool.query(`ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS is_starred BOOLEAN NOT NULL DEFAULT false`);

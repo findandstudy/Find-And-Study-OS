@@ -2473,6 +2473,8 @@
     "emergencyContactDesc": "Información de contacto de un familiar o persona de contacto de emergencia.",
     "languageRegion": "Idioma y región",
     "languageRegionDesc": "Elija su idioma de interfaz preferido.",
+    "dateFormat": "Formato de fecha",
+    "dateFormatDesc": "Elige cómo se muestran las fechas en todo el sistema.",
     "systemLogos": "Logos del sistema",
     "systemLogosDesc": "Suba los logotipos de su empresa para diferentes contextos. Use PNG o SVG con fondos transparentes.",
     "themeColors": "Colores del tema",
