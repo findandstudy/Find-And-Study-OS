@@ -93,7 +93,15 @@ function buildDownloadFilename(docType: string, firstName: string, lastName: str
 // EducationRecordsTab — inline sub-component (no separate file to avoid Fast
 // Refresh mixed-export issues; StudentDetail already owns this page).
 // ---------------------------------------------------------------------------
-function EducationRecordsTab({ studentId, interestedLevel }: { studentId: number; interestedLevel?: string | null }) {
+function EducationRecordsTab({
+  studentId,
+  interestedLevel,
+  applications,
+}: {
+  studentId: number;
+  interestedLevel?: string | null;
+  applications?: any[];
+}) {
   const { t } = useI18n();
   const { toast } = useToast();
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -104,12 +112,31 @@ function EducationRecordsTab({ studentId, interestedLevel }: { studentId: number
     { value: "master",      label: t("studentDetailPage.eduLevelMaster") },
   ];
 
-  // Derive which prior education level is required based on the student's target study level.
-  const requiredPriorLevel: string | null =
-    /master/i.test(interestedLevel || "") ? "bachelor" :
-    /phd|doctor/i.test(interestedLevel || "") ? "master" :
-    /bachelor|associate|certificate/i.test(interestedLevel || "") ? "high_school" :
-    null;
+  // Map an application or student level string to the prior-level that is required.
+  function levelToRequired(lvl: string): string | null {
+    const n = lvl.toLowerCase();
+    if (/phd|doctor/.test(n)) return "master";
+    if (/master/.test(n)) return "bachelor";
+    if (/bachelor|associate|certificate/.test(n)) return "high_school";
+    return null;
+  }
+
+  // Level rank for "most demanding wins" when multiple applications exist.
+  const LEVEL_RANK: Record<string, number> = { master: 2, bachelor: 1, high_school: 0 };
+
+  // Derive which prior education level is required — applications take precedence
+  // over student.interestedLevel so the badge reflects actual active targets.
+  const requiredPriorLevel: string | null = (() => {
+    const appLevels = (applications ?? [])
+      .map((app: any) => levelToRequired(app.level || app.degree || ""))
+      .filter((l): l is string => l !== null);
+    if (appLevels.length > 0) {
+      return appLevels.reduce((best, curr) =>
+        (LEVEL_RANK[curr] ?? -1) > (LEVEL_RANK[best] ?? -1) ? curr : best
+      );
+    }
+    return levelToRequired(interestedLevel || "");
+  })();
   const SOURCE_LABELS: Record<string, string> = {
     manual:       t("studentDetailPage.eduSourceManual"),
     ai_extracted: t("studentDetailPage.eduSourceAI"),
@@ -1614,7 +1641,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           </TabsContent>
 
           <TabsContent value="education" className="mt-4">
-            <EducationRecordsTab studentId={Number(id)} interestedLevel={student?.interestedLevel} />
+            <EducationRecordsTab studentId={Number(id)} interestedLevel={student?.interestedLevel} applications={applications} />
           </TabsContent>
         </Tabs>
         {student && <div className="mt-4"><AuditLogSection resource="student" resourceId={student.id} /></div>}

@@ -274,11 +274,22 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       const studentId = Number(studentIdRaw);
       if (Number.isFinite(studentId) && studentId > 0) {
         try {
-          // Determine education level from extracted data
-          const degreeRaw = String(extracted.degree || extracted.level || extracted.documentType || "").toLowerCase();
-          let level: "high_school" | "bachelor" | "master" = "bachelor";
-          if (/high.?school|secondary|lisans öncesi/i.test(degreeRaw)) level = "high_school";
-          else if (/master|msc|ma\b|mba|graduate/i.test(degreeRaw)) level = "master";
+          // Determine education level — eduLevel canonical field takes priority.
+          const eduLevelNorm = String(extracted.eduLevel || "").toLowerCase().replace(/[-\s]+/g, "_").trim();
+          let level: "high_school" | "bachelor" | "master";
+          if (eduLevelNorm === "high_school" || eduLevelNorm === "high school" || eduLevelNorm === "highschool") {
+            level = "high_school";
+          } else if (eduLevelNorm === "master") {
+            level = "master";
+          } else if (eduLevelNorm === "bachelor") {
+            level = "bachelor";
+          } else {
+            // Fallback: keyword scan of degree / level / documentType fields
+            const degreeRaw = String(extracted.degree || extracted.level || extracted.documentType || "").toLowerCase();
+            if (/high.?school|secondary|lisans öncesi/i.test(degreeRaw)) level = "high_school";
+            else if (/master|msc|ma\b|mba|graduate/i.test(degreeRaw)) level = "master";
+            else level = "bachelor";
+          }
 
           // Derive gpaType from gpaScale returned by normalizer
           const gpaType: string | null =

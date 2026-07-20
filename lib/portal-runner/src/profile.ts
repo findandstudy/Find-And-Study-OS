@@ -26,6 +26,7 @@ import {
   applicationsTable,
   studentsTable,
   documentsTable,
+  educationRecordsTable,
 } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
 import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, docFetchUrl } from "@workspace/portal-adapters";
@@ -613,8 +614,22 @@ export async function buildStudentProfile(
 
   if (!student) throw new Error(`Student ${sub.studentId} not found`);
 
+  // ----- 3b. Load education records ----------------------------------------
+  const educationRecords = await db
+    .select()
+    .from(educationRecordsTable)
+    .where(eq(educationRecordsTable.studentId, sub.studentId));
+
   // ----- 4. Build profile + download documents -----------------------------
   const profile = buildSubmitProfileFromRecords(student, app);
+
+  // Attach education records so adapters (Altınbaş, Topkapı, etc.) can read
+  // per-level city and languageScore without falling back to legacy top-level
+  // student fields. Typed as any[] to avoid a circular type dependency — the
+  // shape mirrors EducationRecord from @workspace/db.
+  if (educationRecords.length > 0) {
+    profile.educationRecords = educationRecords as any;
+  }
 
   // Expose E164 phone on the profile as untyped extra fields so adapters that
   // cast to `any` (e.g. SIT CONTACTFIX2) can read it without relying on the
