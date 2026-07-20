@@ -28,13 +28,19 @@
 //   yakalanmadı — ALTINBAS_CAPTURE=1 ile ilk gerçek run'da tüm aura
 //   request/response'ları /tmp/altinbas-capture.json'a dökülür.
 //
-// Duplicate-passport guard: aynı passport+term+degree ile 2. başvuru portal
-// tarafından ENGELLENİR → SKIPPED_DUPLICATE (alreadyExists=true, FAIL değil).
+// Duplicate-passport guard (FIX-14): CheckDuplicateValidation "already exists"
+// mesajı self-referans DEĞİLDİR — önceki başarısız run'ın Salesforce'ta taslak
+// halinde bıraktığı Application__c kaydına karşı ateşlenir. Bu sinyal artık
+// alreadyExists=true (worker retry etmez) olarak ele alınır.
+// Gerçek yeni-öğrenci duplicate'i → Program adımında AlreadyApplicationError.
 //
 // Dry-run: doSubmit=false Documents'a kadar replay eder, FINISH GÖNDERMEZ.
 // ---------------------------------------------------------------------------
 
 import { appendFileSync } from "node:fs";
+
+import { and, eq, isNull } from "drizzle-orm";
+import { db, portalSubmissionsTable } from "@workspace/db";
 
 import type {
   UniversityAdapter,
@@ -671,12 +677,13 @@ function stageRank(stage: string | null): number {
 }
 
 /**
- * CheckDuplicateValidation passport mesajı — FIX-7: bu mesaj commit/Personal'da
- * commit1'in AZ ÖNCE OLUŞTURDUĞU kaydı self-referans olarak işaretler ve HER
- * taze öğrencide belirir (2214 kanıtı: Program dup=false → commit2/Personal
- * dup=true). STOP sebebi DEĞİLDİR — sadece teşhis logunda (dupIgnored) kullanılır.
- * Gerçek duplicate zaten Program adımında AlreadyApplicationError ile,
- * kayıt OLUŞTURULMADAN ÖNCE yakalanır.
+ * CheckDuplicateValidation passport mesajı — FIX-14: bu mesaj commit/Personal'da
+ * önceki başarısız run'ın Salesforce'ta taslak halinde bıraktığı Application__c
+ * kaydına karşı ateşlenir. Self-referans DEĞİLDİR (FIX-7 varsayımı yanlıştı —
+ * canlı kanıt 71 başarısız denemede her seferinde bu sinyali üretti).
+ * guard() içinde alreadyExists=true → temiz dönüş (worker sonsuz retry yapmaz).
+ * Gerçek ilk-başvuru duplicate'i → Program adımında AlreadyApplicationError ile
+ * kayıt OLUŞTURULMADAN ÖNCE yakalanır (isAlreadyAppliedProgram).
  */
 function isDuplicatePassport(raw: string): boolean {
   return /an application with this passport number already exists|you cannot submit a new application using the same passport/i.test(raw);
@@ -776,7 +783,7 @@ async function postNavigateFlow(
 
   const stage = readStageFromRaw(raw);
   logger.info(
-    `[altinbas] navigateFlow[${tag}] action=${action} nf=${fields.length} → status=${resp.status} stage=${stage ?? "?"} err=${flowHasError(raw)} ${tag === "program" ? `dup=${isAlreadyAppliedProgram(raw)}` : `dupIgnored=${isDuplicatePassport(raw)}`} len=${raw.length} newStateLen=${rt.state.length}`,
+    `[altinbas] navigateFlow[${tag}] action=${action} nf=${fields.length} → status=${resp.status} stage=${stage ?? "?"} err=${flowHasError(raw)} ${tag === "program" ? `alreadyApplied=${isAlreadyAppliedProgram(raw)}` : `dupPassport=${isDuplicatePassport(raw)}`} len=${raw.length} newStateLen=${rt.state.length}`,
   );
   return raw;
 }
@@ -1029,12 +1036,11 @@ async function runFlowReplay(
   dumpRecords(rt, "boot");
 
   /**
-   * Yanıtı denetle: ERROR → fail-visible detail. true = DUR.
-   * FIX-7: duplicate-STOP burada YOK. Gerçek duplicate SADECE Program
-   * adımında (AlreadyApplicationError, kayıt oluşmadan ÖNCE) yakalanır;
-   * commit/Personal'daki CheckDuplicateValidation "already exists" mesajı
-   * commit1'in az önce oluşturduğu kaydın self-referansıdır (her taze
-   * öğrencide belirir) → YOK SAYILIR, sadece dupIgnored diye loglanır.
+   * Yanıtı denetle: ERROR veya isDuplicatePassport → DUR (true döndür).
+   * FIX-14: CheckDuplicateValidation "already exists" sinyali self-referans
+   * DEĞİLDİR — önceki başarısız run'ın SF'te bıraktığı dangling Application__c
+   * kaydına karşı ateşlenir. alreadyExists=true → worker retry etmez.
+   * Gerçek ilk-başvuru duplicate'i → Program adımında isAlreadyAppliedProgram.
    */
   // FIX-6 teşhis: bu run'da oluşturulduğu kanıtlı başvuru Id'leri — explicit
   // "applicationId" anahtarı + commit yanıtlarında İLK KEZ görülen a02 kayıtları
@@ -1047,9 +1053,23 @@ async function runFlowReplay(
   const rawCommitA02 = new Set<string>();
   const ownAppIds = (): Set<string> => new Set([...rt.explicitAppIds, ...runCreatedAppIds]);
 
+  // FIX-14: post-commit guard herhangi bir adımda bloklarsa, bu run'da
+  // oluşturulan Application__c ID'leri SF'te dangling kalabilir.
+  // rollbackIfNeeded tüm post-commit adım guard'larında (commit döngüsü,
+  // Personal, Educational, Questionnaire, Documents, FINISH) çağrılır.
+  const rollbackIfNeeded = async (tag: string): Promise<void> =>
+    rollbackDanglingApps(page, rt, result, tag, runCreatedAppIds);
+
   const guard = (raw: string, tag: string): boolean => {
+    // FIX-14: isDuplicatePassport = önceki run'ın dangling SF kaydı
+    // (CheckDuplicateValidation). Self-referans DEĞİL — gerçek bloker sinyal.
+    // alreadyExists=true → worker bu submission'ı retry etmez (sonsuz döngü biter).
     if (isDuplicatePassport(raw)) {
-      logger.info(`[altinbas] dupIgnored=true @${tag} — self-referans passport mesajı YOK SAYILDI (FIX-7)`);
+      result.alreadyExists = true;
+      result.detail =
+        `Altınbaş: CheckDuplicateValidation @${tag} — önceki run dangling SF Application__c kaydı bırakmış; already_exists (FIX-14). Manuel SF temizliği gerekiyor.`;
+      logger.warn(`[altinbas] ${result.detail}`);
+      return true;
     }
     if (flowHasError(raw)) {
       result.detail = `Altınbaş flow ERROR @${tag}: ${raw.replace(/\s+/g, " ").slice(0, 500)}`;
@@ -1132,8 +1152,9 @@ async function runFlowReplay(
       return;
     }
     raw = await postNavigateFlow(page, rt, "NEXT", buildProgramFields(prog), "program");
-    // FIX-7: GERÇEK duplicate kontrolü SADECE burada — AlreadyApplicationError
-    // kayıt oluşturulmadan ÖNCE dolar (öğrenci bu programa gerçekten başvurmuş).
+    // Gerçek ilk-başvuru duplicate'i: Program NEXT yanıtında AlreadyApplicationError
+    // kayıt OLUŞTURULMADAN ÖNCE dolar (öğrenci bu programa gerçekten başvurmuş).
+    // isDuplicatePassport (dangling SF kaydı) ise guard() içinde yakalanır.
     if (isAlreadyAppliedProgram(raw)) {
       result.alreadyExists = true;
       result.detail =
@@ -1156,6 +1177,7 @@ async function runFlowReplay(
     // FIX-12: availability baseline'ı rt'ye kaydet — Educational guard'ında
     // fallback adayını filtrelemek için (pre-commit a02 = availability, not application).
     for (const id of a02Before) rt.knownAvailabilityIds.add(id);
+
     for (let i = 0; i < 4 && !/Personal Information/i.test(raw); i++) {
       const ownBefore = ownAppIds();
       raw = await postNavigateFlow(page, rt, "CONTINUE_AFTER_COMMIT", [], `commit${i + 1}`);
@@ -1187,7 +1209,10 @@ async function runFlowReplay(
           `[altinbas] ÇİFT-CREATE ŞÜPHESİ @commit${i + 1} — yeni applicationId ${newIds.join(",")} (önceki: ${[...ownBefore].join(",")}); insan akışında commit sayısını ALTINBAS_CAPTURE ile karşılaştırın`,
         );
       }
-      if (guard(raw, `commit${i + 1}`) || noteStage(raw, `commit${i + 1}`)) return;
+      if (guard(raw, `commit${i + 1}`) || noteStage(raw, `commit${i + 1}`)) {
+        await rollbackIfNeeded(`commit${i + 1}`);
+        return;
+      }
     }
     if (!/Personal Information/i.test(raw)) {
       logger.warn(
@@ -1205,7 +1230,10 @@ async function runFlowReplay(
   if (curRank <= 3) {
     raw = await postNavigateFlow(page, rt, "NEXT", buildPersonalFields(profile), "personal");
     // FIX-7: Personal'daki "already exists" self-referanstır — duplicate-stop YOK.
-    if (guard(raw, "Personal") || noteStage(raw, "Personal")) return;
+    if (guard(raw, "Personal") || noteStage(raw, "Personal")) {
+      await rollbackIfNeeded("personal");
+      return;
+    }
   } else {
     logger.info("[altinbas] Personal adımı atlandı (boot stage ilerisinde)");
   }
@@ -1385,7 +1413,10 @@ async function runFlowReplay(
     // Capture karşılaştırması için TAM istek alanları (sadece Id/sabit — PII yok).
     logger.info(`[altinbas] Educational REQUEST fields (nf=${eduFields.length}): ${JSON.stringify(eduFields)}`);
     raw = await postNavigateFlow(page, rt, "NEXT", eduFields, "educational");
-    if (guard(raw, "Educational") || noteStage(raw, "Educational")) return;
+    if (guard(raw, "Educational") || noteStage(raw, "Educational")) {
+      await rollbackIfNeeded("educational");
+      return;
+    }
   } else {
     logger.info("[altinbas] Educational adımı atlandı (boot stage ilerisinde)");
   }
@@ -1393,7 +1424,10 @@ async function runFlowReplay(
   // 8) QUESTIONNAIRE (NEXT) — cevap şekli henüz yakalanmadı; boş dene.
   if (curRank <= 5) {
     raw = await postNavigateFlow(page, rt, "NEXT", buildQuestionnaireFields(), "questionnaire");
-    if (guard(raw, "Questionnaire") || noteStage(raw, "Questionnaire")) return;
+    if (guard(raw, "Questionnaire") || noteStage(raw, "Questionnaire")) {
+      await rollbackIfNeeded("questionnaire");
+      return;
+    }
   } else {
     logger.info("[altinbas] Questionnaire adımı atlandı (boot stage ilerisinde)");
   }
@@ -1414,7 +1448,10 @@ async function runFlowReplay(
   );
   if (missing.length) result.missingDocuments = missing;
   raw = await postNavigateFlow(page, rt, "NEXT", buildDocumentsFields(), "documents");
-  if (guard(raw, "Documents") || noteStage(raw, "Documents")) return;
+  if (guard(raw, "Documents") || noteStage(raw, "Documents")) {
+    await rollbackIfNeeded("documents");
+    return;
+  }
 
   // 10) FINISH — dry-run'da GÖNDERİLMEZ.
   if (dryRun) {
@@ -1423,13 +1460,17 @@ async function runFlowReplay(
     return;
   }
   raw = await postNavigateFlow(page, rt, "FINISH", [], "finish");
-  if (guard(raw, "FINISH") || noteStage(raw, "FINISH")) return;
+  if (guard(raw, "FINISH") || noteStage(raw, "FINISH")) {
+    await rollbackIfNeeded("finish");
+    return;
+  }
 
   // FINISH başarı kanıtı: HTTP 2xx + aura JSON (postNavigateFlow garanti eder)
   // YETMEZ — aura action state:SUCCESS da şart. Aksi halde fail-visible.
   if (!auraActionSucceeded(raw)) {
     result.detail = `Altınbaş: FINISH yanıtında state:SUCCESS yok — başarı SAYILMADI: ${raw.replace(/\s+/g, " ").slice(0, 500)}`;
     logger.warn(`[altinbas] ${result.detail}`);
+    await rollbackIfNeeded("finish-no-success");
     return;
   }
 
@@ -1437,6 +1478,60 @@ async function runFlowReplay(
   if (rt.ids.applicationId) result.externalRef = rt.ids.applicationId;
   result.detail = `Altınbaş: FINISH gönderildi, aura state:SUCCESS (flow replay)${rt.ids.applicationId ? ` — applicationId=${rt.ids.applicationId}` : ""}`;
   logger.info(`[altinbas] ${result.detail}`);
+}
+
+// ---------------------------------------------------------------------------
+// Dangling Application__c rollback helper (FIX-14)
+//
+// Called whenever a post-commit step fails — either via guard()-detected flow
+// errors (early return inside runFlowReplay) or thrown exceptions (submit catch).
+// Attempts SF REST API DELETE for every known Application__c ID; logs DANGLING
+// and appends to result.detail when DELETE fails (for manual cleanup tracking).
+// ---------------------------------------------------------------------------
+async function rollbackDanglingApps(
+  page: any,
+  rt: FlowRuntime,
+  result: SubmitResult,
+  triggerTag: string,
+  runCreatedIds: Set<string>,
+): Promise<void> {
+  const ids = [...new Set([...runCreatedIds, ...rt.explicitAppIds])].filter(Boolean);
+  if (ids.length === 0 || !rt.template) return;
+  const origin = rt.template.origin;
+  for (const appId of ids) {
+    let rolled = false;
+    try {
+      const delResp: { status: number } = await page.evaluate(
+        async (a: { url: string }) => {
+          const r = await fetch(a.url, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          return { status: r.status };
+        },
+        { url: `${origin}/services/data/v59.0/sobjects/Application__c/${appId}` },
+      );
+      if (delResp.status >= 200 && delResp.status < 300) {
+        logger.info(
+          `[altinbas] ROLLBACK OK @${triggerTag}: Application__c ${appId} silindi (HTTP ${delResp.status})`,
+        );
+        rolled = true;
+      } else {
+        logger.warn(
+          `[altinbas] ROLLBACK başarısız @${triggerTag}: Application__c ${appId} SF REST DELETE HTTP ${delResp.status}`,
+        );
+      }
+    } catch (rollbackErr) {
+      logger.warn(
+        `[altinbas] ROLLBACK hata @${triggerTag}: Application__c ${appId}: ${(rollbackErr as Error).message?.slice(0, 200)}`,
+      );
+    }
+    if (!rolled) {
+      const danglingMsg = `[altinbas] DANGLING APPLICATION__C applicationId=${appId} — manuel Salesforce temizliği gerekiyor`;
+      logger.warn(danglingMsg);
+      result.detail = (result.detail ? result.detail + " | " : "") + danglingMsg;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1790,6 +1885,40 @@ export const altinbasAdapter: UniversityAdapter = {
       };
     }
 
+    // ── Pre-flight: önceki run dangling SF kaydı bırakmış mı? (FIX-14) ──────
+    // Aynı CRM applicationId için mode=real, status=failed satırları varsa
+    // WARN logu yaz — önceki run(lar) Salesforce'ta taslak Application__c
+    // bırakmış olabilir; manuel SF temizliği yapılmadan yeni run'da
+    // CheckDuplicateValidation (isDuplicatePassport sinyali) tetiklenir.
+    if (profile.applicationDbId) {
+      try {
+        const prevFailed = await db
+          .select({ id: portalSubmissionsTable.id, createdAt: portalSubmissionsTable.createdAt })
+          .from(portalSubmissionsTable)
+          .where(
+            and(
+              eq(portalSubmissionsTable.applicationId, profile.applicationDbId),
+              eq(portalSubmissionsTable.universityKey, ADAPTER_KEY),
+              eq(portalSubmissionsTable.mode, "real"),
+              eq(portalSubmissionsTable.status, "failed"),
+              isNull(portalSubmissionsTable.deletedAt),
+            ),
+          );
+        if (prevFailed.length > 0) {
+          const summary = prevFailed
+            .map((r) => `id=${r.id} at=${r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt)}`)
+            .join("; ");
+          logger.warn(
+            `[altinbas] PRE-FLIGHT: applicationId=${profile.applicationDbId} için ${prevFailed.length} adet önceki mode=real status=failed submission var` +
+            ` (${summary}) — önceki run(lar) Salesforce'ta dangling Application__c bırakmış olabilir.` +
+            ` Manuel SF temizliği yapılmadan bu run'da CheckDuplicateValidation (already_exists) tetiklenebilir.`,
+          );
+        }
+      } catch (preflightErr) {
+        logger.warn(`[altinbas] pre-flight sorgusu başarısız (non-fatal): ${(preflightErr as Error).message?.slice(0, 200)}`);
+      }
+    }
+
     const result: SubmitResult = {
       alreadyExists:  false,
       submitted:      false,
@@ -1852,6 +1981,15 @@ export const altinbasAdapter: UniversityAdapter = {
       result.detail = result.detail || `Altınbaş flow replay hatası: ${msg}`;
       const failShot = await captureScreen(page, "flow-replay-failed");
       if (failShot) screenshots.push(failShot);
+
+      // ── Dangling Application__c rollback (FIX-14) ────────────────────────
+      // commit'ten sonra exception fırlatıldıysa Salesforce'ta taslak
+      // Application__c kaydı kalmış olabilir. Guard()-detected hatalar zaten
+      // runFlowReplay'in içinde rollbackIfNeeded ile yakalanır; bu dal yalnız
+      // gerçek throw'lar için son güvencedir.
+      // runCreatedAppIds is scoped to runFlowReplay; for exceptions that escape
+      // the function, rely on rt.explicitAppIds (union happens inside rollbackDanglingApps).
+      await rollbackDanglingApps(page, rt, result, "exception", new Set<string>());
     }
 
     if (screenshots.length) result.screenshots = screenshots;

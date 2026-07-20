@@ -195,6 +195,13 @@ export interface SubmitProfile {
   /** Country name/adjective (lowercase) → portal label. Merged over country maps. */
   countryOverrides?: Record<string, string>;
   /**
+   * CRM `applications.id` (the portal_submissions.application_id FK). Populated
+   * by buildStudentProfile() and used by adapters that need to query their own
+   * prior portal_submissions (e.g. Altınbaş pre-flight dangling-record check).
+   * Optional — absent in the dry-test CLI path (buildProfileFromApplication).
+   */
+  applicationDbId?: number;
+  /**
    * { CRM programId (string) → portal program id } — explicit ADMIN override.
    * Unlike programNameMap, this targets a catalog entry by raw id and is
    * consulted BEFORE any language filter or fuzzy matching — a deliberate

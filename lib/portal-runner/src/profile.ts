@@ -642,6 +642,11 @@ export async function buildStudentProfile(
   if (dl.photoUrl) profile.photoUrl = dl.photoUrl;
   if (dl.documentRefs.length) profile.studentDocuments = dl.documentRefs;
 
+  // Expose the CRM application id so adapters can query prior portal_submissions
+  // (e.g. Altınbaş pre-flight dangling-record check). Optional — not set in the
+  // dry-test CLI path (buildProfileFromApplication).
+  profile.applicationDbId = sub.applicationId;
+
   return { profile, ...dl };
 }
 
