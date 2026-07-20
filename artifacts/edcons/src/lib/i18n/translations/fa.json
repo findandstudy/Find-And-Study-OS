@@ -2989,7 +2989,8 @@
     "eduSourceMigrated": "منتقل‌شده",
     "eduEditTitle": "ویرایش سابقه تحصیلی",
     "eduCity": "شهر",
-    "eduLanguageScore": "نمره زبان"
+    "eduLanguageScore": "نمره زبان",
+    "eduMissingRequired": "سابقه تحصیلی {level} مورد نیاز برای این سطح درخواست وجود ندارد."
   },
   "agentsPage": {
     "assignContactPerson": "انتخاب شخص تماس",

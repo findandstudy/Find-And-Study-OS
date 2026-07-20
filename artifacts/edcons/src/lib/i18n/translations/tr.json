@@ -3237,7 +3237,8 @@
     "eduSourceMigrated": "Taşındı",
     "eduEditTitle": "Eğitim Kaydını Düzenle",
     "eduCity": "Şehir",
-    "eduLanguageScore": "Dil Puanı"
+    "eduLanguageScore": "Dil Puanı",
+    "eduMissingRequired": "Bu başvuru seviyesi için zorunlu {level} eğitim kaydı eksik."
   },
   "agentsPage": {
     "assignContactPerson": "İletişim Kişisi Ata",

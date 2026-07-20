@@ -272,6 +272,8 @@ export function buildEducationalFields(ids: FlowIds, edu?: EduRecord): FlowField
       { field: "EducationalInformationList.records.0.End_Year__c",       value: edu.endYear ?? "",       isVisible: true },
       { field: "EducationalInformationList.records.0.GPA_Type__c",       value: edu.gpaType ?? "",       isVisible: true },
       { field: "EducationalInformationList.records.0.GPA__c",            value: edu.gpa ?? "",           isVisible: true },
+      { field: "EducationalInformationList.records.0.City__c",           value: edu.city ?? "",          isVisible: true },
+      { field: "ExamInformationList.records.0.Exam_Score__c",            value: edu.languageScore ?? "", isVisible: true },
     );
   }
 

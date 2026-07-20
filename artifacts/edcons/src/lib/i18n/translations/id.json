@@ -2989,7 +2989,8 @@
     "eduSourceMigrated": "Dipindahkan",
     "eduEditTitle": "Edit Catatan Pendidikan",
     "eduCity": "Kota",
-    "eduLanguageScore": "Skor Bahasa"
+    "eduLanguageScore": "Skor Bahasa",
+    "eduMissingRequired": "Rekaman pendidikan {level} yang diperlukan untuk tingkat aplikasi ini tidak ada."
   },
   "agentsPage": {
     "assignContactPerson": "Tetapkan Kontak",

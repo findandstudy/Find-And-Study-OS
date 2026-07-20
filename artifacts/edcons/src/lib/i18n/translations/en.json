@@ -3296,7 +3296,8 @@
     "eduSourceMigrated": "Migrated",
     "eduEditTitle": "Edit Education Record",
     "eduCity": "City",
-    "eduLanguageScore": "Language Score"
+    "eduLanguageScore": "Language Score",
+    "eduMissingRequired": "Missing required {level} education record for this application level."
   },
   "agentsPage": {
     "assignContactPerson": "Assign Contact Person",

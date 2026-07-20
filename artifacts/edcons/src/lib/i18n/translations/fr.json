@@ -3040,7 +3040,8 @@
     "eduSourceMigrated": "Migré",
     "eduEditTitle": "Modifier le dossier de formation",
     "eduCity": "Ville",
-    "eduLanguageScore": "Score de langue"
+    "eduLanguageScore": "Score de langue",
+    "eduMissingRequired": "Le dossier scolaire {level} requis est manquant pour ce niveau de candidature."
   },
   "agentsPage": {
     "assignContactPerson": "Assigner la personne de contact",

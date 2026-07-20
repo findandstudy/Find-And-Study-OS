@@ -93,7 +93,7 @@ function buildDownloadFilename(docType: string, firstName: string, lastName: str
 // EducationRecordsTab — inline sub-component (no separate file to avoid Fast
 // Refresh mixed-export issues; StudentDetail already owns this page).
 // ---------------------------------------------------------------------------
-function EducationRecordsTab({ studentId }: { studentId: number }) {
+function EducationRecordsTab({ studentId, interestedLevel }: { studentId: number; interestedLevel?: string | null }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -103,6 +103,13 @@ function EducationRecordsTab({ studentId }: { studentId: number }) {
     { value: "bachelor",    label: t("studentDetailPage.eduLevelBachelor") },
     { value: "master",      label: t("studentDetailPage.eduLevelMaster") },
   ];
+
+  // Derive which prior education level is required based on the student's target study level.
+  const requiredPriorLevel: string | null =
+    /master/i.test(interestedLevel || "") ? "bachelor" :
+    /phd|doctor/i.test(interestedLevel || "") ? "master" :
+    /bachelor|associate|certificate/i.test(interestedLevel || "") ? "high_school" :
+    null;
   const SOURCE_LABELS: Record<string, string> = {
     manual:       t("studentDetailPage.eduSourceManual"),
     ai_extracted: t("studentDetailPage.eduSourceAI"),
@@ -172,6 +179,14 @@ function EducationRecordsTab({ studentId }: { studentId: number }) {
   }
 
   const existingLevels = new Set((records ?? []).map((r: any) => r.level));
+  const missingRequired = requiredPriorLevel !== null && !existingLevels.has(requiredPriorLevel);
+
+  // Sort records so the required prior level appears first.
+  const sortedRecords = [...(records ?? [])].sort((a: any, b: any) => {
+    if (a.level === requiredPriorLevel) return -1;
+    if (b.level === requiredPriorLevel) return 1;
+    return 0;
+  });
 
   return (
     <div className="space-y-4">
@@ -179,14 +194,33 @@ function EducationRecordsTab({ studentId }: { studentId: number }) {
         <h3 className="font-semibold text-sm">{t("studentDetailPage.educationHistory")}</h3>
       </div>
 
+      {missingRequired && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <span className="font-medium">⚠</span>
+          <span>
+            {t("studentDetailPage.eduMissingRequired", {
+              level: LEVELS.find(l => l.value === requiredPriorLevel)?.label ?? requiredPriorLevel,
+            })}
+          </span>
+          <Button size="sm" variant="outline" className="ml-auto h-6 text-xs border-amber-400 text-amber-800 hover:bg-amber-100" onClick={() => openNew(requiredPriorLevel!)}>
+            <Plus className="w-3 h-3 mr-1" />{t("common.add")}
+          </Button>
+        </div>
+      )}
+
       {!records || records.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("studentDetailPage.noEducationRecords")}</p>
       ) : (
         <div className="space-y-3">
-          {(records ?? []).map((rec: any) => (
-            <div key={rec.level} className="border rounded-lg p-3 space-y-1">
+          {sortedRecords.map((rec: any) => (
+            <div key={rec.level} className={`border rounded-lg p-3 space-y-1 ${rec.level === requiredPriorLevel ? "border-blue-300 bg-blue-50/40" : ""}`}>
               <div className="flex items-center justify-between">
-                <span className="font-medium text-sm">{LEVELS.find(l => l.value === rec.level)?.label ?? rec.level}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{LEVELS.find(l => l.value === rec.level)?.label ?? rec.level}</span>
+                  {rec.level === requiredPriorLevel && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">Required</span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   {rec.source && (
                     <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-secondary">
@@ -1580,7 +1614,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           </TabsContent>
 
           <TabsContent value="education" className="mt-4">
-            <EducationRecordsTab studentId={Number(id)} />
+            <EducationRecordsTab studentId={Number(id)} interestedLevel={student?.interestedLevel} />
           </TabsContent>
         </Tabs>
         {student && <div className="mt-4"><AuditLogSection resource="student" resourceId={student.id} /></div>}

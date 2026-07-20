@@ -890,13 +890,15 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 city: form.eduCity || null,
                 country: form.eduCountry || null,
                 fieldOfStudy: form.eduField || null,
-                graduationYear: form.graduationYear ? parseInt(form.graduationYear) : null,
+                endYear: form.graduationYear ? parseInt(form.graduationYear) : null,
                 gpa: form.gpa || null,
                 gpaType: form.gpa ? form.gradingSystem : null,
                 languageScore: form.languageScore || null,
               }),
             });
-          } catch { /* non-blocking */ }
+          } catch {
+            toast({ title: "Warning", description: "Student saved, but education record could not be updated.", variant: "destructive" });
+          }
         }
       }
       toast({ title: "Student updated" });

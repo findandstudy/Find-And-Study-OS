@@ -3040,7 +3040,8 @@
     "eduSourceMigrated": "Перенесено",
     "eduEditTitle": "Изменить запись об образовании",
     "eduCity": "Город",
-    "eduLanguageScore": "Языковой балл"
+    "eduLanguageScore": "Языковой балл",
+    "eduMissingRequired": "Отсутствует обязательная запись об образовании {level} для данного уровня заявки."
   },
   "agentsPage": {
     "assignContactPerson": "Назначить контактное лицо",

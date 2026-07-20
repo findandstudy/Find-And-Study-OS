@@ -2989,7 +2989,8 @@
     "eduSourceMigrated": "माइग्रेट किया",
     "eduEditTitle": "शिक्षा रिकॉर्ड संपादित करें",
     "eduCity": "शहर",
-    "eduLanguageScore": "भाषा स्कोर"
+    "eduLanguageScore": "भाषा स्कोर",
+    "eduMissingRequired": "इस आवेदन स्तर के लिए आवश्यक {level} शिक्षा रिकॉर्ड अनुपस्थित है।"
   },
   "agentsPage": {
     "assignContactPerson": "संपर्क व्यक्ति असाइन करें",

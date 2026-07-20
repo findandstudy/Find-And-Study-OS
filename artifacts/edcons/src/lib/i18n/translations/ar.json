@@ -3040,7 +3040,8 @@
     "eduSourceMigrated": "منقول",
     "eduEditTitle": "تعديل السجل التعليمي",
     "eduCity": "المدينة",
-    "eduLanguageScore": "درجة اللغة"
+    "eduLanguageScore": "درجة اللغة",
+    "eduMissingRequired": "سجل التعليم {level} المطلوب مفقود لهذا المستوى."
   },
   "agentsPage": {
     "assignContactPerson": "تعيين شخص الاتصال",

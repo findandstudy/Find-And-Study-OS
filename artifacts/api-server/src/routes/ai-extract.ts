@@ -258,9 +258,19 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
 
     // FIX-15D: Auto-upsert education_records when diploma or transcript is extracted
     // and a studentId is provided in the request body.
+    // Confidence gating: skip upsert when AI reports low confidence to avoid persisting
+    // unreliable data. Add a note to extractedNotes so the staff member is aware.
+    if (extracted.confidence === "low") {
+      extracted.extractedNotes = [
+        extracted.extractedNotes,
+        "Low confidence — extracted fields were not auto-saved. Please review and save manually.",
+      ].filter(Boolean).join(" ");
+    }
+
     const studentIdRaw = (req.body as any)?.studentId;
     const eduUpserted = { skipped: true, level: null as string | null };
-    if (studentIdRaw && /diploma|transcript|degree/i.test(String(extracted.documentType || ""))) {
+    const skipDueToLowConfidence = extracted.confidence === "low";
+    if (!skipDueToLowConfidence && studentIdRaw && /diploma|transcript|degree/i.test(String(extracted.documentType || ""))) {
       const studentId = Number(studentIdRaw);
       if (Number.isFinite(studentId) && studentId > 0) {
         try {

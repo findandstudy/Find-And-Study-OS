@@ -2989,7 +2989,8 @@
     "eduSourceMigrated": "迁移",
     "eduEditTitle": "编辑教育记录",
     "eduCity": "城市",
-    "eduLanguageScore": "语言成绩"
+    "eduLanguageScore": "语言成绩",
+    "eduMissingRequired": "该申请级别缺少必需的 {level} 教育记录。"
   },
   "agentsPage": {
     "assignContactPerson": "分配联系人",

@@ -2989,7 +2989,8 @@
     "eduSourceMigrated": "Migrado",
     "eduEditTitle": "Editar registro educativo",
     "eduCity": "Ciudad",
-    "eduLanguageScore": "Puntuación de idioma"
+    "eduLanguageScore": "Puntuación de idioma",
+    "eduMissingRequired": "Falta el registro de educación {level} requerido para este nivel de solicitud."
   },
   "agentsPage": {
     "assignContactPerson": "Asignar persona de contacto",
