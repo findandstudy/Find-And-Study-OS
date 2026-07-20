@@ -306,11 +306,12 @@ export default function SignFlow({ token }: { token: string }) {
         body: JSON.stringify({ intake: intakePayload }),
       });
       // If the user filled any education field, persist it best-effort (non-blocking).
+      // Server resolves interestedLevel itself — no need to send it.
       const hasEdu = edu.schoolName || edu.country || edu.city || edu.fieldOfStudy || edu.graduationYear || edu.gpa || edu.languageScore;
       if (hasEdu) {
         customFetch(`/api/public/sign/${encodeURIComponent(token)}/education`, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...edu, graduationYear: edu.graduationYear ? Number(edu.graduationYear) : null, interestedLevel: session?.interestedLevel || null }),
+          body: JSON.stringify({ ...edu, graduationYear: edu.graduationYear ? Number(edu.graduationYear) : null }),
         }).catch(() => { /* best-effort */ });
       }
       setStep("review");
@@ -589,6 +590,23 @@ export default function SignFlow({ token }: { token: string }) {
   }
 
   if (step === "review") {
+    // For admin_driven sessions, education hasn't been submitted yet (intake was
+    // skipped). Fire it best-effort when the user advances to the sign step.
+    function advanceToSign() {
+      if (session.mode === "admin_driven") {
+        const hasEdu = edu.schoolName || edu.country || edu.city || edu.fieldOfStudy || edu.graduationYear || edu.gpa || edu.languageScore;
+        if (hasEdu) {
+          customFetch(`/api/public/sign/${encodeURIComponent(token)}/education`, {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ...edu, graduationYear: edu.graduationYear ? Number(edu.graduationYear) : null }),
+          }).catch(() => { /* best-effort */ });
+        }
+      }
+      setStep("sign");
+    }
+    const reviewEduLevel = (session?.interestedLevel || "").toLowerCase();
+    const reviewShowEdu = session.mode === "admin_driven" && (/bachelor|associate|certificate/.test(reviewEduLevel) || /master/.test(reviewEduLevel) || /phd|doctor|doctorate/.test(reviewEduLevel));
+    const reviewEduLabel = /bachelor|associate|certificate/.test(reviewEduLevel) ? t("eduLevelHS") : /master/.test(reviewEduLevel) ? t("eduLevelBachelor") : t("eduLevelMaster");
     return (
       <Shell
         brand={brand}
@@ -598,7 +616,7 @@ export default function SignFlow({ token }: { token: string }) {
         subtitle={<span className="font-semibold text-foreground">{session.template.name}</span>}
         footer={
           <div className="flex flex-col sm:flex-row-reverse gap-2">
-            <Button className="w-full sm:flex-1 bg-[#143591] hover:bg-[#0f2870] text-white" size="lg" onClick={() => setStep("sign")}>
+            <Button className="w-full sm:flex-1 bg-[#143591] hover:bg-[#0f2870] text-white" size="lg" onClick={advanceToSign}>
               <FileSignature className="w-4 h-4 mr-2" /> {t("sign")}
             </Button>
             {session.mode === "self_fill" && (
@@ -627,6 +645,39 @@ export default function SignFlow({ token }: { token: string }) {
             src={previewUrl}
           />
         </div>
+        {reviewShowEdu && (
+          <div className="mt-4 pt-4 border-t space-y-4">
+            <p className="text-sm font-medium text-muted-foreground">{t("priorEducation")} — {reviewEduLabel}</p>
+            <div>
+              <FieldLabel>{t("eduSchoolName")}</FieldLabel>
+              <Input className="mt-1.5" value={edu.schoolName} onChange={e => setEdu(s => ({ ...s, schoolName: e.target.value }))} />
+            </div>
+            <div>
+              <FieldLabel>{t("eduCountry")}</FieldLabel>
+              <Input className="mt-1.5" value={edu.country} onChange={e => setEdu(s => ({ ...s, country: e.target.value }))} />
+            </div>
+            <div>
+              <FieldLabel>{t("eduCity")}</FieldLabel>
+              <Input className="mt-1.5" value={edu.city} onChange={e => setEdu(s => ({ ...s, city: e.target.value }))} />
+            </div>
+            <div>
+              <FieldLabel>{t("eduFieldOfStudy")}</FieldLabel>
+              <Input className="mt-1.5" value={edu.fieldOfStudy} onChange={e => setEdu(s => ({ ...s, fieldOfStudy: e.target.value }))} />
+            </div>
+            <div>
+              <FieldLabel>{t("eduGraduationYear")}</FieldLabel>
+              <Input type="number" className="mt-1.5" placeholder="2022" value={edu.graduationYear} onChange={e => setEdu(s => ({ ...s, graduationYear: e.target.value }))} />
+            </div>
+            <div>
+              <FieldLabel>{t("eduGpa")}</FieldLabel>
+              <Input className="mt-1.5" placeholder="3.50 / 85" value={edu.gpa} onChange={e => setEdu(s => ({ ...s, gpa: e.target.value }))} />
+            </div>
+            <div>
+              <FieldLabel>{t("eduLanguageScore")}</FieldLabel>
+              <Input className="mt-1.5" placeholder="IELTS 6.5" value={edu.languageScore} onChange={e => setEdu(s => ({ ...s, languageScore: e.target.value }))} />
+            </div>
+          </div>
+        )}
       </Shell>
     );
   }

@@ -449,15 +449,20 @@ router.post("/public/sign/:token/education", signLimiter, async (req, res): Prom
     if (!r.session.verifiedEmail) {
       res.status(403).json({ error: "Email verification required" }); return;
     }
-    const { schoolName, country, city, fieldOfStudy, graduationYear, gpa, languageScore, interestedLevel } = req.body || {};
-    const lvl = (typeof interestedLevel === "string" ? interestedLevel : "").toLowerCase();
-    const educationLevel: string | null =
-      /bachelor|associate|certificate/.test(lvl) ? "high_school" :
-      /master/.test(lvl) ? "bachelor" :
-      /phd|doctor|doctorate/.test(lvl) ? "master" : null;
+    const { schoolName, country, city, fieldOfStudy, graduationYear, gpa, languageScore } = req.body || {};
     const email = r.session.verifiedEmail.toLowerCase().trim();
     const capStr = (v: unknown) => typeof v === "string" && v.trim() ? v.trim().slice(0, 500) : null;
     const capYear = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n > 1900 && n < 2100 ? n : null; };
+    // Resolve interestedLevel server-side (never trust client).
+    const [leadLevel] = await db.select({ interestedLevel: leadsTable.interestedLevel })
+      .from(leadsTable).where(sql`lower(${leadsTable.email}) = ${email}`).limit(1);
+    const [stuLevel] = await db.select({ interestedLevel: studentsTable.interestedLevel })
+      .from(studentsTable).where(sql`lower(${studentsTable.email}) = ${email}`).limit(1);
+    const resolvedLvl = (leadLevel?.interestedLevel || stuLevel?.interestedLevel || "").toLowerCase();
+    const educationLevel: string | null =
+      /bachelor|associate|certificate/.test(resolvedLvl) ? "high_school" :
+      /master/.test(resolvedLvl) ? "bachelor" :
+      /phd|doctor|doctorate/.test(resolvedLvl) ? "master" : null;
     // Try student first.
     const [stuRow] = await db.select({ id: studentsTable.id })
       .from(studentsTable).where(sql`lower(${studentsTable.email}) = ${email}`).limit(1);
