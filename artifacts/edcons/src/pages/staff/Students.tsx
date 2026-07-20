@@ -873,7 +873,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       // Also write education_records for the prior level based on interestedLevel
-      const lvl = form.interestedLevel;
+      const lvl = (form.interestedLevel || "").toLowerCase();
       const isBachelorApp = /bachelor|associate|certificate/.test(lvl);
       const isMasterApp = /master/.test(lvl);
       const isPhdApp = /phd|doctor/.test(lvl);
@@ -882,7 +882,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         const schoolName = isBachelorApp ? form.highSchool : isMasterApp ? form.universityBachelor : form.universityMaster;
         if (schoolName || form.eduCity || form.eduCountry || form.eduField) {
           try {
-            await fetch(`${BASE_URL}/api/students/${student.id}/education-records/${priorLevel}`, {
+            const eduRes = await fetch(`${BASE_URL}/api/students/${student.id}/education-records/${priorLevel}`, {
               method: "PUT", credentials: "include",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -896,6 +896,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 languageScore: form.languageScore || null,
               }),
             });
+            if (!eduRes.ok) throw new Error(`HTTP ${eduRes.status}`);
           } catch {
             toast({ title: "Warning", description: "Student saved, but education record could not be updated.", variant: "destructive" });
           }
@@ -988,7 +989,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 </Select>
               </div>
               {(() => {
-                const lvl = form.interestedLevel;
+                const lvl = (form.interestedLevel || "").toLowerCase();
                 const isBachelorApp = /bachelor|associate|certificate/.test(lvl);
                 const isMasterApp = /master/.test(lvl);
                 const isPhdApp = /phd|doctor/.test(lvl);
