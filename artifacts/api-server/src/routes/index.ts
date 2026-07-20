@@ -60,6 +60,7 @@ import portalProgramFallbacksRouter from "./portalProgramFallbacks";
 import portalUniversityExclusionsRouter from "./portalUniversityExclusions";
 import personFeedRouter from "./personFeed";
 import academySsoRouter from "./academySso";
+import educationRecordsRouter from "./education-records";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
 const router: IRouter = Router();
@@ -205,5 +206,6 @@ router.use(portalUniversityExclusionsRouter);
 router.use(personFeedRouter);
 router.use(qualityRouter);
 router.use(academySsoRouter);
+router.use(educationRecordsRouter);
 
 export default router;

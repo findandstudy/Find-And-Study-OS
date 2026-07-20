@@ -3,13 +3,14 @@
 //
 // Her ekran geçişi navigateFlow POST'unda DÜZ METİN `fields` taşır; bu modül
 // bizim SubmitProfile verimizi o alan adlarına çevirir. Formatlar KRİTİK:
-//   - Tarihler ISO "YYYY-MM-DD" (UI farklı gösterse de payload ISO).
+//   - Tarihler "d MMM yyyy" (e.g. "4 Sep 1989") — FIX-15C (Azenabor run doğruladı).
 //   - Ülke picklist deseni ÜÇ alan birden:
 //       <F>.<Group>.<CountryEn>.selected = true
 //       <F>.selectedChoiceLabels = "<CountryEn>"
 //       <F>.selectedChoiceValues = "<CountryEn>"
 //   - Telefon: phoneWithCountryCode.selectedCountryCode = "93",
-//     phoneWithCountryCode.phone = "93706620293" (kod PREFIX'li tam numara).
+//     phoneWithCountryCode.phone = "706620293" (SADECE yerel numara, kod prefix YOK)
+//     FIX-15C: ülke kodu prefix kaldırıldı (Azenabor run doğruladı).
 //   - Email READ-ONLY pre-filled → HİÇ dokunulmaz.
 // ---------------------------------------------------------------------------
 
@@ -20,6 +21,28 @@ export interface FlowField {
   field: string;
   value: unknown;
   isVisible: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Short English month names (locale-insensitive)
+// ---------------------------------------------------------------------------
+const MONTHS_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/**
+ * Format ISO "YYYY-MM-DD" to "d MMM yyyy" (e.g. "4 Sep 1989").
+ * Required by Altınbaş portal date pickers (FIX-15C).
+ */
+export function formatDateDmy(iso: string | undefined): string {
+  if (!iso) return "";
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso;
+  const [, y, mo, d] = m;
+  const monthName = MONTHS_SHORT[parseInt(mo, 10) - 1];
+  if (!monthName) return iso;
+  return `${parseInt(d, 10)} ${monthName} ${y}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +141,10 @@ export function buildProgramFields(programRecord: Record<string, unknown>): Flow
 
 // ---------------------------------------------------------------------------
 // Screen 4 — Personal Information (action: NEXT)
+//
+// FIX-15C değişiklikleri (Azenabor run):
+//   - Date_of_Birth + Passport dates → "d MMM yyyy" formatı
+//   - phoneWithCountryCode.phone → SADECE yerel numara (kod prefix YOK)
 // ---------------------------------------------------------------------------
 export function buildPersonalFields(profile: SubmitProfile): FlowField[] {
   const country = mapCountry(profile.nationality) || "Turkey";
@@ -132,7 +159,8 @@ export function buildPersonalFields(profile: SubmitProfile): FlowField[] {
     { field: "Last_Name", value: profile.lastName, isVisible: true },
     { field: "Preferred_Name", value: null, isVisible: true },
     { field: `Gender.GenderChoice.${female ? "Female" : "Male"}.selected`, value: true, isVisible: true },
-    { field: "Date_of_Birth", value: profile.dateOfBirth || "", isVisible: true },
+    // FIX-15C: "d MMM yyyy" format (e.g. "4 Sep 1989")
+    { field: "Date_of_Birth", value: formatDateDmy(profile.dateOfBirth), isVisible: true },
     ...countryPick("Country_of_Birth", "CountryList", country),
     { field: "City_of_Birth", value: "", isVisible: true },
     ...countryPick("Citizenship_CL", "CountryList", country),
@@ -140,12 +168,14 @@ export function buildPersonalFields(profile: SubmitProfile): FlowField[] {
     { field: "Secondary_Citizenship.selectedChoiceValues", value: "", isVisible: true },
     { field: "National_Identity_Number", value: null, isVisible: true },
     { field: "Passport", value: profile.passportNumber, isVisible: true },
-    { field: "Passport_Date_of_Issue", value: profile.passportIssueDate || "", isVisible: true },
-    { field: "Passport_Date_of_Expiry", value: profile.passportExpiryDate || "", isVisible: true },
+    // FIX-15C: Passport dates also use "d MMM yyyy"
+    { field: "Passport_Date_of_Issue", value: formatDateDmy(profile.passportIssueDate), isVisible: true },
+    { field: "Passport_Date_of_Expiry", value: formatDateDmy(profile.passportExpiryDate), isVisible: true },
     ...countryPick("Passport_Issuing_Country", "IssuingCountry", country),
     // Email READ-ONLY pre-filled — kontrata göre HİÇ gönderilmez/dokunulmaz.
     { field: "phoneWithCountryCode.selectedCountryCode", value: dial, isVisible: true },
-    { field: "phoneWithCountryCode.phone", value: `${dial}${national}`, isVisible: true },
+    // FIX-15C: SADECE yerel numara — ülke kodu prefix KALDIRILDI
+    { field: "phoneWithCountryCode.phone", value: national, isVisible: true },
     { field: "Father_Name", value: profile.fatherName || "-", isVisible: true },
     { field: "Mother_Name", value: profile.motherName || "-", isVisible: true },
     ...countryPick("Address_Country", "CountryList", country),
@@ -158,8 +188,8 @@ export function buildPersonalFields(profile: SubmitProfile): FlowField[] {
 }
 
 // ---------------------------------------------------------------------------
-// Screen 5 — Educational Information (action: NEXT) — alt-kayıtlar opsiyonel;
-// boş geçilirken SADECE liste ID binding'leri gider.
+// Screen 5 — Educational Information (action: NEXT) — FIX-15C: education
+// records artık DB'den yükleniyor ve bachelor kaydı varsa gönderiliyor.
 // ---------------------------------------------------------------------------
 export interface FlowIds {
   applicantId?: string;
@@ -168,7 +198,36 @@ export interface FlowIds {
   contactId?: string;
 }
 
-export function buildEducationalFields(ids: FlowIds): FlowField[] {
+/** Minimal education record shape passed from profile builder (education_records table). */
+export interface EduRecord {
+  level: string;
+  schoolName?: string | null;
+  country?: string | null;
+  fieldOfStudy?: string | null;
+  startMonth?: string | null;
+  startYear?: number | null;
+  endMonth?: string | null;
+  endYear?: number | null;
+  gpa?: string | null;
+  gpaType?: string | null;
+}
+
+/**
+ * Returns the first missing required education record level key, or null.
+ * Altınbaş: Master/PhD submissions require a bachelor-level record.
+ */
+export function checkMissingEduRecord(
+  eduRecords: EduRecord[] | undefined,
+  profileLevel: string,
+): string | null {
+  const needsBachelor = /master|phd|doctor/i.test(profileLevel || "");
+  if (needsBachelor && !eduRecords?.some((r) => r.level === "bachelor")) {
+    return "bachelor_education_record";
+  }
+  return null;
+}
+
+export function buildEducationalFields(ids: FlowIds, edu?: EduRecord): FlowField[] {
   const lists: Array<{ name: string; cvType: string }> = [
     { name: "EducationalInformationList", cvType: "Educational_Information" },
     { name: "ExamInformationList", cvType: "Proficiency_Exam" },
@@ -190,23 +249,59 @@ export function buildEducationalFields(ids: FlowIds): FlowField[] {
     { field: "SetCookie.accountId", value: ids.accountId ?? "", isVisible: true },
     { field: "SetCookie.contactId", value: ids.contactId ?? "", isVisible: true },
   );
+
+  // FIX-15C: If we have a bachelor/master education record, inject its data
+  // into the EducationalInformationList modal fields. Field names are based on
+  // the Altınbaş Salesforce Screen Flow schema (verify with ALTINBAS_CAPTURE=1).
+  if (edu) {
+    const degreeLabel =
+      edu.level === "master" ? "Master" :
+      edu.level === "bachelor" ? "Bachelor" :
+      edu.level === "high_school" ? "High School" :
+      edu.level;
+    fields.push(
+      { field: "EducationalInformationList.records.0.School__c",         value: edu.schoolName ?? "",    isVisible: true },
+      { field: "EducationalInformationList.records.0.Country__c",        value: edu.country ?? "",       isVisible: true },
+      { field: "EducationalInformationList.records.0.Degree__c",         value: degreeLabel,             isVisible: true },
+      { field: "EducationalInformationList.records.0.Field_of_Study__c", value: edu.fieldOfStudy ?? "",  isVisible: true },
+      { field: "EducationalInformationList.records.0.Start_Month__c",    value: edu.startMonth ?? "",    isVisible: true },
+      { field: "EducationalInformationList.records.0.Start_Year__c",     value: edu.startYear ?? "",     isVisible: true },
+      { field: "EducationalInformationList.records.0.End_Month__c",      value: edu.endMonth ?? "",      isVisible: true },
+      { field: "EducationalInformationList.records.0.End_Year__c",       value: edu.endYear ?? "",       isVisible: true },
+      { field: "EducationalInformationList.records.0.GPA_Type__c",       value: edu.gpaType ?? "",       isVisible: true },
+      { field: "EducationalInformationList.records.0.GPA__c",            value: edu.gpa ?? "",           isVisible: true },
+    );
+  }
+
   return fields;
 }
 
 // ---------------------------------------------------------------------------
-// Screen 6 — Questionnaire (action: NEXT). Sorular flow'a önceden yüklü;
-// zorunlu cevap şekli henüz canlı yakalanmadı → boş dene, hata olursa
-// ALTINBAS_CAPTURE=1 run'ından responseQuestions şekli alınıp buraya eklenir.
+// Screen 6 — Questionnaire (action: NEXT).
+// FIX-15C: Visa Support sorusu canlı yakalandı — "Yes" varsayılan.
 // ---------------------------------------------------------------------------
-export function buildQuestionnaireFields(): FlowField[] {
-  return [];
+export function buildQuestionnaireFields(visaSupport?: string): FlowField[] {
+  const vs = visaSupport ?? "Yes";
+  // Field names based on Altınbaş portal Questionnaire step.
+  // Verify exact names with ALTINBAS_CAPTURE=1 if issues arise.
+  return [
+    { field: "VisaSupportQuestion.selectedChoiceLabels", value: vs, isVisible: true },
+    { field: "VisaSupportQuestion.selectedChoiceValues", value: vs, isVisible: true },
+  ];
 }
 
 // ---------------------------------------------------------------------------
 // Screen 7 — Documents (action: NEXT). Belge upload = Salesforce ContentVersion
-// insert (base64) — HENÜZ canlı yakalanmadı; ilk capture run'ından eklenecek.
-// Şimdilik belgesiz geçilir (Upload.recordsCV boş).
+// insert (base64) — FIX-15C: slot mapping tanımlandı, upload HENÜZ yok.
 // ---------------------------------------------------------------------------
+/** CRM document type keys that satisfy each portal slot. */
+export const DOCUMENT_SLOT_TYPES: Record<string, string[]> = {
+  passport:   ["passport"],
+  diploma:    ["diploma", "degree", "graduation_certificate"],
+  transcript: ["transcript", "academic_transcript"],
+  photo:      ["photo", "photograph"],
+};
+
 export function buildDocumentsFields(): FlowField[] {
   return [];
 }

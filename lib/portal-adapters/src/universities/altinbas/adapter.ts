@@ -58,6 +58,7 @@ import { fold } from "../../programMatch.js";
 import {
   type FlowField,
   type FlowIds,
+  type EduRecord,
   buildTermFields,
   buildDegreeFields,
   buildProgramFields,
@@ -65,6 +66,7 @@ import {
   buildEducationalFields,
   buildQuestionnaireFields,
   buildDocumentsFields,
+  checkMissingEduRecord,
 } from "./flow-fields.js";
 
 // ---------------------------------------------------------------------------
@@ -979,6 +981,96 @@ function pickProgramRecord(
 }
 
 // ---------------------------------------------------------------------------
+// FIX-15B: isDuplicatePassport tespit edilince My Applications sayfasına gidip
+// "Signed Up" (yarım) başvuru satırında "Complete Application" tıklanır.
+// Başarılı olursa flow resume modunda devam eder (Term/Degree/Program atlanır).
+// ---------------------------------------------------------------------------
+async function tryResumeFromMyApplications(
+  page: any,
+  profile: SubmitProfile,
+  rt: FlowRuntime,
+  result: SubmitResult,
+): Promise<boolean> {
+  const MY_APPS_URL = "https://apply.altinbas.edu.tr/partner/s/my-applications";
+  try {
+    logger.info("[altinbas] FIX-15B: isDuplicatePassport → My Applications'a yönlendiriliyor");
+    await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60_000 }).catch(() => {});
+    await page.waitForTimeout(SF_HYDRATION_MS);
+
+    // "Signed Up" = Salesforce Experience Cloud'da tamamlanmamış başvuru.
+    const rows = page.locator("tr").filter({ hasText: /signed up/i });
+    const rowCount = await rows.count().catch(() => 0);
+    if (rowCount === 0) {
+      logger.warn("[altinbas] FIX-15B: Signed Up satırı bulunamadı — alreadyExists fallback'e düşülüyor");
+      return false;
+    }
+
+    const firstRow = rows.first();
+    const rowText = await firstRow.innerText().catch(() => "");
+    logger.info(`[altinbas] FIX-15B: Signed Up satırı bulundu: "${rowText.replace(/\s+/g, " ").slice(0, 150)}"`);
+
+    // Program mismatch uyarısı: satır metni beklenen programı içermiyorsa kaydet.
+    const crmProgram = profile.programName || "";
+    if (crmProgram) {
+      const firstWord = crmProgram.split(/\s+/)[0].toLowerCase();
+      if (firstWord.length > 3 && !rowText.toLowerCase().includes(firstWord)) {
+        if (!result.meta) result.meta = {};
+        result.meta.programMismatch = {
+          expected: crmProgram,
+          actual: rowText.replace(/\s+/g, " ").trim().slice(0, 200),
+          note: "resume mode — program doğrulanamadı, satır metninden çıkarıldı",
+        };
+        logger.warn(
+          `[altinbas] FIX-15B: program mismatch olası — expected="${crmProgram}", rowText="${rowText.slice(0, 80)}"`,
+        );
+      }
+    }
+
+    // "Complete Application" butonunu önce ilgili satırda, bulunamazsa tüm sayfada ara.
+    let completeBtn = firstRow
+      .getByRole("button", { name: /complete application/i }).first();
+    if (await completeBtn.count().catch(() => 0) === 0) {
+      completeBtn = firstRow
+        .getByRole("link", { name: /complete application/i }).first();
+    }
+    if (await completeBtn.count().catch(() => 0) === 0) {
+      completeBtn = page.getByRole("button", { name: /complete application/i }).first();
+    }
+    if (await completeBtn.count().catch(() => 0) === 0) {
+      completeBtn = page.getByRole("link", { name: /complete application/i }).first();
+    }
+    if (await completeBtn.count().catch(() => 0) === 0) {
+      logger.warn("[altinbas] FIX-15B: Complete Application butonu bulunamadı — alreadyExists fallback'e düşülüyor");
+      return false;
+    }
+
+    const beforeLastRaw = rt.lastRaw;
+    await completeBtn.scrollIntoViewIfNeeded().catch(() => {});
+    await completeBtn.click({ force: true, timeout: 10_000 }).catch(() => {});
+    await page.waitForTimeout(SF_HYDRATION_MS);
+    logger.info("[altinbas] FIX-15B: Complete Application tıklandı — flow boot bekleniyor");
+
+    // Mevcut flow interceptor yeni session'ı da yakalar (aynı URL pattern).
+    // rt.lastRaw güncellenene kadar 15s bekle.
+    for (let t = 0; t < 15; t++) {
+      await page.waitForTimeout(1000);
+      if (rt.lastRaw !== beforeLastRaw && rt.lastRaw.length > 0) break;
+    }
+
+    if (rt.lastRaw === beforeLastRaw || rt.lastRaw.length === 0) {
+      logger.warn("[altinbas] FIX-15B: flow yeniden boot olmadı (serializedState güncel değil)");
+      return false;
+    }
+
+    logger.info(`[altinbas] FIX-15B: resume başarılı — yeni stage=${readStageFromRaw(rt.lastRaw) ?? "?"}`);
+    return true;
+  } catch (err) {
+    logger.warn(`[altinbas] FIX-15B resume hatası (non-fatal): ${(err as Error).message?.slice(0, 200)}`);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Flow replay sürücüsü — Term → Degree → Program → commit → Personal →
 // Educational → Questionnaire → Documents → FINISH
 // ---------------------------------------------------------------------------
@@ -1060,15 +1152,17 @@ async function runFlowReplay(
   const rollbackIfNeeded = async (tag: string): Promise<void> =>
     rollbackDanglingApps(page, rt, result, tag, runCreatedAppIds);
 
+  // FIX-15B: isDuplicatePassport → resume attempt (tryResumeFromMyApplications).
+  // _duplicateSignal se bildirir; caller'lar bunu kontrol ederek resume dener.
+  // Fallback: resume başarısız → alreadyExists=true (orijinal FIX-14 davranışı).
+  let _duplicateSignal = false;
+
   const guard = (raw: string, tag: string): boolean => {
-    // FIX-14: isDuplicatePassport = önceki run'ın dangling SF kaydı
-    // (CheckDuplicateValidation). Self-referans DEĞİL — gerçek bloker sinyal.
-    // alreadyExists=true → worker bu submission'ı retry etmez (sonsuz döngü biter).
     if (isDuplicatePassport(raw)) {
-      result.alreadyExists = true;
-      result.detail =
-        `Altınbaş: CheckDuplicateValidation @${tag} — önceki run dangling SF Application__c kaydı bırakmış; already_exists (FIX-14). Manuel SF temizliği gerekiyor.`;
-      logger.warn(`[altinbas] ${result.detail}`);
+      _duplicateSignal = true;
+      logger.warn(
+        `[altinbas] isDuplicatePassport @${tag} — FIX-15B resume akışı başlatılıyor`,
+      );
       return true;
     }
     if (flowHasError(raw)) {
@@ -1078,6 +1172,8 @@ async function runFlowReplay(
     }
     return false;
   };
+
+  let resumeMode = false;
 
   // Stage-aware başlangıç: boot-seed UI Next tıklaması ekranı ilerletmiş
   // olabilir (örn. Term default'la Degree'ye geçti). Okunabilen boot stage'e
@@ -1210,6 +1306,19 @@ async function runFlowReplay(
         );
       }
       if (guard(raw, `commit${i + 1}`) || noteStage(raw, `commit${i + 1}`)) {
+        if (_duplicateSignal) {
+          _duplicateSignal = false;
+          const resumed = await tryResumeFromMyApplications(page, profile, rt, result);
+          if (resumed) {
+            resumeMode = true;
+            curRank = Math.max(curRank, stageRank(readStageFromRaw(rt.lastRaw)));
+            break; // commit döngüsünden çık, Personal'a geç
+          }
+          result.alreadyExists = true;
+          result.detail =
+            `Altınbaş: CheckDuplicateValidation @commit${i + 1} — resume başarısız; already_exists (FIX-15B). Manuel SF temizliği gerekiyor.`;
+          logger.warn(`[altinbas] ${result.detail}`);
+        }
         await rollbackIfNeeded(`commit${i + 1}`);
         return;
       }
@@ -1229,10 +1338,26 @@ async function runFlowReplay(
   // 6) PERSONAL (NEXT) — 46 alan; ISO tarih + 3'lü ülke picklist + kod-prefix telefon
   if (curRank <= 3) {
     raw = await postNavigateFlow(page, rt, "NEXT", buildPersonalFields(profile), "personal");
-    // FIX-7: Personal'daki "already exists" self-referanstır — duplicate-stop YOK.
     if (guard(raw, "Personal") || noteStage(raw, "Personal")) {
-      await rollbackIfNeeded("personal");
-      return;
+      if (_duplicateSignal) {
+        _duplicateSignal = false;
+        const resumed = await tryResumeFromMyApplications(page, profile, rt, result);
+        if (resumed) {
+          resumeMode = true;
+          curRank = Math.max(curRank, stageRank(readStageFromRaw(rt.lastRaw)));
+          // Don't return — fall through to Educational step
+        } else {
+          result.alreadyExists = true;
+          result.detail =
+            `Altınbaş: CheckDuplicateValidation @Personal — resume başarısız; already_exists (FIX-15B). Manuel SF temizliği gerekiyor.`;
+          logger.warn(`[altinbas] ${result.detail}`);
+          await rollbackIfNeeded("personal");
+          return;
+        }
+      } else {
+        await rollbackIfNeeded("personal");
+        return;
+      }
     }
   } else {
     logger.info("[altinbas] Personal adımı atlandı (boot stage ilerisinde)");
@@ -1409,7 +1534,20 @@ async function runFlowReplay(
         `[altinbas] Educational ID binding EKSİK: ${missingIds.join(",")} — validation hatası olası (kaynak: flow yanıtlarında bu anahtar/prefix hiç görülmedi)`,
       );
     }
-    const eduFields = buildEducationalFields(effIds);
+    // FIX-15C: education_records'dan bachelor/master kaydı al ve gönder.
+    // Master/PhD başvurularında bachelor kaydı yoksa missingDocuments'a ekle.
+    const eduRecords = profile.educationRecords;
+    const missingEduKey = checkMissingEduRecord(eduRecords, profile.level || "");
+    if (missingEduKey) {
+      logger.warn(`[altinbas] FIX-15C: ${missingEduKey} eksik — missingDocuments'a eklendi`);
+      result.missingDocuments = [...(result.missingDocuments ?? []), missingEduKey];
+    }
+    // Prefer bachelor record; fall back to master or high_school for the modal.
+    const primaryEdu =
+      eduRecords?.find((r) => r.level === "bachelor") ??
+      eduRecords?.find((r) => r.level === "master") ??
+      eduRecords?.find((r) => r.level === "high_school");
+    const eduFields = buildEducationalFields(effIds, primaryEdu);
     // Capture karşılaştırması için TAM istek alanları (sadece Id/sabit — PII yok).
     logger.info(`[altinbas] Educational REQUEST fields (nf=${eduFields.length}): ${JSON.stringify(eduFields)}`);
     raw = await postNavigateFlow(page, rt, "NEXT", eduFields, "educational");
@@ -1421,9 +1559,9 @@ async function runFlowReplay(
     logger.info("[altinbas] Educational adımı atlandı (boot stage ilerisinde)");
   }
 
-  // 8) QUESTIONNAIRE (NEXT) — cevap şekli henüz yakalanmadı; boş dene.
+  // 8) QUESTIONNAIRE (NEXT) — FIX-15C: Visa Support sorusu gönderiliyor.
   if (curRank <= 5) {
-    raw = await postNavigateFlow(page, rt, "NEXT", buildQuestionnaireFields(), "questionnaire");
+    raw = await postNavigateFlow(page, rt, "NEXT", buildQuestionnaireFields(profile.visaSupport), "questionnaire");
     if (guard(raw, "Questionnaire") || noteStage(raw, "Questionnaire")) {
       await rollbackIfNeeded("questionnaire");
       return;
@@ -1463,6 +1601,24 @@ async function runFlowReplay(
   if (guard(raw, "FINISH") || noteStage(raw, "FINISH")) {
     await rollbackIfNeeded("finish");
     return;
+  }
+
+  // FIX-15A: Salesforce LWS "EduhubNavigateToURL" nav-blocked hatası BAŞARI sinyalidir.
+  // LWS cross-origin yönlendirmeyi engeller, ama Application__c kaydı çoktan işlendi.
+  // "Cannot open: ...my-applications?id=<TOKEN>" URL'inden externalRef çıkarılır.
+  {
+    const lwsMatch = raw.match(
+      /EduhubNavigateToURL[\s\S]{0,600}?Cannot open:\s*https?:\/\/apply\.altinbas\.edu\.tr\/partner\/s\/my-applications\?id=([^"'\s\\&]+)/i,
+    );
+    if (lwsMatch) {
+      const externalRef = lwsMatch[1].replace(/\\/g, "");
+      result.submitted = true;
+      result.externalRef = externalRef || rt.ids.applicationId;
+      result.detail =
+        `Altınbaş: FINISH — EduhubNavigateToURL LWS nav-blocked başarı (FIX-15A); externalRef=${result.externalRef ?? "?"}`;
+      logger.info(`[altinbas] ${result.detail}`);
+      return;
+    }
   }
 
   // FINISH başarı kanıtı: HTTP 2xx + aura JSON (postNavigateFlow garanti eder)

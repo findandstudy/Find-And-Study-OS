@@ -45,6 +45,11 @@ export interface SubmitResult {
    */
   externalRef?: string;
   /**
+   * Adapter-specific metadata: programMismatch (Part B resume) and other
+   * structured diagnostics that don't fit into the flat SubmitResult fields.
+   */
+  meta?: Record<string, unknown>;
+  /**
    * Document type slots that were required but not supplied to the adapter
    * (e.g. ["passport", "transcript"]). Optional — set by adapters when they
    * detect missing uploads.
@@ -172,6 +177,22 @@ export interface SubmitProfile {
   visaSupport?: string;
   /** Application intake term (e.g. "Fall 2026", "Spring 2026"). */
   intakeTerm?: string;
+  /**
+   * Education history from education_records, loaded by the profile builder.
+   * Used by Altınbaş Educational modal (FIX-15C) and missing-record gate.
+   */
+  educationRecords?: Array<{
+    level: string;
+    schoolName?: string | null;
+    country?: string | null;
+    fieldOfStudy?: string | null;
+    startMonth?: string | null;
+    startYear?: number | null;
+    endMonth?: string | null;
+    endYear?: number | null;
+    gpa?: string | null;
+    gpaType?: string | null;
+  }>;
   // ---------------------------------------------------------------------------
   // Panel-managed mapping data (sourced from portal_program_mapping by the
   // runner, keyed by universityKey). All optional — when absent the adapter

@@ -9,6 +9,7 @@ import {
   isFallbackExtractor,
   recordExtractorRun,
 } from "../lib/aiExtractorService";
+import { db, educationRecordsTable } from "@workspace/db";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
 // JSON body. Base64 inflates payload size by ~33%, and the route itself
@@ -246,7 +247,67 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       }
     }
 
-    res.json({ extracted, warnings, extractorId: extractor.id || null });
+    // FIX-15D: Auto-upsert education_records when diploma or transcript is extracted
+    // and a studentId is provided in the request body.
+    const studentIdRaw = (req.body as any)?.studentId;
+    const eduUpserted = { skipped: true, level: null as string | null };
+    if (studentIdRaw && /diploma|transcript|degree/i.test(String(extracted.documentType || ""))) {
+      const studentId = Number(studentIdRaw);
+      if (Number.isFinite(studentId) && studentId > 0) {
+        try {
+          // Determine education level from extracted data
+          const degreeRaw = String(extracted.degree || extracted.level || extracted.documentType || "").toLowerCase();
+          let level: "high_school" | "bachelor" | "master" = "bachelor";
+          if (/high.?school|secondary|lisans öncesi/i.test(degreeRaw)) level = "high_school";
+          else if (/master|msc|ma\b|mba|graduate/i.test(degreeRaw)) level = "master";
+
+          // Derive gpaType from gpaScale returned by normalizer
+          const gpaType: string | null =
+            extracted.gpaScale === 100 ? "percentage" :
+            extracted.gpaScale === 4   ? "4.0" :
+            null;
+
+          // Parse graduation year from extracted data for endYear
+          const endYear = extracted.graduationYear
+            ? Number(String(extracted.graduationYear).slice(0, 4))
+            : null;
+
+          await db
+            .insert(educationRecordsTable)
+            .values({
+              studentId,
+              level,
+              schoolName:   extracted.institutionName ?? extracted.schoolName ?? null,
+              country:      extracted.country ?? null,
+              fieldOfStudy: extracted.fieldOfStudy ?? extracted.major ?? null,
+              endYear:      Number.isFinite(endYear) ? endYear : null,
+              gpa:          extracted.gpa ? String(extracted.gpa) : null,
+              gpaType,
+              source:       "ai_extracted",
+            })
+            .onConflictDoUpdate({
+              target: [educationRecordsTable.studentId, educationRecordsTable.level],
+              set: {
+                schoolName:   extracted.institutionName ?? extracted.schoolName ?? null,
+                country:      extracted.country ?? null,
+                fieldOfStudy: extracted.fieldOfStudy ?? extracted.major ?? null,
+                endYear:      Number.isFinite(endYear) ? endYear : null,
+                gpa:          extracted.gpa ? String(extracted.gpa) : null,
+                gpaType,
+                source:       "ai_extracted",
+                updatedAt:    new Date(),
+              },
+            });
+          eduUpserted.skipped = false;
+          eduUpserted.level = level;
+        } catch (upsertErr) {
+          // Non-fatal — AI extraction result is still returned to client.
+          console.warn("[ai-extract] education_records upsert failed (non-fatal):", upsertErr);
+        }
+      }
+    }
+
+    res.json({ extracted, warnings, extractorId: extractor.id || null, eduUpserted });
     await recordExtractorRun({
       extractorId: extractor.id,
       scope: "staff",

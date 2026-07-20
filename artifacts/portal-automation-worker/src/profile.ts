@@ -10,7 +10,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { db, portalSubmissionsTable, applicationsTable, studentsTable, documentsTable } from "@workspace/db";
+import { db, portalSubmissionsTable, applicationsTable, studentsTable, documentsTable, educationRecordsTable } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
 import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, docFetchUrl } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
@@ -98,6 +98,12 @@ export async function buildStudentProfile(
 
   if (!student) throw new Error(`Student ${sub.studentId} not found`);
 
+  // ----- 3b. Load education_records (FIX-15D) --------------------------------
+  const eduRows = await db
+    .select()
+    .from(educationRecordsTable)
+    .where(eq(educationRecordsTable.studentId, sub.studentId));
+
   // ----- 4. Build SubmitProfile --------------------------------------------
   // Guard parent names: buildProfile requires non-empty values and throws if
   // they are blank, crashing the whole submission. Log + fall back to "-" so
@@ -156,6 +162,20 @@ export async function buildStudentProfile(
     // intakeTerm: application intake period first, season as fallback open-term
     intakeTerm: app.intake ?? app.season ?? undefined,
   });
+
+  // FIX-15D: attach education_records after buildProfile (buildProfile ignores unknown fields).
+  profile.educationRecords = eduRows.map((r) => ({
+    level:        r.level,
+    schoolName:   r.schoolName ?? null,
+    country:      r.country ?? null,
+    fieldOfStudy: r.fieldOfStudy ?? null,
+    startMonth:   r.startMonth ?? null,
+    startYear:    r.startYear ?? null,
+    endMonth:     r.endMonth ?? null,
+    endYear:      r.endYear ?? null,
+    gpa:          r.gpa ?? null,
+    gpaType:      r.gpaType ?? null,
+  }));
 
   // ----- 5. Download documents to temp dir ---------------------------------
   const tempDir = await fs.mkdtemp(

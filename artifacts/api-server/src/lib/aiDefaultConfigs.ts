@@ -23,6 +23,15 @@ export const HARDCODED_EXTRACTOR_FIELDS: ExtractorFieldDef[] = [
   { key: "documentType", label: "Document type", type: "enum", enumValues: ["passport", "diploma", "transcript", "photo", "other"] },
   { key: "confidence", label: "Confidence", type: "enum", enumValues: ["high", "medium", "low"] },
   { key: "extractedNotes", label: "Notes", type: "string" },
+  // Education record fields — extracted from diploma / transcript documents.
+  // Only populated when documentType is "diploma" or "transcript".
+  { key: "eduLevel", label: "Education level", type: "enum", enumValues: ["high_school", "bachelor", "master"], description: "Level of the degree shown on this document (high_school / bachelor / master)." },
+  { key: "eduSchoolName", label: "School / university name", type: "string", description: "Official institution name as printed on the document." },
+  { key: "eduCountry", label: "School country", type: "string", description: "Country where the institution is located." },
+  { key: "eduFieldOfStudy", label: "Field of study / major", type: "string", description: "Degree programme or major (e.g. 'Computer Engineering')." },
+  { key: "eduGraduationYear", label: "Graduation year", type: "number", description: "4-digit year of graduation / degree completion." },
+  { key: "eduGpa", label: "GPA / grade", type: "string", description: "Raw GPA or overall grade as printed on the document (e.g. '3.5', '85.4', 'A')." },
+  { key: "eduGpaType", label: "GPA scale type", type: "enum", enumValues: ["4.0", "percentage", "letter"], description: "Scale the GPA is expressed on: 4.0 for 0–4 scale, percentage for 0–100, letter for letter grade." },
 ];
 
 export const HARDCODED_EXTRACTOR_RULES: string[] = [

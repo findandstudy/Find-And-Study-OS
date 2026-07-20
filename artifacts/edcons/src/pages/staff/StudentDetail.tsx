@@ -87,6 +87,192 @@ function buildDownloadFilename(docType: string, firstName: string, lastName: str
   return `${sanitize(docType || "document")}-${sanitize(firstName)}-${sanitize(lastName)}.${ext}`;
 }
 
+// ---------------------------------------------------------------------------
+// EducationRecordsTab — inline sub-component (no separate file to avoid Fast
+// Refresh mixed-export issues; StudentDetail already owns this page).
+// ---------------------------------------------------------------------------
+function EducationRecordsTab({ studentId }: { studentId: number }) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+
+  const LEVELS = [
+    { value: "high_school", label: t("studentDetailPage.eduLevelHS") },
+    { value: "bachelor",    label: t("studentDetailPage.eduLevelBachelor") },
+    { value: "master",      label: t("studentDetailPage.eduLevelMaster") },
+  ];
+  const SOURCE_LABELS: Record<string, string> = {
+    manual:       t("studentDetailPage.eduSourceManual"),
+    ai_extracted: t("studentDetailPage.eduSourceAI"),
+    migrated:     t("studentDetailPage.eduSourceMigrated"),
+  };
+
+  const { data: records, refetch } = useQuery<any[]>({
+    queryKey: ["education-records", studentId],
+    queryFn: () =>
+      apiFetch(`${BASE}/api/students/${studentId}/education-records`).then((r) => r.json()),
+  });
+
+  const [editLevel, setEditLevel] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    schoolName: "", country: "", fieldOfStudy: "",
+    startYear: "", endYear: "", gpa: "", gpaType: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  function openEdit(rec: any) {
+    setEditLevel(rec.level);
+    setForm({
+      schoolName:   rec.schoolName   ?? "",
+      country:      rec.country      ?? "",
+      fieldOfStudy: rec.fieldOfStudy ?? "",
+      startYear:    rec.startYear    != null ? String(rec.startYear) : "",
+      endYear:      rec.endYear      != null ? String(rec.endYear)   : "",
+      gpa:          rec.gpa          ?? "",
+      gpaType:      rec.gpaType      ?? "",
+    });
+  }
+  function openNew(level: string) {
+    setEditLevel(level);
+    setForm({ schoolName: "", country: "", fieldOfStudy: "", startYear: "", endYear: "", gpa: "", gpaType: "" });
+  }
+
+  async function handleSave() {
+    if (!editLevel) return;
+    setSaving(true);
+    try {
+      const body = {
+        schoolName:   form.schoolName   || null,
+        country:      form.country      || null,
+        fieldOfStudy: form.fieldOfStudy || null,
+        startYear:    form.startYear    ? Number(form.startYear) : null,
+        endYear:      form.endYear      ? Number(form.endYear)   : null,
+        gpa:          form.gpa          || null,
+        gpaType:      form.gpaType      || null,
+      };
+      await apiFetch(`${BASE}/api/students/${studentId}/education-records/${editLevel}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      toast({ title: t("studentDetailPage.eduSaved") });
+      setEditLevel(null);
+      refetch();
+    } catch {
+      toast({ title: t("common.error"), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const existingLevels = new Set((records ?? []).map((r: any) => r.level));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-sm">{t("studentDetailPage.educationHistory")}</h3>
+      </div>
+
+      {!records || records.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("studentDetailPage.noEducationRecords")}</p>
+      ) : (
+        <div className="space-y-3">
+          {(records ?? []).map((rec: any) => (
+            <div key={rec.level} className="border rounded-lg p-3 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-sm">{LEVELS.find(l => l.value === rec.level)?.label ?? rec.level}</span>
+                <div className="flex items-center gap-2">
+                  {rec.source && (
+                    <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-secondary">
+                      {SOURCE_LABELS[rec.source] ?? rec.source}
+                    </span>
+                  )}
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(rec)}>
+                    <Pencil className="w-3 h-3 mr-1" />{t("studentDetailPage.editProfile")}
+                  </Button>
+                </div>
+              </div>
+              {rec.schoolName   && <p className="text-sm">{rec.schoolName}</p>}
+              {rec.fieldOfStudy && <p className="text-sm text-muted-foreground">{rec.fieldOfStudy}</p>}
+              <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
+                {rec.country  && <span>{rec.country}</span>}
+                {(rec.startYear || rec.endYear) && (
+                  <span>{rec.startYear ?? "?"} – {rec.endYear ?? "?"}</span>
+                )}
+                {rec.gpa && <span>{t("studentDetailPage.eduGpa")}: {rec.gpa}{rec.gpaType ? ` (${rec.gpaType})` : ""}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2 flex-wrap">
+        {LEVELS.filter(l => !existingLevels.has(l.value)).map(l => (
+          <Button key={l.value} size="sm" variant="outline" className="h-7 text-xs" onClick={() => openNew(l.value)}>
+            <Plus className="w-3 h-3 mr-1" />{l.label}
+          </Button>
+        ))}
+      </div>
+
+      <Dialog open={!!editLevel} onOpenChange={o => { if (!o) setEditLevel(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("studentDetailPage.eduEditTitle")} — {LEVELS.find(l => l.value === editLevel)?.label ?? editLevel}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label className="text-xs font-medium">{t("studentDetailPage.eduSchoolName")}</Label>
+              <Input value={form.schoolName} onChange={e => setForm(f => ({ ...f, schoolName: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-xs font-medium">{t("studentDetailPage.eduCountry")}</Label>
+              <Input value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-xs font-medium">{t("studentDetailPage.eduFieldOfStudy")}</Label>
+              <Input value={form.fieldOfStudy} onChange={e => setForm(f => ({ ...f, fieldOfStudy: e.target.value }))} />
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <Label className="text-xs font-medium">{t("studentDetailPage.eduStartYear")}</Label>
+                <Input type="number" min="1950" max="2100" value={form.startYear} onChange={e => setForm(f => ({ ...f, startYear: e.target.value }))} />
+              </div>
+              <div className="flex-1">
+                <Label className="text-xs font-medium">{t("studentDetailPage.eduEndYear")}</Label>
+                <Input type="number" min="1950" max="2100" value={form.endYear} onChange={e => setForm(f => ({ ...f, endYear: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <Label className="text-xs font-medium">{t("studentDetailPage.eduGpa")}</Label>
+                <Input value={form.gpa} onChange={e => setForm(f => ({ ...f, gpa: e.target.value }))} />
+              </div>
+              <div className="flex-1">
+                <Label className="text-xs font-medium">{t("studentDetailPage.eduGpaType")}</Label>
+                <Select value={form.gpaType} onValueChange={v => setForm(f => ({ ...f, gpaType: v }))}>
+                  <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">%</SelectItem>
+                    <SelectItem value="4.0">4.0</SelectItem>
+                    <SelectItem value="letter">Letter</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditLevel(null)}>{t("studentDetailPage.cancel")}</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              {t("studentDetailPage.eduSave")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
@@ -813,6 +999,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               </TabsTrigger>
             )}
             <TabsTrigger value="messaging">{t("studentDetailPage.allMessaging")}</TabsTrigger>
+            <TabsTrigger value="education">{t("studentDetailPage.education")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
@@ -1371,6 +1558,10 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
           <TabsContent value="messaging" className="mt-4">
             <AllMessagingHistory type="student" id={Number(id)} />
+          </TabsContent>
+
+          <TabsContent value="education" className="mt-4">
+            <EducationRecordsTab studentId={Number(id)} />
           </TabsContent>
         </Tabs>
         {student && <div className="mt-4"><AuditLogSection resource="student" resourceId={student.id} /></div>}

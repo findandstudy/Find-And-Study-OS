@@ -2212,6 +2212,61 @@ async function seedClaudeIntegration() {
     console.error("[migrate] academy_access_to_overrides:", err);
   }
 
+  // Step 2b22: education_records — structured education history per student.
+  // Replaces the flat high_school / university_bachelor / university_master
+  // columns on the students table with a normalised child table.
+  // The flat columns remain on students (no DROP) for backward compatibility.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS education_records (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        level TEXT NOT NULL CHECK (level IN ('high_school', 'bachelor', 'master')),
+        school_name TEXT,
+        country TEXT,
+        field_of_study TEXT,
+        start_month TEXT,
+        start_year INTEGER,
+        end_month TEXT,
+        end_year INTEGER,
+        gpa TEXT,
+        gpa_type TEXT,
+        source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai_extracted', 'migrated')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (student_id, level)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS education_records_student_id_idx ON education_records (student_id)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS education_records_student_level_uniq ON education_records (student_id, level)`);
+    // Migrate flat columns → education_records (source=migrated, skip if already present).
+    await pool.query(`
+      INSERT INTO education_records (student_id, level, school_name, source)
+      SELECT id, 'high_school', high_school, 'migrated'
+      FROM students
+      WHERE high_school IS NOT NULL AND high_school <> ''
+      ON CONFLICT (student_id, level) DO NOTHING
+    `);
+    await pool.query(`
+      INSERT INTO education_records (student_id, level, school_name, end_year, source)
+      SELECT id, 'bachelor', university_bachelor,
+             CASE WHEN graduation_year > 0 THEN graduation_year ELSE NULL END,
+             'migrated'
+      FROM students
+      WHERE university_bachelor IS NOT NULL AND university_bachelor <> ''
+      ON CONFLICT (student_id, level) DO NOTHING
+    `);
+    await pool.query(`
+      INSERT INTO education_records (student_id, level, school_name, source)
+      SELECT id, 'master', university_master, 'migrated'
+      FROM students
+      WHERE university_master IS NOT NULL AND university_master <> ''
+      ON CONFLICT (student_id, level) DO NOTHING
+    `);
+  } catch (err) {
+    console.error("[migrate] education_records:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
