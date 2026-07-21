@@ -2467,18 +2467,7 @@
     "sigTooLarge": "Image is too large. Please use a smaller file.",
     "fillDetailsFor": "Please fill in your details for:",
     "footerNote": "Your information will be used to generate the contract.",
-    "selectPlaceholder": "Select...",
-    "priorEducation": "Prior Education",
-    "eduSchoolName": "School / University",
-    "eduCountry": "Country",
-    "eduCity": "City",
-    "eduFieldOfStudy": "Field of Study",
-    "eduGraduationYear": "Graduation Year",
-    "eduGpa": "GPA / Score",
-    "eduLanguageScore": "Language Score",
-    "eduLevelHS": "High School",
-    "eduLevelBachelor": "Bachelor's",
-    "eduLevelMaster": "Master's"
+    "selectPlaceholder": "Select..."
   },
   "languages": {
     "tr": "Turkish",

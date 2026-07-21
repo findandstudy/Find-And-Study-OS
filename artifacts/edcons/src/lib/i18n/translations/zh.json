@@ -4269,18 +4269,7 @@
     "sigTooLarge": "Image is too large. Please use a smaller file.",
     "fillDetailsFor": "Please fill in your details for:",
     "footerNote": "Your information will be used to generate the contract.",
-    "selectPlaceholder": "请选择...",
-    "priorEducation": "先前学历",
-    "eduSchoolName": "学校 / 大学",
-    "eduCountry": "国家",
-    "eduCity": "城市",
-    "eduFieldOfStudy": "专业",
-    "eduGraduationYear": "毕业年份",
-    "eduGpa": "绩点 / 成绩",
-    "eduLanguageScore": "语言成绩",
-    "eduLevelHS": "高中",
-    "eduLevelBachelor": "本科",
-    "eduLevelMaster": "硕士"
+    "selectPlaceholder": "请选择..."
   },
   "languages": {
     "tr": "土耳其语",

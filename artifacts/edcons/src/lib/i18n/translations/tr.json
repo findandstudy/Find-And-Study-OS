@@ -2408,18 +2408,7 @@
     "sigTooLarge": "Görsel çok büyük. Lütfen daha küçük bir dosya kullanın.",
     "fillDetailsFor": "Lütfen şunun için bilgilerinizi girin:",
     "footerNote": "Bilgileriniz sözleşmeyi oluşturmak için kullanılacaktır.",
-    "selectPlaceholder": "Seçin...",
-    "priorEducation": "Önceki Eğitim",
-    "eduSchoolName": "Okul / Üniversite",
-    "eduCountry": "Ülke",
-    "eduCity": "Şehir",
-    "eduFieldOfStudy": "Bölüm",
-    "eduGraduationYear": "Mezuniyet Yılı",
-    "eduGpa": "Not Ortalaması",
-    "eduLanguageScore": "Dil Puanı",
-    "eduLevelHS": "Lise",
-    "eduLevelBachelor": "Lisans",
-    "eduLevelMaster": "Yüksek Lisans"
+    "selectPlaceholder": "Seçin..."
   },
   "languages": {
     "tr": "Türkçe",

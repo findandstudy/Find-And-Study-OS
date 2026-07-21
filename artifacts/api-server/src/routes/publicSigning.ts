@@ -1,7 +1,7 @@
 import express, { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, emailVerificationCodesTable, leadsTable, studentsTable, educationRecordsTable } from "@workspace/db";
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, emailVerificationCodesTable } from "@workspace/db";
+import { and, eq, gt, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import { hashToken } from "../lib/signingTokens";
 import { renderTemplate, buildAgentContext, cleanupSignatureImages, SIG_PLACEHOLDER, toSignatureDataUrl, contractNumber, signedContractFilename, documentShell } from "../lib/contractRenderer";
@@ -178,16 +178,6 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
           taxNumber: r.agent.taxNumber,
         } : null,
         intakeData: r.session.intakeData || null,
-        interestedLevel: await (async () => {
-          const email = (r.session.verifiedEmail || r.session.signerEmail || "").toLowerCase().trim();
-          if (!email) return null;
-          const [leadRow] = await db.select({ interestedLevel: leadsTable.interestedLevel })
-            .from(leadsTable).where(sql`lower(${leadsTable.email}) = ${email}`).limit(1);
-          if (leadRow?.interestedLevel) return leadRow.interestedLevel;
-          const [stuRow] = await db.select({ interestedLevel: studentsTable.interestedLevel })
-            .from(studentsTable).where(sql`lower(${studentsTable.email}) = ${email}`).limit(1);
-          return stuRow?.interestedLevel ?? null;
-        })(),
       }
     });
   } catch (err) {
@@ -439,79 +429,6 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
   } catch (err) {
     console.error("[public-sign] intake:", err);
     res.status(500).json({ error: "Failed to save intake" });
-  }
-});
-
-router.post("/public/sign/:token/education", signLimiter, async (req, res): Promise<void> => {
-  try {
-    const r = await resolveByToken(String(req.params.token));
-    if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }
-    if (!r.session.verifiedEmail) {
-      res.status(403).json({ error: "Email verification required" }); return;
-    }
-    const { schoolName, country, city, fieldOfStudy, graduationYear, gpa, languageScore } = req.body || {};
-    const email = r.session.verifiedEmail.toLowerCase().trim();
-    const capStr = (v: unknown) => typeof v === "string" && v.trim() ? v.trim().slice(0, 500) : null;
-    const capYear = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n > 1900 && n < 2100 ? n : null; };
-    // Resolve interestedLevel server-side (never trust client).
-    const [leadLevel] = await db.select({ interestedLevel: leadsTable.interestedLevel })
-      .from(leadsTable).where(sql`lower(${leadsTable.email}) = ${email}`).limit(1);
-    const [stuLevel] = await db.select({ interestedLevel: studentsTable.interestedLevel })
-      .from(studentsTable).where(sql`lower(${studentsTable.email}) = ${email}`).limit(1);
-    const resolvedLvl = (leadLevel?.interestedLevel || stuLevel?.interestedLevel || "").toLowerCase();
-    const educationLevel: string | null =
-      /bachelor|associate|certificate/.test(resolvedLvl) ? "high_school" :
-      /master/.test(resolvedLvl) ? "bachelor" :
-      /phd|doctor|doctorate/.test(resolvedLvl) ? "master" : null;
-    // Try student first.
-    const [stuRow] = await db.select({ id: studentsTable.id })
-      .from(studentsTable).where(sql`lower(${studentsTable.email}) = ${email}`).limit(1);
-    if (stuRow && educationLevel) {
-      const payload = {
-        studentId: stuRow.id,
-        level: educationLevel as "high_school" | "bachelor" | "master",
-        schoolName: capStr(schoolName),
-        country: capStr(country),
-        city: capStr(city),
-        fieldOfStudy: capStr(fieldOfStudy),
-        endYear: capYear(graduationYear),
-        gpa: capStr(gpa),
-        languageScore: capStr(languageScore),
-        source: "manual" as const,
-        updatedAt: new Date(),
-      };
-      const [existing] = await db.select({ id: educationRecordsTable.id })
-        .from(educationRecordsTable)
-        .where(and(eq(educationRecordsTable.studentId, stuRow.id), eq(educationRecordsTable.level, educationLevel))).limit(1);
-      if (existing) {
-        await db.update(educationRecordsTable).set(payload).where(eq(educationRecordsTable.id, existing.id));
-      } else {
-        await db.insert(educationRecordsTable).values(payload);
-      }
-      res.json({ success: true, entity: "student" }); return;
-    }
-    // Try lead.
-    const [leadRow] = await db.select({ id: leadsTable.id })
-      .from(leadsTable).where(sql`lower(${leadsTable.email}) = ${email}`).limit(1);
-    if (leadRow) {
-      await db.update(leadsTable).set({
-        educationData: {
-          schoolName: capStr(schoolName),
-          country: capStr(country),
-          city: capStr(city),
-          fieldOfStudy: capStr(fieldOfStudy),
-          endYear: capYear(graduationYear),
-          gpa: capStr(gpa),
-          languageScore: capStr(languageScore),
-        },
-      }).where(eq(leadsTable.id, leadRow.id));
-      res.json({ success: true, entity: "lead" }); return;
-    }
-    // No entity found — still succeed (best-effort, don't block the signing flow).
-    res.json({ success: true, entity: null });
-  } catch (err) {
-    console.error("[public-sign] education:", err);
-    res.status(500).json({ error: "Failed to save education data" });
   }
 });
 

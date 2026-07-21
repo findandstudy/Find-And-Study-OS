@@ -4269,18 +4269,7 @@
     "sigTooLarge": "Image is too large. Please use a smaller file.",
     "fillDetailsFor": "Please fill in your details for:",
     "footerNote": "Your information will be used to generate the contract.",
-    "selectPlaceholder": "Seleccionar...",
-    "priorEducation": "Educación previa",
-    "eduSchoolName": "Escuela / Universidad",
-    "eduCountry": "País",
-    "eduCity": "Ciudad",
-    "eduFieldOfStudy": "Campo de estudio",
-    "eduGraduationYear": "Año de graduación",
-    "eduGpa": "Promedio / Nota",
-    "eduLanguageScore": "Puntuación de idioma",
-    "eduLevelHS": "Secundaria",
-    "eduLevelBachelor": "Grado",
-    "eduLevelMaster": "Máster"
+    "selectPlaceholder": "Seleccionar..."
   },
   "languages": {
     "tr": "Turco",

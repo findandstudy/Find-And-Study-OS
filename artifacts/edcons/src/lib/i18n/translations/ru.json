@@ -2268,18 +2268,7 @@
     "sigTooLarge": "Изображение слишком большое. Используйте файл меньшего размера.",
     "fillDetailsFor": "Пожалуйста, укажите свои данные для:",
     "footerNote": "Ваши данные будут использованы для создания договора.",
-    "selectPlaceholder": "Выберите...",
-    "priorEducation": "Предыдущее образование",
-    "eduSchoolName": "Школа / Университет",
-    "eduCountry": "Страна",
-    "eduCity": "Город",
-    "eduFieldOfStudy": "Специальность",
-    "eduGraduationYear": "Год окончания",
-    "eduGpa": "Средний балл",
-    "eduLanguageScore": "Языковой балл",
-    "eduLevelHS": "Средняя школа",
-    "eduLevelBachelor": "Бакалавриат",
-    "eduLevelMaster": "Магистратура"
+    "selectPlaceholder": "Выберите..."
   },
   "messagesPage": {
     "messages": "Сообщения",

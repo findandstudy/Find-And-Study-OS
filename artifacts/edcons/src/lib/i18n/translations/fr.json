@@ -2268,18 +2268,7 @@
     "sigTooLarge": "L'image est trop volumineuse. Utilisez un fichier plus petit.",
     "fillDetailsFor": "Veuillez renseigner vos informations pour :",
     "footerNote": "Vos informations serviront à générer le contrat.",
-    "selectPlaceholder": "Sélectionner...",
-    "priorEducation": "Études antérieures",
-    "eduSchoolName": "École / Université",
-    "eduCountry": "Pays",
-    "eduCity": "Ville",
-    "eduFieldOfStudy": "Domaine d'études",
-    "eduGraduationYear": "Année d'obtention",
-    "eduGpa": "Moyenne / Note",
-    "eduLanguageScore": "Score de langue",
-    "eduLevelHS": "Lycée",
-    "eduLevelBachelor": "Licence",
-    "eduLevelMaster": "Master"
+    "selectPlaceholder": "Sélectionner..."
   },
   "messagesPage": {
     "messages": "Messages",

@@ -4269,18 +4269,7 @@
     "sigTooLarge": "Image is too large. Please use a smaller file.",
     "fillDetailsFor": "Please fill in your details for:",
     "footerNote": "Your information will be used to generate the contract.",
-    "selectPlaceholder": "चुनें...",
-    "priorEducation": "पूर्व शिक्षा",
-    "eduSchoolName": "स्कूल / विश्वविद्यालय",
-    "eduCountry": "देश",
-    "eduCity": "शहर",
-    "eduFieldOfStudy": "अध्ययन क्षेत्र",
-    "eduGraduationYear": "स्नातक वर्ष",
-    "eduGpa": "GPA / अंक",
-    "eduLanguageScore": "भाषा स्कोर",
-    "eduLevelHS": "हाई स्कूल",
-    "eduLevelBachelor": "स्नातक",
-    "eduLevelMaster": "परास्नातक"
+    "selectPlaceholder": "चुनें..."
   },
   "languages": {
     "tr": "तुर्की",
