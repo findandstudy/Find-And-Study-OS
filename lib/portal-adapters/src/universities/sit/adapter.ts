@@ -1174,9 +1174,10 @@ const DEEP_FILL_INPUT_JS =
   "    try { els = Array.from(root.querySelectorAll('input, textarea')); } catch {}" +
   "    for (const e of els) {" +
   "      if (e.type === 'hidden' || e.disabled || e.readOnly) continue;" +
-  "      if (!(e.offsetParent !== null || (e.getClientRects && e.getClientRects().length))) continue;" +
-  "      const t = textFor(e, root);" +
   "      const isTel = e.type === 'tel';" +
+  "      const visible = e.offsetParent !== null || !!(e.getClientRects && e.getClientRects().length);" +
+  "      if (!visible && !isTel) continue;" +
+  "      const t = textFor(e, root);" +
   "      if (!isTel && !labelRe.test(t)) continue;" +
   "      if (excludeRe && excludeRe.test(t)) continue;" +
   "      cands.push(e);" +
@@ -1348,9 +1349,16 @@ async function uploadDocRow(
   docPath: string,
 ): Promise<boolean> {
   try {
-    const addBtn = page.getByRole("button", { name: /add (new )?doc/i }).first();
+    // Text-based discovery: getByRole with name= uses accessible name which may
+    // differ from visible text in SIT's SPA. has-text filter on the raw button
+    // text is more robust when aria labels are missing.
+    let addBtn = page.locator("button").filter({ hasText: /add new document/i }).first();
+    if (!(await addBtn.count())) addBtn = page.locator("button").filter({ hasText: /add.*document/i }).first();
+    if (!(await addBtn.count())) addBtn = page.getByRole("button", { name: /add (new )?doc/i }).first();
     if (!(await addBtn.count())) {
-      logger.warn(`[sit] uploadDocRow ${key}: 'Add New Document' butonu yok`);
+      // Last resort: any button visible on screen whose text includes "Add"
+      const allBtns = await page.locator("button").allTextContents();
+      logger.warn(`[sit] uploadDocRow ${key}: 'Add New Document' butonu yok — görünür butonlar: ${JSON.stringify(allBtns.map((t: string) => t.trim()).filter(Boolean).slice(0, 15))}`);
       return false;
     }
     await addBtn.scrollIntoViewIfNeeded().catch(() => {});
@@ -2138,11 +2146,13 @@ export const sitAdapter: SitAdapter = {
         let telOk = false;
         let telDbg = "not-contact";
         if (selIdx >= 0) {
-          // Country of Residence
+          // Country of Residence — nameless <select>; must dispatch change manually
+          // because React controlled selects ignore value assignments without events.
           if (cval2) {
             const cs = page.locator("select").nth(selIdx);
             try {
               await cs.selectOption({ label: cval2 });
+              await cs.evaluate((el: Element) => el.dispatchEvent(new Event("change", { bubbles: true }))).catch(() => {});
               cOk = true;
             } catch {}
             if (!cOk) {
@@ -2153,6 +2163,7 @@ export const sitAdapter: SitAdapter = {
               if (hit) {
                 try {
                   await cs.selectOption({ label: hit });
+                  await cs.evaluate((el: Element) => el.dispatchEvent(new Event("change", { bubbles: true }))).catch(() => {});
                   cOk = true;
                 } catch {}
               }
@@ -2190,28 +2201,55 @@ export const sitAdapter: SitAdapter = {
               "",
           );
           if (phoneVal) {
-            // Deep label/aria-based lookup across all frames + open shadow
-            // roots — SIT renders inputs without stable ids ("_r_3_" style)
-            // so matching must go by label text / aria-label / placeholder,
-            // and read the value BACK to prove the fill landed.
             telDbg = "no-el";
-            for (const frame of page.frames()) {
-              const r = (await frame
-                .evaluate(DEEP_FILL_INPUT_JS, {
-                  val: phoneVal,
-                  labelRe: "(mobile|phone|telefon|tel\\b|gsm|whatsapp)",
-                  excludeRe: "(code|kod|dial|country)",
-                })
-                .catch(() => "eval-err")) as string;
-              // Only POSITIVE proof ("val=<readback>") stops the frame scan —
-              // an eval error / miss in one frame must not abort the others.
-              if (r && r.startsWith("val=")) {
-                telDbg = r;
-                break;
+            // Strategy 1: Direct Playwright — input[type=tel] with placeholder
+            // "Enter mobile number" or similar. DOM contract says the phone
+            // widget has no id/name — target by type or placeholder.
+            // Skip any input whose placeholder is just a dial-code ("+XX").
+            try {
+              const allTel = page.locator('input[type="tel"]');
+              const telCount = await allTel.count();
+              for (let ti = 0; ti < telCount; ti++) {
+                const telEl = allTel.nth(ti);
+                const ph = ((await telEl.getAttribute("placeholder").catch(() => "")) || "").trim();
+                // Dial-code boxes have short placeholders like "+90", "+1", "+"; skip them.
+                if (/^\+?\d{0,4}$/.test(ph)) continue;
+                const r = await telEl.evaluate((el: Element, v: string) => {
+                  const inp = el as HTMLInputElement;
+                  const proto = Object.getPrototypeOf(inp);
+                  const d = Object.getOwnPropertyDescriptor(proto, "value");
+                  if (d?.set) d.set.call(inp, v); else inp.value = v;
+                  inp.dispatchEvent(new Event("input", { bubbles: true }));
+                  inp.dispatchEvent(new Event("change", { bubbles: true }));
+                  inp.dispatchEvent(new Event("blur", { bubbles: true }));
+                  return "val=" + inp.value;
+                }, phoneVal).catch(() => "");
+                if (r && r.startsWith("val=") && r.length > 4) {
+                  telDbg = "pw-direct " + r;
+                  telOk = true;
+                  break;
+                }
               }
-              if (r && r !== "no-el" && telDbg === "no-el") telDbg = r;
+            } catch {}
+            // Strategy 2: DEEP_FILL across frames (label/aria/placeholder/type=tel).
+            // Picks up inputs inside shadow roots or cross-origin subframes.
+            if (!telOk) {
+              for (const frame of page.frames()) {
+                const r = (await frame
+                  .evaluate(DEEP_FILL_INPUT_JS, {
+                    val: phoneVal,
+                    labelRe: "(mobile|phone|telefon|tel\\b|gsm|whatsapp|number)",
+                    excludeRe: "(code|kod|dial|country)",
+                  })
+                  .catch(() => "eval-err")) as string;
+                if (r && r.startsWith("val=")) {
+                  telDbg = r;
+                  telOk = true;
+                  break;
+                }
+                if (r && r !== "no-el" && telDbg === "no-el") telDbg = r;
+              }
             }
-            telOk = telDbg.startsWith("val=") && telDbg.length > 4;
             if (telOk) everSet.add("phone");
           }
         }
@@ -2526,6 +2564,70 @@ export const sitAdapter: SitAdapter = {
           // Cap in-step retries: after 2 consecutive failures on a stuck step,
           // screenshot + FAIL retryably (same terminal "failed" status as before,
           // but earlier and with a clear cause) instead of re-looping silently.
+          // Per-field: log which labels are still showing required-field markers
+          // and attempt one targeted re-fill per empty field.
+          try {
+            const emptyLabels: string[] = await page.evaluate(() => {
+              const results: string[] = [];
+              // SIT marks required-but-empty fields with a red asterisk in the label
+              // and a visible error message below the input.
+              document.querySelectorAll('[data-slot="form-item"], .form-item, [class*=field]').forEach((fi) => {
+                const lab = (fi.querySelector("label")?.textContent || "").trim();
+                const hasError = !!fi.querySelector('[data-slot="form-message"], .error, [class*=error], [aria-invalid]');
+                const inputEmpty = Array.from(fi.querySelectorAll("input, textarea, select")).some((el) => {
+                  const inp = el as HTMLInputElement;
+                  return !inp.disabled && !inp.readOnly && inp.type !== "hidden" && !inp.value;
+                });
+                if (lab && (hasError || inputEmpty)) results.push(lab);
+              });
+              return results;
+            }).catch(() => [] as string[]);
+            if (emptyLabels.length) {
+              logger.warn(`[sit] boş alanlar (adım ${step + 1}): ${emptyLabels.join(" | ")}`);
+              // Re-fill contact fields if we're on the Contact step
+              const isContactStep = emptyLabels.some((l) => /email|mobile|phone|residence|country/i.test(l));
+              if (isContactStep) {
+                // Re-fill email
+                if (emptyLabels.some((l) => /email/i.test(l)) && profile.email) {
+                  await page.evaluate((v: string) => {
+                    const el = document.querySelector('input[name="email"], input[type="email"]') as HTMLInputElement | null;
+                    if (!el) return;
+                    const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value");
+                    if (d?.set) d.set.call(el, v); else el.value = v;
+                    ["input", "change", "blur"].forEach((t) => el.dispatchEvent(new Event(t, { bubbles: true })));
+                  }, profile.email).catch(() => {});
+                }
+                // Re-fill phone: direct input[type=tel]
+                if (emptyLabels.some((l) => /mobile|phone/i.test(l))) {
+                  const phoneVal2 = cleanPhone((profile as any).phoneE164 || profile.phone || "");
+                  if (phoneVal2) {
+                    await page.locator('input[type="tel"]').first().evaluate((el: Element, v: string) => {
+                      const inp = el as HTMLInputElement;
+                      const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(inp), "value");
+                      if (d?.set) d.set.call(inp, v); else inp.value = v;
+                      ["input", "change", "blur"].forEach((t) => inp.dispatchEvent(new Event(t, { bubbles: true })));
+                    }, phoneVal2).catch(() => {});
+                  }
+                }
+                // Re-fill Country of Residence: target by label-scoped select
+                if (emptyLabels.some((l) => /residence|country/i.test(l))) {
+                  const cvalR = toEnglishCountryName(profile.nationality) || profile.nationality || "";
+                  if (cvalR) {
+                    const cselR = page.locator('div[data-slot="form-item"]:has(label:has-text("Country of Residence")) select').first();
+                    if (await cselR.count()) {
+                      await cselR.selectOption({ label: cvalR }).catch(async () => {
+                        const opts = (await cselR.locator("option").allTextContents()).map((o) => o.trim());
+                        const hit = opts.find((o) => o.toLowerCase().includes(cvalR.toLowerCase()));
+                        if (hit) await cselR.selectOption({ label: hit }).catch(() => {});
+                      });
+                      await cselR.evaluate((el: Element) => el.dispatchEvent(new Event("change", { bubbles: true }))).catch(() => {});
+                    }
+                  }
+                }
+                await page.waitForTimeout(400);
+              }
+            }
+          } catch {}
           if (validationRetries >= 2) {
             await captureWizardFail(page, idToken, `step${step + 1}-validation`);
             const unset = Object.keys(critical).filter(

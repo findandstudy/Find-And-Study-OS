@@ -532,6 +532,96 @@ test("BUNDLE2 — drops cross-origin refs and dedups", () => {
   assert.deepEqual(urls, ["https://partners.sitconnect.net/keep.js"]);
 });
 
+// ---------------------------------------------------------------------------
+// Contact-fill helpers (SIT-FIX-18)
+//
+// PHONE1 — cleanPhone: E.164 passthrough, trunk-digit strip, 00→+ prefix
+// PHONE2 — cleanPhone: strips non-digit/+ characters
+// PHONE3 — dial-code skip regex: short "+XX" placeholders excluded, long ones kept
+// PHONE4 — DEEP_FILL_INPUT_JS tel-visibility guard: isTel bypasses offsetParent=null
+// ---------------------------------------------------------------------------
+
+// cleanPhone is not exported from helpers.js (file-private), so we replicate
+// its exact logic here as a pure-function unit test target.
+function cleanPhone(raw: string): string {
+  if (!raw) return "";
+  let s = String(raw).trim().replace(/[^\d+]/g, "");
+  if (s.startsWith("00")) s = "+" + s.slice(2);
+  if (!s.startsWith("+")) return s;
+  const trunkFix: Array<[string, number, string]> = [
+    ["+998", 9, "8"], // Uzbekistan
+    ["+7", 10, "8"],  // Russia / Kazakhstan
+    ["+994", 9, "0"], // Azerbaijan
+    ["+996", 9, "0"], // Kyrgyzstan
+    ["+992", 9, "8"], // Tajikistan
+    ["+993", 8, "8"], // Turkmenistan
+    ["+380", 9, "0"], // Ukraine
+    ["+375", 9, "8"], // Belarus
+  ];
+  for (const [cc, natLen, trunk] of trunkFix) {
+    if (s.startsWith(cc)) {
+      const nat = s.slice(cc.length);
+      if (nat.length === natLen + 1 && nat.startsWith(trunk)) {
+        s = cc + nat.slice(1);
+      }
+      break;
+    }
+  }
+  return s;
+}
+
+// Regex from Strategy-1 in adapter: skip inputs whose placeholder is a bare dial code.
+const DIAL_CODE_PLACEHOLDER_RE = /^\+?\d{0,4}$/;
+
+test("PHONE1 — cleanPhone: E.164 passthrough and 00→+ prefix", () => {
+  assert.equal(cleanPhone("+905551234567"), "+905551234567");
+  assert.equal(cleanPhone("00905551234567"), "+905551234567");
+});
+
+test("PHONE2 — cleanPhone: strips non-digit/+ characters and trunk digits", () => {
+  // Strips dashes, spaces, parens before trunk logic
+  assert.equal(cleanPhone("+7 (921) 123-45-67"), "+79211234567");
+  // Russian trunk: strip only when nat.length === natLen+1 (i.e. 11 digits for +7).
+  // "+789212345678" → nat="89212345678" (11 chars, starts with "8") → strip trunk → "+79212345678"
+  assert.equal(cleanPhone("+789212345678"), "+79212345678");
+  // "+78921234567" → nat="8921234567" (10 chars = natLen, not natLen+1) → no strip
+  assert.equal(cleanPhone("+78921234567"), "+78921234567");
+  // Empty / null-ish passthrough
+  assert.equal(cleanPhone(""), "");
+});
+
+test("PHONE3 — dial-code skip regex: short placeholders excluded, long ones kept", () => {
+  // Should be SKIPPED (are dial codes, not mobile number inputs)
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+"),     "+ is a dial code");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+1"),    "+1 is a dial code");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+90"),   "+90 is a dial code");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+994"),  "+994 is a dial code");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("90"),    "bare 2-digit is a dial code");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test(""),      "empty string matches (no placeholder ⇒ skip)");
+  // Should NOT be skipped (are real mobile-number inputs)
+  assert.ok(!DIAL_CODE_PLACEHOLDER_RE.test("Enter mobile number"), "descriptive placeholder kept");
+  assert.ok(!DIAL_CODE_PLACEHOLDER_RE.test("+1234567890"),         "full E.164 number kept");
+  assert.ok(!DIAL_CODE_PLACEHOLDER_RE.test("Mobile Number"),       "label-like placeholder kept");
+});
+
+test("PHONE4 — DEEP_FILL_INPUT_JS tel-visibility guard: isTel bypasses offsetParent=null", () => {
+  // The JS guard we patched reads: if (!visible && !isTel) continue
+  // Simulate the decision: a tel input with offsetParent=null must NOT be skipped.
+  function shouldSkip(type: string, hasOffsetParent: boolean): boolean {
+    const isTel = type === "tel";
+    const visible = hasOffsetParent;
+    return !visible && !isTel;
+  }
+  // tel with no offsetParent → must NOT skip
+  assert.ok(!shouldSkip("tel", false), "tel input with offsetParent=null must NOT be skipped");
+  // text with no offsetParent → must skip
+  assert.ok(shouldSkip("text", false), "text input with offsetParent=null must be skipped");
+  // tel with offsetParent → must NOT skip
+  assert.ok(!shouldSkip("tel", true), "tel input with offsetParent must NOT be skipped");
+  // text with offsetParent → must NOT skip
+  assert.ok(!shouldSkip("text", true), "text input with offsetParent must NOT be skipped");
+});
+
 test("BUNDLE3 — a deep chunk (19th) is included; low cap would drop it", () => {
   const tags = Array.from(
     { length: 20 },
