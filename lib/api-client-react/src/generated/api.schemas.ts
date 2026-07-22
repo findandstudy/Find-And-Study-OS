@@ -431,8 +431,78 @@ export interface Student {
   languageScore?: string | null;
   /** @nullable */
   notes?: string | null;
+  transferStudent?: boolean;
+  hasTcId?: boolean;
+  hasBlueCard?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export type StudentEducationRecordLevel =
+  (typeof StudentEducationRecordLevel)[keyof typeof StudentEducationRecordLevel];
+
+export const StudentEducationRecordLevel = {
+  high_school: "high_school",
+  bachelor: "bachelor",
+  master: "master",
+} as const;
+
+export interface StudentEducationRecord {
+  id: number;
+  studentId: number;
+  level: StudentEducationRecordLevel;
+  /** @nullable */
+  institution?: string | null;
+  /** @nullable */
+  program?: string | null;
+  /** @nullable */
+  graduationYear?: number | null;
+  /** @nullable */
+  gpa?: string | null;
+  /** @nullable */
+  gpaRaw?: string | null;
+  /** @nullable */
+  gpaScale?: number | null;
+  /** @nullable */
+  languageScore?: string | null;
+  sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type StudentEducationRecordInputLevel =
+  (typeof StudentEducationRecordInputLevel)[keyof typeof StudentEducationRecordInputLevel];
+
+export const StudentEducationRecordInputLevel = {
+  high_school: "high_school",
+  bachelor: "bachelor",
+  master: "master",
+} as const;
+
+export interface StudentEducationRecordInput {
+  level: StudentEducationRecordInputLevel;
+  /** @nullable */
+  institution?: string | null;
+  /** @nullable */
+  program?: string | null;
+  /** @nullable */
+  graduationYear?: number | null;
+  /** @nullable */
+  gpa?: string | null;
+  /** @nullable */
+  gpaRaw?: string | null;
+  /** @nullable */
+  gpaScale?: number | null;
+  /** @nullable */
+  languageScore?: string | null;
+}
+
+export interface StudentEducationResponse {
+  records: StudentEducationRecord[];
+}
+
+export interface PutStudentEducationBody {
+  records: StudentEducationRecordInput[];
 }
 
 export interface CreateStudentBody {
@@ -514,6 +584,9 @@ export interface UpdateStudentBody {
   languageScore?: string | null;
   /** @nullable */
   notes?: string | null;
+  transferStudent?: boolean;
+  hasTcId?: boolean;
+  hasBlueCard?: boolean;
 }
 
 export interface StudentsListResponse {

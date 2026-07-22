@@ -45,6 +45,9 @@ export interface Student {
   languageScore?: string | null;
   /** @nullable */
   notes?: string | null;
+  transferStudent?: boolean;
+  hasTcId?: boolean;
+  hasBlueCard?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -34,6 +34,7 @@ const STUDENT_PATCH_FIELDS = [
   "highSchool", "graduationYear", "gpa", "languageScore",
   "universityBachelor", "universityMaster",
   "photoUrl", "nextFollowup", "interestedLevel",
+  "transferStudent", "hasTcId", "hasBlueCard",
 ];
 
 router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
@@ -523,6 +524,78 @@ router.get("/students/:id", requireAuth, requireAgentStaffPermission("students")
   const access = await assertCanAccessStudent(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
   res.json(access.student);
+});
+
+// --- Education records (FAZ 2) -------------------------------------------
+const EDUCATION_LEVELS = ["high_school", "bachelor", "master"] as const;
+
+router.get("/students/:id/education", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const access = await assertCanAccessStudent(req, id);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  const records = await db.select().from(studentEducationRecordsTable)
+    .where(and(eq(studentEducationRecordsTable.studentId, id), isNull(studentEducationRecordsTable.deletedAt)))
+    .orderBy(asc(studentEducationRecordsTable.sortOrder), asc(studentEducationRecordsTable.id));
+  res.json({ records });
+});
+
+router.put("/students/:id/education", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const access = await assertCanAccessStudent(req, id);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+
+  const rawRecords = (req.body as any)?.records;
+  if (!Array.isArray(rawRecords)) {
+    res.status(400).json({ error: "records must be an array" });
+    return;
+  }
+  const s = (v: any, max: number) => (v === undefined || v === null || v === "") ? null : String(v).slice(0, max);
+  const seenLevels = new Set<string>();
+  const cleaned: Array<{
+    level: string; institution: string | null; program: string | null;
+    graduationYear: number | null; gpa: string | null; gpaRaw: string | null;
+    gpaScale: number | null; languageScore: string | null; sortOrder: number;
+  }> = [];
+  for (let i = 0; i < rawRecords.length; i++) {
+    const r = rawRecords[i] || {};
+    const level = String(r.level || "");
+    if (!(EDUCATION_LEVELS as readonly string[]).includes(level)) {
+      res.status(400).json({ error: `records[${i}].level must be one of: ${EDUCATION_LEVELS.join(", ")}` });
+      return;
+    }
+    if (seenLevels.has(level)) {
+      res.status(400).json({ error: `Duplicate level "${level}" — only one record per level is allowed` });
+      return;
+    }
+    seenLevels.add(level);
+    const gy = r.graduationYear != null && r.graduationYear !== "" ? parseInt(String(r.graduationYear), 10) : null;
+    const gs = r.gpaScale != null && r.gpaScale !== "" ? parseInt(String(r.gpaScale), 10) : null;
+    cleaned.push({
+      level,
+      institution: s(r.institution, 300),
+      program: level === "high_school" ? null : s(r.program, 300),
+      graduationYear: Number.isFinite(gy as number) ? gy : null,
+      gpa: s(r.gpa, 20),
+      gpaRaw: s(r.gpaRaw, 50),
+      gpaScale: Number.isFinite(gs as number) ? gs : null,
+      languageScore: s(r.languageScore, 50),
+      sortOrder: i,
+    });
+  }
+
+  // Replace-set semantics in one transaction: soft-delete current set, insert new.
+  const inserted = await db.transaction(async (tx) => {
+    await tx.update(studentEducationRecordsTable)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(studentEducationRecordsTable.studentId, id), isNull(studentEducationRecordsTable.deletedAt)));
+    if (cleaned.length === 0) return [];
+    return tx.insert(studentEducationRecordsTable)
+      .values(cleaned.map((r) => ({ ...r, studentId: id })))
+      .returning();
+  });
+
+  await logAudit(req.user!.id, "student.education_updated", "student", id, { levels: cleaned.map((r) => r.level) }, req.ip);
+  res.json({ records: inserted });
 });
 
 router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {

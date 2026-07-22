@@ -45,4 +45,7 @@ export interface UpdateStudentBody {
   languageScore?: string | null;
   /** @nullable */
   notes?: string | null;
+  transferStudent?: boolean;
+  hasTcId?: boolean;
+  hasBlueCard?: boolean;
 }

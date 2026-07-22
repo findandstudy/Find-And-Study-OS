@@ -123,6 +123,7 @@ import type {
   ProgramFallback,
   ProgramsListResponse,
   PublicLeadBody,
+  PutStudentEducationBody,
   RecordEntityViewBody,
   RecordEntityViewResponse,
   RetryPortalSubmission200,
@@ -131,6 +132,7 @@ import type {
   SetPortalCredentialsBody,
   Settings,
   Student,
+  StudentEducationResponse,
   StudentsListResponse,
   SuccessResponse,
   SummarizeInboxConversationResponse,
@@ -1944,6 +1946,180 @@ export const useUpdateStudent = <
   TContext
 > => {
   return useMutation(getUpdateStudentMutationOptions(options));
+};
+
+/**
+ * @summary List a student's education records (active set, ordered)
+ */
+export const getGetStudentEducationUrl = (id: number) => {
+  return `/api/students/${id}/education`;
+};
+
+export const getStudentEducation = async (
+  id: number,
+  options?: RequestInit,
+): Promise<StudentEducationResponse> => {
+  return customFetch<StudentEducationResponse>(getGetStudentEducationUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStudentEducationQueryKey = (id: number) => {
+  return [`/api/students/${id}/education`] as const;
+};
+
+export const getGetStudentEducationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStudentEducation>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStudentEducation>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStudentEducationQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStudentEducation>>
+  > = ({ signal }) => getStudentEducation(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStudentEducation>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStudentEducationQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStudentEducation>>
+>;
+export type GetStudentEducationQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List a student's education records (active set, ordered)
+ */
+
+export function useGetStudentEducation<
+  TData = Awaited<ReturnType<typeof getStudentEducation>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStudentEducation>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStudentEducationQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace a student's education records (replace-set, soft-delete old)
+ */
+export const getPutStudentEducationUrl = (id: number) => {
+  return `/api/students/${id}/education`;
+};
+
+export const putStudentEducation = async (
+  id: number,
+  putStudentEducationBody: PutStudentEducationBody,
+  options?: RequestInit,
+): Promise<StudentEducationResponse> => {
+  return customFetch<StudentEducationResponse>(getPutStudentEducationUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(putStudentEducationBody),
+  });
+};
+
+export const getPutStudentEducationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putStudentEducation>>,
+    TError,
+    { id: number; data: BodyType<PutStudentEducationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putStudentEducation>>,
+  TError,
+  { id: number; data: BodyType<PutStudentEducationBody> },
+  TContext
+> => {
+  const mutationKey = ["putStudentEducation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putStudentEducation>>,
+    { id: number; data: BodyType<PutStudentEducationBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return putStudentEducation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutStudentEducationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putStudentEducation>>
+>;
+export type PutStudentEducationMutationBody = BodyType<PutStudentEducationBody>;
+export type PutStudentEducationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Replace a student's education records (replace-set, soft-delete old)
+ */
+export const usePutStudentEducation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putStudentEducation>>,
+    TError,
+    { id: number; data: BodyType<PutStudentEducationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof putStudentEducation>>,
+  TError,
+  { id: number; data: BodyType<PutStudentEducationBody> },
+  TContext
+> => {
+  return useMutation(getPutStudentEducationMutationOptions(options));
 };
 
 /**

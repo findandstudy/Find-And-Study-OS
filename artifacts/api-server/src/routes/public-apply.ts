@@ -20,6 +20,8 @@ import { getCurrentSeason } from "../lib/season";
 import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
 import { maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
+import { isPassportExpired } from "../lib/passportValidity";
+import { studentEducationRecordsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -349,7 +351,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
 
 router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: Response): Promise<void> => {
   let { firstName, lastName, motherName, fatherName } = req.body;
-  const { email, phone, phoneCode, nationality, programId, programName, universityName, notes, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, documents, reuseDocumentIds } = req.body;
+  const { email, phone, phoneCode, nationality, programId, programName, universityName, notes, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, documents, reuseDocumentIds, transferStudent, hasTcId, hasBlueCard, education } = req.body;
   let leadId: number | null = null;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality || !gender) {
@@ -382,6 +384,14 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
     lastName = normNames.lastName as string;
     motherName = normNames.motherName as string;
     fatherName = normNames.fatherName as string;
+  }
+
+  // FAZ 2 — passport hard-block: an expired passport cannot start an
+  // application. Runs BEFORE any student/application insert. Unparseable
+  // or missing expiry dates pass (fail-open by design).
+  if (isPassportExpired(passportExpiry)) {
+    res.status(422).json({ error: "PASSPORT_EXPIRED", message: "Passport has expired. Application cannot be submitted." });
+    return;
   }
 
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
@@ -606,6 +616,54 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       await sendEmail(normalizedEmail, emailContent);
 
       console.log(`[PUBLIC-APPLY] Created student account for ${normalizedEmail} (user #${newUser.id}, student #${newStudent.id})`);
+    }
+
+    // FAZ 2 — persist SIT toggles + education records (all optional fields;
+    // legacy payloads without them are unaffected). Best-effort: a failure
+    // here must not break the application submission itself.
+    if (resultStudentId) {
+      try {
+        const toggleUpdates: Record<string, boolean> = {};
+        if (typeof transferStudent === "boolean") toggleUpdates.transferStudent = transferStudent;
+        if (typeof hasTcId === "boolean") toggleUpdates.hasTcId = hasTcId;
+        if (typeof hasBlueCard === "boolean") toggleUpdates.hasBlueCard = hasBlueCard;
+        if (Object.keys(toggleUpdates).length > 0) {
+          await db.update(studentsTable).set(toggleUpdates).where(eq(studentsTable.id, resultStudentId));
+        }
+        if (Array.isArray(education) && education.length > 0) {
+          const validLevels = new Set(["high_school", "bachelor", "master"]);
+          const seen = new Set<string>();
+          const cleaned = education
+            .filter((r: any) => r && validLevels.has(String(r.level)) && !seen.has(String(r.level)) && seen.add(String(r.level)))
+            .slice(0, 3)
+            .map((r: any, i: number) => ({
+              studentId: resultStudentId!,
+              level: String(r.level),
+              institution: s(r.institution, 300),
+              program: String(r.level) === "high_school" ? null : s(r.program, 300),
+              graduationYear: r.graduationYear ? parseInt(String(r.graduationYear), 10) || null : null,
+              gpa: s(r.gpa, 20),
+              gpaRaw: s(r.gpaRaw, 50),
+              gpaScale: r.gpaScale ? parseInt(String(r.gpaScale), 10) || null : null,
+              languageScore: s(r.languageScore, 50),
+              sortOrder: i,
+            }));
+          if (cleaned.length > 0) {
+            await db.transaction(async (tx) => {
+              await tx.update(studentEducationRecordsTable)
+                .set({ deletedAt: new Date() })
+                .where(and(
+                  eq(studentEducationRecordsTable.studentId, resultStudentId!),
+                  isNull(studentEducationRecordsTable.deletedAt),
+                  inArray(studentEducationRecordsTable.level, cleaned.map((r) => r.level)),
+                ));
+              await tx.insert(studentEducationRecordsTable).values(cleaned);
+            });
+          }
+        }
+      } catch (err) {
+        console.error("[PUBLIC-APPLY] education/toggle persist failed:", err);
+      }
     }
 
     // Lead → student/application conversion happens AFTER document linking

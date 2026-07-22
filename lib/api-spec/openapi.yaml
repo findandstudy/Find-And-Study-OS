@@ -504,6 +504,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/Student"
 
+  /students/{id}/education:
+    get:
+      operationId: getStudentEducation
+      tags: [students]
+      summary: List a student's education records (active set, ordered)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Education records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentEducationResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: putStudentEducation
+      tags: [students]
+      summary: Replace a student's education records (replace-set, soft-delete old)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutStudentEducationBody"
+      responses:
+        "200":
+          description: New active education records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentEducationResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /students/me:
     get:
       operationId: getMyStudentProfile
@@ -3868,6 +3928,12 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        transferStudent:
+          type: boolean
+        hasTcId:
+          type: boolean
+        hasBlueCard:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -3881,6 +3947,87 @@ components:
         - status
         - createdAt
         - updatedAt
+
+    StudentEducationRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: integer
+        level:
+          type: string
+          enum: [high_school, bachelor, master]
+        institution:
+          type: ["string", "null"]
+        program:
+          type: ["string", "null"]
+        graduationYear:
+          type: ["integer", "null"]
+        gpa:
+          type: ["string", "null"]
+        gpaRaw:
+          type: ["string", "null"]
+        gpaScale:
+          type: ["integer", "null"]
+        languageScore:
+          type: ["string", "null"]
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - studentId
+        - level
+        - sortOrder
+
+    StudentEducationRecordInput:
+      type: object
+      properties:
+        level:
+          type: string
+          enum: [high_school, bachelor, master]
+        institution:
+          type: ["string", "null"]
+        program:
+          type: ["string", "null"]
+        graduationYear:
+          type: ["integer", "null"]
+        gpa:
+          type: ["string", "null"]
+        gpaRaw:
+          type: ["string", "null"]
+        gpaScale:
+          type: ["integer", "null"]
+        languageScore:
+          type: ["string", "null"]
+      required:
+        - level
+
+    StudentEducationResponse:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentEducationRecord"
+      required:
+        - records
+
+    PutStudentEducationBody:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentEducationRecordInput"
+      required:
+        - records
 
     CreateStudentBody:
       type: object
@@ -3971,6 +4118,12 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        transferStudent:
+          type: boolean
+        hasTcId:
+          type: boolean
+        hasBlueCard:
+          type: boolean
 
     StudentsListResponse:
       type: object

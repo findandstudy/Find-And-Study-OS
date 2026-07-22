@@ -325,6 +325,9 @@ export const ConvertLeadResponse = zod.object({
   gpa: zod.string().nullish(),
   languageScore: zod.string().nullish(),
   notes: zod.string().nullish(),
+  transferStudent: zod.boolean().optional(),
+  hasTcId: zod.boolean().optional(),
+  hasBlueCard: zod.boolean().optional(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -407,6 +410,9 @@ export const ListStudentsResponse = zod.object({
       gpa: zod.string().nullish(),
       languageScore: zod.string().nullish(),
       notes: zod.string().nullish(),
+      transferStudent: zod.boolean().optional(),
+      hasTcId: zod.boolean().optional(),
+      hasBlueCard: zod.boolean().optional(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     }),
@@ -474,6 +480,9 @@ export const GetStudentResponse = zod.object({
   gpa: zod.string().nullish(),
   languageScore: zod.string().nullish(),
   notes: zod.string().nullish(),
+  transferStudent: zod.boolean().optional(),
+  hasTcId: zod.boolean().optional(),
+  hasBlueCard: zod.boolean().optional(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -505,6 +514,9 @@ export const UpdateStudentBody = zod.object({
   gpa: zod.string().nullish(),
   languageScore: zod.string().nullish(),
   notes: zod.string().nullish(),
+  transferStudent: zod.boolean().optional(),
+  hasTcId: zod.boolean().optional(),
+  hasBlueCard: zod.boolean().optional(),
 });
 
 export const UpdateStudentResponse = zod.object({
@@ -529,8 +541,80 @@ export const UpdateStudentResponse = zod.object({
   gpa: zod.string().nullish(),
   languageScore: zod.string().nullish(),
   notes: zod.string().nullish(),
+  transferStudent: zod.boolean().optional(),
+  hasTcId: zod.boolean().optional(),
+  hasBlueCard: zod.boolean().optional(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
+});
+
+/**
+ * @summary List a student's education records (active set, ordered)
+ */
+export const GetStudentEducationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetStudentEducationResponse = zod.object({
+  records: zod.array(
+    zod.object({
+      id: zod.number(),
+      studentId: zod.number(),
+      level: zod.enum(["high_school", "bachelor", "master"]),
+      institution: zod.string().nullish(),
+      program: zod.string().nullish(),
+      graduationYear: zod.number().nullish(),
+      gpa: zod.string().nullish(),
+      gpaRaw: zod.string().nullish(),
+      gpaScale: zod.number().nullish(),
+      languageScore: zod.string().nullish(),
+      sortOrder: zod.number(),
+      createdAt: zod.date().optional(),
+      updatedAt: zod.date().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Replace a student's education records (replace-set, soft-delete old)
+ */
+export const PutStudentEducationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const PutStudentEducationBody = zod.object({
+  records: zod.array(
+    zod.object({
+      level: zod.enum(["high_school", "bachelor", "master"]),
+      institution: zod.string().nullish(),
+      program: zod.string().nullish(),
+      graduationYear: zod.number().nullish(),
+      gpa: zod.string().nullish(),
+      gpaRaw: zod.string().nullish(),
+      gpaScale: zod.number().nullish(),
+      languageScore: zod.string().nullish(),
+    }),
+  ),
+});
+
+export const PutStudentEducationResponse = zod.object({
+  records: zod.array(
+    zod.object({
+      id: zod.number(),
+      studentId: zod.number(),
+      level: zod.enum(["high_school", "bachelor", "master"]),
+      institution: zod.string().nullish(),
+      program: zod.string().nullish(),
+      graduationYear: zod.number().nullish(),
+      gpa: zod.string().nullish(),
+      gpaRaw: zod.string().nullish(),
+      gpaScale: zod.number().nullish(),
+      languageScore: zod.string().nullish(),
+      sortOrder: zod.number(),
+      createdAt: zod.date().optional(),
+      updatedAt: zod.date().optional(),
+    }),
+  ),
 });
 
 /**
@@ -558,6 +642,9 @@ export const GetMyStudentProfileResponse = zod.object({
   gpa: zod.string().nullish(),
   languageScore: zod.string().nullish(),
   notes: zod.string().nullish(),
+  transferStudent: zod.boolean().optional(),
+  hasTcId: zod.boolean().optional(),
+  hasBlueCard: zod.boolean().optional(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
