@@ -35,6 +35,10 @@ export const studentsTable = pgTable("students", {
   photoUrl: text("photo_url"),
   hasPhoto: boolean("has_photo").notNull().default(false),
   interestedLevel: text("interested_level"),
+  // SIT "Student Information" toggles (asked at Review & Submit; stored on profile)
+  transferStudent: boolean("transfer_student").notNull().default(false),
+  hasTcId: boolean("has_tc_id").notNull().default(false),
+  hasBlueCard: boolean("has_blue_card").notNull().default(false),
   notes: text("notes"),
   nextFollowup: timestamp("next_followup", { withTimezone: true }),
   originType: text("origin_type").notNull().default("direct"),

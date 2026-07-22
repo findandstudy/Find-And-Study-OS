@@ -189,3 +189,4 @@ export const db = drizzle(pool, { schema });
 
 export * from "./schema";
 export * from "./softDelete";
+export * from "./academicLevels";
