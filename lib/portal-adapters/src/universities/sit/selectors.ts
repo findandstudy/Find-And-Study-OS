@@ -74,6 +74,8 @@ export const SIT_STUDENT_FIELDS = {
   fatherName:     /father'?s?\s*name|baba ad/i,
   motherName:     /mother'?s?\s*name|anne ad/i,
   address:        /address|adres/i,
+  // Contact & Location "City" — anchored so it never matches "Capacity" etc.
+  city:           /^\s*city\b|şehir|sehir|^\s*il\b/i,
   // Contact & Location "Country" (country of residence). Anchored so it never
   // matches "Nationality" and excludes a phone "Country Code" control.
   country:        /^\s*country\b(?!\s*code)|ikamet.*ülke|^\s*ülke\b/i,

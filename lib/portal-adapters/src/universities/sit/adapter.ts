@@ -33,6 +33,7 @@ import { launchPortal, logger } from "../../browser.js";
 import { getAssetSigningSecret } from "../../assetSigningSecret.js";
 import { portalCreds, type ResolvedCreds } from "../../portalCreds.js";
 import { fold, matchProgram, type ProgramCandidate } from "../../programMatch.js";
+import { deriveAddressParts } from "../../profile.js";
 import { db, portalProgramCacheTable } from "@workspace/db";
 import {
   SIT_URLS,
@@ -2044,8 +2045,18 @@ export const sitAdapter: SitAdapter = {
             (profile as any).highSchoolGpa ??
             (profile as any).gpa ??
             (profile as any).gpaPercent;
-          const hsGpa =
-            gpaRaw !== undefined && gpaRaw !== null && String(gpaRaw).trim() !== "" ? String(gpaRaw) : "3.0";
+          // Zoho, gpa_percent alanında yalnızca 0-100 arası TAM SAYI kabul
+          // ediyor (86.6 / 4.33 / "3.0" → INVALID_DATA: High_School_GPA).
+          // normalizeGpa yuvarlar + 0-100'e sıkıştırır; sayısal olmayan değerde
+          // alanı HİÇ gönderme (fail-closed) ve nedenini logla — eski "3.0"
+          // ondalık varsayılanı bizzat hatanın kaynağıydı.
+          const hsGpaInt = normalizeGpa(gpaRaw as any);
+          const hsGpa = hsGpaInt !== undefined ? String(hsGpaInt) : "";
+          if (hsGpa === "") {
+            logger.warn(
+              `[sit] SCHOOLFIX gpa ATLANDI (fail-closed): sayısal olmayan/boş GPA değeri raw='${String(gpaRaw ?? "")}' — gpa_percent gönderilmeyecek`,
+            );
+          }
           const setByName = (nm: string, val: string) =>
             page.evaluate(
               (a: { nm: string; val: string }) => {
@@ -2062,7 +2073,7 @@ export const sitAdapter: SitAdapter = {
               { nm, val },
             );
           const nR = await setByName("high_school_name", hsName);
-          const gR = await setByName("high_school_gpa_percent", hsGpa);
+          const gR = hsGpa !== "" ? await setByName("high_school_gpa_percent", hsGpa) : "skipped";
           logger.info(
             "[sit] SCHOOLFIX cOk=" + cOk + " hsCountry='" + hsCountry + "' name=" + nR + " gpa=" + gR,
           );
@@ -2260,6 +2271,19 @@ export const sitAdapter: SitAdapter = {
         logger.info("[sit] CONTACTFIX err " + (e as any)?.message);
       }
       await fillField(page, SIT_STUDENT_FIELDS.address, profile.address);
+      // City (Contact & Location) — CRM'de ayrı şehir alanı yok; adresin ilk
+      // virgül-öncesi parçasından türet (deriveAddressParts). Adres boş/işe
+      // yaramazsa hiç doldurma (best-effort, adım engellemez).
+      try {
+        const cityVal = deriveAddressParts(profile.address || undefined).city.trim();
+        if (cityVal && cityVal !== "-") {
+          const cityOk = await fillField(page, SIT_STUDENT_FIELDS.city, cityVal);
+          if (cityOk) everSet.add("city");
+          logger.info(`[sit] CITYFILL city='${cityVal}' ok=${cityOk}`);
+        }
+      } catch (e) {
+        logger.info("[sit] CITYFILL err " + (e as any)?.message);
+      }
       // Robust residence-country: target the labelled select directly (independent of
       // the country label regex) and fuzzy-match the English nationality country name.
       try {

@@ -62,8 +62,12 @@ export function normalizeGpa(
 ): number | undefined {
   if (value === undefined || value === null) return undefined;
 
+  // Zoho'nun GPA alanları TAM SAYI ve 0-100 aralığı bekler (ondalık değerler
+  // "INVALID_DATA: High_School_GPA" ile reddediliyor) — yuvarla VE sıkıştır.
+  const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
+
   if (typeof value === "number") {
-    return Number.isFinite(value) ? Math.round(value) : undefined;
+    return Number.isFinite(value) ? clamp(value) : undefined;
   }
 
   const trimmed = value.trim();
@@ -75,7 +79,7 @@ export function normalizeGpa(
   }
 
   const num = Number(trimmed.replace(",", "."));
-  return Number.isFinite(num) ? Math.round(num) : undefined;
+  return Number.isFinite(num) ? clamp(num) : undefined;
 }
 
 // ---------------------------------------------------------------------------

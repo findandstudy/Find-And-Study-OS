@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { db, portalSubmissionsTable, applicationsTable, studentsTable, documentsTable, educationRecordsTable } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, docFetchUrl } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 
 // ---------------------------------------------------------------------------
@@ -263,8 +263,27 @@ export async function buildStudentProfile(
         // produces either the doc's own public URL or the signed
         // /api/documents/:id/file path — same primitive SIT's proven working
         // photo/document webhooks already use.
-        const url = docFetchUrl(doc);
-        if (url) {
+        // KÖK NEDEN düzeltmesi: public fileUrl (403/404/HTML) tek denemede
+        // düşünce imzalı /api/documents/:id/file yolu hiç denenmiyordu. Artık
+        // public URL sonrası imzalı yol da denenir; her başarısız deneme
+        // hangi doc/URL/HTTP status ile düştüğünü ayrı loglar.
+        const primaryUrl = docFetchUrl(doc);
+        const candidates: string[] = [];
+        if (primaryUrl) candidates.push(primaryUrl);
+        if (primaryUrl && /^https?:\/\//i.test(primaryUrl) && doc.id != null) {
+          const signed = buildSignedDocumentPath(doc.id);
+          if (signed && signed !== primaryUrl) candidates.push(signed);
+        }
+        if (!primaryUrl) {
+          docKeyStatus[docKey] = docKeyStatus[docKey] ?? "docKey-null";
+          console.warn(
+            `[portal-profile] #${submissionId} doc #${doc.id} slot=${docKey} type=${doc.type}: ` +
+            `indirilebilir URL üretilemedi (public fileUrl yok ve imzalı URL üretilemedi — ` +
+            `ASSET_URL_SIGNING_SECRET/SESSION_SECRET yapılandırmasını kontrol edin); base64 yedeğe geçiliyor`,
+          );
+        }
+        const attemptErrors: string[] = [];
+        for (const url of candidates) {
           try {
             const ext = safeDocExt(doc.mimeType, doc.name);
             const dest = path.join(tempDir, `${docKey}.${ext}`);
@@ -274,11 +293,19 @@ export async function buildStudentProfile(
             return;
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            downloadErrors[docKey] = `doc #${doc.id} type=${doc.type} fileKey=${doc.fileKey ?? "-"}: ${msg}`;
-            // Fall through to base64 fallback
+            attemptErrors.push(msg);
+            console.warn(
+              `[portal-profile] #${submissionId} doc #${doc.id} slot=${docKey} type=${doc.type} ` +
+              `URL indirme başarısız — ${msg}` +
+              (doc.fileData || candidates.indexOf(url) < candidates.length - 1
+                ? " (sonraki yedek denenecek)"
+                : ""),
+            );
           }
-        } else {
-          docKeyStatus[docKey] = docKeyStatus[docKey] ?? "docKey-null";
+        }
+        if (attemptErrors.length > 0) {
+          downloadErrors[docKey] = `doc #${doc.id} type=${doc.type} fileKey=${doc.fileKey ?? "-"}: ${attemptErrors.join(" | ")}`;
+          // Fall through to base64 fallback
         }
 
         // --- path B: base64 fileData fallback --------------------------------

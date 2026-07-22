@@ -29,7 +29,7 @@ import {
   educationRecordsTable,
 } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, docFetchUrl } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 
 const execFileP = promisify(execFile);
@@ -494,21 +494,57 @@ async function downloadStudentDocuments(
       }
 
       try {
-        // --- path A: signed URL download (same resolution SIT already uses) --
+        // --- path A: URL download (same resolution SIT already uses) ---------
         // Never trust a raw fileUrl/fileKey path directly — unknown
         // /objects/... paths are served the SPA shell (200 text/html), not the
         // file. docFetchUrl() resolves either the doc's own public URL or the
         // signed /api/documents/:id/file path.
-        const url = docFetchUrl(doc);
-        if (url) {
-          const ext = safeDocExt(doc.mimeType, doc.name);
-          const dest = path.join(tempDir, `${docKey}.${ext}`);
-          await downloadFile(url, dest);
-          files[docKey] = await ensureUploadFormat(dest, docKey, logLabel);
-          docKeyStatus[docKey] = "ok";
-          return;
+        //
+        // KÖK NEDEN düzeltmesi: eskiden path A'daki İLK indirme hatası doğrudan
+        // catch'e düşüyor ve base64 fileData yedeği HİÇ denenmiyordu — süresi
+        // geçmiş/kırık bir public fileUrl (403/404/HTML) tek başına slotu
+        // kaybettiriyor, SIT de "sıfır belgeli create engellendi" ile submit'i
+        // blokluyordu. Artık: public URL başarısız olursa imzalı
+        // /api/documents/:id/file yolu, o da olmazsa base64 denenir; her deneme
+        // hangi doc/URL/HTTP status ile düştüğünü ayrı ayrı loglar.
+        const primaryUrl = docFetchUrl(doc);
+        const candidates: string[] = [];
+        if (primaryUrl) candidates.push(primaryUrl);
+        // Public fileUrl seçildiyse imzalı yolu da yedek aday olarak ekle.
+        if (primaryUrl && /^https?:\/\//i.test(primaryUrl) && doc.id != null) {
+          const signed = buildSignedDocumentPath(doc.id);
+          if (signed && signed !== primaryUrl) candidates.push(signed);
         }
-        docKeyStatus[docKey] = docKeyStatus[docKey] ?? "docKey-null";
+        if (!primaryUrl) {
+          docKeyStatus[docKey] = docKeyStatus[docKey] ?? "docKey-null";
+          console.warn(
+            `[portal-profile] ${logLabel} doc #${doc.id} slot=${docKey} type=${doc.type}: ` +
+            `indirilebilir URL üretilemedi (public fileUrl yok ve imzalı URL üretilemedi — ` +
+            `ASSET_URL_SIGNING_SECRET/SESSION_SECRET yapılandırmasını kontrol edin); base64 yedeğe geçiliyor`,
+          );
+        }
+
+        const attemptErrors: string[] = [];
+        for (const url of candidates) {
+          try {
+            const ext = safeDocExt(doc.mimeType, doc.name);
+            const dest = path.join(tempDir, `${docKey}.${ext}`);
+            await downloadFile(url, dest);
+            files[docKey] = await ensureUploadFormat(dest, docKey, logLabel);
+            docKeyStatus[docKey] = "ok";
+            return;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            attemptErrors.push(msg);
+            console.warn(
+              `[portal-profile] ${logLabel} doc #${doc.id} slot=${docKey} type=${doc.type} ` +
+              `URL indirme başarısız — ${msg}` +
+              (doc.fileData || candidates.indexOf(url) < candidates.length - 1
+                ? " (sonraki yedek denenecek)"
+                : ""),
+            );
+          }
+        }
 
         // --- path B: base64 fileData fallback --------------------------------
         if (doc.fileData) {
@@ -518,6 +554,16 @@ async function downloadStudentDocuments(
           files[docKey] = await ensureUploadFormat(dest, docKey, logLabel);
           docKeyStatus[docKey] = "ok";
           return;
+        }
+
+        // Tüm adaylar tükendi ve base64 yok → hatayı slot bazında kaydet.
+        if (attemptErrors.length > 0) {
+          downloadErrors[docKey] = `doc #${doc.id} type=${doc.type} fileKey=${doc.fileKey ?? "-"}: ${attemptErrors.join(" | ")}`;
+          docKeyStatus[docKey] = "err";
+          console.warn(
+            `[portal-profile] ${logLabel} doc download failed (tüm yollar tükendi)` +
+            ` — slot=${docKey} doc #${doc.id} type=${doc.type} fileKey=${doc.fileKey ?? "-"}: ${attemptErrors.join(" | ")}`,
+          );
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
