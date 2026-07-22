@@ -19,6 +19,7 @@ import assert from "node:assert/strict";
 import {
   buildEducationPromptSection,
   mapExtractionToEducation,
+  decideEducationExtraction,
 } from "../src/lib/educationExtraction.js";
 import { isPassportExpired } from "../src/lib/passportValidity.js";
 
@@ -58,9 +59,10 @@ describe("mapExtractionToEducation — GPA guarantee", () => {
     const pct = Number(b.gpa);
     assert.ok(pct > 80 && pct <= 100, `expected percent-ish value, got ${b.gpa}`);
   });
-  it("AE-4b '87.5' stays a percent decimal", () => {
+  it("AE-4b '87.5' → integer percent (portal compatibility), raw kept", () => {
     const out = mapExtractionToEducation(mockAll, "Bachelor");
-    assert.equal(out[0].gpa, "87.5");
+    assert.equal(out[0].gpa, "88");
+    assert.equal(out[0].gpaRaw, "87.5");
     assert.equal(out[0].gpaScale, 100);
   });
   it("AE-5 unnormalizable gpa kept raw with null scale", () => {
@@ -109,6 +111,84 @@ describe("buildEducationPromptSection", () => {
     assert.ok(c.includes('"level": "bachelor"'));
     assert.ok(c.includes('"level": "master"'));
     assert.ok(c.includes("educationRecords"));
+  });
+});
+
+// --- FAZ 1: POST /ai/students/:id/extract-education decision core ---------
+describe("decideEducationExtraction — extract-education endpoint core", () => {
+  it("EE-1 Master apply + mock educationRecords[{level:'bachelor'}] → bachelor record kept", () => {
+    const out = decideEducationExtraction({
+      levelKey: "Master",
+      documentCount: 2,
+      educationRecords: [
+        { level: "bachelor", institution: "Bilkent University", program: "CS", graduationYear: 2023, gpa: "3.5/4" },
+      ],
+      confidence: "high",
+    });
+    assert.equal(out.records.length, 1);
+    assert.equal(out.records[0].level, "bachelor");
+    assert.equal(out.records[0].institution, "Bilkent University");
+    assert.equal(out.levelKey, "Master");
+    assert.deepEqual(out.warnings, []);
+  });
+
+  it("EE-2 confidence 'low' with readable fields → record SAVED + LOW_CONFIDENCE_EDUCATION", () => {
+    const out = decideEducationExtraction({
+      levelKey: "Master",
+      documentCount: 1,
+      educationRecords: [
+        { level: "bachelor", institution: "Some University", program: null, graduationYear: null, gpa: null },
+      ],
+      confidence: "low",
+    });
+    // Critical gate fix: the record is NOT dropped.
+    assert.equal(out.records.length, 1);
+    assert.equal(out.records[0].institution, "Some University");
+    assert.ok(out.warnings.includes("LOW_CONFIDENCE_EDUCATION"));
+  });
+
+  it("EE-2b confidence 'low' with NO readable fields → nothing saved, no low-confidence warning", () => {
+    const out = decideEducationExtraction({
+      levelKey: "Master",
+      documentCount: 1,
+      educationRecords: [{ level: "bachelor" }],
+      confidence: "low",
+    });
+    assert.equal(out.records.length, 0);
+    assert.ok(!out.warnings.includes("LOW_CONFIDENCE_EDUCATION"));
+  });
+
+  it("EE-3 no education documents → NO_EDUCATION_DOCUMENTS, nothing saved (route responds 200, upserted=0)", () => {
+    const out = decideEducationExtraction({ levelKey: "Master", documentCount: 0 });
+    assert.deepEqual(out.records, []);
+    assert.deepEqual(out.warnings, ["NO_EDUCATION_DOCUMENTS"]);
+    assert.equal(out.levelKey, "Master");
+  });
+
+  it("EE-3b unresolved level → LEVEL_UNRESOLVED", () => {
+    const out = decideEducationExtraction({ levelKey: null, documentCount: 3 });
+    assert.deepEqual(out.records, []);
+    assert.deepEqual(out.warnings, ["LEVEL_UNRESOLVED"]);
+    assert.equal(out.levelKey, null);
+  });
+
+  it("EE-4 invalid level 'kindergarten' is excluded", () => {
+    const out = decideEducationExtraction({
+      levelKey: "Master",
+      documentCount: 1,
+      educationRecords: [
+        { level: "kindergarten", institution: "Tiny Tots" },
+        { level: "bachelor", institution: "Real University" },
+      ],
+      confidence: "high",
+    });
+    // zod schema rejects the whole array on unknown level → nothing kept.
+    // (Same behavior as mapExtractionToEducation — see AE-7.)
+    assert.ok(out.records.every((r) => (r.level as string) !== "kindergarten"));
+    assert.deepEqual(
+      mapExtractionToEducation([{ level: "kindergarten", institution: "Tiny Tots" }], "Master"),
+      [],
+    );
   });
 });
 

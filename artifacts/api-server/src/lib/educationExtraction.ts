@@ -130,6 +130,58 @@ function normalizeRecord(rec: AiEducationRecord): EducationRecordOutput {
   };
 }
 
+/** true when at least one extractable field carries data. */
+export function educationRecordHasData(rec: EducationRecordOutput): boolean {
+  return (
+    rec.institution != null ||
+    rec.program != null ||
+    rec.gpa != null ||
+    rec.graduationYear != null ||
+    rec.languageScore != null
+  );
+}
+
+export interface ExtractEducationDecisionInput {
+  levelKey: string | null;
+  documentCount: number;
+  educationRecords?: unknown;
+  confidence?: unknown;
+}
+
+export interface ExtractEducationDecision {
+  records: EducationRecordOutput[];
+  warnings: string[];
+  levelKey: string | null;
+}
+
+/**
+ * Pure decision core of POST /ai/students/:id/extract-education.
+ *
+ * - No resolvable level → LEVEL_UNRESOLVED, nothing to save.
+ * - No education documents → NO_EDUCATION_DOCUMENTS, nothing to save.
+ * - Otherwise map the AI educationRecords via mapExtractionToEducation and
+ *   drop records with no readable data.
+ * - CRITICAL GATE: confidence === "low" never drops readable records — they
+ *   are kept for saving and flagged with LOW_CONFIDENCE_EDUCATION instead.
+ */
+export function decideEducationExtraction(
+  input: ExtractEducationDecisionInput,
+): ExtractEducationDecision {
+  if (!input.levelKey) {
+    return { records: [], warnings: ["LEVEL_UNRESOLVED"], levelKey: null };
+  }
+  if (input.documentCount <= 0) {
+    return { records: [], warnings: ["NO_EDUCATION_DOCUMENTS"], levelKey: input.levelKey };
+  }
+  const mapped = mapExtractionToEducation(input.educationRecords, input.levelKey);
+  const records = mapped.filter(educationRecordHasData);
+  const warnings: string[] = [];
+  if (input.confidence === "low" && records.length > 0) {
+    warnings.push("LOW_CONFIDENCE_EDUCATION");
+  }
+  return { records, warnings, levelKey: input.levelKey };
+}
+
 /**
  * Map a raw AI extraction to the final `education` array for the applied
  * level: keep only the levels required by the level key, dedup levels

@@ -1,6 +1,9 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction, json } from "express";
 import * as XLSX from "xlsx";
-import { requireAuth } from "../lib/auth";
+import { z } from "zod";
+import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
+import { STAFF_ROLES } from "../lib/roles";
+import { validate, getValidated } from "../middlewares/validate";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { canonicalCountry, cleanCity } from "@workspace/db";
@@ -10,10 +13,23 @@ import {
   isFallbackExtractor,
   recordExtractorRun,
 } from "../lib/aiExtractorService";
-import { db, educationRecordsTable, studentsTable, applicationsTable, programsTable } from "@workspace/db";
-import { eq, desc, and, isNull } from "drizzle-orm";
+import {
+  db,
+  educationRecordsTable,
+  studentsTable,
+  applicationsTable,
+  programsTable,
+  documentsTable,
+  studentEducationRecordsTable,
+} from "@workspace/db";
+import { eq, desc, and, isNull, inArray, asc } from "drizzle-orm";
 import { isPassportExpired } from "../lib/passportValidity";
-import { buildEducationPromptSection, mapExtractionToEducation } from "../lib/educationExtraction";
+import { loadDocumentBytes } from "../lib/documentBytes";
+import {
+  buildEducationPromptSection,
+  mapExtractionToEducation,
+  decideEducationExtraction,
+} from "../lib/educationExtraction";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
 // JSON body. Base64 inflates payload size by ~33%, and the route itself
@@ -633,5 +649,262 @@ Headers: ${JSON.stringify(unmappedIdx.map((i) => headers[i]))}`,
     res.status(500).json({ error: "CSV parsing failed" });
   }
 });
+
+// ---------------------------------------------------------------------------
+// FAZ 1 — POST /ai/students/:id/extract-education
+//
+// Sends ALL of a student's education-related documents (transcript, diploma,
+// "other"; never photo/passport) to the AI in ONE messages.create call, maps
+// the returned educationRecords[] to the PUT /students/:id/education body
+// shape via mapExtractionToEducation, and idempotently upserts them into
+// student_education_records level-by-level (no duplicates thanks to the
+// partial unique index on (student_id, level) WHERE deleted_at IS NULL).
+//
+// Critical gate fix vs /ai/extract-document: even when the AI reports
+// confidence === "low", a record is STILL saved as long as at least one of
+// institution/program/gpa/graduationYear/languageScore is non-null — the
+// response then carries a "LOW_CONFIDENCE_EDUCATION" warning instead of
+// silently dropping readable data.
+// ---------------------------------------------------------------------------
+
+const EDUCATION_DOC_TYPES = ["transcript", "diploma", "other"] as const;
+const IMAGE_MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+// Defensive request-budget caps for the single messages.create call.
+const MAX_EDUCATION_DOCS = 10;
+const MAX_EDUCATION_TOTAL_BYTES = 15 * 1024 * 1024; // raw bytes (~20MB as base64)
+
+const extractEducationParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+/** Resolve the applied study level server-side (never trust the client). */
+async function resolveAppliedLevelKey(studentId: number): Promise<string | null> {
+  const [stu] = await db.select({ interestedLevel: studentsTable.interestedLevel })
+    .from(studentsTable)
+    .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+  if (stu?.interestedLevel && stu.interestedLevel.trim()) return stu.interestedLevel.trim();
+  const [appRow] = await db.select({ degree: programsTable.degree })
+    .from(applicationsTable)
+    .innerJoin(programsTable, eq(applicationsTable.programId, programsTable.id))
+    .where(eq(applicationsTable.studentId, studentId))
+    .orderBy(desc(applicationsTable.id))
+    .limit(1);
+  return appRow?.degree && appRow.degree.trim() ? appRow.degree.trim() : null;
+}
+
+router.post(
+  "/ai/students/:id/extract-education",
+  requireAuth,
+  requireRole(...STAFF_ROLES),
+  requireAgentStaffPermission("students"),
+  aiRateLimit(10, 15 * 60 * 1000),
+  validate({ params: extractEducationParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { id: studentId } = getValidated<{ params: typeof extractEducationParamsSchema }>(req).params;
+    try {
+      const [student] = await db.select({ id: studentsTable.id })
+        .from(studentsTable)
+        .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+      if (!student) {
+        res.status(404).json({ error: "Student not found" });
+        return;
+      }
+
+      // Level is resolved SERVER-side; without it we cannot build the
+      // level-based prompt section, so return early with a stable warning.
+      const levelKey = await resolveAppliedLevelKey(studentId);
+      if (!levelKey) {
+        const decision = decideEducationExtraction({ levelKey: null, documentCount: 0 });
+        await logAudit(req.user!.id, "ai_extract_education", "student", studentId, {
+          levelKey: null, documentCount: 0, upserted: 0, warnings: decision.warnings,
+        }, req.ip);
+        res.json({ ...decision, upserted: 0 });
+        return;
+      }
+
+      // Education-related documents only — photo/passport are never sent.
+      const docRows = await db.select({
+        id: documentsTable.id,
+        name: documentsTable.name,
+        type: documentsTable.type,
+        fileKey: documentsTable.fileKey,
+        fileData: documentsTable.fileData,
+        mimeType: documentsTable.mimeType,
+      })
+        .from(documentsTable)
+        .where(and(
+          eq(documentsTable.studentId, studentId),
+          isNull(documentsTable.deletedAt),
+          inArray(documentsTable.type, [...EDUCATION_DOC_TYPES]),
+        ))
+        .orderBy(asc(documentsTable.id));
+
+      // Reuse the existing storage/base64 fallback chain to load bytes.
+      // Defensive caps: never exceed the model request budget — stop adding
+      // documents past the raw-byte / count limits (uploads are compressed
+      // to <=2MB system-wide, so this only trips on unusual data).
+      const loaded: Array<{ label: string; mimeType: string; base64: string }> = [];
+      let totalBytes = 0;
+      for (const doc of docRows) {
+        if (loaded.length >= MAX_EDUCATION_DOCS) {
+          console.warn(`[ai-extract-education] student #${studentId}: document count cap (${MAX_EDUCATION_DOCS}) reached — remaining docs skipped`);
+          break;
+        }
+        try {
+          const bytes = await loadDocumentBytes(doc);
+          if (!bytes) continue;
+          const mime = (doc.mimeType || bytes.mimeType || "").toLowerCase();
+          const isPdf = mime === "application/pdf";
+          const isImage = (IMAGE_MEDIA_TYPES as readonly string[]).includes(mime);
+          if (!isPdf && !isImage) continue; // unsupported content for vision
+          if (totalBytes + bytes.buffer.length > MAX_EDUCATION_TOTAL_BYTES) {
+            console.warn(`[ai-extract-education] student #${studentId}: total byte cap reached — document #${doc.id} and remaining docs skipped`);
+            break;
+          }
+          totalBytes += bytes.buffer.length;
+          loaded.push({
+            label: `${doc.type}: ${doc.name}`,
+            mimeType: mime,
+            base64: bytes.buffer.toString("base64"),
+          });
+        } catch (docErr) {
+          console.warn(`[ai-extract-education] failed to load document #${doc.id} (non-fatal):`, docErr);
+        }
+      }
+
+      if (loaded.length === 0) {
+        const decision = decideEducationExtraction({ levelKey, documentCount: 0 });
+        await logAudit(req.user!.id, "ai_extract_education", "student", studentId, {
+          levelKey, documentCount: 0, upserted: 0, warnings: decision.warnings,
+        }, req.ip);
+        res.json({ ...decision, upserted: 0 });
+        return;
+      }
+
+      let anthropic;
+      let claudeConfig;
+      try {
+        anthropic = await getAnthropicClient();
+        claudeConfig = await getClaudeConfig();
+      } catch (err) {
+        res.status(503).json({ error: err instanceof Error ? err.message : "AI integration not configured" });
+        return;
+      }
+
+      // ALL education documents go in ONE messages.create call, reusing the
+      // legacy prompt + the level-based education section.
+      const promptText = EXTRACT_PROMPT + "\n" + buildEducationPromptSection(levelKey);
+      type ContentBlock =
+        | { type: "text"; text: string }
+        | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
+        | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } };
+      const contentBlocks: ContentBlock[] = [{ type: "text", text: promptText }];
+      for (const doc of loaded) {
+        contentBlocks.push({ type: "text", text: `\n--- Document: ${doc.label} ---` });
+        if (doc.mimeType === "application/pdf") {
+          contentBlocks.push({
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: doc.base64 },
+          });
+        } else {
+          contentBlocks.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: doc.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: doc.base64,
+            },
+          });
+        }
+      }
+
+      const message = await anthropic.messages.create({
+        model: claudeConfig.model || DEFAULT_VISION_MODEL,
+        max_tokens: 8192,
+        messages: [{ role: "user", content: contentBlocks as never }],
+      });
+
+      const textBlock = message.content.find((b) => b.type === "text");
+      if (!textBlock || textBlock.type !== "text") {
+        res.status(500).json({ error: "No response from AI" });
+        return;
+      }
+
+      let extracted: Record<string, unknown> = {};
+      try {
+        const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) extracted = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+      } catch {
+        res.status(500).json({ error: "Failed to parse AI response" });
+        return;
+      }
+
+      // Map to the PUT /students/:id/education body shape (level filter,
+      // dedup, GPA guarantee), drop no-data records, and apply the CRITICAL
+      // GATE FIX: low confidence never drops readable records — they are
+      // saved AND flagged with the stable LOW_CONFIDENCE_EDUCATION warning.
+      const { records, warnings } = decideEducationExtraction({
+        levelKey,
+        documentCount: loaded.length,
+        educationRecords: extracted.educationRecords,
+        confidence: extracted.confidence,
+      });
+
+      // Idempotent, race-safe level-based upsert: ON CONFLICT against the
+      // partial unique index on (student_id, level) WHERE deleted_at IS NULL
+      // — concurrent calls can never create duplicates or 500 on the index.
+      let upserted = 0;
+      if (records.length > 0) {
+        await db.transaction(async (tx) => {
+          for (let i = 0; i < records.length; i++) {
+            const rec = records[i];
+            const values = {
+              studentId,
+              level: rec.level,
+              institution: rec.institution,
+              program: rec.program,
+              graduationYear: rec.graduationYear,
+              gpa: rec.gpa,
+              gpaRaw: rec.gpaRaw,
+              gpaScale: rec.gpaScale,
+              languageScore: rec.languageScore,
+              sortOrder: i,
+            };
+            await tx.insert(studentEducationRecordsTable)
+              .values(values)
+              .onConflictDoUpdate({
+                target: [studentEducationRecordsTable.studentId, studentEducationRecordsTable.level],
+                targetWhere: isNull(studentEducationRecordsTable.deletedAt),
+                set: {
+                  institution: values.institution,
+                  program: values.program,
+                  graduationYear: values.graduationYear,
+                  gpa: values.gpa,
+                  gpaRaw: values.gpaRaw,
+                  gpaScale: values.gpaScale,
+                  languageScore: values.languageScore,
+                  sortOrder: values.sortOrder,
+                  updatedAt: new Date(),
+                },
+              });
+            upserted++;
+          }
+        });
+      }
+
+      await logAudit(req.user!.id, "ai_extract_education", "student", studentId, {
+        levelKey,
+        documentCount: loaded.length,
+        upserted,
+        warnings,
+      }, req.ip);
+
+      res.json({ records, warnings, levelKey, upserted });
+    } catch (err) {
+      console.error("[ai-extract-education] extraction failed:", err);
+      res.status(500).json({ error: "AI extraction failed" });
+    }
+  },
+);
 
 export default router;
