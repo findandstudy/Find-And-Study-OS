@@ -102,7 +102,9 @@ function normalizeRecord(rec: AiEducationRecord): EducationRecordOutput {
     const raw = String(rec.gpa).trim();
     const pct = normalizeGpaTo100(raw);
     if (!isNaN(pct)) {
-      gpa = String(Math.round(pct * 10) / 10);
+      // Portal compatibility (SIT/Zoho rejects decimal GPA): always an
+      // INTEGER percentage 0–100. Original kept in gpaRaw.
+      gpa = String(Math.min(100, Math.max(0, Math.round(pct))));
       gpaRaw = raw;
       gpaScale = 100;
     } else {

@@ -1,5 +1,5 @@
 ---
-name: Multico adapter (FIX-16)
+name: Multico adapter ()
 description: HTTP-first aggregator adapter for Topkapı Central Asian/Mongolian exclusive channel; key implementation decisions and known gotchas.
 ---
 

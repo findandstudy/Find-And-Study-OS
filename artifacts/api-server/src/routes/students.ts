@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable, educationRecordsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -23,6 +23,7 @@ import bcrypt from "bcryptjs";
 import { deleteSessionsForUser } from "../lib/replitAuth";
 import { getCurrentSeason } from "../lib/season";
 import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
+import { computeReadiness } from "../lib/portalReadiness";
 
 const router: IRouter = Router();
 
@@ -537,6 +538,21 @@ router.get("/students/:id/education", requireAuth, requireAgentStaffPermission("
     .where(and(eq(studentEducationRecordsTable.studentId, id), isNull(studentEducationRecordsTable.deletedAt)))
     .orderBy(asc(studentEducationRecordsTable.sortOrder), asc(studentEducationRecordsTable.id));
   res.json({ records });
+});
+
+// --- Portal Uyumluluk Katmanı Faz 3 — soft readiness gate (read-only) -----
+router.get("/students/:id/portal-readiness", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  const access = await assertCanAccessStudent(req, id);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  const portal = String(req.query.portal || "sit").trim().toLowerCase() || "sit";
+  const [eduRecords, docs] = await Promise.all([
+    db.select().from(educationRecordsTable).where(eq(educationRecordsTable.studentId, id)),
+    db.select({ type: documentsTable.type }).from(documentsTable)
+      .where(and(eq(documentsTable.studentId, id), isNull(documentsTable.deletedAt))),
+  ]);
+  const readiness = computeReadiness(access.student, eduRecords, portal, docs.map((d) => d.type));
+  res.json(readiness);
 });
 
 router.put("/students/:id/education", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {

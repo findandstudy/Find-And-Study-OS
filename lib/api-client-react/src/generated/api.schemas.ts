@@ -497,6 +497,34 @@ export interface StudentEducationRecordInput {
   languageScore?: string | null;
 }
 
+export interface PortalReadinessIncompatibility {
+  field: string;
+  reason: string;
+}
+
+/**
+ * @nullable
+ */
+export type PortalReadinessLevel =
+  | (typeof PortalReadinessLevel)[keyof typeof PortalReadinessLevel]
+  | null;
+
+export const PortalReadinessLevel = {
+  high_school: "high_school",
+  bachelor: "bachelor",
+  master: "master",
+} as const;
+
+export interface PortalReadiness {
+  ready: boolean;
+  portal: string;
+  /** @nullable */
+  level?: PortalReadinessLevel;
+  missing: string[];
+  incompatible: PortalReadinessIncompatibility[];
+  skipped: string[];
+}
+
 export interface StudentEducationResponse {
   records: StudentEducationRecord[];
 }
@@ -2377,6 +2405,10 @@ export type ListStudentsParams = {
   search?: string;
   page?: number;
   limit?: number;
+};
+
+export type GetStudentPortalReadinessParams = {
+  portal?: string;
 };
 
 export type ListAgentsParams = {

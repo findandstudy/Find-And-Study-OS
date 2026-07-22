@@ -143,3 +143,4 @@
 - [Zernio template = broadcast flow](zernio-template-broadcast.md) — inbox endpoint is text-only; templates use 3-step broadcast (profiles→create→recipients→send), sent<1 ⇒ failed.
 - [AI agent working-hours gate](ai-agent-working-hours.md) — schedule gate lives in maybeAutoReply only (test console ungated); overnight window owned by START day; dual logic copies botSchedule.ts ↔ edcons aiSchedule.ts must stay in sync.
 - [Academic levels dual helpers + applied-level ranking](academic-levels-dual-helpers.md) — edcons src/lib/academicLevels.ts is a browser copy of lib/db helpers (keep in sync); applied level must pick most-demanding group (C>B>A) across applications, never first-truthy.
+- [Portal readiness SOFT gate](portal-readiness-soft-gate.md) — readiness matrix/endpoint is display-only, never blocks submission; countryOfResidence←nationality fallback, city←cleanCity(address), GPA integer everywhere; board fetch is per-row (batch later).

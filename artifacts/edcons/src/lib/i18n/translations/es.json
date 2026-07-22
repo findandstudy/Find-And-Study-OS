@@ -6197,5 +6197,48 @@
     "yes": "Yes",
     "no": "No",
     "passportExpiredWarning": "The passport has expired. Please upload a valid passport before submitting the application."
+  },
+  "portalReadiness": {
+    "ready": "Listo para {portal}",
+    "notReady": "{portal}: {count} faltante(s)/incompatible(s)",
+    "missingFields": "Campos faltantes",
+    "incompatible": "Campos incompatibles",
+    "softNote": "Solo informativo — el envío no se bloquea.",
+    "reasons": {
+      "gpaMustBeInteger": "El promedio debe ser un entero (0–100)",
+      "countryUnmatched": "El país no coincide con la lista del portal",
+      "cityUnclean": "La ciudad parece un fragmento de dirección",
+      "passportExpired": "El pasaporte ha caducado",
+      "invalidDate": "Formato de fecha no válido",
+      "invalidValue": "Valor no válido"
+    },
+    "fields": {
+      "dob": "Date of birth",
+      "gender": "Gender",
+      "nationality": "Nationality",
+      "passportNo": "Passport number",
+      "passportIssueDate": "Passport issue date",
+      "passportExpiryDate": "Passport expiry date",
+      "email": "Email",
+      "mobile": "Mobile phone",
+      "countryOfResidence": "Country of residence",
+      "city": "City",
+      "fatherName": "Father's name",
+      "motherName": "Mother's name",
+      "hsCountry": "High school country",
+      "hsName": "High school name",
+      "hsGpa": "High school GPA",
+      "bachelorCountry": "Bachelor country",
+      "bachelorSchool": "Bachelor university",
+      "bachelorGpa": "Bachelor GPA",
+      "masterCountry": "Master country",
+      "masterSchool": "Master university",
+      "masterGpa": "Master GPA",
+      "languageScore": "Language score",
+      "photo": "Photo",
+      "passport": "Passport",
+      "transcript": "Transcript",
+      "diploma": "Diploma"
+    }
   }
 }

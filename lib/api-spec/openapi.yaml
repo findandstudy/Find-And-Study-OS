@@ -504,6 +504,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/Student"
 
+  /students/{id}/portal-readiness:
+    get:
+      operationId: getStudentPortalReadiness
+      tags: [students]
+      summary: Soft portal-compatibility readiness for a student (never blocks submission)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: portal
+          in: query
+          required: false
+          schema:
+            type: string
+            default: sit
+      responses:
+        "200":
+          description: Readiness computation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalReadiness"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /students/{id}/education:
     get:
       operationId: getStudentEducation
@@ -4008,6 +4039,46 @@ components:
           type: ["string", "null"]
       required:
         - level
+
+    PortalReadinessIncompatibility:
+      type: object
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+      required:
+        - field
+        - reason
+
+    PortalReadiness:
+      type: object
+      properties:
+        ready:
+          type: boolean
+        portal:
+          type: string
+        level:
+          type: ["string", "null"]
+          enum: [high_school, bachelor, master, null]
+        missing:
+          type: array
+          items:
+            type: string
+        incompatible:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortalReadinessIncompatibility"
+        skipped:
+          type: array
+          items:
+            type: string
+      required:
+        - ready
+        - portal
+        - missing
+        - incompatible
+        - skipped
 
     StudentEducationResponse:
       type: object

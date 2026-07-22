@@ -89,7 +89,10 @@
     "test:university-exclusions": "tsx --test ./scripts/test-university-exclusions.ts",
     "test:portal": "tsx --test ./scripts/test-portal-api.ts",
     "test:doc-slot-mapping": "tsx --test ./scripts/test-portal-process.ts",
-    "test:zernio-broadcast": "tsx --test ./scripts/test-zernio-broadcast.ts"
+    "test:zernio-broadcast": "tsx --test ./scripts/test-zernio-broadcast.ts",
+    "test:portal-compat": "tsx --test ./scripts/test-portal-compat.ts",
+    "test:ai-extract-compat": "tsx --test ./scripts/test-ai-extract-compat.ts",
+    "test:portal-readiness": "tsx --test ./scripts/test-portal-readiness.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

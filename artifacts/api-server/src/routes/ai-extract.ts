@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { requireAuth } from "../lib/auth";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
+import { canonicalCountry, cleanCity } from "@workspace/db";
 import {
   buildExtractionPrompt,
   getActiveExtractor,
@@ -35,7 +36,8 @@ function normalizeExtractedGpa(extracted: Record<string, any>): void {
   const pct = normalizeGpaTo100(raw);
   if (!isNaN(pct)) {
     extracted.gpaRaw = raw;
-    extracted.gpa = (Math.round(pct * 10) / 10).toString();
+    // Portal compatibility: SIT/Zoho rejects decimal GPA — integer 0–100.
+    extracted.gpa = String(Math.min(100, Math.max(0, Math.round(pct))));
     extracted.gpaScale = 100;
   }
 }
@@ -46,7 +48,8 @@ function applyExtractorNormalize(extractor: { fields: any[] }, extracted: Record
       const pct = normalizeGpaTo100(String(extracted[f.key]));
       if (!isNaN(pct)) {
         extracted[`${f.key}Raw`] = extracted[f.key];
-        extracted[f.key] = (Math.round(pct * 10) / 10).toString();
+        // Portal compatibility: integer 0–100 (SIT/Zoho rejects decimals).
+        extracted[f.key] = String(Math.min(100, Math.max(0, Math.round(pct))));
         extracted[`${f.key}Scale`] = 100;
       }
     }
@@ -109,7 +112,9 @@ Extract ALL of the following fields if visible in the document. Return a JSON ob
   "eduStartMonth": "string or null - English month name when studies started (e.g. 'September')",
   "eduStartYear": "number or null - 4-digit year when studies started",
   "eduEndMonth": "string or null - English month name of graduation/completion (e.g. 'June')",
-  "eduLanguageScore": "string or null - language proficiency test score visible on the document (e.g. 'IELTS 6.5', 'TOEFL 90')"
+  "eduLanguageScore": "string or null - language proficiency test score visible on the document (e.g. 'IELTS 6.5', 'TOEFL 90')",
+  "countryOfResidence": "string or null - full English country name where the student currently lives (e.g. 'Turkey', 'Afghanistan'), if visible",
+  "city": "string or null - ONLY the city name where the student currently lives (e.g. 'Istanbul'). Never include street, building number, district or postal code"
 }
 
 Rules:
@@ -129,6 +134,9 @@ Rules:
 - For photos: only set confidence to "low", documentType to "photo", everything else null
 - For nationality: always return the full country name (e.g. "Afghanistan" not "Afghan", "Turkey" not "Turkish", "Iran" not "Iranian", "Pakistan" not "Pakistani", "Uzbekistan" not "Uzbek", "India" not "Indian"). Convert any demonym/adjective form to the full country name.
 - Always normalize dates to YYYY-MM-DD format
+- GPA must be returned exactly as printed (native scale); it will be normalized server-side to an INTEGER percentage
+- countryOfResidence must be a full English country name (never a demonym, city or address fragment)
+- city must be a bare city name only — if you only see a full address line and cannot isolate the city, set city to null
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find or are not sure about`;
 
@@ -299,6 +307,32 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
     // translates this in Faz 4; keep the code stable.
     if (isPassportExpired(typeof extracted.passportExpiry === "string" ? extracted.passportExpiry : null)) {
       if (!warnings.includes("PASSPORT_EXPIRED")) warnings.push("PASSPORT_EXPIRED");
+    }
+
+    // Portal Uyumluluk Katmanı — soft normalization of residence country and
+    // city. Never blocks extraction; unmatched values are cleared with a
+    // stable warning code so the UI can flag them.
+    if (extracted.countryOfResidence != null && String(extracted.countryOfResidence).trim() !== "") {
+      const rawResidence = String(extracted.countryOfResidence).trim();
+      const canon = canonicalCountry(rawResidence);
+      if (canon) {
+        extracted.countryOfResidence = canon;
+      } else {
+        extracted.countryOfResidenceRaw = rawResidence;
+        extracted.countryOfResidence = null;
+        warnings.push("RESIDENCE_COUNTRY_UNMATCHED");
+      }
+    }
+    if (extracted.city != null && String(extracted.city).trim() !== "") {
+      const rawCity = String(extracted.city).trim();
+      const cleaned = cleanCity(rawCity);
+      if (cleaned) {
+        extracted.city = cleaned;
+      } else {
+        extracted.cityRaw = rawCity;
+        extracted.city = null;
+        warnings.push("CITY_UNCLEAN");
+      }
     }
 
     // FAZ 3 — map AI educationRecords[] to the PUT /students/:id/education

@@ -549,6 +549,42 @@ export const UpdateStudentResponse = zod.object({
 });
 
 /**
+ * @summary Soft portal-compatibility readiness for a student (never blocks submission)
+ */
+export const GetStudentPortalReadinessParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const getStudentPortalReadinessQueryPortalDefault = `sit`;
+
+export const GetStudentPortalReadinessQueryParams = zod.object({
+  portal: zod.coerce
+    .string()
+    .default(getStudentPortalReadinessQueryPortalDefault),
+});
+
+export const GetStudentPortalReadinessResponse = zod.object({
+  ready: zod.boolean(),
+  portal: zod.string(),
+  level: zod
+    .union([
+      zod.literal("high_school"),
+      zod.literal("bachelor"),
+      zod.literal("master"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  missing: zod.array(zod.string()),
+  incompatible: zod.array(
+    zod.object({
+      field: zod.string(),
+      reason: zod.string(),
+    }),
+  ),
+  skipped: zod.array(zod.string()),
+});
+
+/**
  * @summary List a student's education records (active set, ordered)
  */
 export const GetStudentEducationParams = zod.object({

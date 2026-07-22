@@ -75,6 +75,7 @@ import type {
   GetPortalProgramOptionsParams,
   GetPortalSubmissions200,
   GetPortalSubmissionsParams,
+  GetStudentPortalReadinessParams,
   GetUniversityContract200,
   HealthStatus,
   InboxConversationDetailResponse,
@@ -118,6 +119,7 @@ import type {
   PatchAdapterSpecResponse,
   PortalProgramMapping,
   PortalProgramOptionsResponse,
+  PortalReadiness,
   PortalSubmission,
   Program,
   ProgramFallback,
@@ -1947,6 +1949,126 @@ export const useUpdateStudent = <
 > => {
   return useMutation(getUpdateStudentMutationOptions(options));
 };
+
+/**
+ * @summary Soft portal-compatibility readiness for a student (never blocks submission)
+ */
+export const getGetStudentPortalReadinessUrl = (
+  id: number,
+  params?: GetStudentPortalReadinessParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/students/${id}/portal-readiness?${stringifiedParams}`
+    : `/api/students/${id}/portal-readiness`;
+};
+
+export const getStudentPortalReadiness = async (
+  id: number,
+  params?: GetStudentPortalReadinessParams,
+  options?: RequestInit,
+): Promise<PortalReadiness> => {
+  return customFetch<PortalReadiness>(
+    getGetStudentPortalReadinessUrl(id, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetStudentPortalReadinessQueryKey = (
+  id: number,
+  params?: GetStudentPortalReadinessParams,
+) => {
+  return [
+    `/api/students/${id}/portal-readiness`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetStudentPortalReadinessQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStudentPortalReadiness>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  params?: GetStudentPortalReadinessParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStudentPortalReadiness>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetStudentPortalReadinessQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStudentPortalReadiness>>
+  > = ({ signal }) =>
+    getStudentPortalReadiness(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStudentPortalReadiness>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStudentPortalReadinessQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStudentPortalReadiness>>
+>;
+export type GetStudentPortalReadinessQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Soft portal-compatibility readiness for a student (never blocks submission)
+ */
+
+export function useGetStudentPortalReadiness<
+  TData = Awaited<ReturnType<typeof getStudentPortalReadiness>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  params?: GetStudentPortalReadinessParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStudentPortalReadiness>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStudentPortalReadinessQueryOptions(
+    id,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List a student's education records (active set, ordered)

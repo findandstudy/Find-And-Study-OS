@@ -6197,5 +6197,48 @@
     "yes": "Yes",
     "no": "No",
     "passportExpiredWarning": "The passport has expired. Please upload a valid passport before submitting the application."
+  },
+  "portalReadiness": {
+    "ready": "已准备好提交 {portal}",
+    "notReady": "{portal}：{count} 项缺失/不兼容",
+    "missingFields": "缺失字段",
+    "incompatible": "不兼容字段",
+    "softNote": "仅供参考 — 不会阻止提交。",
+    "reasons": {
+      "gpaMustBeInteger": "GPA 必须为整数（0–100）",
+      "countryUnmatched": "国家与门户列表不匹配",
+      "cityUnclean": "城市看起来像地址片段",
+      "passportExpired": "护照已过期",
+      "invalidDate": "日期格式无效",
+      "invalidValue": "无效值"
+    },
+    "fields": {
+      "dob": "Date of birth",
+      "gender": "Gender",
+      "nationality": "Nationality",
+      "passportNo": "Passport number",
+      "passportIssueDate": "Passport issue date",
+      "passportExpiryDate": "Passport expiry date",
+      "email": "Email",
+      "mobile": "Mobile phone",
+      "countryOfResidence": "Country of residence",
+      "city": "City",
+      "fatherName": "Father's name",
+      "motherName": "Mother's name",
+      "hsCountry": "High school country",
+      "hsName": "High school name",
+      "hsGpa": "High school GPA",
+      "bachelorCountry": "Bachelor country",
+      "bachelorSchool": "Bachelor university",
+      "bachelorGpa": "Bachelor GPA",
+      "masterCountry": "Master country",
+      "masterSchool": "Master university",
+      "masterGpa": "Master GPA",
+      "languageScore": "Language score",
+      "photo": "Photo",
+      "passport": "Passport",
+      "transcript": "Transcript",
+      "diploma": "Diploma"
+    }
   }
 }

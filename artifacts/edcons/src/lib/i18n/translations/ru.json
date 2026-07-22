@@ -6197,5 +6197,48 @@
     "yes": "Yes",
     "no": "No",
     "passportExpiredWarning": "The passport has expired. Please upload a valid passport before submitting the application."
+  },
+  "portalReadiness": {
+    "ready": "Готово для {portal}",
+    "notReady": "{portal}: {count} не хватает/несовместимо",
+    "missingFields": "Отсутствующие поля",
+    "incompatible": "Несовместимые поля",
+    "softNote": "Только для информации — отправка не блокируется.",
+    "reasons": {
+      "gpaMustBeInteger": "Средний балл должен быть целым числом (0–100)",
+      "countryUnmatched": "Страна не соответствует списку портала",
+      "cityUnclean": "Город похож на фрагмент адреса",
+      "passportExpired": "Срок действия паспорта истёк",
+      "invalidDate": "Неверный формат даты",
+      "invalidValue": "Недопустимое значение"
+    },
+    "fields": {
+      "dob": "Date of birth",
+      "gender": "Gender",
+      "nationality": "Nationality",
+      "passportNo": "Passport number",
+      "passportIssueDate": "Passport issue date",
+      "passportExpiryDate": "Passport expiry date",
+      "email": "Email",
+      "mobile": "Mobile phone",
+      "countryOfResidence": "Country of residence",
+      "city": "City",
+      "fatherName": "Father's name",
+      "motherName": "Mother's name",
+      "hsCountry": "High school country",
+      "hsName": "High school name",
+      "hsGpa": "High school GPA",
+      "bachelorCountry": "Bachelor country",
+      "bachelorSchool": "Bachelor university",
+      "bachelorGpa": "Bachelor GPA",
+      "masterCountry": "Master country",
+      "masterSchool": "Master university",
+      "masterGpa": "Master GPA",
+      "languageScore": "Language score",
+      "photo": "Photo",
+      "passport": "Passport",
+      "transcript": "Transcript",
+      "diploma": "Diploma"
+    }
   }
 }

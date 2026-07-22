@@ -25,6 +25,7 @@ import {
 import { MultiSelectFilter, type MultiSelectOption } from "@/components/admin/MultiSelectFilter";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PortalSortControl, type PortalSortDir } from "@/components/admin/PortalSortControl";
+import { PortalReadinessInlineWarning } from "@/components/PortalReadinessBadge";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -346,6 +347,9 @@ function SubmissionRow({
                     <User className="w-3.5 h-3.5 text-muted-foreground" />
                     {sub.studentName}
                   </span>
+                )}
+                {sub.status === "queued" && sub.studentId != null && (
+                  <PortalReadinessInlineWarning studentId={sub.studentId} />
                 )}
                 {sub.studentName && sub.programName && (
                   <span className="text-muted-foreground">·</span>

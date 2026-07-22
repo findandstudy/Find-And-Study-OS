@@ -34,6 +34,7 @@ import { useCountrySearch } from "@/hooks/use-countries";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { OriginBadge } from "@/components/OriginBadge";
+import { PortalReadinessBadge } from "@/components/PortalReadinessBadge";
 import { AllMessagingHistory } from "@/components/inbox/AllMessagingHistory";
 import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
@@ -968,6 +969,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 hideEmail={isAgent}
                 hideWhatsApp={isAgent}
               />
+              <PortalReadinessBadge studentId={id} />
               <Badge
                 className={`capitalize px-3 py-1 rounded-full text-sm font-medium border-0 ${STATUS_COLORS[student.status ?? "active"]}`}
               >

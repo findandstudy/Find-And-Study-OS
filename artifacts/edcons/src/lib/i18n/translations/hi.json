@@ -6197,5 +6197,48 @@
     "yes": "Yes",
     "no": "No",
     "passportExpiredWarning": "The passport has expired. Please upload a valid passport before submitting the application."
+  },
+  "portalReadiness": {
+    "ready": "{portal} के लिए तैयार",
+    "notReady": "{portal}: {count} अनुपस्थित/असंगत",
+    "missingFields": "अनुपस्थित फ़ील्ड",
+    "incompatible": "असंगत फ़ील्ड",
+    "softNote": "केवल सूचना — सबमिशन अवरुद्ध नहीं होता।",
+    "reasons": {
+      "gpaMustBeInteger": "GPA पूर्णांक होना चाहिए (0–100)",
+      "countryUnmatched": "देश पोर्टल सूची से मेल नहीं खाता",
+      "cityUnclean": "शहर पते के अंश जैसा दिखता है",
+      "passportExpired": "पासपोर्ट की अवधि समाप्त हो गई है",
+      "invalidDate": "अमान्य दिनांक प्रारूप",
+      "invalidValue": "अमान्य मान"
+    },
+    "fields": {
+      "dob": "Date of birth",
+      "gender": "Gender",
+      "nationality": "Nationality",
+      "passportNo": "Passport number",
+      "passportIssueDate": "Passport issue date",
+      "passportExpiryDate": "Passport expiry date",
+      "email": "Email",
+      "mobile": "Mobile phone",
+      "countryOfResidence": "Country of residence",
+      "city": "City",
+      "fatherName": "Father's name",
+      "motherName": "Mother's name",
+      "hsCountry": "High school country",
+      "hsName": "High school name",
+      "hsGpa": "High school GPA",
+      "bachelorCountry": "Bachelor country",
+      "bachelorSchool": "Bachelor university",
+      "bachelorGpa": "Bachelor GPA",
+      "masterCountry": "Master country",
+      "masterSchool": "Master university",
+      "masterGpa": "Master GPA",
+      "languageScore": "Language score",
+      "photo": "Photo",
+      "passport": "Passport",
+      "transcript": "Transcript",
+      "diploma": "Diploma"
+    }
   }
 }

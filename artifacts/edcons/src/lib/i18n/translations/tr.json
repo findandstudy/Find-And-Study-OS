@@ -6197,5 +6197,48 @@
     "yes": "Evet",
     "no": "Hayır",
     "passportExpiredWarning": "Pasaportun süresi dolmuş. Lütfen başvuruyu göndermeden önce geçerli bir pasaport yükleyin."
+  },
+  "portalReadiness": {
+    "ready": "{portal} için hazır",
+    "notReady": "{portal}: {count} eksik/uyumsuz",
+    "missingFields": "Eksik alanlar",
+    "incompatible": "Uyumsuz alanlar",
+    "softNote": "Sadece bilgilendirme — gönderim engellenmez.",
+    "reasons": {
+      "gpaMustBeInteger": "Not ortalaması tam sayı olmalı (0–100)",
+      "countryUnmatched": "Ülke portal listesiyle eşleşmiyor",
+      "cityUnclean": "Şehir adres parçası gibi görünüyor",
+      "passportExpired": "Pasaportun süresi dolmuş",
+      "invalidDate": "Geçersiz tarih biçimi",
+      "invalidValue": "Geçersiz değer"
+    },
+    "fields": {
+      "dob": "Doğum tarihi",
+      "gender": "Cinsiyet",
+      "nationality": "Uyruk",
+      "passportNo": "Pasaport numarası",
+      "passportIssueDate": "Pasaport veriliş tarihi",
+      "passportExpiryDate": "Pasaport geçerlilik tarihi",
+      "email": "E-posta",
+      "mobile": "Cep telefonu",
+      "countryOfResidence": "İkamet ülkesi",
+      "city": "Şehir",
+      "fatherName": "Baba adı",
+      "motherName": "Anne adı",
+      "hsCountry": "Lise ülkesi",
+      "hsName": "Lise adı",
+      "hsGpa": "Lise not ortalaması",
+      "bachelorCountry": "Lisans ülkesi",
+      "bachelorSchool": "Lisans üniversitesi",
+      "bachelorGpa": "Lisans not ortalaması",
+      "masterCountry": "Yüksek lisans ülkesi",
+      "masterSchool": "Yüksek lisans üniversitesi",
+      "masterGpa": "Yüksek lisans not ortalaması",
+      "languageScore": "Dil puanı",
+      "photo": "Fotoğraf",
+      "passport": "Pasaport",
+      "transcript": "Transkript",
+      "diploma": "Diploma"
+    }
   }
 }

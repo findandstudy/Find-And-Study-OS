@@ -190,3 +190,6 @@ export const db = drizzle(pool, { schema });
 export * from "./schema";
 export * from "./softDelete";
 export * from "./academicLevels";
+export * from "./portal/portalFieldSpec";
+export * from "./portal/portalNormalize";
+export * from "./portal/canonicalCountries";
