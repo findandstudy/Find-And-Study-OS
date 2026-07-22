@@ -9,7 +9,10 @@ import {
   isFallbackExtractor,
   recordExtractorRun,
 } from "../lib/aiExtractorService";
-import { db, educationRecordsTable } from "@workspace/db";
+import { db, educationRecordsTable, studentsTable, applicationsTable, programsTable } from "@workspace/db";
+import { eq, desc, and, isNull } from "drizzle-orm";
+import { isPassportExpired } from "../lib/passportValidity";
+import { buildEducationPromptSection, mapExtractionToEducation } from "../lib/educationExtraction";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
 // JSON body. Base64 inflates payload size by ~33%, and the route itself
@@ -174,7 +177,43 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
     // behavioural change. As soon as an admin defines an extractor, the dynamic
     // prompt + per-extractor model/tokens take over.
     const useLegacy = isFallbackExtractor(extractor);
-    const promptText = useLegacy ? EXTRACT_PROMPT : buildExtractionPrompt(extractor, { lang: requestedLang });
+    let promptText = useLegacy ? EXTRACT_PROMPT : buildExtractionPrompt(extractor, { lang: requestedLang });
+
+    // FAZ 3 — level-based education extraction. Resolve the applied study
+    // level from the student's interestedLevel, falling back to the level
+    // (degree) of the most recent application's program. When resolvable,
+    // instruct the AI which education records to fill.
+    let appliedLevelKey: string | null = null;
+    {
+      const studentIdParam = Number((req.body as { studentId?: unknown })?.studentId);
+      const explicitLevel = (req.body as { appliedLevel?: unknown })?.appliedLevel;
+      if (typeof explicitLevel === "string" && explicitLevel.trim()) {
+        appliedLevelKey = explicitLevel.trim();
+      } else if (Number.isFinite(studentIdParam) && studentIdParam > 0) {
+        try {
+          const [stu] = await db.select({ interestedLevel: studentsTable.interestedLevel })
+            .from(studentsTable)
+            .where(and(eq(studentsTable.id, studentIdParam), isNull(studentsTable.deletedAt)));
+          if (stu?.interestedLevel && stu.interestedLevel.trim()) {
+            appliedLevelKey = stu.interestedLevel.trim();
+          } else {
+            const [appRow] = await db.select({ degree: programsTable.degree })
+              .from(applicationsTable)
+              .innerJoin(programsTable, eq(applicationsTable.programId, programsTable.id))
+              .where(eq(applicationsTable.studentId, studentIdParam))
+              .orderBy(desc(applicationsTable.id))
+              .limit(1);
+            if (appRow?.degree && appRow.degree.trim()) appliedLevelKey = appRow.degree.trim();
+          }
+        } catch (levelErr) {
+          console.warn("[ai-extract] applied-level lookup failed (non-fatal):", levelErr);
+        }
+      }
+    }
+    if (appliedLevelKey) {
+      promptText += "\n" + buildEducationPromptSection(appliedLevelKey);
+    }
+
     const contentBlocks: any[] = [
       { type: "text", text: promptText },
     ];
@@ -255,6 +294,19 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
         extracted.passportExpired = false;
       }
     }
+
+    // FAZ 3 — stable soft-warning code (never blocks extraction). Frontend
+    // translates this in Faz 4; keep the code stable.
+    if (isPassportExpired(typeof extracted.passportExpiry === "string" ? extracted.passportExpiry : null)) {
+      if (!warnings.includes("PASSPORT_EXPIRED")) warnings.push("PASSPORT_EXPIRED");
+    }
+
+    // FAZ 3 — map AI educationRecords[] to the PUT /students/:id/education
+    // body shape, filtered/ordered by the applied level's required records,
+    // with the GPA-percent guarantee applied.
+    const education = appliedLevelKey
+      ? mapExtractionToEducation(extracted.educationRecords, appliedLevelKey)
+      : [];
 
     // FIX-15D: Auto-upsert education_records when diploma or transcript is extracted
     // and a studentId is provided in the request body.
@@ -344,7 +396,7 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       }
     }
 
-    res.json({ extracted, warnings, extractorId: extractor.id || null, eduUpserted });
+    res.json({ extracted, warnings, extractorId: extractor.id || null, eduUpserted, education, appliedLevel: appliedLevelKey });
     await recordExtractorRun({
       extractorId: extractor.id,
       scope: "staff",

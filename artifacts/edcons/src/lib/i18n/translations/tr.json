@@ -6179,5 +6179,23 @@
     "days7": "Son 7 gün",
     "days30": "Son 30 gün",
     "days90": "Son 90 gün"
+  },
+  "studentAcademic": {
+    "title": "Akademik Bilgiler",
+    "highSchool": "Lise",
+    "university": "Üniversite",
+    "program": "Bölüm",
+    "graduationYear": "Mezuniyet Yılı",
+    "gpa": "Not Ortalaması",
+    "languageScore": "Dil Puanı",
+    "bachelor": "Lisans",
+    "master": "Yüksek Lisans",
+    "studentInformation": "Öğrenci Bilgileri",
+    "transferStudent": "Yatay geçiş öğrencisi mi?",
+    "haveTcId": "TC Kimlik var mı?",
+    "blueCard": "Mavi Kart var mı?",
+    "yes": "Evet",
+    "no": "Hayır",
+    "passportExpiredWarning": "Pasaportun süresi dolmuş. Lütfen başvuruyu göndermeden önce geçerli bir pasaport yükleyin."
   }
 }

@@ -6179,5 +6179,23 @@
     "days7": "۷ روز اخیر",
     "days30": "۳۰ روز اخیر",
     "days90": "۹۰ روز اخیر"
+  },
+  "studentAcademic": {
+    "title": "Academic Information",
+    "highSchool": "High School",
+    "university": "University",
+    "program": "Program",
+    "graduationYear": "Graduation Year",
+    "gpa": "GPA",
+    "languageScore": "Language Score",
+    "bachelor": "Bachelor",
+    "master": "Master",
+    "studentInformation": "Student Information",
+    "transferStudent": "Transfer student?",
+    "haveTcId": "Do you have a TC ID?",
+    "blueCard": "Do you have a Blue Card?",
+    "yes": "Yes",
+    "no": "No",
+    "passportExpiredWarning": "The passport has expired. Please upload a valid passport before submitting the application."
   }
 }

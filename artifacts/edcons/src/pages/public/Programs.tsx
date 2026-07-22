@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 import { PHONE_CODES, normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
@@ -366,6 +367,8 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   const [step, setStep] = useState<ApplyStep>("personal");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  // SIT student-information questions (Review & Submit step only).
+  const [sitInfo, setSitInfo] = useState({ transferStudent: false, hasTcId: false, hasBlueCard: false });
   const [extracted, setExtracted] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -496,6 +499,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     setStep("personal");
     setDocs({});
     setForm({ ...EMPTY_FORM });
+    setSitInfo({ transferStudent: false, hasTcId: false, hasBlueCard: false });
     setExtracted(new Set());
     setSubmitting(false);
     setAiError(null);
@@ -728,6 +732,9 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          transferStudent: sitInfo.transferStudent,
+          hasTcId: sitInfo.hasTcId,
+          hasBlueCard: sitInfo.hasBlueCard,
           programId: program?.id,
           programName: program?.name,
           universityName: program?.universityName,
@@ -740,7 +747,13 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: t("apply.submissionFailed") }));
-        if (err.code === "QUOTA_FULL") {
+        if (resp.status === 422 && err.error === "PASSPORT_EXPIRED") {
+          toast({
+            title: t("studentAcademic.passportExpiredWarning"),
+            variant: "destructive",
+            duration: 12000,
+          });
+        } else if (err.code === "QUOTA_FULL") {
           toast({
             title: t("programs.quotaFull"),
             description: err.error || t("programs.quotaFullDesc"),
@@ -1269,6 +1282,33 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               <Label className="text-sm font-semibold">{t("apply.additionalNotes")}</Label>
               <Textarea value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
                 placeholder={t("apply.notesPlaceholder")} className="rounded-xl resize-none" rows={3} />
+            </div>
+
+            <div className="space-y-3 border rounded-xl p-4">
+              <p className="text-sm font-semibold">{t("studentAcademic.studentInformation")}</p>
+              {([
+                ["transferStudent", t("studentAcademic.transferStudent")],
+                ["hasTcId", t("studentAcademic.haveTcId")],
+                ["hasBlueCard", t("studentAcademic.blueCard")],
+              ] as const).map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between gap-3">
+                  <Label className="text-sm">{label}</Label>
+                  <RadioGroup
+                    className="flex gap-4"
+                    value={sitInfo[key] ? "yes" : "no"}
+                    onValueChange={(v) => setSitInfo((s) => ({ ...s, [key]: v === "yes" }))}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <RadioGroupItem value="yes" id={`sit-${key}-yes`} />
+                      <Label htmlFor={`sit-${key}-yes`} className="text-sm font-normal">{t("studentAcademic.yes")}</Label>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <RadioGroupItem value="no" id={`sit-${key}-no`} />
+                      <Label htmlFor={`sit-${key}-no`} className="text-sm font-normal">{t("studentAcademic.no")}</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              ))}
             </div>
 
             <div className="bg-secondary/50 rounded-xl p-3 text-sm">
