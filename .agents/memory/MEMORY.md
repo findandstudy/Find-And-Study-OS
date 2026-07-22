@@ -141,6 +141,7 @@
 - [Inbox unread lastReadAt upsert](inbox-unread-lastreadat.md) — mark-read must be atomic ON CONFLICT upsert on cp_conv_user_uniq; scalar last_read_at subqueries break on duplicates.
 - [Topkapı Step 5 upload gate](topkapi-step5-upload-gate.md) — verify uploads + 4-slot gate before final submit; uploadedSlots evidence in result_json; redact signed URLs in download errors.
 - [Zernio template = broadcast flow](zernio-template-broadcast.md) — inbox endpoint is text-only; templates use 3-step broadcast (profiles→create→recipients→send), sent<1 ⇒ failed.
+- [Education extraction low-confidence partial-save](education-extraction-low-confidence.md) — low confidence never blanket-drops readable education records; save + LOW_CONFIDENCE_EDUCATION via shared gate in educationExtraction.ts (both paths).
 - [AI agent working-hours gate](ai-agent-working-hours.md) — schedule gate lives in maybeAutoReply only (test console ungated); overnight window owned by START day; dual logic copies botSchedule.ts ↔ edcons aiSchedule.ts must stay in sync.
 - [Academic levels dual helpers + applied-level ranking](academic-levels-dual-helpers.md) — edcons src/lib/academicLevels.ts is a browser copy of lib/db helpers (keep in sync); applied level must pick most-demanding group (C>B>A) across applications, never first-truthy.
 - [Portal readiness SOFT gate](portal-readiness-soft-gate.md) — readiness matrix/endpoint is display-only, never blocks submission; countryOfResidence←nationality fallback, city←cleanCity(address), GPA integer everywhere; board fetch is per-row (batch later).

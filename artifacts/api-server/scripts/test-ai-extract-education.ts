@@ -20,6 +20,8 @@ import {
   buildEducationPromptSection,
   mapExtractionToEducation,
   decideEducationExtraction,
+  decideLegacyEducationAutoUpsert,
+  type EducationRecordOutput,
 } from "../src/lib/educationExtraction.js";
 import { isPassportExpired } from "../src/lib/passportValidity.js";
 
@@ -188,6 +190,61 @@ describe("decideEducationExtraction — extract-education endpoint core", () => 
     assert.deepEqual(
       mapExtractionToEducation([{ level: "kindergarten", institution: "Tiny Tots" }], "Master"),
       [],
+    );
+  });
+});
+
+describe("decideLegacyEducationAutoUpsert — legacy /ai/extract-document FIX-15D gate", () => {
+  const bachelorPartial: EducationRecordOutput = {
+    level: "bachelor",
+    institution: "Some University",
+    program: null,
+    graduationYear: null,
+    gpa: null,
+    gpaRaw: null,
+    gpaScale: null,
+    languageScore: null,
+  };
+  const empty: EducationRecordOutput = {
+    level: "bachelor",
+    institution: null,
+    program: null,
+    graduationYear: null,
+    gpa: null,
+    gpaRaw: null,
+    gpaScale: null,
+    languageScore: null,
+  };
+
+  it("EL-1 confidence 'low' + readable bachelor fields → SAVED (partial-save) + lowConfidence flag (parallel to EE-2)", () => {
+    const out = decideLegacyEducationAutoUpsert({ confidence: "low", record: bachelorPartial });
+    assert.equal(out.save, true);
+    assert.equal(out.lowConfidence, true);
+  });
+
+  it("EL-1b confidence 'low' + gpa-only record → still SAVED", () => {
+    const out = decideLegacyEducationAutoUpsert({
+      confidence: "low",
+      record: { ...empty, gpa: "88" },
+    });
+    assert.equal(out.save, true);
+    assert.equal(out.lowConfidence, true);
+  });
+
+  it("EL-2 confidence 'low' + NO readable fields → skipped, no save", () => {
+    const out = decideLegacyEducationAutoUpsert({ confidence: "low", record: empty });
+    assert.equal(out.save, false);
+    assert.equal(out.lowConfidence, true);
+  });
+
+  it("EL-3 normal/high confidence → always saved, no low-confidence flag (legacy behavior unchanged)", () => {
+    assert.deepEqual(
+      decideLegacyEducationAutoUpsert({ confidence: "high", record: empty }),
+      { save: true, lowConfidence: false },
+    );
+    assert.deepEqual(
+      decideLegacyEducationAutoUpsert({ confidence: undefined, record: bachelorPartial }),
+      { save: true, lowConfidence: false },
     );
   });
 });

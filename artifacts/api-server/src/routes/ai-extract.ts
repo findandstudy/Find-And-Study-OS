@@ -29,6 +29,7 @@ import {
   buildEducationPromptSection,
   mapExtractionToEducation,
   decideEducationExtraction,
+  decideLegacyEducationAutoUpsert,
 } from "../lib/educationExtraction";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
@@ -358,21 +359,16 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       ? mapExtractionToEducation(extracted.educationRecords, appliedLevelKey)
       : [];
 
-    // FIX-15D: Auto-upsert education_records when diploma or transcript is extracted
-    // and a studentId is provided in the request body.
-    // Confidence gating: skip upsert when AI reports low confidence to avoid persisting
-    // unreliable data. Add a note to extractedNotes so the staff member is aware.
-    if (extracted.confidence === "low") {
-      extracted.extractedNotes = [
-        extracted.extractedNotes,
-        "Low confidence — extracted fields were not auto-saved. Please review and save manually.",
-      ].filter(Boolean).join(" ");
-    }
-
+    // FIX-15D (FAZ 2 refactor): Auto-upsert education_records when diploma or
+    // transcript is extracted and a studentId is provided in the request body.
+    // Confidence gating now uses the SHARED core rule
+    // (decideLegacyEducationAutoUpsert / educationRecordHasData): low
+    // confidence never blanket-skips — a record with at least one readable
+    // field is still saved (partial-save) and flagged LOW_CONFIDENCE_EDUCATION.
     const studentIdRaw = (req.body as any)?.studentId;
     const eduUpserted = { skipped: true, level: null as string | null };
-    const skipDueToLowConfidence = extracted.confidence === "low";
-    if (!skipDueToLowConfidence && studentIdRaw && /diploma|transcript|degree/i.test(String(extracted.documentType || ""))) {
+    let lowConfidenceEducationSaved = false;
+    if (studentIdRaw && /diploma|transcript|degree/i.test(String(extracted.documentType || ""))) {
       const studentId = Number(studentIdRaw);
       if (Number.isFinite(studentId) && studentId > 0) {
         try {
@@ -427,23 +423,54 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
             source:        "ai_extracted" as const,
           };
 
-          await db
-            .insert(educationRecordsTable)
-            .values(upsertRow)
-            .onConflictDoUpdate({
-              target: [educationRecordsTable.studentId, educationRecordsTable.level],
-              set: {
-                ...upsertRow,
-                updatedAt: new Date(),
-              },
-            });
-          eduUpserted.skipped = false;
-          eduUpserted.level = level;
+          // Shared low-confidence gate: save when at least one readable field
+          // is present (partial-save), skip only truly empty low-conf records.
+          const gate = decideLegacyEducationAutoUpsert({
+            confidence: extracted.confidence,
+            record: {
+              level,
+              institution: upsertRow.schoolName != null ? String(upsertRow.schoolName) : null,
+              program: upsertRow.fieldOfStudy != null ? String(upsertRow.fieldOfStudy) : null,
+              graduationYear: upsertRow.endYear,
+              gpa: upsertRow.gpa,
+              gpaRaw: upsertRow.gpa,
+              gpaScale: null,
+              languageScore: upsertRow.languageScore != null ? String(upsertRow.languageScore) : null,
+            },
+          });
+
+          if (gate.save) {
+            await db
+              .insert(educationRecordsTable)
+              .values(upsertRow)
+              .onConflictDoUpdate({
+                target: [educationRecordsTable.studentId, educationRecordsTable.level],
+                set: {
+                  ...upsertRow,
+                  updatedAt: new Date(),
+                },
+              });
+            eduUpserted.skipped = false;
+            eduUpserted.level = level;
+            if (gate.lowConfidence) {
+              lowConfidenceEducationSaved = true;
+              warnings.push("LOW_CONFIDENCE_EDUCATION");
+            }
+          }
         } catch (upsertErr) {
           // Non-fatal — AI extraction result is still returned to client.
           console.warn("[ai-extract] education_records upsert failed (non-fatal):", upsertErr);
         }
       }
+    }
+
+    if (extracted.confidence === "low") {
+      extracted.extractedNotes = [
+        extracted.extractedNotes,
+        lowConfidenceEducationSaved
+          ? "LOW_CONFIDENCE_EDUCATION: Low confidence — education record was auto-saved with the readable fields (partial-save). Please review."
+          : "Low confidence — extracted fields were not auto-saved. Please review and save manually.",
+      ].filter(Boolean).join(" ");
     }
 
     res.json({ extracted, warnings, extractorId: extractor.id || null, eduUpserted, education, appliedLevel: appliedLevelKey });

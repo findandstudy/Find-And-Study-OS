@@ -141,6 +141,34 @@ export function educationRecordHasData(rec: EducationRecordOutput): boolean {
   );
 }
 
+export interface LegacyEducationAutoUpsertInput {
+  confidence?: unknown;
+  record: EducationRecordOutput;
+}
+
+export interface LegacyEducationAutoUpsertDecision {
+  save: boolean;
+  lowConfidence: boolean;
+}
+
+/**
+ * Shared gate for the legacy /ai/extract-document FIX-15D auto-upsert path.
+ *
+ * Same CRITICAL rule as decideEducationExtraction: low confidence never
+ * blanket-skips — a record carrying ANY readable field (institution /
+ * program / gpa / graduationYear / languageScore) is still saved
+ * (partial-save) and flagged LOW_CONFIDENCE_EDUCATION by the caller.
+ * Normal/high confidence behavior is unchanged (always save).
+ */
+export function decideLegacyEducationAutoUpsert(
+  input: LegacyEducationAutoUpsertInput,
+): LegacyEducationAutoUpsertDecision {
+  if (input.confidence !== "low") {
+    return { save: true, lowConfidence: false };
+  }
+  return { save: educationRecordHasData(input.record), lowConfidence: true };
+}
+
 export interface ExtractEducationDecisionInput {
   levelKey: string | null;
   documentCount: number;
