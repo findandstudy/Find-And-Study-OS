@@ -34,9 +34,11 @@ import {
   portalSubmissionsTable,
   portalAccountUniversitiesTable,
   universitiesTable,
+  studentsTable,
 } from "@workspace/db";
 import { logAudit } from "./auth.js";
 import { checkHasPortalCredentials } from "./portalCreds.js";
+import { isMulticoNationality } from "@workspace/portal-adapters";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -291,7 +293,45 @@ export async function enqueueIfEligible(
   if (!routing) {
     return { status: "skipped", reason: "no_active_portal_university" };
   }
-  const { portalUni, target } = routing;
+  // Use `let` so the Multico redirect below can substitute the portal row.
+  let { portalUni, target } = routing;
+  // Preserve the original university name for the submission row when the
+  // redirect fires (we want "Topkapı University" in the UI, not "Multico").
+  let submissionUniversityName: string | undefined;
+
+  // ----- Multico nationality redirect: Central Asian Topkapı → Multico ----
+  // When the resolved portal is topkapi AND the student's nationality is one
+  // of the 7 Central Asian / Mongolian countries served exclusively by
+  // Multico, we re-route the submission to the `multico` portal row.  The
+  // original Topkapı name is preserved as the display university name.
+  if (portalUni.universityKey === "topkapi") {
+    const [studentRow] = await db
+      .select({ nationality: studentsTable.nationality })
+      .from(studentsTable)
+      .where(eq(studentsTable.id, studentId))
+      .limit(1);
+    const nat = studentRow?.nationality ?? null;
+    if (isMulticoNationality(nat)) {
+      const [multicoRow] = await db
+        .select()
+        .from(portalUniversitiesTable)
+        .where(
+          and(
+            eq(portalUniversitiesTable.universityKey, "multico"),
+            eq(portalUniversitiesTable.isActive, true),
+            isNull(portalUniversitiesTable.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (multicoRow) {
+        submissionUniversityName = portalUni.universityName; // keep Topkapı name
+        portalUni = multicoRow;
+        console.log(
+          `[portal-enqueue] multico redirect: app=${applicationId} nat="${nat}" → key=multico`,
+        );
+      }
+    }
+  }
 
   // ----- Gate 3: scope filter -------------------------------------------
   if (settings.scope === "selected") {
@@ -346,7 +386,7 @@ export async function enqueueIfEligible(
         applicationId,
         studentId,
         universityKey:  portalUni.universityKey,
-        universityName: target ? target.universityName : portalUni.universityName,
+        universityName: submissionUniversityName ?? (target ? target.universityName : portalUni.universityName),
         adapterKey:     portalUni.adapterKey,
         mode:           settings.mode,
         status:         "queued",

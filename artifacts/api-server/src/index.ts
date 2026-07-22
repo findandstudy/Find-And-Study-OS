@@ -1790,6 +1790,12 @@ async function seedClaudeIntegration() {
       ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'exclusive_region'
     `);
     await pool.query(`
+      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'accepted'
+    `);
+    await pool.query(`
+      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'rejected'
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS portal_submissions (
         id SERIAL PRIMARY KEY,
         application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
@@ -2031,6 +2037,72 @@ async function seedClaudeIntegration() {
     `);
   } catch (err) {
     console.error("[migrate] portal_credentials backfill universityKey→adapterKey:", err);
+  }
+
+  // Step 2b12c: Multico portal_universities + portal_university_exclusions seed.
+  //
+  // Multico (https://www.multico.com.tr/crm/) is the exclusive submission
+  // channel for Topkapı University for students whose nationality is one of 7
+  // Central Asian / Mongolian countries. Two idempotent inserts:
+  //
+  //   1. portal_universities row for `multico` (adapter_key=multico).
+  //      auto_process=false: stays experimental until manually graduated.
+  //   2. portal_university_exclusions: one row per nationality for `topkapi`,
+  //      so the fan-out worker skips direct Topkapı for these students.
+  //      agency_name='Multico' is used by the UI to show a redirect hint.
+  try {
+    await pool.query(`
+      INSERT INTO portal_universities
+        (university_key, university_name, adapter_key, is_active, auto_process, is_multi_portal)
+      VALUES
+        ('multico', 'Multico (Topkapı CAS)', 'multico', true, false, false)
+      ON CONFLICT (university_key) DO NOTHING
+    `);
+    // Ensure university_name is up-to-date in case the row already exists.
+    await pool.query(`
+      UPDATE portal_universities
+         SET university_name = 'Multico (Topkapı CAS)', adapter_key = 'multico', updated_at = NOW()
+       WHERE university_key = 'multico'
+         AND (university_name IS DISTINCT FROM 'Multico (Topkapı CAS)'
+              OR adapter_key IS DISTINCT FROM 'multico')
+    `);
+    // Seed topkapi exclusions for the 7 Central Asian / Mongolian nationalities.
+    // ON CONFLICT DO NOTHING — idempotent even if rows already exist.
+    const exclusionNationalities = [
+      'Azerbaijan',
+      'Kazakhstan',
+      'Uzbekistan',
+      'Kyrgyzstan',
+      'Tajikistan',
+      'Turkmenistan',
+      'Mongolia',
+    ];
+    for (const nat of exclusionNationalities) {
+      await pool.query(`
+        INSERT INTO portal_university_exclusions
+          (university_key, nationality, agency_name, note, enabled)
+        VALUES
+          ('topkapi', $1, 'Multico', 'Exclusive CAS channel — submit via Multico adapter', true)
+        ON CONFLICT (university_key, nationality)
+          WHERE deleted_at IS NULL
+        DO UPDATE SET
+          agency_name = EXCLUDED.agency_name,
+          enabled     = true,
+          note        = EXCLUDED.note,
+          updated_at  = NOW()
+      `, [nat]);
+    }
+    // Seed a placeholder portal_credentials row for `multico` so the
+    // credentials management UI shows a slot to configure it.
+    // is_active=false → resolvePortalCreds skips it until real creds are saved.
+    await pool.query(`
+      INSERT INTO portal_credentials (portal_key, username_enc, password_enc, is_active)
+      VALUES ('multico', '', '', false)
+      ON CONFLICT (portal_key) DO NOTHING
+    `);
+    console.log('[migrate] Multico portal_universities + topkapi exclusions seeded');
+  } catch (err) {
+    console.error('[migrate] Multico portal_universities seed:', err);
   }
 
   // Step 2b14: Backfill assignedToId consistency across Lead → Student → Application.
@@ -2781,9 +2853,10 @@ async function seedClaudeIntegration() {
       startFollowUpChecker();
     });
     staggerStart("portalStuckReset+autoDrain", 28_000, async () => {
-      const { startPortalStuckReset, startPortalAutoDrain } = await import("./routes/portalAutomation");
+      const { startPortalStuckReset, startPortalAutoDrain, startPortalStatusSync } = await import("./routes/portalAutomation");
       startPortalStuckReset();
       startPortalAutoDrain();
+      startPortalStatusSync();
     });
     staggerStart("portalUniversityLinker", 31_000, async () => {
       const { startPortalUniversityLinker } = await import("./lib/portalUniversityLinker");

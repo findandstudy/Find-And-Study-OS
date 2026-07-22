@@ -64,6 +64,13 @@ export {
 // SIT membership guard (used by the runner to skip non-member universities)
 export { isSitMember } from "./universities/sit/helpers.js";
 
+// Multico — Central Asian nationality guard (used by the enqueue hook)
+export {
+  MULTICO_NATIONALITIES,
+  isMulticoNationality,
+  type MulticoNationality,
+} from "./universities/multico/adapter.js";
+
 // Registry
 export {
   adapters,

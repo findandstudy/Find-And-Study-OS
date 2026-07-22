@@ -363,6 +363,19 @@ export interface UniversityAdapter {
   ): Promise<SubmitResult>;
 
   /**
+   * Optional — poll the live portal for the current status of a submitted
+   * application. Used by the periodic status-sync sweep.
+   *
+   * @param externalRef  The value stored in portal_submissions.external_ref
+   *                     (adapter-defined format, e.g. "studentId:applicationId").
+   * @returns { status: string } with the raw portal status, or null if not found.
+   */
+  checkStatus?(
+    session: AdapterSession,
+    externalRef: string,
+  ): Promise<{ status: string } | null>;
+
+  /**
    * Optional — fetch the portal's LIVE program option list (value + text) for
    * a given education level WITHOUT submitting an application. Used by the
    * admin "Program Eşleme" editor to populate mapping dropdowns.

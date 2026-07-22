@@ -1,4 +1,5 @@
 import { Router, type IRouter, raw } from "express";
+import { dispatchNotification } from "../lib/notificationDispatcher.js";
 import { and, asc, count, desc, eq, getTableColumns, gte, ilike, inArray, isNotNull, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -2434,6 +2435,194 @@ export function startPortalAutoDrain(intervalMs = AUTO_DRAIN_TICK_MS): void {
   };
   setInterval(run, intervalMs);
   console.log(`[portal-auto-drain] Started — tick=${intervalMs}ms`);
+}
+
+// ---------------------------------------------------------------------------
+// Background job: periodic multico status sync
+// ---------------------------------------------------------------------------
+
+/**
+ * Map a raw Multico portal status string to an internal portal_submission_status
+ * enum value. Returns null when the status is not yet terminal (i.e. the
+ * canonical row status should remain "submitted" while only result_json is
+ * updated).
+ *
+ * Terminal → internal mapping:
+ *   Accepted / Approved  → "accepted"
+ *   Rejected / Declined  → "rejected"
+ *   anything else        → null  (keep "submitted", just update result_json)
+ */
+function mapMulticoPortalStatus(
+  raw: string,
+): "accepted" | "rejected" | null {
+  const lower = raw.toLowerCase().trim();
+  if (lower.includes("accept") || lower.includes("approv")) return "accepted";
+  if (lower.includes("reject") || lower.includes("declin")) return "rejected";
+  return null;
+}
+
+/**
+ * One status-sync sweep: queries portal_submissions rows that were submitted
+ * to the Multico adapter (status="submitted", adapter_key="multico") and for
+ * each row calls the adapter's checkStatus() method to refresh the remote
+ * application status.
+ *
+ * For every changed status the sweep:
+ *   1. Writes result_json.portalStatus + portalStatusCheckedAt (always).
+ *   2. Writes portal_submissions.status to "accepted"/"rejected" when the
+ *      Multico portal signals a terminal decision.
+ *   3. Emits a dispatchNotification for accepted/rejected transitions so
+ *      staff are informed without manually checking the portal.
+ *
+ * Exported so a run-now API endpoint can invoke it on demand.
+ */
+export async function runPortalStatusSync(): Promise<{ checked: number; updated: number }> {
+  const rows = await db
+    .select({
+      id:            portalSubmissionsTable.id,
+      applicationId: portalSubmissionsTable.applicationId,
+      studentId:     portalSubmissionsTable.studentId,
+      externalRef:   portalSubmissionsTable.externalRef,
+      resultJson:    portalSubmissionsTable.resultJson,
+    })
+    .from(portalSubmissionsTable)
+    .where(
+      and(
+        eq(portalSubmissionsTable.status, "submitted"),
+        eq(portalSubmissionsTable.adapterKey, "multico"),
+        isNotNull(portalSubmissionsTable.externalRef),
+      ),
+    )
+    .limit(20);
+
+  if (rows.length === 0) return { checked: 0, updated: 0 };
+
+  const adapter = await resolveAdapterByKey("multico");
+  if (!adapter?.checkStatus) return { checked: rows.length, updated: 0 };
+
+  let session: Awaited<ReturnType<typeof adapter.login>> | undefined;
+  let updated = 0;
+  try {
+    const creds = await resolvePortalCreds("multico").catch(() => null);
+    if (!creds) {
+      console.warn("[portal-status-sync] multico credentials not configured — skipping sweep");
+      return { checked: rows.length, updated: 0 };
+    }
+    session = await adapter.login({ credentials: creds, headless: true });
+
+    for (const row of rows) {
+      if (!row.externalRef) continue;
+      try {
+        const result = await adapter.checkStatus!(session, row.externalRef);
+        if (!result) continue;
+
+        const prevPortalStatus = (row.resultJson as Record<string, unknown> | null)?.portalStatus as string | undefined;
+        if (result.status === prevPortalStatus) continue;  // nothing changed
+
+        const internalStatus = mapMulticoPortalStatus(result.status);
+        const newResultJson = {
+          ...(row.resultJson as Record<string, unknown> ?? {}),
+          portalStatus:          result.status,
+          portalStatusCheckedAt: new Date().toISOString(),
+        };
+
+        if (internalStatus) {
+          // Terminal decision — transition portal_submissions.status too.
+          await db
+            .update(portalSubmissionsTable)
+            .set({
+              status:     internalStatus,
+              resultJson: newResultJson,
+              updatedAt:  new Date(),
+            })
+            .where(eq(portalSubmissionsTable.id, row.id));
+
+          // Look up student name + university for the notification body.
+          const [appRow] = await db
+            .select({
+              universityName: applicationsTable.universityName,
+              programName:    applicationsTable.programName,
+              assignedToId:   applicationsTable.assignedToId,
+            })
+            .from(applicationsTable)
+            .where(eq(applicationsTable.id, row.applicationId))
+            .limit(1);
+
+          let studentName = "student";
+          if (row.studentId) {
+            const [sRow] = await db
+              .select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+              .from(studentsTable)
+              .where(eq(studentsTable.id, row.studentId))
+              .limit(1);
+            if (sRow) studentName = `${sRow.firstName ?? ""} ${sRow.lastName ?? ""}`.trim() || studentName;
+          }
+
+          const uniName = appRow?.universityName ?? "Multico University";
+          const progName = appRow?.programName ?? "";
+          const isAccepted = internalStatus === "accepted";
+          const eventLabel = isAccepted ? "Accepted" : "Rejected";
+
+          const recipientUserIds: number[] = [];
+          if (appRow?.assignedToId) recipientUserIds.push(appRow.assignedToId);
+
+          dispatchNotification({
+            event:    `portal.application_${internalStatus}`,
+            title:    `Portal Application ${eventLabel}`,
+            body:     `${studentName}'s application to ${uniName}${progName ? ` / ${progName}` : ""} was ${eventLabel.toLowerCase()} on the Multico portal.`,
+            actionUrl: `/staff/applications/${row.applicationId}`,
+            icon:     isAccepted ? "CheckCircle" : "XCircle",
+            recipientUserIds: recipientUserIds.length > 0 ? recipientUserIds : undefined,
+            templateVars: {
+              studentName,
+              universityName: uniName,
+              programName: progName,
+              portalStatus: result.status,
+            },
+          }).catch(() => {});
+
+          console.log(
+            `[portal-status-sync] multico submission #${row.id} (app #${row.applicationId}): ` +
+            `portalStatus ${prevPortalStatus ?? "?"} → ${result.status} (internal: ${internalStatus})`,
+          );
+        } else {
+          // Non-terminal status change — update result_json only.
+          await db
+            .update(portalSubmissionsTable)
+            .set({ resultJson: newResultJson, updatedAt: new Date() })
+            .where(eq(portalSubmissionsTable.id, row.id));
+
+          console.log(
+            `[portal-status-sync] multico submission #${row.id}: portalStatus ` +
+            `${prevPortalStatus ?? "?"} → ${result.status} (non-terminal, keeping status=submitted)`,
+          );
+        }
+
+        updated++;
+      } catch (err) {
+        console.warn(`[portal-status-sync] multico #${row.id} check failed:`, err);
+      }
+    }
+  } finally {
+    await session?.close().catch(() => {});
+  }
+
+  return { checked: rows.length, updated };
+}
+
+/**
+ * Starts the periodic multico status-sync sweep. Call once at api-server
+ * startup. Default interval is 10 minutes — deliberately generous to avoid
+ * hammering the portal.
+ */
+export function startPortalStatusSync(intervalMs = 10 * 60_000): void {
+  const run = (): void => {
+    runPortalStatusSync().catch((err) => {
+      console.error("[portal-status-sync] Sweep error:", err);
+    });
+  };
+  setInterval(run, intervalMs);
+  console.log(`[portal-status-sync] Started — interval=${intervalMs}ms`);
 }
 
 // ===========================================================================
