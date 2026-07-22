@@ -64,13 +64,28 @@ export type SkipReason =
   | "no_active_portal_university"
   | "out_of_scope"
   | "no_credentials"
-  | "duplicate";
+  | "duplicate"
+  | "max_failures";
 
 export type EnqueueOutcome =
   | { status: "queued"; submissionId: number; universityKey: string }
   | { status: "skipped"; reason: SkipReason };
 
 const ACTIVE_STATUSES = ["queued", "running", "submitted"] as const;
+
+/**
+ * Cross-row automatic retry budget per application × university pair.
+ *
+ * Each enqueue creates a NEW portal_submissions row (attempts resets to 0), so
+ * the per-row attempts/max_attempts columns alone cannot stop the auto-trigger
+ * loop: a failed run leaves the row in "failed" (not in ACTIVE_STATUSES), the
+ * next scan sees "no active duplicate" and enqueues a fresh row — forever.
+ * This constant caps that: once this many failed rows exist for the pair, the
+ * automatic paths stop re-enqueuing (skip reason "max_failures"). Manual
+ * single-submission endpoints intentionally bypass this so staff can retry
+ * after fixing the underlying cause.
+ */
+export const MAX_AUTO_FAILED_SUBMISSIONS = 3;
 
 // ---------------------------------------------------------------------------
 // Immediate drain trigger (Scheduled Auto-Process OFF)
@@ -378,6 +393,31 @@ export async function enqueueIfEligible(
 
     if (existing) {
       return { status: "skipped", reason: "duplicate" };
+    }
+
+    // Cross-row failure cap: failed rows are NOT in ACTIVE_STATUSES, so without
+    // this every scan/trigger would insert a fresh queued row after each failure
+    // — an infinite retry loop that also blocks the rest of the queue. Once the
+    // pair has accumulated MAX_AUTO_FAILED_SUBMISSIONS failed rows, automatic
+    // enqueue stops permanently; only a manual retry (separate endpoint) can
+    // re-submit after the root cause is fixed.
+    const [failedCountRow] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(portalSubmissionsTable)
+      .where(
+        and(
+          eq(portalSubmissionsTable.applicationId, applicationId),
+          eq(portalSubmissionsTable.universityKey, portalUni.universityKey),
+          eq(portalSubmissionsTable.status, "failed"),
+          isNull(portalSubmissionsTable.deletedAt),
+        ),
+      );
+    if ((failedCountRow?.n ?? 0) >= MAX_AUTO_FAILED_SUBMISSIONS) {
+      console.warn(
+        `[portal-auto] app=${applicationId} uni=${portalUni.universityKey}: ` +
+          `${failedCountRow!.n} başarısız deneme — otomatik yeniden kuyruklama durduruldu (max_failures)`,
+      );
+      return { status: "skipped", reason: "max_failures" };
     }
 
     const [row] = await tx

@@ -388,6 +388,50 @@ test("TAT4: dedup — skips enqueue when an active submission already exists", a
 });
 
 // ---------------------------------------------------------------------------
+// TAT4b — max_failures: 3 failed rows for the pair stop automatic re-enqueue
+// ---------------------------------------------------------------------------
+test("TAT4b: max_failures — does NOT enqueue after 3 failed submissions for the pair", async () => {
+  const { studentId, appId } = await seedApp();
+
+  // Seed 3 failed rows (failed is NOT in ACTIVE_STATUSES, so without the cap
+  // the trigger would happily create a 4th queued row — the infinite loop).
+  for (let i = 0; i < 3; i++) {
+    await db.insert(portalSubmissionsTable).values({
+      applicationId: appId,
+      studentId,
+      universityKey: UNI_KEY,
+      universityName: UNI_NAME,
+      adapterKey: ADAPTER_KEY,
+      mode: "dry",
+      status: "failed",
+      attempts: 1,
+    });
+  }
+
+  await maybeEnqueuePortalSubmission({
+    applicationId: appId,
+    studentId,
+    newStage:      TRIGGER_STAGE,
+    universityName: UNI_NAME,
+    universityId:  null,
+    actorUserId:   1,
+  });
+
+  const rows = await db
+    .select({ id: portalSubmissionsTable.id, status: portalSubmissionsTable.status })
+    .from(portalSubmissionsTable)
+    .where(
+      and(
+        eq(portalSubmissionsTable.applicationId, appId),
+        eq(portalSubmissionsTable.universityKey, UNI_KEY),
+        isNull(portalSubmissionsTable.deletedAt),
+      ),
+    );
+  assert.equal(rows.length, 3, "no new row — max_failures gate blocked re-enqueue");
+  assert.ok(rows.every((r) => r.status === "failed"), "all rows remain failed");
+});
+
+// ---------------------------------------------------------------------------
 // TAT5 — Scheduled OFF: immediate drain trigger fires after a successful enqueue
 // ---------------------------------------------------------------------------
 test("TAT5: Scheduled OFF — immediate drain trigger fires after enqueue (not on dedup)", async () => {

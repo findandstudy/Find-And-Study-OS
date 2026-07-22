@@ -106,6 +106,14 @@ export async function claimNext(
   try {
     await client.query("BEGIN");
 
+    // NOTE: deliberately NO "attempts < max_attempts" condition here. attempts
+    // increments at claim time and a failed run parks the row in 'failed'
+    // permanently — there is no per-row auto-retry loop to guard against. The
+    // manual Retry button re-queues WITHOUT resetting attempts, so gating on
+    // attempts would silently dead-lock retried rows (see TAP4). The infinite
+    // auto-retry loop is instead capped at the enqueue side (max_failures gate
+    // in enqueueIfEligible / aggregator fan-out) — new rows stop being created
+    // after MAX_AUTO_FAILED_SUBMISSIONS failures per application × university.
     const conds: string[] = ["status = 'queued'", "deleted_at IS NULL"];
     const params: unknown[] = [];
     const isManualCond = `(meta->>'manual')::boolean IS TRUE`;

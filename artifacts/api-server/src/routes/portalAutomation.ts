@@ -30,6 +30,7 @@ import {
   findActivePortalUniversity,
   resolvePortalRouting,
   scanAndEnqueueTriggerStageApplications,
+  MAX_AUTO_FAILED_SUBMISSIONS,
 } from "../lib/portalAutoTrigger.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import {
@@ -1614,6 +1615,33 @@ async function fanOutApplicationToUniversities(
 
           if (existingSub) {
             return { kind: "duplicate", appId, subId: existingSub.id };
+          }
+
+          // AUTO (aggregator-routed) fan-out only: cap cross-row retries.
+          // Failed rows are outside submissionDedupStatuses, so a repeatedly
+          // failing member would otherwise get a fresh queued row on every
+          // auto re-trigger — an infinite loop that also blocks the queue.
+          // The legacy manual apply-to-all path keeps failed rows retryable
+          // (a human clicked, not a loop).
+          if (routeVia) {
+            const [failedCnt] = await tx
+              .select({ n: sql<number>`count(*)::int` })
+              .from(portalSubmissionsTable)
+              .where(
+                and(
+                  eq(portalSubmissionsTable.applicationId, appId),
+                  eq(portalSubmissionsTable.universityKey, submissionKey),
+                  eq(portalSubmissionsTable.status, "failed"),
+                  isNull(portalSubmissionsTable.deletedAt),
+                ),
+              );
+            if ((failedCnt?.n ?? 0) >= MAX_AUTO_FAILED_SUBMISSIONS) {
+              console.warn(
+                `[portal-fanout] app=${appId} uni=${submissionKey}: ` +
+                  `${failedCnt!.n} başarısız deneme — otomatik fan-out yeniden kuyruklama durduruldu (max_failures)`,
+              );
+              return { kind: "duplicate", appId, subId: 0 };
+            }
           }
 
           const [subRow] = await tx

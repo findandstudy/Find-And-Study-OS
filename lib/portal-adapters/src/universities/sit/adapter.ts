@@ -1588,9 +1588,11 @@ async function resolveCreatedStudentId(
   page: Page,
   by: { email?: string; passportNumber?: string },
 ): Promise<string | null> {
-  // ~1+2+3+4+5+5+5 = ~25s across 7 attempts — tolerant of Zoho/SIT indexing
-  // lag (previously 18s which was too short on slow Zoho writes).
-  const backoffMs = [1000, 2000, 3000, 4000, 5000, 5000, 5000];
+  // ~1+2+3+4+5+5+5+8+10+12 = ~55s across 10 attempts — tolerant of Zoho/SIT
+  // indexing lag (25s previously proved too short in production: the create
+  // webhook persisted, but the record only became queryable after the poll
+  // window closed → "öğrenci id çözümlenemedi" despite a real create).
+  const backoffMs = [1000, 2000, 3000, 4000, 5000, 5000, 5000, 8000, 10000, 12000];
   const started = Date.now();
   for (let i = 0; i < backoffMs.length; i++) {
     await sleep(page, backoffMs[i]);
@@ -1861,13 +1863,40 @@ export const sitAdapter: SitAdapter = {
     await sleep(page, 3500);
     await dismissInactivityModal(page);
     if (!(await clickButton(page, SIT_NAV.addStudentName))) {
-      return {
-        studentId: null,
-        created: false,
-        alreadyExists: false,
-        createdViaWebhook: false,
-        detail: "öğrenci oluşturulamadı: Add Student düğmesi bulunamadı",
-      };
+      // Diagnose + one recovery attempt. This branch was previously a SILENT
+      // early return — on retries it produced "search ran but wizard never
+      // started" with no clue why (session bounced to login, SPA not hydrated,
+      // overlay, selector drift). Log the real page state and re-navigate once.
+      const diagHeading = await page
+        .evaluate(() =>
+          (document.querySelector("h1,h2,h3")?.textContent || "").trim().slice(0, 120),
+        )
+        .catch(() => "");
+      logger.warn(
+        `[sit] Add Student düğmesi bulunamadı — url=${page.url()} başlık="${diagHeading}" — sayfa yeniden yükleniyor (kurtarma denemesi)`,
+      );
+      await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+        waitUntil: "domcontentloaded",
+        timeout: 60_000,
+      });
+      await sleep(page, 5000);
+      await dismissInactivityModal(page);
+      if (!(await clickButton(page, SIT_NAV.addStudentName))) {
+        const diagHeading2 = await page
+          .evaluate(() =>
+            (document.querySelector("h1,h2,h3")?.textContent || "").trim().slice(0, 120),
+          )
+          .catch(() => "");
+        logger.warn(
+          `[sit] Add Student düğmesi kurtarma sonrası da yok — url=${page.url()} başlık="${diagHeading2}"`,
+        );
+        await captureWizardFail(page, `addstudent${Date.now().toString(36)}`, "add-student-missing");
+        // Retryable: transient session/hydration problems must not silently
+        // cascade into "öğrenci id çözümlenemedi" at the application step.
+        throw new Error(
+          "SIT: Add Student düğmesi bulunamadı (öğrenci listesi sayfası beklenen durumda değil) — tekrar denenecek",
+        );
+      }
     }
     await sleep(page, 2000);
 
@@ -2739,6 +2768,40 @@ export const sitAdapter: SitAdapter = {
     let duplicateSeen = false;
     let lastInlineErrors = "";
     const wizardUrlBefore = page.url();
+    // RAW create-response capture: log every relevant network response fired by
+    // the Save click (SIT SPA API / Zoho webhook / GraphQL mutation) so a save
+    // that "looks clicked" but never persists is diagnosable from the worker
+    // log alone. PII-safe: emails and long digit runs (phone/passport) are
+    // redacted; body is capped. Listener removed in the finally below.
+    const redact = (s: string): string =>
+      s
+        .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "<email>")
+        .replace(/\d{6,}/g, "<digits>");
+    const onSaveResponse = (resp: import("playwright-core").Response): void => {
+      try {
+        const req = resp.request();
+        const method = req.method();
+        if (method !== "POST" && method !== "PUT" && method !== "PATCH") return;
+        const url = resp.url();
+        if (!/student|webhook|graphql|zoho|save|create/i.test(url)) return;
+        void resp
+          .text()
+          .then((body) => {
+            logger.info(
+              `[sit] SAVE-RESP ${method} ${resp.status()} ${url.slice(0, 160)} — body: ${redact(
+                (body || "").slice(0, 400),
+              )}`,
+            );
+          })
+          .catch(() => {
+            logger.info(
+              `[sit] SAVE-RESP ${method} ${resp.status()} ${url.slice(0, 160)} — body okunamadı`,
+            );
+          });
+      } catch {}
+    };
+    page.on("response", onSaveResponse);
+    try {
     for (let attempt = 0; attempt < 2 && !saved; attempt++) {
       await dismissInactivityModal(page);
       const clicked = await clickButton(page, SIT_BUTTONS.saveStudent);
@@ -2812,6 +2875,9 @@ export const sitAdapter: SitAdapter = {
           );
         }
       }
+    }
+    } finally {
+      page.off("response", onSaveResponse);
     }
 
     // Save neither succeeded nor hit a duplicate → capture the failed final
@@ -2887,6 +2953,18 @@ export const sitAdapter: SitAdapter = {
     logger.warn(
       `[sit] create-fail teşhis — url=${diagUrl} inline=${JSON.stringify(diagInline)} step="${diagTitle}" saved=${saved}`,
     );
+    // saved=true means positive save proof was seen (redirect / quick lookup),
+    // yet the record is STILL not queryable and no detail URL carries an id.
+    // Returning studentId:null here would silently cascade into the guaranteed
+    // "başvuru oluşturulamadı: öğrenci id çözümlenemedi" failure downstream.
+    // Throw retryable instead: on the next attempt the pre-create findStudent
+    // dedup either finds the (late-indexed) student → alreadyExists → proceeds
+    // to the application, or it is genuinely absent → the wizard runs again.
+    if (saved) {
+      throw new Error(
+        "SIT: öğrenci kaydedildi görünüyor ancak id çözümlenemedi (Zoho indeks gecikmesi olabilir) — tekrar denenecek",
+      );
+    }
     // Honest failure message: name the concrete blocker when known —
     // never-filled critical fields or the captured inline validation error.
     const TR_FIELD: Record<string, string> = {
