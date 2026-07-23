@@ -19,18 +19,16 @@ import {
   studentsTable,
   applicationsTable,
   programsTable,
-  documentsTable,
-  studentEducationRecordsTable,
 } from "@workspace/db";
-import { eq, desc, and, isNull, inArray, asc } from "drizzle-orm";
+import { eq, desc, and, isNull } from "drizzle-orm";
 import { isPassportExpired } from "../lib/passportValidity";
-import { loadDocumentBytes } from "../lib/documentBytes";
 import {
   buildEducationPromptSection,
   mapExtractionToEducation,
-  decideEducationExtraction,
   decideLegacyEducationAutoUpsert,
 } from "../lib/educationExtraction";
+import { EXTRACT_PROMPT } from "../lib/extractPrompt";
+import { runEducationExtraction } from "../lib/educationAutoExtract";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
 // JSON body. Base64 inflates payload size by ~33%, and the route itself
@@ -97,65 +95,7 @@ function aiRateLimit(maxRequests: number, windowMs: number) {
 const DEFAULT_VISION_MODEL = "claude-sonnet-4-6";
 const DEFAULT_CSV_MODEL = "claude-haiku-4-5";
 
-const EXTRACT_PROMPT = `You are an expert document analysis system for an education consultancy. 
-Analyze the provided document image(s) and extract student information.
-
-Extract ALL of the following fields if visible in the document. Return a JSON object with these exact keys:
-{
-  "firstName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
-  "lastName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
-  "dateOfBirth": "YYYY-MM-DD format or null",
-  "nationality": "country name string (e.g. 'Afghanistan' not 'Afghan', 'Turkey' not 'Turkish', 'Iran' not 'Iranian', 'Pakistan' not 'Pakistani', 'Uzbekistan' not 'Uzbek', 'India' not 'Indian') or null",
-  "passportNumber": "string or null",
-  "passportIssueDate": "YYYY-MM-DD format or null",
-  "passportExpiry": "YYYY-MM-DD format or null",
-  "passportExpired": "boolean - true if passport expiry date has passed, false otherwise, null if no expiry date found",
-  "motherName": "string or null - EXACTLY as printed on the document",
-  "fatherName": "string or null - EXACTLY as printed on the document",
-  "email": "string or null",
-  "phone": "string or null",
-  "address": "string or null",
-  "highSchool": "string or null",
-  "graduationYear": "number or null",
-  "gpa": "string or null",
-  "languageScore": "string or null",
-  "documentType": "passport|diploma|transcript|photo|other",
-  "confidence": "high|medium|low",
-  "extractedNotes": "any additional relevant notes found in the document",
-  "institutionName": "string or null - name of the school/university on a diploma or transcript",
-  "fieldOfStudy": "string or null - major, department, or program name (diploma/transcript)",
-  "country": "string or null - country where the institution is located (diploma/transcript)",
-  "eduCity": "string or null - city where the institution is located (diploma/transcript)",
-  "eduStartMonth": "string or null - English month name when studies started (e.g. 'September')",
-  "eduStartYear": "number or null - 4-digit year when studies started",
-  "eduEndMonth": "string or null - English month name of graduation/completion (e.g. 'June')",
-  "eduLanguageScore": "string or null - language proficiency test score visible on the document (e.g. 'IELTS 6.5', 'TOEFL 90')",
-  "countryOfResidence": "string or null - full English country name where the student currently lives (e.g. 'Turkey', 'Afghanistan'), if visible",
-  "city": "string or null - ONLY the city name where the student currently lives (e.g. 'Istanbul'). Never include street, building number, district or postal code"
-}
-
-Rules:
-- CRITICAL - Names: Extract names EXACTLY as they appear on the passport or official document. The passport is the authoritative source for the person's legal name. Do NOT modify, translate, or reformat names. Copy them character by character as printed.
-- CRITICAL - Date format awareness: Different countries use different date formats on passports:
-  * Most countries (Europe, Asia, Middle East, Africa): DD/MM/YYYY or DD.MM.YYYY (day first)
-  * USA, Philippines, some others: MM/DD/YYYY (month first)
-  * East Asian countries (Japan, China, Korea): YYYY/MM/DD (year first)
-  * Look at the passport's issuing country to determine the likely date format
-  * When a date is ambiguous (e.g. 03/04/2025 could be March 4 or April 3), use the issuing country's convention
-  * Always output dates in YYYY-MM-DD format after correctly interpreting the source format
-- CRITICAL - Passport expiry: Check if the passport expiry date has passed relative to today's date. Set passportExpired to true if expired, false if still valid.
-- CRITICAL - Never fabricate values: if you cannot confidently read a field, set it to null. Do not guess.
-- For passport documents: extract all passport fields, name, DOB, nationality, issue/expiry dates, mother name, father name (often listed on passport identity pages)
-- For diplomas: extract institutionName, country, eduCity, fieldOfStudy, eduStartMonth, eduStartYear, eduEndMonth, graduationYear (=eduEndYear), GPA, student name, parent names if visible
-- For transcripts: extract institutionName, country, eduCity, fieldOfStudy, GPA, graduationYear, student name; include eduLanguageScore if a language test appears
-- For photos: only set confidence to "low", documentType to "photo", everything else null
-- For nationality: always return the full country name (e.g. "Afghanistan" not "Afghan", "Turkey" not "Turkish", "Iran" not "Iranian", "Pakistan" not "Pakistani", "Uzbekistan" not "Uzbek", "India" not "Indian"). Convert any demonym/adjective form to the full country name.
-- Always normalize dates to YYYY-MM-DD format
-- GPA must be returned exactly as printed (native scale); it will be normalized server-side to an INTEGER percentage
-- countryOfResidence must be a full English country name (never a demonym, city or address fragment)
-- city must be a bare city name only — if you only see a full address line and cannot isolate the city, set city to null
-- Return ONLY the JSON object, no other text
-- Set null for fields you cannot find or are not sure about`;
+// EXTRACT_PROMPT moved to ../lib/extractPrompt (shared with educationAutoExtract).
 
 router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
   const runStart = Date.now();
@@ -694,30 +634,9 @@ Headers: ${JSON.stringify(unmappedIdx.map((i) => headers[i]))}`,
 // silently dropping readable data.
 // ---------------------------------------------------------------------------
 
-const EDUCATION_DOC_TYPES = ["transcript", "diploma", "other"] as const;
-const IMAGE_MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
-// Defensive request-budget caps for the single messages.create call.
-const MAX_EDUCATION_DOCS = 10;
-const MAX_EDUCATION_TOTAL_BYTES = 15 * 1024 * 1024; // raw bytes (~20MB as base64)
-
 const extractEducationParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
-
-/** Resolve the applied study level server-side (never trust the client). */
-async function resolveAppliedLevelKey(studentId: number): Promise<string | null> {
-  const [stu] = await db.select({ interestedLevel: studentsTable.interestedLevel })
-    .from(studentsTable)
-    .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
-  if (stu?.interestedLevel && stu.interestedLevel.trim()) return stu.interestedLevel.trim();
-  const [appRow] = await db.select({ degree: programsTable.degree })
-    .from(applicationsTable)
-    .innerJoin(programsTable, eq(applicationsTable.programId, programsTable.id))
-    .where(eq(applicationsTable.studentId, studentId))
-    .orderBy(desc(applicationsTable.id))
-    .limit(1);
-  return appRow?.degree && appRow.degree.trim() ? appRow.degree.trim() : null;
-}
 
 router.post(
   "/ai/students/:id/extract-education",
@@ -729,204 +648,38 @@ router.post(
   async (req, res): Promise<void> => {
     const { id: studentId } = getValidated<{ params: typeof extractEducationParamsSchema }>(req).params;
     try {
-      const [student] = await db.select({ id: studentsTable.id })
-        .from(studentsTable)
-        .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
-      if (!student) {
-        res.status(404).json({ error: "Student not found" });
-        return;
-      }
-
-      // Level is resolved SERVER-side; without it we cannot build the
-      // level-based prompt section, so return early with a stable warning.
-      const levelKey = await resolveAppliedLevelKey(studentId);
-      if (!levelKey) {
-        const decision = decideEducationExtraction({ levelKey: null, documentCount: 0 });
-        await logAudit(req.user!.id, "ai_extract_education", "student", studentId, {
-          levelKey: null, documentCount: 0, upserted: 0, warnings: decision.warnings,
-        }, req.ip);
-        res.json({ ...decision, upserted: 0 });
-        return;
-      }
-
-      // Education-related documents only — photo/passport are never sent.
-      const docRows = await db.select({
-        id: documentsTable.id,
-        name: documentsTable.name,
-        type: documentsTable.type,
-        fileKey: documentsTable.fileKey,
-        fileData: documentsTable.fileData,
-        mimeType: documentsTable.mimeType,
-      })
-        .from(documentsTable)
-        .where(and(
-          eq(documentsTable.studentId, studentId),
-          isNull(documentsTable.deletedAt),
-          inArray(documentsTable.type, [...EDUCATION_DOC_TYPES]),
-        ))
-        .orderBy(asc(documentsTable.id));
-
-      // Reuse the existing storage/base64 fallback chain to load bytes.
-      // Defensive caps: never exceed the model request budget — stop adding
-      // documents past the raw-byte / count limits (uploads are compressed
-      // to <=2MB system-wide, so this only trips on unusual data).
-      const loaded: Array<{ label: string; mimeType: string; base64: string }> = [];
-      let totalBytes = 0;
-      for (const doc of docRows) {
-        if (loaded.length >= MAX_EDUCATION_DOCS) {
-          console.warn(`[ai-extract-education] student #${studentId}: document count cap (${MAX_EDUCATION_DOCS}) reached — remaining docs skipped`);
-          break;
-        }
-        try {
-          const bytes = await loadDocumentBytes(doc);
-          if (!bytes) continue;
-          const mime = (doc.mimeType || bytes.mimeType || "").toLowerCase();
-          const isPdf = mime === "application/pdf";
-          const isImage = (IMAGE_MEDIA_TYPES as readonly string[]).includes(mime);
-          if (!isPdf && !isImage) continue; // unsupported content for vision
-          if (totalBytes + bytes.buffer.length > MAX_EDUCATION_TOTAL_BYTES) {
-            console.warn(`[ai-extract-education] student #${studentId}: total byte cap reached — document #${doc.id} and remaining docs skipped`);
-            break;
-          }
-          totalBytes += bytes.buffer.length;
-          loaded.push({
-            label: `${doc.type}: ${doc.name}`,
-            mimeType: mime,
-            base64: bytes.buffer.toString("base64"),
-          });
-        } catch (docErr) {
-          console.warn(`[ai-extract-education] failed to load document #${doc.id} (non-fatal):`, docErr);
-        }
-      }
-
-      if (loaded.length === 0) {
-        const decision = decideEducationExtraction({ levelKey, documentCount: 0 });
-        await logAudit(req.user!.id, "ai_extract_education", "student", studentId, {
-          levelKey, documentCount: 0, upserted: 0, warnings: decision.warnings,
-        }, req.ip);
-        res.json({ ...decision, upserted: 0 });
-        return;
-      }
-
-      let anthropic;
-      let claudeConfig;
-      try {
-        anthropic = await getAnthropicClient();
-        claudeConfig = await getClaudeConfig();
-      } catch (err) {
-        res.status(503).json({ error: err instanceof Error ? err.message : "AI integration not configured" });
-        return;
-      }
-
-      // ALL education documents go in ONE messages.create call, reusing the
-      // legacy prompt + the level-based education section.
-      const promptText = EXTRACT_PROMPT + "\n" + buildEducationPromptSection(levelKey);
-      type ContentBlock =
-        | { type: "text"; text: string }
-        | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
-        | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } };
-      const contentBlocks: ContentBlock[] = [{ type: "text", text: promptText }];
-      for (const doc of loaded) {
-        contentBlocks.push({ type: "text", text: `\n--- Document: ${doc.label} ---` });
-        if (doc.mimeType === "application/pdf") {
-          contentBlocks.push({
-            type: "document",
-            source: { type: "base64", media_type: "application/pdf", data: doc.base64 },
-          });
-        } else {
-          contentBlocks.push({
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: doc.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-              data: doc.base64,
-            },
-          });
-        }
-      }
-
-      const message = await anthropic.messages.create({
-        model: claudeConfig.model || DEFAULT_VISION_MODEL,
-        max_tokens: 8192,
-        messages: [{ role: "user", content: contentBlocks as never }],
+      // Core moved to ../lib/educationAutoExtract so the automatic
+      // document-upload trigger reuses EXACTLY the same logic.
+      const result = await runEducationExtraction({
+        studentId,
+        actorUserId: req.user!.id,
+        ip: req.ip,
       });
-
-      const textBlock = message.content.find((b) => b.type === "text");
-      if (!textBlock || textBlock.type !== "text") {
-        res.status(500).json({ error: "No response from AI" });
-        return;
+      switch (result.status) {
+        case "not_found":
+          res.status(404).json({ error: "Student not found" });
+          return;
+        case "ai_unavailable":
+          res.status(503).json({ error: result.error });
+          return;
+        case "ai_failed":
+          console.error("[ai-extract-education] extraction failed:", result.error);
+          res.status(500).json({ error: "AI extraction failed" });
+          return;
+        case "skipped_filled":
+          // Manual endpoint never sets skipIfFilled — unreachable, kept for
+          // exhaustiveness.
+          res.json({ records: [], warnings: [], levelKey: null, upserted: 0 });
+          return;
+        case "ok":
+          res.json({
+            records: result.records,
+            warnings: result.warnings,
+            levelKey: result.levelKey,
+            upserted: result.upserted,
+          });
+          return;
       }
-
-      let extracted: Record<string, unknown> = {};
-      try {
-        const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) extracted = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-      } catch {
-        res.status(500).json({ error: "Failed to parse AI response" });
-        return;
-      }
-
-      // Map to the PUT /students/:id/education body shape (level filter,
-      // dedup, GPA guarantee), drop no-data records, and apply the CRITICAL
-      // GATE FIX: low confidence never drops readable records — they are
-      // saved AND flagged with the stable LOW_CONFIDENCE_EDUCATION warning.
-      const { records, warnings } = decideEducationExtraction({
-        levelKey,
-        documentCount: loaded.length,
-        educationRecords: extracted.educationRecords,
-        confidence: extracted.confidence,
-      });
-
-      // Idempotent, race-safe level-based upsert: ON CONFLICT against the
-      // partial unique index on (student_id, level) WHERE deleted_at IS NULL
-      // — concurrent calls can never create duplicates or 500 on the index.
-      let upserted = 0;
-      if (records.length > 0) {
-        await db.transaction(async (tx) => {
-          for (let i = 0; i < records.length; i++) {
-            const rec = records[i];
-            const values = {
-              studentId,
-              level: rec.level,
-              institution: rec.institution,
-              program: rec.program,
-              graduationYear: rec.graduationYear,
-              gpa: rec.gpa,
-              gpaRaw: rec.gpaRaw,
-              gpaScale: rec.gpaScale,
-              languageScore: rec.languageScore,
-              sortOrder: i,
-            };
-            await tx.insert(studentEducationRecordsTable)
-              .values(values)
-              .onConflictDoUpdate({
-                target: [studentEducationRecordsTable.studentId, studentEducationRecordsTable.level],
-                targetWhere: isNull(studentEducationRecordsTable.deletedAt),
-                set: {
-                  institution: values.institution,
-                  program: values.program,
-                  graduationYear: values.graduationYear,
-                  gpa: values.gpa,
-                  gpaRaw: values.gpaRaw,
-                  gpaScale: values.gpaScale,
-                  languageScore: values.languageScore,
-                  sortOrder: values.sortOrder,
-                  updatedAt: new Date(),
-                },
-              });
-            upserted++;
-          }
-        });
-      }
-
-      await logAudit(req.user!.id, "ai_extract_education", "student", studentId, {
-        levelKey,
-        documentCount: loaded.length,
-        upserted,
-        warnings,
-      }, req.ip);
-
-      res.json({ records, warnings, levelKey, upserted });
     } catch (err) {
       console.error("[ai-extract-education] extraction failed:", err);
       res.status(500).json({ error: "AI extraction failed" });

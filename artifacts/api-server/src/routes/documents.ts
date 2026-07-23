@@ -14,6 +14,7 @@ import { verifyDocumentSignature } from "@workspace/portal-adapters";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
+import { maybeTriggerAutoEducationExtract } from "../lib/educationAutoExtract";
 import { callerOwnsObject } from "../lib/objectAuthz";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
@@ -391,6 +392,18 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
       });
     }
   }
+
+  // AUTO-TRIGGER: transcript/diploma/degree upload for a student whose
+  // education records are still empty fires the FAZ 1 extraction core in
+  // the background. Fire-and-forget by contract — the upload response never
+  // waits on it and never fails because of it (idempotent: skipIfFilled +
+  // per-student in-flight guard live inside the trigger).
+  maybeTriggerAutoEducationExtract({
+    studentId: doc.studentId,
+    documentType: type,
+    actorUserId: user.id,
+    ip: req.ip,
+  });
 
   if (doc.studentId && (type === "photo" || type === "photograph")) {
     // Recompute from the docs themselves so fileData-only photos (which carry

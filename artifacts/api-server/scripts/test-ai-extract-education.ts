@@ -21,6 +21,9 @@ import {
   mapExtractionToEducation,
   decideEducationExtraction,
   decideLegacyEducationAutoUpsert,
+  decideAutoEducationTrigger,
+  isEducationTriggerDocType,
+  EDUCATION_SOURCE_DOC_TYPES,
   type EducationRecordOutput,
 } from "../src/lib/educationExtraction.js";
 import { isPassportExpired } from "../src/lib/passportValidity.js";
@@ -246,6 +249,54 @@ describe("decideLegacyEducationAutoUpsert — legacy /ai/extract-document FIX-15
       decideLegacyEducationAutoUpsert({ confidence: undefined, record: bachelorPartial }),
       { save: true, lowConfidence: false },
     );
+  });
+});
+
+describe("decideAutoEducationTrigger — automatic document-upload trigger gate", () => {
+  const filled: EducationRecordOutput = {
+    level: "high_school", institution: "Ankara Lisesi", program: null,
+    graduationYear: "2019", gpa: 88, gpaRaw: "87.5", gpaScale: null, languageScore: null,
+  };
+  const emptyRec: EducationRecordOutput = {
+    level: "bachelor", institution: null, program: null,
+    graduationYear: null, gpa: null, gpaRaw: null, gpaScale: null, languageScore: null,
+  };
+
+  it("AT-1 transcript uploaded + education EMPTY → trigger fires", () => {
+    assert.equal(decideAutoEducationTrigger({ documentType: "transcript", existingRecords: [] }), true);
+  });
+
+  it("AT-2 transcript uploaded + education already FILLED → no trigger (idempotent, no AI call)", () => {
+    assert.equal(decideAutoEducationTrigger({ documentType: "transcript", existingRecords: [filled] }), false);
+  });
+
+  it("AT-3 diploma/degree variants fire; passport/photo/other never do", () => {
+    assert.equal(decideAutoEducationTrigger({ documentType: "diploma", existingRecords: [] }), true);
+    assert.equal(decideAutoEducationTrigger({ documentType: "Degree Certificate", existingRecords: [] }), true);
+    assert.equal(decideAutoEducationTrigger({ documentType: "passport", existingRecords: [] }), false);
+    assert.equal(decideAutoEducationTrigger({ documentType: "photo", existingRecords: [] }), false);
+    assert.equal(decideAutoEducationTrigger({ documentType: "other", existingRecords: [] }), false);
+    assert.equal(decideAutoEducationTrigger({ documentType: null, existingRecords: [] }), false);
+  });
+
+  it("AT-4 data-less placeholder records do NOT block the trigger", () => {
+    assert.equal(decideAutoEducationTrigger({ documentType: "transcript", existingRecords: [emptyRec] }), true);
+  });
+
+  it("AT-5 isEducationTriggerDocType is case-insensitive substring match", () => {
+    assert.equal(isEducationTriggerDocType("TRANSCRIPT"), true);
+    assert.equal(isEducationTriggerDocType("high_school_diploma"), true);
+    assert.equal(isEducationTriggerDocType(undefined), false);
+  });
+
+  it("AT-6 every trigger doc type is also an extraction SOURCE type (degree-only upload must not yield NO_EDUCATION_DOCUMENTS)", () => {
+    for (const t of ["transcript", "diploma", "degree"]) {
+      assert.equal(isEducationTriggerDocType(t), true, `${t} must trigger`);
+      assert.ok(
+        (EDUCATION_SOURCE_DOC_TYPES as readonly string[]).includes(t),
+        `${t} must be included in EDUCATION_SOURCE_DOC_TYPES`,
+      );
+    }
   });
 });
 

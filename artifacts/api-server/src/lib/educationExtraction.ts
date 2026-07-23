@@ -141,6 +141,35 @@ export function educationRecordHasData(rec: EducationRecordOutput): boolean {
   );
 }
 
+/**
+ * Document types loaded as AI input for education extraction. Must cover
+ * every type that can trigger the automatic run (transcript/diploma/degree)
+ * plus "other" (mixed uploads often land there).
+ */
+export const EDUCATION_SOURCE_DOC_TYPES = ["transcript", "diploma", "degree", "other"] as const;
+
+/** Document types that carry education data and may auto-trigger extraction. */
+export function isEducationTriggerDocType(documentType: string | null | undefined): boolean {
+  return /transcript|diploma|degree/i.test(String(documentType || ""));
+}
+
+export interface AutoEducationTriggerDecisionInput {
+  documentType: string | null | undefined;
+  /** Existing (non-deleted) student_education_records rows for the student. */
+  existingRecords: EducationRecordOutput[];
+}
+
+/**
+ * Pure decision core of the automatic document-upload trigger:
+ * run auto extraction ONLY for transcript/diploma/degree documents AND only
+ * while the student's education is still empty (idempotent — a student with
+ * any data-bearing record is never re-extracted or overwritten).
+ */
+export function decideAutoEducationTrigger(input: AutoEducationTriggerDecisionInput): boolean {
+  if (!isEducationTriggerDocType(input.documentType)) return false;
+  return !input.existingRecords.some(educationRecordHasData);
+}
+
 export interface LegacyEducationAutoUpsertInput {
   confidence?: unknown;
   record: EducationRecordOutput;
