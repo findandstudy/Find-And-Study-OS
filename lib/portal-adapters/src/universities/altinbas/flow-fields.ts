@@ -47,8 +47,18 @@ export function formatDateDmy(iso: string | undefined): string {
 
 // ---------------------------------------------------------------------------
 // Country normalisation — portal picklists use plain ENGLISH country names.
+//
+// COUNTRY_EN_MAP handles two input conventions:
+//   a) Adjective / demonym  (e.g. "Pakistani"  → "Pakistan")   ← legacy CRM
+//   b) Country name         (e.g. "Pakistan")                   ← prod DB norm
+//   c) ISO alpha-2 codes    (e.g. "tr" → "Turkey")              ← seen in prod
+//
+// mapCountry returns null (not "") when the input is empty/missing — callers
+// MUST check for null and throw a submission-stopping error rather than
+// silently substituting a default country (which would submit incorrect data).
 // ---------------------------------------------------------------------------
 const COUNTRY_EN_MAP: Record<string, string> = {
+  // --- adjective / demonym forms (legacy) ----------------------------------
   afghan: "Afghanistan", algerian: "Algeria", azerbaijani: "Azerbaijan",
   bahraini: "Bahrain", bangladeshi: "Bangladesh", british: "United Kingdom",
   chinese: "China", egyptian: "Egypt", emirati: "United Arab Emirates",
@@ -62,13 +72,76 @@ const COUNTRY_EN_MAP: Record<string, string> = {
   tunisian: "Tunisia", turk: "Turkey", turkish: "Turkey",
   turkmen: "Turkmenistan", ukrainian: "Ukraine", uzbek: "Uzbekistan",
   yemeni: "Yemen",
+  // --- country name forms (lowercase, as stored in prod DB) ----------------
+  afghanistan: "Afghanistan", albania: "Albania", algeria: "Algeria",
+  armenia: "Armenia", azerbaijan: "Azerbaijan",
+  bahrain: "Bahrain", bangladesh: "Bangladesh", burundi: "Burundi",
+  china: "China", congo: "Congo",
+  "democratic republic of the congo": "Democratic Republic of the Congo",
+  egypt: "Egypt", ethiopia: "Ethiopia",
+  france: "France", germany: "Germany", ghana: "Ghana",
+  india: "India", indonesia: "Indonesia", iran: "Iran", iraq: "Iraq",
+  "ivory coast": "Ivory Coast",
+  japan: "Japan", jordan: "Jordan",
+  kazakhstan: "Kazakhstan", kenya: "Kenya", kuwait: "Kuwait",
+  kyrgyzstan: "Kyrgyzstan",
+  lebanon: "Lebanon", libya: "Libya",
+  malaysia: "Malaysia", mali: "Mali", morocco: "Morocco",
+  niger: "Niger", nigeria: "Nigeria",
+  oman: "Oman",
+  pakistan: "Pakistan", palestine: "Palestine",
+  qatar: "Qatar",
+  russia: "Russia", rwanda: "Rwanda",
+  "saudi arabia": "Saudi Arabia",
+  senegal: "Senegal", somalia: "Somalia", "south africa": "South Africa",
+  sudan: "Sudan", syria: "Syria",
+  tajikistan: "Tajikistan", tanzania: "Tanzania", tunisia: "Tunisia",
+  turkey: "Turkey", turkmenistan: "Turkmenistan",
+  uganda: "Uganda", ukraine: "Ukraine",
+  "united arab emirates": "United Arab Emirates",
+  "united kingdom": "United Kingdom", "united states": "United States",
+  "united states of america": "United States",
+  uzbekistan: "Uzbekistan",
+  vietnam: "Vietnam",
+  yemen: "Yemen",
+  zambia: "Zambia", zimbabwe: "Zimbabwe",
+  // --- ISO alpha-2 codes seen in prod --------------------------------------
+  tr: "Turkey", pk: "Pakistan", af: "Afghanistan", ng: "Nigeria",
+  ma: "Morocco", uz: "Uzbekistan", kz: "Kazakhstan", az: "Azerbaijan",
+  tz: "Tanzania", et: "Ethiopia", rw: "Rwanda", vn: "Vietnam",
+  ly: "Libya", sd: "Sudan", in: "India", ke: "Kenya", dz: "Algeria",
+  so: "Somalia", bi: "Burundi", zm: "Zambia", ne: "Niger",
+  ci: "Ivory Coast", fr: "France", jp: "Japan", am: "Armenia",
+  us: "United States", bd: "Bangladesh", zw: "Zimbabwe", tn: "Tunisia",
+  id: "Indonesia", gh: "Ghana", za: "South Africa", sy: "Syria",
+  lb: "Lebanon", ps: "Palestine", gb: "United Kingdom", ir: "Iran",
+  al: "Albania", de: "Germany", cd: "Democratic Republic of the Congo",
+  cg: "Congo", kg: "Kyrgyzstan",
 };
 
-/** Normalise a nationality string to the English country name the portal expects. */
-export function mapCountry(nationality?: string): string {
-  if (!nationality) return "";
+/**
+ * Normalise a nationality string to the English country name the portal expects.
+ *
+ * Returns null when the input is empty/missing — NEVER fall back to a default.
+ * Returns the canonical portal name when found in the map.
+ * Returns a title-cased version of the raw value when not in the map, and
+ * logs a warning so staff can detect unrecognised nationalities.
+ */
+export function mapCountry(nationality?: string): string | null {
+  if (!nationality || !nationality.trim()) return null;
   const lower = nationality.trim().toLowerCase();
-  return COUNTRY_EN_MAP[lower] || nationality.trim();
+  const mapped = COUNTRY_EN_MAP[lower];
+  if (mapped) return mapped;
+  // Not in the map: title-case the raw value and warn so staff can act.
+  // The portal MAY accept it if the picklist has a matching entry; if not,
+  // the submission will surface an explicit form-fill error rather than
+  // silently using the wrong country.
+  const titleCased = nationality.trim().replace(/\b\w/g, (c) => c.toUpperCase());
+  console.warn(
+    `[altinbas/flow-fields] mapCountry: nationality "${nationality.trim()}" not in map` +
+    ` — using title-cased raw value "${titleCased}". Update COUNTRY_EN_MAP if incorrect.`,
+  );
+  return titleCased;
 }
 
 /** Dial codes for phoneWithCountryCode.selectedCountryCode. */
@@ -147,7 +220,13 @@ export function buildProgramFields(programRecord: Record<string, unknown>): Flow
 //   - phoneWithCountryCode.phone → SADECE yerel numara (kod prefix YOK)
 // ---------------------------------------------------------------------------
 export function buildPersonalFields(profile: SubmitProfile): FlowField[] {
-  const country = mapCountry(profile.nationality) || "Turkey";
+  const country = mapCountry(profile.nationality);
+  if (country === null) {
+    throw new Error(
+      `MISSING_NATIONALITY: profile.nationality is empty or missing — cannot fill` +
+      ` country picklists on the Altınbaş portal. Update the student record before retrying.`,
+    );
+  }
   const dial = DIAL_CODES[country] || "";
   const national = toNationalNoTrunk(profile.phone || "", dial);
   const female = /^f/i.test((profile.gender || "").trim());

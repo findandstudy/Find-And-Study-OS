@@ -42,6 +42,16 @@ function resolveChromiumPath(): string | undefined {
 // These flags are mandatory for Replit (constrained RAM + no /dev/shm):
 //   --disable-dev-shm-usage   use /tmp instead of /dev/shm (prevents ENOMEM)
 //   --no-sandbox              required when running as root inside container
+//   --no-zygote               CRITICAL: prevents zygote process IPC via shared
+//                             memory — the primary cause of SIGBUS (exit 135)
+//                             in containerised environments.  Without this flag
+//                             Chromium still uses shm-backed IPC for renderer
+//                             forking even when --disable-dev-shm-usage is set,
+//                             because the zygote is spawned before that flag
+//                             takes effect on the renderer's /dev/shm mapping.
+//   --disable-setuid-sandbox  belt-and-suspenders: prevents the sandbox helper
+//                             binary from requesting a setuid call that fails in
+//                             our container security model (another SIGBUS path)
 //   --disable-gpu             no GPU on server; avoids GPU-process memory overhead
 //   --disable-extensions      no extensions — saves ~20 MB per browser instance
 //   --disable-background-networking  stops background XHRs that keep V8 alive
@@ -49,6 +59,8 @@ function resolveChromiumPath(): string | undefined {
 const MEM_ARGS: string[] = [
   "--disable-dev-shm-usage",
   "--no-sandbox",
+  "--no-zygote",
+  "--disable-setuid-sandbox",
   "--disable-gpu",
   "--disable-extensions",
   "--disable-background-networking",
