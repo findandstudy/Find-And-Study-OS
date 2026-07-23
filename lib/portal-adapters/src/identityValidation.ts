@@ -9,17 +9,18 @@
  *     the portal form — never submit silently wrong data.
  *
  * All functions are pure (no DB, no I/O) so they are trivially testable.
- * parseFlexibleDate is inlined here to avoid a cross-package dependency on
- * passportValidity.ts (api-server lib). The api-server may continue using
- * its own copy for the existing expiry check.
+ *
+ * This module is also the SINGLE SOURCE for parseFlexibleDate and
+ * isPassportExpired — the api-server's passportValidity.ts re-exports them
+ * from here so the logic never exists in two places.
  */
 
 // ---------------------------------------------------------------------------
-// Internal date parser (subset of passportValidity.parseFlexibleDate)
+// Shared date helpers (single source; re-exported by api-server passportValidity)
 // ---------------------------------------------------------------------------
 
-/** Parse "YYYY-MM-DD", "DD.MM.YYYY" or "DD/MM/YYYY" → UTC Date or null. */
-function parseDate(s: string | null | undefined): Date | null {
+/** Parse "YYYY-MM-DD", "DD.MM.YYYY" or "DD/MM/YYYY" → Date (UTC midnight) or null. */
+export function parseFlexibleDate(s: string): Date | null {
   const v = String(s || "").trim();
   if (!v) return null;
   let year: number, month: number, day: number;
@@ -33,16 +34,49 @@ function parseDate(s: string | null | undefined): Date | null {
   }
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   const d = new Date(Date.UTC(year, month - 1, day));
+  // Reject overflow dates like 31.02.2030
   if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
   return d;
 }
+
+/** true only when expiry parses AND is strictly before today (00:00 UTC). */
+export function isPassportExpired(expiry: string | null | undefined, now: Date = new Date()): boolean {
+  if (!expiry) return false;
+  const d = parseFlexibleDate(String(expiry));
+  if (!d) return false; // unparseable → do not block
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return d.getTime() < todayUtc;
+}
+
+/** Internal alias used by the date-consistency checks below. */
+const parseDate = (s: string | null | undefined): Date | null =>
+  parseFlexibleDate(String(s ?? ""));
 
 // ---------------------------------------------------------------------------
 // Error shape
 // ---------------------------------------------------------------------------
 
+/** Stable machine-readable reason codes (mapped to Turkish staff messages in
+ *  api-server criticalFieldValidation.ts). */
+export type IdentityErrorCode =
+  | "empty"
+  | "placeholder_value"
+  | "looks_like_national_id_not_passport"
+  | "invalid_characters"
+  | "invalid_length"
+  | "repeated_character"
+  | "numeric_name"
+  | "unparseable_date"
+  | "dob_in_future"
+  | "dob_before_1900"
+  | "age_out_of_range"
+  | "issue_date_in_future"
+  | "issue_before_birth"
+  | "expiry_before_issue";
+
 export interface IdentityValidationError {
   field: string;
+  code: IdentityErrorCode;
   reason: string;
 }
 
@@ -64,17 +98,18 @@ function isAllSameChar(s: string): boolean {
 /**
  * Validate a passport number.
  *
- * Rules (in order):
- *  1. Required — must be non-empty.
- *  2. No known placeholder text.
- *  3. Length: 5 – 20 characters after stripping whitespace.
- *  4. Characters: only letters, digits, spaces, or a single hyphen allowed
- *     (no slashes, underscores, etc.).
- *  5. Not all same character.
- *  6. Pure-digit strings longer than 13 characters are rejected
- *     (no real passport uses 14+ all-digit numbers).
- *  7. Pakistan CNIC pattern (XX-XXXXXXX-X, 13 digits with hyphens) is
- *     rejected — this is a national ID, not a passport number.
+ * Rules (in order — mirrors the staff-facing spec):
+ *  1. Required — must be non-empty.                          → empty
+ *  2. No known placeholder / test text.                      → placeholder_value
+ *  3. Pakistan CNIC pattern (DDDDD-DDDDDDD-D).               → looks_like_national_id_not_passport
+ *  4. All-digit (ignoring spaces/hyphens) longer than 10.    → looks_like_national_id_not_passport
+ *  5. Characters: only letters, digits, spaces, hyphens.     → invalid_characters
+ *  6. Not all the same character.                            → repeated_character
+ *  7. Length 5–12 after stripping spaces/hyphens.            → invalid_length
+ *
+ * Spaces and hyphens are IGNORED for length so Russian-style numbers like
+ * "76 7365488" (series + space + number) are accepted, and CNIC-style
+ * hyphenated IDs are still caught by the earlier structural rules.
  */
 export function validatePassportNumber(
   value: string | null | undefined,
@@ -82,64 +117,61 @@ export function validatePassportNumber(
   const raw = String(value || "").trim();
 
   if (!raw) {
-    return { field: "passportNumber", reason: "Passport number is required" };
+    return { field: "passportNumber", code: "empty", reason: "Passport number is required" };
   }
 
   if (PASSPORT_PLACEHOLDER_RE.test(raw)) {
     return {
       field: "passportNumber",
+      code: "placeholder_value",
       reason: `Passport number "${raw}" is a placeholder or test value`,
     };
   }
 
-  if (raw.length < 5) {
-    return {
-      field: "passportNumber",
-      reason: `Passport number too short (${raw.length} chars; minimum 5)`,
-    };
-  }
-
-  if (raw.length > 20) {
-    return {
-      field: "passportNumber",
-      reason: `Passport number too long (${raw.length} chars; maximum 20)`,
-    };
-  }
-
-  // Only letters, digits, spaces, or a single embedded hyphen are allowed.
-  if (!/^[A-Za-z0-9 -]+$/.test(raw)) {
-    return {
-      field: "passportNumber",
-      reason: `Passport number contains invalid characters: "${raw}"`,
-    };
-  }
-
-  if (isAllSameChar(raw.replace(/[\s-]/g, ""))) {
-    return {
-      field: "passportNumber",
-      reason: `Passport number is all the same character: "${raw}"`,
-    };
-  }
-
-  // Pakistan CNIC pattern checked BEFORE the pure-digit cap so it gets the
-  // specific error message (DDDDD-DDDDDDD-D format, 13 digits with hyphens).
+  // Pakistan CNIC pattern (DDDDD-DDDDDDD-D — 13 digits with hyphens).
   if (/^\d{5}-\d{7}-\d{1}$/.test(raw)) {
     return {
       field: "passportNumber",
+      code: "looks_like_national_id_not_passport",
       reason: `Value "${raw}" matches Pakistan CNIC pattern (DDDDD-DDDDDDD-D) — this is a national ID, not a passport number`,
     };
   }
 
-  // Pure digits with 11+ characters → not a real passport number.
-  // Real passports with all-numeric formats (Iran, some older) top out at
-  // 9–10 digits. Strings of 11+ digits indicate a national ID, a fabricated
-  // number, or a data-entry error (e.g. phone number pasted into the field).
+  // Pure digits (ignoring spaces/hyphens) with 11+ characters → national ID,
+  // fabricated number or data-entry error, never a real passport. Real
+  // all-numeric passports (Iran, some older formats) top out at 9–10 digits.
   const stripped = raw.replace(/[\s-]/g, "");
-  const digitsOnly = stripped.replace(/\D/g, "");
-  if (digitsOnly === stripped && digitsOnly.length > 10) {
+  if (/^\d+$/.test(stripped) && stripped.length > 10) {
     return {
       field: "passportNumber",
-      reason: `Passport number is a ${digitsOnly.length}-digit all-numeric string — too long for any real passport (max 10 digits for all-numeric passports)`,
+      code: "looks_like_national_id_not_passport",
+      reason: `Passport number is a ${stripped.length}-digit all-numeric string — too long for any real passport (max 10 digits for all-numeric passports)`,
+    };
+  }
+
+  // Only letters, digits, spaces, or hyphens are allowed.
+  if (!/^[A-Za-z0-9 -]+$/.test(raw)) {
+    return {
+      field: "passportNumber",
+      code: "invalid_characters",
+      reason: `Passport number contains invalid characters: "${raw}"`,
+    };
+  }
+
+  if (isAllSameChar(stripped)) {
+    return {
+      field: "passportNumber",
+      code: "repeated_character",
+      reason: `Passport number is all the same character: "${raw}"`,
+    };
+  }
+
+  // Length check on the stripped value (spaces/hyphens don't count).
+  if (stripped.length < 5 || stripped.length > 12) {
+    return {
+      field: "passportNumber",
+      code: "invalid_length",
+      reason: `Passport number length ${stripped.length} (ignoring spaces/hyphens) is outside the valid 5–12 range`,
     };
   }
 
@@ -163,23 +195,28 @@ export function validatePersonName(
   const raw = String(value || "").trim();
 
   if (!raw) {
-    return { field, reason: `${field} is required` };
+    return { field, code: "empty", reason: `${field} is required` };
   }
 
   if (NAME_PLACEHOLDER_RE.test(raw)) {
-    return { field, reason: `${field} contains a placeholder value: "${raw}"` };
+    return { field, code: "placeholder_value", reason: `${field} contains a placeholder value: "${raw}"` };
+  }
+
+  // Names must contain at least one letter — digits-only values are data errors.
+  if (!/\p{L}/u.test(raw)) {
+    return { field, code: "numeric_name", reason: `${field} contains no letters: "${raw}"` };
   }
 
   if (raw.length < 2) {
-    return { field, reason: `${field} too short (${raw.length} char; minimum 2)` };
+    return { field, code: "invalid_length", reason: `${field} too short (${raw.length} char; minimum 2)` };
   }
 
   if (raw.length > 100) {
-    return { field, reason: `${field} too long (${raw.length} chars; maximum 100)` };
+    return { field, code: "invalid_length", reason: `${field} too long (${raw.length} chars; maximum 100)` };
   }
 
   if (isAllSameChar(raw.replace(/[\s-]/g, ""))) {
-    return { field, reason: `${field} is all the same character: "${raw}"` };
+    return { field, code: "repeated_character", reason: `${field} is all the same character: "${raw}"` };
   }
 
   return null;
@@ -223,18 +260,21 @@ export function validateDateConsistency(
   if (input.dateOfBirth && !dob) {
     errors.push({
       field: "dateOfBirth",
+      code: "unparseable_date",
       reason: `Cannot parse date of birth: "${input.dateOfBirth}"`,
     });
   }
   if (input.passportIssueDate && !issueDate) {
     errors.push({
       field: "passportIssueDate",
+      code: "unparseable_date",
       reason: `Cannot parse passport issue date: "${input.passportIssueDate}"`,
     });
   }
   if (input.passportExpiryDate && !expiryDate) {
     errors.push({
       field: "passportExpiryDate",
+      code: "unparseable_date",
       reason: `Cannot parse passport expiry date: "${input.passportExpiryDate}"`,
     });
   }
@@ -243,11 +283,13 @@ export function validateDateConsistency(
     if (dob.getTime() >= todayUtc) {
       errors.push({
         field: "dateOfBirth",
+        code: "dob_in_future",
         reason: "Date of birth cannot be today or in the future",
       });
     } else if (dob.getUTCFullYear() < 1900) {
       errors.push({
         field: "dateOfBirth",
+        code: "dob_before_1900",
         reason: `Date of birth year ${dob.getUTCFullYear()} is before 1900 — likely a data error`,
       });
     } else {
@@ -255,11 +297,13 @@ export function validateDateConsistency(
       if (ageYears < 10) {
         errors.push({
           field: "dateOfBirth",
+          code: "age_out_of_range",
           reason: `Date of birth implies age ${ageYears.toFixed(1)} — too young for a university applicant`,
         });
       } else if (ageYears > 100) {
         errors.push({
           field: "dateOfBirth",
+          code: "age_out_of_range",
           reason: `Date of birth implies age ${ageYears.toFixed(1)} — likely a data error`,
         });
       }
@@ -270,12 +314,14 @@ export function validateDateConsistency(
     if (issueDate.getTime() > todayUtc) {
       errors.push({
         field: "passportIssueDate",
+        code: "issue_date_in_future",
         reason: "Passport issue date is in the future — not yet a valid passport",
       });
     }
     if (dob && issueDate.getTime() <= dob.getTime()) {
       errors.push({
         field: "passportIssueDate",
+        code: "issue_before_birth",
         reason: "Passport issue date must be after date of birth",
       });
     }
@@ -285,6 +331,7 @@ export function validateDateConsistency(
     if (expiryDate.getTime() <= issueDate.getTime()) {
       errors.push({
         field: "passportExpiryDate",
+        code: "expiry_before_issue",
         reason: "Passport expiry date must be after issue date",
       });
     }

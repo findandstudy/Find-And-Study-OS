@@ -17,6 +17,7 @@
     "test:public-apply-passport": "tsx --test ./scripts/test-public-apply-passport.ts",
     "test:ai-extract-education": "tsx --test ./scripts/test-ai-extract-education.ts",
     "test:identity-validation": "tsx --test ./scripts/test-identity-validation.ts",
+    "test:critical-field-validation": "tsx --test ./scripts/test-critical-field-validation.ts",
     "test:course-finder": "tsx --test ./scripts/test-course-finder.ts",
     "test:ai-agent": "tsx --test ./scripts/test-ai-agent-config.ts",
     "test:ai-agent-admin": "tsx --test ./scripts/test-ai-agent-admin.ts",

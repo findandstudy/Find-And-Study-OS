@@ -48,6 +48,13 @@ describe("validatePassportNumber", () => {
   valid("ABCDE12345", "Alphanumeric 10 chars");
   valid("MR AB 123456", "Spaced format (some countries)");
 
+  // Russian-style spaced series+number formats (spaces ignored for length)
+  valid("76 7365488", "Russian internal format '76 7365488' (2+7 digits with space)");
+  valid("76 4550075", "Russian internal format '76 4550075'");
+  valid("AE 6558052", "Spaced letter-prefix 'AE 6558052'");
+  valid("NA4152481", "Namibian-style 'NA4152481' — 'NA' prefix must NOT match placeholder 'na'");
+  valid("FV0760011", "'FV0760011' letter prefix + digits");
+
   // Placeholder / test values from production
   invalid("pending", "placeholder 'pending'", "placeholder");
   invalid("N/A", "placeholder 'N/A'", "placeholder");
@@ -64,9 +71,10 @@ describe("validatePassportNumber", () => {
   invalid("000000000", "all zeros 9 chars", "same character");
   invalid("AAAAAAAAA", "all same letter A", "same character");
 
-  // Length violations
-  invalid("A123", "4 chars — too short", "too short");
-  invalid("A" + "1".repeat(20), "21 chars — too long", "too long");
+  // Length violations (5–12 chars after stripping spaces/hyphens)
+  invalid("A123", "4 chars — too short", "outside the valid");
+  invalid("A" + "1".repeat(20), "21 chars — too long", "outside the valid");
+  invalid("AB 12", "5 chars raw but 4 stripped — too short", "outside the valid");
   invalid(null, "null", "required");
   invalid("", "empty string", "required");
   invalid("   ", "whitespace only", "required");

@@ -29,7 +29,7 @@ import {
   educationRecordsTable,
 } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl, validateIdentityFields, formatIdentityErrors } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 
 const execFileP = promisify(execFile);
@@ -668,6 +668,30 @@ export async function buildStudentProfile(
 
   // ----- 4. Build profile + download documents -----------------------------
   const profile = buildSubmitProfileFromRecords(student, app);
+
+  // ----- 4a. SON SAVUNMA HATTI: kimlik alanı doğrulaması (real mode) --------
+  // Pasaport numarası, ad/soyad ve tarihler portal formuna yazılmadan HEMEN
+  // önce doğrulanır. Geçersiz veri buraya kadar sızdıysa (Gate 5 / worker
+  // guard atlanmış olsa bile) tarayıcı hiç açılmadan başvuru durdurulur —
+  // gerçek bir üniversite portalına asla hatalı kimlik verisi gönderilmez.
+  // Dry-run'lar (mode !== "real") ve buildProfileFromApplication (dry CLI)
+  // kasıtlı olarak engellenmez.
+  if (sub.mode === "real") {
+    const identityErrors = validateIdentityFields({
+      passportNumber:     student.passportNumber,
+      firstName:          student.firstName,
+      lastName:           student.lastName,
+      dateOfBirth:        student.dateOfBirth,
+      passportIssueDate:  student.passportIssueDate,
+      passportExpiryDate: student.passportExpiry,
+    });
+    if (identityErrors.length > 0) {
+      throw new Error(
+        `[VERİ DOĞRULAMA] Kimlik alanları geçersiz — gerçek portal başvurusu durduruldu: ` +
+        formatIdentityErrors(identityErrors),
+      );
+    }
+  }
 
   // Attach education records so adapters (Altınbaş, Topkapı, etc.) can read
   // per-level city and languageScore without falling back to legacy top-level
