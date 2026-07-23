@@ -35,7 +35,7 @@
  *   pnpm --filter @workspace/api-server exec tsx scripts/backfill-education-extract.ts
  */
 
-import { and, eq, inArray, isNotNull, isNull, notExists, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import {
   db,
   documentsTable,
@@ -43,11 +43,13 @@ import {
   studentsTable,
 } from "@workspace/db";
 import {
-  EDUCATION_SOURCE_DOC_TYPES,
   educationRecordHasData,
   type EducationRecordOutput,
 } from "../src/lib/educationExtraction";
-import { runEducationExtraction } from "../src/lib/educationAutoExtract";
+import {
+  runEducationExtraction,
+  educationDocTypeCondition,
+} from "../src/lib/educationAutoExtract";
 
 // ---------------------------------------------------------------------------
 // Config from environment
@@ -103,6 +105,7 @@ async function main() {
 
   if (STUDENT_IDS_RAW && STUDENT_IDS_RAW.length > 0) {
     // Specific students requested — validate they have education-trigger docs.
+    const { inArray } = await import("drizzle-orm");
     const docRows = await db
       .selectDistinct({ studentId: documentsTable.studentId })
       .from(documentsTable)
@@ -110,7 +113,7 @@ async function main() {
         and(
           isNotNull(documentsTable.studentId),
           inArray(documentsTable.studentId, STUDENT_IDS_RAW as number[]),
-          inArray(documentsTable.type, [...EDUCATION_SOURCE_DOC_TYPES]),
+          educationDocTypeCondition(),
           isNull(documentsTable.deletedAt),
         ),
       );
@@ -128,7 +131,7 @@ async function main() {
       .where(
         and(
           isNotNull(documentsTable.studentId),
-          inArray(documentsTable.type, [...EDUCATION_SOURCE_DOC_TYPES]),
+          educationDocTypeCondition(),
           isNull(documentsTable.deletedAt),
         ),
       );

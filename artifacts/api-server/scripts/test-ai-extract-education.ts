@@ -24,6 +24,7 @@ import {
   decideAutoEducationTrigger,
   isEducationTriggerDocType,
   EDUCATION_SOURCE_DOC_TYPES,
+  EDUCATION_FUZZY_KEYWORDS,
   type EducationRecordOutput,
 } from "../src/lib/educationExtraction.js";
 import { isPassportExpired } from "../src/lib/passportValidity.js";
@@ -270,11 +271,15 @@ describe("decideAutoEducationTrigger — automatic document-upload trigger gate"
     assert.equal(decideAutoEducationTrigger({ documentType: "transcript", existingRecords: [filled] }), false);
   });
 
-  it("AT-3 diploma/degree variants fire; passport/photo/other never do", () => {
+  it("AT-3 core types fire; passport/photo/bank/visa/id/other never do", () => {
     assert.equal(decideAutoEducationTrigger({ documentType: "diploma", existingRecords: [] }), true);
     assert.equal(decideAutoEducationTrigger({ documentType: "Degree Certificate", existingRecords: [] }), true);
     assert.equal(decideAutoEducationTrigger({ documentType: "passport", existingRecords: [] }), false);
     assert.equal(decideAutoEducationTrigger({ documentType: "photo", existingRecords: [] }), false);
+    assert.equal(decideAutoEducationTrigger({ documentType: "photograph", existingRecords: [] }), false);
+    assert.equal(decideAutoEducationTrigger({ documentType: "bank statement", existingRecords: [] }), false);
+    assert.equal(decideAutoEducationTrigger({ documentType: "visa", existingRecords: [] }), false);
+    assert.equal(decideAutoEducationTrigger({ documentType: "national id", existingRecords: [] }), false);
     assert.equal(decideAutoEducationTrigger({ documentType: "other", existingRecords: [] }), false);
     assert.equal(decideAutoEducationTrigger({ documentType: null, existingRecords: [] }), false);
   });
@@ -287,14 +292,70 @@ describe("decideAutoEducationTrigger — automatic document-upload trigger gate"
     assert.equal(isEducationTriggerDocType("TRANSCRIPT"), true);
     assert.equal(isEducationTriggerDocType("high_school_diploma"), true);
     assert.equal(isEducationTriggerDocType(undefined), false);
+    assert.equal(isEducationTriggerDocType(""), false);
+    assert.equal(isEducationTriggerDocType(null), false);
   });
 
-  it("AT-6 every trigger doc type is also an extraction SOURCE type (degree-only upload must not yield NO_EDUCATION_DOCUMENTS)", () => {
-    for (const t of ["transcript", "diploma", "degree"]) {
-      assert.equal(isEducationTriggerDocType(t), true, `${t} must trigger`);
-      assert.ok(
-        (EDUCATION_SOURCE_DOC_TYPES as readonly string[]).includes(t),
-        `${t} must be included in EDUCATION_SOURCE_DOC_TYPES`,
+  it("AT-6 every keyword in EDUCATION_FUZZY_KEYWORDS triggers isEducationTriggerDocType", () => {
+    for (const kw of EDUCATION_FUZZY_KEYWORDS) {
+      assert.equal(
+        isEducationTriggerDocType(kw),
+        true,
+        `keyword "${kw}" from EDUCATION_FUZZY_KEYWORDS must trigger`,
+      );
+      // Also check embedded in a realistic label
+      assert.equal(
+        isEducationTriggerDocType(`some ${kw} document`),
+        true,
+        `"some ${kw} document" must trigger`,
+      );
+    }
+  });
+
+  it("AT-7 real-world label variants that must now trigger (broadened matching)", () => {
+    const shouldTrigger = [
+      "high school diploma translation",
+      "class 12th marks sheet",
+      "bachelor's transcript",
+      "marksheet",
+      "school leaving certificate",
+      "academic record",
+      "secondary school certificate",
+      "grade card",
+      "exam result",
+      "baccalaureate",
+      "matriculation certificate",
+      "MARKS SHEET",           // case-insensitive
+      "Grade Report",          // case-insensitive
+    ];
+    for (const label of shouldTrigger) {
+      assert.equal(
+        isEducationTriggerDocType(label),
+        true,
+        `"${label}" should trigger education extraction`,
+      );
+    }
+  });
+
+  it("AT-8 unrelated document types must NOT trigger", () => {
+    const shouldNotTrigger = [
+      "passport",
+      "photo",
+      "photograph",
+      "national id",
+      "id card",
+      "bank statement",
+      "visa",
+      "reference letter",
+      "financial guarantee",
+      "other",
+      "",
+    ];
+    for (const label of shouldNotTrigger) {
+      assert.equal(
+        isEducationTriggerDocType(label),
+        false,
+        `"${label}" must NOT trigger education extraction`,
       );
     }
   });

@@ -18,7 +18,7 @@
  * application's program degree). Low confidence never drops readable
  * records (LOW_CONFIDENCE_EDUCATION warning instead).
  */
-import { eq, desc, and, isNull, inArray, asc } from "drizzle-orm";
+import { eq, desc, and, isNull, or, ilike, asc } from "drizzle-orm";
 import {
   db,
   studentsTable,
@@ -34,11 +34,28 @@ import { EXTRACT_PROMPT } from "./extractPrompt";
 import {
   buildEducationPromptSection,
   decideEducationExtraction,
-  EDUCATION_SOURCE_DOC_TYPES,
+  EDUCATION_FUZZY_KEYWORDS,
   educationRecordHasData,
   isEducationTriggerDocType,
   type EducationRecordOutput,
 } from "./educationExtraction";
+
+/**
+ * Drizzle OR condition that matches any education-related document type
+ * using case-insensitive substring matching.  Replaces the former exact
+ * inArray(type, ["transcript","diploma","degree","other"]) filter so that
+ * real-world labels such as "high school diploma translation", "class 12th
+ * marks sheet", or "bachelor's transcript" are correctly included.
+ *
+ * Exported so the backfill script can reuse it without duplicating the list.
+ * "other" is kept as an exact fallback (catch-all for mixed uploads).
+ */
+export function educationDocTypeCondition() {
+  return or(
+    ...EDUCATION_FUZZY_KEYWORDS.map((kw) => ilike(documentsTable.type, `%${kw}%`)),
+    ilike(documentsTable.type, "other"),
+  )!;
+}
 
 const IMAGE_MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 // Defensive request-budget caps for the single messages.create call.
@@ -152,7 +169,7 @@ export async function runEducationExtraction(
     .where(and(
       eq(documentsTable.studentId, studentId),
       isNull(documentsTable.deletedAt),
-      inArray(documentsTable.type, [...EDUCATION_SOURCE_DOC_TYPES]),
+      educationDocTypeCondition(),
     ))
     .orderBy(asc(documentsTable.id));
 
@@ -408,7 +425,7 @@ export function maybeTriggerAutoEducationExtractForStudent(
         .where(and(
           eq(documentsTable.studentId, studentId),
           isNull(documentsTable.deletedAt),
-          inArray(documentsTable.type, [...EDUCATION_SOURCE_DOC_TYPES]),
+          educationDocTypeCondition(),
         ))
         .limit(1);
       if (triggerDocs.length === 0) {
