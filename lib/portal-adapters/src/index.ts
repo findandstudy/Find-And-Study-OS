@@ -148,3 +148,13 @@ export {
   maxSpecVersion,
   enabledSpecVersion,
 } from "./specLoader.js";
+export {
+  validatePassportNumber,
+  validatePersonName,
+  validateDateConsistency,
+  validateIdentityFields,
+  formatIdentityErrors,
+  type IdentityValidationError,
+  type IdentityFieldsInput,
+  type DateConsistencyInput,
+} from "./identityValidation.js";

@@ -38,7 +38,7 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./auth.js";
 import { checkHasPortalCredentials } from "./portalCreds.js";
-import { isMulticoNationality } from "@workspace/portal-adapters";
+import { isMulticoNationality, validateIdentityFields, formatIdentityErrors } from "@workspace/portal-adapters";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,7 +65,9 @@ export type SkipReason =
   | "out_of_scope"
   | "no_credentials"
   | "duplicate"
-  | "max_failures";
+  | "max_failures"
+  /** mode=real submission blocked due to invalid/placeholder identity fields. */
+  | "invalid_identity_fields";
 
 export type EnqueueOutcome =
   | { status: "queued"; submissionId: number; universityKey: string }
@@ -364,7 +366,44 @@ export async function enqueueIfEligible(
     return { status: "skipped", reason: "no_credentials" };
   }
 
-  // ----- Gate 5: dedup + enqueue (atomic) -------------------------------
+  // ----- Gate 5: identity field validation (mode=real only) ----------------
+  // We never enqueue a real submission when critical identity fields are
+  // missing, placeholder, or logically inconsistent — a wrong passport number
+  // or garbled name is worse than no submission at all (it can block the
+  // student's visa/registration). Dry runs bypass this gate so staff can test
+  // portal connectivity without needing perfect data.
+  if (settings.mode === "real") {
+    const [studentForValidation] = await db
+      .select({
+        passportNumber:   studentsTable.passportNumber,
+        firstName:        studentsTable.firstName,
+        lastName:         studentsTable.lastName,
+        dateOfBirth:      studentsTable.dateOfBirth,
+        passportIssueDate: studentsTable.passportIssueDate,
+        passportExpiry:   studentsTable.passportExpiry,
+      })
+      .from(studentsTable)
+      .where(eq(studentsTable.id, studentId))
+      .limit(1);
+    if (studentForValidation) {
+      const idErrors = validateIdentityFields({
+        passportNumber:    studentForValidation.passportNumber,
+        firstName:         studentForValidation.firstName,
+        lastName:          studentForValidation.lastName,
+        dateOfBirth:       studentForValidation.dateOfBirth,
+        passportIssueDate: studentForValidation.passportIssueDate,
+        passportExpiryDate: studentForValidation.passportExpiry,
+      });
+      if (idErrors.length > 0) {
+        console.warn(
+          `[portal-enqueue] identity validation FAILED for student=${studentId} app=${applicationId} uni=${portalUni.universityKey}: ${formatIdentityErrors(idErrors)}`,
+        );
+        return { status: "skipped", reason: "invalid_identity_fields" };
+      }
+    }
+  }
+
+  // ----- Gate 6: dedup + enqueue (atomic) -------------------------------
   // A plain SELECT-then-INSERT is racy: multiple callers (creation hook, PATCH
   // hook, Run Now scan, or multiple server instances) can fire for the same
   // application concurrently, all pass the read, and all insert duplicate

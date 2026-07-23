@@ -17,6 +17,8 @@ import {
   resolveAdapterForUniversity,
   setCredsOverride,
   clearCredsOverride,
+  validateIdentityFields,
+  formatIdentityErrors,
 } from "@workspace/portal-adapters";
 import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 import type { ClaimedSubmission } from "./queue.js";
@@ -71,6 +73,28 @@ export async function runSubmission(
       screenshotUrls: [],
       meta: { dryRun: true, adapterKey: adapter.key },
     };
+  }
+
+  // ----- 2.5. Identity field guard (real mode, defence-in-depth) ----------
+  // The enqueue gate (api-server portalAutoTrigger) already blocks invalid
+  // data from entering the queue, but submissions may have been created
+  // before this guard existed, or the student record may have been edited
+  // after enqueueing.  Better to abort here than to fill a university form
+  // with a placeholder passport number and create a real-but-wrong application
+  // that harms the student.
+  const idErrors = validateIdentityFields({
+    passportNumber:     profile.passportNumber,
+    firstName:          profile.firstName,
+    lastName:           profile.lastName,
+    dateOfBirth:        profile.dateOfBirth || undefined,
+    passportIssueDate:  profile.passportIssueDate,
+    passportExpiryDate: profile.passportExpiryDate,
+  });
+  if (idErrors.length > 0) {
+    await cleanup(tempDir);
+    throw new Error(
+      `IDENTITY_VALIDATION_FAILED: ${formatIdentityErrors(idErrors)}`,
+    );
   }
 
   // ----- 3. Real mode — resolve credentials (DB-first, env fallback) ------

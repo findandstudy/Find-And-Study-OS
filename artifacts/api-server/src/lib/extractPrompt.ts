@@ -49,6 +49,18 @@ Rules:
   * Always output dates in YYYY-MM-DD format after correctly interpreting the source format
 - CRITICAL - Passport expiry: Check if the passport expiry date has passed relative to today's date. Set passportExpired to true if expired, false if still valid.
 - CRITICAL - Never fabricate values: if you cannot confidently read a field, set it to null. Do not guess.
+- CRITICAL - Passport number accuracy (ZERO TOLERANCE for errors):
+  * Read the passport number CHARACTER BY CHARACTER. Passport numbers control university admission and visa decisions — a wrong digit or letter can harm the student.
+  * If the document has a Machine Readable Zone (MRZ — two lines of text at the bottom of the passport identity page, containing '<' characters), ALWAYS cross-check the passport number against the MRZ. The MRZ is printed by machine and is the most reliable source. Format: the passport number appears in the first MRZ line starting at position 6, and terminates at the first '<' after it.
+  * When the printed number and the MRZ disagree, PREFER the MRZ value and note the discrepancy in extractedNotes.
+  * NEVER return placeholder, status, or pending values such as "pending", "N/A", "Applying", "Applied", "TBD", or similar. If you cannot read the number confidently, return null.
+  * NEVER guess or reconstruct a partially-visible passport number. Return null if any digit or letter is unclear.
+  * Do NOT confuse a National ID number (e.g. Pakistan's CNIC format XX-XXXXXXX-X with two hyphens) with a passport number. Passport numbers are typically 7–12 alphanumeric characters without hyphens.
+- CRITICAL - Date logical consistency:
+  * Verify that dateOfBirth < passportIssueDate < passportExpiry. If a date you have extracted violates this order, you have made a date-format error — re-read and correct it before returning.
+  * A person cannot receive a passport before they were born. If your extracted dateOfBirth is later than your extracted passportIssueDate, swap or null both and note the inconsistency in extractedNotes.
+  * dateOfBirth must be in the past (never today or in the future).
+  * passportIssueDate must not be in the future.
 - For passport documents: extract all passport fields, name, DOB, nationality, issue/expiry dates, mother name, father name (often listed on passport identity pages)
 - For diplomas: extract institutionName, country, eduCity, fieldOfStudy, eduStartMonth, eduStartYear, eduEndMonth, graduationYear (=eduEndYear), GPA, student name, parent names if visible
 - For transcripts: extract institutionName, country, eduCity, fieldOfStudy, GPA, graduationYear, student name; include eduLanguageScore if a language test appears
