@@ -294,16 +294,46 @@ export interface EduRecord {
 }
 
 /**
+ * Classify a profile level string into one of the four degree tiers the adapter
+ * understands. Turkish equivalents are recognised:
+ *   "yüksek lisans" / "yuksek lisans" → "master"
+ *   "lisans"                           → "bachelor"   (exact — not "yüksek lisans")
+ *   "önlisans" / "onlisans" / "ön lisans" → "associate"
+ *   "doktora"                          → "phd"
+ *
+ * Returns "unknown" only if no pattern matches — the caller should treat this as
+ * an unsupported level (the upstream guard already rejects it, so in practice
+ * "unknown" should never reach here after the guard runs).
+ */
+export function classifyProfileLevel(
+  level: string,
+): "master" | "phd" | "bachelor" | "associate" | "unknown" {
+  const n = (level ?? "").trim().toLowerCase();
+  if (/phd|doctor|doktora/.test(n)) return "phd";
+  if (/master|yüksek\s*lisans|yuksek\s*lisans/.test(n)) return "master";
+  if (/bachelor|^lisans$/.test(n)) return "bachelor";
+  if (/associate|önlisans|onlisans|ön\s*lisans/.test(n)) return "associate";
+  return "unknown";
+}
+
+/**
  * Returns the first missing required education record level key, or null.
- * Altınbaş: Master/PhD submissions require a bachelor-level record.
+ *   Master / PhD  → must have a "bachelor" record on file.
+ *   Bachelor / Associate → must have a "high_school" record on file.
  */
 export function checkMissingEduRecord(
   eduRecords: EduRecord[] | undefined,
   profileLevel: string,
 ): string | null {
-  const needsBachelor = /master|phd|doctor/i.test(profileLevel || "");
-  if (needsBachelor && !eduRecords?.some((r) => r.level === "bachelor")) {
+  const cls = classifyProfileLevel(profileLevel);
+  if ((cls === "master" || cls === "phd") && !eduRecords?.some((r) => r.level === "bachelor")) {
     return "bachelor_education_record";
+  }
+  if (
+    (cls === "bachelor" || cls === "associate") &&
+    !eduRecords?.some((r) => r.level === "high_school")
+  ) {
+    return "high_school_education_record";
   }
   return null;
 }

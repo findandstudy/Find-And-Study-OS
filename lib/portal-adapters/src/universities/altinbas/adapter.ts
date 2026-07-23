@@ -67,6 +67,7 @@ import {
   buildQuestionnaireFields,
   buildDocumentsFields,
   checkMissingEduRecord,
+  classifyProfileLevel,
 } from "./flow-fields.js";
 
 // ---------------------------------------------------------------------------
@@ -79,7 +80,14 @@ const APP_FORM_URL  = PORTAL_URL + "application-form";
 const SESSION_STATE = "/tmp/altinbas-portal-state.json";
 
 /** Levels this adapter accepts. Everything else → skipped. */
-const ACCEPTED_LEVELS = new Set(["master", "phd", "doctorate", "doktora", "yüksek lisans", "yuksek lisans"]);
+const ACCEPTED_LEVELS = new Set([
+  // Graduate
+  "master", "phd", "doctorate", "doktora", "yüksek lisans", "yuksek lisans",
+  // Undergraduate (portal opening imminent — adapter ready, IDs captured live)
+  "bachelor", "lisans",
+  // Sub-degree associate (portal opening imminent — adapter ready, IDs captured live)
+  "associate", "önlisans", "onlisans", "ön lisans",
+]);
 
 // Salesforce LWC hydration is slow — never use networkidle on SF pages.
 const SF_HYDRATION_MS = 8000;
@@ -894,31 +902,53 @@ function pickTermOption(rt: FlowRuntime): { label: string; id: string } {
 }
 
 /**
- * Degree seçimi: Master → captured constant. PhD → constant henüz yok, filtreli
- * dinamik parse'a düş (Id a0C ZORUNLU + label PhD/Doctorate); o da boşsa null
- * (fail-visible, ilk PhD ALTINBAS_CAPTURE run'ında Id yakalanacak).
+ * Degree seçimi:
+ *   Master → captured constant (FALLBACK_DEGREE_MASTER) — stabil, doğrulandı.
+ *   PhD / Bachelor / Associate → Id henüz sabitlenmedi; a0C prefix + label
+ *     pattern ile filtreli dinamik arama yapılır. Bulunamazsa null döner
+ *     (fail-visible). İlk gerçek run ALTINBAS_CAPTURE=1 ile yapıldığında
+ *     yakalanan Id constant olarak eklenebilir (Master gibi).
+ *
+ * NOT: Bachelor ve Associate için portal ID'leri henüz açık olmadığı için
+ * bilinmiyor. Dinamik arama, portal Degree ekranının o zaman sunacağı
+ * seçenekler arasından label eşleştirmesi yaparak Id'yi canlı bulur.
  */
 function pickDegreeOption(rt: FlowRuntime, level: string): { label: string; id: string } | null {
-  const wantPhd = /phd|doctor|doktora/i.test(level);
-  if (!wantPhd) {
+  const cls = classifyProfileLevel(level);
+
+  if (cls === "master") {
     logger.info(
       `[altinbas] Degree captured constant kullanılıyor: "${FALLBACK_DEGREE_MASTER.label}" (${FALLBACK_DEGREE_MASTER.id})`,
     );
     return FALLBACK_DEGREE_MASTER;
   }
-  const re = /^(phd|doctorate|ph\.?\s*d|doktora)/i;
+
+  // PhD / Bachelor / Associate → dynamic label search (no captured constant yet)
+  const labelRe =
+    cls === "phd"
+      ? /^(phd|doctorate|ph\.?\s*d|doktora)/i
+      : cls === "bachelor"
+        ? /^(bachelor|lisans|undergraduate)/i
+        : /^(associate|önlisans|onlisans|2[\s-]?year)/i;
+
+  const degreeLabel =
+    cls === "phd" ? "PhD" : cls === "bachelor" ? "Bachelor" : "Associate";
+
   for (const [id, r] of rt.records) {
     if (!id.startsWith("a0C")) continue;
     for (const v of Object.values(r)) {
-      if (typeof v === "string" && re.test(v.trim())) {
+      if (typeof v === "string" && labelRe.test(v.trim())) {
         dumpCandidate(rt, id, "degree");
-        logger.info(`[altinbas] PhD degree dinamik bulundu: "${v.trim()}" (${id})`);
+        logger.info(
+          `[altinbas] ${degreeLabel} degree dinamik bulundu: "${v.trim()}" (${id})`,
+        );
         return { label: v.trim(), id };
       }
     }
   }
+
   logger.warn(
-    "[altinbas] PhD degree Id'si dinamik bulunamadı (a0C+label filtreli) ve captured constant HENÜZ yok — ilk PhD ALTINBAS_CAPTURE=1 run'ında yakalanacak",
+    `[altinbas] ${degreeLabel} degree Id'si dinamik bulunamadı (a0C+label filtreli) ve captured constant HENÜZ yok — ilk ${degreeLabel} ALTINBAS_CAPTURE=1 run'ında yakalanacak`,
   );
   return null;
 }
@@ -2031,7 +2061,7 @@ export const altinbasAdapter: UniversityAdapter = {
 
     // ── Level guard ─────────────────────────────────────────────────────────
     if (!isAcceptedLevel(profile.level || "")) {
-      const msg = `Altınbaş: level "${profile.level}" kapalı (yalnız Master/PhD)`;
+      const msg = `Altınbaş: level "${profile.level}" kapalı (Master/PhD/Bachelor/Associate)`;
       logger.info(`[altinbas] ${msg}`);
       return {
         alreadyExists:  false,

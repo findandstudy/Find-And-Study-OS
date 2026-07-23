@@ -18,6 +18,8 @@ import assert from "node:assert/strict";
 import {
   mapCountry,
   buildPersonalFields,
+  classifyProfileLevel,
+  checkMissingEduRecord,
 } from "../../../lib/portal-adapters/src/universities/altinbas/flow-fields.js";
 
 // ---------------------------------------------------------------------------
@@ -196,6 +198,156 @@ describe("buildPersonalFields — throws MISSING_NATIONALITY when nationality ab
       `expected Pakistan in field name, got: ${birthCountryField.field}`,
     );
   });
+});
+
+// ---------------------------------------------------------------------------
+// classifyProfileLevel — degree tier classification
+// ---------------------------------------------------------------------------
+
+describe("classifyProfileLevel — master variants", () => {
+  const cases: [string, "master"][] = [
+    ["master",        "master"],
+    ["Master",        "master"],
+    ["MASTER",        "master"],
+    ["yüksek lisans", "master"],
+    ["yuksek lisans", "master"],
+    ["Yüksek Lisans", "master"],
+  ];
+  for (const [input, expected] of cases) {
+    it(`"${input}" → "${expected}"`, () =>
+      assert.equal(classifyProfileLevel(input), expected));
+  }
+});
+
+describe("classifyProfileLevel — phd variants", () => {
+  const cases: [string, "phd"][] = [
+    ["phd",       "phd"],
+    ["PhD",       "phd"],
+    ["doctorate", "phd"],
+    ["Doctorate", "phd"],
+    ["doktora",   "phd"],
+    ["Doktora",   "phd"],
+  ];
+  for (const [input, expected] of cases) {
+    it(`"${input}" → "${expected}"`, () =>
+      assert.equal(classifyProfileLevel(input), expected));
+  }
+});
+
+describe("classifyProfileLevel — bachelor variants", () => {
+  const cases: [string, "bachelor"][] = [
+    ["bachelor",  "bachelor"],
+    ["Bachelor",  "bachelor"],
+    ["BACHELOR",  "bachelor"],
+    ["lisans",    "bachelor"],
+    ["Lisans",    "bachelor"],
+  ];
+  for (const [input, expected] of cases) {
+    it(`"${input}" → "${expected}"`, () =>
+      assert.equal(classifyProfileLevel(input), expected));
+  }
+
+  it('"lisans" must NOT classify as "master" (yüksek lisans vs lisans ambiguity)', () => {
+    assert.equal(classifyProfileLevel("lisans"), "bachelor");
+    assert.notEqual(classifyProfileLevel("lisans"), "master");
+  });
+});
+
+describe("classifyProfileLevel — associate variants", () => {
+  const cases: [string, "associate"][] = [
+    ["associate",  "associate"],
+    ["Associate",  "associate"],
+    ["önlisans",   "associate"],
+    ["Önlisans",   "associate"],
+    ["onlisans",   "associate"],
+    ["ön lisans",  "associate"],
+  ];
+  for (const [input, expected] of cases) {
+    it(`"${input}" → "${expected}"`, () =>
+      assert.equal(classifyProfileLevel(input), expected));
+  }
+});
+
+describe("classifyProfileLevel — bachelor/associate must never be master", () => {
+  const notMaster = ["bachelor", "lisans", "Bachelor", "associate", "önlisans", "onlisans", "ön lisans"];
+  for (const level of notMaster) {
+    it(`"${level}" classifies as bachelor or associate, NOT master`, () => {
+      const cls = classifyProfileLevel(level);
+      assert.notEqual(cls, "master", `"${level}" must not map to "master" (would silently submit wrong degree)`);
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// checkMissingEduRecord — prior-education gate per degree tier
+// ---------------------------------------------------------------------------
+
+describe("checkMissingEduRecord — Master/PhD require bachelor record", () => {
+  const bachelorRec = { level: "bachelor" };
+  const highSchoolRec = { level: "high_school" };
+
+  it("master + no records → missing bachelor", () =>
+    assert.equal(checkMissingEduRecord([], "master"), "bachelor_education_record"));
+  it("master + only high_school → missing bachelor", () =>
+    assert.equal(checkMissingEduRecord([highSchoolRec], "master"), "bachelor_education_record"));
+  it("master + bachelor record → ok", () =>
+    assert.equal(checkMissingEduRecord([bachelorRec], "master"), null));
+  it("master + bachelor + high_school → ok", () =>
+    assert.equal(checkMissingEduRecord([bachelorRec, highSchoolRec], "master"), null));
+
+  it("phd + no records → missing bachelor", () =>
+    assert.equal(checkMissingEduRecord([], "phd"), "bachelor_education_record"));
+  it("phd + bachelor record → ok", () =>
+    assert.equal(checkMissingEduRecord([bachelorRec], "phd"), null));
+
+  it("yüksek lisans + no records → missing bachelor (Turkish master alias)", () =>
+    assert.equal(checkMissingEduRecord([], "yüksek lisans"), "bachelor_education_record"));
+  it("doktora + no records → missing bachelor (Turkish phd alias)", () =>
+    assert.equal(checkMissingEduRecord([], "doktora"), "bachelor_education_record"));
+});
+
+describe("checkMissingEduRecord — Bachelor/Associate require high_school record (NOT bachelor)", () => {
+  const bachelorRec = { level: "bachelor" };
+  const highSchoolRec = { level: "high_school" };
+
+  it("bachelor + no records → missing high_school", () =>
+    assert.equal(checkMissingEduRecord([], "bachelor"), "high_school_education_record"));
+  it("bachelor + only bachelor record → still missing high_school", () =>
+    assert.equal(checkMissingEduRecord([bachelorRec], "bachelor"), "high_school_education_record"));
+  it("bachelor + high_school record → ok", () =>
+    assert.equal(checkMissingEduRecord([highSchoolRec], "bachelor"), null));
+
+  it("associate + no records → missing high_school", () =>
+    assert.equal(checkMissingEduRecord([], "associate"), "high_school_education_record"));
+  it("associate + high_school record → ok", () =>
+    assert.equal(checkMissingEduRecord([highSchoolRec], "associate"), null));
+
+  it("lisans + no records → missing high_school (Turkish bachelor alias)", () =>
+    assert.equal(checkMissingEduRecord([], "lisans"), "high_school_education_record"));
+  it("önlisans + no records → missing high_school (Turkish associate alias)", () =>
+    assert.equal(checkMissingEduRecord([], "önlisans"), "high_school_education_record"));
+
+  it("bachelor MUST NOT require a bachelor record (would be a circular self-requirement)", () => {
+    assert.notEqual(
+      checkMissingEduRecord([], "bachelor"),
+      "bachelor_education_record",
+      "bachelor applicants should NOT need a bachelor record (that's for master/phd)",
+    );
+  });
+  it("associate MUST NOT require a bachelor record", () => {
+    assert.notEqual(
+      checkMissingEduRecord([], "associate"),
+      "bachelor_education_record",
+      "associate applicants should NOT need a bachelor record",
+    );
+  });
+});
+
+describe("checkMissingEduRecord — undefined records treated as empty", () => {
+  it("master + undefined → missing bachelor", () =>
+    assert.equal(checkMissingEduRecord(undefined, "master"), "bachelor_education_record"));
+  it("bachelor + undefined → missing high_school", () =>
+    assert.equal(checkMissingEduRecord(undefined, "bachelor"), "high_school_education_record"));
 });
 
 // ---------------------------------------------------------------------------
