@@ -2,11 +2,17 @@
  * educationAutoExtract — shared core of the FAZ 1 extract-education flow.
  *
  * The former POST /ai/students/:id/extract-education body moved here so it
- * can run in TWO ways with identical behavior:
+ * can run in THREE ways with identical behavior:
  *  1. The staff endpoint (ai-extract.ts) — manual, always runs.
  *  2. The automatic document-upload trigger (documents route) — fires when a
  *     transcript/diploma/degree document is created AND the student's
  *     education records are still empty (idempotent, non-blocking).
+ *  3. The lead-to-student conversion path (leads.ts + embed.ts) — fires when
+ *     a lead's documents are adopted onto a student, ensuring documents that
+ *     arrived via the public widget flow get the same AI treatment as
+ *     staff-uploaded documents.  Uses maybeTriggerAutoEducationExtractForStudent
+ *     which does not require a specific document type — it checks internally
+ *     whether any education-trigger documents are present.
  *
  * Level is resolved SERVER-side (students.interestedLevel → latest
  * application's program degree). Low confidence never drops readable
@@ -351,6 +357,88 @@ export function maybeTriggerAutoEducationExtract(input: AutoEducationTriggerInpu
     } catch (err) {
       // Non-fatal by contract — the upload already succeeded.
       console.warn(`[auto-education-extract] student=${studentId} failed (non-fatal):`, err);
+    } finally {
+      inFlight.delete(studentId);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Lead-to-student conversion trigger
+// ---------------------------------------------------------------------------
+
+export interface AutoEducationTriggerForStudentInput {
+  studentId: number | null | undefined;
+  actorUserId: number | null;
+  ip?: string;
+}
+
+/**
+ * Fire-and-forget auto extraction after a lead's documents are adopted onto a
+ * student (via lead convert or embed widget auto-convert). Functionally
+ * equivalent to maybeTriggerAutoEducationExtract but does NOT require a
+ * specific document type — it checks internally whether the student has any
+ * education-trigger documents (transcript/diploma/degree) before making an
+ * AI call.
+ *
+ * Guards:
+ *  - studentId must be present
+ *  - at least one education-trigger document must exist for this student
+ *  - no auto-run already in flight for this student (shared inFlight guard)
+ *  - student must have no data-bearing education records (skipIfFilled)
+ *
+ * NEVER throws and NEVER blocks the caller.  Call with void or fire-and-forget.
+ * Audit action: "auto_education_extract_lead_convert"
+ */
+export function maybeTriggerAutoEducationExtractForStudent(
+  input: AutoEducationTriggerForStudentInput,
+): void {
+  const { studentId, actorUserId, ip } = input;
+  if (!studentId) return;
+  if (inFlight.has(studentId)) return;
+  inFlight.add(studentId);
+  setImmediate(async () => {
+    try {
+      // Check whether the student has any education-trigger documents before
+      // incurring an AI call.  This is a cheap read; if none are present the
+      // function exits without calling Claude.
+      const triggerDocs = await db
+        .select({ id: documentsTable.id })
+        .from(documentsTable)
+        .where(and(
+          eq(documentsTable.studentId, studentId),
+          isNull(documentsTable.deletedAt),
+          inArray(documentsTable.type, [...EDUCATION_SOURCE_DOC_TYPES]),
+        ))
+        .limit(1);
+      if (triggerDocs.length === 0) {
+        // No education documents — nothing to extract.  Log at debug level only.
+        console.log(`[auto-education-extract] student=${studentId} no education-trigger docs after lead convert — skipping`);
+        return;
+      }
+
+      const result = await runEducationExtraction({
+        studentId,
+        actorUserId,
+        ip,
+        skipIfFilled: true,
+        auditAction: "auto_education_extract_lead_convert",
+      });
+      if (result.status === "ok") {
+        console.log(
+          `[auto-education-extract] auto_education_extract_lead_convert student=${studentId}` +
+          ` level=${result.levelKey ?? "unresolved"} upserted=${result.upserted}` +
+          `${result.warnings.length ? ` warnings=${result.warnings.join(",")}` : ""}`,
+        );
+      } else if (result.status !== "skipped_filled") {
+        console.warn(
+          `[auto-education-extract] lead-convert trigger student=${studentId}` +
+          ` not run: ${result.status}${"error" in result ? ` (${result.error})` : ""}`,
+        );
+      }
+    } catch (err) {
+      // Non-fatal by contract — the conversion already succeeded.
+      console.warn(`[auto-education-extract] lead-convert trigger student=${studentId} failed (non-fatal):`, err);
     } finally {
       inFlight.delete(studentId);
     }

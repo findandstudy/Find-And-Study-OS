@@ -19,6 +19,7 @@ import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/porta
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
+import { maybeTriggerAutoEducationExtractForStudent } from "../lib/educationAutoExtract";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
@@ -1169,6 +1170,14 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       // Reassigned lead docs may include a photo/photograph — resync the flag now
       // so the avatar appears immediately, not only after the next boot backfill.
       await recomputeStudentPhoto(existingByEmail.id);
+      // Fire-and-forget: run AI education extraction on any newly adopted lead
+      // documents (transcript/diploma/degree) so the academic history section
+      // is filled in — identical to what happens for staff-uploaded documents.
+      maybeTriggerAutoEducationExtractForStudent({
+        studentId: existingByEmail.id,
+        actorUserId: req.user?.id ?? null,
+        ip: req.ip,
+      });
 
       if (submission?.programId) {
         await createApplicationFromSubmission(existingByEmail.id, submission, req.user?.id ?? null);
@@ -1192,6 +1201,14 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   // Now that the lead's photo doc(s) belong to the student, sync has_photo +
   // photo_url. Covers photo/photograph + fileKey/fileData/fileUrl uniformly.
   await recomputeStudentPhoto(student.id);
+  // Fire-and-forget: run AI education extraction on any newly adopted lead
+  // documents (transcript/diploma/degree) so the academic history section
+  // is filled in — identical to what happens for staff-uploaded documents.
+  maybeTriggerAutoEducationExtractForStudent({
+    studentId: student.id,
+    actorUserId: req.user?.id ?? null,
+    ip: req.ip,
+  });
 
   if (submission?.programId) {
     await createApplicationFromSubmission(student.id, submission);

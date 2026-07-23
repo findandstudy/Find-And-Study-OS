@@ -15,6 +15,7 @@ import { createApplicationForStudent } from "./public-apply";
 import { checkMandatoryDocs, checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
 import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
+import { maybeTriggerAutoEducationExtractForStudent } from "../lib/educationAutoExtract";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
@@ -1502,6 +1503,14 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     // photograph uploaded through the embed widget shows on every avatar surface.
     if (resultStudentId) {
       await recomputeStudentPhoto(resultStudentId);
+      // Fire-and-forget: run AI education extraction on any education-trigger
+      // docs that were just inserted for this student (transcript/diploma/degree).
+      // Public widget submission: actorUserId is null (no logged-in user).
+      maybeTriggerAutoEducationExtractForStudent({
+        studentId: resultStudentId,
+        actorUserId: null,
+        ip: req.ip,
+      });
     }
 
     // Auto-convert the lead → "converted" + flip student → "active" on
