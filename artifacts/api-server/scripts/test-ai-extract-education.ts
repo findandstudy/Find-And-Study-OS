@@ -314,19 +314,28 @@ describe("decideAutoEducationTrigger — automatic document-upload trigger gate"
 
   it("AT-7 real-world label variants that must now trigger (broadened matching)", () => {
     const shouldTrigger = [
-      "high school diploma translation",
-      "class 12th marks sheet",
-      "bachelor's transcript",
-      "marksheet",
-      "school leaving certificate",
-      "academic record",
-      "secondary school certificate",
-      "grade card",
-      "exam result",
-      "baccalaureate",
-      "matriculation certificate",
-      "MARKS SHEET",           // case-insensitive
-      "Grade Report",          // case-insensitive
+      "high school diploma translation",        // "diploma" keyword
+      "high_school_diploma_translation",        // underscore form (559 docs in prod)
+      "class 12th marks sheet",                 // "marks" keyword
+      "class_12th_hsc_marks_sheet",             // "hsc" + "marks" (572 docs in prod)
+      "bachelor's transcript",                  // "transcript" keyword
+      "marksheet",                              // "marks" keyword
+      "school leaving certificate",             // "certificate" keyword
+      "leaving cert",                           // "cert" abbreviated form
+      "a-level cert",                           // "cert" abbreviated form
+      "academic record",                        // "academic" keyword
+      "secondary school certificate",           // "secondary" keyword
+      "grade card",                             // "grade" keyword
+      "exam result",                            // "result" keyword
+      "baccalaureate",                          // "baccalaur" keyword
+      "matriculation certificate",              // "matriculat" keyword
+      "HSC marksheet",                          // "hsc" keyword (case-insensitive)
+      "SSC certificate",                        // "ssc" keyword
+      "credential equivalency",                 // "equivalency" keyword
+      "education equivalency document",         // "equivalency" keyword
+      "MARKS SHEET",                            // case-insensitive
+      "Grade Report",                           // case-insensitive
+      "HSC_MARKS",                              // underscore, uppercase
     ];
     for (const label of shouldTrigger) {
       assert.equal(

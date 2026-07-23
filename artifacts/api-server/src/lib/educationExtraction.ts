@@ -171,6 +171,7 @@ export const EDUCATION_FUZZY_KEYWORDS: readonly string[] = [
   "degree",
   "marks",       // marksheet, marks sheet, class 12th marks, mark card
   "certificate", // school certificate, leaving certificate, academic certificate
+  "cert",        // abbreviated form: leaving cert, a-level cert (superset of "certificate")
   "result",      // exam result, result sheet
   "grade",       // grade card, grade sheet
   "academic",    // academic record, academic transcript
@@ -178,6 +179,9 @@ export const EDUCATION_FUZZY_KEYWORDS: readonly string[] = [
   "leaving",     // school leaving certificate
   "baccalaur",   // baccalaureate
   "matriculat",  // matriculation
+  "hsc",         // Higher Secondary Certificate (South Asia: class_12th_hsc_marks_sheet)
+  "ssc",         // Secondary School Certificate (South Asia)
+  "equivalency", // credential equivalency, education equivalency documents
 ] as const;
 
 /** Document types that carry education data and may auto-trigger extraction.
