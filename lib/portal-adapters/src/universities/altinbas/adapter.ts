@@ -1009,10 +1009,41 @@ async function tryResumeFromMyApplications(
     await page.waitForTimeout(SF_HYDRATION_MS);
 
     // "Signed Up" = Salesforce Experience Cloud'da tamamlanmamış başvuru.
-    const rows = page.locator("tr").filter({ hasText: /signed up/i });
-    const rowCount = await rows.count().catch(() => 0);
+    // FIX-15C: liste 175+ kayit / 18 sayfa olabiliyor; ogrencinin satiri
+    // sayfa 1'de degilse eski kod hicbir zaman bulamiyordu. Ustelik ilk
+    // "Signed Up" satiri BASKA bir ogrencinin olabilirdi (yanlis basvuruyu
+    // resume etme riski). Simdi once "Search by Applicant" filtresiyle
+    // liste daraltiliyor, satir ogrenci adiyla da eslestiriliyor.
+    const escapeRe = (s: string) => s.replace(/[.*+?^$"{}"()|[\]\\]/g, "\\$&");
+    const fullName = [profile.firstName, profile.lastName]
+      .filter(Boolean).join(" ").trim();
+    const lastName = (profile.lastName || "").trim();
+    const searchQ = lastName.length >= 3 ? lastName : fullName;
+    if (searchQ) {
+      const searchBox = page.getByPlaceholder(/search by applicant/i).first();
+      if ((await searchBox.count().catch(() => 0)) > 0) {
+        await searchBox.fill(searchQ).catch(() => {});
+        await page.waitForTimeout(3000); // liste otomatik filtreleniyor
+        logger.info(`[altinbas] FIX-15C: My Applications "${searchQ}" ile filtrelendi`);
+      } else {
+        logger.warn("[altinbas] FIX-15C: Search by Applicant kutusu bulunamadi - filtresiz taranacak");
+      }
+    }
+
+    let rows = page.locator("tr").filter({ hasText: /signed up/i });
+    if (searchQ) rows = rows.filter({ hasText: new RegExp(escapeRe(searchQ), "i") });
+    let rowCount = await rows.count().catch(() => 0);
+    if (rowCount === 0 && fullName && searchQ !== fullName) {
+      rows = page
+        .locator("tr")
+        .filter({ hasText: /signed up/i })
+        .filter({ hasText: new RegExp(escapeRe(fullName), "i") });
+      rowCount = await rows.count().catch(() => 0);
+    }
     if (rowCount === 0) {
-      logger.warn("[altinbas] FIX-15B: Signed Up satırı bulunamadı — alreadyExists fallback'e düşülüyor");
+      logger.warn(
+        `[altinbas] FIX-15C: "${searchQ || fullName}" icin Signed Up satiri bulunamadi - alreadyExists fallback'e dusuluyor`,
+      );
       return false;
     }
 
