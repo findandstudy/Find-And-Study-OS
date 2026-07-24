@@ -50,6 +50,7 @@ export interface AltinbasLabeledControlCandidate {
  */
 export function chooseAltinbasLabeledCombobox(
   candidates: AltinbasLabeledControlCandidate[],
+  options: { allowReadOnly?: boolean } = {},
 ): number {
   const matches = candidates
     .map((candidate, index) => ({ candidate, index }))
@@ -58,7 +59,7 @@ export function chooseAltinbasLabeledCombobox(
       candidate.role.toLowerCase() === "combobox" &&
       candidate.visible &&
       !candidate.disabled &&
-      !candidate.readOnly
+      (options.allowReadOnly || !candidate.readOnly)
     );
   return matches.length === 1 ? matches[0].index : -1;
 }

@@ -233,8 +233,20 @@ async function pickCombobox(
       if (optFold === searchFold) {
         await opts.nth(i).click({ timeout: 5000 }).catch(() => {});
         await page.waitForTimeout(500);
-        const selected = ((await box.inputValue().catch(() => "")) || "").trim();
-        if (fold(selected) === searchFold) {
+        const proof = await box.evaluate((element: Element) => {
+          const input = element as HTMLInputElement;
+          return {
+            value: (input.value || "").trim(),
+            ariaInvalid: input.getAttribute("aria-invalid") === "true",
+            valid: input.validity ? input.validity.valid : true,
+          };
+        }).catch(() => null);
+        if (
+          proof &&
+          fold(proof.value) === searchFold &&
+          proof.valid &&
+          !proof.ariaInvalid
+        ) {
           logger.info("[altinbas] pickCombobox: exact option selected");
           return true;
         }
@@ -258,6 +270,7 @@ async function pickCombobox(
 async function uniqueLabeledCombobox(
   page: any,
   labelPattern: RegExp,
+  options: { allowReadOnly?: boolean } = {},
 ): Promise<any | null> {
   const candidates = page.getByLabel(labelPattern);
   const count = await candidates.count().catch(() => 0);
@@ -285,7 +298,7 @@ async function uniqueLabeledCombobox(
       };
     }),
   );
-  const index = chooseAltinbasLabeledCombobox(metadata);
+  const index = chooseAltinbasLabeledCombobox(metadata, options);
   return index >= 0 ? candidates.nth(index) : null;
 }
 
@@ -1245,14 +1258,9 @@ async function pickTypeaheadIfEmpty(
 ): Promise<boolean> {
   if (!value) return false;
   try {
-    const box = await uniqueLabeledCombobox(page, labelRe);
-    if (!box) return false;
-    const cur = ((await box.inputValue().catch(() => "")) || "").trim();
-    if (fold(cur) === fold(value)) return true;
-  } catch {/* fall through to pickCombobox */}
-  await pickCombobox(page, labelRe, value).catch(() => {});
-  try {
-    const box = await uniqueLabeledCombobox(page, labelRe);
+    const box = await uniqueLabeledCombobox(page, labelRe, {
+      allowReadOnly: true,
+    });
     if (!box) return false;
     const proof = await box.evaluate((element: Element) => {
       const input = element as HTMLInputElement;
@@ -1262,14 +1270,13 @@ async function pickTypeaheadIfEmpty(
         valid: input.validity ? input.validity.valid : true,
       };
     });
-    return (
+    if (
       fold(proof.value) === fold(value) &&
       !proof.ariaInvalid &&
       proof.valid
-    );
-  } catch {
-    return false;
-  }
+    ) return true;
+  } catch {/* fall through to pickCombobox */}
+  return pickCombobox(page, labelRe, value).catch(() => false);
 }
 
 /** Click a wizard button (Next / Submit) by accessible name, tolerant. */

@@ -474,4 +474,27 @@ test("AW23: country picker ignores its labeled listbox and requires one actionab
     -1,
     "read-only controls are never mutated",
   );
+  assert.equal(
+    chooseAltinbasLabeledCombobox(
+      [
+        {
+          tagName: "INPUT",
+          role: "combobox",
+          visible: true,
+          disabled: false,
+          readOnly: true,
+        },
+        {
+          tagName: "DIV",
+          role: "listbox",
+          visible: false,
+          disabled: false,
+          readOnly: false,
+        },
+      ],
+      { allowReadOnly: true },
+    ),
+    0,
+    "a readonly selected input remains a valid readback target",
+  );
 });
