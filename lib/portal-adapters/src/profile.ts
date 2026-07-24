@@ -519,7 +519,9 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
   const edu = deriveEducation(data);
 
   const cityOfBirthRaw = data.cityOfBirth != null ? String(data.cityOfBirth).trim() : "";
-  const cityOfBirth = cityOfBirthRaw || addrParts.city || undefined;
+  // Never fabricate a birth city from the current address. Altınbaş treats
+  // missing dedicated CRM cityOfBirth as data_missing and stops before writes.
+  const cityOfBirth = cityOfBirthRaw || undefined;
 
   const isTurkish = /^(tr|tur|turk|turkish|türk|türkiye|turkey)$/i.test(nationality.trim());
   const visaSupport =

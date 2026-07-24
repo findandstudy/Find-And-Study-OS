@@ -283,9 +283,9 @@ test("BP8: buildProfile derives eduDegree from universityBachelor", () => {
   assert.equal(profile.eduGpaType, "4.0");
 });
 
-test("BP9: buildProfile cityOfBirth falls back to addressCity when absent", () => {
+test("BP9: buildProfile never derives cityOfBirth from addressCity", () => {
   const profile = buildProfile({ ...BASE_DATA, address: "Ankara, Turkey" });
-  assert.equal(profile.cityOfBirth, "Ankara");
+  assert.equal(profile.cityOfBirth, undefined);
 });
 
 test("BP10: buildProfile cityOfBirth prefers explicit value over addressCity", () => {
@@ -295,6 +295,15 @@ test("BP10: buildProfile cityOfBirth prefers explicit value over addressCity", (
     cityOfBirth: "Istanbul",
   });
   assert.equal(profile.cityOfBirth, "Istanbul");
+});
+
+test("BP11: no-comma address never leaks into cityOfBirth", () => {
+  const profile = buildProfile({
+    ...BASE_DATA,
+    address: "TAJIKISTAN KHUJAND STREET SADI 12",
+  });
+  assert.equal(profile.addressCity, "TAJIKISTAN KHUJAND STREET SADI 12");
+  assert.equal(profile.cityOfBirth, undefined);
 });
 
 // ---------------------------------------------------------------------------

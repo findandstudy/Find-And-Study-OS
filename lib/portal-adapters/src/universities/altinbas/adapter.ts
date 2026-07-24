@@ -69,6 +69,13 @@ import {
   checkMissingEduRecord,
   classifyProfileLevel,
 } from "./flow-fields.js";
+import {
+  classifyAltinbasWizardTransition,
+  explicitCityOfBirth,
+  resolveAltinbasWizardState,
+  type AltinbasWizardSnapshot,
+  type AltinbasWizardState,
+} from "./altinbasWizard.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1191,6 +1198,34 @@ async function fillIfEmpty(
   } catch { return false; }
 }
 
+/** Fill and prove an exact text value, replacing a stale/wrong prefill. */
+async function fillExact(
+  page: any,
+  labelRe: RegExp,
+  value: string,
+): Promise<boolean> {
+  const expected = value.trim();
+  if (!expected) return false;
+  try {
+    const boxes = page.getByLabel(labelRe);
+    if ((await boxes.count().catch(() => 0)) !== 1) return false;
+    const box = boxes.first();
+    const current = ((await box.inputValue().catch(() => "")) || "").trim();
+    if (current === expected) return true;
+    await box.click({ timeout: 6000 });
+    await box.fill(expected, { timeout: 6000 });
+    if (((await box.inputValue().catch(() => "")) || "").trim() !== expected) {
+      await box.fill("", { timeout: 6000 });
+      await box.pressSequentially(expected, { delay: 25 });
+    }
+    await box.press("Tab").catch(() => {});
+    await box.press("Escape").catch(() => {});
+    return ((await box.inputValue().catch(() => "")) || "").trim() === expected;
+  } catch {
+    return false;
+  }
+}
+
 /** Select a value in a native <select> resolved by its label. */
 async function selectNative(
   page: any,
@@ -1226,28 +1261,32 @@ async function pickTypeaheadIfEmpty(
 /** Click a wizard button (Next / Submit) by accessible name, tolerant. */
 async function clickWizardBtn(page: any, nameRe: RegExp): Promise<boolean> {
   try {
-    const btn = page.getByRole("button", { name: nameRe }).first();
-    if (!(await btn.count().catch(() => 0))) return false;
+    const buttons = page.getByRole("button", { name: nameRe });
+    const count = await buttons.count().catch(() => 0);
+    if (count !== 1) {
+      logger.warn(`[altinbas][ui] wizard butonu tekil değil: pattern=${nameRe} count=${count}`);
+      return false;
+    }
+    const btn = buttons.first();
     await btn.scrollIntoViewIfNeeded().catch(() => {});
-    await btn.click({ timeout: 15000 }).catch(() => {});
+    await btn.click({ timeout: 15000 });
     return true;
   } catch { return false; }
 }
 
-type WizardState = {
-  step: string;
-  fileInputCount: number;
-  documentScreen: boolean;
-};
-
 /**
- * Read only the CURRENT wizard step. body.innerText is unusable here because
- * the progress indicator contains all future step names at once.
+ * Read only the CURRENT wizard step from the live-discovered SLDS Path. The
+ * modal does not change URL and the path lives under nested shadow roots.
  */
-async function readWizardState(page: any): Promise<WizardState> {
-  return page.evaluate(() => {
-    const stepNames =
-      /^(Personal Information|Educational Information|Questionnaire|Documents|Required Documents|Completed)$/i;
+async function readWizardState(page: any): Promise<AltinbasWizardState> {
+  const empty: AltinbasWizardState = {
+    step: "",
+    fileInputCount: 0,
+    documentScreen: false,
+    reason: "stage_missing",
+  };
+  try {
+    const snapshot = await page.evaluate((): AltinbasWizardSnapshot => {
     const roots: Array<Document | ShadowRoot> = [document];
     const elements: Element[] = [];
     for (let i = 0; i < roots.length; i++) {
@@ -1256,56 +1295,21 @@ async function readWizardState(page: any): Promise<WizardState> {
         if ((el as HTMLElement).shadowRoot) roots.push((el as HTMLElement).shadowRoot!);
       });
     }
-
-    const clean = (value: string | null | undefined) =>
-      (value || "").replace(/\s+/g, " ").trim();
-    const visible = (el: Element) => {
-      const node = el as HTMLElement;
-      const style = getComputedStyle(node);
-      return style.display !== "none" && style.visibility !== "hidden" &&
-        (node.offsetWidth > 0 || node.offsetHeight > 0);
-    };
-    const nameOf = (el: Element) => {
-      const candidates = [
-        el.getAttribute("aria-label"),
-        el.getAttribute("title"),
-        el.getAttribute("data-label"),
-        el.textContent,
-      ];
-      return candidates.map(clean).find((v) => stepNames.test(v)) || "";
-    };
-
-    // Salesforce/SLDS variants seen across Experience Cloud releases.
-    const currentSelectors = [
-      '[aria-current="step"]',
-      '[aria-current="true"]',
-      ".slds-is-current",
-      ".slds-is-active",
-      '[data-current="true"]',
-      '[data-active="true"]',
-    ];
-    let step = "";
-    for (const selector of currentSelectors) {
-      const hit = elements.find((el) => el.matches(selector) && visible(el) && nameOf(el));
-      if (hit) { step = nameOf(hit); break; }
-    }
-    // Fallback to the visible page heading, never the full progress-bar text.
-    if (!step) {
-      const heading = elements.find((el) =>
-        /^(H1|H2|H3|H4)$/.test(el.tagName) && visible(el) && nameOf(el),
-      );
-      if (heading) step = nameOf(heading);
-    }
-
+    const stageNames = elements
+      .filter((el) => el.matches(".slds-path__stage-name"))
+      .map((el) => el.getAttribute("data-label") || el.textContent || "");
+    const currentTitles = elements
+      .filter((el) => el.matches("li.slds-path__item.slds-is-current"))
+      .map((el) => el.querySelector(".slds-path__title")?.textContent || "");
     const fileInputCount = elements.filter((el) =>
       el.tagName === "INPUT" && (el as HTMLInputElement).type === "file",
     ).length;
-    return {
-      step,
-      fileInputCount,
-      documentScreen: fileInputCount > 0 || /^(Documents|Required Documents)$/i.test(step),
-    };
-  }).catch(() => ({ step: "", fileInputCount: 0, documentScreen: false }));
+      return { stageNames, currentTitles, fileInputCount };
+    });
+    return resolveAltinbasWizardState(snapshot);
+  } catch {
+    return empty;
+  }
 }
 
 /** Return visible browser validation errors with their field labels/values. */
@@ -1341,14 +1345,13 @@ async function readWizardValidation(page: any): Promise<string[]> {
         el.getAttribute("aria-invalid") === "true"
       ))
       .map((el) => {
-        const input = el as HTMLInputElement;
         const id = el.getAttribute("id");
         const label = id
           ? elements.find((candidate) => candidate.tagName === "LABEL" && candidate.getAttribute("for") === id)
           : undefined;
         const name = clean(label?.textContent) || clean(el.getAttribute("aria-label")) ||
           clean(el.getAttribute("name")) || el.tagName.toLowerCase();
-        return `${name} (value="${clean(input.value)}")`;
+        return `${name} (invalid)`;
       });
     return [...new Set([...messages, ...invalid])].slice(0, 20);
   }).catch(() => [] as string[]);
@@ -1357,19 +1360,14 @@ async function readWizardValidation(page: any): Promise<string[]> {
 // ---------------------------------------------------------------------------
 // Stage fillers
 // ---------------------------------------------------------------------------
-async function fillPersonalUI(page: any, profile: SubmitProfile): Promise<void> {
+async function fillPersonalUI(page: any, profile: SubmitProfile): Promise<boolean> {
   await selectNative(page, /^\s*Gender/i, (profile.gender || "").replace(/^m.*/i, "Male").replace(/^f.*/i, "Female"));
   await fillIfEmpty(page, /Date of Birth/i, formatSfDate(profile.dateOfBirth));
   await pickTypeaheadIfEmpty(page, /Country of Birth/i, profile.nationality);
-  const birthCity = profile.cityOfBirth || profile.addressCity || "";
-  const birthCityFilled = await fillIfEmpty(page, /City of Birth/i, birthCity);
-  if (birthCity) {
-    logger.info(
-      `[altinbas][ui] Personal: City of Birth ${birthCityFilled ? "dolu" : "DOLDURULAMADI"} (değer="${birthCity}")`,
-    );
-  } else {
-    logger.warn("[altinbas][ui] Personal: City of Birth için profil/adres şehri bulunamadı");
-  }
+  const birthCity = explicitCityOfBirth(profile.cityOfBirth);
+  if (!birthCity) return false;
+  const birthCityFilled = await fillExact(page, /City of Birth/i, birthCity);
+  logger.info(`[altinbas][ui] Personal: City of Birth ${birthCityFilled ? "dolu" : "DOLDURULAMADI"}`);
   await fillIfEmpty(page, /Passport Date of Issue/i, formatSfDate(profile.passportIssueDate));
   await fillIfEmpty(page, /Passport Date of Expiry/i, formatSfDate(profile.passportExpiryDate));
   await pickTypeaheadIfEmpty(page, /Passport Issuing Country/i, profile.nationality);
@@ -1379,6 +1377,7 @@ async function fillPersonalUI(page: any, profile: SubmitProfile): Promise<void> 
   await fillIfEmpty(page, /Address:\s*Street/i, profile.addressStreet || profile.address || "");
   await fillIfEmpty(page, /Address:\s*City/i, profile.addressCity || "");
   await fillIfEmpty(page, /Address:\s*Zip/i, profile.addressZip || "");
+  return birthCityFilled;
 }
 
 /** Ensure at least one EDUCATION record exists on the Educational screen. */
@@ -1617,7 +1616,6 @@ async function completeApplicationUI(
   // Choose the button whose row's program matches the profile; else the first.
   let chosenIdx = 0;
   let matched = false;
-  let chosenRowText = "";
   for (let i = 0; i < nBtns; i++) {
     let rowText = "";
     try {
@@ -1625,11 +1623,10 @@ async function completeApplicationUI(
     } catch { rowText = ""; }
     const rf = fold(rowText);
     if ((coreProg.length > 5 && rf.includes(coreProg)) || (progFold.length > 6 && rf.includes(progFold))) {
-      chosenIdx = i; matched = true; chosenRowText = rowText; break;
+      chosenIdx = i; matched = true; break;
     }
-    if (i === 0) chosenRowText = rowText;
   }
-  logger.info(`[altinbas][ui] ${nBtns} adet 'Complete Application' bulundu → #${chosenIdx} seçildi (programEşleşme=${matched}) satır="${(chosenRowText || "").replace(/\s+/g, " ").slice(0, 90)}"`);
+  logger.info(`[altinbas][ui] ${nBtns} adet 'Complete Application' bulundu → #${chosenIdx} seçildi (programEşleşme=${matched})`);
 
   await completeBtns.nth(chosenIdx).scrollIntoViewIfNeeded().catch(() => {});
   let clicked = false;
@@ -1650,29 +1647,64 @@ async function completeApplicationUI(
   const sOpened = await captureScreen(page, "ui-wizard-opened"); if (sOpened) shots.push(sOpened);
   logger.info("[altinbas][ui] Complete Application açıldı — wizard sürülüyor");
 
+  // Altınbaş requires the dedicated CRM City of Birth. buildProfile no longer
+  // derives it from the address; block before any wizard write/Next when absent.
+  if (!explicitCityOfBirth(profile.cityOfBirth)) {
+    const initial = await readWizardState(page);
+    result.detail =
+      `Altınbaş[ui]: data_missing — CRM cityOfBirth zorunlu` +
+      ` (aktif="${initial.step || "bilinmiyor"}", detector=${initial.reason})`;
+    logger.warn(`[altinbas][ui] ${result.detail}`);
+    const s = await captureScreen(page, "ui-data-missing-city-of-birth"); if (s) shots.push(s);
+    result.screenshots = shots;
+    return true;
+  }
+
   // 3) Drive the wizard STEP-BY-STEP until the Documents screen (identified by
-  //    real <input type=file> elements). On a resumed application most fields are
-  //    already prefilled, so we fill Personal opportunistically and then just keep
-  //    pressing "Next", filling each step's specific needs as we recognise it.
-  await fillPersonalUI(page, profile).catch(() => {});
-  await page.waitForTimeout(800);
+  //    the exact SLDS Path stage marker. On a resumed application most fields
+  //    are already prefilled; every transition is still proved before continuing.
 
   let reachedDocuments = false;
-  for (let step = 0; step < 7; step++) {
+  let wizardFailure = "";
+  wizardLoop: for (let step = 0; step < 7; step++) {
     const before = await readWizardState(page);
-    logger.info(`[altinbas][ui] wizard adım#${step}: aktif="${before.step || "bilinmiyor"}" fileInputs=${before.fileInputCount}`);
+    logger.info(
+      `[altinbas][ui] wizard adım#${step}: aktif="${before.step || "bilinmiyor"}"` +
+      ` detector=${before.reason} fileInputs=${before.fileInputCount}`,
+    );
     if (before.documentScreen) {
       reachedDocuments = true;
       break;
     }
+    if (!before.step) {
+      const validation = await readWizardValidation(page);
+      wizardFailure =
+        `Altınbaş[ui]: aktif wizard adımı okunamadı (detector=${before.reason})` +
+        ` — validation=${validation.length ? JSON.stringify(validation) : "mesaj bulunamadı"}`;
+      logger.warn(`[altinbas][ui] ${wizardFailure}`);
+      break;
+    }
     // Fill the specific step we're on before advancing.
-    if (/Personal Information/i.test(before.step)) await fillPersonalUI(page, profile).catch(() => {});
-    if (/Educational Information/i.test(before.step)) await ensureEducationUI(page, profile).catch(() => {});
-    if (/Questionnaire/i.test(before.step)) await fillQuestionnaireUI(page, profile).catch(() => {});
+    if (before.step === "Personal Information") {
+      const cityProved = await fillPersonalUI(page, profile).catch(() => false);
+      if (!cityProved) {
+        wizardFailure = "Altınbaş[ui]: City of Birth DOM readback doğrulanamadı";
+        logger.warn(`[altinbas][ui] ${wizardFailure}`);
+        break;
+      }
+    }
+    if (before.step === "Educational Information") await ensureEducationUI(page, profile).catch(() => {});
+    if (before.step === "Questionnaire") await fillQuestionnaireUI(page, profile).catch(() => {});
+    if (before.step === "Completed") {
+      wizardFailure = "Altınbaş[ui]: beklenmeyen Completed adımı; yeni submit kanıtlanmadı";
+      logger.warn(`[altinbas][ui] ${wizardFailure}`);
+      break;
+    }
     await page.waitForTimeout(500);
     const advanced = await clickWizardBtn(page, /^\s*Next\s*$/i);
     if (!advanced) {
-      logger.warn(`[altinbas][ui] adım#${step}: 'Next' bulunamadı — ilerlenemedi`);
+      wizardFailure = `Altınbaş[ui]: adım#${step} için tekil/tıklanabilir 'Next' bulunamadı`;
+      logger.warn(`[altinbas][ui] ${wizardFailure}`);
       break;
     }
     await page.waitForTimeout(SF_HYDRATION_MS);
@@ -1681,22 +1713,23 @@ async function completeApplicationUI(
       reachedDocuments = true;
       break;
     }
-    if (before.step && after.step === before.step) {
+    const transition = classifyAltinbasWizardTransition(before.step, after.step);
+    if (transition !== "advanced") {
       const validation = await readWizardValidation(page);
-      logger.warn(
-        `[altinbas][ui] adım#${step}: Next sonrası "${before.step}" değişmedi` +
-        ` — validation=${validation.length ? JSON.stringify(validation) : "mesaj bulunamadı"}`,
-      );
-      // Repeating Next cannot clear client-side validation. Stop immediately
-      // with evidence instead of producing seven identical attempts.
-      break;
+      wizardFailure =
+        `Altınbaş[ui]: adım#${step} Next geçişi doğrulanamadı` +
+        ` (before="${before.step}", after="${after.step || "bilinmiyor"}", verdict=${transition}, detector=${after.reason})` +
+        ` — validation=${validation.length ? JSON.stringify(validation) : "mesaj bulunamadı"}`;
+      logger.warn(`[altinbas][ui] ${wizardFailure}`);
+      break wizardLoop;
     }
   }
 
   const sDocs = await captureScreen(page, reachedDocuments ? "ui-documents" : "ui-stuck");
   if (sDocs) shots.push(sDocs);
   if (!reachedDocuments) {
-    result.detail = "Altınbaş[ui]: Documents ekranına ulaşılamadı (wizard adımları beklenenden farklı)";
+    result.detail = wizardFailure ||
+      "Altınbaş[ui]: Documents ekranına ulaşılamadı (wizard adımları beklenenden farklı)";
     logger.warn(`[altinbas][ui] ${result.detail}`);
     result.screenshots = shots;
     return true;

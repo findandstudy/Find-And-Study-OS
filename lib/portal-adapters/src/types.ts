@@ -149,7 +149,7 @@ export interface SubmitProfile {
   // Additive fields — Altınbaş Faz-B (21 → 35). All optional strings.
   // Derived by the profile builder from student/application records.
   // ---------------------------------------------------------------------------
-  /** City of birth (from student record; falls back to addressCity when absent). */
+  /** City of birth from the dedicated CRM student field; never address-derived. */
   cityOfBirth?: string;
   /** Street part of the student's address (entire raw address string). */
   addressStreet?: string;
