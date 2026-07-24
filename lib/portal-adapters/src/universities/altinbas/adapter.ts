@@ -1524,82 +1524,98 @@ async function completeApplicationUI(
   await fillPersonalUI(page, profile).catch(() => {});
   await page.waitForTimeout(800);
 
-  // Diagnostic scan of the current screen: visible validation errors + required
-  // fields that are still empty (pierces shadow DOM). This is how we discover
-  // exactly WHICH field blocks "Next".
-  const scanBlockers = async (): Promise<{ errors: string[]; emptyReq: string[] }> =>
+  // Full-screen inspector: active breadcrumb step, all step names, Next-button
+  // state, visible errors (text OR css-class based), and required-marked-empty
+  // fields (Lightning marks required with a label "*"/slds-required, NOT the
+  // input's required attribute — so we detect the star marker).
+  const inspect = async (): Promise<any> =>
     await page.evaluate(() => {
-      function walk(root: Document | ShadowRoot, acc: Element[]) {
-        root.querySelectorAll("*").forEach((el: Element) => {
-          if ((el as HTMLElement).shadowRoot) walk((el as HTMLElement).shadowRoot!, acc);
+      function walk(root: any, acc: any[]) {
+        root.querySelectorAll("*").forEach((el: any) => {
+          if (el.shadowRoot) walk(el.shadowRoot, acc);
           acc.push(el);
         });
         return acc;
       }
+      const cn = (el: any) => (el && el.className && el.className.baseVal !== undefined ? el.className.baseVal : (el && typeof el.className === "string" ? el.className : "")) || "";
       const all = walk(document, []);
-      const errors: string[] = [];
-      all.forEach((el) => {
-        const t = (el.textContent || "").trim();
-        if (
-          el.children.length === 0 &&
-          t.length > 0 &&
-          t.length < 120 &&
-          /complete this field|you must enter|enter a valid|is required|required field|please enter|zorunlu|geçerli bir|boş bırak/i.test(t)
-        )
-          errors.push(t);
-      });
-      const emptyReq: string[] = [];
-      all.forEach((el) => {
-        const inp = el as HTMLInputElement;
-        const tag = el.tagName;
-        if (
-          (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") &&
-          (inp.required || el.getAttribute("required") !== null || el.getAttribute("aria-required") === "true") &&
-          !((inp.value || "") as string).trim()
-        ) {
-          let lbl = "";
-          let n: any = el;
-          for (let i = 0; i < 8 && n; i++) {
-            n = n.parentElement || (n.getRootNode && n.getRootNode().host);
-            if (n && n.querySelector) {
-              const l = n.querySelector("label");
-              if (l && (l.textContent || "").trim()) {
-                lbl = (l.textContent || "").trim();
-                break;
-              }
-            }
-          }
-          emptyReq.push((lbl || inp.name || el.getAttribute("placeholder") || "?").slice(0, 50));
+      let active = "";
+      const steps: string[] = [];
+      all.forEach((el: any) => {
+        const t = (el.textContent || "").replace(/\s+/g, " ").trim();
+        const c = cn(el);
+        if (t.length < 40 && /Personal|Educational|Questionnaire|Document|Completed/i.test(t) && /tab|step|progress|path|slds-is|breadcrumb/i.test(c)) {
+          if (!steps.includes(t)) steps.push(t);
+          if (/active|current|slds-is-active|slds-is-current|selected/i.test(c) && !active) active = t;
         }
       });
-      return { errors: Array.from(new Set(errors)).slice(0, 12), emptyReq: Array.from(new Set(emptyReq)).slice(0, 12) };
-    }).catch(() => ({ errors: [], emptyReq: [] }));
+      const errors: string[] = [];
+      all.forEach((el: any) => {
+        const t = (el.textContent || "").trim();
+        if (el.children.length !== 0 || !t || t.length > 140) return;
+        const c = cn(el);
+        const isErrCls = /has-error|is-invalid|form-element__help|inlineHelp|error/i.test(c);
+        const isErrTxt = /complete this field|you must|enter a valid|is required|required|fill out|please|zorunlu|geçerli|boş|doldur/i.test(t);
+        if (isErrCls || isErrTxt) errors.push(t.slice(0, 90));
+      });
+      const emptyReq: string[] = [];
+      all.forEach((el: any) => {
+        if (!(el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) return;
+        if ((((el as any).value || "") + "").trim()) return;
+        let n: any = el, lbl = "", req = false;
+        for (let i = 0; i < 8 && n; i++) {
+          n = n.parentElement || (n.getRootNode && n.getRootNode().host);
+          if (!n || !n.querySelector) continue;
+          const l = n.querySelector("label");
+          if (l && (l.textContent || "").trim() && !lbl) lbl = (l.textContent || "").replace(/\s+/g, " ").trim();
+          if (n.querySelector("abbr, .slds-required, [title='required' i]")) req = true;
+          if (lbl) break;
+        }
+        if (req || el.required || el.getAttribute("aria-required") === "true") emptyReq.push((lbl || el.name || "?").slice(0, 40));
+      });
+      let next = "yok";
+      const nb = all.filter((e: any) => e.tagName === "BUTTON" && /^\s*Next\s*$/i.test((e.textContent || "").trim()));
+      if (nb.length) next = `n=${nb.length} disabled=${nb[0].disabled} aria=${nb[0].getAttribute("aria-disabled")}`;
+      return { active, steps, next, errors: Array.from(new Set(errors)).slice(0, 10), emptyReq: Array.from(new Set(emptyReq)).slice(0, 10) };
+    }).catch(() => ({ active: "", steps: [], next: "err", errors: [], emptyReq: [] }));
+
+  // Jump directly to a step by clicking its breadcrumb (bypasses Next validation).
+  const clickBreadcrumb = async (name: string): Promise<boolean> =>
+    await page.evaluate((nm: string) => {
+      const re = new RegExp(nm, "i");
+      function walk(root: any, acc: any[]) { root.querySelectorAll("*").forEach((el: any) => { if (el.shadowRoot) walk(el.shadowRoot, acc); acc.push(el); }); return acc; }
+      const cn = (el: any) => (el && typeof el.className === "string" ? el.className : (el && el.className && el.className.baseVal) || "") || "";
+      const all = walk(document, []);
+      const cand = all.find((el: any) => {
+        const t = (el.textContent || "").replace(/\s+/g, " ").trim();
+        return t.length < 40 && re.test(t) && /tab|step|progress|path|slds|breadcrumb/i.test(cn(el)) && (el.tagName === "A" || el.tagName === "BUTTON" || el.tagName === "LI" || el.tagName === "SPAN" || el.tagName === "DIV");
+      });
+      if (cand) { try { (cand as any).click(); return true; } catch { return false; } }
+      return false;
+    }, name).catch(() => false);
 
   let reachedDocuments = false;
   for (let step = 0; step < 8; step++) {
     const fileInputCount = await page.locator('input[type="file"]').count().catch(() => 0);
-    const body = (await page.locator("body").innerText().catch(() => "")) || "";
-    logger.info(`[altinbas][ui] wizard adım#${step}: fileInputs=${fileInputCount}`);
-    if (fileInputCount > 0 || /Required\s*-/i.test(body)) {
-      reachedDocuments = true;
-      break;
-    }
-    // Fill by real step content (not progress-bar text).
+    if (fileInputCount > 0) { reachedDocuments = true; break; }
+    const insp = await inspect();
+    logger.info(
+      `[altinbas][ui] adım#${step}: aktif="${insp.active}" steps=${JSON.stringify(insp.steps)} next=(${insp.next}) errors=${JSON.stringify(insp.errors)} emptyReq=${JSON.stringify(insp.emptyReq)}`,
+    );
+    // Fill whatever this step needs.
     await fillPersonalUI(page, profile).catch(() => {});
+    const body = (await page.locator("body").innerText().catch(() => "")) || "";
     if (/Name of School|There are no records to show/i.test(body)) await ensureEducationUI(page, profile).catch(() => {});
-    if (/Questionnaire|Visa|embassy/i.test(body)) await fillQuestionnaireUI(page, profile).catch(() => {});
+    if (/Visa Support|embassy|consulate/i.test(body)) await fillQuestionnaireUI(page, profile).catch(() => {});
     await page.waitForTimeout(600);
     await clickWizardBtn(page, /^\s*Next\s*$/i);
     await page.waitForTimeout(SF_HYDRATION_MS);
-    // After Next: if still no file inputs, log what's blocking.
-    const stillNoDocs = (await page.locator('input[type="file"]').count().catch(() => 0)) === 0;
-    if (stillNoDocs) {
-      const diag = await scanBlockers();
-      if (diag.errors.length || diag.emptyReq.length) {
-        logger.warn(
-          `[altinbas][ui] adım#${step} sonrası BLOKAJ → errors=${JSON.stringify(diag.errors)} emptyRequired=${JSON.stringify(diag.emptyReq)}`,
-        );
-        const sv = await captureScreen(page, `ui-blocked-${step}`); if (sv) shots.push(sv);
+    // If Next didn't reach Documents, try jumping via the breadcrumb directly.
+    if ((await page.locator('input[type="file"]').count().catch(() => 0)) === 0) {
+      const jumped = (await clickBreadcrumb("Document")) || (await clickBreadcrumb("Questionnaire")) || (await clickBreadcrumb("Educational"));
+      if (jumped) {
+        logger.info(`[altinbas][ui] adım#${step}: breadcrumb ile ileri atlandı`);
+        await page.waitForTimeout(SF_HYDRATION_MS);
       }
     }
   }
