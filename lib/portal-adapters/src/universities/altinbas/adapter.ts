@@ -1021,23 +1021,34 @@ async function tryResumeFromMyApplications(
     const searchQ = lastName.length >= 3 ? lastName : fullName;
     if (searchQ) {
       const searchBox = page.getByPlaceholder(/search by applicant/i).first();
-      if ((await searchBox.count().catch(() => 0)) > 0) {
-        await searchBox.fill(searchQ).catch(() => {});
-        await page.waitForTimeout(3000); // liste otomatik filtreleniyor
-        logger.info(`[altinbas] FIX-15C: My Applications "${searchQ}" ile filtrelendi`);
+      // Lightning listesi gec hydrate olabiliyor - kutu gorunur olana dek bekle.
+      const sbVisible = await searchBox
+        .waitFor({ state: "visible", timeout: 20000 })
+        .then(() => true)
+        .catch(() => false);
+      if (sbVisible) {
+        await searchBox.click().catch(() => {});
+        await searchBox.fill("").catch(() => {});
+        // fill() Lightning'in filtre event'ini tetiklemeyebiliyor - gercek tuslama kullan.
+        await searchBox.pressSequentially(searchQ, { delay: 60 }).catch(() => {});
+        logger.info(`[altinbas] FIX-15C: My Applications "${searchQ}" ile filtreleniyor`);
       } else {
         logger.warn("[altinbas] FIX-15C: Search by Applicant kutusu bulunamadi - filtresiz taranacak");
       }
     }
 
-    let rows = page.locator("tr").filter({ hasText: /signed up/i });
-    if (searchQ) rows = rows.filter({ hasText: new RegExp(escapeRe(searchQ), "i") });
+    const buildRows = (q: string | null) => {
+      let r = page.locator("tr").filter({ hasText: /signed up/i });
+      if (q) r = r.filter({ hasText: new RegExp(escapeRe(q), "i") });
+      return r;
+    };
+    let rows = buildRows(searchQ || null);
+    // Liste async filtreleniyor - hedef satiri acikca bekle (sabit sleep yerine).
+    await rows.first().waitFor({ state: "visible", timeout: 20000 }).catch(() => {});
     let rowCount = await rows.count().catch(() => 0);
     if (rowCount === 0 && fullName && searchQ !== fullName) {
-      rows = page
-        .locator("tr")
-        .filter({ hasText: /signed up/i })
-        .filter({ hasText: new RegExp(escapeRe(fullName), "i") });
+      rows = buildRows(fullName);
+      await rows.first().waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
       rowCount = await rows.count().catch(() => 0);
     }
     if (rowCount === 0) {
