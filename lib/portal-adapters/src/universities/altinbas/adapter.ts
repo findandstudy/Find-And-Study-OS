@@ -1416,6 +1416,12 @@ async function completeApplicationUI(
   // `if (screenshots.length) result.screenshots = screenshots;` picks them up.
   const shots: string[] = screenshots;
   const progFold = fold(profile.programName || "");
+  // "Core" program (strip Bachelor/Master/of/in/English…) → robust row match,
+  // e.g. profile "Bachelor of Electrical and Electronics Engineering (English)"
+  // matches a portal row labelled "Electrical and Electronics Engineering (in English)".
+  const coreProg = fold(
+    (profile.programName || "").replace(/\b(bachelor|master|associate|phd|doctorate|of|in|the|english|degree|program|programme)\b/gi, " "),
+  );
 
   // 1) My Applications → search the student → open the target app.
   await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
@@ -1430,63 +1436,59 @@ async function completeApplicationUI(
     }
   } catch {/* tolerate */}
 
-  // 2) Pick the row: prefer program match; among matches prefer non-completed.
-  const target = await page.evaluate((pf: string) => {
-    function foldLoc(s: string) { return (s || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
-    const rows = Array.from(document.querySelectorAll("tr")).filter((r) =>
-      /RAMAZAN|[A-Z]/.test(r.textContent || "") && /Signed Up|Evaluation|Complete Application|View Application/i.test(r.textContent || ""),
-    );
-    const info = rows.map((r) => {
-      const t = r.textContent || "";
-      return {
-        text: t.slice(0, 200),
-        signedUp: /Signed Up/i.test(t),
-        completed: /Evaluation|Offer|Accepted|View Application/i.test(t),
-        progMatch: pf.length > 4 && foldLoc(t).includes(pf),
-      };
-    });
-    // best = program match & Signed Up; else program match; else any Signed Up
-    let best = info.findIndex((x) => x.progMatch && x.signedUp);
-    if (best < 0) best = info.findIndex((x) => x.progMatch);
-    if (best < 0) best = info.findIndex((x) => x.signedUp);
-    return { idx: best, info };
-  }, progFold).catch(() => ({ idx: -1, info: [] as any[] }));
-
-  if (target.idx < 0) {
-    result.detail = `Altınbaş[ui]: My Applications'ta tamamlanacak başvuru bulunamadı (program="${profile.programName}")`;
+  // 2) Find the "Complete Application" action buttons. Playwright getByRole
+  //    PIERCES Salesforce's shadow DOM (querySelectorAll('tr') did NOT — that
+  //    was the bug that made every existing Signed-Up app look "not found").
+  const completeBtns = page.getByRole("button", { name: /^\s*Complete Application\s*$/i });
+  let nBtns = await completeBtns.count().catch(() => 0);
+  if (!nBtns) {
+    // Lightning datatable can render late — wait once more and recount.
+    await page.waitForTimeout(SF_HYDRATION_MS);
+    nBtns = await completeBtns.count().catch(() => 0);
+  }
+  if (!nBtns) {
+    result.detail = `Altınbaş[ui]: My Applications'ta 'Complete Application' (Signed Up) başvuru yok (program="${profile.programName}")`;
     logger.warn(`[altinbas][ui] ${result.detail}`);
+    const s = await captureScreen(page, "ui-no-complete-btn"); if (s) shots.push(s);
     // NO existing row → tell caller to fall through to the normal create path.
     return false;
   }
-  const chosen = target.info[target.idx];
-  if (chosen.completed && !chosen.signedUp) {
-    result.alreadyExists = true;
-    result.detail = `Altınbaş[ui]: başvuru zaten tamamlanmış/değerlendirmede (${chosen.text.slice(0, 80)})`;
-    logger.info(`[altinbas][ui] ${result.detail}`);
-    return true;
-  }
 
-  // Click that row's "Complete Application".
-  const opened = await page.evaluate((idx: number) => {
-    const rows = Array.from(document.querySelectorAll("tr")).filter((r) =>
-      /Signed Up|Evaluation|Complete Application|View Application/i.test(r.textContent || ""),
-    );
-    const row = rows[idx];
-    if (!row) return false;
-    const btn = Array.from(row.querySelectorAll("button,a")).find((b) =>
-      /Complete Application/i.test(b.textContent || ""),
-    ) as HTMLElement | undefined;
-    if (btn) { btn.click(); return true; }
-    return false;
-  }, target.idx).catch(() => false);
-  if (!opened) {
+  // Choose the button whose row's program matches the profile; else the first.
+  let chosenIdx = 0;
+  let matched = false;
+  let chosenRowText = "";
+  for (let i = 0; i < nBtns; i++) {
+    let rowText = "";
+    try {
+      rowText = await completeBtns.nth(i).locator("xpath=ancestor::tr[1]").innerText({ timeout: 3000 });
+    } catch { rowText = ""; }
+    const rf = fold(rowText);
+    if ((coreProg.length > 5 && rf.includes(coreProg)) || (progFold.length > 6 && rf.includes(progFold))) {
+      chosenIdx = i; matched = true; chosenRowText = rowText; break;
+    }
+    if (i === 0) chosenRowText = rowText;
+  }
+  logger.info(`[altinbas][ui] ${nBtns} adet 'Complete Application' bulundu → #${chosenIdx} seçildi (programEşleşme=${matched}) satır="${(chosenRowText || "").replace(/\s+/g, " ").slice(0, 90)}"`);
+
+  await completeBtns.nth(chosenIdx).scrollIntoViewIfNeeded().catch(() => {});
+  let clicked = false;
+  try {
+    await completeBtns.nth(chosenIdx).click({ timeout: 15000 });
+    clicked = true;
+  } catch {
+    try { await completeBtns.nth(chosenIdx).click({ force: true, timeout: 8000 }); clicked = true; } catch {/* fall through */}
+  }
+  if (!clicked) {
     result.detail = "Altınbaş[ui]: 'Complete Application' butonu tıklanamadı";
     logger.warn(`[altinbas][ui] ${result.detail}`);
+    const s = await captureScreen(page, "ui-click-fail"); if (s) shots.push(s);
     // Row exists but couldn't open it — do NOT create a duplicate; report failure.
     return true;
   }
   await page.waitForTimeout(SF_HYDRATION_MS);
-  logger.info(`[altinbas][ui] Complete Application açıldı — ${chosen.text.slice(0, 80)}`);
+  const sOpened = await captureScreen(page, "ui-wizard-opened"); if (sOpened) shots.push(sOpened);
+  logger.info("[altinbas][ui] Complete Application açıldı — wizard sürülüyor");
 
   // 3) Drive the wizard: Personal → Educational → Questionnaire → Documents → Submit.
   // Personal Information
