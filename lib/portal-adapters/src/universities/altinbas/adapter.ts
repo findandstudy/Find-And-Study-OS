@@ -913,44 +913,25 @@ function pickTermOption(rt: FlowRuntime): { label: string; id: string } {
  * bilinmiyor. Dinamik arama, portal Degree ekranının o zaman sunacağı
  * seçenekler arasından label eşleştirmesi yaparak Id'yi canlı bulur.
  */
+const DEGREE_OPTIONS: Record<"associate" | "bachelor" | "master" | "phd", { label: string; id: string }> = {
+  associate: { label: "Associate", id: "a0CQ30000AimBgbMQE" },
+  bachelor: { label: "Bachelor", id: "a0CQ30000Aim5PsMQI" },
+  master: { label: "Master", id: "a0CQ30000AVvqKTMQZ" },
+  phd: { label: "PhD", id: "a0CQ30000AVvf4SMQR" },
+};
+
 function pickDegreeOption(rt: FlowRuntime, level: string): { label: string; id: string } | null {
+  void rt;
   const cls = classifyProfileLevel(level);
-
-  if (cls === "master") {
-    logger.info(
-      `[altinbas] Degree captured constant kullanılıyor: "${FALLBACK_DEGREE_MASTER.label}" (${FALLBACK_DEGREE_MASTER.id})`,
+  if (cls === "unknown") {
+    logger.warn(
+      `[altinbas] Degree seviyesi siniflandirilamadi (level="${level}") - DEGREE_OPTIONS eslesme yok`,
     );
-    return FALLBACK_DEGREE_MASTER;
+    return null;
   }
-
-  // PhD / Bachelor / Associate → dynamic label search (no captured constant yet)
-  const labelRe =
-    cls === "phd"
-      ? /^(phd|doctorate|ph\.?\s*d|doktora)/i
-      : cls === "bachelor"
-        ? /^(bachelor|lisans|undergraduate)/i
-        : /^(associate|önlisans|onlisans|2[\s-]?year)/i;
-
-  const degreeLabel =
-    cls === "phd" ? "PhD" : cls === "bachelor" ? "Bachelor" : "Associate";
-
-  for (const [id, r] of rt.records) {
-    if (!id.startsWith("a0C")) continue;
-    for (const v of Object.values(r)) {
-      if (typeof v === "string" && labelRe.test(v.trim())) {
-        dumpCandidate(rt, id, "degree");
-        logger.info(
-          `[altinbas] ${degreeLabel} degree dinamik bulundu: "${v.trim()}" (${id})`,
-        );
-        return { label: v.trim(), id };
-      }
-    }
-  }
-
-  logger.warn(
-    `[altinbas] ${degreeLabel} degree Id'si dinamik bulunamadı (a0C+label filtreli) ve captured constant HENÜZ yok — ilk ${degreeLabel} ALTINBAS_CAPTURE=1 run'ında yakalanacak`,
-  );
-  return null;
+  const opt = DEGREE_OPTIONS[cls];
+  logger.info(`[altinbas] ${opt.label} degree sabit id kullaniliyor: "${opt.label}" (${opt.id})`);
+  return opt;
 }
 
 /**
