@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   altinbasMutationCanaryGate,
   altinbasGpaTypeLabel,
+  blockingAltinbasCanaryFailures,
   canonicalAltinbasWizardStep,
   chooseAltinbasApplicationRow,
   chooseAltinbasLabeledCombobox,
@@ -496,5 +497,32 @@ test("AW23: country picker ignores its labeled listbox and requires one actionab
     ),
     0,
     "a readonly selected input remains a valid readback target",
+  );
+});
+
+test("AW24: legacy-address canary bypass ignores only blank city and postal fields", () => {
+  const failures = [
+    { field: "Address_City", reason: "data_missing" },
+    { field: "Address_Zip_Code", reason: "data_missing" },
+    { field: "Address_Country", reason: "readback_failed" },
+  ];
+  assert.deepEqual(
+    blockingAltinbasCanaryFailures(failures, true),
+    [{ field: "Address_Country", reason: "readback_failed" }],
+  );
+  assert.deepEqual(
+    blockingAltinbasCanaryFailures(failures.slice(0, 2), true),
+    [],
+  );
+  assert.deepEqual(
+    blockingAltinbasCanaryFailures(failures.slice(0, 2), false),
+    failures.slice(0, 2),
+  );
+  assert.deepEqual(
+    blockingAltinbasCanaryFailures(
+      [{ field: "Address_City", reason: "control_count_0" }],
+      true,
+    ),
+    [{ field: "Address_City", reason: "control_count_0" }],
   );
 });

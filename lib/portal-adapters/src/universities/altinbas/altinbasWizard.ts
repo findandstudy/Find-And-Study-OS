@@ -64,6 +64,28 @@ export function chooseAltinbasLabeledCombobox(
   return matches.length === 1 ? matches[0].index : -1;
 }
 
+export interface AltinbasCanaryFieldFailure {
+  field: string;
+  reason: string;
+}
+
+/**
+ * A diagnostic canary may leave only the two legacy address fields blank so
+ * the live portal itself can prove whether they are required. Every selector,
+ * readback, and non-address failure remains blocking.
+ */
+export function blockingAltinbasCanaryFailures(
+  failures: AltinbasCanaryFieldFailure[],
+  allowLegacyAddressGaps: boolean,
+): AltinbasCanaryFieldFailure[] {
+  if (!allowLegacyAddressGaps) return failures;
+  return failures.filter(
+    (failure) =>
+      failure.reason !== "data_missing" ||
+      !["Address_City", "Address_Zip_Code"].includes(failure.field),
+  );
+}
+
 const STEP_BY_FOLDED_NAME = new Map<string, AltinbasWizardStep>(
   ALTINBAS_WIZARD_STEPS.map((step) => [step.toLowerCase(), step]),
 );

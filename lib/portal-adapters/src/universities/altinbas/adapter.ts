@@ -76,6 +76,7 @@ import {
 import {
   altinbasMutationCanaryGate,
   altinbasGpaTypeLabel,
+  blockingAltinbasCanaryFailures,
   chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
   classifyAltinbasWizardTransition,
@@ -1047,6 +1048,8 @@ const MUTATION_CANARY = process.env.ALTINBAS_MUTATION_CANARY === "1";
 const MUTATION_CANARY_STAGE = parseAltinbasCanaryStage(
   process.env.ALTINBAS_MUTATION_CANARY_STAGE,
 );
+const MUTATION_CANARY_ALLOW_LEGACY_ADDRESS_GAPS =
+  process.env.ALTINBAS_MUTATION_CANARY_ALLOW_LEGACY_ADDRESS_GAPS === "1";
 const MY_APPS_URL = PORTAL_URL + "my-applications";
 
 interface UiFieldResult {
@@ -1574,11 +1577,20 @@ async function runSingleStepMutationCanary(
   }
   if (before.step === "Personal Information") {
     const filled = await fillPersonalUI(page, profile);
-    if (!filled.ok) {
+    const blockingFailures = blockingAltinbasCanaryFailures(
+      filled.failures,
+      MUTATION_CANARY_ALLOW_LEGACY_ADDRESS_GAPS,
+    );
+    if (blockingFailures.length) {
       result.detail =
         `Altınbaş[canary]: data_missing_or_unproved` +
-        ` (${filled.failures.map((item) => `${item.field}:${item.reason}`).join(",")})`;
+        ` (${blockingFailures.map((item) => `${item.field}:${item.reason}`).join(",")})`;
       return;
+    }
+    if (filled.failures.length) {
+      logger.info(
+        "[altinbas][canary] legacy address gaps intentionally left blank for one-Next validation probe",
+      );
     }
   } else if (before.step === "Educational Information") {
     const education = await ensureEducationUI(page, profile);
