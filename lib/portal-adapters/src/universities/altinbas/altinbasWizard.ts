@@ -159,6 +159,59 @@ export interface AltinbasPersonalSource {
 const isPresent = (value: unknown): boolean =>
   typeof value === "string" && value.trim() !== "" && value.trim() !== "-";
 
+export type AltinbasResumeFieldAction =
+  | "write_crm_value"
+  | "accept_existing_portal_value"
+  | "data_missing";
+
+/**
+ * Decide how a resumed wizard field may be handled without inventing data.
+ *
+ * A CRM value always wins and is written/read back. When CRM has no value, a
+ * previously saved non-placeholder portal value may be accepted only after
+ * native/LWC validity is proved. A blank/invalid portal control remains a hard
+ * data_missing boundary.
+ */
+export function resolveAltinbasResumeFieldAction(input: {
+  crmValue: unknown;
+  portalValue: unknown;
+  portalValid: boolean;
+}): AltinbasResumeFieldAction {
+  if (isPresent(input.crmValue)) return "write_crm_value";
+  if (input.portalValid && isPresent(input.portalValue)) {
+    return "accept_existing_portal_value";
+  }
+  return "data_missing";
+}
+
+export type AltinbasVisaResumeAction =
+  | "select_no_from_crm"
+  | "accept_existing_no"
+  | "questionnaire_followup_unmapped"
+  | "data_missing";
+
+/**
+ * The current CRM can safely answer only "No". "Yes" exposes an additional
+ * consulate/embassy question for which no CRM source exists. A resumed portal
+ * selection of "No" may be reused; every other unknown remains fail-closed.
+ */
+export function resolveAltinbasVisaResumeAction(input: {
+  crmValue: unknown;
+  portalValue: unknown;
+}): AltinbasVisaResumeAction {
+  const crm = typeof input.crmValue === "string"
+    ? input.crmValue.trim().toLowerCase()
+    : "";
+  const portal = typeof input.portalValue === "string"
+    ? input.portalValue.trim().toLowerCase()
+    : "";
+  if (crm === "yes") return "questionnaire_followup_unmapped";
+  if (crm === "no") return "select_no_from_crm";
+  if (portal === "yes") return "questionnaire_followup_unmapped";
+  if (portal === "no") return "accept_existing_no";
+  return "data_missing";
+}
+
 const isIsoDate = (value: unknown): boolean => {
   if (typeof value !== "string") return false;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());

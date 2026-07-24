@@ -10,7 +10,8 @@
  * Rule 4: programFull=true    → portal_submissions.status='program_full'
  *                                 portal_submissions.meta={requestedProgram,
  *                                 openPrograms, reason, detectedAt}
- *                                 application stage unchanged
+ *                                 Altınbaş only: application.stage='quota_full'
+ *                                 Other adapters: application stage unchanged
  * Rule 5: error / none matched → portal_submissions.status='failed'
  *                                 application stage unchanged (stays in Inquiry)
  *
@@ -25,88 +26,8 @@ import {
   pipelineStagesTable,
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
-import type { SubmitResult } from "@workspace/portal-adapters";
 import type { RunResult } from "./runner.js";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type SubmissionStatus =
-  | "submitted"
-  | "program_missing"
-  | "already_exists"
-  | "program_full"
-  | "exclusive_region"
-  | "failed"
-  | "dry_run";
-
-interface WritebackTarget {
-  submissionStatus: SubmissionStatus;
-  /** pipeline_stages.key to set on the application; null = no change */
-  stageKey: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Rule resolution
-// ---------------------------------------------------------------------------
-
-function resolveTarget(
-  result: SubmitResult | null,
-  meta?: Record<string, unknown>,
-): WritebackTarget {
-  if (!result) {
-    return { submissionStatus: "failed", stageKey: null };
-  }
-  // Exclusive-region (nationality restricted to a specific agency) is a permanent
-  // finding regardless of dry/real mode — surface it ahead of EVERYTHING (incl.
-  // programFull and dry_run). The portal was skipped (preventive) or rejected the
-  // application (reactive). Application stage unchanged; no retry.
-  if (result.exclusiveRegion) {
-    return { submissionStatus: "exclusive_region", stageKey: null };
-  }
-  // Non-member (routeTo:'direct') is, like exclusive_region, a permanent "handle
-  // this via another channel" finding surfaced ahead of EVERYTHING. NO new enum
-  // value is introduced (no migration allowed) — we reuse the nearest existing
-  // terminal status ('exclusive_region') and carry the true reason in
-  // result_json / meta so it stays distinguishable. Application stage unchanged.
-  if (result.skippedNotMember) {
-    return { submissionStatus: "exclusive_region", stageKey: null };
-  }
-  // Quota-full ("Kontenjan Dolu") is a structural finding regardless of dry/real
-  // mode — surface it (ahead of dry_run) so the orchestrator can supersede the
-  // full programme. The application stage is left unchanged.
-  if (result.programFull) {
-    return { submissionStatus: "program_full", stageKey: null };
-  }
-  // Program not found in the portal dropdown, but the dropdown WAS reached and
-  // its options are known (resolution="not_in_dropdown"). Like program_full this
-  // is a structural finding surfaced ahead of dry_run so the orchestrator can
-  // supersede to a backup programme even on a dry run. Application stage is left
-  // unchanged. Only when availablePrograms is non-empty — otherwise this falls
-  // through to the plain program_missing rule below (dropdown unreachable).
-  if (
-    result.programMissing &&
-    result.resolution === "not_in_dropdown" &&
-    (result.availablePrograms?.length ?? 0) > 0
-  ) {
-    return { submissionStatus: "program_missing", stageKey: null };
-  }
-  // Dry runs: pipeline smoke-test only, no real portal interaction → dry_run status
-  if (meta?.["dryRun"]) {
-    return { submissionStatus: "dry_run", stageKey: null };
-  }
-  if (result.submitted) {
-    return { submissionStatus: "submitted",       stageKey: "awaiting_offer" };
-  }
-  if (result.programMissing) {
-    return { submissionStatus: "program_missing", stageKey: "documents_collected" };
-  }
-  if (result.alreadyExists) {
-    return { submissionStatus: "already_exists",  stageKey: "all_registered" };
-  }
-  return { submissionStatus: "failed", stageKey: null };
-}
+import { resolveWritebackTarget } from "./stageWritebackTarget.js";
 
 // ---------------------------------------------------------------------------
 // writebackResult
@@ -131,7 +52,10 @@ export async function writebackResult(
   workerId?: string,
 ): Promise<void> {
   const result = runResult?.result ?? null;
-  const { submissionStatus, stageKey } = resolveTarget(result, runResult?.meta);
+  const { submissionStatus, stageKey } = resolveWritebackTarget(
+    result,
+    runResult?.meta,
+  );
 
   // ----- 1. Load submission to get applicationId --------------------------
   const [sub] = await db

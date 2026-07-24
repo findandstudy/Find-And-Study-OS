@@ -11,10 +11,17 @@ import {
   missingAltinbasPersonalFields,
   parseAltinbasCanaryStage,
   redactAltinbasLog,
+  resolveAltinbasResumeFieldAction,
+  resolveAltinbasVisaResumeAction,
   resolveAltinbasWizardState,
   selectAltinbasRollbackIds,
   shouldUseAltinbasUiPath,
 } from "../src/universities/altinbas/altinbasWizard.js";
+import {
+  altinbasProgramName,
+  isAltinbasQuotaFull,
+  selectAltinbasProgram,
+} from "../src/universities/altinbas/altinbasProgram.js";
 
 test("AW1: canonicalizes the live SLDS stage-name marker", () => {
   assert.equal(
@@ -253,4 +260,162 @@ test("AW16: canary stage is explicit and can never target Documents", () => {
   );
   assert.equal(parseAltinbasCanaryStage("questionnaire"), "Questionnaire");
   assert.equal(parseAltinbasCanaryStage("documents"), null);
+});
+
+test("AW17: live Program Availability name wins over internal PE record name", () => {
+  assert.equal(
+    altinbasProgramName({
+      Id: "a0AQ3000007Te4WMAS",
+      Name: "PE-01904",
+      eduhub__Program_Name__c: "Biomedical Sciences (With Thesis)",
+    }),
+    "Biomedical Sciences (With Thesis)",
+  );
+});
+
+test("AW18: quota-full requires an explicit true value", () => {
+  assert.equal(isAltinbasQuotaFull({ eduhub__Quota_Full__c: true }), true);
+  assert.equal(isAltinbasQuotaFull({ eduhub__Quota_Full__c: "true" }), true);
+  assert.equal(isAltinbasQuotaFull({ eduhub__Quota_Full__c: false }), false);
+  assert.equal(isAltinbasQuotaFull({ eduhub__Quota_Full__c: "false" }), false);
+  assert.equal(isAltinbasQuotaFull({}), false);
+});
+
+test("AW19: programme selection prefers availability rows and preserves exact quota flags", () => {
+  const selection = selectAltinbasProgram(
+    [
+      [
+        "a0BQH000008IDVQ2A4",
+        {
+          Id: "a0BQH000008IDVQ2A4",
+          Name: "Data Analytics (With Thesis)",
+        },
+      ],
+      [
+        "a0AQ3000007Te4jMAC",
+        {
+          Id: "a0AQ3000007Te4jMAC",
+          Name: "PE-01917",
+          eduhub__Program__c: "a0BQH000008IDVQ2A4",
+          eduhub__Program_Name__c: "Data Analytics (With Thesis)",
+          eduhub__Quota_Full__c: true,
+          eduhub__Quota_of_Program__c: 13,
+          // Live capture carries false here even for eligible options; it must
+          // never override the dedicated quota flag.
+          eduhub__Is_Active__c: false,
+        },
+      ],
+      [
+        "a0AQ3000007Te4XMAS",
+        {
+          Id: "a0AQ3000007Te4XMAS",
+          Name: "PE-01905",
+          eduhub__Program__c: "a0BQH000008IDS72AO",
+          eduhub__Program_Name__c:
+            "Biomedical Sciences (With Thesis) (in English)",
+          eduhub__Quota_Full__c: false,
+          eduhub__Is_Active__c: false,
+        },
+      ],
+    ],
+    "Data Analytics (With Thesis)",
+  );
+
+  assert.equal(selection.option?.value, "a0AQ3000007Te4jMAC");
+  assert.equal(selection.option?.name, "Data Analytics (With Thesis)");
+  assert.equal(selection.option?.enabled, false);
+  assert.equal(selection.record?.["Name"], "PE-01917");
+  assert.equal(selection.candidates.length, 2, "base a0B row is ignored");
+  assert.equal(
+    selection.candidates.find(
+      (candidate) => candidate.value === "a0AQ3000007Te4XMAS",
+    )?.enabled,
+    true,
+    "Quota_Full=false remains selectable even when Is_Active=false",
+  );
+});
+
+test("AW20: unknown programme never becomes a quota-full false positive", () => {
+  const selection = selectAltinbasProgram(
+    [
+      [
+        "a0AQ3000007Te4WMAS",
+        {
+          eduhub__Program__c: "a0BQH000008IDS62AO",
+          eduhub__Program_Name__c: "Biomedical Sciences (With Thesis)",
+          eduhub__Quota_Full__c: true,
+        },
+      ],
+    ],
+    "A Programme That Does Not Exist",
+  );
+  assert.equal(selection.option, null);
+  assert.equal(selection.record, null);
+  assert.equal(selection.candidates[0]?.enabled, false);
+});
+
+test("AW21: resumed fields prefer CRM, otherwise require a valid saved portal value", () => {
+  assert.equal(
+    resolveAltinbasResumeFieldAction({
+      crmValue: "CRM value",
+      portalValue: "older portal value",
+      portalValid: true,
+    }),
+    "write_crm_value",
+  );
+  assert.equal(
+    resolveAltinbasResumeFieldAction({
+      crmValue: "",
+      portalValue: "saved portal value",
+      portalValid: true,
+    }),
+    "accept_existing_portal_value",
+  );
+  assert.equal(
+    resolveAltinbasResumeFieldAction({
+      crmValue: "",
+      portalValue: "",
+      portalValid: true,
+    }),
+    "data_missing",
+  );
+  assert.equal(
+    resolveAltinbasResumeFieldAction({
+      crmValue: "",
+      portalValue: "saved but invalid",
+      portalValid: false,
+    }),
+    "data_missing",
+  );
+  assert.equal(
+    resolveAltinbasResumeFieldAction({
+      crmValue: "",
+      portalValue: "-",
+      portalValid: true,
+    }),
+    "data_missing",
+  );
+});
+
+test("AW22: resumed questionnaire reuses only a saved No answer", () => {
+  assert.equal(
+    resolveAltinbasVisaResumeAction({ crmValue: "No", portalValue: "" }),
+    "select_no_from_crm",
+  );
+  assert.equal(
+    resolveAltinbasVisaResumeAction({ crmValue: "", portalValue: "No" }),
+    "accept_existing_no",
+  );
+  assert.equal(
+    resolveAltinbasVisaResumeAction({ crmValue: "Yes", portalValue: "No" }),
+    "questionnaire_followup_unmapped",
+  );
+  assert.equal(
+    resolveAltinbasVisaResumeAction({ crmValue: "", portalValue: "Yes" }),
+    "questionnaire_followup_unmapped",
+  );
+  assert.equal(
+    resolveAltinbasVisaResumeAction({ crmValue: "", portalValue: "" }),
+    "data_missing",
+  );
 });

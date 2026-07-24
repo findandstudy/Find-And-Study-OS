@@ -4,8 +4,8 @@
 // Portal: https://apply.altinbas.edu.tr/partner/s/
 // Technology: Salesforce Experience Cloud (Screen Flow)
 //
-// SCOPE: Master (Yüksek Lisans) + PhD (Doktora) ONLY.
-//   Associate / Bachelor gelirse → skipped (never silent-fail).
+// SCOPE: Associate + Bachelor + Master + PhD.
+// Unknown levels are rejected before any portal mutation.
 //
 // MİMARİ (Faz-4, canlı yakalanan kontrat 2026-07-10):
 //   Wizard bir Salesforce Screen Flow. Her ekran geçişi
@@ -20,13 +20,12 @@
 //   yanıttan EN GÜNCEL serializedState'i tutar, ekranlar Next'e TIKLAMADAN
 //   page.evaluate(fetch) ile replay edilir. Kapalı-shadow DOM ve koordinat YOK.
 //
-//   Sıra: Term(NEXT) → Degree(NEXT) → Program(NEXT) →
-//         CONTINUE_AFTER_COMMIT(×N, fields:[]) → Personal(NEXT) →
-//         Educational(NEXT) → Questionnaire(NEXT) → Documents(NEXT) → FINISH.
+//   Creation half: Term(NEXT) → Degree(NEXT) → Program(NEXT) →
+//         CONTINUE_AFTER_COMMIT(×N, fields:[]).
 //
-//   FINISH + ContentVersion (belge upload) payload'ları henüz canlı
-//   yakalanmadı — ALTINBAS_CAPTURE=1 ile ilk gerçek run'da tüm aura
-//   request/response'ları /tmp/altinbas-capture.json'a dökülür.
+//   Completion half: the real Lightning UI is driven from its exact current
+//   SLDS stage (Personal → Educational → Questionnaire → Documents → Submit).
+//   Required uploads and the final row transition are positively read back.
 //
 // Duplicate-passport guard (FIX-14): CheckDuplicateValidation "already exists"
 // mesajı self-referans DEĞİLDİR — önceki başarısız run'ın Salesforce'ta taslak
@@ -83,12 +82,15 @@ import {
   missingAltinbasPersonalFields,
   parseAltinbasCanaryStage,
   redactAltinbasLog,
+  resolveAltinbasResumeFieldAction,
+  resolveAltinbasVisaResumeAction,
   resolveAltinbasWizardState,
   selectAltinbasRollbackIds,
   shouldUseAltinbasUiPath,
   type AltinbasWizardSnapshot,
   type AltinbasWizardState,
 } from "./altinbasWizard.js";
+import { selectAltinbasProgram } from "./altinbasProgram.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -826,28 +828,6 @@ async function postNavigateFlow(
 // Flow kayıtlarından Term / Degree / Program seçimi
 // ---------------------------------------------------------------------------
 
-/** Kayıttaki tüm string değerleri tek metinde birleştir (eşleme için). */
-function recordText(r: Record<string, unknown>): string {
-  return Object.values(r)
-    .filter((v): v is string => typeof v === "string")
-    .join(" | ");
-}
-
-/** Kayıttan insan-okur görünen ad çıkar (Name > label > en uzun harfli string). */
-function recordDisplayName(r: Record<string, unknown>): string {
-  for (const key of ["Name", "label", "MasterLabel"]) {
-    const v = r[key];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
-  let best = "";
-  for (const v of Object.values(r)) {
-    if (typeof v === "string" && /[A-Za-zÇĞİÖŞÜçğıöşü]{3,}/.test(v) && v.length > best.length && v.length < 120) {
-      best = v;
-    }
-  }
-  return best || String(r["Id"] ?? "?");
-}
-
 /**
  * FIX-2 captured FALLBACK'ler: dinamik record parse boş kalırsa canlı yakalanmış
  * cycle ID'leri kullanılır (Fall 2026-2027 cycle'ı). Fallback kullanımı WARN loglanır.
@@ -855,8 +835,6 @@ function recordDisplayName(r: Record<string, unknown>): string {
  * yakalanıp eklenecek (TODO).
  */
 const FALLBACK_TERM = { label: "Fall 2026 - 2027", id: "a0CQ30000AVvpaEMQR" };
-const FALLBACK_DEGREE_MASTER = { label: "Master", id: "a0CQ30000AVvqKTMQZ" };
-
 /** ALTINBAS_CAPTURE=1 iken flow record havuzunu dök — option eşleme teşhisi. */
 function dumpRecords(rt: FlowRuntime, tag: string): void {
   if (!CAPTURE) return;
@@ -871,14 +849,14 @@ function dumpRecords(rt: FlowRuntime, tag: string): void {
 }
 
 /**
- * FIX-3: Term/Degree'de CAPTURED CONSTANT ÖNCELİKLİ (bu cycle stabil).
+ * FIX-3: Term'de CAPTURED CONSTANT ÖNCELİKLİ (bu cycle stabil).
  * FIX-2'nin gevşek dinamik parse'ı YANLIŞ record tipini seçti: "2026-2027"
  * etiketli a02 (application/availability) kayıtlarını Term sandı → flow
  * interviewStatus:"Error" ile Term'i reddetti. Salesforce Id prefix haritası
  * (yakalanan): a0C=Term/Degree seçenekleri, a02=başvuru/availability,
  * a0A=Program Availability, a0B=Program.
- * Dinamik parse artık SADECE fallback (PhD gibi constant'ı olmayanlar) ve
- * record-tipi filtreli: Id a0C zorunlu + label pattern'i zorunlu.
+ * Dinamik term parse artık yalnız fallback/teşhis amaçlı ve record-tipi
+ * filtreli: Id a0C zorunlu + label pattern'i zorunlu.
  */
 
 /** ALTINBAS_CAPTURE=1 iken aday record'un TAM şeklini dök (filtre teşhisi). */
@@ -926,16 +904,8 @@ function pickTermOption(rt: FlowRuntime): { label: string; id: string } {
 }
 
 /**
- * Degree seçimi:
- *   Master → captured constant (FALLBACK_DEGREE_MASTER) — stabil, doğrulandı.
- *   PhD / Bachelor / Associate → Id henüz sabitlenmedi; a0C prefix + label
- *     pattern ile filtreli dinamik arama yapılır. Bulunamazsa null döner
- *     (fail-visible). İlk gerçek run ALTINBAS_CAPTURE=1 ile yapıldığında
- *     yakalanan Id constant olarak eklenebilir (Master gibi).
- *
- * NOT: Bachelor ve Associate için portal ID'leri henüz açık olmadığı için
- * bilinmiyor. Dinamik arama, portal Degree ekranının o zaman sunacağı
- * seçenekler arasından label eşleştirmesi yaparak Id'yi canlı bulur.
+ * Degree seçimi: dört desteklenen seviye için canlı yakalanmış sabit portal
+ * Id'leri kullanılır. Sınıflandırılamayan seviye null dönerek fail-closed olur.
  */
 const DEGREE_OPTIONS: Record<"associate" | "bachelor" | "master" | "phd", { label: string; id: string }> = {
   associate: { label: "Associate", id: "a0CQ30000AimBgbMQE" },
@@ -959,60 +929,47 @@ function pickDegreeOption(rt: FlowRuntime, level: string): { label: string; id: 
 }
 
 /**
- * Program seçimi: eligible-program listesi (eduhub__Program__c taşıyan ya da
- * Id prefix a0A kayıtlar) içinden CRM program adıyla kelime-bazlı eşleşen
- * EN YÜKSEK skorlu kaydı döndür. Bulunamazsa aday listesi de döner
- * (programMissing + availablePrograms → fallback orchestration).
+ * Program seçimi: canlı Program Availability (a0A) kayıtlarını, ortak güvenli
+ * program matcher ile CRM adına eşler. Availability kaydındaki açık
+ * `eduhub__Quota_Full__c=true` sonucu commit öncesinde durdurur. Bulunamazsa
+ * aday listesi de döner (programMissing + availablePrograms).
  */
 function pickProgramRecord(
   rt: FlowRuntime,
   profile: SubmitProfile,
-): { record: Record<string, unknown> | null; candidates: PortalProgramOption[] } {
-  const cands: Array<{ record: Record<string, unknown>; id: string }> = [];
-  for (const [id, r] of rt.records) {
-    if (id.startsWith("a0A") || id.startsWith("a0B") || typeof r["eduhub__Program__c"] === "string") {
-      cands.push({ record: r, id });
-    }
-  }
-
-  const candidates: PortalProgramOption[] = cands.map((c) => ({
-    value: c.id,
-    name: recordDisplayName(c.record),
-    enabled: true,
-  }));
-
-  const queryWords = fold(profile.programName || "")
-    .split(/\s+/)
-    .filter((w) => w.length > 3);
-  if (!queryWords.length || !cands.length) {
-    logger.warn(
-      `[altinbas] program eşleme: aday=${cands.length} queryWords=${queryWords.length} ("${profile.programName}")`,
-    );
-    return { record: null, candidates };
-  }
-
-  let best: { record: Record<string, unknown>; score: number; id: string } | null = null;
-  for (const c of cands) {
-    const txt = fold(recordText(c.record));
-    let score = 0;
-    for (const w of queryWords) if (txt.includes(w)) score += 1;
-    if (score > 0 && (!best || score > best.score)) best = { record: c.record, score, id: c.id };
-  }
-
-  if (best) {
-    logger.info(
-      `[altinbas] program eşleşti: "${recordDisplayName(best.record)}" (Id=${best.id}, skor=${best.score}/${queryWords.length})`,
-    );
-    return { record: best.record, candidates };
-  }
-
-  logger.warn(
-    `[altinbas] program BULUNAMADI: "${profile.programName}" — adaylar: ${candidates
-      .map((c) => c.name)
-      .slice(0, 30)
-      .join("; ")}`,
+): {
+  record: Record<string, unknown> | null;
+  selected: PortalProgramOption | null;
+  candidates: PortalProgramOption[];
+} {
+  const selection = selectAltinbasProgram(
+    [...rt.records.entries()],
+    profile.programName || "",
   );
-  return { record: null, candidates };
+  if (!selection.option) {
+    logger.warn(
+      `[altinbas] program BULUNAMADI: "${profile.programName}" — adaylar: ${selection.candidates
+        .map((candidate) => candidate.name)
+        .slice(0, 30)
+        .join("; ")}`,
+    );
+    return {
+      record: null,
+      selected: null,
+      candidates: selection.candidates,
+    };
+  }
+
+  logger.info(
+    `[altinbas] program eşleşti: "${selection.option.name}"` +
+      ` (Id=${selection.option.value}, confidence=${selection.confidence ?? "?"},` +
+      ` quotaFull=${!selection.option.enabled})`,
+  );
+  return {
+    record: selection.record,
+    selected: selection.option,
+    candidates: selection.candidates,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1094,6 +1051,55 @@ async function fillNamedField(
       ok: false,
       field,
       reason: error instanceof Error ? error.name : "fill_error",
+    };
+  }
+}
+
+/**
+ * Resume-safe text/date fill. A real CRM value is written and read back. When
+ * CRM is empty, an already-saved valid portal value is accepted in place and
+ * never copied into logs/result_json. Blank or invalid controls fail closed.
+ */
+async function fillOrProveNamedField(
+  page: any,
+  field: string,
+  crmValue: string | undefined,
+): Promise<UiFieldResult> {
+  const expected = crmValue?.trim() || "";
+  if (expected) return fillNamedField(page, field, expected);
+
+  const controls = page.locator(`[name="${field}"]:visible`);
+  const count = await controls.count().catch(() => 0);
+  if (count !== 1) {
+    return { ok: false, field, reason: `control_count_${count}` };
+  }
+  try {
+    const proof = await controls.first().evaluate((element: Element) => {
+      const input = element as HTMLInputElement;
+      return {
+        value: (input.value || "").trim(),
+        ariaInvalid: input.getAttribute("aria-invalid") === "true",
+        valid: input.validity ? input.validity.valid : true,
+      };
+    });
+    const action = resolveAltinbasResumeFieldAction({
+      crmValue: expected,
+      portalValue: proof.value,
+      portalValid: proof.valid && !proof.ariaInvalid,
+    });
+    return {
+      ok: action === "accept_existing_portal_value",
+      field,
+      reason:
+        action === "accept_existing_portal_value"
+          ? "existing_portal_value_proved"
+          : "data_missing",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      field,
+      reason: error instanceof Error ? error.name : "readback_error",
     };
   }
 }
@@ -1394,46 +1400,65 @@ async function fillPersonalUI(
   page: any,
   profile: SubmitProfile,
 ): Promise<{ ok: boolean; failures: UiFieldResult[] }> {
-  const missing = missingAltinbasPersonalFields(profile);
-  if (missing.length) {
-    return {
-      ok: false,
-      failures: missing.map((field) => ({
-        ok: false,
-        field,
-        reason: "data_missing",
-      })),
-    };
-  }
-
-  const gender = /^f/i.test(profile.gender.trim()) ? "Female" : "Male";
   const results: UiFieldResult[] = [];
-  results.push(await selectNamedField(page, "Gender", gender));
+  const explicitGender = /^(male|female|m|f)$/i.test(profile.gender?.trim() || "")
+    ? (/^f/i.test(profile.gender.trim()) ? "Female" : "Male")
+    : "";
+  if (explicitGender) {
+    results.push(await selectNamedField(page, "Gender", explicitGender));
+  } else {
+    const controls = page.locator('select[name="Gender"]:visible');
+    const count = await controls.count().catch(() => 0);
+    if (count !== 1) {
+      results.push({ ok: false, field: "Gender", reason: `control_count_${count}` });
+    } else {
+      const proof = await controls.first().evaluate((element: Element) => {
+        const select = element as HTMLSelectElement;
+        return {
+          value: (select.value || "").trim(),
+          text: (select.selectedOptions.item(0)?.textContent || "").trim(),
+          ariaInvalid: select.getAttribute("aria-invalid") === "true",
+          valid: select.validity ? select.validity.valid : true,
+        };
+      }).catch(() => null);
+      const savedGender = proof &&
+        [proof.value, proof.text].find((value) => /^(male|female)$/i.test(value));
+      results.push({
+        ok: !!savedGender && !!proof?.valid && !proof?.ariaInvalid,
+        field: "Gender",
+        reason: savedGender ? "existing_portal_value_proved" : "data_missing",
+      });
+    }
+  }
   results.push(
-    await fillNamedField(page, "Date_of_Birth", formatDateDmy(profile.dateOfBirth)),
+    await fillOrProveNamedField(
+      page,
+      "Date_of_Birth",
+      formatDateDmy(profile.dateOfBirth) || undefined,
+    ),
   );
   results.push(
-    await fillNamedField(
+    await fillOrProveNamedField(
       page,
       "Passport_Date_of_Issue",
-      formatDateDmy(profile.passportIssueDate),
+      formatDateDmy(profile.passportIssueDate) || undefined,
     ),
   );
   results.push(
-    await fillNamedField(
+    await fillOrProveNamedField(
       page,
       "Passport_Date_of_Expiry",
-      formatDateDmy(profile.passportExpiryDate),
+      formatDateDmy(profile.passportExpiryDate) || undefined,
     ),
   );
   results.push(
-    await fillNamedField(page, "Address_Street", profile.addressStreet || ""),
+    await fillOrProveNamedField(page, "Address_Street", profile.addressStreet),
   );
   results.push(
-    await fillNamedField(page, "Address_City", profile.addressCity || ""),
+    await fillOrProveNamedField(page, "Address_City", profile.addressCity),
   );
   results.push(
-    await fillNamedField(page, "Address_Zip_Code", profile.addressZip || ""),
+    await fillOrProveNamedField(page, "Address_Zip_Code", profile.addressZip),
   );
 
   const birthCity = explicitCityOfBirth(profile.cityOfBirth);
@@ -1560,10 +1585,6 @@ async function ensureEducationUI(
     return [
       !record && `${level}_education_record`,
       !record?.schoolName?.trim() && `${level}.schoolName`,
-      !record?.country?.trim() && `${level}.country`,
-      !record?.endYear && `${level}.graduationYear`,
-      !record?.gpa?.trim() && `${level}.gpa`,
-      !altinbasGpaTypeLabel(record?.gpaType) && `${level}.gpaType`,
     ].filter((value): value is string => !!value);
   });
   if (missing.length) {
@@ -1584,6 +1605,18 @@ async function ensureEducationRecordUI(
   if (fold(beforeText).includes(fold(primary.schoolName!))) {
     logger.info("[altinbas][ui] Educational: exact CRM school readback bulundu");
     return { ok: true, reason: "existing_record_proved" };
+  }
+  const missingForCreate = [
+    !primary.country?.trim() && "country",
+    !primary.endYear && "graduationYear",
+    !primary.gpa?.trim() && "gpa",
+    !altinbasGpaTypeLabel(primary.gpaType) && "gpaType",
+  ].filter((value): value is string => !!value);
+  if (missingForCreate.length) {
+    return {
+      ok: false,
+      reason: `data_missing:${primary.level}.${missingForCreate.join(`,${primary.level}.`)}`,
+    };
   }
   // Open the EDUCATION add (+) modal.
   // The + is an icon button next to the "EDUCATION" heading; click by proximity.
@@ -1672,21 +1705,43 @@ async function fillQuestionnaireUI(
   page: any,
   profile: SubmitProfile,
 ): Promise<{ ok: boolean; reason: string }> {
-  if (!/^(yes|no)$/i.test(profile.visaSupport || "")) {
-    return { ok: false, reason: "data_missing:needsVisaSupport" };
-  }
-  const need = /^yes$/i.test(profile.visaSupport || "") ? "Yes" : "No";
-  if (need === "Yes") {
-    // Live evidence shows an additional consulate/embassy answer after Yes.
-    // The CRM has no dedicated source for it yet; never fabricate one.
-    return { ok: false, reason: "data_missing:questionnaire_followup" };
-  }
-  // Lightning combobox: click, pick option.
   const combos = page.getByRole("combobox");
   if ((await combos.count().catch(() => 0)) !== 1) {
     return { ok: false, reason: "visa_combobox_not_unique" };
   }
   const combo = combos.first();
+  const existingProof = await combo.evaluate((element: Element) => {
+    const control = element as HTMLInputElement;
+    return {
+      value: (control.value || "").trim(),
+      text: (control.textContent || "").trim(),
+      ariaValue: (control.getAttribute("aria-valuetext") || "").trim(),
+      ariaInvalid: control.getAttribute("aria-invalid") === "true",
+      valid: control.validity ? control.validity.valid : true,
+    };
+  }).catch(() => null);
+  const existingChoice = existingProof && existingProof.valid && !existingProof.ariaInvalid
+    ? [existingProof.value, existingProof.text, existingProof.ariaValue]
+      .find((value) => /^(yes|no)$/i.test(value)) || ""
+    : "";
+  const resumeAction = resolveAltinbasVisaResumeAction({
+    crmValue: profile.visaSupport,
+    portalValue: existingChoice,
+  });
+  if (resumeAction === "questionnaire_followup_unmapped") {
+    // Live evidence shows an additional consulate/embassy answer after Yes.
+    // The CRM has no dedicated source for it yet; never fabricate one.
+    return { ok: false, reason: "data_missing:questionnaire_followup" };
+  }
+  if (resumeAction === "data_missing") {
+    return { ok: false, reason: "data_missing:needsVisaSupport" };
+  }
+  if (resumeAction === "accept_existing_no") {
+    return { ok: true, reason: "existing_portal_value_proved" };
+  }
+
+  // Explicit CRM "No": select the exact Lightning option and prove readback.
+  const need = "No";
   await combo.click({ timeout: 6_000 }).catch(() => {});
   await page.waitForTimeout(800);
   const options = page.getByRole("option", {
@@ -2385,8 +2440,8 @@ async function runFlowReplay(
   // 4) PROGRAM (NEXT) — eligible listeden eşle
   // 5) CONTINUE_AFTER_COMMIT (×N, fields:[]) — başvuru kaydı burada OLUŞUR.
   if (curRank <= 2) {
-    const { record: prog, candidates } = pickProgramRecord(rt, profile);
-    if (!prog) {
+    const { record: prog, selected, candidates } = pickProgramRecord(rt, profile);
+    if (!prog || !selected) {
       result.programMissing = true;
       result.detail = `Altınbaş: program eligible listede bulunamadı: "${profile.programName}"`;
       if (candidates.length) {
@@ -2394,6 +2449,18 @@ async function runFlowReplay(
         result.availablePrograms = candidates;
         result.requestedProgram = { name: profile.programName };
       }
+      return;
+    }
+    if (!selected.enabled) {
+      result.programFull = true;
+      result.requestedProgram = {
+        value: selected.value,
+        name: selected.name,
+      };
+      result.openPrograms = candidates;
+      result.detail =
+        `Altınbaş: QUOTA_FULL — "${selected.name}" programının kontenjanı dolu`;
+      logger.info(`[altinbas] ${result.detail}`);
       return;
     }
     raw = await postNavigateFlow(page, rt, "NEXT", buildProgramFields(prog), "program");

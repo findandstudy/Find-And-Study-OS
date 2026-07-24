@@ -323,8 +323,9 @@ describe("classifyProfileLevel — bachelor/associate must never be master", () 
 // checkMissingEduRecord — prior-education gate per degree tier
 // ---------------------------------------------------------------------------
 
-describe("checkMissingEduRecord — Master/PhD require bachelor record", () => {
+describe("checkMissingEduRecord — Master requires bachelor; PhD requires bachelor + master", () => {
   const bachelorRec = { level: "bachelor" };
+  const masterRec = { level: "master" };
   const highSchoolRec = { level: "high_school" };
 
   it("master + no records → missing bachelor", () =>
@@ -338,8 +339,12 @@ describe("checkMissingEduRecord — Master/PhD require bachelor record", () => {
 
   it("phd + no records → missing bachelor", () =>
     assert.equal(checkMissingEduRecord([], "phd"), "bachelor_education_record"));
-  it("phd + bachelor record → ok", () =>
-    assert.equal(checkMissingEduRecord([bachelorRec], "phd"), null));
+  it("phd + bachelor record → missing master", () =>
+    assert.equal(checkMissingEduRecord([bachelorRec], "phd"), "master_education_record"));
+  it("phd + master record → still missing bachelor first", () =>
+    assert.equal(checkMissingEduRecord([masterRec], "phd"), "bachelor_education_record"));
+  it("phd + bachelor + master records → ok", () =>
+    assert.equal(checkMissingEduRecord([bachelorRec, masterRec], "phd"), null));
 
   it("yüksek lisans + no records → missing bachelor (Turkish master alias)", () =>
     assert.equal(checkMissingEduRecord([], "yüksek lisans"), "bachelor_education_record"));

@@ -6,6 +6,7 @@
  * TW3: writebackResult(alreadyExists=true)  → status='already_exists',  stage='all_registered'
  * TW4: writebackResult(null / error)        → status='failed', application stage unchanged
  * TW5: writebackResult(programFull=true)     → status='program_full', meta jsonb written, stage unchanged
+ * TW6: Altınbaş programFull=true             → status='program_full', stage='quota_full'
  *
  * Run:
  *   pnpm --filter @workspace/portal-automation-worker test:writeback
@@ -85,6 +86,7 @@ function makeRunResult(result: {
    *  branch (default real mode so the submitted/programMissing/alreadyExists
    *  branches are reachable). */
   dryRun?: boolean;
+  adapterKey?: string;
 }): RunResult {
   return {
     result: {
@@ -96,7 +98,10 @@ function makeRunResult(result: {
       ...(result.openPrograms     ? { openPrograms: result.openPrograms }       : {}),
     },
     screenshotUrls: [],
-    meta: { adapterKey: "test", ...(result.dryRun ? { dryRun: true } : {}) },
+    meta: {
+      adapterKey: result.adapterKey ?? "test",
+      ...(result.dryRun ? { dryRun: true } : {}),
+    },
   };
 }
 
@@ -239,4 +244,38 @@ test("TW5: programFull=true (dry) → status=program_full, meta written, stage u
 
   const [app] = await db.select({ stage: applicationsTable.stage }).from(applicationsTable).where(eq(applicationsTable.id, appId));
   assert.equal(app.stage, "inquiry", "application stage unchanged (no stage change)");
+});
+
+test("TW6: Altınbaş programFull=true → status=program_full, stage=quota_full (if stage exists)", async () => {
+  const { subId, appId } = await seedRunningSubmission();
+
+  await writebackResult(
+    subId,
+    makeRunResult({
+      adapterKey: "altinbas",
+      programFull: true,
+      requestedProgram: { value: "a0A_FULL", name: "Data Analytics (With Thesis)" },
+      openPrograms: [
+        { value: "a0A_OPEN", name: "Biomedical Sciences (With Thesis)", enabled: true },
+        { value: "a0A_FULL", name: "Data Analytics (With Thesis)", enabled: false },
+      ],
+    }),
+  );
+
+  const [sub] = await db
+    .select()
+    .from(portalSubmissionsTable)
+    .where(eq(portalSubmissionsTable.id, subId));
+  assert.equal(sub.status, "program_full", "submission status=program_full");
+
+  const [app] = await db
+    .select({ stage: applicationsTable.stage })
+    .from(applicationsTable)
+    .where(eq(applicationsTable.id, appId));
+  const stageExists = await lookupStageKey("quota_full");
+  if (stageExists) {
+    assert.equal(app.stage, "quota_full", "Altınbaş app stage → quota_full");
+  } else {
+    assert.equal(app.stage, "inquiry", "stage absent → application unchanged");
+  }
 });

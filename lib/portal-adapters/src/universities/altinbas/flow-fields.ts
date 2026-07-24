@@ -335,7 +335,8 @@ export function classifyProfileLevel(
 
 /**
  * Returns the first missing required education record level key, or null.
- *   Master / PhD  → must have a "bachelor" record on file.
+ *   Master        → must have a "bachelor" record on file.
+ *   PhD           → must have both "bachelor" and "master" records on file.
  *   Bachelor / Associate → must have a "high_school" record on file.
  */
 export function checkMissingEduRecord(
@@ -345,6 +346,9 @@ export function checkMissingEduRecord(
   const cls = classifyProfileLevel(profileLevel);
   if ((cls === "master" || cls === "phd") && !eduRecords?.some((r) => r.level === "bachelor")) {
     return "bachelor_education_record";
+  }
+  if (cls === "phd" && !eduRecords?.some((r) => r.level === "master")) {
+    return "master_education_record";
   }
   if (
     (cls === "bachelor" || cls === "associate") &&
