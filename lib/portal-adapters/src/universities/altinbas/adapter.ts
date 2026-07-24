@@ -1052,8 +1052,16 @@ async function tryResumeFromMyApplications(
       rowCount = await rows.count().catch(() => 0);
     }
     if (rowCount === 0) {
+      // FIX-15C debug: worker'in gercekte ne gordugunu kaydet.
+      const missShot = `/tmp/altinbas-fix15c-miss-${Date.now()}.png`;
+      await page.screenshot({ path: missShot, fullPage: true }).catch(() => {});
+      const bodyTxt = await page
+        .locator("body")
+        .innerText()
+        .then((t: string) => t.replace(/\s+/g, " ").slice(0, 400))
+        .catch(() => "<body okunamadi>");
       logger.warn(
-        `[altinbas] FIX-15C: "${searchQ || fullName}" icin Signed Up satiri bulunamadi - alreadyExists fallback'e dusuluyor`,
+        `[altinbas] FIX-15C: "${searchQ || fullName}" icin Signed Up satiri bulunamadi - alreadyExists fallback'e dusuluyor | shot=${missShot} | body="${bodyTxt}"`,
       );
       return false;
     }
