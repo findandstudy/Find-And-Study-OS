@@ -1348,6 +1348,31 @@ async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[
     [/Picture|Photo/i, files.photo, "photo"],
   ];
   const uploaded: string[] = [];
+
+  // Diagnostic: dump every file input with its nearest descriptive label so a
+  // failed match still tells us the real Documents-screen structure.
+  const allLabels: string[] = await page.evaluate(() => {
+    function walk(root: Document | ShadowRoot, acc: HTMLInputElement[]) {
+      root.querySelectorAll("*").forEach((el: Element) => {
+        if ((el as HTMLElement).shadowRoot) walk((el as HTMLElement).shadowRoot!, acc);
+        if (el.tagName === "INPUT" && (el as HTMLInputElement).type === "file") acc.push(el as HTMLInputElement);
+      });
+      return acc;
+    }
+    const inputs = walk(document, []);
+    return inputs.map((inp) => {
+      let n: any = inp;
+      for (let i = 0; i < 10 && n; i++) {
+        n = n.parentElement || (n.getRootNode && n.getRootNode().host);
+        if (n && /Required|Passport|Diploma|Transcript|Photo|Picture|Document/i.test(n.textContent || "")) {
+          return (n.textContent || "").replace(/\s+/g, " ").trim().slice(0, 90);
+        }
+      }
+      return "(etiket yok)";
+    });
+  }).catch(() => [] as string[]);
+  logger.info(`[altinbas][ui] Documents: ${allLabels.length} file input → etiketler: ${JSON.stringify(allLabels)}`);
+
   for (const [re, path, tag] of wanted) {
     if (!path) continue;
     // Map file inputs → their "Required - X" section label (pierces shadow DOM).
@@ -1490,29 +1515,43 @@ async function completeApplicationUI(
   const sOpened = await captureScreen(page, "ui-wizard-opened"); if (sOpened) shots.push(sOpened);
   logger.info("[altinbas][ui] Complete Application açıldı — wizard sürülüyor");
 
-  // 3) Drive the wizard: Personal → Educational → Questionnaire → Documents → Submit.
-  // Personal Information
-  await fillPersonalUI(page, profile);
+  // 3) Drive the wizard STEP-BY-STEP until the Documents screen (identified by
+  //    real <input type=file> elements). On a resumed application most fields are
+  //    already prefilled, so we fill Personal opportunistically and then just keep
+  //    pressing "Next", filling each step's specific needs as we recognise it.
+  await fillPersonalUI(page, profile).catch(() => {});
   await page.waitForTimeout(800);
-  await clickWizardBtn(page, /^\s*Next\s*$/i);
-  await page.waitForTimeout(SF_HYDRATION_MS);
 
-  // Educational Information
-  await ensureEducationUI(page, profile);
-  await clickWizardBtn(page, /^\s*Next\s*$/i);
-  await page.waitForTimeout(SF_HYDRATION_MS);
+  let reachedDocuments = false;
+  for (let step = 0; step < 7; step++) {
+    const fileInputCount = await page.locator('input[type="file"]').count().catch(() => 0);
+    const body = (await page.locator("body").innerText().catch(() => "")) || "";
+    const heading =
+      (body.match(/Required Documents|Upload Files|Educational Information|Questionnaire|Personal Information|Completed/i) || [""])[0];
+    logger.info(`[altinbas][ui] wizard adım#${step}: başlık="${heading}" fileInputs=${fileInputCount}`);
+    if (fileInputCount > 0 || /Required Documents|Upload Files|Required\s*-/i.test(body)) {
+      reachedDocuments = true;
+      break;
+    }
+    // Fill the specific step we're on before advancing.
+    if (/Educational Information/i.test(body)) await ensureEducationUI(page, profile).catch(() => {});
+    if (/Questionnaire/i.test(body)) await fillQuestionnaireUI(page, profile).catch(() => {});
+    await page.waitForTimeout(500);
+    const advanced = await clickWizardBtn(page, /^\s*Next\s*$/i);
+    if (!advanced) {
+      logger.warn(`[altinbas][ui] adım#${step}: 'Next' bulunamadı — ilerlenemedi`);
+      break;
+    }
+    await page.waitForTimeout(SF_HYDRATION_MS);
+  }
 
-  // Questionnaire
-  await fillQuestionnaireUI(page, profile);
-  await page.waitForTimeout(800);
-  await clickWizardBtn(page, /^\s*Next\s*$/i);
-  await page.waitForTimeout(SF_HYDRATION_MS);
-
-  // Documents
-  const bodyNow = (await page.locator("body").innerText().catch(() => "")) || "";
-  if (!/Required Documents|Upload Files/i.test(bodyNow)) {
-    logger.warn("[altinbas][ui] Documents ekranına ulaşılamadı — wizard beklenenden farklı");
-    const s = await captureScreen(page, "ui-no-documents"); if (s) shots.push(s);
+  const sDocs = await captureScreen(page, reachedDocuments ? "ui-documents" : "ui-stuck");
+  if (sDocs) shots.push(sDocs);
+  if (!reachedDocuments) {
+    result.detail = "Altınbaş[ui]: Documents ekranına ulaşılamadı (wizard adımları beklenenden farklı)";
+    logger.warn(`[altinbas][ui] ${result.detail}`);
+    result.screenshots = shots;
+    return true;
   }
   const up = await uploadDocumentsUI(page, files);
   const missing = (["passport", "diploma", "transcript", "photo"] as const).filter((t) => !up.includes(t));
