@@ -35,6 +35,34 @@ export interface AltinbasWizardState {
     | "marker_mismatch";
 }
 
+export interface AltinbasLabeledControlCandidate {
+  tagName: string;
+  role: string;
+  visible: boolean;
+  disabled: boolean;
+  readOnly: boolean;
+}
+
+/**
+ * Salesforce labels both the interactive country input and its owned listbox.
+ * Select only one visible, writable input combobox; duplicate/ambiguous inputs
+ * fail closed instead of relying on DOM order.
+ */
+export function chooseAltinbasLabeledCombobox(
+  candidates: AltinbasLabeledControlCandidate[],
+): number {
+  const matches = candidates
+    .map((candidate, index) => ({ candidate, index }))
+    .filter(({ candidate }) =>
+      candidate.tagName.toLowerCase() === "input" &&
+      candidate.role.toLowerCase() === "combobox" &&
+      candidate.visible &&
+      !candidate.disabled &&
+      !candidate.readOnly
+    );
+  return matches.length === 1 ? matches[0].index : -1;
+}
+
 const STEP_BY_FOLDED_NAME = new Map<string, AltinbasWizardStep>(
   ALTINBAS_WIZARD_STEPS.map((step) => [step.toLowerCase(), step]),
 );

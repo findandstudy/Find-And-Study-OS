@@ -6,6 +6,7 @@ import {
   altinbasGpaTypeLabel,
   canonicalAltinbasWizardStep,
   chooseAltinbasApplicationRow,
+  chooseAltinbasLabeledCombobox,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
   missingAltinbasPersonalFields,
@@ -417,5 +418,60 @@ test("AW22: resumed questionnaire reuses only a saved No answer", () => {
   assert.equal(
     resolveAltinbasVisaResumeAction({ crmValue: "", portalValue: "" }),
     "data_missing",
+  );
+});
+
+test("AW23: country picker ignores its labeled listbox and requires one actionable input", () => {
+  assert.equal(
+    chooseAltinbasLabeledCombobox([
+      {
+        tagName: "INPUT",
+        role: "combobox",
+        visible: true,
+        disabled: false,
+        readOnly: false,
+      },
+      {
+        tagName: "DIV",
+        role: "listbox",
+        visible: false,
+        disabled: false,
+        readOnly: false,
+      },
+    ]),
+    0,
+  );
+  assert.equal(
+    chooseAltinbasLabeledCombobox([
+      {
+        tagName: "INPUT",
+        role: "combobox",
+        visible: true,
+        disabled: false,
+        readOnly: false,
+      },
+      {
+        tagName: "INPUT",
+        role: "combobox",
+        visible: true,
+        disabled: false,
+        readOnly: false,
+      },
+    ]),
+    -1,
+    "two actionable inputs remain ambiguous",
+  );
+  assert.equal(
+    chooseAltinbasLabeledCombobox([
+      {
+        tagName: "INPUT",
+        role: "combobox",
+        visible: true,
+        disabled: false,
+        readOnly: true,
+      },
+    ]),
+    -1,
+    "read-only controls are never mutated",
   );
 });

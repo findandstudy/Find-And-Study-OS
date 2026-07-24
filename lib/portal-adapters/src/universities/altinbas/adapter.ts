@@ -76,6 +76,7 @@ import {
 import {
   altinbasMutationCanaryGate,
   altinbasGpaTypeLabel,
+  chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
@@ -205,12 +206,11 @@ async function pickCombobox(
 ): Promise<boolean> {
   if (!searchTerm) return false;
   try {
-    const boxes = page.getByLabel(labelPattern);
-    if ((await boxes.count().catch(() => 0)) !== 1) {
+    const box = await uniqueLabeledCombobox(page, labelPattern);
+    if (!box) {
       logger.warn(`[altinbas] pickCombobox: no input found for ${labelPattern}`);
       return false;
     }
-    const box = boxes.first();
 
     await box.click({ timeout: 8000 }).catch(() => {});
     await box.fill("").catch(() => {});
@@ -249,6 +249,44 @@ async function pickCombobox(
     logger.warn(`[altinbas] pickCombobox error for "${searchTerm}":`, e);
     return false;
   }
+}
+
+/**
+ * Live Altınbaş LWC labels both the input and its owned listbox. Resolve the
+ * single visible, writable input combobox and reject every ambiguous shape.
+ */
+async function uniqueLabeledCombobox(
+  page: any,
+  labelPattern: RegExp,
+): Promise<any | null> {
+  const candidates = page.getByLabel(labelPattern);
+  const count = await candidates.count().catch(() => 0);
+  if (!count) return null;
+  const metadata = await Promise.all(
+    Array.from({ length: count }, async (_, index) => {
+      const candidate = candidates.nth(index);
+      const attributes = await candidate.evaluate((element: Element) => {
+        const control = element as HTMLInputElement;
+        return {
+          tagName: element.tagName,
+          role: element.getAttribute("role") || "",
+          disabled: Boolean(control.disabled),
+          readOnly: Boolean(control.readOnly),
+        };
+      }).catch(() => ({
+        tagName: "",
+        role: "",
+        disabled: true,
+        readOnly: true,
+      }));
+      return {
+        ...attributes,
+        visible: await candidate.isVisible().catch(() => false),
+      };
+    }),
+  );
+  const index = chooseAltinbasLabeledCombobox(metadata);
+  return index >= 0 ? candidates.nth(index) : null;
 }
 
 /**
@@ -1207,17 +1245,15 @@ async function pickTypeaheadIfEmpty(
 ): Promise<boolean> {
   if (!value) return false;
   try {
-    const boxes = page.getByLabel(labelRe);
-    if ((await boxes.count().catch(() => 0)) !== 1) return false;
-    const box = boxes.first();
+    const box = await uniqueLabeledCombobox(page, labelRe);
+    if (!box) return false;
     const cur = ((await box.inputValue().catch(() => "")) || "").trim();
     if (fold(cur) === fold(value)) return true;
   } catch {/* fall through to pickCombobox */}
   await pickCombobox(page, labelRe, value).catch(() => {});
   try {
-    const boxes = page.getByLabel(labelRe);
-    if ((await boxes.count().catch(() => 0)) !== 1) return false;
-    const box = boxes.first();
+    const box = await uniqueLabeledCombobox(page, labelRe);
+    if (!box) return false;
     const proof = await box.evaluate((element: Element) => {
       const input = element as HTMLInputElement;
       return {
