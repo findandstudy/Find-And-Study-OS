@@ -151,11 +151,11 @@ export interface SubmitProfile {
   // ---------------------------------------------------------------------------
   /** City of birth from the dedicated CRM student field; never address-derived. */
   cityOfBirth?: string;
-  /** Street part of the student's address (entire raw address string). */
+  /** Explicit street/address line from CRM; never a nationality fallback. */
   addressStreet?: string;
-  /** City part of the student's address (text before the first comma). */
+  /** Dedicated current/residence city from CRM; never parsed from free text. */
   addressCity?: string;
-  /** Postal/zip code (empty string when not present in the address). */
+  /** Dedicated postal/zip code from CRM. */
   addressZip?: string;
   /** Country name derived from the E.164 phone dial code; falls back to nationality. */
   phoneCountry?: string;
@@ -173,7 +173,7 @@ export interface SubmitProfile {
   eduEndYear?: string;
   /** GPA type hint ("percentage" for 0-100 scale, "4.0" for 0-4 scale, "letter" otherwise). */
   eduGpaType?: string;
-  /** Visa support required: "Yes" for non-TR nationals, "No" for TR. */
+  /** Explicit CRM answer to the Altınbaş visa-support question ("Yes" / "No"). */
   visaSupport?: string;
   /** Application intake term (e.g. "Fall 2026", "Spring 2026"). */
   intakeTerm?: string;

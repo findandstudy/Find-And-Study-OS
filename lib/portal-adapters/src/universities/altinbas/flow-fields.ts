@@ -38,7 +38,7 @@ const MONTHS_SHORT = [
 export function formatDateDmy(iso: string | undefined): string {
   if (!iso) return "";
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return iso;
+  if (!m) return "";
   const [, y, mo, d] = m;
   const monthName = MONTHS_SHORT[parseInt(mo, 10) - 1];
   if (!monthName) return iso;
@@ -229,8 +229,26 @@ export function buildPersonalFields(profile: SubmitProfile): FlowField[] {
   }
   const dial = DIAL_CODES[country] || "";
   const national = toNationalNoTrunk(profile.phone || "", dial);
-  const female = /^f/i.test((profile.gender || "").trim());
-  const addrParts = (profile.address || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const gender = (profile.gender || "").trim();
+  const female = /^f(?:emale)?$/i.test(gender);
+  const male = /^m(?:ale)?$/i.test(gender);
+  if (!female && !male) {
+    throw new Error("DATA_MISSING: gender must be explicitly Male or Female");
+  }
+  const street = profile.addressStreet?.trim() || "";
+  const city = profile.addressCity?.trim() || "";
+  const zip = profile.addressZip?.trim() || "";
+  const missing = [
+    !formatDateDmy(profile.dateOfBirth) && "dateOfBirth",
+    !formatDateDmy(profile.passportIssueDate) && "passportIssueDate",
+    !formatDateDmy(profile.passportExpiryDate) && "passportExpiryDate",
+    !street && "addressStreet",
+    !city && "addressCity",
+    !zip && "postalCode",
+  ].filter((value): value is string => !!value);
+  if (missing.length) {
+    throw new Error(`DATA_MISSING: ${missing.join(", ")}`);
+  }
 
   return [
     { field: "path.currentStage", value: "Personal Information", isVisible: true },
@@ -241,7 +259,7 @@ export function buildPersonalFields(profile: SubmitProfile): FlowField[] {
     // FIX-15C: "d MMM yyyy" format (e.g. "4 Sep 1989")
     { field: "Date_of_Birth", value: formatDateDmy(profile.dateOfBirth), isVisible: true },
     ...countryPick("Country_of_Birth", "CountryList", country),
-    { field: "City_of_Birth", value: "", isVisible: true },
+    { field: "City_of_Birth", value: profile.cityOfBirth?.trim() || "", isVisible: true },
     ...countryPick("Citizenship_CL", "CountryList", country),
     { field: "Secondary_Citizenship.selectedChoiceLabels", value: "", isVisible: true },
     { field: "Secondary_Citizenship.selectedChoiceValues", value: "", isVisible: true },
@@ -255,13 +273,12 @@ export function buildPersonalFields(profile: SubmitProfile): FlowField[] {
     { field: "phoneWithCountryCode.selectedCountryCode", value: dial, isVisible: true },
     // FIX-15C: SADECE yerel numara — ülke kodu prefix KALDIRILDI
     { field: "phoneWithCountryCode.phone", value: national, isVisible: true },
-    { field: "Father_Name", value: profile.fatherName || "-", isVisible: true },
-    { field: "Mother_Name", value: profile.motherName || "-", isVisible: true },
+    { field: "Father_Name", value: profile.fatherName || "", isVisible: true },
+    { field: "Mother_Name", value: profile.motherName || "", isVisible: true },
     ...countryPick("Address_Country", "CountryList", country),
-    { field: "Address_City", value: addrParts[addrParts.length - 1] || "N/A", isVisible: true },
-    { field: "Address_Street", value: addrParts[0] || profile.address || "N/A", isVisible: true },
-    // Canlı yakalanan başarılı payload'da "1000001" gitti — zip yoksa onu kullan.
-    { field: "Address_Zip_Code", value: "1000001", isVisible: true },
+    { field: "Address_City", value: city, isVisible: true },
+    { field: "Address_Street", value: street, isVisible: true },
+    { field: "Address_Zip_Code", value: zip, isVisible: true },
     { field: "I_am_Alumni", value: null, isVisible: true },
   ];
 }
@@ -391,10 +408,16 @@ export function buildEducationalFields(ids: FlowIds, edu?: EduRecord): FlowField
 
 // ---------------------------------------------------------------------------
 // Screen 6 — Questionnaire (action: NEXT).
-// FIX-15C: Visa Support sorusu canlı yakalandı — "Yes" varsayılan.
+// Visa Support must be an explicit CRM answer; nationality is not a proxy.
 // ---------------------------------------------------------------------------
 export function buildQuestionnaireFields(visaSupport?: string): FlowField[] {
-  const vs = visaSupport ?? "Yes";
+  const raw = visaSupport?.trim() || "";
+  if (!/^(yes|no)$/i.test(raw)) {
+    throw new Error(
+      "DATA_MISSING: needsVisaSupport must be explicitly Yes or No",
+    );
+  }
+  const vs = /^yes$/i.test(raw) ? "Yes" : "No";
   // Field names based on Altınbaş portal Questionnaire step.
   // Verify exact names with ALTINBAS_CAPTURE=1 if issues arise.
   return [

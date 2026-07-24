@@ -140,3 +140,164 @@ export function explicitCityOfBirth(value: unknown): string | null {
   const clean = value.trim();
   return clean && clean !== "-" ? clean : null;
 }
+
+export interface AltinbasPersonalSource {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  passportNumber?: string;
+  dateOfBirth?: string;
+  passportIssueDate?: string;
+  passportExpiryDate?: string;
+  gender?: string;
+  nationality?: string;
+  addressStreet?: string;
+  addressCity?: string;
+  addressZip?: string;
+}
+
+const isPresent = (value: unknown): boolean =>
+  typeof value === "string" && value.trim() !== "" && value.trim() !== "-";
+
+const isIsoDate = (value: unknown): boolean => {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+};
+
+/** Required Personal fields proven against the live Altınbaş DOM. */
+export function missingAltinbasPersonalFields(
+  profile: AltinbasPersonalSource,
+): string[] {
+  const missing: string[] = [];
+  for (const key of [
+    "email",
+    "firstName",
+    "lastName",
+    "passportNumber",
+    "nationality",
+    "addressStreet",
+    "addressCity",
+    "addressZip",
+  ] as const) {
+    if (!isPresent(profile[key])) missing.push(key);
+  }
+  if (!isIsoDate(profile.dateOfBirth)) missing.push("dateOfBirth");
+  if (!isIsoDate(profile.passportIssueDate)) missing.push("passportIssueDate");
+  if (!isIsoDate(profile.passportExpiryDate)) missing.push("passportExpiryDate");
+  if (!/^(male|female|m|f)$/i.test(profile.gender?.trim() || "")) {
+    missing.push("gender");
+  }
+  return missing;
+}
+
+/**
+ * One result is unique after applicant search. Multiple results require exactly
+ * one row that proves both applicant name and programme.
+ */
+export function chooseAltinbasApplicationRow(
+  foldedRows: string[],
+  expectedFoldedNames: string[],
+  expectedFoldedPrograms: string[],
+): number {
+  if (foldedRows.length === 1) return 0;
+  if (foldedRows.length === 0) return -1;
+  const names = expectedFoldedNames.filter((value) => value.length >= 3);
+  const programs = expectedFoldedPrograms.filter((value) => value.length >= 5);
+  if (!names.length || !programs.length) return -1;
+  const matches = foldedRows
+    .map((row, index) => ({
+      index,
+      name: names.some((name) => row.includes(name)),
+      program: programs.some((program) => row.includes(program)),
+    }))
+    .filter((candidate) => candidate.name && candidate.program);
+  return matches.length === 1 ? matches[0].index : -1;
+}
+
+export type AltinbasMutationCanaryGate =
+  | "inactive"
+  | "ready"
+  | "requires_ui_complete"
+  | "requires_dry_run";
+
+export function altinbasMutationCanaryGate(input: {
+  requested: boolean;
+  uiComplete: boolean;
+  dryRun: boolean;
+}): AltinbasMutationCanaryGate {
+  if (!input.requested) return "inactive";
+  if (!input.uiComplete) return "requires_ui_complete";
+  if (!input.dryRun) return "requires_dry_run";
+  return "ready";
+}
+
+/** Every dry-run is routed through the read-only UI inspection path. */
+export function shouldUseAltinbasUiPath(input: {
+  uiComplete: boolean;
+  dryRun: boolean;
+}): boolean {
+  return input.uiComplete || input.dryRun;
+}
+
+/** Redact applicant data before any raw portal/browser text reaches logs. */
+export function redactAltinbasLog(value: unknown): string {
+  return String(value ?? "")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "<redacted-email>")
+    .replace(
+      /((?:first|last|father|mother)[_ ]?name|passport(?:[_ ]?number)?|address(?:[_ ]?(?:street|city|zip|postal))?|phone|mobile|token|signature|sig)\s*["']?\s*[:=]\s*["']?([^"',}&\n]+)/gi,
+      "$1=<redacted>",
+    )
+    .replace(/([?&](?:token|signature|sig|key)=)[^&\s]+/gi, "$1<redacted>")
+    .replace(/\b\+?\d[\d\s().-]{6,}\d\b/g, "<redacted-number>");
+}
+
+/** Map CRM grading-system values to the exact Altınbaş select labels. */
+export function altinbasGpaTypeLabel(value: unknown): string | null {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  const scale =
+    normalized === "percentage" ? "100" :
+    normalized === "4.0" ? "4" :
+    /^(4|5|10|12|20|100)$/.test(normalized) ? normalized :
+    /^grading system out of (4|5|10|12|20|100)$/i.test(normalized)
+      ? normalized.match(/(4|5|10|12|20|100)$/)?.[1] || ""
+      : "";
+  return scale ? `GRADING SYSTEM OUT OF ${scale}` : null;
+}
+
+/** Ambiguous/previous draft ids never become rollback deletion targets. */
+export function selectAltinbasRollbackIds(input: {
+  runCreatedIds: Iterable<string>;
+  explicitAppIds: Iterable<string>;
+}): string[] {
+  void input.explicitAppIds;
+  return [...new Set(input.runCreatedIds)]
+    .filter((id) => /^a02[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?$/.test(id));
+}
+
+export type AltinbasCanaryStage =
+  | "Personal Information"
+  | "Educational Information"
+  | "Questionnaire";
+
+/** Explicit env value → one allowed canary stage; Documents is never allowed. */
+export function parseAltinbasCanaryStage(
+  value: string | undefined,
+): AltinbasCanaryStage | null {
+  const normalized = String(value || "personal").trim().toLowerCase();
+  if (normalized === "personal") return "Personal Information";
+  if (normalized === "educational" || normalized === "education") {
+    return "Educational Information";
+  }
+  if (normalized === "questionnaire") return "Questionnaire";
+  return null;
+}

@@ -781,7 +781,8 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
     nationality: "", status: "active", dateOfBirth: "",
     passportNumber: "", passportIssueDate: "", passportExpiry: "",
     motherName: "", fatherName: "", address: "",
-    highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
+    cityOfBirth: "", addressCity: "", postalCode: "", needsVisaSupport: "",
+    highSchool: "", graduationYear: "", gpa: "", gradingSystem: "",
     universityBachelor: "", universityMaster: "",
     languageScore: "", notes: "", interestedLevel: "",
     eduCity: "", eduCountry: "", eduField: "",
@@ -796,6 +797,17 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
     staleTime: 5 * 60_000,
   });
   const allCountries: Array<{ id: number; name: string; code?: string; flagEmoji?: string | null }> = countriesResp?.data ?? [];
+  const { data: educationRecords = [] } = useQuery<any[]>({
+    queryKey: ["/api/students", student?.id, "education-records"],
+    queryFn: () =>
+      fetch(`${BASE_URL}/api/students/${student.id}/education-records`, {
+        credentials: "include",
+      }).then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      }),
+    enabled: open && !!student?.id,
+  });
 
   useEffect(() => {
     if (open && student) {
@@ -809,9 +821,24 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           phoneNum = phoneNum.slice(matched.code.length).trim();
         }
       }
-      const gpaRaw = student.gpa || "";
+      const level = (student.interestedLevel || "").toLowerCase();
+      const priorLevel =
+        /phd|doctor/.test(level) ? "master" :
+        /master/.test(level) ? "bachelor" :
+        /bachelor|associate|certificate/.test(level) ? "high_school" :
+        "";
+      const priorRecord = educationRecords.find(
+        (record: any) => record.level === priorLevel,
+      );
+      const gpaRaw = priorRecord?.gpa || student.gpa || "";
       let gpaVal = gpaRaw;
-      let gradingSys = "4";
+      let gradingSys = priorRecord?.gpaType
+        ? String(priorRecord.gpaType)
+          .toLowerCase()
+          .replace("percentage", "100")
+          .replace("4.0", "4")
+          .replace(/^grading system out of /, "")
+        : "";
       const gpaMatch = gpaRaw.match(/^([\d.]+)\s*\/\s*(\d+)$/);
       if (gpaMatch) {
         gpaVal = gpaMatch[1];
@@ -828,18 +855,27 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
         passportExpiry: student.passportExpiry || "",
         motherName: student.motherName || "", fatherName: student.fatherName || "",
         address: student.address || "",
+        cityOfBirth: student.cityOfBirth || "",
+        addressCity: student.addressCity || "",
+        postalCode: student.postalCode || "",
+        needsVisaSupport:
+          student.needsVisaSupport == null
+            ? ""
+            : student.needsVisaSupport ? "yes" : "no",
         highSchool: student.highSchool || "",
-        graduationYear: student.graduationYear?.toString() || "",
+        graduationYear: priorRecord?.endYear?.toString() || student.graduationYear?.toString() || "",
         gpa: gpaVal, gradingSystem: gradingSys,
         universityBachelor: student.universityBachelor || "",
         universityMaster: student.universityMaster || "",
-        languageScore: student.languageScore || "",
+        languageScore: priorRecord?.languageScore || student.languageScore || "",
         notes: student.notes || "",
         interestedLevel: student.interestedLevel || "",
-        eduCity: "", eduCountry: "", eduField: "",
+        eduCity: priorRecord?.city || "",
+        eduCountry: priorRecord?.country || "",
+        eduField: priorRecord?.fieldOfStudy || "",
       });
     }
-  }, [open, student]);
+  }, [open, student, educationRecords]);
 
   function field(name: string) {
     return (val: string) => setForm(f => ({ ...f, [name]: val }));
@@ -850,7 +886,12 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
     setSaving(true);
     try {
       const phone = form.phone ? `${form.phoneCode}${form.phone.replace(/^\s+/, "")}` : "";
-      const gpa = form.gpa ? (form.gradingSystem !== "4" ? `${form.gpa}/${form.gradingSystem}` : form.gpa) : "";
+      const gpa =
+        form.gpa && form.gradingSystem
+          ? form.gradingSystem !== "4"
+            ? `${form.gpa}/${form.gradingSystem}`
+            : form.gpa
+          : form.gpa;
       const res = await fetch(`${BASE_URL}/api/students/${student.id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -863,7 +904,13 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
           passportIssueDate: form.passportIssueDate,
           passportExpiry: form.passportExpiry,
           motherName: form.motherName, fatherName: form.fatherName,
-          address: form.address, highSchool: form.highSchool,
+          address: form.address,
+          cityOfBirth: form.cityOfBirth || null,
+          addressCity: form.addressCity || null,
+          postalCode: form.postalCode || null,
+          needsVisaSupport:
+            form.needsVisaSupport === "" ? null : form.needsVisaSupport === "yes",
+          highSchool: form.highSchool,
           interestedLevel: form.interestedLevel || null,
           graduationYear: form.graduationYear ? parseInt(form.graduationYear) : null,
           gpa, universityBachelor: form.universityBachelor,
@@ -892,7 +939,7 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
                 fieldOfStudy: form.eduField || null,
                 endYear: form.graduationYear ? parseInt(form.graduationYear) : null,
                 gpa: form.gpa || null,
-                gpaType: form.gpa ? form.gradingSystem : null,
+                gpaType: form.gpa && form.gradingSystem ? form.gradingSystem : null,
                 languageScore: form.languageScore || null,
               }),
             });
@@ -949,6 +996,21 @@ function EditStudentDialog({ open, onClose, student, stages }: { open: boolean; 
               <F label={t("studentsPage.motherName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentsPage.motherNamePlaceholder")} latinUppercase />
               <F label={t("studentsPage.fatherName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentsPage.fatherNamePlaceholder")} latinUppercase />
               <F label={t("studentsPage.address")} value={form.address} onChange={field("address")} placeholder={t("studentsPage.addressPlaceholder")} className="col-span-2" />
+              <F label="Residence City" value={form.addressCity} onChange={field("addressCity")} placeholder="e.g. Khujand" />
+              <F label="Postal Code" value={form.postalCode} onChange={field("postalCode")} placeholder="e.g. 735700" />
+              <F label="City of Birth (optional)" value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder="e.g. Khujand" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Needs Visa Support</Label>
+                <select
+                  value={form.needsVisaSupport}
+                  onChange={(e) => field("needsVisaSupport")(e.target.value)}
+                  className="flex h-9 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Not specified</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
               <div className="space-y-1.5">
                 <Label className="font-semibold text-sm">Status</Label>
                 <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>

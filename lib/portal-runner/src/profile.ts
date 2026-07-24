@@ -89,6 +89,14 @@ function buildSubmitProfileFromRecords(
     motherName:     student.motherName?.trim() || "-",
     nationality:    student.nationality     ?? "",
     address:        student.address         ?? "",
+    addressStreet:  student.address?.trim() || undefined,
+    addressCity:    student.addressCity?.trim() || undefined,
+    addressZip:     student.postalCode?.trim() || undefined,
+    cityOfBirth:    student.cityOfBirth?.trim() || undefined,
+    visaSupport:
+      student.needsVisaSupport == null
+        ? undefined
+        : student.needsVisaSupport ? "Yes" : "No",
     phone:          student.phoneE164 ?? student.phone ?? "",
     level:          app.level               ?? "",
     programName:    app.programName         ?? "",
@@ -770,7 +778,15 @@ export async function buildProfileFromApplication(
 
   if (!student) throw new Error(`Student ${app.studentId} not found`);
 
+  const educationRecords = await db
+    .select()
+    .from(educationRecordsTable)
+    .where(eq(educationRecordsTable.studentId, app.studentId));
+
   const profile = buildSubmitProfileFromRecords(student, app);
+  if (educationRecords.length > 0) {
+    profile.educationRecords = educationRecords as any;
+  }
   (profile as any).phoneE164  = student.phoneE164 ?? null;
   (profile as any).phone_e164 = student.phoneE164 ?? null;
   const dl = await downloadStudentDocuments(

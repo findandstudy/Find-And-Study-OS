@@ -205,14 +205,15 @@ export function extractStudentDocumentRefs(rows: RawDocumentRow[]): {
 // ---------------------------------------------------------------------------
 
 /**
- * Splits a free-form address string into street / city / zip parts.
+ * Best-effort legacy address split used by existing non-Altınbaş adapters.
  *
  * Rules (additive, non-breaking):
  *   - `street` = the entire raw address string (trimmed)
- *   - `city`   = the text BEFORE the first comma (trimmed); equals `street`
- *                when no comma is present
- *   - `zip`    = empty string (no reliable zip extraction from free-form CRM
- *                addresses; reserved for portal-specific overrides)
+ *   - `city` = text before the first comma, or the whole value without comma
+ *   - `zip` remains empty
+ *
+ * Altınbaş never treats this derived city as authoritative: buildProfile maps
+ * its `addressCity` only from the dedicated CRM field.
  *
  * Edge cases: blank / undefined address → all three parts are `""`.
  */
@@ -507,25 +508,39 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
   const phone = isBlank(data.phone) ? "" : str("phone");
   if (isBlank(data.phone)) logger.warn('buildProfile: phone boş — "" ile devam');
 
-  let address = isBlank(data.address) ? "" : str("address");
-  if (isBlank(data.address)) {
+  const addressWasMissing = isBlank(data.address);
+  let address = addressWasMissing ? "" : str("address");
+  if (addressWasMissing) {
     const fallback = !isBlank(data.nationality) ? str("nationality") : "-";
     address = fallback;
-    logger.warn(`buildProfile: address boş — fallback olarak "${fallback}" kullanıldı`);
+    logger.warn(
+      `buildProfile: address boş — ${fallback === "-" ? "placeholder" : "nationality"} fallback kullanıldı`,
+    );
   }
 
   const nationality = str("nationality");
-  const addrParts = deriveAddressParts(address || undefined);
+  const addrParts = deriveAddressParts(addressWasMissing ? undefined : address);
   const edu = deriveEducation(data);
 
   const cityOfBirthRaw = data.cityOfBirth != null ? String(data.cityOfBirth).trim() : "";
-  // Never fabricate a birth city from the current address. Altınbaş treats
-  // missing dedicated CRM cityOfBirth as data_missing and stops before writes.
+  // Never fabricate a birth city from the current address. The live Altınbaş
+  // form marks it optional, but an explicit CRM value can still be submitted.
   const cityOfBirth = cityOfBirthRaw || undefined;
+  const explicitStreet =
+    data.addressStreet != null ? String(data.addressStreet).trim() : "";
+  const explicitCity =
+    data.addressCity != null ? String(data.addressCity).trim() : "";
+  const explicitZip =
+    data.addressZip != null ? String(data.addressZip).trim() :
+    data.postalCode != null ? String(data.postalCode).trim() :
+    "";
 
-  const isTurkish = /^(tr|tur|turk|turkish|türk|türkiye|turkey)$/i.test(nationality.trim());
+  const visaSupportRaw =
+    data.visaSupport != null ? String(data.visaSupport).trim() : "";
   const visaSupport =
-    data.visaSupport != null ? String(data.visaSupport) : (isTurkish ? "No" : "Yes");
+    /^(yes|no)$/i.test(visaSupportRaw)
+      ? (/^yes$/i.test(visaSupportRaw) ? "Yes" : "No")
+      : undefined;
 
   const intakeTerm =
     data.intakeTerm != null ? String(data.intakeTerm) :
@@ -558,9 +573,9 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
 
     // Additive — Altınbaş Faz-B
     cityOfBirth,
-    addressStreet: addrParts.street || undefined,
-    addressCity:   addrParts.city   || undefined,
-    addressZip:    addrParts.zip    || undefined,
+    addressStreet: explicitStreet || addrParts.street || undefined,
+    addressCity:   explicitCity || undefined,
+    addressZip:    explicitZip || undefined,
     phoneCountry:  derivePhoneCountry(phone || undefined, nationality || undefined),
     ...edu,
     visaSupport,

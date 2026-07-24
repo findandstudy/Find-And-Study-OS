@@ -245,9 +245,9 @@ test("BP3: buildProfile intakeTerm is undefined when neither intakeTerm nor term
   assert.equal(profile.intakeTerm, undefined);
 });
 
-test("BP4: buildProfile derives addressCity/addressStreet from address", () => {
+test("BP4: buildProfile preserves street but never derives structured city/zip", () => {
   const profile = buildProfile({ ...BASE_DATA, address: "Kabul, Afghanistan" });
-  assert.equal(profile.addressCity, "Kabul");
+  assert.equal(profile.addressCity, undefined);
   assert.equal(profile.addressStreet, "Kabul, Afghanistan");
   assert.equal(profile.addressZip, undefined);
 });
@@ -261,13 +261,13 @@ test("BP5: buildProfile derives phoneCountry from E.164 phone", () => {
   assert.equal(profile.phoneCountry, "Afghanistan");
 });
 
-test("BP6: buildProfile derives visaSupport='No' for Turkish nationality", () => {
+test("BP6: buildProfile never infers visaSupport from Turkish nationality", () => {
   const profile = buildProfile({ ...BASE_DATA, nationality: "Turkish" });
-  assert.equal(profile.visaSupport, "No");
+  assert.equal(profile.visaSupport, undefined);
 });
 
-test("BP7: buildProfile derives visaSupport='Yes' for non-Turkish nationality", () => {
-  const profile = buildProfile({ ...BASE_DATA, nationality: "Afghan" });
+test("BP7: buildProfile accepts only explicit Yes/No visaSupport", () => {
+  const profile = buildProfile({ ...BASE_DATA, visaSupport: "yes" });
   assert.equal(profile.visaSupport, "Yes");
 });
 
@@ -302,8 +302,20 @@ test("BP11: no-comma address never leaks into cityOfBirth", () => {
     ...BASE_DATA,
     address: "TAJIKISTAN KHUJAND STREET SADI 12",
   });
-  assert.equal(profile.addressCity, "TAJIKISTAN KHUJAND STREET SADI 12");
+  assert.equal(profile.addressCity, undefined);
   assert.equal(profile.cityOfBirth, undefined);
+});
+
+test("BP12: explicit structured address fields are preserved", () => {
+  const profile = buildProfile({
+    ...BASE_DATA,
+    address: "Street Sadi 12",
+    addressCity: "Khujand",
+    postalCode: "735700",
+  });
+  assert.equal(profile.addressStreet, "Street Sadi 12");
+  assert.equal(profile.addressCity, "Khujand");
+  assert.equal(profile.addressZip, "735700");
 });
 
 // ---------------------------------------------------------------------------

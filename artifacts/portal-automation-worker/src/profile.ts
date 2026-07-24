@@ -126,7 +126,8 @@ export async function buildStudentProfile(
     "-";
   if (!student.address?.trim())
     console.warn(
-      `[portal-profile] #${submissionId} address missing or empty — using fallback "${addressVal}"`,
+      `[portal-profile] #${submissionId} address missing or empty — using ` +
+      `${addressVal === "-" ? "placeholder" : "nationality"} fallback`,
     );
 
   const profile: SubmitProfile = buildProfile({
@@ -140,6 +141,14 @@ export async function buildStudentProfile(
     motherName:     motherNameVal,
     nationality:    student.nationality ?? "",
     address:        addressVal,
+    addressStreet:  student.address?.trim() || undefined,
+    addressCity:    student.addressCity?.trim() || undefined,
+    addressZip:     student.postalCode?.trim() || undefined,
+    cityOfBirth:    student.cityOfBirth?.trim() || undefined,
+    visaSupport:
+      student.needsVisaSupport == null
+        ? undefined
+        : student.needsVisaSupport ? "Yes" : "No",
     phone:          student.phoneE164 ?? student.phone ?? "",
     level:          app.level              ?? "",
     programName:    app.programName        ?? "",

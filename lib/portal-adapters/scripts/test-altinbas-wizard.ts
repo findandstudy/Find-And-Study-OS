@@ -2,10 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  altinbasMutationCanaryGate,
+  altinbasGpaTypeLabel,
   canonicalAltinbasWizardStep,
+  chooseAltinbasApplicationRow,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  missingAltinbasPersonalFields,
+  parseAltinbasCanaryStage,
+  redactAltinbasLog,
   resolveAltinbasWizardState,
+  selectAltinbasRollbackIds,
+  shouldUseAltinbasUiPath,
 } from "../src/universities/altinbas/altinbasWizard.js";
 
 test("AW1: canonicalizes the live SLDS stage-name marker", () => {
@@ -125,4 +133,124 @@ test("AW8: City of Birth accepts only a dedicated non-placeholder value", () => 
   assert.equal(explicitCityOfBirth(""), null);
   assert.equal(explicitCityOfBirth(" - "), null);
   assert.equal(explicitCityOfBirth(undefined), null);
+});
+
+test("AW9: live Personal contract treats City of Birth optional and structured address required", () => {
+  const complete = {
+    email: "student@example.com",
+    firstName: "Ali",
+    lastName: "Yilmaz",
+    passportNumber: "A1234567",
+    dateOfBirth: "2000-01-01",
+    passportIssueDate: "2020-01-01",
+    passportExpiryDate: "2030-01-01",
+    gender: "Male",
+    nationality: "Turkey",
+    addressStreet: "Main Street 1",
+    addressCity: "Istanbul",
+    addressZip: "34000",
+  };
+  assert.deepEqual(missingAltinbasPersonalFields(complete), []);
+  assert.deepEqual(
+    missingAltinbasPersonalFields({ ...complete, addressCity: "", addressZip: "" }),
+    ["addressCity", "addressZip"],
+  );
+});
+
+test("AW10: multiple application rows require unique name+programme proof", () => {
+  assert.equal(
+    chooseAltinbasApplicationRow(
+      [
+        "aliyilmazbusinessadministrationcompleteapplication",
+        "aliyilmazelectricalelectronicsengineeringcompleteapplication",
+      ],
+      ["aliyilmaz", "yilmazali"],
+      ["electricalelectronicsengineering"],
+    ),
+    1,
+  );
+  assert.equal(
+    chooseAltinbasApplicationRow(
+      ["", ""],
+      ["aliyilmaz"],
+      ["electricalelectronicsengineering"],
+    ),
+    -1,
+  );
+  assert.equal(
+    chooseAltinbasApplicationRow([""], ["aliyilmaz"], ["computerengineering"]),
+    0,
+  );
+});
+
+test("AW11: mutation canary requires UI completion and dry runner mode", () => {
+  assert.equal(
+    altinbasMutationCanaryGate({ requested: false, uiComplete: false, dryRun: false }),
+    "inactive",
+  );
+  assert.equal(
+    altinbasMutationCanaryGate({ requested: true, uiComplete: false, dryRun: true }),
+    "requires_ui_complete",
+  );
+  assert.equal(
+    altinbasMutationCanaryGate({ requested: true, uiComplete: true, dryRun: false }),
+    "requires_dry_run",
+  );
+  assert.equal(
+    altinbasMutationCanaryGate({ requested: true, uiComplete: true, dryRun: true }),
+    "ready",
+  );
+});
+
+test("AW12: every dry-run uses the read-only UI path", () => {
+  assert.equal(
+    shouldUseAltinbasUiPath({ uiComplete: false, dryRun: true }),
+    true,
+  );
+  assert.equal(
+    shouldUseAltinbasUiPath({ uiComplete: false, dryRun: false }),
+    false,
+  );
+});
+
+test("AW13: portal logging redacts applicant PII and signed tokens", () => {
+  const redacted = redactAltinbasLog(
+    'email=test@example.com passportNumber="P1234567" addressStreet="Secret Road" phone=+905551112233 https://x.test/file?token=secret',
+  );
+  assert.ok(!redacted.includes("test@example.com"));
+  assert.ok(!redacted.includes("P1234567"));
+  assert.ok(!redacted.includes("Secret Road"));
+  assert.ok(!redacted.includes("+905551112233"));
+  assert.ok(!redacted.includes("token=secret"));
+});
+
+test("AW14: GPA system maps only known CRM scales to exact portal labels", () => {
+  assert.equal(altinbasGpaTypeLabel("4"), "GRADING SYSTEM OUT OF 4");
+  assert.equal(altinbasGpaTypeLabel("4.0"), "GRADING SYSTEM OUT OF 4");
+  assert.equal(altinbasGpaTypeLabel("percentage"), "GRADING SYSTEM OUT OF 100");
+  assert.equal(
+    altinbasGpaTypeLabel("GRADING SYSTEM OUT OF 5"),
+    "GRADING SYSTEM OUT OF 5",
+  );
+  assert.equal(altinbasGpaTypeLabel("letter"), null);
+});
+
+test("AW15: rollback accepts only ids proven created in the current run", () => {
+  assert.deepEqual(
+    selectAltinbasRollbackIds({
+      runCreatedIds: ["a02Q30000000001", "a02Q30000000001", "not-an-id"],
+      explicitAppIds: ["a02Q30000000999"],
+    }),
+    ["a02Q30000000001"],
+  );
+});
+
+test("AW16: canary stage is explicit and can never target Documents", () => {
+  assert.equal(parseAltinbasCanaryStage(undefined), "Personal Information");
+  assert.equal(
+    parseAltinbasCanaryStage("educational"),
+    "Educational Information",
+  );
+  assert.equal(parseAltinbasCanaryStage("questionnaire"), "Questionnaire");
+  assert.equal(parseAltinbasCanaryStage("documents"), null);
 });

@@ -30,7 +30,7 @@ const router: IRouter = Router();
 const STUDENT_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
   "dateOfBirth", "passportNumber", "passportIssueDate", "passportExpiry",
-  "motherName", "fatherName", "address", "gender",
+  "motherName", "fatherName", "address", "cityOfBirth", "addressCity", "postalCode", "needsVisaSupport", "gender",
   "status", "agentId", "assignedToId", "userId", "notes",
   "highSchool", "graduationYear", "gpa", "languageScore",
   "universityBachelor", "universityMaster",
@@ -131,7 +131,7 @@ router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
   const SELF_FIELDS = [
     "firstName", "lastName", "phone", "nationality",
     "dateOfBirth", "passportNumber", "passportIssueDate", "passportExpiry",
-    "motherName", "fatherName", "address", "gender",
+    "motherName", "fatherName", "address", "cityOfBirth", "addressCity", "postalCode", "needsVisaSupport", "gender",
     "highSchool", "universityBachelor", "universityMaster",
     "graduationYear", "gpa", "languageScore",
   ];
@@ -358,7 +358,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     firstName, lastName, status = "active",
     email, phone, nationality,
     dateOfBirth, gender, passportNumber, passportIssueDate, passportExpiry,
-    motherName, fatherName, address,
+    motherName, fatherName, address, cityOfBirth, addressCity, postalCode, needsVisaSupport,
     agentId, userId, notes,
     highSchool, graduationYear, gpa, languageScore, season,
     interestedLevel,
@@ -366,6 +366,14 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
 
   if (!firstName || !lastName) {
     res.status(400).json({ error: "firstName and lastName are required" });
+    return;
+  }
+  if (
+    needsVisaSupport !== undefined &&
+    needsVisaSupport !== null &&
+    typeof needsVisaSupport !== "boolean"
+  ) {
+    res.status(400).json({ error: "needsVisaSupport must be boolean or null" });
     return;
   }
   const { error: nameErr, normalized: normBody } = normalizeAndValidateNames(
@@ -433,6 +441,10 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     motherName: normBody.motherName ? (normBody.motherName as string) : null,
     fatherName: normBody.fatherName ? (normBody.fatherName as string) : null,
     address: normBody.address ? (normBody.address as string) : null,
+    cityOfBirth: typeof cityOfBirth === "string" && cityOfBirth.trim() ? cityOfBirth.trim() : null,
+    addressCity: typeof addressCity === "string" && addressCity.trim() ? addressCity.trim() : null,
+    postalCode: typeof postalCode === "string" && postalCode.trim() ? postalCode.trim() : null,
+    needsVisaSupport: typeof needsVisaSupport === "boolean" ? needsVisaSupport : null,
     agentId: resolvedAgentId,
     userId: userId || null,
     notes: notes || null,
@@ -652,7 +664,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   const STUDENT_SELF_FIELDS = [
     "firstName", "lastName", "phone", "nationality",
     "dateOfBirth", "passportNumber", "passportIssueDate", "passportExpiry",
-    "motherName", "fatherName", "address", "gender",
+    "motherName", "fatherName", "address", "cityOfBirth", "addressCity", "postalCode", "needsVisaSupport", "gender",
     "highSchool", "universityBachelor", "universityMaster",
     "graduationYear", "gpa", "languageScore", "photoUrl",
   ];
@@ -702,6 +714,19 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
+  }
+  if (
+    updates.needsVisaSupport !== undefined &&
+    updates.needsVisaSupport !== null &&
+    typeof updates.needsVisaSupport !== "boolean"
+  ) {
+    res.status(400).json({ error: "needsVisaSupport must be boolean or null" });
+    return;
+  }
+  for (const key of ["cityOfBirth", "addressCity", "postalCode"] as const) {
+    if (typeof updates[key] === "string") {
+      updates[key] = (updates[key] as string).trim() || null;
+    }
   }
   if (updates.email && typeof updates.email === "string") {
     const normalizedEmail = (updates.email as string).toLowerCase().trim();

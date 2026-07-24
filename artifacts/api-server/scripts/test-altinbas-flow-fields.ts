@@ -18,9 +18,26 @@ import assert from "node:assert/strict";
 import {
   mapCountry,
   buildPersonalFields,
+  buildQuestionnaireFields,
   classifyProfileLevel,
   checkMissingEduRecord,
 } from "../../../lib/portal-adapters/src/universities/altinbas/flow-fields.js";
+
+describe("buildQuestionnaireFields — explicit answer only", () => {
+  it("rejects a missing answer instead of defaulting to Yes", () => {
+    assert.throws(
+      () => buildQuestionnaireFields(undefined),
+      /DATA_MISSING: needsVisaSupport/,
+    );
+  });
+  it("normalizes an explicit no", () => {
+    const fields = buildQuestionnaireFields(" no ");
+    assert.deepEqual(
+      fields.map((field) => field.value),
+      ["No", "No"],
+    );
+  });
+});
 
 // ---------------------------------------------------------------------------
 // mapCountry — null on empty input
@@ -153,6 +170,9 @@ describe("buildPersonalFields — throws MISSING_NATIONALITY when nationality ab
     phone: "5321234567",
     gender: "male",
     address: "123 Main St, Istanbul",
+    addressStreet: "123 Main St",
+    addressCity: "Istanbul",
+    addressZip: "34000",
   };
 
   it("throws when nationality is undefined", () => {
@@ -197,6 +217,27 @@ describe("buildPersonalFields — throws MISSING_NATIONALITY when nationality ab
       String(birthCountryField.field).includes(".Pakistan."),
       `expected Pakistan in field name, got: ${birthCountryField.field}`,
     );
+  });
+
+  it("never fabricates city, street or postal code", () => {
+    assert.throws(
+      () => buildPersonalFields({
+        ...base,
+        nationality: "pakistan",
+        addressCity: undefined,
+        addressZip: undefined,
+      }),
+      /DATA_MISSING:.*addressCity.*postalCode/,
+    );
+  });
+
+  it("uses only explicit structured address values", () => {
+    const fields = buildPersonalFields({ ...base, nationality: "pakistan" });
+    const values = Object.fromEntries(fields.map((field) => [field.field, field.value]));
+    assert.equal(values.Address_Street, "123 Main St");
+    assert.equal(values.Address_City, "Istanbul");
+    assert.equal(values.Address_Zip_Code, "34000");
+    assert.notEqual(values.Address_Zip_Code, "1000001");
   });
 });
 

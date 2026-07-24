@@ -94,3 +94,49 @@ test("R8: non-SIT portal (skeleton matrix) → ready", () => {
   assert.equal(r.ready, true);
   assert.deepEqual(r.missing, []);
 });
+
+test("R9: Altınbaş requires dedicated city/postal/visa fields", () => {
+  const missing = computeReadiness(
+    fullStudent({ address: "A full street address" }),
+    [hsRecord()],
+    "altinbas",
+    DOCS,
+  );
+  assert.ok(missing.missing.includes("addressCity"));
+  assert.ok(missing.missing.includes("postalCode"));
+  assert.ok(missing.missing.includes("needsVisaSupport"));
+
+  const ready = computeReadiness(
+    fullStudent({
+      address: "A full street address",
+      addressCity: "Istanbul",
+      postalCode: "34000",
+      needsVisaSupport: false,
+    }),
+    [hsRecord()],
+    "altinbas",
+    DOCS,
+  );
+  assert.deepEqual(ready.missing, []);
+  assert.deepEqual(ready.incompatible, []);
+  assert.equal(ready.ready, true);
+
+  const followupMissing = computeReadiness(
+    fullStudent({
+      address: "A full street address",
+      addressCity: "Istanbul",
+      postalCode: "34000",
+      needsVisaSupport: true,
+    }),
+    [hsRecord()],
+    "altinbas",
+    DOCS,
+  );
+  assert.ok(
+    followupMissing.incompatible.some(
+      (item) =>
+        item.field === "needsVisaSupport" &&
+        item.reason === "questionnaireFollowupUnmapped",
+    ),
+  );
+});

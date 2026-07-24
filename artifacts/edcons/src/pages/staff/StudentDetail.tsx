@@ -1782,6 +1782,7 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
     nationality: "", dateOfBirth: "", gender: "",
     passportNumber: "", passportIssueDate: "", passportExpiry: "",
     motherName: "", fatherName: "", address: "",
+    cityOfBirth: "", addressCity: "", postalCode: "", needsVisaSupport: "",
     highSchool: "", graduationYear: "", gpa: "", gradingSystem: "4",
     universityBachelor: "", universityMaster: "",
     languageScore: "", notes: "", interestedLevel: "",
@@ -1812,6 +1813,13 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
         passportExpiry: student.passportExpiry || "",
         motherName: student.motherName || "", fatherName: student.fatherName || "",
         address: student.address || "",
+        cityOfBirth: student.cityOfBirth || "",
+        addressCity: student.addressCity || "",
+        postalCode: student.postalCode || "",
+        needsVisaSupport:
+          student.needsVisaSupport == null
+            ? ""
+            : student.needsVisaSupport ? "yes" : "no",
         highSchool: student.highSchool || "",
         graduationYear: student.graduationYear?.toString() || "",
         gpa: gpaVal, gradingSystem: gradingSys,
@@ -1850,7 +1858,13 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
           passportIssueDate: form.passportIssueDate,
           passportExpiry: form.passportExpiry,
           motherName: form.motherName, fatherName: form.fatherName,
-          address: form.address, highSchool: form.highSchool,
+          address: form.address,
+          cityOfBirth: form.cityOfBirth || null,
+          addressCity: form.addressCity || null,
+          postalCode: form.postalCode || null,
+          needsVisaSupport:
+            form.needsVisaSupport === "" ? null : form.needsVisaSupport === "yes",
+          highSchool: form.highSchool,
           graduationYear: form.graduationYear ? parseInt(form.graduationYear) : null,
           gpa, universityBachelor: form.universityBachelor,
           universityMaster: form.universityMaster,
@@ -1910,6 +1924,21 @@ function EditStudentDetailDialog({ open, onClose, student, studentId }: {
               <F label={t("studentDetailPage.mothersName")} value={form.motherName} onChange={field("motherName")} placeholder={t("studentDetailPage.mothersNamePh")} latinUppercase />
               <F label={t("studentDetailPage.fathersName")} value={form.fatherName} onChange={field("fatherName")} placeholder={t("studentDetailPage.fathersNamePh")} latinUppercase />
               <F label="Address" value={form.address} onChange={field("address")} placeholder="Full home address" className="col-span-2" />
+              <F label="Residence City" value={form.addressCity} onChange={field("addressCity")} placeholder="e.g. Khujand" />
+              <F label="Postal Code" value={form.postalCode} onChange={field("postalCode")} placeholder="e.g. 735700" />
+              <F label="City of Birth (optional)" value={form.cityOfBirth} onChange={field("cityOfBirth")} placeholder="e.g. Khujand" />
+              <div className="space-y-1.5">
+                <Label className="font-semibold text-sm">Needs Visa Support</Label>
+                <select
+                  value={form.needsVisaSupport}
+                  onChange={(e) => field("needsVisaSupport")(e.target.value)}
+                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Not specified</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
             </div>
           </section>
 

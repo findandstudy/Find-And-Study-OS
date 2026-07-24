@@ -34,10 +34,13 @@
 // alreadyExists=true (worker retry etmez) olarak ele alınır.
 // Gerçek yeni-öğrenci duplicate'i → Program adımında AlreadyApplicationError.
 //
-// Dry-run: doSubmit=false Documents'a kadar replay eder, FINISH GÖNDERMEZ.
+// Dry-run: target wizard may be opened for inspection, but no form fill,
+// Next/Save/upload/Submit or Aura mutation is allowed. The separate canary
+// flag permits only the explicitly approved Personal fill + one Next boundary.
 // ---------------------------------------------------------------------------
 
 import { appendFileSync } from "node:fs";
+import { basename } from "node:path";
 
 import { and, eq, isNull } from "drizzle-orm";
 import { db, portalSubmissionsTable } from "@workspace/db";
@@ -68,11 +71,21 @@ import {
   buildDocumentsFields,
   checkMissingEduRecord,
   classifyProfileLevel,
+  formatDateDmy,
+  mapCountry,
 } from "./flow-fields.js";
 import {
+  altinbasMutationCanaryGate,
+  altinbasGpaTypeLabel,
+  chooseAltinbasApplicationRow,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  missingAltinbasPersonalFields,
+  parseAltinbasCanaryStage,
+  redactAltinbasLog,
   resolveAltinbasWizardState,
+  selectAltinbasRollbackIds,
+  shouldUseAltinbasUiPath,
   type AltinbasWizardSnapshot,
   type AltinbasWizardState,
 } from "./altinbasWizard.js";
@@ -84,6 +97,7 @@ import {
 const ADAPTER_KEY   = "altinbas";
 const PORTAL_URL    = "https://apply.altinbas.edu.tr/partner/s/";
 const APP_FORM_URL  = PORTAL_URL + "application-form";
+
 const SESSION_STATE = "/tmp/altinbas-portal-state.json";
 
 /** Levels this adapter accepts. Everything else → skipped. */
@@ -189,17 +203,12 @@ async function pickCombobox(
 ): Promise<boolean> {
   if (!searchTerm) return false;
   try {
-    let box = page.getByLabel(labelPattern).first();
-    if (!(await box.count().catch(() => 0))) {
-      // Fallback: nearby role=combobox / typeahead input
-      box = page
-        .locator("input[role=combobox], input[aria-autocomplete=list], input[aria-autocomplete=both]")
-        .first();
-    }
-    if (!(await box.count().catch(() => 0))) {
+    const boxes = page.getByLabel(labelPattern);
+    if ((await boxes.count().catch(() => 0)) !== 1) {
       logger.warn(`[altinbas] pickCombobox: no input found for ${labelPattern}`);
       return false;
     }
+    const box = boxes.first();
 
     await box.click({ timeout: 8000 }).catch(() => {});
     await box.fill("").catch(() => {});
@@ -219,11 +228,16 @@ async function pickCombobox(
     for (let i = 0; i < optCount; i++) {
       const txt = ((await opts.nth(i).innerText().catch(() => "")) || "").trim();
       const optFold = fold(txt);
-      if (optFold === searchFold || optFold.startsWith(searchFold) || optFold.includes(searchFold)) {
+      if (optFold === searchFold) {
         await opts.nth(i).click({ timeout: 5000 }).catch(() => {});
-        logger.info(`[altinbas] pickCombobox: picked "${txt}" for "${searchTerm}"`);
         await page.waitForTimeout(500);
-        return true;
+        const selected = ((await box.inputValue().catch(() => "")) || "").trim();
+        if (fold(selected) === searchFold) {
+          logger.info("[altinbas] pickCombobox: exact option selected");
+          return true;
+        }
+        logger.warn("[altinbas] pickCombobox: option click readback mismatch");
+        return false;
       }
     }
 
@@ -446,7 +460,10 @@ function captureDump(kind: string, url: string, body: string): void {
   } catch {
     /* capture asla akışı kırmaz */
   }
-  logger.info(`[altinbas][capture] ${kind} ${url.slice(0, 140)} :: ${body.slice(0, 1200)}`);
+  logger.info(
+    `[altinbas][capture] ${kind} ${redactAltinbasLog(url).slice(0, 140)}` +
+    ` :: ${redactAltinbasLog(body).slice(0, 1200)}`,
+  );
 }
 
 /**
@@ -785,13 +802,13 @@ async function postNavigateFlow(
 
   if (resp.status < 200 || resp.status >= 300) {
     throw new Error(
-      `[altinbas] navigateFlow[${tag}] HTTP ${resp.status}: ${raw.replace(/\s+/g, " ").slice(0, 300)}`,
+      `[altinbas] navigateFlow[${tag}] HTTP ${resp.status}: ${redactAltinbasLog(raw).replace(/\s+/g, " ").slice(0, 300)}`,
     );
   }
   if (!isAuraResponse(raw)) {
     // HTML login sayfası / edge hatası vb. — aura yanıtı DEĞİL, state'e sindirme.
     throw new Error(
-      `[altinbas] navigateFlow[${tag}] yanıt aura JSON değil (session düşmüş olabilir): ${raw.replace(/\s+/g, " ").slice(0, 300)}`,
+      `[altinbas] navigateFlow[${tag}] yanıt aura JSON değil (session düşmüş olabilir): ${redactAltinbasLog(raw).replace(/\s+/g, " ").slice(0, 300)}`,
     );
   }
 
@@ -999,146 +1016,6 @@ function pickProgramRecord(
 }
 
 // ---------------------------------------------------------------------------
-// FIX-15B: isDuplicatePassport tespit edilince My Applications sayfasına gidip
-// "Signed Up" (yarım) başvuru satırında "Complete Application" tıklanır.
-// Başarılı olursa flow resume modunda devam eder (Term/Degree/Program atlanır).
-// ---------------------------------------------------------------------------
-async function tryResumeFromMyApplications(
-  page: any,
-  profile: SubmitProfile,
-  rt: FlowRuntime,
-  result: SubmitResult,
-): Promise<boolean> {
-  const MY_APPS_URL = "https://apply.altinbas.edu.tr/partner/s/my-applications";
-  try {
-    logger.info("[altinbas] FIX-15B: isDuplicatePassport → My Applications'a yönlendiriliyor");
-    await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60_000 }).catch(() => {});
-    await page.waitForTimeout(SF_HYDRATION_MS);
-
-    // "Signed Up" = Salesforce Experience Cloud'da tamamlanmamış başvuru.
-    // FIX-15C: liste 175+ kayit / 18 sayfa olabiliyor; ogrencinin satiri
-    // sayfa 1'de degilse eski kod hicbir zaman bulamiyordu. Ustelik ilk
-    // "Signed Up" satiri BASKA bir ogrencinin olabilirdi (yanlis basvuruyu
-    // resume etme riski). Simdi once "Search by Applicant" filtresiyle
-    // liste daraltiliyor, satir ogrenci adiyla da eslestiriliyor.
-    const escapeRe = (s: string) => s.replace(/[.*+?^$"{}"()|[\]\\]/g, "\\$&");
-    const fullName = [profile.firstName, profile.lastName]
-      .filter(Boolean).join(" ").trim();
-    const lastName = (profile.lastName || "").trim();
-    const searchQ = lastName.length >= 3 ? lastName : fullName;
-    if (searchQ) {
-      const searchBox = page.getByPlaceholder(/search by applicant/i).first();
-      // Lightning listesi gec hydrate olabiliyor - kutu gorunur olana dek bekle.
-      const sbVisible = await searchBox
-        .waitFor({ state: "visible", timeout: 20000 })
-        .then(() => true)
-        .catch(() => false);
-      if (sbVisible) {
-        await searchBox.click().catch(() => {});
-        await searchBox.fill("").catch(() => {});
-        // fill() Lightning'in filtre event'ini tetiklemeyebiliyor - gercek tuslama kullan.
-        await searchBox.pressSequentially(searchQ, { delay: 60 }).catch(() => {});
-        logger.info(`[altinbas] FIX-15C: My Applications "${searchQ}" ile filtreleniyor`);
-      } else {
-        logger.warn("[altinbas] FIX-15C: Search by Applicant kutusu bulunamadi - filtresiz taranacak");
-      }
-    }
-
-    const buildRows = (q: string | null) => {
-      let r = page.locator("tr").filter({ hasText: /signed up/i });
-      if (q) r = r.filter({ hasText: new RegExp(escapeRe(q), "i") });
-      return r;
-    };
-    let rows = buildRows(searchQ || null);
-    // Liste async filtreleniyor - hedef satiri acikca bekle (sabit sleep yerine).
-    await rows.first().waitFor({ state: "visible", timeout: 20000 }).catch(() => {});
-    let rowCount = await rows.count().catch(() => 0);
-    if (rowCount === 0 && fullName && searchQ !== fullName) {
-      rows = buildRows(fullName);
-      await rows.first().waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
-      rowCount = await rows.count().catch(() => 0);
-    }
-    if (rowCount === 0) {
-      // FIX-15C debug: worker'in gercekte ne gordugunu kaydet.
-      const missShot = `/tmp/altinbas-fix15c-miss-${Date.now()}.png`;
-      await page.screenshot({ path: missShot, fullPage: true }).catch(() => {});
-      const bodyTxt = await page
-        .locator("body")
-        .innerText()
-        .then((t: string) => t.replace(/\s+/g, " ").slice(0, 400))
-        .catch(() => "<body okunamadi>");
-      logger.warn(
-        `[altinbas] FIX-15C: "${searchQ || fullName}" icin Signed Up satiri bulunamadi - alreadyExists fallback'e dusuluyor | shot=${missShot} | body="${bodyTxt}"`,
-      );
-      return false;
-    }
-
-    const firstRow = rows.first();
-    const rowText = await firstRow.innerText().catch(() => "");
-    logger.info(`[altinbas] FIX-15B: Signed Up satırı bulundu: "${rowText.replace(/\s+/g, " ").slice(0, 150)}"`);
-
-    // Program mismatch uyarısı: satır metni beklenen programı içermiyorsa kaydet.
-    const crmProgram = profile.programName || "";
-    if (crmProgram) {
-      const firstWord = crmProgram.split(/\s+/)[0].toLowerCase();
-      if (firstWord.length > 3 && !rowText.toLowerCase().includes(firstWord)) {
-        if (!result.meta) result.meta = {};
-        result.meta.programMismatch = {
-          expected: crmProgram,
-          actual: rowText.replace(/\s+/g, " ").trim().slice(0, 200),
-          note: "resume mode — program doğrulanamadı, satır metninden çıkarıldı",
-        };
-        logger.warn(
-          `[altinbas] FIX-15B: program mismatch olası — expected="${crmProgram}", rowText="${rowText.slice(0, 80)}"`,
-        );
-      }
-    }
-
-    // "Complete Application" butonunu önce ilgili satırda, bulunamazsa tüm sayfada ara.
-    let completeBtn = firstRow
-      .getByRole("button", { name: /complete application/i }).first();
-    if (await completeBtn.count().catch(() => 0) === 0) {
-      completeBtn = firstRow
-        .getByRole("link", { name: /complete application/i }).first();
-    }
-    if (await completeBtn.count().catch(() => 0) === 0) {
-      completeBtn = page.getByRole("button", { name: /complete application/i }).first();
-    }
-    if (await completeBtn.count().catch(() => 0) === 0) {
-      completeBtn = page.getByRole("link", { name: /complete application/i }).first();
-    }
-    if (await completeBtn.count().catch(() => 0) === 0) {
-      logger.warn("[altinbas] FIX-15B: Complete Application butonu bulunamadı — alreadyExists fallback'e düşülüyor");
-      return false;
-    }
-
-    const beforeLastRaw = rt.lastRaw;
-    await completeBtn.scrollIntoViewIfNeeded().catch(() => {});
-    await completeBtn.click({ force: true, timeout: 10_000 }).catch(() => {});
-    await page.waitForTimeout(SF_HYDRATION_MS);
-    logger.info("[altinbas] FIX-15B: Complete Application tıklandı — flow boot bekleniyor");
-
-    // Mevcut flow interceptor yeni session'ı da yakalar (aynı URL pattern).
-    // rt.lastRaw güncellenene kadar 15s bekle.
-    for (let t = 0; t < 15; t++) {
-      await page.waitForTimeout(1000);
-      if (rt.lastRaw !== beforeLastRaw && rt.lastRaw.length > 0) break;
-    }
-
-    if (rt.lastRaw === beforeLastRaw || rt.lastRaw.length === 0) {
-      logger.warn("[altinbas] FIX-15B: flow yeniden boot olmadı (serializedState güncel değil)");
-      return false;
-    }
-
-    logger.info(`[altinbas] FIX-15B: resume başarılı — yeni stage=${readStageFromRaw(rt.lastRaw) ?? "?"}`);
-    return true;
-  } catch (err) {
-    logger.warn(`[altinbas] FIX-15B resume hatası (non-fatal): ${(err as Error).message?.slice(0, 200)}`);
-    return false;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Flow replay sürücüsü — Term → Degree → Program → commit → Personal →
 // Educational → Questionnaire → Documents → FINISH
 // ---------------------------------------------------------------------------
@@ -1158,88 +1035,162 @@ async function tryResumeFromMyApplications(
 // ===========================================================================
 
 const UI_COMPLETE = process.env.ALTINBAS_UI_COMPLETE === "1";
+const MUTATION_CANARY = process.env.ALTINBAS_MUTATION_CANARY === "1";
+const MUTATION_CANARY_STAGE = parseAltinbasCanaryStage(
+  process.env.ALTINBAS_MUTATION_CANARY_STAGE,
+);
 const MY_APPS_URL = PORTAL_URL + "my-applications";
 
-/** ISO "YYYY-MM-DD" → Salesforce display "Sep 12, 2008" (no leading zero). */
-function formatSfDate(iso: string | undefined): string {
-  if (!iso) return "";
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
-  if (!m) return "";
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const y = m[1];
-  const mo = months[parseInt(m[2], 10) - 1];
-  const d = parseInt(m[3], 10);
-  if (!mo) return "";
-  return `${mo} ${d}, ${y}`;
+interface UiFieldResult {
+  ok: boolean;
+  field: string;
+  reason: string;
 }
 
-/** Fill a labelled text/date input only when it is currently empty. */
-async function fillIfEmpty(
+/**
+ * Fill one live-discovered Salesforce field by its stable `name`, then prove
+ * the value survived blur and native/LWC validity. Never falls back to a
+ * different control and never treats an exception as success.
+ */
+async function fillNamedField(
+  page: any,
+  field: string,
+  value: string,
+): Promise<UiFieldResult> {
+  const expected = value.trim();
+  if (!expected) return { ok: false, field, reason: "data_missing" };
+  const controls = page.locator(`[name="${field}"]:visible`);
+  const count = await controls.count().catch(() => 0);
+  if (count !== 1) {
+    return { ok: false, field, reason: `control_count_${count}` };
+  }
+  const control = controls.first();
+  try {
+    const current = ((await control.inputValue()) || "").trim();
+    if (current !== expected) {
+      await control.click({ timeout: 6_000 });
+      await control.fill(expected, { timeout: 6_000 });
+      await control.press("Tab").catch(() => {});
+      await page.waitForTimeout(150);
+    }
+    const proof = await control.evaluate((element: Element) => {
+      const input = element as HTMLInputElement;
+      return {
+        value: (input.value || "").trim(),
+        ariaInvalid: input.getAttribute("aria-invalid") === "true",
+        valid: input.validity ? input.validity.valid : true,
+      };
+    });
+    return {
+      ok: proof.value === expected && !proof.ariaInvalid && proof.valid,
+      field,
+      reason:
+        proof.value !== expected ? "readback_mismatch" :
+        proof.ariaInvalid || !proof.valid ? "invalid" :
+        "ok",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      field,
+      reason: error instanceof Error ? error.name : "fill_error",
+    };
+  }
+}
+
+async function selectNamedField(
+  page: any,
+  field: string,
+  value: string,
+): Promise<UiFieldResult> {
+  const controls = page.locator(`select[name="${field}"]:visible`);
+  const count = await controls.count().catch(() => 0);
+  if (count !== 1) {
+    return { ok: false, field, reason: `control_count_${count}` };
+  }
+  const control = controls.first();
+  try {
+    await control.selectOption({ label: value }).catch(async () => {
+      await control.selectOption(value);
+    });
+    const proof = await control.evaluate((element: Element) => {
+      const select = element as HTMLSelectElement;
+      return {
+        value: (select.value || "").trim(),
+        text: (select.selectedOptions.item(0)?.textContent || "").trim(),
+        ariaInvalid: select.getAttribute("aria-invalid") === "true",
+        valid: select.validity ? select.validity.valid : true,
+      };
+    });
+    const wanted = value.toLowerCase();
+    const matched =
+      proof.value.toLowerCase() === wanted ||
+      proof.text.toLowerCase() === wanted;
+    return {
+      ok: matched && !proof.ariaInvalid && proof.valid,
+      field,
+      reason: matched ? (proof.valid && !proof.ariaInvalid ? "ok" : "invalid") : "readback_mismatch",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      field,
+      reason: error instanceof Error ? error.name : "select_error",
+    };
+  }
+}
+
+/** Select an exact native option and prove selected text/value after change. */
+async function selectNative(
   page: any,
   labelRe: RegExp,
   value: string,
 ): Promise<boolean> {
   if (!value) return false;
   try {
-    const box = page.getByLabel(labelRe).first();
-    if (!(await box.count().catch(() => 0))) return false;
-    const cur = ((await box.inputValue().catch(() => "")) || "").trim();
-    if (cur) return true; // already populated (prefilled from the Signed-Up record)
-    await box.click({ timeout: 6000 }).catch(() => {});
-    await box.fill(value, { timeout: 6000 }).catch(() => {});
-    // Lightning inputs occasionally do not commit a Playwright fill until a
-    // real keyboard event/blur occurs. Fall back to typing and always verify.
-    if (!((await box.inputValue().catch(() => "")) || "").trim()) {
-      await box.pressSequentially(value, { delay: 25 }).catch(() => {});
-    }
-    await box.press("Tab").catch(() => {});
-    await box.press("Escape").catch(() => {});
-    return !!((await box.inputValue().catch(() => "")) || "").trim();
-  } catch { return false; }
-}
-
-/** Fill and prove an exact text value, replacing a stale/wrong prefill. */
-async function fillExact(
-  page: any,
-  labelRe: RegExp,
-  value: string,
-): Promise<boolean> {
-  const expected = value.trim();
-  if (!expected) return false;
-  try {
-    const boxes = page.getByLabel(labelRe);
-    if ((await boxes.count().catch(() => 0)) !== 1) return false;
-    const box = boxes.first();
-    const current = ((await box.inputValue().catch(() => "")) || "").trim();
-    if (current === expected) return true;
-    await box.click({ timeout: 6000 });
-    await box.fill(expected, { timeout: 6000 });
-    if (((await box.inputValue().catch(() => "")) || "").trim() !== expected) {
-      await box.fill("", { timeout: 6000 });
-      await box.pressSequentially(expected, { delay: 25 });
-    }
-    await box.press("Tab").catch(() => {});
-    await box.press("Escape").catch(() => {});
-    return ((await box.inputValue().catch(() => "")) || "").trim() === expected;
+    const controls = page.getByLabel(labelRe);
+    if ((await controls.count().catch(() => 0)) !== 1) return false;
+    const sel = controls.first();
+    await sel.selectOption({ label: value }).catch(async () => {
+      await sel.selectOption(value);
+    });
+    const proof = await sel.evaluate((element: Element) => {
+      const select = element as HTMLSelectElement;
+      return {
+        value: (select.value || "").trim(),
+        text: (select.selectedOptions.item(0)?.textContent || "").trim(),
+        valid: select.validity ? select.validity.valid : true,
+        ariaInvalid: select.getAttribute("aria-invalid") === "true",
+      };
+    });
+    return (
+      (fold(proof.value) === fold(value) || fold(proof.text) === fold(value)) &&
+      proof.valid &&
+      !proof.ariaInvalid
+    );
   } catch {
     return false;
   }
 }
 
-/** Select a value in a native <select> resolved by its label. */
-async function selectNative(
-  page: any,
-  labelRe: RegExp,
-  value: string,
-): Promise<void> {
-  if (!value) return;
-  try {
-    const sel = page.getByLabel(labelRe).first();
-    if (!(await sel.count().catch(() => 0))) return;
-    await sel.selectOption({ label: value }).catch(async () => {
-      await sel.selectOption(value).catch(() => {});
-    });
-  } catch {/* tolerate */}
+/** Composed-tree text for readback only; callers must never log the result. */
+async function readComposedPageText(page: any): Promise<string> {
+  return page.evaluate(() => {
+    const roots: Array<Document | ShadowRoot> = [document];
+    const parts: string[] = [];
+    for (let rootIndex = 0; rootIndex < roots.length; rootIndex++) {
+      roots[rootIndex].querySelectorAll("*").forEach((element: Element) => {
+        if ((element as HTMLElement).shadowRoot) {
+          roots.push((element as HTMLElement).shadowRoot!);
+        }
+        if (element.children.length === 0 && element.textContent) {
+          const text = element.textContent.replace(/\s+/g, " ").trim();
+          if (text) parts.push(text);
+        }
+      });
+    }
+    return parts.join(" ");
+  }).catch(() => "");
 }
 
 /** Fill a Lightning typeahead (country pickers) only when empty. */
@@ -1247,15 +1198,36 @@ async function pickTypeaheadIfEmpty(
   page: any,
   labelRe: RegExp,
   value: string,
-): Promise<void> {
-  if (!value) return;
+): Promise<boolean> {
+  if (!value) return false;
   try {
-    const box = page.getByLabel(labelRe).first();
-    if (!(await box.count().catch(() => 0))) return;
+    const boxes = page.getByLabel(labelRe);
+    if ((await boxes.count().catch(() => 0)) !== 1) return false;
+    const box = boxes.first();
     const cur = ((await box.inputValue().catch(() => "")) || "").trim();
-    if (cur) return;
+    if (fold(cur) === fold(value)) return true;
   } catch {/* fall through to pickCombobox */}
   await pickCombobox(page, labelRe, value).catch(() => {});
+  try {
+    const boxes = page.getByLabel(labelRe);
+    if ((await boxes.count().catch(() => 0)) !== 1) return false;
+    const box = boxes.first();
+    const proof = await box.evaluate((element: Element) => {
+      const input = element as HTMLInputElement;
+      return {
+        value: (input.value || "").trim(),
+        ariaInvalid: input.getAttribute("aria-invalid") === "true",
+        valid: input.validity ? input.validity.valid : true,
+      };
+    });
+    return (
+      fold(proof.value) === fold(value) &&
+      !proof.ariaInvalid &&
+      proof.valid
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Click a wizard button (Next / Submit) by accessible name, tolerant. */
@@ -1312,99 +1284,320 @@ async function readWizardState(page: any): Promise<AltinbasWizardState> {
   }
 }
 
-/** Return visible browser validation errors with their field labels/values. */
+/** Return PII-redacted visible browser validation messages and invalid labels. */
 async function readWizardValidation(page: any): Promise<string[]> {
-  return page.evaluate(() => {
-    const roots: Array<Document | ShadowRoot> = [document];
-    const elements: Element[] = [];
-    for (let i = 0; i < roots.length; i++) {
-      roots[i].querySelectorAll("*").forEach((el: Element) => {
-        elements.push(el);
-        if ((el as HTMLElement).shadowRoot) roots.push((el as HTMLElement).shadowRoot!);
-      });
+  const output: string[] = [];
+  const messages = page.locator(
+    '[role="alert"],[aria-live="assertive"],.slds-form-element__help,.slds-has-error,.error-message',
+  );
+  const count = Math.min(await messages.count().catch(() => 0), 40);
+  for (let index = 0; index < count; index++) {
+    const message = messages.nth(index);
+    if (!(await message.isVisible().catch(() => false))) continue;
+    const text = ((await message.innerText().catch(() => "")) || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "<redacted-email>")
+      .replace(/\b\+?\d[\d\s().-]{6,}\d\b/g, "<redacted-number>")
+      .slice(0, 160);
+    if (text) output.push(text);
+  }
+  const issues = await readVisibleControlIssues(page);
+  for (const issue of issues) {
+    output.push(
+      `${issue.label} (${issue.validationMessage || "invalid"})`,
+    );
+  }
+  return [...new Set(output)].slice(0, 20);
+}
+
+/** PII-free native/LWC invalid and required-empty control inventory. */
+async function readVisibleControlIssues(page: any): Promise<Array<{
+  label: string;
+  required: boolean;
+  ariaInvalid: boolean;
+  valueMissing: boolean;
+  empty: boolean;
+  validationMessage: string;
+}>> {
+  const issues: Array<{
+    label: string;
+    required: boolean;
+    ariaInvalid: boolean;
+    valueMissing: boolean;
+    empty: boolean;
+    validationMessage: string;
+  }> = [];
+  const controls = page.locator("input, select, textarea");
+  const count = Math.min(await controls.count().catch(() => 0), 120);
+  for (let index = 0; index < count; index++) {
+    const control = controls.nth(index);
+    if (!(await control.isVisible().catch(() => false))) continue;
+    const meta = await control.evaluate((element: Element) => {
+      const input = element as HTMLInputElement;
+      const required =
+        input.required ||
+        input.hasAttribute("required") ||
+        input.getAttribute("aria-required") === "true";
+      const ariaInvalid = input.getAttribute("aria-invalid") === "true";
+      const valueMissing = input.validity ? input.validity.valueMissing : false;
+      const empty = !(input.value || "").trim();
+      let label =
+        input.getAttribute("aria-label") ||
+        input.labels?.item(0)?.textContent ||
+        "";
+      let node: Element | null = input;
+      for (let depth = 0; depth < 8 && !label && node; depth++) {
+        label =
+          node.getAttribute("label") ||
+          node.getAttribute("data-label") ||
+          node.getAttribute("title") ||
+          "";
+        const root = node.getRootNode() as ShadowRoot | Document;
+        node =
+          node.parentElement ||
+          ("host" in root ? root.host : null);
+      }
+      return {
+        label: (label || input.getAttribute("name") || input.tagName.toLowerCase())
+          .replace(/\s+/g, " ")
+          .trim()
+          .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "<redacted-email>")
+          .replace(/\b\+?\d[\d\s().-]{6,}\d\b/g, "<redacted-number>")
+          .slice(0, 160),
+        required,
+        ariaInvalid,
+        valueMissing,
+        empty,
+        validationMessage: (input.validationMessage || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "<redacted-email>")
+          .replace(/\b\+?\d[\d\s().-]{6,}\d\b/g, "<redacted-number>")
+          .slice(0, 160),
+      };
+    }).catch(() => null);
+    if (
+      meta &&
+      (meta.ariaInvalid || meta.valueMissing || (meta.required && meta.empty))
+    ) {
+      issues.push(meta);
     }
-    const clean = (value: string | null | undefined) =>
-      (value || "").replace(/\s+/g, " ").trim();
-    const visible = (el: Element) => {
-      const node = el as HTMLElement;
-      const style = getComputedStyle(node);
-      return style.display !== "none" && style.visibility !== "hidden" &&
-        (node.offsetWidth > 0 || node.offsetHeight > 0);
-    };
-    const messages = elements
-      .filter((el) => visible(el) && (
-        el.getAttribute("role") === "alert" ||
-        el.getAttribute("aria-live") === "assertive" ||
-        /slds-(form-element__help|has-error)|error-message/i.test(el.className?.toString() || "")
-      ))
-      .map((el) => clean(el.textContent))
-      .filter(Boolean);
-    const invalid = elements
-      .filter((el) => visible(el) && (
-        el.matches("input:invalid, select:invalid, textarea:invalid") ||
-        el.getAttribute("aria-invalid") === "true"
-      ))
-      .map((el) => {
-        const id = el.getAttribute("id");
-        const label = id
-          ? elements.find((candidate) => candidate.tagName === "LABEL" && candidate.getAttribute("for") === id)
-          : undefined;
-        const name = clean(label?.textContent) || clean(el.getAttribute("aria-label")) ||
-          clean(el.getAttribute("name")) || el.tagName.toLowerCase();
-        return `${name} (invalid)`;
-      });
-    return [...new Set([...messages, ...invalid])].slice(0, 20);
-  }).catch(() => [] as string[]);
+  }
+  return issues.slice(0, 30);
 }
 
 // ---------------------------------------------------------------------------
 // Stage fillers
 // ---------------------------------------------------------------------------
-async function fillPersonalUI(page: any, profile: SubmitProfile): Promise<boolean> {
-  await selectNative(page, /^\s*Gender/i, (profile.gender || "").replace(/^m.*/i, "Male").replace(/^f.*/i, "Female"));
-  await fillIfEmpty(page, /Date of Birth/i, formatSfDate(profile.dateOfBirth));
-  await pickTypeaheadIfEmpty(page, /Country of Birth/i, profile.nationality);
+async function fillPersonalUI(
+  page: any,
+  profile: SubmitProfile,
+): Promise<{ ok: boolean; failures: UiFieldResult[] }> {
+  const missing = missingAltinbasPersonalFields(profile);
+  if (missing.length) {
+    return {
+      ok: false,
+      failures: missing.map((field) => ({
+        ok: false,
+        field,
+        reason: "data_missing",
+      })),
+    };
+  }
+
+  const gender = /^f/i.test(profile.gender.trim()) ? "Female" : "Male";
+  const results: UiFieldResult[] = [];
+  results.push(await selectNamedField(page, "Gender", gender));
+  results.push(
+    await fillNamedField(page, "Date_of_Birth", formatDateDmy(profile.dateOfBirth)),
+  );
+  results.push(
+    await fillNamedField(
+      page,
+      "Passport_Date_of_Issue",
+      formatDateDmy(profile.passportIssueDate),
+    ),
+  );
+  results.push(
+    await fillNamedField(
+      page,
+      "Passport_Date_of_Expiry",
+      formatDateDmy(profile.passportExpiryDate),
+    ),
+  );
+  results.push(
+    await fillNamedField(page, "Address_Street", profile.addressStreet || ""),
+  );
+  results.push(
+    await fillNamedField(page, "Address_City", profile.addressCity || ""),
+  );
+  results.push(
+    await fillNamedField(page, "Address_Zip_Code", profile.addressZip || ""),
+  );
+
   const birthCity = explicitCityOfBirth(profile.cityOfBirth);
-  if (!birthCity) return false;
-  const birthCityFilled = await fillExact(page, /City of Birth/i, birthCity);
-  logger.info(`[altinbas][ui] Personal: City of Birth ${birthCityFilled ? "dolu" : "DOLDURULAMADI"}`);
-  await fillIfEmpty(page, /Passport Date of Issue/i, formatSfDate(profile.passportIssueDate));
-  await fillIfEmpty(page, /Passport Date of Expiry/i, formatSfDate(profile.passportExpiryDate));
-  await pickTypeaheadIfEmpty(page, /Passport Issuing Country/i, profile.nationality);
-  await fillIfEmpty(page, /Father\s*Name/i, profile.fatherName || "");
-  await fillIfEmpty(page, /Mother\s*Name/i, profile.motherName || "");
-  await pickTypeaheadIfEmpty(page, /Address:\s*Country/i, profile.nationality);
-  await fillIfEmpty(page, /Address:\s*Street/i, profile.addressStreet || profile.address || "");
-  await fillIfEmpty(page, /Address:\s*City/i, profile.addressCity || "");
-  await fillIfEmpty(page, /Address:\s*Zip/i, profile.addressZip || "");
-  return birthCityFilled;
+  if (birthCity) {
+    results.push(await fillNamedField(page, "City_of_Birth", birthCity));
+  }
+  if (profile.fatherName?.trim() && profile.fatherName.trim() !== "-") {
+    results.push(await fillNamedField(page, "Father_Name", profile.fatherName));
+  }
+  if (profile.motherName?.trim() && profile.motherName.trim() !== "-") {
+    results.push(await fillNamedField(page, "Mother_Name", profile.motherName));
+  }
+  if (profile.phone?.trim()) {
+    results.push(await fillNamedField(page, "phone", profile.phone));
+  }
+
+  const country = mapCountry(profile.nationality);
+  if (!country) {
+    results.push({
+      ok: false,
+      field: "nationality",
+      reason: "country_mapping_missing",
+    });
+  }
+  const countryProofs: Array<[string, boolean]> = [
+    [
+      "Country_of_Birth",
+      country
+        ? await pickTypeaheadIfEmpty(page, /^Country of Birth$/i, country)
+        : false,
+    ],
+    [
+      "Passport_Issuing_Country",
+      country
+        ? await pickTypeaheadIfEmpty(page, /^Passport Issuing Country$/i, country)
+        : false,
+    ],
+    [
+      "Address_Country",
+      country
+        ? await pickTypeaheadIfEmpty(page, /^Address:\s*Country$/i, country)
+        : false,
+    ],
+  ];
+  for (const [field, ok] of countryProofs) {
+    results.push({ ok, field, reason: ok ? "ok" : "readback_failed" });
+  }
+
+  const failures = results.filter((result) => !result.ok);
+  return { ok: failures.length === 0, failures };
 }
 
-/** Ensure at least one EDUCATION record exists on the Educational screen. */
-async function ensureEducationUI(page: any, profile: SubmitProfile): Promise<void> {
-  // Already has a record? ("There are no records to show." absent under EDUCATION)
-  const bodyTxt = (await page.locator("body").innerText().catch(() => "")) || "";
-  const eduSectionHasRecord =
-    /EDUCATION[\s\S]{0,400}?(Secondary School|Bachelor|Master|High School)/i.test(bodyTxt) &&
-    !/EDUCATION[\s\S]{0,120}?There are no records to show/i.test(bodyTxt);
-  if (eduSectionHasRecord) {
-    logger.info("[altinbas][ui] Educational: mevcut kayıt var, ekleme atlandı");
+/** Diagnostic boundary: one explicitly selected stage + one Next, then stop. */
+async function runSingleStepMutationCanary(
+  page: any,
+  profile: SubmitProfile,
+  result: SubmitResult,
+): Promise<void> {
+  const before = await readWizardState(page);
+  if (
+    !MUTATION_CANARY_STAGE ||
+    before.step !== MUTATION_CANARY_STAGE ||
+    before.reason !== "ok"
+  ) {
+    result.detail =
+      `Altınbaş[canary]: blocked_before_write` +
+      ` (requested="${MUTATION_CANARY_STAGE || "invalid"}",` +
+      ` aktif="${before.step || "bilinmiyor"}", detector=${before.reason})`;
     return;
   }
+  if (before.step === "Personal Information") {
+    const filled = await fillPersonalUI(page, profile);
+    if (!filled.ok) {
+      result.detail =
+        `Altınbaş[canary]: data_missing_or_unproved` +
+        ` (${filled.failures.map((item) => `${item.field}:${item.reason}`).join(",")})`;
+      return;
+    }
+  } else if (before.step === "Educational Information") {
+    const education = await ensureEducationUI(page, profile);
+    if (!education.ok) {
+      result.detail = `Altınbaş[canary]: Educational ${education.reason}`;
+      return;
+    }
+  } else if (before.step === "Questionnaire") {
+    const questionnaire = await fillQuestionnaireUI(page, profile);
+    if (!questionnaire.ok) {
+      result.detail = `Altınbaş[canary]: Questionnaire ${questionnaire.reason}`;
+      return;
+    }
+  }
+  if (!(await clickWizardBtn(page, /^\s*Next\s*$/i))) {
+    result.detail = "Altınbaş[canary]: blocked — tekil/tıklanabilir Next bulunamadı";
+    return;
+  }
+  await page.waitForTimeout(SF_HYDRATION_MS);
+  const after = await readWizardState(page);
+  const issues = await readVisibleControlIssues(page);
+  result.detail =
+    `Altınbaş[canary]: STOPPED_AFTER_EXACTLY_ONE_NEXT` +
+    ` (before="${before.step}", after="${after.step || "bilinmiyor"}",` +
+    ` transition=${classifyAltinbasWizardTransition(before.step, after.step)},` +
+    ` detector=${after.reason})` +
+    ` — controlIssues=${issues.length ? JSON.stringify(issues) : "yok"}`;
+}
+
+/** Ensure every prior-education record required by the target level exists. */
+async function ensureEducationUI(
+  page: any,
+  profile: SubmitProfile,
+): Promise<{ ok: boolean; reason: string }> {
+  const classification = classifyProfileLevel(profile.level);
+  const requiredLevels =
+    classification === "phd"
+      ? ["bachelor", "master"]
+      : classification === "master"
+        ? ["bachelor"]
+        : ["high_school"];
+  const records = requiredLevels.map((level) =>
+    profile.educationRecords?.find((record) => record.level === level),
+  );
+  const missing = records.flatMap((record, index) => {
+    const level = requiredLevels[index];
+    return [
+      !record && `${level}_education_record`,
+      !record?.schoolName?.trim() && `${level}.schoolName`,
+      !record?.country?.trim() && `${level}.country`,
+      !record?.endYear && `${level}.graduationYear`,
+      !record?.gpa?.trim() && `${level}.gpa`,
+      !altinbasGpaTypeLabel(record?.gpaType) && `${level}.gpaType`,
+    ].filter((value): value is string => !!value);
+  });
+  if (missing.length) {
+    return { ok: false, reason: `data_missing:${missing.join(",")}` };
+  }
+  for (const record of records as EduRecord[]) {
+    const ensured = await ensureEducationRecordUI(page, record);
+    if (!ensured.ok) return ensured;
+  }
+  return { ok: true, reason: "all_required_records_proved" };
+}
+
+async function ensureEducationRecordUI(
+  page: any,
+  primary: EduRecord,
+): Promise<{ ok: boolean; reason: string }> {
+  const beforeText = await readComposedPageText(page);
+  if (fold(beforeText).includes(fold(primary.schoolName!))) {
+    logger.info("[altinbas][ui] Educational: exact CRM school readback bulundu");
+    return { ok: true, reason: "existing_record_proved" };
+  }
   // Open the EDUCATION add (+) modal.
-  const addBtn = page
-    .locator("button, lightning-button-icon, [role=button]")
-    .filter({ hasText: /^\s*$/ });
   // The + is an icon button next to the "EDUCATION" heading; click by proximity.
   const opened = await page.evaluate(() => {
-    function walk(root: Document | ShadowRoot, acc: Element[]) {
-      root.querySelectorAll("*").forEach((el: Element) => {
-        if ((el as HTMLElement).shadowRoot) walk((el as HTMLElement).shadowRoot!, acc);
-        acc.push(el);
+    const roots: Array<Document | ShadowRoot> = [document];
+    const els: Element[] = [];
+    for (let rootIndex = 0; rootIndex < roots.length; rootIndex++) {
+      roots[rootIndex].querySelectorAll("*").forEach((element: Element) => {
+        els.push(element);
+        if ((element as HTMLElement).shadowRoot) {
+          roots.push((element as HTMLElement).shadowRoot!);
+        }
       });
-      return acc;
     }
-    const els = walk(document, []);
     const eduHead = els.find((e) => /^\s*EDUCATION\s*$/i.test((e.textContent || "").trim()) && e.children.length === 0);
     if (!eduHead) return false;
     // Search siblings / ancestors for an add/plus button.
@@ -1418,63 +1611,117 @@ async function ensureEducationUI(page: any, profile: SubmitProfile): Promise<voi
   }).catch(() => false);
   if (!opened) {
     logger.warn("[altinbas][ui] Educational: + (add) butonu bulunamadı");
-    return;
+    return { ok: false, reason: "add_button_missing" };
   }
   await page.waitForTimeout(2500);
   // Modal fields.
-  const primary =
-    profile.educationRecords?.find((r) => r.level === "high_school") ??
-    profile.educationRecords?.find((r) => r.level === "bachelor") ??
-    profile.educationRecords?.[0];
-  const school = primary?.schoolName || profile.schoolName || "High School";
-  const country = primary?.country || profile.nationality || "";
-  const gradYear = String(primary?.endYear || profile.graduationYear || profile.eduEndYear || "");
   const degreeLabel =
-    /master|phd|doctora|bachelor|associate/i.test(primary?.level || "")
-      ? (primary!.level.charAt(0).toUpperCase() + primary!.level.slice(1))
-      : "Secondary School";
-  const gpaVal = String(primary?.gpa ?? profile.gpa ?? "");
-  const gpaType = "GRADING SYSTEM OUT OF 5";
-  await page.getByLabel(/Name of School/i).first().fill(school).catch(() => {});
-  await selectNative(page, /^\s*Country/i, country);
-  await selectNative(page, /^\s*Degree/i, degreeLabel);
-  await selectNative(page, /Graduation Year/i, gradYear);
-  await selectNative(page, /GPA Type/i, gpaType);
-  await page.getByLabel(/^\s*GPA\s*$/i).first().fill(gpaVal || "5").catch(() => {});
+    primary.level === "bachelor" ? "Bachelor" :
+    primary.level === "master" ? "Master" :
+    "Secondary School";
+  const gpaTypeLabel = altinbasGpaTypeLabel(primary.gpaType);
+  if (!gpaTypeLabel) {
+    return { ok: false, reason: "data_missing:education.gpaType" };
+  }
+  const schoolControl = page.getByLabel(/Name of School/i);
+  if ((await schoolControl.count().catch(() => 0)) !== 1) {
+    return { ok: false, reason: "school_control_not_unique" };
+  }
+  await schoolControl.fill(primary.schoolName!.trim());
+  const schoolReadback =
+    ((await schoolControl.inputValue().catch(() => "")) || "").trim() ===
+    primary.schoolName!.trim();
+  const selectProofs = await Promise.all([
+    selectNative(page, /^\s*Country/i, primary.country!.trim()),
+    selectNative(page, /^\s*Degree/i, degreeLabel),
+    selectNative(page, /Graduation Year/i, String(primary.endYear)),
+    selectNative(page, /GPA Type/i, gpaTypeLabel),
+  ]);
+  const gpaControl = page.getByLabel(/^\s*GPA\s*$/i);
+  if ((await gpaControl.count().catch(() => 0)) !== 1) {
+    return { ok: false, reason: "gpa_control_not_unique" };
+  }
+  await gpaControl.fill(primary.gpa!.trim());
+  const gpaReadback =
+    ((await gpaControl.inputValue().catch(() => "")) || "").trim() ===
+    primary.gpa!.trim();
+  if (!schoolReadback || !gpaReadback || selectProofs.some((proof) => !proof)) {
+    return { ok: false, reason: "education_readback_failed" };
+  }
   await page.waitForTimeout(500);
-  await clickWizardBtn(page, /^\s*Save\s*$/i);
+  if (!(await clickWizardBtn(page, /^\s*Save\s*$/i))) {
+    return { ok: false, reason: "save_button_missing" };
+  }
   await page.waitForTimeout(3500);
+  const validation = await readWizardValidation(page);
+  if (validation.length) {
+    return { ok: false, reason: `validation:${validation.join("|")}` };
+  }
+  const state = await readWizardState(page);
+  const afterText = await readComposedPageText(page);
+  const recordProved =
+    state.step === "Educational Information" &&
+    state.reason === "ok" &&
+    fold(afterText).includes(fold(primary.schoolName!));
+  return recordProved
+    ? { ok: true, reason: "created_and_read_back" }
+    : { ok: false, reason: "education_row_readback_failed" };
 }
 
-async function fillQuestionnaireUI(page: any, profile: SubmitProfile): Promise<void> {
-  const need = (profile.visaSupport || "Yes").toLowerCase().startsWith("y") ? "Yes" : "No";
-  // Lightning combobox: click, pick option.
-  try {
-    const combo = page.getByRole("combobox").first();
-    if (await combo.count().catch(() => 0)) {
-      await combo.click({ timeout: 6000 }).catch(() => {});
-      await page.waitForTimeout(800);
-      const opt = page.getByRole("option", { name: new RegExp(`^\\s*${need}\\s*$`, "i") }).first();
-      if (await opt.count().catch(() => 0)) await opt.click({ timeout: 5000 }).catch(() => {});
-    }
-  } catch {/* tolerate */}
-  await page.waitForTimeout(1500);
-  if (need === "Yes") {
-    // A free-text "embassy" answer appears; fill the first empty textbox on screen.
-    const embassy = `Turkish Consulate in ${profile.nationality || "home country"}`;
-    try {
-      const boxes = page.getByRole("textbox");
-      const n = await boxes.count().catch(() => 0);
-      for (let i = 0; i < n; i++) {
-        const b = boxes.nth(i);
-        const v = ((await b.inputValue().catch(() => "")) || "").trim();
-        if (!v) { await b.fill(embassy).catch(() => {}); break; }
-      }
-    } catch {/* tolerate */}
+async function fillQuestionnaireUI(
+  page: any,
+  profile: SubmitProfile,
+): Promise<{ ok: boolean; reason: string }> {
+  if (!/^(yes|no)$/i.test(profile.visaSupport || "")) {
+    return { ok: false, reason: "data_missing:needsVisaSupport" };
   }
+  const need = /^yes$/i.test(profile.visaSupport || "") ? "Yes" : "No";
+  if (need === "Yes") {
+    // Live evidence shows an additional consulate/embassy answer after Yes.
+    // The CRM has no dedicated source for it yet; never fabricate one.
+    return { ok: false, reason: "data_missing:questionnaire_followup" };
+  }
+  // Lightning combobox: click, pick option.
+  const combos = page.getByRole("combobox");
+  if ((await combos.count().catch(() => 0)) !== 1) {
+    return { ok: false, reason: "visa_combobox_not_unique" };
+  }
+  const combo = combos.first();
+  await combo.click({ timeout: 6_000 }).catch(() => {});
+  await page.waitForTimeout(800);
+  const options = page.getByRole("option", {
+    name: new RegExp(`^\\s*${need}\\s*$`, "i"),
+  });
+  if ((await options.count().catch(() => 0)) !== 1) {
+    return { ok: false, reason: "visa_option_not_unique" };
+  }
+  await options.first().click({ timeout: 5_000 }).catch(() => {});
+  await page.waitForTimeout(1500);
+  const proof = await combo.evaluate((element: Element) => {
+    const control = element as HTMLInputElement;
+    return {
+      value: (control.value || "").trim(),
+      text: (control.textContent || "").trim(),
+      ariaValue: (control.getAttribute("aria-valuetext") || "").trim(),
+      ariaInvalid: control.getAttribute("aria-invalid") === "true",
+    };
+  }).catch(() => null);
+  const selected = proof && [proof.value, proof.text, proof.ariaValue]
+    .some((value) => fold(value) === fold(need));
+  return selected && !proof!.ariaInvalid
+    ? { ok: true, reason: "selected_and_read_back" }
+    : { ok: false, reason: "visa_readback_failed" };
 }
 
 async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[]> {
+  const state = await readWizardState(page);
+  if (state.step !== "Documents" || !state.documentScreen || state.reason !== "ok") {
+    logger.warn(
+      `[altinbas][ui] Documents upload blocked` +
+      ` (aktif="${state.step || "bilinmiyor"}", detector=${state.reason})`,
+    );
+    return [];
+  }
   const wanted: Array<[RegExp, string | undefined, string]> = [
     [/Passport/i, files.passport, "passport"],
     [/Diploma/i, files.diploma, "diploma"],
@@ -1483,73 +1730,97 @@ async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[
   ];
   const uploaded: string[] = [];
 
-  // Diagnostic: dump every file input with its nearest descriptive label so a
-  // failed match still tells us the real Documents-screen structure.
-  const allLabels: string[] = await page.evaluate(() => {
-    function walk(root: Document | ShadowRoot, acc: HTMLInputElement[]) {
-      root.querySelectorAll("*").forEach((el: Element) => {
-        if ((el as HTMLElement).shadowRoot) walk((el as HTMLElement).shadowRoot!, acc);
-        if (el.tagName === "INPUT" && (el as HTMLInputElement).type === "file") acc.push(el as HTMLInputElement);
-      });
-      return acc;
-    }
-    const inputs = walk(document, []);
-    return inputs.map((inp) => {
-      let n: any = inp;
-      for (let i = 0; i < 10 && n; i++) {
-        n = n.parentElement || (n.getRootNode && n.getRootNode().host);
-        if (n && /Required|Passport|Diploma|Transcript|Photo|Picture|Document/i.test(n.textContent || "")) {
-          return (n.textContent || "").replace(/\s+/g, " ").trim().slice(0, 90);
+  const fileInputs = page.locator('input[type="file"]');
+  const labels: string[] = await fileInputs.evaluateAll(
+    (inputs: HTMLInputElement[]) =>
+      inputs.map((input) => {
+        let node: Element | null = input;
+        for (let depth = 0; depth < 10 && node; depth++) {
+          const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+          if (/Required|Passport|Diploma|Transcript|Photo|Picture|Document/i.test(text)) {
+            return text.slice(0, 120);
+          }
+          const root = node.getRootNode() as ShadowRoot | Document;
+          node =
+            node.parentElement ||
+            ("host" in root ? root.host : null);
         }
-      }
-      return "(etiket yok)";
-    });
-  }).catch(() => [] as string[]);
-  logger.info(`[altinbas][ui] Documents: ${allLabels.length} file input → etiketler: ${JSON.stringify(allLabels)}`);
+        return "";
+      }),
+  ).catch(() => [] as string[]);
+  logger.info(
+    `[altinbas][ui] Documents: fileInputCount=${labels.length}` +
+    ` labelled=${labels.filter(Boolean).length}`,
+  );
 
   for (const [re, path, tag] of wanted) {
     if (!path) continue;
-    // Map file inputs → their "Required - X" section label (pierces shadow DOM).
-    const labels: string[] = await page.evaluate(() => {
-      function walk(root: Document | ShadowRoot, acc: HTMLInputElement[]) {
-        root.querySelectorAll("*").forEach((el: Element) => {
-          if ((el as HTMLElement).shadowRoot) walk((el as HTMLElement).shadowRoot!, acc);
-          if (el.tagName === "INPUT" && (el as HTMLInputElement).type === "file") acc.push(el as HTMLInputElement);
-        });
-        return acc;
-      }
-      const inputs = walk(document, []);
-      return inputs.map((inp) => {
-        let n: any = inp;
-        for (let i = 0; i < 8 && n; i++) {
-          n = n.parentElement || (n.getRootNode && n.getRootNode().host);
-          if (n && /Required -/i.test(n.textContent || "")) return (n.textContent || "").slice(0, 100);
-        }
-        return "";
-      });
-    }).catch(() => [] as string[]);
-    const idx = labels.findIndex((l) => re.test(l));
-    if (idx < 0) { logger.warn(`[altinbas][ui] Documents: ${tag} için input bulunamadı`); continue; }
+    const indices = labels
+      .map((label, index) => (re.test(label) ? index : -1))
+      .filter((index) => index >= 0);
+    if (indices.length !== 1) {
+      logger.warn(
+        `[altinbas][ui] Documents: ${tag} input tekil değil (count=${indices.length})`,
+      );
+      continue;
+    }
+    const fileName = basename(path);
+    const beforeText = await readComposedPageText(page);
+    if (fold(beforeText).includes(fold(fileName))) {
+      uploaded.push(tag);
+      logger.info(`[altinbas][ui] Documents: ${tag} exact filename zaten mevcut`);
+      continue;
+    }
     try {
-      await page.locator('input[type="file"]').nth(idx).setInputFiles(path);
+      await fileInputs.nth(indices[0]).setInputFiles(path);
     } catch (e) {
       logger.warn(`[altinbas][ui] Documents: ${tag} setInputFiles hatası: ${(e as Error).message?.slice(0, 120)}`);
       continue;
     }
+    const localReadback = await fileInputs.nth(indices[0]).evaluate(
+      (input: Element) => {
+        const fileInput = input as HTMLInputElement;
+        return fileInput.files?.item(0)?.name || "";
+      },
+    ).catch(() => "");
+    if (localReadback !== fileName) {
+      logger.warn(`[altinbas][ui] Documents: ${tag} local file readback başarısız`);
+      continue;
+    }
     // Upload modal → wait for Done, click it.
     await page.waitForTimeout(1500);
+    let doneClicked = false;
     for (let t = 0; t < 20; t++) {
-      const done = page.getByRole("button", { name: /^\s*Done\s*$/i }).first();
-      if (await done.count().catch(() => 0)) {
+      const done = page.getByRole("button", { name: /^\s*Done\s*$/i });
+      if ((await done.count().catch(() => 0)) === 1) {
         await page.waitForTimeout(1200);
-        await done.click({ timeout: 6000 }).catch(() => {});
+        doneClicked = await done.click({ timeout: 6000 }).then(
+          () => true,
+          () => false,
+        );
         break;
       }
       await page.waitForTimeout(1000);
     }
+    if (!doneClicked) {
+      logger.warn(`[altinbas][ui] Documents: ${tag} Done doğrulanamadı`);
+      continue;
+    }
     await page.waitForTimeout(1500);
+    const after = await readWizardState(page);
+    if (after.step !== "Documents" || after.reason !== "ok") {
+      logger.warn(`[altinbas][ui] Documents: ${tag} sonrası stage doğrulanamadı`);
+      continue;
+    }
+    const afterText = await readComposedPageText(page);
+    if (!fold(afterText).includes(fold(fileName))) {
+      logger.warn(
+        `[altinbas][ui] Documents: ${tag} portal filename readback doğrulanamadı`,
+      );
+      continue;
+    }
     uploaded.push(tag);
-    logger.info(`[altinbas][ui] Documents: ${tag} yüklendi`);
+    logger.info(`[altinbas][ui] Documents: ${tag} upload tamamlandı`);
   }
   return uploaded;
 }
@@ -1608,25 +1879,94 @@ async function completeApplicationUI(
   if (!nBtns) {
     result.detail = `Altınbaş[ui]: My Applications'ta 'Complete Application' (Signed Up) başvuru yok (program="${profile.programName}")`;
     logger.warn(`[altinbas][ui] ${result.detail}`);
+    if (MUTATION_CANARY) {
+      result.detail = "Altınbaş[canary]: blocked — hedef Complete Application satırı bulunamadı";
+      result.screenshots = shots;
+      return true;
+    }
     const s = await captureScreen(page, "ui-no-complete-btn"); if (s) shots.push(s);
     // NO existing row → tell caller to fall through to the normal create path.
     return false;
   }
 
-  // Choose the button whose row's program matches the profile; else the first.
-  let chosenIdx = 0;
-  let matched = false;
+  // Resolve the composed Salesforce row across shadow-root boundaries. Raw row
+  // text is used only in memory and never logged.
+  const rowTexts: string[] = [];
   for (let i = 0; i < nBtns; i++) {
-    let rowText = "";
     try {
-      rowText = await completeBtns.nth(i).locator("xpath=ancestor::tr[1]").innerText({ timeout: 3000 });
-    } catch { rowText = ""; }
-    const rf = fold(rowText);
-    if ((coreProg.length > 5 && rf.includes(coreProg)) || (progFold.length > 6 && rf.includes(progFold))) {
-      chosenIdx = i; matched = true; break;
+      rowTexts.push(await completeBtns.nth(i).evaluate((button: Element) => {
+        let node: Element | null = button;
+        let boundary: Element | null = null;
+        for (let depth = 0; depth < 20 && node; depth++) {
+          if (
+            node.tagName === "C-APPLICATION-TABLE-ROW-COMPONENT" ||
+            node.matches("tr,[role='row']")
+          ) {
+            boundary = node;
+            break;
+          }
+          const root = node.getRootNode() as ShadowRoot | Document;
+          node =
+            node.parentElement ||
+            ("host" in root ? root.host : null);
+        }
+        if (!boundary) return "";
+        const parts: string[] = [];
+        const seen = new Set<Node>();
+        const stack: Node[] = [boundary];
+        let totalLength = 0;
+        while (stack.length > 0 && totalLength < 20_000) {
+          const current = stack.pop();
+          if (!current || seen.has(current)) continue;
+          seen.add(current);
+          if (current.nodeType === 3) {
+            const text = (current.textContent || "").replace(/\s+/g, " ").trim();
+            if (text) {
+              parts.push(text);
+              totalLength += text.length + 1;
+            }
+            continue;
+          }
+          if (current.nodeType === 1) {
+            const shadowRoot = (current as Element).shadowRoot;
+            if (shadowRoot) stack.push(shadowRoot);
+          }
+          for (
+            let childIndex = current.childNodes.length - 1;
+            childIndex >= 0;
+            childIndex--
+          ) {
+            const child = current.childNodes.item(childIndex);
+            if (child) stack.push(child);
+          }
+        }
+        return parts.join(" ").replace(/\s+/g, " ").trim();
+      }));
+    } catch {
+      rowTexts.push("");
     }
   }
-  logger.info(`[altinbas][ui] ${nBtns} adet 'Complete Application' bulundu → #${chosenIdx} seçildi (programEşleşme=${matched})`);
+  const chosenIdx = chooseAltinbasApplicationRow(
+    rowTexts.map(fold),
+    [
+      fold(`${profile.firstName} ${profile.lastName}`),
+      fold(`${profile.lastName} ${profile.firstName}`),
+    ],
+    [coreProg, progFold],
+  );
+  if (chosenIdx < 0) {
+    result.detail =
+      `Altınbaş[ui]: hedef başvuru tekil ad+program kanıtıyla seçilemedi` +
+      ` (completeButtonCount=${nBtns}, readableRows=${rowTexts.filter(Boolean).length})`;
+    logger.warn(`[altinbas][ui] ${result.detail}`);
+    result.screenshots = shots;
+    return true;
+  }
+  logger.info(
+    `[altinbas][ui] portal hedefi doğrulandı` +
+    ` (proof=${nBtns === 1 ? "single_complete_button" : "unique_name_program"},` +
+    ` completeButtonCount=${nBtns})`,
+  );
 
   await completeBtns.nth(chosenIdx).scrollIntoViewIfNeeded().catch(() => {});
   let clicked = false;
@@ -1647,15 +1987,23 @@ async function completeApplicationUI(
   const sOpened = await captureScreen(page, "ui-wizard-opened"); if (sOpened) shots.push(sOpened);
   logger.info("[altinbas][ui] Complete Application açıldı — wizard sürülüyor");
 
-  // Altınbaş requires the dedicated CRM City of Birth. buildProfile no longer
-  // derives it from the address; block before any wizard write/Next when absent.
-  if (!explicitCityOfBirth(profile.cityOfBirth)) {
+  if (MUTATION_CANARY) {
+    await runSingleStepMutationCanary(page, profile, result);
+    logger.warn(`[altinbas][canary] ${result.detail}`);
+    result.screenshots = shots;
+    return true;
+  }
+
+  // A normal dry-run is read-only. It may open the target wizard for discovery
+  // but never fills, advances, saves, uploads or submits.
+  if (dryRun) {
     const initial = await readWizardState(page);
+    const missing = missingAltinbasPersonalFields(profile);
     result.detail =
-      `Altınbaş[ui]: data_missing — CRM cityOfBirth zorunlu` +
-      ` (aktif="${initial.step || "bilinmiyor"}", detector=${initial.reason})`;
-    logger.warn(`[altinbas][ui] ${result.detail}`);
-    const s = await captureScreen(page, "ui-data-missing-city-of-birth"); if (s) shots.push(s);
+      `Altınbaş[ui]: read_only_dry_run` +
+      ` (aktif="${initial.step || "bilinmiyor"}", detector=${initial.reason},` +
+      ` missing=${missing.length ? missing.join(",") : "none"})`;
+    logger.info(`[altinbas][ui] ${result.detail}`);
     result.screenshots = shots;
     return true;
   }
@@ -1686,15 +2034,44 @@ async function completeApplicationUI(
     }
     // Fill the specific step we're on before advancing.
     if (before.step === "Personal Information") {
-      const cityProved = await fillPersonalUI(page, profile).catch(() => false);
-      if (!cityProved) {
-        wizardFailure = "Altınbaş[ui]: City of Birth DOM readback doğrulanamadı";
+      const personal = await fillPersonalUI(page, profile).catch((error) => ({
+        ok: false,
+        failures: [{
+          ok: false,
+          field: "personal",
+          reason: error instanceof Error ? error.name : "unexpected_error",
+        }],
+      }));
+      if (!personal.ok) {
+        wizardFailure =
+          `Altınbaş[ui]: Personal data_missing_or_unproved` +
+          ` (${personal.failures.map((item) => `${item.field}:${item.reason}`).join(",")})`;
         logger.warn(`[altinbas][ui] ${wizardFailure}`);
         break;
       }
     }
-    if (before.step === "Educational Information") await ensureEducationUI(page, profile).catch(() => {});
-    if (before.step === "Questionnaire") await fillQuestionnaireUI(page, profile).catch(() => {});
+    if (before.step === "Educational Information") {
+      const education = await ensureEducationUI(page, profile).catch((error) => ({
+        ok: false,
+        reason: error instanceof Error ? error.name : "unexpected_error",
+      }));
+      if (!education.ok) {
+        wizardFailure = `Altınbaş[ui]: Educational ${education.reason}`;
+        logger.warn(`[altinbas][ui] ${wizardFailure}`);
+        break;
+      }
+    }
+    if (before.step === "Questionnaire") {
+      const questionnaire = await fillQuestionnaireUI(page, profile).catch((error) => ({
+        ok: false,
+        reason: error instanceof Error ? error.name : "unexpected_error",
+      }));
+      if (!questionnaire.ok) {
+        wizardFailure = `Altınbaş[ui]: Questionnaire ${questionnaire.reason}`;
+        logger.warn(`[altinbas][ui] ${wizardFailure}`);
+        break;
+      }
+    }
     if (before.step === "Completed") {
       wizardFailure = "Altınbaş[ui]: beklenmeyen Completed adımı; yeni submit kanıtlanmadı";
       logger.warn(`[altinbas][ui] ${wizardFailure}`);
@@ -1738,7 +2115,11 @@ async function completeApplicationUI(
   const missing = (["passport", "diploma", "transcript", "photo"] as const).filter((t) => !up.includes(t));
   if (missing.length) {
     result.missingDocuments = [...(result.missingDocuments ?? []), ...missing];
-    logger.warn(`[altinbas][ui] eksik belge yüklemesi: ${missing.join(",")}`);
+    result.detail =
+      `Altınbaş[ui]: required document upload doğrulanamadı — ${missing.join(",")}`;
+    logger.warn(`[altinbas][ui] ${result.detail}`);
+    result.screenshots = shots;
+    return true;
   }
 
   if (dryRun) {
@@ -1750,37 +2131,92 @@ async function completeApplicationUI(
   }
 
   // 4) Submit Application + success detection.
-  await clickWizardBtn(page, /^\s*Submit Application\s*$/i);
-  await page.waitForTimeout(SF_HYDRATION_MS);
-  const after = (await page.locator("body").innerText().catch(() => "")) || "";
-  const ok =
-    /created successfully|submitted successfully|application is created/i.test(after) ||
-    /EduhubNavigateToURL[\s\S]{0,400}?my-applications\?id=/i.test(after);
-  const s2 = await captureScreen(page, ok ? "ui-submitted" : "ui-submit-unclear");
-  if (s2) shots.push(s2);
-  result.screenshots = shots;
-  if (ok) {
-    result.submitted = true;
-    result.externalRef = result.externalRef; // set upstream when known
-    result.detail = "Altınbaş[ui]: Submit başarılı — 'Application is created successfully' (UI completion + belgeler yüklendi)";
-    logger.info(`[altinbas][ui] ${result.detail}`);
+  if (!(await clickWizardBtn(page, /^\s*Submit Application\s*$/i))) {
+    result.detail = "Altınbaş[ui]: tekil/tıklanabilir Submit Application bulunamadı";
     return true;
   }
-  // Verify via My Applications (stage moved off "Signed Up").
+  await page.waitForTimeout(SF_HYDRATION_MS);
+  const successMessageSeen = await page.evaluate(() => {
+    const roots: Array<Document | ShadowRoot> = [document];
+    const parts: string[] = [];
+    for (let index = 0; index < roots.length; index++) {
+      roots[index].querySelectorAll("*").forEach((element: Element) => {
+        if ((element as HTMLElement).shadowRoot) {
+          roots.push((element as HTMLElement).shadowRoot!);
+        }
+        if (element.children.length === 0 && element.textContent) {
+          parts.push(element.textContent);
+        }
+      });
+    }
+    return /created successfully|submitted successfully|application is created/i.test(
+      parts.join(" "),
+    );
+  }).catch(() => false);
+  const s2 = await captureScreen(page, successMessageSeen ? "ui-submit-message" : "ui-submit-unclear");
+  if (s2) shots.push(s2);
+  result.screenshots = shots;
+
+  // Final proof is the exact applicant+programme row moving off Signed Up.
   await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
   await page.waitForTimeout(SF_HYDRATION_MS);
-  const moved = await page.evaluate((pf: string) => {
-    function foldLoc(s: string) { return (s || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
-    const rows = Array.from(document.querySelectorAll("tr"));
-    const row = rows.find((r) => pf.length > 4 && foldLoc(r.textContent || "").includes(pf));
-    return row ? /Evaluation|Offer|Accepted|View Application/i.test(row.textContent || "") : false;
-  }, progFold).catch(() => false);
+  const search = page.getByPlaceholder(/search by applicant/i).first();
+  if (await search.count().catch(() => 0)) {
+    await search.fill(profile.lastName || profile.firstName || "").catch(() => {});
+    await page.waitForTimeout(3_500);
+  }
+  const rowHosts = page.locator("c-application-table-row-component");
+  const rows: string[] = await rowHosts.evaluateAll((hosts: Element[]) =>
+    hosts.map((host) => {
+      const parts: string[] = [];
+      const seen = new Set<Node>();
+      const stack: Node[] = [host];
+      while (stack.length > 0) {
+        const current = stack.pop();
+        if (!current || seen.has(current)) continue;
+        seen.add(current);
+        if (current.nodeType === 3) {
+          const text = (current.textContent || "").replace(/\s+/g, " ").trim();
+          if (text) parts.push(text);
+          continue;
+        }
+        if (current.nodeType === 1) {
+          const shadowRoot = (current as Element).shadowRoot;
+          if (shadowRoot) stack.push(shadowRoot);
+        }
+        for (
+          let childIndex = current.childNodes.length - 1;
+          childIndex >= 0;
+          childIndex--
+        ) {
+          const child = current.childNodes.item(childIndex);
+          if (child) stack.push(child);
+        }
+      }
+      return parts.join(" ").replace(/\s+/g, " ").trim();
+    }),
+  ).catch(() => [] as string[]);
+  const movedIdx = chooseAltinbasApplicationRow(
+    rows.map(fold),
+    [
+      fold(`${profile.firstName} ${profile.lastName}`),
+      fold(`${profile.lastName} ${profile.firstName}`),
+    ],
+    [coreProg, progFold],
+  );
+  const moved =
+    movedIdx >= 0 &&
+    /Evaluation|Offer|Accepted|View Application/i.test(rows[movedIdx]) &&
+    !/Signed Up|Complete Application/i.test(rows[movedIdx]);
   if (moved) {
     result.submitted = true;
-    result.detail = "Altınbaş[ui]: Submit sonrası başvuru 'Evaluation' aşamasına geçti (doğrulandı)";
+    result.detail =
+      "Altınbaş[ui]: Submit sonrası tekil ad+program satırı Signed Up dışına geçti (doğrulandı)";
     logger.info(`[altinbas][ui] ${result.detail}`);
   } else {
-    result.detail = "Altınbaş[ui]: Submit sonrası başarı doğrulanamadı (aşama Signed Up'ta kalmış olabilir)";
+    result.detail =
+      `Altınbaş[ui]: Submit sonrası başarı doğrulanamadı` +
+      ` (successMessage=${successMessageSeen}, targetRow=${movedIdx >= 0})`;
     logger.warn(`[altinbas][ui] ${result.detail}`);
   }
   // Attempted completion on an existing row — handled (don't create a duplicate).
@@ -1866,28 +2302,27 @@ async function runFlowReplay(
   const rollbackIfNeeded = async (tag: string): Promise<void> =>
     rollbackDanglingApps(page, rt, result, tag, runCreatedAppIds);
 
-  // FIX-15B: isDuplicatePassport → resume attempt (tryResumeFromMyApplications).
-  // _duplicateSignal se bildirir; caller'lar bunu kontrol ederek resume dener.
-  // Fallback: resume başarısız → alreadyExists=true (orijinal FIX-14 davranışı).
+  // Duplicate-passport can mean an existing Signed-Up draft. The caller may
+  // route it only through completeApplicationUI's exact row proof.
   let _duplicateSignal = false;
 
   const guard = (raw: string, tag: string): boolean => {
     if (isDuplicatePassport(raw)) {
       _duplicateSignal = true;
       logger.warn(
-        `[altinbas] isDuplicatePassport @${tag} — FIX-15B resume akışı başlatılıyor`,
+        `[altinbas] isDuplicatePassport @${tag} — verified UI resume required`,
       );
       return true;
     }
     if (flowHasError(raw)) {
-      result.detail = `Altınbaş flow ERROR @${tag}: ${raw.replace(/\s+/g, " ").slice(0, 500)}`;
+      result.detail =
+        `Altınbaş flow ERROR @${tag}: ` +
+        redactAltinbasLog(raw).replace(/\s+/g, " ").slice(0, 500);
       logger.warn(`[altinbas] ${result.detail}`);
       return true;
     }
     return false;
   };
-
-  let resumeMode = false;
 
   // Stage-aware başlangıç: boot-seed UI Next tıklaması ekranı ilerletmiş
   // olabilir (örn. Term default'la Degree'ye geçti). Okunabilen boot stage'e
@@ -2022,15 +2457,13 @@ async function runFlowReplay(
       if (guard(raw, `commit${i + 1}`) || noteStage(raw, `commit${i + 1}`)) {
         if (_duplicateSignal) {
           _duplicateSignal = false;
-          const resumed = await tryResumeFromMyApplications(page, profile, rt, result);
-          if (resumed) {
-            resumeMode = true;
-            curRank = Math.max(curRank, stageRank(readStageFromRaw(rt.lastRaw)));
-            break; // commit döngüsünden çık, Personal'a geç
+          if (UI_COMPLETE) {
+            break; // exact row proof is handled by completeApplicationUI below
           }
           result.alreadyExists = true;
           result.detail =
-            `Altınbaş: CheckDuplicateValidation @commit${i + 1} — resume başarısız; already_exists (FIX-15B). Manuel SF temizliği gerekiyor.`;
+            `Altınbaş: CheckDuplicateValidation @commit${i + 1}; ` +
+            `verified UI completion disabled, unsafe legacy resume blocked`;
           logger.warn(`[altinbas] ${result.detail}`);
         }
         await rollbackIfNeeded(`commit${i + 1}`);
@@ -2049,25 +2482,48 @@ async function runFlowReplay(
     logger.info("[altinbas] Program+commit adımları atlandı (boot stage ilerisinde)");
   }
 
+  // Once the Program commit has created the Signed-Up row, switch to the real
+  // Lightning UI for the remainder. This keeps Personal/Education/Documents
+  // on the same verified state machine for both resumed and brand-new students.
+  if (UI_COMPLETE) {
+    const handled = await completeApplicationUI(
+      page,
+      profile,
+      files,
+      dryRun,
+      result,
+      screenshots,
+    );
+    if (!handled) {
+      result.detail =
+        "Altınbaş[ui]: Program commit sonrası Signed-Up satırı doğrulanamadı; duplicate riski nedeniyle durduruldu";
+      await rollbackIfNeeded("ui-row-not-found");
+    }
+    return;
+  }
+
+  // The replay completion half cannot prove document uploads or the final UI
+  // state. It is retained only as diagnostic history; production completion
+  // must opt into the verified Lightning UI state machine.
+  result.detail =
+    "Altınbaş: verified UI completion disabled (ALTINBAS_UI_COMPLETE=1 gerekli); " +
+    "uydurma/kanıtsız legacy Personal→FINISH akışı çalıştırılmadı";
+  logger.warn(`[altinbas] ${result.detail}`);
+  await rollbackIfNeeded("ui-complete-disabled");
+  return;
+
   // 6) PERSONAL (NEXT) — 46 alan; ISO tarih + 3'lü ülke picklist + kod-prefix telefon
   if (curRank <= 3) {
     raw = await postNavigateFlow(page, rt, "NEXT", buildPersonalFields(profile), "personal");
     if (guard(raw, "Personal") || noteStage(raw, "Personal")) {
       if (_duplicateSignal) {
         _duplicateSignal = false;
-        const resumed = await tryResumeFromMyApplications(page, profile, rt, result);
-        if (resumed) {
-          resumeMode = true;
-          curRank = Math.max(curRank, stageRank(readStageFromRaw(rt.lastRaw)));
-          // Don't return — fall through to Educational step
-        } else {
-          result.alreadyExists = true;
-          result.detail =
-            `Altınbaş: CheckDuplicateValidation @Personal — resume başarısız; already_exists (FIX-15B). Manuel SF temizliği gerekiyor.`;
-          logger.warn(`[altinbas] ${result.detail}`);
-          await rollbackIfNeeded("personal");
-          return;
-        }
+        result.alreadyExists = true;
+        result.detail =
+          "Altınbaş: CheckDuplicateValidation @Personal; unsafe legacy resume blocked";
+        logger.warn(`[altinbas] ${result.detail}`);
+        await rollbackIfNeeded("personal");
+        return;
       } else {
         await rollbackIfNeeded("personal");
         return;
@@ -2120,7 +2576,7 @@ async function runFlowReplay(
       logger.warn(
         `[altinbas] Güvenilir applicationId adayı YOK (commitTrusted=[] explicit=[]) — prefix-fallback'e düşülecek; capture ile insan-payload diff önerilir`,
       );
-    } else if (!hasSfPadding(provenAppId)) {
+    } else if (!hasSfPadding(provenAppId!)) {
       logger.warn(
         `[altinbas] applicationId adayı 0000-padding'siz: ${provenAppId} (şüpheli format — padding'li aday yoktu; commit=[${commitTrusted.join(",") || "-"}] explicit=[${explicitAll.join(",") || "-"}])`,
       );
@@ -2144,7 +2600,7 @@ async function runFlowReplay(
     //  4. ABORT: hiçbiri geçmezse; teşhis logu ekle.
     if (!provenAppId) {
       const fallback = rt.ids.applicationId;
-      const fallbackPadded = !!fallback && hasSfPadding(fallback);
+      const fallbackPadded = !!fallback && hasSfPadding(fallback!);
       if (fallbackPadded) {
         // FIX-13: commit-sonrası stored değer — hasSfPadding yeterli güvence.
         logger.info(
@@ -2159,6 +2615,7 @@ async function runFlowReplay(
           ...[...rawCommitA02],
         ];
         const trustworthy = [...new Set(rawCandidates)]
+          .filter((id): id is string => typeof id === "string")
           .filter(isSfIdShape)
           .filter(hasSfPadding)
           .filter((id) => !rt.knownAvailabilityIds.has(id));
@@ -2172,7 +2629,7 @@ async function runFlowReplay(
           logger.warn(
             `[altinbas] FIX-13 teşhis: runState.applicationId=${fallback ?? "null"}` +
             ` hasSfPadding=${fallbackPadded}` +
-            ` inAvailability=${fallback ? rt.knownAvailabilityIds.has(fallback) : false}` +
+            ` inAvailability=${fallback ? rt.knownAvailabilityIds.has(fallback!) : false}` +
             ` trustworthy=[${trustworthy.join(",")}]` +
             ` commitTrusted=[${commitTrusted.join(",")}] explicit=[${explicitAll.join(",")}]`,
           );
@@ -2203,7 +2660,7 @@ async function runFlowReplay(
       effIds[k] = v;
       const src =
         k === "applicationId" && provenAppId
-          ? commitTrusted.includes(provenAppId)
+          ? commitTrusted.includes(provenAppId!)
             ? "commit-raw"
             : "run-proven"
           : explicit
@@ -2232,7 +2689,7 @@ async function runFlowReplay(
     };
     for (const k of idKeys) {
       const v = effIds[k];
-      if (v && !v.startsWith(prefixOf[k])) {
+      if (v && !v!.startsWith(prefixOf[k])) {
         logger.warn(`[altinbas] Educational ${k}=${v} beklenen prefix '${prefixOf[k]}' değil — bağlanmadı`);
         effIds[k] = undefined;
       }
@@ -2254,7 +2711,7 @@ async function runFlowReplay(
     const missingEduKey = checkMissingEduRecord(eduRecords, profile.level || "");
     if (missingEduKey) {
       logger.warn(`[altinbas] FIX-15C: ${missingEduKey} eksik — missingDocuments'a eklendi`);
-      result.missingDocuments = [...(result.missingDocuments ?? []), missingEduKey];
+      result.missingDocuments = [...(result.missingDocuments ?? []), missingEduKey!];
     }
     // Prefer bachelor record; fall back to master or high_school for the modal.
     const primaryEdu =
@@ -2262,8 +2719,9 @@ async function runFlowReplay(
       eduRecords?.find((r) => r.level === "master") ??
       eduRecords?.find((r) => r.level === "high_school");
     const eduFields = buildEducationalFields(effIds, primaryEdu);
-    // Capture karşılaştırması için TAM istek alanları (sadece Id/sabit — PII yok).
-    logger.info(`[altinbas] Educational REQUEST fields (nf=${eduFields.length}): ${JSON.stringify(eduFields)}`);
+    logger.info(
+      `[altinbas] Educational REQUEST prepared (nf=${eduFields.length}, values redacted)`,
+    );
     raw = await postNavigateFlow(page, rt, "NEXT", eduFields, "educational");
     if (guard(raw, "Educational") || noteStage(raw, "Educational")) {
       await rollbackIfNeeded("educational");
@@ -2325,7 +2783,7 @@ async function runFlowReplay(
       /EduhubNavigateToURL[\s\S]{0,600}?Cannot open:\s*https?:\/\/apply\.altinbas\.edu\.tr\/partner\/s\/my-applications\?id=([^"'\s\\&]+)/i,
     );
     if (lwsMatch) {
-      const externalRef = lwsMatch[1].replace(/\\/g, "");
+      const externalRef = lwsMatch![1].replace(/\\/g, "");
       result.submitted = true;
       result.externalRef = externalRef || rt.ids.applicationId;
       result.detail =
@@ -2338,7 +2796,9 @@ async function runFlowReplay(
   // FINISH başarı kanıtı: HTTP 2xx + aura JSON (postNavigateFlow garanti eder)
   // YETMEZ — aura action state:SUCCESS da şart. Aksi halde fail-visible.
   if (!auraActionSucceeded(raw)) {
-    result.detail = `Altınbaş: FINISH yanıtında state:SUCCESS yok — başarı SAYILMADI: ${raw.replace(/\s+/g, " ").slice(0, 500)}`;
+    result.detail =
+      `Altınbaş: FINISH yanıtında state:SUCCESS yok — başarı SAYILMADI: ` +
+      redactAltinbasLog(raw).replace(/\s+/g, " ").slice(0, 500);
     logger.warn(`[altinbas] ${result.detail}`);
     await rollbackIfNeeded("finish-no-success");
     return;
@@ -2355,8 +2815,8 @@ async function runFlowReplay(
 //
 // Called whenever a post-commit step fails — either via guard()-detected flow
 // errors (early return inside runFlowReplay) or thrown exceptions (submit catch).
-// Attempts SF REST API DELETE for every known Application__c ID; logs DANGLING
-// and appends to result.detail when DELETE fails (for manual cleanup tracking).
+// Attempts SF REST API DELETE only for Application__c IDs proven to have been
+// created in this exact run. Older/ambiguous drafts are never deleted.
 // ---------------------------------------------------------------------------
 async function rollbackDanglingApps(
   page: any,
@@ -2365,8 +2825,27 @@ async function rollbackDanglingApps(
   triggerTag: string,
   runCreatedIds: Set<string>,
 ): Promise<void> {
-  const ids = [...new Set([...runCreatedIds, ...rt.explicitAppIds])].filter(Boolean);
-  if (ids.length === 0 || !rt.template) return;
+  // Delete only Application__c ids whose creation was observed in this exact
+  // run. `explicitAppIds` can contain an older Signed-Up draft from boot/resume
+  // responses and is therefore diagnostic-only, never delete authority.
+  const ids = selectAltinbasRollbackIds({
+    runCreatedIds,
+    explicitAppIds: rt.explicitAppIds,
+  });
+  if (ids.length === 0) {
+    const message =
+      `[altinbas] ROLLBACK SKIPPED @${triggerTag}: run-proven Application__c id yok`;
+    logger.warn(message);
+    result.detail = (result.detail ? result.detail + " | " : "") + message;
+    return;
+  }
+  if (!rt.template) {
+    const message =
+      `[altinbas] ROLLBACK SKIPPED @${triggerTag}: authenticated Salesforce origin yok`;
+    logger.warn(message);
+    result.detail = (result.detail ? result.detail + " | " : "") + message;
+    return;
+  }
   const origin = rt.template.origin;
   for (const appId of ids) {
     let rolled = false;
@@ -2481,7 +2960,7 @@ async function navigateToAppForm(page: any): Promise<void> {
 //
 // Fields seen: First Name*, Last Name*, Citizenship* (lookup), Passport Number*, Applicant Email*
 // ---------------------------------------------------------------------------
-async function fillStep1(page: any, profile: SubmitProfile): Promise<void> {
+async function fillStep1(page: any, profile: SubmitProfile): Promise<boolean> {
   logger.info("[altinbas] Step 1 (Basic Info): filling label-based fields");
   await dismissSfError(page);
 
@@ -2489,68 +2968,69 @@ async function fillStep1(page: any, profile: SubmitProfile): Promise<void> {
   await page.getByLabel(/applicant email/i).first().waitFor({ timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(1000);
 
-  // First Name
-  const firstNameBox = page.getByLabel(/first name/i).first();
-  if (await firstNameBox.count().catch(() => 0)) {
-    await firstNameBox.fill(profile.firstName).catch(() => {});
-  } else {
-    logger.warn("[altinbas] Step 1: First Name field not found");
-  }
-
-  // Last Name
-  const lastNameBox = page.getByLabel(/last name/i).first();
-  if (await lastNameBox.count().catch(() => 0)) {
-    await lastNameBox.fill(profile.lastName).catch(() => {});
-  } else {
-    logger.warn("[altinbas] Step 1: Last Name field not found");
-  }
-
-  // Passport Number
-  const passportBox = page.getByLabel(/passport number/i).first();
-  if (await passportBox.count().catch(() => 0)) {
-    await passportBox.fill(profile.passportNumber).catch(() => {});
-  } else {
-    logger.warn("[altinbas] Step 1: Passport Number field not found");
-  }
-
-  // Applicant Email
-  const emailBox = page.getByLabel(/applicant email/i).first();
-  if (await emailBox.count().catch(() => 0)) {
-    await emailBox.fill(profile.email).catch(() => {});
-  } else {
-    logger.warn("[altinbas] Step 1: Applicant Email field not found");
+  const fields: Array<[RegExp, string, string]> = [
+    [/^first name/i, profile.firstName, "firstName"],
+    [/^last name/i, profile.lastName, "lastName"],
+    [/passport number/i, profile.passportNumber, "passport"],
+    [/applicant email/i, profile.email, "email"],
+  ];
+  const fieldProofs: Record<string, boolean> = {};
+  for (const [label, value, key] of fields) {
+    const controls = page.getByLabel(label);
+    if ((await controls.count().catch(() => 0)) !== 1 || !value.trim()) {
+      fieldProofs[key] = false;
+      continue;
+    }
+    const control = controls.first();
+    const filled = await control.fill(value).then(
+      () => true,
+      () => false,
+    );
+    const readback = ((await control.inputValue().catch(() => "")) || "").trim();
+    fieldProofs[key] = filled && readback === value.trim();
   }
 
   // Citizenship combobox (Salesforce typeahead)
-  const citizenshipOk = await pickCombobox(
-    page,
-    /citizenship/i,
-    profile.nationality || "Turkey",
-  );
+  const citizenship = mapCountry(profile.nationality);
+  const citizenshipOk =
+    !!citizenship &&
+    await pickCombobox(page, /citizenship/i, citizenship);
   if (!citizenshipOk) {
-    logger.warn("[altinbas] Step 1: Citizenship combobox did not resolve a match — required field may block Next");
+    logger.warn("[altinbas] Step 1: Citizenship exact readback failed");
   }
 
   await page.waitForTimeout(800);
   logger.info(
     "[altinbas] Step1 filled: first/last/passport/email/citizenship",
     {
-      firstName: await firstNameBox.inputValue().catch(() => "?"),
-      lastName:  await lastNameBox.inputValue().catch(() => "?"),
-      passport:  await passportBox.inputValue().catch(() => "?"),
-      email:     await emailBox.inputValue().catch(() => "?"),
+      firstName: fieldProofs.firstName,
+      lastName: fieldProofs.lastName,
+      passport: fieldProofs.passport,
+      email: fieldProofs.email,
       citizenshipOk,
     },
   );
+  if (
+    Object.values(fieldProofs).some((proved) => !proved) ||
+    !citizenshipOk
+  ) {
+    logger.warn("[altinbas] Step 1: required field readback failed — Next blocked");
+    return false;
+  }
 
   logger.info("[altinbas] Step 1: clicking Next");
-  const nextBtn = page.getByRole("button", { name: /^next$/i }).first();
-  if (await nextBtn.count().catch(() => 0)) {
-    await nextBtn.click({ timeout: 10000 }).catch(() => {});
-  } else {
-    await clickNext(page);
+  const nextButtons = page.getByRole("button", { name: /^next$/i });
+  if ((await nextButtons.count().catch(() => 0)) !== 1) {
+    logger.warn("[altinbas] Step 1: Next button is not unique");
+    return false;
   }
+  const clicked = await nextButtons.first().click({ timeout: 10000 }).then(
+    () => true,
+    () => false,
+  );
+  if (!clicked) return false;
   await page.waitForTimeout(3000);
+  return true;
 }
 
 /**
@@ -2558,7 +3038,11 @@ async function fillStep1(page: any, profile: SubmitProfile): Promise<void> {
  * to enter the Screen Flow. Bu tıklama flow'u BOOT eder — serializedState
  * applicant context'ini buradan kazanır. Returns true on success.
  */
-async function clickCreateNewApplication(page: any, rt: FlowRuntime): Promise<boolean> {
+async function clickCreateNewApplication(
+  page: any,
+  rt: FlowRuntime,
+  profile: SubmitProfile,
+): Promise<boolean> {
   await dismissSfError(page);
 
   // Faz-2.1 KANITLANDI (headed dry-run): after Basic Info → Next, the screen
@@ -2569,11 +3053,71 @@ async function clickCreateNewApplication(page: any, rt: FlowRuntime): Promise<bo
   // no-op too. Force-select the first row and force-click through.
   const gotoDetail = page.getByRole("button", { name: /go to applicant detail page/i }).first();
   if (await gotoDetail.count().catch(() => 0)) {
-    const row = page.locator('input[type="radio"]').first();
-    if (await row.count().catch(() => 0)) {
-      const checked = await forceCheckRadio(page, row);
-      logger.info(`[altinbas] grid row radio checked=${checked}`);
+    const radios = page.locator('input[type="radio"]');
+    const radioCount = await radios.count().catch(() => 0);
+    const matches: number[] = [];
+    const expectedEmail = fold(profile.email);
+    const expectedPassport = fold(profile.passportNumber);
+    for (let index = 0; index < radioCount; index++) {
+      const rowText = await radios.nth(index).evaluate((radio: Element) => {
+        let node: Element | null = radio;
+        let boundary: Element | null = null;
+        for (let depth = 0; depth < 16 && node; depth++) {
+          if (node.matches("tr,[role='row'],c-application-table-row-component")) {
+            boundary = node;
+            break;
+          }
+          const root = node.getRootNode() as ShadowRoot | Document;
+          node = node.parentElement || ("host" in root ? root.host : null);
+        }
+        if (!boundary) return "";
+        const parts: string[] = [];
+        const seen = new Set<Node>();
+        const stack: Node[] = [boundary];
+        while (stack.length > 0) {
+          const current = stack.pop();
+          if (!current || seen.has(current)) continue;
+          seen.add(current);
+          if (current.nodeType === 3) {
+            const text = (current.textContent || "").replace(/\s+/g, " ").trim();
+            if (text) parts.push(text);
+            continue;
+          }
+          if (current.nodeType === 1) {
+            const shadowRoot = (current as Element).shadowRoot;
+            if (shadowRoot) stack.push(shadowRoot);
+          }
+          for (
+            let childIndex = current.childNodes.length - 1;
+            childIndex >= 0;
+            childIndex--
+          ) {
+            const child = current.childNodes.item(childIndex);
+            if (child) stack.push(child);
+          }
+        }
+        return parts.join(" ").replace(/\s+/g, " ").trim();
+      }).catch(() => "");
+      const folded = fold(rowText);
+      if (
+        expectedEmail &&
+        expectedPassport &&
+        folded.includes(expectedEmail) &&
+        folded.includes(expectedPassport)
+      ) {
+        matches.push(index);
+      }
     }
+    if (matches.length !== 1) {
+      logger.warn(
+        `[altinbas] applicant grid target proof failed` +
+        ` (radioCount=${radioCount}, exactIdentityMatches=${matches.length})`,
+      );
+      return false;
+    }
+    const checked = await forceCheckRadio(page, radios.nth(matches[0]));
+    logger.info(`[altinbas] applicant grid exact target selected=${checked}`);
+    if (!checked) return false;
     await page.waitForTimeout(800);
     // FIX-9: seçim yapıldı — bundan sonraki aura trafiği seçilen öğrencinin
     // detay yüklemesidir; scanIds (003/001 son-çare fallback) artık dolabilir.
@@ -2736,7 +3280,7 @@ export const altinbasAdapter: UniversityAdapter = {
       process.env.ALTINBAS_DRYRUN === "1";
 
     logger.info("[altinbas] submit start (SCREEN FLOW REPLAY)", {
-      student:     `${profile.firstName} ${profile.lastName}`,
+      applicantIdentity: profile.firstName && profile.lastName ? "present" : "missing",
       level:       profile.level,
       programName: profile.programName,
       dryRun,
@@ -2795,6 +3339,16 @@ export const altinbasAdapter: UniversityAdapter = {
       programMissing: false,
     };
     const screenshots: string[] = [];
+    const canaryGate = altinbasMutationCanaryGate({
+      requested: MUTATION_CANARY,
+      uiComplete: UI_COMPLETE,
+      dryRun,
+    });
+    if (canaryGate !== "inactive" && canaryGate !== "ready") {
+      result.detail = `Altınbaş[canary]: blocked — gate=${canaryGate}`;
+      logger.warn(`[altinbas][canary] ${result.detail}`);
+      return result;
+    }
 
     // ── Flow interceptor'ı EN BAŞTA kur (Create New Application'dan önce
     //    kurulu olmalı ki flow-boot yanıtındaki ilk serializedState kaçmasın;
@@ -2807,15 +3361,22 @@ export const altinbasAdapter: UniversityAdapter = {
 
     // ── Navigate to application form ─────────────────────────────────────
     logger.info("[altinbas] navigating to application form");
-    if (UI_COMPLETE) {
+    if (shouldUseAltinbasUiPath({ uiComplete: UI_COMPLETE, dryRun })) {
       // NEW: finish an EXISTING half-finished (Signed-Up) application via the
       // real Lightning wizard AND upload the 4 required documents. If no such
-      // application exists yet (fresh student), fall through to the normal
-      // create + flow-replay path below — safe to enable globally, no regression.
+      // application exists yet, a real run may fall through to create. Every
+      // dry-run is forced through this read-only path even when UI_COMPLETE is
+      // not enabled, so it can never create/fill/advance/upload.
       const uiHandled = await completeApplicationUI(page, profile, files, dryRun, result, screenshots);
       if (uiHandled) {
         if (screenshots.length) result.screenshots = screenshots;
         logger.info("[altinbas] submit complete (UI completion path)", result);
+        return result;
+      }
+      if (dryRun) {
+        result.detail =
+          "Altınbaş[ui]: read_only_dry_run — mevcut Signed-Up başvuru bulunamadı; create akışına girilmedi";
+        logger.info(`[altinbas][ui] ${result.detail}`);
         return result;
       }
       logger.info("[altinbas] UI_COMPLETE set but no existing Signed-Up app — falling through to create+replay");
@@ -2835,7 +3396,13 @@ export const altinbasAdapter: UniversityAdapter = {
     if (initShot) screenshots.push(initShot);
 
     // ── Step 1: Basic Information (DOM) ───────────────────────────────────
-    await fillStep1(page, profile);
+    const step1Ready = await fillStep1(page, profile);
+    if (!step1Ready) {
+      result.detail =
+        "Altınbaş: Basic Information alanları tekil hedef + exact readback ile doğrulanamadı";
+      logger.warn(`[altinbas] ${result.detail}`);
+      return { ...result, screenshots };
+    }
     await page.waitForTimeout(3000);
 
     if (await checkAlreadyExists(page)) {
@@ -2845,7 +3412,7 @@ export const altinbasAdapter: UniversityAdapter = {
     }
 
     // ── Student summary → Create New Application (flow BOOT) ──────────────
-    const createdApp = await clickCreateNewApplication(page, rt);
+    const createdApp = await clickCreateNewApplication(page, rt, profile);
     if (!createdApp) {
       logger.warn("[altinbas] could not click Create New Application — capturing student summary screen and aborting");
       const stuckShot = await captureScreen(page, "student-summary-stuck");

@@ -9,8 +9,9 @@
  * Field resolution notes (CRM ↔ SIT matrix):
  * - countryOfResidence: CRM has no residence-country column; the SIT adapter
  *   falls back to nationality, so readiness mirrors that fallback.
- * - city: CRM has no dedicated city column; derived via cleanCity(address).
- *   Address-like values yield null → surfaced as missing (soft).
+ * - addressCity/postalCode: dedicated structured CRM columns. Legacy SIT's
+ *   generic `city` rule may still inspect a short, city-like address only when
+ *   addressCity is absent; Altınbaş never uses that fallback.
  * - fatherJob/motherJob: no CRM column and the adapter never sends them —
  *   skipped (evaluating them would flag every student forever).
  * - toggles (transferStudent/hasTcId/hasBlueCard): NOT NULL booleans with
@@ -91,15 +92,26 @@ export function computeReadiness(
     return docTypesLower.has(kind);
   };
 
-  const eduField = (key: string): { value: string | null; rec: EducationRecord | undefined; kind: "country" | "school" | "gpa" } | null => {
-    const m = /^(hs|bachelor|master)(Country|Name|School|Gpa)$/.exec(key);
+  const eduField = (key: string): {
+    value: string | null;
+    rec: EducationRecord | undefined;
+    kind: "country" | "school" | "gpa" | "endYear" | "gpaType";
+  } | null => {
+    const m = /^(hs|bachelor|master)(Country|Name|School|Gpa|EndYear|GpaType)$/.exec(key);
     if (!m) return null;
     const lvl = m[1] === "hs" ? "high_school" : m[1];
     const rec = findRecord(educationRecords, lvl);
-    const kind = m[2] === "Country" ? "country" : m[2] === "Gpa" ? "gpa" : "school";
+    const kind =
+      m[2] === "Country" ? "country" :
+      m[2] === "Gpa" ? "gpa" :
+      m[2] === "EndYear" ? "endYear" :
+      m[2] === "GpaType" ? "gpaType" :
+      "school";
     const value =
       kind === "country" ? rec?.country ?? null :
       kind === "gpa" ? rec?.gpa ?? null :
+      kind === "endYear" ? rec?.endYear != null ? String(rec.endYear) : null :
+      kind === "gpaType" ? rec?.gpaType ?? null :
       rec?.schoolName ?? null;
     return { value, rec, kind };
   };
@@ -119,7 +131,7 @@ export function computeReadiness(
       if (!has(edu.value)) { missing.push(rule.key); continue; }
       if (edu.kind === "country" && !canonicalCountry(edu.value)) {
         incompatible.push({ field: rule.key, reason: "countryUnmatched" });
-      } else if (edu.kind === "gpa") {
+      } else if (edu.kind === "gpa" && rule.type === "integer") {
         const intGpa = normalizeGpaInteger(edu.value);
         if (intGpa == null) {
           incompatible.push({ field: rule.key, reason: "gpaMustBeInteger" });
@@ -127,6 +139,21 @@ export function computeReadiness(
           // present but decimal / out of 0-100 integer form
           incompatible.push({ field: rule.key, reason: "gpaMustBeInteger" });
         }
+      } else if (rule.type === "integer") {
+        const numeric = Number(edu.value);
+        if (
+          !Number.isInteger(numeric) ||
+          (rule.min != null && numeric < rule.min) ||
+          (rule.max != null && numeric > rule.max)
+        ) {
+          incompatible.push({ field: rule.key, reason: "invalidInteger" });
+        }
+      } else if (
+        rule.type === "enum" &&
+        rule.values &&
+        !rule.values.includes(String(edu.value).toLowerCase())
+      ) {
+        incompatible.push({ field: rule.key, reason: "invalidValue" });
       }
       continue;
     }
@@ -143,7 +170,16 @@ export function computeReadiness(
       case "mobile": value = student.phone; break;
       // Adapter falls back to nationality when CRM has no residence country.
       case "countryOfResidence": value = student.nationality; break;
-      case "city": value = cleanCityFromAddress(student.address); break;
+      case "city": value = student.addressCity ?? cleanCityFromAddress(student.address); break;
+      case "address": value = student.address; break;
+      case "addressCity": value = student.addressCity; break;
+      case "postalCode": value = student.postalCode; break;
+      case "needsVisaSupport":
+        value =
+          student.needsVisaSupport == null
+            ? null
+            : student.needsVisaSupport ? "yes" : "no";
+        break;
       case "fatherName": value = student.fatherName; break;
       case "motherName": value = student.motherName; break;
       case "languageScore": value = student.languageScore; break;
@@ -173,6 +209,15 @@ export function computeReadiness(
       case "enum":
         if (rule.values && !rule.values.includes(String(value).toLowerCase())) {
           incompatible.push({ field: rule.key, reason: "invalidValue" });
+        } else if (
+          portalKey === "altinbas" &&
+          rule.key === "needsVisaSupport" &&
+          String(value).toLowerCase() === "yes"
+        ) {
+          incompatible.push({
+            field: rule.key,
+            reason: "questionnaireFollowupUnmapped",
+          });
         }
         break;
       default:
@@ -191,10 +236,9 @@ export function computeReadiness(
 }
 
 /**
- * CRM has no city column — the only source is the free-text address line.
- * We never DERIVE a city from an address (that was wrong before); a bare
- * short city-like address value passes cleanCity, anything address-like is
- * rejected → shows as missing.
+ * Legacy fallback for portals whose matrix still asks for generic `city`.
+ * Altınbaş asks for `addressCity` and therefore never reaches this function.
+ * A bare city-like value may pass; address-like text is rejected.
  */
 function cleanCityFromAddress(address: string | null): string | null {
   return cleanCity(address);

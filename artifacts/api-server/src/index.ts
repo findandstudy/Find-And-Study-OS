@@ -2419,6 +2419,17 @@ async function seedClaudeIntegration() {
     console.error("[migrate] student_education_records:", err);
   }
 
+  // Step 2b24: structured Altınbaş address/questionnaire data.
+  // Mirrors migration 0034; additive and safe for every other adapter.
+  try {
+    await pool.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS city_of_birth TEXT`);
+    await pool.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS address_city TEXT`);
+    await pool.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS postal_code TEXT`);
+    await pool.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS needs_visa_support BOOLEAN`);
+  } catch (err) {
+    console.error("[migrate] altinbas structured student fields:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {
