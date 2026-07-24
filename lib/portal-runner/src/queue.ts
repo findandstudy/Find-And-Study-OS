@@ -266,12 +266,41 @@ export async function claimById(
  * Returns the IDs of rows that were reset.
  */
 export async function releaseStale(thresholdMs: number): Promise<number[]> {
+  // FIX-CRASHLOOP: a submission that deterministically crashes the worker
+  // process (e.g. a native SIGBUS in a downstream dependency) used to be
+  // forgiven forever - attempts was unconditionally reset to 0 on every
+  // crash-recovery, so claimNext kept reclaiming it and it kept crashing
+  // the worker, taking the whole queue hostage. We still forgive normal
+  // crash-recovery (attempts=0, so app-level retry budget is untouched),
+  // but we now track how many times THIS row has come back from a stale
+  // "running" lock via meta.crash_recoveries. Once that exceeds
+  // MAX_CRASH_RECOVERIES we quarantine the row as 'failed' instead of
+  // requeueing it, so one poison-pill submission can no longer crash-loop
+  // the daemon or block the rest of the batch.
   const res = await pool.query<{ id: number }>(
     `UPDATE portal_submissions
-     SET status     = 'queued',
-         attempts   = 0,
+     SET status     = CASE
+                         WHEN COALESCE((meta->>'crash_recoveries')::int, 0) + 1 >= 3
+                           THEN 'failed'
+                         ELSE 'queued'
+                       END,
+         attempts   = CASE
+                         WHEN COALESCE((meta->>'crash_recoveries')::int, 0) + 1 >= 3
+                           THEN attempts
+                         ELSE 0
+                       END,
          locked_at  = NULL,
          locked_by  = NULL,
+         error      = CASE
+                         WHEN COALESCE((meta->>'crash_recoveries')::int, 0) + 1 >= 3
+                           THEN 'WORKER CRASH LOOP - bu basvuru worker surecini ust uste 3+ kez cokerterek (SIGBUS/anormal exit) durdurdu. Otomatik izole edildi (failed); manuel inceleme gerekiyor.'
+                         ELSE error
+                       END,
+         meta       = jsonb_set(
+                         COALESCE(meta, '{}'::jsonb),
+                         '{crash_recoveries}',
+                         to_jsonb(COALESCE((meta->>'crash_recoveries')::int, 0) + 1)
+                       ),
          updated_at = NOW()
      WHERE status = 'running'
        AND locked_at < NOW() - ($1 || ' milliseconds')::interval
