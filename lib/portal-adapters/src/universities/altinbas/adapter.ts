@@ -1171,17 +1171,24 @@ async function fillIfEmpty(
   page: any,
   labelRe: RegExp,
   value: string,
-): Promise<void> {
-  if (!value) return;
+): Promise<boolean> {
+  if (!value) return false;
   try {
     const box = page.getByLabel(labelRe).first();
-    if (!(await box.count().catch(() => 0))) return;
+    if (!(await box.count().catch(() => 0))) return false;
     const cur = ((await box.inputValue().catch(() => "")) || "").trim();
-    if (cur) return; // already populated (prefilled from the Signed-Up record)
+    if (cur) return true; // already populated (prefilled from the Signed-Up record)
     await box.click({ timeout: 6000 }).catch(() => {});
-    await box.fill(value).catch(() => {});
+    await box.fill(value, { timeout: 6000 }).catch(() => {});
+    // Lightning inputs occasionally do not commit a Playwright fill until a
+    // real keyboard event/blur occurs. Fall back to typing and always verify.
+    if (!((await box.inputValue().catch(() => "")) || "").trim()) {
+      await box.pressSequentially(value, { delay: 25 }).catch(() => {});
+    }
+    await box.press("Tab").catch(() => {});
     await box.press("Escape").catch(() => {});
-  } catch {/* tolerate */}
+    return !!((await box.inputValue().catch(() => "")) || "").trim();
+  } catch { return false; }
 }
 
 /** Select a value in a native <select> resolved by its label. */
@@ -1227,6 +1234,126 @@ async function clickWizardBtn(page: any, nameRe: RegExp): Promise<boolean> {
   } catch { return false; }
 }
 
+type WizardState = {
+  step: string;
+  fileInputCount: number;
+  documentScreen: boolean;
+};
+
+/**
+ * Read only the CURRENT wizard step. body.innerText is unusable here because
+ * the progress indicator contains all future step names at once.
+ */
+async function readWizardState(page: any): Promise<WizardState> {
+  return page.evaluate(() => {
+    const stepNames =
+      /^(Personal Information|Educational Information|Questionnaire|Documents|Required Documents|Completed)$/i;
+    const roots: Array<Document | ShadowRoot> = [document];
+    const elements: Element[] = [];
+    for (let i = 0; i < roots.length; i++) {
+      roots[i].querySelectorAll("*").forEach((el: Element) => {
+        elements.push(el);
+        if ((el as HTMLElement).shadowRoot) roots.push((el as HTMLElement).shadowRoot!);
+      });
+    }
+
+    const clean = (value: string | null | undefined) =>
+      (value || "").replace(/\s+/g, " ").trim();
+    const visible = (el: Element) => {
+      const node = el as HTMLElement;
+      const style = getComputedStyle(node);
+      return style.display !== "none" && style.visibility !== "hidden" &&
+        (node.offsetWidth > 0 || node.offsetHeight > 0);
+    };
+    const nameOf = (el: Element) => {
+      const candidates = [
+        el.getAttribute("aria-label"),
+        el.getAttribute("title"),
+        el.getAttribute("data-label"),
+        el.textContent,
+      ];
+      return candidates.map(clean).find((v) => stepNames.test(v)) || "";
+    };
+
+    // Salesforce/SLDS variants seen across Experience Cloud releases.
+    const currentSelectors = [
+      '[aria-current="step"]',
+      '[aria-current="true"]',
+      ".slds-is-current",
+      ".slds-is-active",
+      '[data-current="true"]',
+      '[data-active="true"]',
+    ];
+    let step = "";
+    for (const selector of currentSelectors) {
+      const hit = elements.find((el) => el.matches(selector) && visible(el) && nameOf(el));
+      if (hit) { step = nameOf(hit); break; }
+    }
+    // Fallback to the visible page heading, never the full progress-bar text.
+    if (!step) {
+      const heading = elements.find((el) =>
+        /^(H1|H2|H3|H4)$/.test(el.tagName) && visible(el) && nameOf(el),
+      );
+      if (heading) step = nameOf(heading);
+    }
+
+    const fileInputCount = elements.filter((el) =>
+      el.tagName === "INPUT" && (el as HTMLInputElement).type === "file",
+    ).length;
+    return {
+      step,
+      fileInputCount,
+      documentScreen: fileInputCount > 0 || /^(Documents|Required Documents)$/i.test(step),
+    };
+  }).catch(() => ({ step: "", fileInputCount: 0, documentScreen: false }));
+}
+
+/** Return visible browser validation errors with their field labels/values. */
+async function readWizardValidation(page: any): Promise<string[]> {
+  return page.evaluate(() => {
+    const roots: Array<Document | ShadowRoot> = [document];
+    const elements: Element[] = [];
+    for (let i = 0; i < roots.length; i++) {
+      roots[i].querySelectorAll("*").forEach((el: Element) => {
+        elements.push(el);
+        if ((el as HTMLElement).shadowRoot) roots.push((el as HTMLElement).shadowRoot!);
+      });
+    }
+    const clean = (value: string | null | undefined) =>
+      (value || "").replace(/\s+/g, " ").trim();
+    const visible = (el: Element) => {
+      const node = el as HTMLElement;
+      const style = getComputedStyle(node);
+      return style.display !== "none" && style.visibility !== "hidden" &&
+        (node.offsetWidth > 0 || node.offsetHeight > 0);
+    };
+    const messages = elements
+      .filter((el) => visible(el) && (
+        el.getAttribute("role") === "alert" ||
+        el.getAttribute("aria-live") === "assertive" ||
+        /slds-(form-element__help|has-error)|error-message/i.test(el.className?.toString() || "")
+      ))
+      .map((el) => clean(el.textContent))
+      .filter(Boolean);
+    const invalid = elements
+      .filter((el) => visible(el) && (
+        el.matches("input:invalid, select:invalid, textarea:invalid") ||
+        el.getAttribute("aria-invalid") === "true"
+      ))
+      .map((el) => {
+        const input = el as HTMLInputElement;
+        const id = el.getAttribute("id");
+        const label = id
+          ? elements.find((candidate) => candidate.tagName === "LABEL" && candidate.getAttribute("for") === id)
+          : undefined;
+        const name = clean(label?.textContent) || clean(el.getAttribute("aria-label")) ||
+          clean(el.getAttribute("name")) || el.tagName.toLowerCase();
+        return `${name} (value="${clean(input.value)}")`;
+      });
+    return [...new Set([...messages, ...invalid])].slice(0, 20);
+  }).catch(() => [] as string[]);
+}
+
 // ---------------------------------------------------------------------------
 // Stage fillers
 // ---------------------------------------------------------------------------
@@ -1234,9 +1361,15 @@ async function fillPersonalUI(page: any, profile: SubmitProfile): Promise<void> 
   await selectNative(page, /^\s*Gender/i, (profile.gender || "").replace(/^m.*/i, "Male").replace(/^f.*/i, "Female"));
   await fillIfEmpty(page, /Date of Birth/i, formatSfDate(profile.dateOfBirth));
   await pickTypeaheadIfEmpty(page, /Country of Birth/i, profile.nationality);
-  // City of Birth is empty on resumed apps and appears to be flow-required → give
-  // it a value (fall back to address city / nationality) so "Next" can validate.
-  await fillIfEmpty(page, /City of Birth/i, profile.cityOfBirth || profile.addressCity || profile.nationality || "");
+  const birthCity = profile.cityOfBirth || profile.addressCity || "";
+  const birthCityFilled = await fillIfEmpty(page, /City of Birth/i, birthCity);
+  if (birthCity) {
+    logger.info(
+      `[altinbas][ui] Personal: City of Birth ${birthCityFilled ? "dolu" : "DOLDURULAMADI"} (değer="${birthCity}")`,
+    );
+  } else {
+    logger.warn("[altinbas][ui] Personal: City of Birth için profil/adres şehri bulunamadı");
+  }
   await fillIfEmpty(page, /Passport Date of Issue/i, formatSfDate(profile.passportIssueDate));
   await fillIfEmpty(page, /Passport Date of Expiry/i, formatSfDate(profile.passportExpiryDate));
   await pickTypeaheadIfEmpty(page, /Passport Issuing Country/i, profile.nationality);
@@ -1524,99 +1657,39 @@ async function completeApplicationUI(
   await fillPersonalUI(page, profile).catch(() => {});
   await page.waitForTimeout(800);
 
-  // Full-screen inspector: active breadcrumb step, all step names, Next-button
-  // state, visible errors (text OR css-class based), and required-marked-empty
-  // fields (Lightning marks required with a label "*"/slds-required, NOT the
-  // input's required attribute — so we detect the star marker).
-  const inspect = async (): Promise<any> =>
-    await page.evaluate(() => {
-      function walk(root: any, acc: any[]) {
-        root.querySelectorAll("*").forEach((el: any) => {
-          if (el.shadowRoot) walk(el.shadowRoot, acc);
-          acc.push(el);
-        });
-        return acc;
-      }
-      const cn = (el: any) => (el && el.className && el.className.baseVal !== undefined ? el.className.baseVal : (el && typeof el.className === "string" ? el.className : "")) || "";
-      const all = walk(document, []);
-      let active = "";
-      const steps: string[] = [];
-      all.forEach((el: any) => {
-        const t = (el.textContent || "").replace(/\s+/g, " ").trim();
-        const c = cn(el);
-        if (t.length < 40 && /Personal|Educational|Questionnaire|Document|Completed/i.test(t) && /tab|step|progress|path|slds-is|breadcrumb/i.test(c)) {
-          if (!steps.includes(t)) steps.push(t);
-          if (/active|current|slds-is-active|slds-is-current|selected/i.test(c) && !active) active = t;
-        }
-      });
-      const errors: string[] = [];
-      all.forEach((el: any) => {
-        const t = (el.textContent || "").trim();
-        if (el.children.length !== 0 || !t || t.length > 140) return;
-        const c = cn(el);
-        const isErrCls = /has-error|is-invalid|form-element__help|inlineHelp|error/i.test(c);
-        const isErrTxt = /complete this field|you must|enter a valid|is required|required|fill out|please|zorunlu|geçerli|boş|doldur/i.test(t);
-        if (isErrCls || isErrTxt) errors.push(t.slice(0, 90));
-      });
-      const emptyReq: string[] = [];
-      all.forEach((el: any) => {
-        if (!(el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) return;
-        if ((((el as any).value || "") + "").trim()) return;
-        let n: any = el, lbl = "", req = false;
-        for (let i = 0; i < 8 && n; i++) {
-          n = n.parentElement || (n.getRootNode && n.getRootNode().host);
-          if (!n || !n.querySelector) continue;
-          const l = n.querySelector("label");
-          if (l && (l.textContent || "").trim() && !lbl) lbl = (l.textContent || "").replace(/\s+/g, " ").trim();
-          if (n.querySelector("abbr, .slds-required, [title='required' i]")) req = true;
-          if (lbl) break;
-        }
-        if (req || el.required || el.getAttribute("aria-required") === "true") emptyReq.push((lbl || el.name || "?").slice(0, 40));
-      });
-      let next = "yok";
-      const nb = all.filter((e: any) => e.tagName === "BUTTON" && /^\s*Next\s*$/i.test((e.textContent || "").trim()));
-      if (nb.length) next = `n=${nb.length} disabled=${nb[0].disabled} aria=${nb[0].getAttribute("aria-disabled")}`;
-      return { active, steps, next, errors: Array.from(new Set(errors)).slice(0, 10), emptyReq: Array.from(new Set(emptyReq)).slice(0, 10) };
-    }).catch(() => ({ active: "", steps: [], next: "err", errors: [], emptyReq: [] }));
-
-  // Jump directly to a step by clicking its breadcrumb (bypasses Next validation).
-  const clickBreadcrumb = async (name: string): Promise<boolean> =>
-    await page.evaluate((nm: string) => {
-      const re = new RegExp(nm, "i");
-      function walk(root: any, acc: any[]) { root.querySelectorAll("*").forEach((el: any) => { if (el.shadowRoot) walk(el.shadowRoot, acc); acc.push(el); }); return acc; }
-      const cn = (el: any) => (el && typeof el.className === "string" ? el.className : (el && el.className && el.className.baseVal) || "") || "";
-      const all = walk(document, []);
-      const cand = all.find((el: any) => {
-        const t = (el.textContent || "").replace(/\s+/g, " ").trim();
-        return t.length < 40 && re.test(t) && /tab|step|progress|path|slds|breadcrumb/i.test(cn(el)) && (el.tagName === "A" || el.tagName === "BUTTON" || el.tagName === "LI" || el.tagName === "SPAN" || el.tagName === "DIV");
-      });
-      if (cand) { try { (cand as any).click(); return true; } catch { return false; } }
-      return false;
-    }, name).catch(() => false);
-
   let reachedDocuments = false;
-  for (let step = 0; step < 8; step++) {
-    const fileInputCount = await page.locator('input[type="file"]').count().catch(() => 0);
-    if (fileInputCount > 0) { reachedDocuments = true; break; }
-    const insp = await inspect();
-    logger.info(
-      `[altinbas][ui] adım#${step}: aktif="${insp.active}" steps=${JSON.stringify(insp.steps)} next=(${insp.next}) errors=${JSON.stringify(insp.errors)} emptyReq=${JSON.stringify(insp.emptyReq)}`,
-    );
-    // Fill whatever this step needs.
-    await fillPersonalUI(page, profile).catch(() => {});
-    const body = (await page.locator("body").innerText().catch(() => "")) || "";
-    if (/Name of School|There are no records to show/i.test(body)) await ensureEducationUI(page, profile).catch(() => {});
-    if (/Visa Support|embassy|consulate/i.test(body)) await fillQuestionnaireUI(page, profile).catch(() => {});
-    await page.waitForTimeout(600);
-    await clickWizardBtn(page, /^\s*Next\s*$/i);
+  for (let step = 0; step < 7; step++) {
+    const before = await readWizardState(page);
+    logger.info(`[altinbas][ui] wizard adım#${step}: aktif="${before.step || "bilinmiyor"}" fileInputs=${before.fileInputCount}`);
+    if (before.documentScreen) {
+      reachedDocuments = true;
+      break;
+    }
+    // Fill the specific step we're on before advancing.
+    if (/Personal Information/i.test(before.step)) await fillPersonalUI(page, profile).catch(() => {});
+    if (/Educational Information/i.test(before.step)) await ensureEducationUI(page, profile).catch(() => {});
+    if (/Questionnaire/i.test(before.step)) await fillQuestionnaireUI(page, profile).catch(() => {});
+    await page.waitForTimeout(500);
+    const advanced = await clickWizardBtn(page, /^\s*Next\s*$/i);
+    if (!advanced) {
+      logger.warn(`[altinbas][ui] adım#${step}: 'Next' bulunamadı — ilerlenemedi`);
+      break;
+    }
     await page.waitForTimeout(SF_HYDRATION_MS);
-    // If Next didn't reach Documents, try jumping via the breadcrumb directly.
-    if ((await page.locator('input[type="file"]').count().catch(() => 0)) === 0) {
-      const jumped = (await clickBreadcrumb("Document")) || (await clickBreadcrumb("Questionnaire")) || (await clickBreadcrumb("Educational"));
-      if (jumped) {
-        logger.info(`[altinbas][ui] adım#${step}: breadcrumb ile ileri atlandı`);
-        await page.waitForTimeout(SF_HYDRATION_MS);
-      }
+    const after = await readWizardState(page);
+    if (after.documentScreen) {
+      reachedDocuments = true;
+      break;
+    }
+    if (before.step && after.step === before.step) {
+      const validation = await readWizardValidation(page);
+      logger.warn(
+        `[altinbas][ui] adım#${step}: Next sonrası "${before.step}" değişmedi` +
+        ` — validation=${validation.length ? JSON.stringify(validation) : "mesaj bulunamadı"}`,
+      );
+      // Repeating Next cannot clear client-side validation. Stop immediately
+      // with evidence instead of producing seven identical attempts.
+      break;
     }
   }
 
