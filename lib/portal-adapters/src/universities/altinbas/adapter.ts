@@ -1398,6 +1398,12 @@ async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[
 // ---------------------------------------------------------------------------
 // Orchestrator
 // ---------------------------------------------------------------------------
+// Returns TRUE if it found an existing Signed-Up (half-finished) application and
+// handled it (completed / uploaded / already-done / attempted). Returns FALSE if
+// NO existing application row was found — the caller should then fall through to
+// the normal create + flow-replay path (fresh student). This makes the flag safe
+// to enable globally: existing half-finished apps get finished (with documents);
+// brand-new students keep the existing create path unchanged.
 async function completeApplicationUI(
   page: any,
   profile: SubmitProfile,
@@ -1405,7 +1411,7 @@ async function completeApplicationUI(
   dryRun: boolean,
   result: SubmitResult,
   screenshots: string[],
-): Promise<void> {
+): Promise<boolean> {
   // Push captures into submit()'s own screenshots array so its
   // `if (screenshots.length) result.screenshots = screenshots;` picks them up.
   const shots: string[] = screenshots;
@@ -1449,16 +1455,15 @@ async function completeApplicationUI(
   if (target.idx < 0) {
     result.detail = `Altınbaş[ui]: My Applications'ta tamamlanacak başvuru bulunamadı (program="${profile.programName}")`;
     logger.warn(`[altinbas][ui] ${result.detail}`);
-    const s = await captureScreen(page, "ui-no-app"); if (s) shots.push(s);
-    result.screenshots = shots;
-    return;
+    // NO existing row → tell caller to fall through to the normal create path.
+    return false;
   }
   const chosen = target.info[target.idx];
   if (chosen.completed && !chosen.signedUp) {
     result.alreadyExists = true;
     result.detail = `Altınbaş[ui]: başvuru zaten tamamlanmış/değerlendirmede (${chosen.text.slice(0, 80)})`;
     logger.info(`[altinbas][ui] ${result.detail}`);
-    return;
+    return true;
   }
 
   // Click that row's "Complete Application".
@@ -1477,7 +1482,8 @@ async function completeApplicationUI(
   if (!opened) {
     result.detail = "Altınbaş[ui]: 'Complete Application' butonu tıklanamadı";
     logger.warn(`[altinbas][ui] ${result.detail}`);
-    return;
+    // Row exists but couldn't open it — do NOT create a duplicate; report failure.
+    return true;
   }
   await page.waitForTimeout(SF_HYDRATION_MS);
   logger.info(`[altinbas][ui] Complete Application açıldı — ${chosen.text.slice(0, 80)}`);
@@ -1518,7 +1524,7 @@ async function completeApplicationUI(
     logger.info(`[altinbas][ui] ${result.detail}`);
     const s = await captureScreen(page, "ui-dryrun-docs"); if (s) shots.push(s);
     result.screenshots = shots;
-    return;
+    return true;
   }
 
   // 4) Submit Application + success detection.
@@ -1536,7 +1542,7 @@ async function completeApplicationUI(
     result.externalRef = result.externalRef; // set upstream when known
     result.detail = "Altınbaş[ui]: Submit başarılı — 'Application is created successfully' (UI completion + belgeler yüklendi)";
     logger.info(`[altinbas][ui] ${result.detail}`);
-    return;
+    return true;
   }
   // Verify via My Applications (stage moved off "Signed Up").
   await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
@@ -1555,6 +1561,8 @@ async function completeApplicationUI(
     result.detail = "Altınbaş[ui]: Submit sonrası başarı doğrulanamadı (aşama Signed Up'ta kalmış olabilir)";
     logger.warn(`[altinbas][ui] ${result.detail}`);
   }
+  // Attempted completion on an existing row — handled (don't create a duplicate).
+  return true;
 }
 // ===== END UI-DRIVEN COMPLETION =====
 
@@ -2577,6 +2585,19 @@ export const altinbasAdapter: UniversityAdapter = {
 
     // ── Navigate to application form ─────────────────────────────────────
     logger.info("[altinbas] navigating to application form");
+    if (UI_COMPLETE) {
+      // NEW: finish an EXISTING half-finished (Signed-Up) application via the
+      // real Lightning wizard AND upload the 4 required documents. If no such
+      // application exists yet (fresh student), fall through to the normal
+      // create + flow-replay path below — safe to enable globally, no regression.
+      const uiHandled = await completeApplicationUI(page, profile, files, dryRun, result, screenshots);
+      if (uiHandled) {
+        if (screenshots.length) result.screenshots = screenshots;
+        logger.info("[altinbas] submit complete (UI completion path)", result);
+        return result;
+      }
+      logger.info("[altinbas] UI_COMPLETE set but no existing Signed-Up app — falling through to create+replay");
+    }
     await navigateToAppForm(page);
     await page.waitForTimeout(2000);
 
@@ -2614,15 +2635,7 @@ export const altinbasAdapter: UniversityAdapter = {
     // ── Screen Flow REPLAY: Term → Degree → Program → commit → Personal →
     //    Educational → Questionnaire → Documents → FINISH ───────────────────
     try {
-      if (UI_COMPLETE) {
-        // NEW (UI-driven completion): finish an existing Signed-Up application
-        // via the real Lightning wizard AND upload the 4 required documents
-        // (the API replay never uploaded documents). Replaces the fragile
-        // Personal→Documents→Finish navigateFlow replay.
-        await completeApplicationUI(page, profile, files, dryRun, result, screenshots);
-      } else {
-        await runFlowReplay(page, rt, profile, files, dryRun, result, screenshots);
-      }
+      await runFlowReplay(page, rt, profile, files, dryRun, result, screenshots);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       logger.warn(`[altinbas] flow replay hatası: ${msg}`);
