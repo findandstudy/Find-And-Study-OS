@@ -1234,7 +1234,9 @@ async function fillPersonalUI(page: any, profile: SubmitProfile): Promise<void> 
   await selectNative(page, /^\s*Gender/i, (profile.gender || "").replace(/^m.*/i, "Male").replace(/^f.*/i, "Female"));
   await fillIfEmpty(page, /Date of Birth/i, formatSfDate(profile.dateOfBirth));
   await pickTypeaheadIfEmpty(page, /Country of Birth/i, profile.nationality);
-  await fillIfEmpty(page, /City of Birth/i, profile.cityOfBirth || "");
+  // City of Birth is empty on resumed apps and appears to be flow-required → give
+  // it a value (fall back to address city / nationality) so "Next" can validate.
+  await fillIfEmpty(page, /City of Birth/i, profile.cityOfBirth || profile.addressCity || profile.nationality || "");
   await fillIfEmpty(page, /Passport Date of Issue/i, formatSfDate(profile.passportIssueDate));
   await fillIfEmpty(page, /Passport Date of Expiry/i, formatSfDate(profile.passportExpiryDate));
   await pickTypeaheadIfEmpty(page, /Passport Issuing Country/i, profile.nationality);
@@ -1522,27 +1524,84 @@ async function completeApplicationUI(
   await fillPersonalUI(page, profile).catch(() => {});
   await page.waitForTimeout(800);
 
+  // Diagnostic scan of the current screen: visible validation errors + required
+  // fields that are still empty (pierces shadow DOM). This is how we discover
+  // exactly WHICH field blocks "Next".
+  const scanBlockers = async (): Promise<{ errors: string[]; emptyReq: string[] }> =>
+    await page.evaluate(() => {
+      function walk(root: Document | ShadowRoot, acc: Element[]) {
+        root.querySelectorAll("*").forEach((el: Element) => {
+          if ((el as HTMLElement).shadowRoot) walk((el as HTMLElement).shadowRoot!, acc);
+          acc.push(el);
+        });
+        return acc;
+      }
+      const all = walk(document, []);
+      const errors: string[] = [];
+      all.forEach((el) => {
+        const t = (el.textContent || "").trim();
+        if (
+          el.children.length === 0 &&
+          t.length > 0 &&
+          t.length < 120 &&
+          /complete this field|you must enter|enter a valid|is required|required field|please enter|zorunlu|geçerli bir|boş bırak/i.test(t)
+        )
+          errors.push(t);
+      });
+      const emptyReq: string[] = [];
+      all.forEach((el) => {
+        const inp = el as HTMLInputElement;
+        const tag = el.tagName;
+        if (
+          (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") &&
+          (inp.required || el.getAttribute("required") !== null || el.getAttribute("aria-required") === "true") &&
+          !((inp.value || "") as string).trim()
+        ) {
+          let lbl = "";
+          let n: any = el;
+          for (let i = 0; i < 8 && n; i++) {
+            n = n.parentElement || (n.getRootNode && n.getRootNode().host);
+            if (n && n.querySelector) {
+              const l = n.querySelector("label");
+              if (l && (l.textContent || "").trim()) {
+                lbl = (l.textContent || "").trim();
+                break;
+              }
+            }
+          }
+          emptyReq.push((lbl || inp.name || el.getAttribute("placeholder") || "?").slice(0, 50));
+        }
+      });
+      return { errors: Array.from(new Set(errors)).slice(0, 12), emptyReq: Array.from(new Set(emptyReq)).slice(0, 12) };
+    }).catch(() => ({ errors: [], emptyReq: [] }));
+
   let reachedDocuments = false;
-  for (let step = 0; step < 7; step++) {
+  for (let step = 0; step < 8; step++) {
     const fileInputCount = await page.locator('input[type="file"]').count().catch(() => 0);
     const body = (await page.locator("body").innerText().catch(() => "")) || "";
-    const heading =
-      (body.match(/Required Documents|Upload Files|Educational Information|Questionnaire|Personal Information|Completed/i) || [""])[0];
-    logger.info(`[altinbas][ui] wizard adım#${step}: başlık="${heading}" fileInputs=${fileInputCount}`);
-    if (fileInputCount > 0 || /Required Documents|Upload Files|Required\s*-/i.test(body)) {
+    logger.info(`[altinbas][ui] wizard adım#${step}: fileInputs=${fileInputCount}`);
+    if (fileInputCount > 0 || /Required\s*-/i.test(body)) {
       reachedDocuments = true;
       break;
     }
-    // Fill the specific step we're on before advancing.
-    if (/Educational Information/i.test(body)) await ensureEducationUI(page, profile).catch(() => {});
-    if (/Questionnaire/i.test(body)) await fillQuestionnaireUI(page, profile).catch(() => {});
-    await page.waitForTimeout(500);
-    const advanced = await clickWizardBtn(page, /^\s*Next\s*$/i);
-    if (!advanced) {
-      logger.warn(`[altinbas][ui] adım#${step}: 'Next' bulunamadı — ilerlenemedi`);
-      break;
-    }
+    // Fill by real step content (not progress-bar text).
+    await fillPersonalUI(page, profile).catch(() => {});
+    if (/Name of School|There are no records to show/i.test(body)) await ensureEducationUI(page, profile).catch(() => {});
+    if (/Questionnaire|Visa|embassy/i.test(body)) await fillQuestionnaireUI(page, profile).catch(() => {});
+    await page.waitForTimeout(600);
+    await clickWizardBtn(page, /^\s*Next\s*$/i);
     await page.waitForTimeout(SF_HYDRATION_MS);
+    // After Next: if still no file inputs, log what's blocking.
+    const stillNoDocs = (await page.locator('input[type="file"]').count().catch(() => 0)) === 0;
+    if (stillNoDocs) {
+      const diag = await scanBlockers();
+      if (diag.errors.length || diag.emptyReq.length) {
+        logger.warn(
+          `[altinbas][ui] adım#${step} sonrası BLOKAJ → errors=${JSON.stringify(diag.errors)} emptyRequired=${JSON.stringify(diag.emptyReq)}`,
+        );
+        const sv = await captureScreen(page, `ui-blocked-${step}`); if (sv) shots.push(sv);
+      }
+    }
   }
 
   const sDocs = await captureScreen(page, reachedDocuments ? "ui-documents" : "ui-stuck");
