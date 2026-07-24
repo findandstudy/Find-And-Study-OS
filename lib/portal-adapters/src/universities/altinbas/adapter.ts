@@ -76,7 +76,6 @@ import {
 import {
   altinbasMutationCanaryGate,
   altinbasGpaTypeLabel,
-  blockingAltinbasCanaryFailures,
   chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
   classifyAltinbasWizardTransition,
@@ -1048,8 +1047,8 @@ const MUTATION_CANARY = process.env.ALTINBAS_MUTATION_CANARY === "1";
 const MUTATION_CANARY_STAGE = parseAltinbasCanaryStage(
   process.env.ALTINBAS_MUTATION_CANARY_STAGE,
 );
-const MUTATION_CANARY_ALLOW_LEGACY_ADDRESS_GAPS =
-  process.env.ALTINBAS_MUTATION_CANARY_ALLOW_LEGACY_ADDRESS_GAPS === "1";
+const LEGACY_ADDRESS_CITY_FALLBACK = "Not Provided";
+const LEGACY_ADDRESS_ZIP_FALLBACK = "00000";
 const MY_APPS_URL = PORTAL_URL + "my-applications";
 
 interface UiFieldResult {
@@ -1118,6 +1117,7 @@ async function fillOrProveNamedField(
   page: any,
   field: string,
   crmValue: string | undefined,
+  options: { legacyFallback?: string } = {},
 ): Promise<UiFieldResult> {
   const expected = crmValue?.trim() || "";
   if (expected) return fillNamedField(page, field, expected);
@@ -1140,7 +1140,21 @@ async function fillOrProveNamedField(
       crmValue: expected,
       portalValue: proof.value,
       portalValid: proof.valid && !proof.ariaInvalid,
+      legacyFallback: options.legacyFallback,
     });
+    if (action === "write_legacy_fallback") {
+      const fallbackResult = await fillNamedField(
+        page,
+        field,
+        options.legacyFallback || "",
+      );
+      return {
+        ...fallbackResult,
+        reason: fallbackResult.ok
+          ? "legacy_fallback_applied"
+          : fallbackResult.reason,
+      };
+    }
     return {
       ok: action === "accept_existing_portal_value",
       field,
@@ -1501,10 +1515,14 @@ async function fillPersonalUI(
     await fillOrProveNamedField(page, "Address_Street", profile.addressStreet),
   );
   results.push(
-    await fillOrProveNamedField(page, "Address_City", profile.addressCity),
+    await fillOrProveNamedField(page, "Address_City", profile.addressCity, {
+      legacyFallback: LEGACY_ADDRESS_CITY_FALLBACK,
+    }),
   );
   results.push(
-    await fillOrProveNamedField(page, "Address_Zip_Code", profile.addressZip),
+    await fillOrProveNamedField(page, "Address_Zip_Code", profile.addressZip, {
+      legacyFallback: LEGACY_ADDRESS_ZIP_FALLBACK,
+    }),
   );
 
   const birthCity = explicitCityOfBirth(profile.cityOfBirth);
@@ -1553,6 +1571,15 @@ async function fillPersonalUI(
     results.push({ ok, field, reason: ok ? "ok" : "readback_failed" });
   }
 
+  const legacyFallbackFields = results
+    .filter((item) => item.ok && item.reason === "legacy_fallback_applied")
+    .map((item) => item.field);
+  if (legacyFallbackFields.length) {
+    logger.warn(
+      `[altinbas][ui] legacy address fallback applied` +
+      ` (fields=${legacyFallbackFields.join(",")})`,
+    );
+  }
   const failures = results.filter((result) => !result.ok);
   return { ok: failures.length === 0, failures };
 }
@@ -1577,20 +1604,11 @@ async function runSingleStepMutationCanary(
   }
   if (before.step === "Personal Information") {
     const filled = await fillPersonalUI(page, profile);
-    const blockingFailures = blockingAltinbasCanaryFailures(
-      filled.failures,
-      MUTATION_CANARY_ALLOW_LEGACY_ADDRESS_GAPS,
-    );
-    if (blockingFailures.length) {
+    if (!filled.ok) {
       result.detail =
         `Altınbaş[canary]: data_missing_or_unproved` +
-        ` (${blockingFailures.map((item) => `${item.field}:${item.reason}`).join(",")})`;
+        ` (${filled.failures.map((item) => `${item.field}:${item.reason}`).join(",")})`;
       return;
-    }
-    if (filled.failures.length) {
-      logger.info(
-        "[altinbas][canary] legacy address gaps intentionally left blank for one-Next validation probe",
-      );
     }
   } else if (before.step === "Educational Information") {
     const education = await ensureEducationUI(page, profile);

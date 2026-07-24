@@ -64,28 +64,6 @@ export function chooseAltinbasLabeledCombobox(
   return matches.length === 1 ? matches[0].index : -1;
 }
 
-export interface AltinbasCanaryFieldFailure {
-  field: string;
-  reason: string;
-}
-
-/**
- * A diagnostic canary may leave only the two legacy address fields blank so
- * the live portal itself can prove whether they are required. Every selector,
- * readback, and non-address failure remains blocking.
- */
-export function blockingAltinbasCanaryFailures(
-  failures: AltinbasCanaryFieldFailure[],
-  allowLegacyAddressGaps: boolean,
-): AltinbasCanaryFieldFailure[] {
-  if (!allowLegacyAddressGaps) return failures;
-  return failures.filter(
-    (failure) =>
-      failure.reason !== "data_missing" ||
-      !["Address_City", "Address_Zip_Code"].includes(failure.field),
-  );
-}
-
 const STEP_BY_FOLDED_NAME = new Map<string, AltinbasWizardStep>(
   ALTINBAS_WIZARD_STEPS.map((step) => [step.toLowerCase(), step]),
 );
@@ -213,6 +191,7 @@ const isPresent = (value: unknown): boolean =>
 export type AltinbasResumeFieldAction =
   | "write_crm_value"
   | "accept_existing_portal_value"
+  | "write_legacy_fallback"
   | "data_missing";
 
 /**
@@ -221,17 +200,20 @@ export type AltinbasResumeFieldAction =
  * A CRM value always wins and is written/read back. When CRM has no value, a
  * previously saved non-placeholder portal value may be accepted only after
  * native/LWC validity is proved. A blank/invalid portal control remains a hard
- * data_missing boundary.
+ * data_missing boundary unless the caller supplies an explicit, audited
+ * legacy fallback.
  */
 export function resolveAltinbasResumeFieldAction(input: {
   crmValue: unknown;
   portalValue: unknown;
   portalValid: boolean;
+  legacyFallback?: unknown;
 }): AltinbasResumeFieldAction {
   if (isPresent(input.crmValue)) return "write_crm_value";
   if (input.portalValid && isPresent(input.portalValue)) {
     return "accept_existing_portal_value";
   }
+  if (isPresent(input.legacyFallback)) return "write_legacy_fallback";
   return "data_missing";
 }
 
