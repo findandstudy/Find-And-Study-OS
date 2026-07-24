@@ -1135,6 +1135,429 @@ async function tryResumeFromMyApplications(
 // Flow replay sürücüsü — Term → Degree → Program → commit → Personal →
 // Educational → Questionnaire → Documents → FINISH
 // ---------------------------------------------------------------------------
+// ===== BEGIN UI-DRIVEN COMPLETION (injected) =====
+// ===========================================================================
+// UI-DRIVEN COMPLETION (ALTINBAS_UI_COMPLETE=1)
+// ---------------------------------------------------------------------------
+// Replaces the fragile navigateFlow API-replay for the completion half
+// (Personal → Educational → Questionnaire → Documents → Submit). Drives the
+// real Salesforce Lightning wizard the same way a human agent does, and —
+// critically — UPLOADS the four required documents via Playwright setInputFiles
+// (the API-replay never uploaded documents: buildDocumentsFields() was empty).
+//
+// Self-contained: it finds the target application in "My Applications" itself
+// (by program name, preferring a "Signed Up" row), so it is robust to whichever
+// path triggered it (fresh create, commit-duplicate, or personal-duplicate).
+// ===========================================================================
+
+const UI_COMPLETE = process.env.ALTINBAS_UI_COMPLETE === "1";
+const MY_APPS_URL = PORTAL_URL + "my-applications";
+
+/** ISO "YYYY-MM-DD" → Salesforce display "Sep 12, 2008" (no leading zero). */
+function formatSfDate(iso: string | undefined): string {
+  if (!iso) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!m) return "";
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const y = m[1];
+  const mo = months[parseInt(m[2], 10) - 1];
+  const d = parseInt(m[3], 10);
+  if (!mo) return "";
+  return `${mo} ${d}, ${y}`;
+}
+
+/** Fill a labelled text/date input only when it is currently empty. */
+async function fillIfEmpty(
+  page: any,
+  labelRe: RegExp,
+  value: string,
+): Promise<void> {
+  if (!value) return;
+  try {
+    const box = page.getByLabel(labelRe).first();
+    if (!(await box.count().catch(() => 0))) return;
+    const cur = ((await box.inputValue().catch(() => "")) || "").trim();
+    if (cur) return; // already populated (prefilled from the Signed-Up record)
+    await box.click({ timeout: 6000 }).catch(() => {});
+    await box.fill(value).catch(() => {});
+    await box.press("Escape").catch(() => {});
+  } catch {/* tolerate */}
+}
+
+/** Select a value in a native <select> resolved by its label. */
+async function selectNative(
+  page: any,
+  labelRe: RegExp,
+  value: string,
+): Promise<void> {
+  if (!value) return;
+  try {
+    const sel = page.getByLabel(labelRe).first();
+    if (!(await sel.count().catch(() => 0))) return;
+    await sel.selectOption({ label: value }).catch(async () => {
+      await sel.selectOption(value).catch(() => {});
+    });
+  } catch {/* tolerate */}
+}
+
+/** Fill a Lightning typeahead (country pickers) only when empty. */
+async function pickTypeaheadIfEmpty(
+  page: any,
+  labelRe: RegExp,
+  value: string,
+): Promise<void> {
+  if (!value) return;
+  try {
+    const box = page.getByLabel(labelRe).first();
+    if (!(await box.count().catch(() => 0))) return;
+    const cur = ((await box.inputValue().catch(() => "")) || "").trim();
+    if (cur) return;
+  } catch {/* fall through to pickCombobox */}
+  await pickCombobox(page, labelRe, value).catch(() => {});
+}
+
+/** Click a wizard button (Next / Submit) by accessible name, tolerant. */
+async function clickWizardBtn(page: any, nameRe: RegExp): Promise<boolean> {
+  try {
+    const btn = page.getByRole("button", { name: nameRe }).first();
+    if (!(await btn.count().catch(() => 0))) return false;
+    await btn.scrollIntoViewIfNeeded().catch(() => {});
+    await btn.click({ timeout: 15000 }).catch(() => {});
+    return true;
+  } catch { return false; }
+}
+
+// ---------------------------------------------------------------------------
+// Stage fillers
+// ---------------------------------------------------------------------------
+async function fillPersonalUI(page: any, profile: SubmitProfile): Promise<void> {
+  await selectNative(page, /^\s*Gender/i, (profile.gender || "").replace(/^m.*/i, "Male").replace(/^f.*/i, "Female"));
+  await fillIfEmpty(page, /Date of Birth/i, formatSfDate(profile.dateOfBirth));
+  await pickTypeaheadIfEmpty(page, /Country of Birth/i, profile.nationality);
+  await fillIfEmpty(page, /City of Birth/i, profile.cityOfBirth || "");
+  await fillIfEmpty(page, /Passport Date of Issue/i, formatSfDate(profile.passportIssueDate));
+  await fillIfEmpty(page, /Passport Date of Expiry/i, formatSfDate(profile.passportExpiryDate));
+  await pickTypeaheadIfEmpty(page, /Passport Issuing Country/i, profile.nationality);
+  await fillIfEmpty(page, /Father\s*Name/i, profile.fatherName || "");
+  await fillIfEmpty(page, /Mother\s*Name/i, profile.motherName || "");
+  await pickTypeaheadIfEmpty(page, /Address:\s*Country/i, profile.nationality);
+  await fillIfEmpty(page, /Address:\s*Street/i, profile.addressStreet || profile.address || "");
+  await fillIfEmpty(page, /Address:\s*City/i, profile.addressCity || "");
+  await fillIfEmpty(page, /Address:\s*Zip/i, profile.addressZip || "");
+}
+
+/** Ensure at least one EDUCATION record exists on the Educational screen. */
+async function ensureEducationUI(page: any, profile: SubmitProfile): Promise<void> {
+  // Already has a record? ("There are no records to show." absent under EDUCATION)
+  const bodyTxt = (await page.locator("body").innerText().catch(() => "")) || "";
+  const eduSectionHasRecord =
+    /EDUCATION[\s\S]{0,400}?(Secondary School|Bachelor|Master|High School)/i.test(bodyTxt) &&
+    !/EDUCATION[\s\S]{0,120}?There are no records to show/i.test(bodyTxt);
+  if (eduSectionHasRecord) {
+    logger.info("[altinbas][ui] Educational: mevcut kayıt var, ekleme atlandı");
+    return;
+  }
+  // Open the EDUCATION add (+) modal.
+  const addBtn = page
+    .locator("button, lightning-button-icon, [role=button]")
+    .filter({ hasText: /^\s*$/ });
+  // The + is an icon button next to the "EDUCATION" heading; click by proximity.
+  const opened = await page.evaluate(() => {
+    function walk(root: Document | ShadowRoot, acc: Element[]) {
+      root.querySelectorAll("*").forEach((el: Element) => {
+        if ((el as HTMLElement).shadowRoot) walk((el as HTMLElement).shadowRoot!, acc);
+        acc.push(el);
+      });
+      return acc;
+    }
+    const els = walk(document, []);
+    const eduHead = els.find((e) => /^\s*EDUCATION\s*$/i.test((e.textContent || "").trim()) && e.children.length === 0);
+    if (!eduHead) return false;
+    // Search siblings / ancestors for an add/plus button.
+    let scope: Element | null = eduHead;
+    for (let i = 0; i < 4 && scope; i++) scope = scope.parentElement;
+    const btn = (scope || document).querySelector(
+      "button[title*='Add' i], button[aria-label*='Add' i], lightning-button-icon, button.slds-button_icon",
+    ) as HTMLElement | null;
+    if (btn) { btn.click(); return true; }
+    return false;
+  }).catch(() => false);
+  if (!opened) {
+    logger.warn("[altinbas][ui] Educational: + (add) butonu bulunamadı");
+    return;
+  }
+  await page.waitForTimeout(2500);
+  // Modal fields.
+  const primary =
+    profile.educationRecords?.find((r) => r.level === "high_school") ??
+    profile.educationRecords?.find((r) => r.level === "bachelor") ??
+    profile.educationRecords?.[0];
+  const school = primary?.schoolName || profile.schoolName || "High School";
+  const country = primary?.country || profile.nationality || "";
+  const gradYear = String(primary?.endYear || profile.graduationYear || profile.eduEndYear || "");
+  const degreeLabel =
+    /master|phd|doctora|bachelor|associate/i.test(primary?.level || "")
+      ? (primary!.level.charAt(0).toUpperCase() + primary!.level.slice(1))
+      : "Secondary School";
+  const gpaVal = String(primary?.gpa ?? profile.gpa ?? "");
+  const gpaType = "GRADING SYSTEM OUT OF 5";
+  await page.getByLabel(/Name of School/i).first().fill(school).catch(() => {});
+  await selectNative(page, /^\s*Country/i, country);
+  await selectNative(page, /^\s*Degree/i, degreeLabel);
+  await selectNative(page, /Graduation Year/i, gradYear);
+  await selectNative(page, /GPA Type/i, gpaType);
+  await page.getByLabel(/^\s*GPA\s*$/i).first().fill(gpaVal || "5").catch(() => {});
+  await page.waitForTimeout(500);
+  await clickWizardBtn(page, /^\s*Save\s*$/i);
+  await page.waitForTimeout(3500);
+}
+
+async function fillQuestionnaireUI(page: any, profile: SubmitProfile): Promise<void> {
+  const need = (profile.visaSupport || "Yes").toLowerCase().startsWith("y") ? "Yes" : "No";
+  // Lightning combobox: click, pick option.
+  try {
+    const combo = page.getByRole("combobox").first();
+    if (await combo.count().catch(() => 0)) {
+      await combo.click({ timeout: 6000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      const opt = page.getByRole("option", { name: new RegExp(`^\\s*${need}\\s*$`, "i") }).first();
+      if (await opt.count().catch(() => 0)) await opt.click({ timeout: 5000 }).catch(() => {});
+    }
+  } catch {/* tolerate */}
+  await page.waitForTimeout(1500);
+  if (need === "Yes") {
+    // A free-text "embassy" answer appears; fill the first empty textbox on screen.
+    const embassy = `Turkish Consulate in ${profile.nationality || "home country"}`;
+    try {
+      const boxes = page.getByRole("textbox");
+      const n = await boxes.count().catch(() => 0);
+      for (let i = 0; i < n; i++) {
+        const b = boxes.nth(i);
+        const v = ((await b.inputValue().catch(() => "")) || "").trim();
+        if (!v) { await b.fill(embassy).catch(() => {}); break; }
+      }
+    } catch {/* tolerate */}
+  }
+}
+
+async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[]> {
+  const wanted: Array<[RegExp, string | undefined, string]> = [
+    [/Passport/i, files.passport, "passport"],
+    [/Diploma/i, files.diploma, "diploma"],
+    [/Transcript/i, files.transcript, "transcript"],
+    [/Picture|Photo/i, files.photo, "photo"],
+  ];
+  const uploaded: string[] = [];
+  for (const [re, path, tag] of wanted) {
+    if (!path) continue;
+    // Map file inputs → their "Required - X" section label (pierces shadow DOM).
+    const labels: string[] = await page.evaluate(() => {
+      function walk(root: Document | ShadowRoot, acc: HTMLInputElement[]) {
+        root.querySelectorAll("*").forEach((el: Element) => {
+          if ((el as HTMLElement).shadowRoot) walk((el as HTMLElement).shadowRoot!, acc);
+          if (el.tagName === "INPUT" && (el as HTMLInputElement).type === "file") acc.push(el as HTMLInputElement);
+        });
+        return acc;
+      }
+      const inputs = walk(document, []);
+      return inputs.map((inp) => {
+        let n: any = inp;
+        for (let i = 0; i < 8 && n; i++) {
+          n = n.parentElement || (n.getRootNode && n.getRootNode().host);
+          if (n && /Required -/i.test(n.textContent || "")) return (n.textContent || "").slice(0, 100);
+        }
+        return "";
+      });
+    }).catch(() => [] as string[]);
+    const idx = labels.findIndex((l) => re.test(l));
+    if (idx < 0) { logger.warn(`[altinbas][ui] Documents: ${tag} için input bulunamadı`); continue; }
+    try {
+      await page.locator('input[type="file"]').nth(idx).setInputFiles(path);
+    } catch (e) {
+      logger.warn(`[altinbas][ui] Documents: ${tag} setInputFiles hatası: ${(e as Error).message?.slice(0, 120)}`);
+      continue;
+    }
+    // Upload modal → wait for Done, click it.
+    await page.waitForTimeout(1500);
+    for (let t = 0; t < 20; t++) {
+      const done = page.getByRole("button", { name: /^\s*Done\s*$/i }).first();
+      if (await done.count().catch(() => 0)) {
+        await page.waitForTimeout(1200);
+        await done.click({ timeout: 6000 }).catch(() => {});
+        break;
+      }
+      await page.waitForTimeout(1000);
+    }
+    await page.waitForTimeout(1500);
+    uploaded.push(tag);
+    logger.info(`[altinbas][ui] Documents: ${tag} yüklendi`);
+  }
+  return uploaded;
+}
+
+// ---------------------------------------------------------------------------
+// Orchestrator
+// ---------------------------------------------------------------------------
+async function completeApplicationUI(
+  page: any,
+  profile: SubmitProfile,
+  files: SubmitFiles,
+  dryRun: boolean,
+  result: SubmitResult,
+  screenshots: string[],
+): Promise<void> {
+  // Push captures into submit()'s own screenshots array so its
+  // `if (screenshots.length) result.screenshots = screenshots;` picks them up.
+  const shots: string[] = screenshots;
+  const progFold = fold(profile.programName || "");
+
+  // 1) My Applications → search the student → open the target app.
+  await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+  await page.waitForTimeout(SF_HYDRATION_MS);
+  try {
+    const search = page.getByPlaceholder(/search by applicant/i).first();
+    if (await search.count().catch(() => 0)) {
+      await search.click().catch(() => {});
+      await search.fill("").catch(() => {});
+      await search.pressSequentially(profile.lastName || profile.firstName || "", { delay: 50 }).catch(() => {});
+      await page.waitForTimeout(3500);
+    }
+  } catch {/* tolerate */}
+
+  // 2) Pick the row: prefer program match; among matches prefer non-completed.
+  const target = await page.evaluate((pf: string) => {
+    function foldLoc(s: string) { return (s || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+    const rows = Array.from(document.querySelectorAll("tr")).filter((r) =>
+      /RAMAZAN|[A-Z]/.test(r.textContent || "") && /Signed Up|Evaluation|Complete Application|View Application/i.test(r.textContent || ""),
+    );
+    const info = rows.map((r) => {
+      const t = r.textContent || "";
+      return {
+        text: t.slice(0, 200),
+        signedUp: /Signed Up/i.test(t),
+        completed: /Evaluation|Offer|Accepted|View Application/i.test(t),
+        progMatch: pf.length > 4 && foldLoc(t).includes(pf),
+      };
+    });
+    // best = program match & Signed Up; else program match; else any Signed Up
+    let best = info.findIndex((x) => x.progMatch && x.signedUp);
+    if (best < 0) best = info.findIndex((x) => x.progMatch);
+    if (best < 0) best = info.findIndex((x) => x.signedUp);
+    return { idx: best, info };
+  }, progFold).catch(() => ({ idx: -1, info: [] as any[] }));
+
+  if (target.idx < 0) {
+    result.detail = `Altınbaş[ui]: My Applications'ta tamamlanacak başvuru bulunamadı (program="${profile.programName}")`;
+    logger.warn(`[altinbas][ui] ${result.detail}`);
+    const s = await captureScreen(page, "ui-no-app"); if (s) shots.push(s);
+    result.screenshots = shots;
+    return;
+  }
+  const chosen = target.info[target.idx];
+  if (chosen.completed && !chosen.signedUp) {
+    result.alreadyExists = true;
+    result.detail = `Altınbaş[ui]: başvuru zaten tamamlanmış/değerlendirmede (${chosen.text.slice(0, 80)})`;
+    logger.info(`[altinbas][ui] ${result.detail}`);
+    return;
+  }
+
+  // Click that row's "Complete Application".
+  const opened = await page.evaluate((idx: number) => {
+    const rows = Array.from(document.querySelectorAll("tr")).filter((r) =>
+      /Signed Up|Evaluation|Complete Application|View Application/i.test(r.textContent || ""),
+    );
+    const row = rows[idx];
+    if (!row) return false;
+    const btn = Array.from(row.querySelectorAll("button,a")).find((b) =>
+      /Complete Application/i.test(b.textContent || ""),
+    ) as HTMLElement | undefined;
+    if (btn) { btn.click(); return true; }
+    return false;
+  }, target.idx).catch(() => false);
+  if (!opened) {
+    result.detail = "Altınbaş[ui]: 'Complete Application' butonu tıklanamadı";
+    logger.warn(`[altinbas][ui] ${result.detail}`);
+    return;
+  }
+  await page.waitForTimeout(SF_HYDRATION_MS);
+  logger.info(`[altinbas][ui] Complete Application açıldı — ${chosen.text.slice(0, 80)}`);
+
+  // 3) Drive the wizard: Personal → Educational → Questionnaire → Documents → Submit.
+  // Personal Information
+  await fillPersonalUI(page, profile);
+  await page.waitForTimeout(800);
+  await clickWizardBtn(page, /^\s*Next\s*$/i);
+  await page.waitForTimeout(SF_HYDRATION_MS);
+
+  // Educational Information
+  await ensureEducationUI(page, profile);
+  await clickWizardBtn(page, /^\s*Next\s*$/i);
+  await page.waitForTimeout(SF_HYDRATION_MS);
+
+  // Questionnaire
+  await fillQuestionnaireUI(page, profile);
+  await page.waitForTimeout(800);
+  await clickWizardBtn(page, /^\s*Next\s*$/i);
+  await page.waitForTimeout(SF_HYDRATION_MS);
+
+  // Documents
+  const bodyNow = (await page.locator("body").innerText().catch(() => "")) || "";
+  if (!/Required Documents|Upload Files/i.test(bodyNow)) {
+    logger.warn("[altinbas][ui] Documents ekranına ulaşılamadı — wizard beklenenden farklı");
+    const s = await captureScreen(page, "ui-no-documents"); if (s) shots.push(s);
+  }
+  const up = await uploadDocumentsUI(page, files);
+  const missing = (["passport", "diploma", "transcript", "photo"] as const).filter((t) => !up.includes(t));
+  if (missing.length) {
+    result.missingDocuments = [...(result.missingDocuments ?? []), ...missing];
+    logger.warn(`[altinbas][ui] eksik belge yüklemesi: ${missing.join(",")}`);
+  }
+
+  if (dryRun) {
+    result.detail = "Altınbaş[ui]: dry-run — Documents'a kadar dolduruldu, Submit GÖNDERİLMEDİ";
+    logger.info(`[altinbas][ui] ${result.detail}`);
+    const s = await captureScreen(page, "ui-dryrun-docs"); if (s) shots.push(s);
+    result.screenshots = shots;
+    return;
+  }
+
+  // 4) Submit Application + success detection.
+  await clickWizardBtn(page, /^\s*Submit Application\s*$/i);
+  await page.waitForTimeout(SF_HYDRATION_MS);
+  const after = (await page.locator("body").innerText().catch(() => "")) || "";
+  const ok =
+    /created successfully|submitted successfully|application is created/i.test(after) ||
+    /EduhubNavigateToURL[\s\S]{0,400}?my-applications\?id=/i.test(after);
+  const s2 = await captureScreen(page, ok ? "ui-submitted" : "ui-submit-unclear");
+  if (s2) shots.push(s2);
+  result.screenshots = shots;
+  if (ok) {
+    result.submitted = true;
+    result.externalRef = result.externalRef; // set upstream when known
+    result.detail = "Altınbaş[ui]: Submit başarılı — 'Application is created successfully' (UI completion + belgeler yüklendi)";
+    logger.info(`[altinbas][ui] ${result.detail}`);
+    return;
+  }
+  // Verify via My Applications (stage moved off "Signed Up").
+  await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+  await page.waitForTimeout(SF_HYDRATION_MS);
+  const moved = await page.evaluate((pf: string) => {
+    function foldLoc(s: string) { return (s || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+    const rows = Array.from(document.querySelectorAll("tr"));
+    const row = rows.find((r) => pf.length > 4 && foldLoc(r.textContent || "").includes(pf));
+    return row ? /Evaluation|Offer|Accepted|View Application/i.test(row.textContent || "") : false;
+  }, progFold).catch(() => false);
+  if (moved) {
+    result.submitted = true;
+    result.detail = "Altınbaş[ui]: Submit sonrası başvuru 'Evaluation' aşamasına geçti (doğrulandı)";
+    logger.info(`[altinbas][ui] ${result.detail}`);
+  } else {
+    result.detail = "Altınbaş[ui]: Submit sonrası başarı doğrulanamadı (aşama Signed Up'ta kalmış olabilir)";
+    logger.warn(`[altinbas][ui] ${result.detail}`);
+  }
+}
+// ===== END UI-DRIVEN COMPLETION =====
+
 async function runFlowReplay(
   page: any,
   rt: FlowRuntime,
@@ -2191,7 +2614,15 @@ export const altinbasAdapter: UniversityAdapter = {
     // ── Screen Flow REPLAY: Term → Degree → Program → commit → Personal →
     //    Educational → Questionnaire → Documents → FINISH ───────────────────
     try {
-      await runFlowReplay(page, rt, profile, files, dryRun, result, screenshots);
+      if (UI_COMPLETE) {
+        // NEW (UI-driven completion): finish an existing Signed-Up application
+        // via the real Lightning wizard AND upload the 4 required documents
+        // (the API replay never uploaded documents). Replaces the fragile
+        // Personal→Documents→Finish navigateFlow replay.
+        await completeApplicationUI(page, profile, files, dryRun, result, screenshots);
+      } else {
+        await runFlowReplay(page, rt, profile, files, dryRun, result, screenshots);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       logger.warn(`[altinbas] flow replay hatası: ${msg}`);
