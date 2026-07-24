@@ -283,7 +283,7 @@ export async function releaseStale(thresholdMs: number): Promise<number[]> {
                          WHEN COALESCE((meta->>'crash_recoveries')::int, 0) + 1 >= 3
                            THEN 'failed'
                          ELSE 'queued'
-                       END,
+                       END::portal_submission_status,
          attempts   = CASE
                          WHEN COALESCE((meta->>'crash_recoveries')::int, 0) + 1 >= 3
                            THEN attempts
