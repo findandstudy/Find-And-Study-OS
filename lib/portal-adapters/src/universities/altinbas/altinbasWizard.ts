@@ -800,6 +800,24 @@ export function decideAltinbasEducationAddCandidate(
           reason: "ok",
         };
       }
+      // Salesforce exposes one physical icon button twice (outer host + inner
+      // icon). Both can report interactive, but the host's bounding box starts
+      // slightly higher. Accept only a unique minimum top inside the same
+      // four-pixel cluster; equal-height sibling controls remain ambiguous.
+      const rankedInteractive = [...interactive].sort(
+        (a, b) => Number(a.top) - Number(b.top),
+      );
+      if (
+        rankedInteractive.length > 1 &&
+        Number(rankedInteractive[0].top) <
+          Number(rankedInteractive[1].top)
+      ) {
+        return {
+          id: rankedInteractive[0].id,
+          proof: "stage_topmost",
+          reason: "ok",
+        };
+      }
       if (topCluster.length === 1) {
         return {
           id: topCluster[0].id,
