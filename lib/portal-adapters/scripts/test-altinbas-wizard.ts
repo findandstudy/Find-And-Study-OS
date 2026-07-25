@@ -559,6 +559,7 @@ test("AW25: applicant grid requires email + passport and falls back only for one
       foldedPageText: "",
       expectedFoldedEmail,
       expectedFoldedPassport,
+      exactSearchReadbackVerified: false,
     }),
     1,
     "a unique row-scoped identity proof wins",
@@ -570,6 +571,7 @@ test("AW25: applicant grid requires email + passport and falls back only for one
       foldedPageText: "student@example.com p1234567",
       expectedFoldedEmail,
       expectedFoldedPassport,
+      exactSearchReadbackVerified: false,
     }),
     0,
     "one radio may use composed-page identity proof",
@@ -581,6 +583,7 @@ test("AW25: applicant grid requires email + passport and falls back only for one
       foldedPageText: "student@example.com",
       expectedFoldedEmail,
       expectedFoldedPassport,
+      exactSearchReadbackVerified: false,
     }),
     -1,
     "email alone is insufficient",
@@ -592,6 +595,7 @@ test("AW25: applicant grid requires email + passport and falls back only for one
       foldedPageText: "p1234567",
       expectedFoldedEmail,
       expectedFoldedPassport,
+      exactSearchReadbackVerified: false,
     }),
     -1,
     "passport alone is insufficient",
@@ -603,8 +607,33 @@ test("AW25: applicant grid requires email + passport and falls back only for one
       foldedPageText: "student@example.com p1234567",
       expectedFoldedEmail,
       expectedFoldedPassport,
+      exactSearchReadbackVerified: true,
     }),
     -1,
     "page-wide proof cannot choose between multiple radio candidates",
+  );
+
+  assert.equal(
+    chooseAltinbasApplicantGridRow({
+      foldedRows: [""],
+      foldedPageText: "",
+      expectedFoldedEmail,
+      expectedFoldedPassport,
+      exactSearchReadbackVerified: true,
+    }),
+    0,
+    "one candidate is deterministic after exact Basic Information readback",
+  );
+
+  assert.equal(
+    chooseAltinbasApplicantGridRow({
+      foldedRows: [""],
+      foldedPageText: "",
+      expectedFoldedEmail,
+      expectedFoldedPassport,
+      exactSearchReadbackVerified: false,
+    }),
+    -1,
+    "one candidate without either identity proof remains fail-closed",
   );
 });

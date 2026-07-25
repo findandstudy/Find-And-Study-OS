@@ -3189,6 +3189,7 @@ async function clickCreateNewApplication(
   page: any,
   rt: FlowRuntime,
   profile: SubmitProfile,
+  exactSearchReadbackVerified: boolean,
 ): Promise<boolean> {
   await dismissSfError(page);
 
@@ -3255,15 +3256,16 @@ async function clickCreateNewApplication(
       foldedPageText,
       expectedFoldedEmail: expectedEmail,
       expectedFoldedPassport: expectedPassport,
+      exactSearchReadbackVerified,
     });
+    const pageIdentityProof = Boolean(
+      expectedEmail &&
+      expectedPassport &&
+      foldedPageText.includes(expectedEmail) &&
+      foldedPageText.includes(expectedPassport)
+    );
     if (selectedIndex < 0) {
       const readableRows = foldedRows.filter(Boolean).length;
-      const pageIdentityProof = Boolean(
-        expectedEmail &&
-        expectedPassport &&
-        foldedPageText.includes(expectedEmail) &&
-        foldedPageText.includes(expectedPassport)
-      );
       logger.warn(
         `[altinbas] applicant grid target proof failed` +
         ` (radioCount=${radioCount}, readableRows=${readableRows},` +
@@ -3274,7 +3276,9 @@ async function clickCreateNewApplication(
     const proofSource = foldedRows[selectedIndex]?.includes(expectedEmail) &&
         foldedRows[selectedIndex]?.includes(expectedPassport)
       ? "row"
-      : "single_candidate_page";
+      : pageIdentityProof
+        ? "single_candidate_page"
+        : "single_candidate_exact_search";
     const checked = await forceCheckRadio(page, radios.nth(selectedIndex));
     logger.info(
       `[altinbas] applicant grid exact target selected=${checked}` +
@@ -3575,7 +3579,12 @@ export const altinbasAdapter: UniversityAdapter = {
     }
 
     // ── Student summary → Create New Application (flow BOOT) ──────────────
-    const createdApp = await clickCreateNewApplication(page, rt, profile);
+    const createdApp = await clickCreateNewApplication(
+      page,
+      rt,
+      profile,
+      step1Ready,
+    );
     if (!createdApp) {
       logger.warn("[altinbas] could not click Create New Application — capturing student summary screen and aborting");
       const stuckShot = await captureScreen(page, "student-summary-stuck");

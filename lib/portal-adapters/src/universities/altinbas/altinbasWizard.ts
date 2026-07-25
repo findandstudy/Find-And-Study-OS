@@ -346,8 +346,9 @@ export function chooseAltinbasApplicationRow(
  * Select the applicant-search grid row only when email + passport prove the
  * identity. Prefer a row-scoped proof. Some Altınbaş Lightning builds render
  * the radio and its visible cells under different shadow hosts, so a
- * row-scoped ancestor walk cannot read the cells. In that case a composed-page
- * text proof is sufficient only when there is exactly one radio candidate.
+ * row-scoped ancestor walk cannot read the cells. In that case one radio is
+ * accepted only when either composed-page text proves both identifiers or the
+ * preceding Basic Information search had exact readback for all five fields.
  *
  * All inputs must already be folded by the caller.
  */
@@ -356,12 +357,14 @@ export function chooseAltinbasApplicantGridRow(input: {
   foldedPageText: string;
   expectedFoldedEmail: string;
   expectedFoldedPassport: string;
+  exactSearchReadbackVerified: boolean;
 }): number {
   const {
     foldedRows,
     foldedPageText,
     expectedFoldedEmail,
     expectedFoldedPassport,
+    exactSearchReadbackVerified,
   } = input;
   if (!expectedFoldedEmail || !expectedFoldedPassport) return -1;
 
@@ -377,7 +380,7 @@ export function chooseAltinbasApplicantGridRow(input: {
   const pageProvesIdentity =
     foldedPageText.includes(expectedFoldedEmail) &&
     foldedPageText.includes(expectedFoldedPassport);
-  return pageProvesIdentity ? 0 : -1;
+  return pageProvesIdentity || exactSearchReadbackVerified ? 0 : -1;
 }
 
 export type AltinbasMutationCanaryGate =
