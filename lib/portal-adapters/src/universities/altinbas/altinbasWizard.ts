@@ -643,6 +643,60 @@ export function resolveAltinbasLegacyEducation(input: {
   };
 }
 
+export interface AltinbasEducationAddCandidate {
+  id: string;
+  distance: number;
+  semantic: boolean;
+  genericIcon: boolean;
+  excluded: boolean;
+}
+
+export type AltinbasEducationAddDecision =
+  | { id: string; proof: "semantic" | "nearest_unique_icon"; reason: "ok" }
+  | { id: null; proof: null; reason: "missing" | "ambiguous" };
+
+/**
+ * Select the one education-add control proved by composed-tree proximity.
+ * A semantic Add/New/Create label wins. An unlabeled icon is accepted only
+ * when it is the unique nearest icon to the exact EDUCATION heading.
+ */
+export function decideAltinbasEducationAddCandidate(
+  candidates: AltinbasEducationAddCandidate[],
+): AltinbasEducationAddDecision {
+  const eligible = candidates.filter(
+    (candidate) =>
+      !candidate.excluded &&
+      Number.isFinite(candidate.distance) &&
+      candidate.distance >= 0 &&
+      candidate.distance <= 12,
+  );
+  const decideNearest = (
+    pool: AltinbasEducationAddCandidate[],
+    proof: "semantic" | "nearest_unique_icon",
+  ): AltinbasEducationAddDecision | null => {
+    if (!pool.length) return null;
+    const nearestDistance = Math.min(...pool.map((candidate) => candidate.distance));
+    const nearest = pool.filter(
+      (candidate) => candidate.distance === nearestDistance,
+    );
+    return nearest.length === 1
+      ? { id: nearest[0].id, proof, reason: "ok" }
+      : { id: null, proof: null, reason: "ambiguous" };
+  };
+
+  const semantic = decideNearest(
+    eligible.filter((candidate) => candidate.semantic),
+    "semantic",
+  );
+  if (semantic) return semantic;
+
+  const generic = decideNearest(
+    eligible.filter((candidate) => candidate.genericIcon),
+    "nearest_unique_icon",
+  );
+  return generic || { id: null, proof: null, reason: "missing" };
+}
+
 /** Ambiguous/previous draft ids never become rollback deletion targets. */
 export function selectAltinbasRollbackIds(input: {
   runCreatedIds: Iterable<string>;

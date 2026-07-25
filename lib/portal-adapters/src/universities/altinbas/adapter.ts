@@ -83,6 +83,7 @@ import {
   chooseAltinbasApplicantGridRow,
   chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
+  decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
   missingAltinbasPersonalFields,
@@ -1878,7 +1879,7 @@ async function ensureEducationRecordUI(
   }
   // Open the EDUCATION add (+) modal.
   // The + is an icon button next to the "EDUCATION" heading; click by proximity.
-  const opened = await page.evaluate(() => {
+  const addScan = await page.evaluate(() => {
     const roots: Array<Document | ShadowRoot> = [document];
     const els: Element[] = [];
     for (let rootIndex = 0; rootIndex < roots.length; rootIndex++) {
@@ -1889,21 +1890,146 @@ async function ensureEducationRecordUI(
         }
       });
     }
-    const eduHead = els.find((e) => /^\s*EDUCATION\s*$/i.test((e.textContent || "").trim()) && e.children.length === 0);
-    if (!eduHead) return false;
-    // Search siblings / ancestors for an add/plus button.
-    let scope: Element | null = eduHead;
-    for (let i = 0; i < 4 && scope; i++) scope = scope.parentElement;
-    const btn = (scope || document).querySelector(
-      "button[title*='Add' i], button[aria-label*='Add' i], lightning-button-icon, button.slds-button_icon",
-    ) as HTMLElement | null;
-    if (btn) { btn.click(); return true; }
-    return false;
-  }).catch(() => false);
+    const composedParent = (element: Element): Element | null => {
+      if (element.parentElement) return element.parentElement;
+      const root = element.getRootNode() as ShadowRoot | Document;
+      return "host" in root ? root.host : null;
+    };
+    const composedChain = (element: Element): Element[] => {
+      const result: Element[] = [];
+      let current: Element | null = element;
+      for (let depth = 0; depth < 20 && current; depth++) {
+        result.push(current);
+        current = composedParent(current);
+      }
+      return result;
+    };
+    const headings = els.filter(
+      (element) =>
+        /^\s*EDUCATION\s*$/i.test((element.textContent || "").trim()) &&
+        element.children.length === 0,
+    );
+    if (headings.length !== 1) {
+      return { headingCount: headings.length, candidates: [] };
+    }
+    const headingChain = composedChain(headings[0]);
+    const rawActions = els.filter((element) =>
+      element.matches(
+        "button,lightning-button,lightning-button-icon,[role='button']",
+      ),
+    );
+    const candidates = rawActions.flatMap((element, actionIndex) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      if (
+        rect.width <= 0 ||
+        rect.height <= 0 ||
+        style.display === "none" ||
+        style.visibility === "hidden"
+      ) return [];
+      const actionChain = composedChain(element);
+      const actionCommonIndex = actionChain.findIndex((candidate) =>
+        headingChain.includes(candidate)
+      );
+      if (actionCommonIndex < 0) return [];
+      const headingCommonIndex = headingChain.indexOf(
+        actionChain[actionCommonIndex],
+      );
+      const tag = element.tagName.toLowerCase();
+      // A custom lightning-button host and its native shadow button represent
+      // one action. Prefer the native button so the click follows the exact
+      // browser activation path.
+      if (
+        tag !== "button" &&
+        rawActions.some((other) =>
+          other !== element &&
+          other.tagName.toLowerCase() === "button" &&
+          composedChain(other).includes(element)
+        )
+      ) return [];
+      const descriptor = actionChain
+        .slice(0, 4)
+        .flatMap((candidate) => [
+          candidate.tagName,
+          candidate.getAttribute("class"),
+          candidate.getAttribute("title"),
+          candidate.getAttribute("aria-label"),
+          candidate.getAttribute("name"),
+          candidate.getAttribute("icon-name"),
+          candidate.getAttribute("data-element-id"),
+          String((candidate as Element & { iconName?: unknown }).iconName || ""),
+          candidate.textContent,
+        ])
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .toLowerCase();
+      const excluded =
+        /select a date|calendar|slds-input__icon|flow-button|(?:^|\s)(?:back|next|previous|logout)(?:\s|$)|slds-path/.test(
+          descriptor,
+        );
+      const hasAddVerb = /(?:^|\s)(?:add|new|create|\+)(?:\s|$)/.test(
+        descriptor,
+      );
+      const hasEducationNoun =
+        /(?:^|\s)(?:education|school|record)(?:\s|$)/.test(descriptor);
+      const genericIcon =
+        tag === "lightning-button-icon" ||
+        /slds-button_icon/.test(descriptor);
+      const id = String(actionIndex);
+      element.setAttribute("data-fas-edu-add-candidate", id);
+      return [{
+        id,
+        distance: actionCommonIndex + headingCommonIndex,
+        semantic: hasAddVerb && hasEducationNoun,
+        genericIcon,
+        excluded,
+      }];
+    });
+    return { headingCount: 1, candidates };
+  }).catch(() => ({ headingCount: 0, candidates: [] }));
+  const addDecision = decideAltinbasEducationAddCandidate(addScan.candidates);
+  const opened = addDecision.id
+    ? await page.evaluate((candidateId: string) => {
+        const roots: Array<Document | ShadowRoot> = [document];
+        const matches: HTMLElement[] = [];
+        for (let rootIndex = 0; rootIndex < roots.length; rootIndex++) {
+          roots[rootIndex].querySelectorAll("*").forEach((element: Element) => {
+            if ((element as HTMLElement).shadowRoot) {
+              roots.push((element as HTMLElement).shadowRoot!);
+            }
+            if (
+              element.getAttribute("data-fas-edu-add-candidate") === candidateId
+            ) {
+              matches.push(element as HTMLElement);
+            }
+          });
+        }
+        roots.forEach((root) => {
+          root.querySelectorAll("[data-fas-edu-add-candidate]").forEach(
+            (element) => element.removeAttribute("data-fas-edu-add-candidate"),
+          );
+        });
+        if (matches.length !== 1) return false;
+        matches[0].click();
+        return true;
+      }, addDecision.id).catch(() => false)
+    : false;
   if (!opened) {
-    logger.warn("[altinbas][ui] Educational: + (add) butonu bulunamadı");
+    logger.warn(
+      `[altinbas][ui] Educational: + (add) butonu bulunamadı` +
+      ` (headingCount=${addScan.headingCount},` +
+      ` candidates=${addScan.candidates.length},` +
+      ` semantic=${addScan.candidates.filter((candidate) => candidate.semantic).length},` +
+      ` icons=${addScan.candidates.filter((candidate) => candidate.genericIcon && !candidate.excluded).length},` +
+      ` decision=${addDecision.reason})`,
+    );
     return { ok: false, reason: "add_button_missing" };
   }
+  logger.info(
+    `[altinbas][ui] Educational: add control opened` +
+    ` (proof=${addDecision.proof})`,
+  );
   await page.waitForTimeout(2500);
   // Modal fields.
   const degreeLabel =
