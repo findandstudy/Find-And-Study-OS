@@ -2053,11 +2053,15 @@ async function ensureEducationRecordUI(
       activationCount: activationGroups.size,
       candidates,
     };
-  }).catch(() => ({
+  }).catch((error: unknown) => ({
     headingCount: 0,
     rawSignalCount: 0,
     activationCount: 0,
     candidates: [],
+    scanError:
+      error instanceof Error
+        ? `${error.name}:${error.message}`
+        : String(error || "evaluate_error"),
   }));
   const addDecision = decideAltinbasEducationAddCandidate(addScan.candidates);
   const opened = addDecision.id
@@ -2106,7 +2110,10 @@ async function ensureEducationRecordUI(
       ` candidates=${addScan.candidates.length},` +
       ` semantic=${addScan.candidates.filter((candidate) => candidate.semantic).length},` +
       ` icons=${addScan.candidates.filter((candidate) => candidate.genericIcon && !candidate.excluded).length},` +
-      ` decision=${addDecision.reason})`,
+      ` decision=${addDecision.reason},` +
+      ` scanError=${redactAltinbasLog(
+        "scanError" in addScan ? addScan.scanError : "none",
+      ).slice(0, 180)})`,
     );
     return { ok: false, reason: "add_button_missing" };
   }
