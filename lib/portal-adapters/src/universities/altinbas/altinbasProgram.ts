@@ -1,5 +1,5 @@
 import type { PortalProgramOption } from "../../types.js";
-import { matchProgram } from "../../programMatch.js";
+import { fold, matchProgram } from "../../programMatch.js";
 
 export interface AltinbasProgramSelection {
   record: Record<string, unknown> | null;
@@ -56,6 +56,26 @@ function isAvailabilityRecord(
 }
 
 /**
+ * Older CRM records contain labels such as `Bachelor of Software Engineering
+ * (English)`, while the current degree-scoped Salesforce availability option
+ * is simply `Software Engineering`. This intentionally narrow key is used
+ * only for those legacy degree-prefixed CRM labels. It removes the redundant
+ * degree and English-medium tokens; every other programme still uses the
+ * normal matcher.
+ */
+function legacyDegreeScopedProgramKey(value: string): string | null {
+  const folded = fold(value);
+  if (!/^(associate|bachelor|master|doctorate|phd) of\b/.test(folded)) {
+    return null;
+  }
+  return folded
+    .replace(/^(associate|bachelor|master|doctorate|phd) of\s+/, "")
+    .replace(/\b(?:in )?english\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim() || null;
+}
+
+/**
  * Select the requested programme from the current Term+Degree availability
  * records. Availability rows take precedence over base Program (`a0B`) rows
  * because only the former carry the live quota flag.
@@ -76,6 +96,34 @@ export function selectAltinbasProgram(
     name: altinbasProgramName(record, id),
     enabled: !isAltinbasQuotaFull(record),
   }));
+
+  const legacyKey = legacyDegreeScopedProgramKey(requestedName);
+  if (legacyKey) {
+    const legacyMatches = candidates.filter(
+      (candidate) =>
+        legacyDegreeScopedProgramKey(`Bachelor of ${candidate.name}`) ===
+        legacyKey,
+    );
+    if (legacyMatches.length === 1) {
+      const option = legacyMatches[0];
+      return {
+        record: byId.get(option.value) ?? null,
+        option,
+        candidates,
+        confidence: 1,
+      };
+    }
+    // The current portal must have one unambiguous degree-scoped option. Do
+    // not let a fuzzy match choose between renamed/duplicated programmes.
+    if (legacyMatches.length > 1) {
+      return {
+        record: null,
+        option: null,
+        candidates,
+        confidence: null,
+      };
+    }
+  }
 
   const matched = matchProgram(
     requestedName,

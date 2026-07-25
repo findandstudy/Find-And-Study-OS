@@ -366,6 +366,47 @@ test("AW20: unknown programme never becomes a quota-full false positive", () => 
   assert.equal(selection.candidates[0]?.enabled, false);
 });
 
+test("AW20b: legacy degree-prefixed English CRM title resolves one live bare option", () => {
+  const selection = selectAltinbasProgram(
+    [
+      [
+        "a0AQ3000007s02HMAQ",
+        {
+          eduhub__Program__c: "a0BQ300000Software",
+          eduhub__Program_Name__c: "Software Engineering",
+          eduhub__Quota_Full__c: false,
+        },
+      ],
+    ],
+    "Bachelor of Software Engineering (English)",
+  );
+  assert.equal(selection.option?.value, "a0AQ3000007s02HMAQ");
+  assert.equal(selection.option?.name, "Software Engineering");
+  assert.equal(selection.confidence, 1);
+});
+
+test("AW20c: legacy title refuses ambiguous current programme labels", () => {
+  const selection = selectAltinbasProgram(
+    [
+      [
+        "a0AQ3000007s02HMAQ",
+        {
+          eduhub__Program_Name__c: "Software Engineering",
+        },
+      ],
+      [
+        "a0AQ3000007s02JMAQ",
+        {
+          eduhub__Program_Name__c: "Software Engineering (in English)",
+        },
+      ],
+    ],
+    "Bachelor of Software Engineering (English)",
+  );
+  assert.equal(selection.option, null);
+  assert.equal(selection.record, null);
+});
+
 test("AW21: resumed fields prefer CRM, otherwise require a valid saved portal value", () => {
   assert.equal(
     resolveAltinbasResumeFieldAction({
