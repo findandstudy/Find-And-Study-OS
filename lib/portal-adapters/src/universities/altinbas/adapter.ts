@@ -88,6 +88,7 @@ import {
   missingAltinbasPersonalFields,
   parseAltinbasCanaryStage,
   redactAltinbasLog,
+  resolveAltinbasLegacyEducation,
   resolveAltinbasResumeFieldAction,
   resolveAltinbasVisaResumeAction,
   resolveAltinbasWizardState,
@@ -1797,20 +1798,57 @@ async function ensureEducationUI(
       : classification === "master"
         ? ["bachelor"]
         : ["high_school"];
-  const records = requiredLevels.map((level) =>
-    profile.educationRecords?.find((record) => record.level === level),
-  );
+  const fallbackCountry = mapCountry(profile.nationality) || profile.nationality;
+  const legacySchools = {
+    high_school: profile.legacyEducation?.highSchool,
+    bachelor: profile.legacyEducation?.bachelorSchool,
+    master: profile.legacyEducation?.masterSchool,
+  };
+  const records = requiredLevels.map((level) => {
+    const source = profile.educationRecords?.find(
+      (record) => record.level === level,
+    );
+    const resolved = resolveAltinbasLegacyEducation({
+      record: source,
+      level: level as "high_school" | "bachelor" | "master",
+      applicationLevel: classification as
+        | "associate"
+        | "bachelor"
+        | "master"
+        | "phd",
+      legacySchoolName: legacySchools[level as keyof typeof legacySchools],
+      fallbackCountry,
+      legacyGraduationYear: profile.graduationYear,
+      legacyGpa: profile.legacyEducation?.rawGpa ?? profile.gpa,
+      dateOfBirth: profile.dateOfBirth,
+    });
+    if (resolved.fallbackFields.length) {
+      logger.warn(
+        `[altinbas][ui] legacy education fallback applied` +
+        ` (level=${level}, fields=${resolved.fallbackFields.join(",")},` +
+        ` gpaPolicy=${resolved.gpaProvenance})`,
+      );
+    }
+    return {
+      ...source,
+      level,
+      schoolName: resolved.schoolName,
+      country: resolved.country,
+      endYear: resolved.endYear,
+      gpa: resolved.gpa,
+      gpaType: resolved.gpaType,
+    } satisfies EduRecord;
+  });
   const missing = records.flatMap((record, index) => {
     const level = requiredLevels[index];
     return [
-      !record && `${level}_education_record`,
       !record?.schoolName?.trim() && `${level}.schoolName`,
     ].filter((value): value is string => !!value);
   });
   if (missing.length) {
     return { ok: false, reason: `data_missing:${missing.join(",")}` };
   }
-  for (const record of records as EduRecord[]) {
+  for (const record of records) {
     const ensured = await ensureEducationRecordUI(page, record);
     if (!ensured.ok) return ensured;
   }

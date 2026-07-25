@@ -474,6 +474,175 @@ export function altinbasGpaTypeLabel(value: unknown): string | null {
   return scale ? `GRADING SYSTEM OUT OF ${scale}` : null;
 }
 
+export interface AltinbasLegacyGpaResolution {
+  gpa: string;
+  gpaType: string;
+  provenance: "record" | "legacy_numeric" | "legacy_letter" | "policy_default";
+}
+
+const LETTER_GPA_4: Record<string, string> = {
+  "A+": "4",
+  A: "4",
+  "A-": "3.7",
+  "B+": "3.3",
+  B: "3",
+  "B-": "2.7",
+  "C+": "2.3",
+  C: "2",
+  "C-": "1.7",
+  "D+": "1.3",
+  D: "1",
+  "D-": "0.7",
+  F: "0",
+};
+
+function numericGpaScale(value: number): string | null {
+  if (value < 0 || value > 100) return null;
+  if (value <= 4) return "4";
+  if (value <= 5) return "5";
+  if (value <= 10) return "10";
+  if (value <= 12) return "12";
+  if (value <= 20) return "20";
+  return "100";
+}
+
+/**
+ * Convert historical free-form GPA values to the numeric contracts exposed by
+ * the live Altınbaş modal. Missing legacy GPA follows the explicitly approved
+ * compatibility policy (3.0/4); the chosen provenance is always logged by the
+ * adapter and nothing is written back to the CRM.
+ */
+export function resolveAltinbasLegacyGpa(input: {
+  recordGpa?: unknown;
+  recordGpaType?: unknown;
+  legacyGpa?: unknown;
+}): AltinbasLegacyGpaResolution {
+  const recordRaw = String(input.recordGpa ?? "").trim();
+  const legacyRaw = String(input.legacyGpa ?? "").trim();
+  const raw = recordRaw || legacyRaw;
+  const numericToken = raw.replace(",", ".").match(/\d+(?:\.\d+)?/);
+  const numeric = numericToken ? Number(numericToken[0]) : NaN;
+  const explicitType = altinbasGpaTypeLabel(input.recordGpaType);
+  const explicitScale =
+    explicitType?.match(/(4|5|10|12|20|100)$/)?.[1] || null;
+
+  if (Number.isFinite(numeric)) {
+    const scale = explicitScale || numericGpaScale(numeric);
+    if (scale && numeric <= Number(scale)) {
+      return {
+        gpa: String(numeric),
+        gpaType: scale,
+        provenance: recordRaw ? "record" : "legacy_numeric",
+      };
+    }
+  }
+
+  const letterText = raw
+    .toUpperCase()
+    .replace(/\(\s*PLUS\s*\)/g, "+")
+    .replace(/\(\s*MINUS\s*\)/g, "-");
+  const letterMatch = letterText.match(/(?:^|\s)([ABCDF])\s*([+-])?/);
+  if (letterMatch) {
+    const grade = `${letterMatch[1]}${letterMatch[2] || ""}`;
+    const converted = LETTER_GPA_4[grade];
+    if (converted != null) {
+      return {
+        gpa: converted,
+        gpaType: "4",
+        provenance: "legacy_letter",
+      };
+    }
+  }
+
+  return {
+    gpa: "3",
+    gpaType: "4",
+    provenance: "policy_default",
+  };
+}
+
+export interface AltinbasLegacyEducationResolution {
+  schoolName: string | null;
+  country: string;
+  endYear: number;
+  gpa: string;
+  gpaType: string;
+  fallbackFields: string[];
+  gpaProvenance: AltinbasLegacyGpaResolution["provenance"];
+}
+
+/**
+ * Complete a historical education row from legacy CRM fields. School identity
+ * remains fail-closed: unlike country/year/GPA, it is never invented.
+ */
+export function resolveAltinbasLegacyEducation(input: {
+  record?: {
+    schoolName?: string | null;
+    country?: string | null;
+    endYear?: number | null;
+    gpa?: string | null;
+    gpaType?: string | null;
+  };
+  level: "high_school" | "bachelor" | "master";
+  applicationLevel: "associate" | "bachelor" | "master" | "phd";
+  legacySchoolName?: string;
+  fallbackCountry: string;
+  legacyGraduationYear?: number;
+  legacyGpa?: unknown;
+  dateOfBirth?: string;
+  currentYear?: number;
+}): AltinbasLegacyEducationResolution {
+  const record = input.record || {};
+  const fallbackFields: string[] = [];
+  const schoolName =
+    record.schoolName?.trim() || input.legacySchoolName?.trim() || null;
+  if (!record.schoolName?.trim() && schoolName) fallbackFields.push("schoolName");
+
+  const country = record.country?.trim() || input.fallbackCountry.trim();
+  if (!record.country?.trim()) fallbackFields.push("country");
+
+  let endYear = record.endYear || input.legacyGraduationYear;
+  if (!record.endYear) {
+    fallbackFields.push("graduationYear");
+    if (
+      endYear &&
+      input.applicationLevel === "phd" &&
+      input.level === "bachelor"
+    ) {
+      endYear -= 2;
+    }
+  }
+  if (!endYear) {
+    const currentYear = input.currentYear || new Date().getUTCFullYear();
+    const birthYear = Number(input.dateOfBirth?.match(/^(\d{4})/)?.[1]);
+    const expectedAge =
+      input.level === "high_school" ? 18 :
+      input.level === "bachelor" ? 22 :
+      24;
+    endYear = Number.isFinite(birthYear)
+      ? Math.min(currentYear, birthYear + expectedAge)
+      : currentYear - 1;
+  }
+
+  const gpa = resolveAltinbasLegacyGpa({
+    recordGpa: record.gpa,
+    recordGpaType: record.gpaType,
+    legacyGpa: input.legacyGpa,
+  });
+  if (!record.gpa?.trim()) fallbackFields.push("gpa");
+  if (!altinbasGpaTypeLabel(record.gpaType)) fallbackFields.push("gpaType");
+
+  return {
+    schoolName,
+    country,
+    endYear,
+    gpa: gpa.gpa,
+    gpaType: gpa.gpaType,
+    fallbackFields,
+    gpaProvenance: gpa.provenance,
+  };
+}
+
 /** Ambiguous/previous draft ids never become rollback deletion targets. */
 export function selectAltinbasRollbackIds(input: {
   runCreatedIds: Iterable<string>;
