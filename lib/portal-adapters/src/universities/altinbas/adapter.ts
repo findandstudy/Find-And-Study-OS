@@ -1178,7 +1178,6 @@ async function fillAltinbasUiDateField(
         });
         // lightning-input/date-picker keeps a draft value until it receives a
         // committing keyboard/change sequence after typing.
-        await control.dispatchEvent("input").catch(() => {});
         await control.press("Enter").catch(() => {});
         await control.dispatchEvent("change").catch(() => {});
         await control.dispatchEvent("blur").catch(() => {});
