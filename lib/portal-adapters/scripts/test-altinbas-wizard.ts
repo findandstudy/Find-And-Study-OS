@@ -15,11 +15,13 @@ import {
   chooseAltinbasLabeledCombobox,
   decideAltinbasEducationAddCandidate,
   decideAltinbasUploadRefresh,
+  classifyAltinbasHiddenFlowValidation,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
   extractAltinbasFlowUploadedDocumentSlots,
   isAltinbasExistingUploadProved,
   isAltinbasLightningUploadProved,
+  isAltinbasPostNextDuplicate,
   isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
   normalizeAltinbasPassportNumber,
@@ -1395,4 +1397,55 @@ test("AW28: passport values are normalized only within Altınbaş's proven forma
   assert.equal(normalizeAltinbasPassportNumber("AB/1234"), null);
   assert.equal(normalizeAltinbasPassportNumber("A".repeat(21)), null);
   assert.equal(normalizeAltinbasPassportNumber("  "), null);
+});
+
+test("AW29: exact hidden Salesforce passport conflict is classified", () => {
+  assert.equal(
+    classifyAltinbasHiddenFlowValidation(
+      JSON.stringify({
+        component: "CheckDuplicateValidation",
+        errorMessage:
+          "An application with this passport number already exists. You cannot submit a new application using the same passport number.",
+      }),
+    ),
+    "duplicate_passport",
+  );
+});
+
+test("AW30: generic or partial duplicate text cannot move an application", () => {
+  assert.equal(
+    classifyAltinbasHiddenFlowValidation("An application already exists."),
+    "none",
+  );
+  assert.equal(
+    classifyAltinbasHiddenFlowValidation(
+      "You cannot submit a new application using the same passport number.",
+    ),
+    "none",
+  );
+  assert.equal(classifyAltinbasHiddenFlowValidation(undefined), "none");
+});
+
+test("AW31: only a duplicate response newer than the exact Next is actionable", () => {
+  assert.equal(
+    isAltinbasPostNextDuplicate({
+      flowVersionBeforeNext: 7,
+      duplicatePassportVersion: 8,
+    }),
+    true,
+  );
+  assert.equal(
+    isAltinbasPostNextDuplicate({
+      flowVersionBeforeNext: 7,
+      duplicatePassportVersion: 7,
+    }),
+    false,
+  );
+  assert.equal(
+    isAltinbasPostNextDuplicate({
+      flowVersionBeforeNext: 7,
+      duplicatePassportVersion: 2,
+    }),
+    false,
+  );
 });

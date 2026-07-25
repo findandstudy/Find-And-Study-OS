@@ -432,6 +432,40 @@ export function classifyAltinbasWizardTransition(
     : "invalid";
 }
 
+export type AltinbasHiddenFlowValidation =
+  | "duplicate_passport"
+  | "none";
+
+/**
+ * Salesforce Flow validation can reject a Next transition without rendering
+ * the actual error in the Lightning DOM. Classify only the exact server-side
+ * duplicate-passport contract observed in CheckDuplicateValidation; generic
+ * "already exists" text is intentionally insufficient.
+ */
+export function classifyAltinbasHiddenFlowValidation(
+  raw: unknown,
+): AltinbasHiddenFlowValidation {
+  if (typeof raw !== "string" || raw.length === 0) return "none";
+  return (
+    /an application with this passport number already exists/i.test(raw) &&
+    /you cannot submit a new application using the same passport number/i.test(raw)
+  )
+    ? "duplicate_passport"
+    : "none";
+}
+
+/** Accept a hidden duplicate only when it arrived after this exact UI Next. */
+export function isAltinbasPostNextDuplicate(input: {
+  flowVersionBeforeNext: number;
+  duplicatePassportVersion: number;
+}): boolean {
+  return (
+    Number.isInteger(input.flowVersionBeforeNext) &&
+    Number.isInteger(input.duplicatePassportVersion) &&
+    input.duplicatePassportVersion > input.flowVersionBeforeNext
+  );
+}
+
 /** City of Birth is accepted only from the dedicated CRM field. */
 export function explicitCityOfBirth(value: unknown): string | null {
   if (typeof value !== "string") return null;

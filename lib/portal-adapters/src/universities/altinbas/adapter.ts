@@ -86,11 +86,13 @@ import {
   chooseAltinbasApplicationRow,
   decideAltinbasEducationAddCandidate,
   decideAltinbasUploadRefresh,
+  classifyAltinbasHiddenFlowValidation,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
   extractAltinbasFlowUploadedDocumentSlots,
   isAltinbasExistingUploadProved,
   isAltinbasLightningUploadProved,
+  isAltinbasPostNextDuplicate,
   isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
   normalizeAltinbasPassportNumber,
@@ -403,6 +405,14 @@ interface FlowRuntime {
    * Altınbaş's live eduhubMultipleFileUpload Flow component.
    */
   uploadedDocumentSlots: Set<AltinbasDocumentSlot>;
+  /**
+   * Monotonic Flow-response sequence plus the sequence of the most recent
+   * server-side duplicate-passport validation. UI Next compares these values
+   * so a stale response from an earlier screen can never classify the current
+   * transition.
+   */
+  flowResponseVersion: number;
+  duplicatePassportVersion: number;
 }
 
 function newFlowRuntime(): FlowRuntime {
@@ -421,6 +431,8 @@ function newFlowRuntime(): FlowRuntime {
     applicantSelected: false,
     knownAvailabilityIds: new Set(),
     uploadedDocumentSlots: new Set(),
+    flowResponseVersion: 0,
+    duplicatePassportVersion: 0,
   };
 }
 
@@ -547,7 +559,11 @@ function captureDump(kind: string, url: string, body: string): void {
  */
 function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
   if (!raw) return;
+  rt.flowResponseVersion += 1;
   rt.lastRaw = raw;
+  if (classifyAltinbasHiddenFlowValidation(raw) === "duplicate_passport") {
+    rt.duplicatePassportVersion = rt.flowResponseVersion;
+  }
 
   const states: string[] = [];
 
@@ -3313,6 +3329,7 @@ async function completeApplicationUI(
       break;
     }
     await page.waitForTimeout(500);
+    const flowVersionBeforeNext = rt.flowResponseVersion;
     const advanced = await clickWizardBtn(page, /^\s*Next\s*$/i);
     if (!advanced) {
       wizardFailure = `Altınbaş[ui]: adım#${step} için tekil/tıklanabilir 'Next' bulunamadı`;
@@ -3320,6 +3337,21 @@ async function completeApplicationUI(
       break;
     }
     await page.waitForTimeout(SF_HYDRATION_MS);
+    if (isAltinbasPostNextDuplicate({
+      flowVersionBeforeNext,
+      duplicatePassportVersion: rt.duplicatePassportVersion,
+    })) {
+      result.alreadyExists = true;
+      result.detail =
+        "Altınbaş: SKIPPED_DUPLICATE — portal aynı pasaport numarasıyla mevcut başvuru bulunduğunu doğruladı " +
+        `(CheckDuplicateValidation, aktif="${before.step}")`;
+      logger.info(
+        `[altinbas][ui] duplicate-passport Flow validation` +
+        ` (aktif="${before.step}", proof=post_next_flow_response)`,
+      );
+      result.screenshots = shots;
+      return true;
+    }
     const after = await readWizardState(page);
     if (after.documentScreen) {
       reachedDocuments = true;
