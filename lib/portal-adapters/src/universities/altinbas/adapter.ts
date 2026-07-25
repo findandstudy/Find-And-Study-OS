@@ -1914,21 +1914,39 @@ async function ensureEducationRecordUI(
     );
     const headingChain =
       headings.length === 1 ? composedChain(headings[0]) : [];
-    const rawActions = els.filter((element) =>
+    const rawSignals = els.filter((element) =>
       element.matches(
-        "button,lightning-button,lightning-button-icon,[role='button']",
+        "button,a,lightning-button,lightning-button-icon,lightning-icon," +
+        "[role='button'],[onclick],[tabindex='0'],.slds-button,.slds-button_icon",
       ),
     );
-    const candidates = rawActions.flatMap((element, actionIndex) => {
-      const rect = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
+    const activationGroups = new Map<Element, Element[]>();
+    rawSignals.forEach((signal) => {
+      const activation =
+        composedChain(signal).find((candidate) =>
+          candidate.matches(
+            "button,a,lightning-button,lightning-button-icon,[role='button']," +
+            "[onclick],[tabindex='0'],.slds-button,.slds-button_icon",
+          ),
+        ) || signal;
+      const signals = activationGroups.get(activation) || [];
+      signals.push(signal);
+      activationGroups.set(activation, signals);
+    });
+    const candidates = [...activationGroups.entries()].flatMap(
+      ([activation, signals], actionIndex) => {
+      const rect = activation.getBoundingClientRect();
+      const signalVisible = signals.some((signal) => {
+        const signalRect = signal.getBoundingClientRect();
+        return signalRect.width > 0 && signalRect.height > 0;
+      });
+      const style = getComputedStyle(activation);
       if (
-        rect.width <= 0 ||
-        rect.height <= 0 ||
+        ((rect.width <= 0 || rect.height <= 0) && !signalVisible) ||
         style.display === "none" ||
         style.visibility === "hidden"
       ) return [];
-      const actionChain = composedChain(element);
+      const actionChain = composedChain(activation);
       const actionCommonIndex = headingChain.length
         ? actionChain.findIndex((candidate) => headingChain.includes(candidate))
         : -1;
@@ -1936,26 +1954,24 @@ async function ensureEducationRecordUI(
         actionCommonIndex >= 0
           ? headingChain.indexOf(actionChain[actionCommonIndex])
           : -1;
-      const tag = element.tagName.toLowerCase();
-      // A custom lightning-button host and its native shadow button represent
-      // one action. Prefer the native button so the click follows the exact
-      // browser activation path.
-      if (
-        tag !== "button" &&
-        rawActions.some((other) =>
-          other !== element &&
-          other.tagName.toLowerCase() === "button" &&
-          composedChain(other).includes(element)
-        )
-      ) return [];
+      const tag = activation.tagName.toLowerCase();
       const directDescriptor = [
-        element.getAttribute("title"),
-        element.getAttribute("aria-label"),
-        element.getAttribute("name"),
-        element.getAttribute("icon-name"),
-        element.getAttribute("data-element-id"),
-        String((element as Element & { iconName?: unknown }).iconName || ""),
-        element.textContent,
+        ...signals.flatMap((signal) => [
+          signal.getAttribute("title"),
+          signal.getAttribute("aria-label"),
+          signal.getAttribute("name"),
+          signal.getAttribute("icon-name"),
+          signal.getAttribute("data-element-id"),
+          String((signal as Element & { iconName?: unknown }).iconName || ""),
+          signal.textContent,
+        ]),
+        activation.getAttribute("title"),
+        activation.getAttribute("aria-label"),
+        activation.getAttribute("name"),
+        activation.getAttribute("icon-name"),
+        activation.getAttribute("data-element-id"),
+        String((activation as Element & { iconName?: unknown }).iconName || ""),
+        activation.textContent,
       ]
         .filter(Boolean)
         .join(" ")
@@ -1990,10 +2006,15 @@ async function ensureEducationRecordUI(
           descriptor,
         );
       const genericIcon =
+        signals.some((signal) =>
+          ["lightning-icon", "lightning-button-icon"].includes(
+            signal.tagName.toLowerCase(),
+          ),
+        ) ||
         tag === "lightning-button-icon" ||
         /slds-button_icon/.test(descriptor);
       const id = String(actionIndex);
-      element.setAttribute("data-fas-edu-add-candidate", id);
+      activation.setAttribute("data-fas-edu-add-candidate", id);
       return [{
         id,
         // A direct Add signal is sufficient because this function is invoked
