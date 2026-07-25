@@ -2020,6 +2020,10 @@ async function ensureEducationRecordUI(
         /(?:^|\s)(?:education(?:al)?|school|record)(?:\s|$)/.test(
           descriptor,
         );
+      const hasExamNoun =
+        /(?:^|\s)(?:exam|proficiency|language\s+test|test\s+score)(?:\s|$)/.test(
+          descriptor,
+        );
       const genericIcon =
         signals.some((signal) =>
           ["lightning-icon", "lightning-button-icon"].includes(
@@ -2047,6 +2051,29 @@ async function ensureEducationRecordUI(
         ),
         genericIcon,
         excluded,
+        targetContext:
+          (
+            /educationalinformationlist|educational_information/.test(
+              descriptor,
+            ) ||
+            hasEducationNoun
+          ) &&
+          !hasExamNoun,
+        insideDialog: actionChain.some((candidate) =>
+          candidate.matches(
+            "[role='dialog'],[aria-modal='true'],.slds-modal",
+          ),
+        ),
+        top: Math.round(
+          rect.height > 0
+            ? rect.top
+            : Math.min(
+                ...signals
+                  .map((signal) => signal.getBoundingClientRect())
+                  .filter((signalRect) => signalRect.height > 0)
+                  .map((signalRect) => signalRect.top),
+              ),
+        ),
       }];
     });
     return {
@@ -2111,6 +2138,9 @@ async function ensureEducationRecordUI(
       ` activations=${addScan.activationCount},` +
       ` candidates=${addScan.candidates.length},` +
       ` semantic=${addScan.candidates.filter((candidate) => candidate.semantic).length},` +
+      ` targeted=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.targetContext).length},` +
+      ` dialog=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.insideDialog).length},` +
+      ` tops=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.insideDialog).map((candidate) => candidate.top).sort((a, b) => a - b).join(":") || "none"},` +
       ` icons=${addScan.candidates.filter((candidate) => candidate.genericIcon && !candidate.excluded).length},` +
       ` decision=${addDecision.reason},` +
       ` scanError=${redactAltinbasLog(

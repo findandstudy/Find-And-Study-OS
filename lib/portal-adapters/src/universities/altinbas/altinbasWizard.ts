@@ -649,10 +649,21 @@ export interface AltinbasEducationAddCandidate {
   semantic: boolean;
   genericIcon: boolean;
   excluded: boolean;
+  targetContext?: boolean;
+  insideDialog?: boolean;
+  top?: number;
 }
 
 export type AltinbasEducationAddDecision =
-  | { id: string; proof: "semantic" | "nearest_unique_icon"; reason: "ok" }
+  | {
+      id: string;
+      proof:
+        | "education_context"
+        | "dialog_topmost"
+        | "semantic"
+        | "nearest_unique_icon";
+      reason: "ok";
+    }
   | { id: null; proof: null; reason: "missing" | "ambiguous" };
 
 /**
@@ -685,6 +696,49 @@ export function decideAltinbasEducationAddCandidate(
   };
 
   const semanticPool = eligible.filter((candidate) => candidate.semantic);
+  const contextual = semanticPool.filter(
+    (candidate) => candidate.targetContext === true,
+  );
+  if (contextual.length) {
+    const orderedContextual = [...contextual].sort(
+      (a, b) => Number(a.top) - Number(b.top),
+    );
+    if (
+      orderedContextual.length === 1 ||
+      (
+        Number.isFinite(orderedContextual[0].top) &&
+        Number.isFinite(orderedContextual[1].top) &&
+        Number(orderedContextual[0].top) + 4 <
+          Number(orderedContextual[1].top)
+      )
+    ) {
+      return {
+        id: orderedContextual[0].id,
+        proof: "education_context",
+        reason: "ok",
+      };
+    }
+    return { id: null, proof: null, reason: "ambiguous" };
+  }
+  const dialogSemantic = semanticPool
+    .filter(
+      (candidate) =>
+        candidate.insideDialog === true && Number.isFinite(candidate.top),
+    )
+    .sort((a, b) => Number(a.top) - Number(b.top));
+  if (dialogSemantic.length) {
+    if (
+      dialogSemantic.length === 1 ||
+      Number(dialogSemantic[0].top) + 4 < Number(dialogSemantic[1].top)
+    ) {
+      return {
+        id: dialogSemantic[0].id,
+        proof: "dialog_topmost",
+        reason: "ok",
+      };
+    }
+    return { id: null, proof: null, reason: "ambiguous" };
+  }
   if (semanticPool.length) {
     return semanticPool.length === 1
       ? { id: semanticPool[0].id, proof: "semantic", reason: "ok" }
