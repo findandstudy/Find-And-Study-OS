@@ -15,6 +15,7 @@ import {
   decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  isAltinbasLightningUploadProved,
   isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
   parseAltinbasCanaryStage,
@@ -629,6 +630,46 @@ test("AW14e: exact saved date state is resume-safe and partial drafts fail close
     }),
     true,
     "a native date input uses exact ISO readback without Lightning hosts",
+  );
+});
+
+test("AW14f: Lightning upload needs exact local file plus completed Done contract", () => {
+  const proof = {
+    exactLocalFile: true,
+    doneClicked: true,
+    doneDismissed: true,
+    documentsStage: true,
+    portalFilenameSeen: false,
+  };
+  assert.equal(isAltinbasLightningUploadProved(proof), true);
+  assert.equal(
+    isAltinbasLightningUploadProved({ ...proof, exactLocalFile: false }),
+    false,
+  );
+  assert.equal(
+    isAltinbasLightningUploadProved({ ...proof, doneClicked: false }),
+    false,
+  );
+  assert.equal(
+    isAltinbasLightningUploadProved({
+      ...proof,
+      doneDismissed: false,
+      portalFilenameSeen: false,
+    }),
+    false,
+  );
+  assert.equal(
+    isAltinbasLightningUploadProved({ ...proof, documentsStage: false }),
+    false,
+  );
+  assert.equal(
+    isAltinbasLightningUploadProved({
+      ...proof,
+      doneDismissed: false,
+      portalFilenameSeen: true,
+    }),
+    true,
+    "an exact portal filename is sufficient even before the modal disappears",
   );
 });
 
