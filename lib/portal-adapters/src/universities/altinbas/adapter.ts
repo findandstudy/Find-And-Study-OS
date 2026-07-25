@@ -1057,6 +1057,7 @@ const MUTATION_CANARY_STAGE = parseAltinbasCanaryStage(
 );
 const LEGACY_ADDRESS_CITY_FALLBACK = "Not Provided";
 const LEGACY_ADDRESS_ZIP_FALLBACK = "00000";
+const LEGACY_VISA_SUPPORT_DEFAULT_NO = true;
 const MY_APPS_URL = PORTAL_URL + "my-applications";
 
 interface UiFieldResult {
@@ -2657,6 +2658,7 @@ async function fillQuestionnaireUI(
   const resumeAction = resolveAltinbasVisaResumeAction({
     crmValue: profile.visaSupport,
     portalValue: existingChoice,
+    legacyDefaultNo: LEGACY_VISA_SUPPORT_DEFAULT_NO,
   });
   if (resumeAction === "questionnaire_followup_unmapped") {
     // Live evidence shows an additional consulate/embassy answer after Yes.
@@ -2669,8 +2671,15 @@ async function fillQuestionnaireUI(
   if (resumeAction === "accept_existing_no") {
     return { ok: true, reason: "existing_portal_value_proved" };
   }
+  if (resumeAction === "select_no_from_policy") {
+    logger.info(
+      "[altinbas][ui] legacy questionnaire fallback applied" +
+      " (field=needsVisaSupport, value=No, policy=historical_default)",
+    );
+  }
 
-  // Explicit CRM "No": select the exact Lightning option and prove readback.
+  // Explicit CRM or approved historical fallback "No": select the exact
+  // Lightning option and prove readback.
   const need = "No";
   await combo.click({ timeout: 6_000 }).catch(() => {});
   await page.waitForTimeout(800);
