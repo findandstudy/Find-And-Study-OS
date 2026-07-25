@@ -8,7 +8,7 @@
  * via resolvePortalRouting, never hardcoded, and the duplicate guard is the
  * single source of truth for "already queued/running".
  */
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, applicationsTable, portalSubmissionsTable } from "@workspace/db";
 import { resolvePortalRouting } from "./portalAutoTrigger.js";
 
@@ -30,6 +30,11 @@ export interface PortalEnqueueResult {
   queued: PortalEnqueueQueuedRow[];
   skipped: PortalEnqueueSkippedRow[];
 }
+
+// Namespace for PostgreSQL's two-int advisory lock API. The application id is
+// the second key, so concurrent API processes serialize only submissions for
+// the same application while unrelated bulk rows remain independent.
+const PORTAL_MANUAL_ENQUEUE_LOCK_NAMESPACE = 4_602_019;
 
 /**
  * Enqueues portal_submissions rows (status="queued") for the given
@@ -79,56 +84,81 @@ export async function enqueuePortalSubmissions(opts: {
     }
     const { portalUni, target } = routing;
 
-    // Duplicate guard: an active (queued/running) submission for this
-    // application x university must not be re-queued.
-    const [existing] = await db
-      .select({ id: portalSubmissionsTable.id })
-      .from(portalSubmissionsTable)
-      .where(
-        and(
-          eq(portalSubmissionsTable.applicationId, appId),
-          eq(portalSubmissionsTable.universityKey, portalUni.universityKey),
-          inArray(portalSubmissionsTable.status, ["queued", "running"]),
-          isNull(portalSubmissionsTable.deletedAt),
-        ),
-      )
-      .limit(1);
+    const outcome = await db.transaction(async (tx) => {
+      // The former read-then-insert guard raced when the user clicked Run
+      // again before the first request committed. An xact advisory lock makes
+      // that check atomic across API processes without requiring a partial
+      // unique index (historical queued rows prevent adding one safely).
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(
+          ${PORTAL_MANUAL_ENQUEUE_LOCK_NAMESPACE},
+          ${appId}
+        )`,
+      );
 
-    if (existing) {
-      skipped.push({ applicationId: appId, reason: "ALREADY_QUEUED", submissionId: existing.id });
+      const [existing] = await tx
+        .select({ id: portalSubmissionsTable.id })
+        .from(portalSubmissionsTable)
+        .where(
+          and(
+            eq(portalSubmissionsTable.applicationId, appId),
+            eq(portalSubmissionsTable.universityKey, portalUni.universityKey),
+            inArray(portalSubmissionsTable.status, ["queued", "running"]),
+            isNull(portalSubmissionsTable.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (existing) {
+        return { kind: "existing" as const, id: existing.id };
+      }
+
+      const [row] = await tx
+        .insert(portalSubmissionsTable)
+        .values({
+          applicationId: appId,
+          studentId: app.studentId,
+          universityKey: portalUni.universityKey,
+          universityName: target ? target.universityName : portalUni.universityName,
+          adapterKey: portalUni.adapterKey,
+          mode: opts.mode,
+          status: "queued",
+          enqueuedBy: opts.userId,
+          // manual:true marks this row as a deliberate user-selected submission
+          // (Applications bulk "Run" action / admin Manual Submit dialog — the
+          // only two callers of this shared enqueue loop). claimNext() uses this
+          // flag to bypass the trigger-stage and autoProcess claim gates, which
+          // exist only to scope AUTOMATIC/scheduled processing.
+          meta: {
+            manual: true,
+            ...(target
+              ? {
+                  targetCatalogUniversityId: target.catalogUniversityId,
+                  targetUniversityName: target.universityName,
+                  routedViaAggregator: portalUni.universityKey,
+                }
+              : {}),
+          },
+        })
+        .returning({ id: portalSubmissionsTable.id });
+
+      return { kind: "inserted" as const, id: row.id };
+    });
+
+    if (outcome.kind === "existing") {
+      skipped.push({
+        applicationId: appId,
+        reason: "ALREADY_QUEUED",
+        submissionId: outcome.id,
+      });
       continue;
     }
 
-    const [row] = await db
-      .insert(portalSubmissionsTable)
-      .values({
-        applicationId: appId,
-        studentId: app.studentId,
-        universityKey: portalUni.universityKey,
-        universityName: target ? target.universityName : portalUni.universityName,
-        adapterKey: portalUni.adapterKey,
-        mode: opts.mode,
-        status: "queued",
-        enqueuedBy: opts.userId,
-        // manual:true marks this row as a deliberate user-selected submission
-        // (Applications bulk "Run" action / admin Manual Submit dialog — the
-        // only two callers of this shared enqueue loop). claimNext() uses this
-        // flag to bypass the trigger-stage and autoProcess claim gates, which
-        // exist only to scope AUTOMATIC/scheduled processing.
-        meta: {
-          manual: true,
-          ...(target
-            ? {
-                targetCatalogUniversityId: target.catalogUniversityId,
-                targetUniversityName: target.universityName,
-                routedViaAggregator: portalUni.universityKey,
-              }
-            : {}),
-        },
-      })
-      .returning({ id: portalSubmissionsTable.id });
-
-    queued.push({ applicationId: appId, submissionId: row.id, universityKey: portalUni.universityKey });
+    queued.push({
+      applicationId: appId,
+      submissionId: outcome.id,
+      universityKey: portalUni.universityKey,
+    });
   }
 
   return { queued, skipped };

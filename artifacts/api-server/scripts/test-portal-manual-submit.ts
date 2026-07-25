@@ -11,6 +11,7 @@
  * MSUB8: deleted app (single) → 404; (bulk) → skipped NOT_FOUND
  * MSUB9: RBAC — non-admin role → 403
  * MSUB10: rate limit — burst of identical submits → 429
+ * MSUB14: concurrent submits for the same app create exactly one active row
  *
  * Run:
  *   pnpm --filter @workspace/api-server test:portal-manual-submit
@@ -46,12 +47,13 @@ let appB = 0; // bulk
 let appC = 0; // real-confirm
 let appD = 0; // soft-deleted
 let appE = 0; // no matching portal university
+let appF = 0; // concurrent idempotency
 
 // ---------------------------------------------------------------------------
 // Cleanup
 // ---------------------------------------------------------------------------
 after(async () => {
-  const appIds = [appA, appB, appC, appD, appE].filter((x) => x > 0);
+  const appIds = [appA, appB, appC, appD, appE, appF].filter((x) => x > 0);
   if (appIds.length > 0) {
     await db.delete(portalSubmissionsTable).where(inArray(portalSubmissionsTable.applicationId, appIds)).catch(() => {});
     await db.delete(applicationsTable).where(inArray(applicationsTable.id, appIds)).catch(() => {});
@@ -165,6 +167,7 @@ test("MSUB0: seed fixtures", async () => {
   appB = await mkApp();
   appC = await mkApp();
   appD = await mkApp(true);
+  appF = await mkApp();
 
   // appE: a non-deleted app whose university matches NO active portal_universities row.
   const [e] = await db
@@ -173,7 +176,7 @@ test("MSUB0: seed fixtures", async () => {
     .returning({ id: applicationsTable.id });
   appE = e.id;
 
-  assert.ok(studentId && portalUniId && appA && appB && appC && appD && appE);
+  assert.ok(studentId && portalUniId && appA && appB && appC && appD && appE && appF);
 });
 
 // ---------------------------------------------------------------------------
@@ -416,6 +419,46 @@ test("MSUB12: eligible-applications stage + universityKey filters", async () => 
     );
     assert.equal(wrongKey.status, 200);
     assert.equal(wrongKey.body.data.length, 0, "unknown key returns nothing");
+  } finally {
+    await close(server);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// MSUB14 — concurrent idempotency across API requests
+// ---------------------------------------------------------------------------
+test("MSUB14: concurrent submits create one row and reuse it", async () => {
+  const server = await listen(buildApp());
+  try {
+    const [first, second] = await Promise.all([
+      sendReq(server, "POST", "/api/portal-automation/submit", {
+        applicationIds: [appF],
+        mode: "dry",
+      }),
+      sendReq(server, "POST", "/api/portal-automation/submit", {
+        applicationIds: [appF],
+        mode: "dry",
+      }),
+    ]);
+    assert.deepEqual(
+      [first.status, second.status].sort((a, b) => a - b),
+      [200, 201],
+    );
+
+    const inserted = [first, second].find((res) => res.status === 201);
+    const reused = [first, second].find((res) => res.status === 200);
+    assert.equal(inserted?.body.queued.length, 1);
+    assert.equal(reused?.body.skipped[0]?.reason, "ALREADY_QUEUED");
+    assert.equal(
+      reused?.body.skipped[0]?.submissionId,
+      inserted?.body.queued[0]?.submissionId,
+    );
+
+    const rows = await db
+      .select()
+      .from(portalSubmissionsTable)
+      .where(eq(portalSubmissionsTable.applicationId, appF));
+    assert.equal(rows.length, 1, "advisory lock prevents a duplicate insert");
   } finally {
     await close(server);
   }
