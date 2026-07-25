@@ -1191,7 +1191,7 @@ async function fillAltinbasUiDateField(
         await control.press("Control+A").catch(() => {});
       });
       await control.press("Backspace").catch(() => {});
-      await control.type(candidate, { delay: 35, timeout: 6_000 });
+      await control.pressSequentially(candidate, { delay: 35, timeout: 6_000 });
       // lightning-input/date-picker keeps a draft value until it receives a
       // committing keyboard/change sequence after typing (observed in the live
       // Personal Information step).
@@ -1202,16 +1202,47 @@ async function fillAltinbasUiDateField(
       await page.waitForTimeout(150);
       const proof = await control.evaluate((element: Element) => {
         const input = element as HTMLInputElement;
+        let node: Element | null = element;
+        let lightningInputValuePresent = false;
+        let lightningInputValid = false;
+        let flowScreenValuePresent = false;
+        for (let depth = 0; depth < 12 && node; depth++) {
+          const candidateNode = node as Element & {
+            value?: unknown;
+            validity?: { valid?: boolean };
+          };
+          const tag = candidateNode.tagName.toLowerCase();
+          const valuePresent =
+            typeof candidateNode.value === "string" &&
+            candidateNode.value.trim().length > 0;
+          if (tag === "lightning-input") {
+            lightningInputValuePresent = valuePresent;
+            lightningInputValid = candidateNode.validity?.valid === true;
+          }
+          if (tag === "flowruntime-flow-screen-input") {
+            flowScreenValuePresent = valuePresent;
+          }
+          const root = node.getRootNode() as ShadowRoot | Document;
+          node =
+            node.parentElement ||
+            ("host" in root ? root.host : null);
+        }
         return {
           value: (input.value || "").trim(),
           ariaInvalid: input.getAttribute("aria-invalid") === "true",
           valid: input.validity ? input.validity.valid : true,
+          lightningInputValuePresent,
+          lightningInputValid,
+          flowScreenValuePresent,
         };
       });
       if (
         canonicalAltinbasUiDate(proof.value, metadata) === iso &&
         !proof.ariaInvalid &&
-        proof.valid
+        proof.valid &&
+        proof.lightningInputValuePresent &&
+        proof.lightningInputValid &&
+        proof.flowScreenValuePresent
       ) {
         logger.info(
           `[altinbas][ui] date control committed` +
