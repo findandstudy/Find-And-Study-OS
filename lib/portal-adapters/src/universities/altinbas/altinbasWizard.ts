@@ -45,6 +45,37 @@ export interface AltinbasLabeledControlCandidate {
   readOnly: boolean;
 }
 
+export interface AltinbasUiDateProof {
+  ariaInvalid: boolean;
+  valid: boolean;
+  nativeDateInput: boolean;
+  nativeValueMatchesExpected: boolean;
+  lightningInputValuePresent: boolean;
+  lightningInputMatchesExpected: boolean;
+  lightningInputValid: boolean;
+  datepickerMatchesExpected: boolean;
+  flowScreenValuePresent: boolean;
+}
+
+/**
+ * A resumed application may already contain the exact CRM date from an
+ * earlier successful Personal save. Accept that value without retyping it,
+ * but only when the complete native/Lightning state proves the same ISO date.
+ */
+export function isAltinbasUiDateCommitted(
+  proof: AltinbasUiDateProof | null | undefined,
+): boolean {
+  if (!proof || proof.ariaInvalid || !proof.valid) return false;
+  if (proof.nativeDateInput) return proof.nativeValueMatchesExpected;
+  return (
+    proof.lightningInputValuePresent &&
+    proof.lightningInputMatchesExpected &&
+    proof.lightningInputValid &&
+    proof.datepickerMatchesExpected &&
+    proof.flowScreenValuePresent
+  );
+}
+
 export type AltinbasBasicField =
   | "firstName"
   | "lastName"
