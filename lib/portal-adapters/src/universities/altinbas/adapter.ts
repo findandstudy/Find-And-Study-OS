@@ -86,6 +86,7 @@ import {
   decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  extractAltinbasFlowUploadedDocumentSlots,
   isAltinbasExistingUploadProved,
   isAltinbasLightningUploadProved,
   isAltinbasUiDateCommitted,
@@ -98,6 +99,7 @@ import {
   resolveAltinbasWizardState,
   selectAltinbasRollbackIds,
   shouldUseAltinbasUiPath,
+  type AltinbasDocumentSlot,
   type AltinbasWizardSnapshot,
   type AltinbasWizardState,
 } from "./altinbasWizard.js";
@@ -393,6 +395,11 @@ interface FlowRuntime {
    * set'te olan bir a02 availability kaydıdır, application DEĞİLDİR.
    */
   knownAvailabilityIds: Set<string>;
+  /**
+   * Required document slots proved by the authoritative recordsCV payload of
+   * Altınbaş's live eduhubMultipleFileUpload Flow component.
+   */
+  uploadedDocumentSlots: Set<AltinbasDocumentSlot>;
 }
 
 function newFlowRuntime(): FlowRuntime {
@@ -410,6 +417,7 @@ function newFlowRuntime(): FlowRuntime {
     scanIds: {},
     applicantSelected: false,
     knownAvailabilityIds: new Set(),
+    uploadedDocumentSlots: new Set(),
   };
 }
 
@@ -601,7 +609,21 @@ function ingestFlowResponse(rt: FlowRuntime, raw: string): void {
   const start = raw.indexOf("{");
   if (start >= 0) {
     try {
-      walk(JSON.parse(raw.slice(start)));
+      const parsed = JSON.parse(raw.slice(start));
+      walk(parsed);
+      const documentProof =
+        extractAltinbasFlowUploadedDocumentSlots(parsed);
+      if (documentProof.componentFound) {
+        // A malformed or ambiguous matching component clears this run-local
+        // proof and therefore fails closed. Unrelated Flow responses do not
+        // alter a valid Documents proof.
+        rt.uploadedDocumentSlots = new Set(documentProof.slots);
+        logger.info(
+          `[altinbas][ui] Documents Flow state` +
+          ` (proof=recordsCV, uploaded=${documentProof.slots.length},` +
+          ` slots=${documentProof.slots.length ? documentProof.slots.join(",") : "none"})`,
+        );
+      }
     } catch {
       /* JSON parse edilemedi — regex fallback aşağıda */
     }
@@ -2860,7 +2882,11 @@ async function fillQuestionnaireUI(
     : { ok: false, reason: "visa_readback_failed" };
 }
 
-async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[]> {
+async function uploadDocumentsUI(
+  page: any,
+  files: SubmitFiles,
+  serverUploadedSlots: ReadonlySet<AltinbasDocumentSlot>,
+): Promise<string[]> {
   const state = await readWizardState(page);
   if (state.step !== "Documents" || !state.documentScreen || state.reason !== "ok") {
     logger.warn(
@@ -2902,6 +2928,14 @@ async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[
 
   for (const [re, path, tag] of wanted) {
     if (!path) continue;
+    if (serverUploadedSlots.has(tag as AltinbasDocumentSlot)) {
+      uploaded.push(tag);
+      logger.info(
+        `[altinbas][ui] Documents: ${tag} zaten mevcut` +
+        ` (proof=flow_recordsCV)`,
+      );
+      continue;
+    }
     const indices = labels
       .map((label, index) => (re.test(label) ? index : -1))
       .filter((index) => index >= 0);
@@ -3029,6 +3063,7 @@ async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[
 // brand-new students keep the existing create path unchanged.
 async function completeApplicationUI(
   page: any,
+  rt: FlowRuntime,
   profile: SubmitProfile,
   files: SubmitFiles,
   dryRun: boolean,
@@ -3339,7 +3374,17 @@ async function completeApplicationUI(
     result.screenshots = shots;
     return true;
   }
-  const up = await uploadDocumentsUI(page, files);
+  // The response interceptor normally finishes before the hydrated Documents
+  // stage is visible. This bounded grace period also covers a final slow
+  // response-body read without relying on DOM upload remnants.
+  if (rt.uploadedDocumentSlots.size === 0) {
+    await page.waitForTimeout(750);
+  }
+  const up = await uploadDocumentsUI(
+    page,
+    files,
+    rt.uploadedDocumentSlots,
+  );
   const missing = (["passport", "diploma", "transcript", "photo"] as const).filter((t) => !up.includes(t));
   if (missing.length) {
     result.missingDocuments = [...(result.missingDocuments ?? []), ...missing];
@@ -3728,6 +3773,7 @@ async function runFlowReplay(
   if (UI_COMPLETE) {
     const handled = await completeApplicationUI(
       page,
+      rt,
       profile,
       files,
       dryRun,
@@ -4651,7 +4697,15 @@ export const altinbasAdapter: UniversityAdapter = {
       // application exists yet, a real run may fall through to create. Every
       // dry-run is forced through this read-only path even when UI_COMPLETE is
       // not enabled, so it can never create/fill/advance/upload.
-      const uiHandled = await completeApplicationUI(page, profile, files, dryRun, result, screenshots);
+      const uiHandled = await completeApplicationUI(
+        page,
+        rt,
+        profile,
+        files,
+        dryRun,
+        result,
+        screenshots,
+      );
       if (uiHandled) {
         if (screenshots.length) result.screenshots = screenshots;
         logger.info("[altinbas] submit complete (UI completion path)", result);
