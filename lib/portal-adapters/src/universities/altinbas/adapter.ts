@@ -2220,6 +2220,33 @@ async function ensureEducationRecordUI(
         /slds-button_icon/.test(descriptor);
       const id = String(actionIndex);
       activation.setAttribute("data-fas-edu-add-candidate", id);
+      const targetMeta = actionChain.slice(0, 10).map((candidate) => ({
+        tag: candidate.tagName.toLowerCase(),
+        role: candidate.getAttribute("role") || "",
+        name: candidate.getAttribute("name") || "",
+        title: candidate.getAttribute("title") || "",
+        ariaLabel: candidate.getAttribute("aria-label") || "",
+        iconName:
+          candidate.getAttribute("icon-name") ||
+          String((candidate as Element & { iconName?: unknown }).iconName || ""),
+        dataElementId: candidate.getAttribute("data-element-id") || "",
+        dataKey: candidate.getAttribute("data-key") || "",
+        className: (candidate.getAttribute("class") || "").slice(0, 180),
+      }));
+      const signalMeta = signals.slice(0, 12).map((signal) => ({
+        tag: signal.tagName.toLowerCase(),
+        role: signal.getAttribute("role") || "",
+        title: signal.getAttribute("title") || "",
+        ariaLabel: signal.getAttribute("aria-label") || "",
+        iconName:
+          signal.getAttribute("icon-name") ||
+          String((signal as Element & { iconName?: unknown }).iconName || ""),
+        href:
+          signal.getAttribute("href") ||
+          signal.getAttribute("xlink:href") ||
+          "",
+        className: (signal.getAttribute("class") || "").slice(0, 180),
+      }));
       return [{
         id,
         // A direct Add signal is sufficient because this function is invoked
@@ -2235,6 +2262,8 @@ async function ensureEducationRecordUI(
         genericIcon,
         excluded,
         targetContext,
+        targetMeta,
+        signalMeta,
         insideDialog: actionChain.some((candidate) =>
           candidate.matches(
             "[role='dialog'],[aria-modal='true'],.slds-modal",
@@ -2339,10 +2368,17 @@ async function ensureEducationRecordUI(
     afterModalControls <= beforeModalControls ||
     afterModalControls === 0
   ) {
+    const selectedCandidate = addScan.candidates.find(
+      (candidate) => candidate.id === addDecision.id,
+    );
     logger.warn(
       `[altinbas][ui] Educational: Add tıklandı fakat modal doğrulanamadı` +
       ` (beforeControls=${beforeModalControls}, afterControls=${afterModalControls},` +
-      ` visibleDialogs=${visibleDialogs}, proof=${addDecision.proof})`,
+      ` visibleDialogs=${visibleDialogs}, proof=${addDecision.proof},` +
+      ` target=${redactAltinbasLog(JSON.stringify({
+        chain: selectedCandidate?.targetMeta || [],
+        signals: selectedCandidate?.signalMeta || [],
+      })).slice(0, 1800)})`,
     );
     return { ok: false, reason: "add_modal_not_opened" };
   }
