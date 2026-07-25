@@ -6,8 +6,9 @@ import {
   aiPersonaRunsTable,
   aiActionQueueTable,
   usersTable,
+  portalSubmissionsTable,
 } from "@workspace/db";
-import { eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { listScopes } from "../lib/scopeRegistry";
@@ -340,6 +341,7 @@ router.get(
         personaId: aiActionQueueTable.personaId,
         runId: aiActionQueueTable.runId,
         actionType: aiActionQueueTable.actionType,
+        payload: aiActionQueueTable.payload,
         preview: aiActionQueueTable.preview,
         status: aiActionQueueTable.status,
         createdAt: aiActionQueueTable.createdAt,
@@ -353,6 +355,121 @@ router.get(
       .orderBy(desc(aiActionQueueTable.createdAt))
       .limit(100);
     res.json({ actions: rows });
+  },
+);
+
+const reviewActionSchema = z.object({
+  decision: z.enum(["approved", "rejected"]),
+});
+
+// Reviewing a proposal changes queue state only. In particular,
+// portal_fix_proposal approval never executes a retry, edits a spec/code, or
+// touches a university portal.
+router.post(
+  "/ai-personas/queue/actions/:id/review",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const parsed = reviewActionSchema.safeParse(req.body);
+    if (!Number.isFinite(id) || id <= 0 || !parsed.success) {
+      res.status(400).json({ error: "Invalid review request" });
+      return;
+    }
+    const [current] = await db
+      .select()
+      .from(aiActionQueueTable)
+      .where(eq(aiActionQueueTable.id, id));
+    if (!current || current.status !== "pending_approval") {
+      res.status(409).json({
+        error: "ACTION_NOT_PENDING",
+        message: "This action was already reviewed or does not exist",
+      });
+      return;
+    }
+    if (
+      parsed.data.decision === "approved" &&
+      current.actionType === "portal_fix_proposal"
+    ) {
+      const payload =
+        current.payload && typeof current.payload === "object"
+          ? (current.payload as Record<string, unknown>)
+          : {};
+      const context =
+        payload.context && typeof payload.context === "object"
+          ? (payload.context as Record<string, unknown>)
+          : {};
+      const submissionId = Number(context.submissionId);
+      const fingerprint =
+        typeof context.fingerprint === "string" ? context.fingerprint : "";
+      const [submission] = Number.isFinite(submissionId)
+        ? await db
+            .select({ resultJson: portalSubmissionsTable.resultJson })
+            .from(portalSubmissionsTable)
+            .where(eq(portalSubmissionsTable.id, submissionId))
+        : [];
+      const result =
+        submission?.resultJson && typeof submission.resultJson === "object"
+          ? (submission.resultJson as Record<string, unknown>)
+          : {};
+      const guardian =
+        result.aiGuardian && typeof result.aiGuardian === "object"
+          ? (result.aiGuardian as Record<string, unknown>)
+          : {};
+      if (
+        !submission ||
+        guardian.status !== "proposed" ||
+        guardian.fingerprint !== fingerprint ||
+        guardian.actionId !== id
+      ) {
+        res.status(409).json({
+          error: "STALE_PORTAL_PROPOSAL",
+          message:
+            "The portal outcome changed after this proposal was created; run a new diagnosis",
+        });
+        return;
+      }
+    }
+    const [updated] = await db
+      .update(aiActionQueueTable)
+      .set({
+        status: parsed.data.decision,
+        reviewedBy: req.user!.id,
+        reviewedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(aiActionQueueTable.id, id),
+          eq(aiActionQueueTable.status, "pending_approval"),
+        ),
+      )
+      .returning();
+    if (!updated) {
+      res.status(409).json({
+        error: "ACTION_NOT_PENDING",
+        message: "This action was already reviewed or does not exist",
+      });
+      return;
+    }
+    await logAudit(
+      req.user!.id,
+      parsed.data.decision === "approved" ? "approve_ai_action" : "reject_ai_action",
+      "ai_action_queue",
+      id,
+      {
+        actionType: updated.actionType,
+        executionMode: "review_only",
+      },
+      req.ip,
+    );
+    res.json({
+      action: updated,
+      executed: false,
+      message:
+        updated.actionType === "portal_fix_proposal"
+          ? "Proposal reviewed; no portal, code, or spec mutation was performed"
+          : "Action reviewed; execution is not enabled in this phase",
+    });
   },
 );
 

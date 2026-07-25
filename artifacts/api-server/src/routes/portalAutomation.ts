@@ -71,6 +71,10 @@ import {
 import { batchPortalCredentialKeys, resolvePortalCreds, checkHasPortalCredentials } from "../lib/portalCreds.js";
 import { reconcilePortalUniversityCrmLinks } from "../lib/portalUniversityLinker.js";
 import { enqueuePortalSubmissions } from "../lib/portalManualEnqueue.js";
+import {
+  diagnosePortalSubmission,
+  isDiagnosablePortalStatus,
+} from "../lib/portalAiGuardian.js";
 
 const router: IRouter = Router();
 
@@ -602,6 +606,85 @@ router.get(
 );
 
 // ---------------------------------------------------------------------------
+// POST /portal-submissions/:id/ai-diagnose
+// Admin-only, review-only diagnosis. This can spend AI budget, but it never
+// retries a submission or mutates an external university portal.
+// ---------------------------------------------------------------------------
+router.post(
+  "/portal-submissions/:id/ai-diagnose",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: idParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { id } = getValidated<IdSchemas>(req).params;
+    const [row] = await db
+      .select({ id: portalSubmissionsTable.id, status: portalSubmissionsTable.status })
+      .from(portalSubmissionsTable)
+      .where(
+        and(
+          eq(portalSubmissionsTable.id, id),
+          isNull(portalSubmissionsTable.deletedAt),
+        ),
+      );
+    if (!row) {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+    if (!isDiagnosablePortalStatus(row.status)) {
+      res.status(409).json({
+        error: "NOT_DIAGNOSABLE",
+        message: "Only failed, program-missing, or program-full outcomes can be diagnosed",
+      });
+      return;
+    }
+    try {
+      const guardian = await diagnosePortalSubmission(id, {
+        triggeredBy: "manual",
+        triggerActor: req.user!.id,
+      });
+      await logAudit(
+        req.user!.id,
+        "diagnose_portal_submission",
+        "portal_submission",
+        id,
+        {
+          runId: guardian.runId ?? null,
+          actionId: guardian.actionId ?? null,
+          reused: guardian.reused,
+          executionMode: "review_only",
+        },
+        req.ip,
+      );
+      res.json({ guardian });
+    } catch (error) {
+      const code = (error as Error).message;
+      if (code === "PORTAL_AI_GUARDIAN_INACTIVE") {
+        res.status(409).json({
+          error: code,
+          message: "Activate the Portal Automation Guardian persona first",
+        });
+        return;
+      }
+      if (code === "PORTAL_AI_GUARDIAN_IN_PROGRESS") {
+        res.status(409).json({ error: code, message: "Diagnosis is already in progress" });
+        return;
+      }
+      if (code === "PORTAL_AI_GUARDIAN_DAILY_LIMIT") {
+        res.status(429).json({
+          error: code,
+          message: "Portal AI Guardian daily run limit has been reached",
+        });
+        return;
+      }
+      console.error(
+        `[portal-ai-guardian] manual diagnosis ${id} failed (${(error as Error).name || "Error"})`,
+      );
+      res.status(500).json({ error: "PORTAL_AI_DIAGNOSIS_FAILED" });
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // POST /portal-submissions/:id/retry
 // ---------------------------------------------------------------------------
 router.post(
@@ -633,7 +716,14 @@ router.post(
 
     await db
       .update(portalSubmissionsTable)
-      .set({ status: "queued", lockedAt: null, lockedBy: null, error: null, attempts: 0 })
+      .set({
+        status: "queued",
+        lockedAt: null,
+        lockedBy: null,
+        error: null,
+        attempts: 0,
+        resultJson: sql`coalesce(${portalSubmissionsTable.resultJson}, '{}'::jsonb) - 'aiGuardian'`,
+      })
       .where(eq(portalSubmissionsTable.id, id));
 
     await logAudit(user.id, "retry_portal_submission", "portal_submission", id, {}, req.ip);
@@ -1165,7 +1255,14 @@ router.post(
     if (eligibleIds.length > 0) {
       await db
         .update(portalSubmissionsTable)
-        .set({ status: "queued", lockedAt: null, lockedBy: null, error: null, attempts: 0 })
+        .set({
+          status: "queued",
+          lockedAt: null,
+          lockedBy: null,
+          error: null,
+          attempts: 0,
+          resultJson: sql`coalesce(${portalSubmissionsTable.resultJson}, '{}'::jsonb) - 'aiGuardian'`,
+        })
         .where(inArray(portalSubmissionsTable.id, eligibleIds));
     }
 

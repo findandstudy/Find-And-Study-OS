@@ -7,8 +7,10 @@ import {
   auditLogsTable,
   usersTable,
   leadsTable,
+  portalSubmissionsTable,
 } from "@workspace/db";
-import { desc, sql, gte } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { desc, sql, gte, inArray, isNull, and } from "drizzle-orm";
 
 export type ScopeContextResult = {
   scope: string;
@@ -141,6 +143,76 @@ async function getHrContext(_opts: { branchId?: number }): Promise<ScopeContextR
   }
 }
 
+async function getPortalAutomationContext(
+  _opts: { branchId?: number },
+): Promise<ScopeContextResult> {
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1_000);
+    const grouped = await db
+      .select({
+        status: portalSubmissionsTable.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(portalSubmissionsTable)
+      .where(
+        and(
+          isNull(portalSubmissionsTable.deletedAt),
+          gte(portalSubmissionsTable.updatedAt, since),
+        ),
+      )
+      .groupBy(portalSubmissionsTable.status);
+
+    const recent = await db
+      .select({
+        id: portalSubmissionsTable.id,
+        universityKey: portalSubmissionsTable.universityKey,
+        adapterKey: portalSubmissionsTable.adapterKey,
+        status: portalSubmissionsTable.status,
+        attempts: portalSubmissionsTable.attempts,
+        error: portalSubmissionsTable.error,
+        updatedAt: portalSubmissionsTable.updatedAt,
+      })
+      .from(portalSubmissionsTable)
+      .where(
+        and(
+          isNull(portalSubmissionsTable.deletedAt),
+          gte(portalSubmissionsTable.updatedAt, since),
+          inArray(portalSubmissionsTable.status, [
+            "failed",
+            "program_missing",
+            "program_full",
+          ]),
+        ),
+      )
+      .orderBy(desc(portalSubmissionsTable.updatedAt))
+      .limit(20);
+
+    // Cross-submission context is deliberately aggregate/fingerprint-only.
+    // Raw errors can contain values typed into a university portal, so the
+    // exact text is supplied only by the single-submission Guardian evidence.
+    const safeRecent = recent.map(({ error, ...row }) => ({
+      ...row,
+      errorFingerprint: error
+        ? createHash("sha256").update(error).digest("hex").slice(0, 16)
+        : null,
+    }));
+    const statusCounts = Object.fromEntries(grouped.map((row) => [row.status, row.count]));
+    return {
+      scope: "portal_automation",
+      summary: `Portal automation in the last 24h: ${Object.entries(statusCounts)
+        .map(([status, count]) => `${status}=${count}`)
+        .join(", ") || "no submissions"}`,
+      data: { statusCounts, recentOutcomes: safeRecent },
+    };
+  } catch (e) {
+    return {
+      scope: "portal_automation",
+      summary: `portal automation scope unavailable: ${(e as Error).message}`,
+      data: null,
+    };
+  }
+}
+
 export const SCOPE_REGISTRY: Record<string, { fn: ScopeFn; label: string; description: string }> = {
   blog: {
     fn: getBlogContext,
@@ -161,6 +233,12 @@ export const SCOPE_REGISTRY: Record<string, { fn: ScopeFn; label: string; descri
     fn: getHrContext,
     label: "HR",
     description: "Staff roster + recent workload (PII masked)",
+  },
+  portal_automation: {
+    fn: getPortalAutomationContext,
+    label: "Portal Automation",
+    description:
+      "PII-free portal submission status aggregates and recent failure fingerprints",
   },
 };
 

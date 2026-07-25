@@ -40,6 +40,7 @@ type PersonaForm = {
   toolsEnabled: string[];
   triggerMode: "manual" | "scheduled" | "event_driven";
   scheduleCron: string;
+  eventSubscriptions: string[];
   outputTargets: string[];
   monthlyCostCapUsd: string;
   isActive: boolean;
@@ -62,12 +63,26 @@ const empty: PersonaForm = {
   toolsEnabled: [],
   triggerMode: "manual",
   scheduleCron: "",
+  eventSubscriptions: [],
   outputTargets: [],
   monthlyCostCapUsd: "",
   isActive: false,
 };
 
-const OUTPUT_TARGETS = ["notification", "report", "blog_draft", "internal_msg"];
+const OUTPUT_TARGETS = [
+  "notification",
+  "report",
+  "blog_draft",
+  "internal_msg",
+  "portal_diagnosis",
+  "approval_queue",
+];
+const EVENT_SUBSCRIPTIONS = [
+  {
+    key: "portal_submission.failed",
+    labelKey: "aiPersona.eventPortalSubmissionFailed",
+  },
+];
 
 export default function AiPersonaDetail() {
   const { t } = useI18n();
@@ -130,6 +145,7 @@ export default function AiPersonaDetail() {
           toolsEnabled: persona.toolsEnabled ?? [],
           triggerMode: persona.triggerMode ?? "manual",
           scheduleCron: persona.scheduleCron ?? "",
+          eventSubscriptions: persona.eventSubscriptions ?? [],
           outputTargets: persona.outputTargets ?? [],
           monthlyCostCapUsd:
             persona.monthlyCostCapUsd == null ? "" : String(persona.monthlyCostCapUsd),
@@ -399,6 +415,42 @@ export default function AiPersonaDetail() {
                   <Input value={form.scheduleCron} onChange={(e) => update("scheduleCron", e.target.value)} placeholder={t("aiPersona.cronPlaceholder")} />
                 </div>
               )}
+              {form.triggerMode === "event_driven" && (
+                <div className="space-y-2">
+                  <Label>{t("aiPersona.eventSubscriptions")}</Label>
+                  {form.slug === "portal-automation-guardian" ? EVENT_SUBSCRIPTIONS.map((event) => (
+                    <label
+                      key={event.key}
+                      className="flex items-start gap-3 cursor-pointer border rounded p-3 hover:bg-muted/50"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={form.eventSubscriptions.includes(event.key)}
+                        onChange={() =>
+                          update(
+                            "eventSubscriptions",
+                            toggleArr(form.eventSubscriptions, event.key),
+                          )
+                        }
+                      />
+                      <div>
+                        <div className="text-sm font-medium">{t(event.labelKey)}</div>
+                        <code className="text-xs text-muted-foreground">{event.key}</code>
+                      </div>
+                    </label>
+                  )) : (
+                    <p className="text-sm text-muted-foreground">
+                      {t("aiPersona.eventGuardianOnly")}
+                    </p>
+                  )}
+                  {form.slug === "portal-automation-guardian" && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("aiPersona.eventSafetyNote")}
+                    </p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -452,7 +504,21 @@ export default function AiPersonaDetail() {
                     value={runInput}
                     onChange={(e) => setRunInput(e.target.value)}
                   />
-                  <Button onClick={runNow} disabled={running || !form.isActive} title={!form.isActive ? t("aiPersona.activateFirst") : ""}>
+                  <Button
+                    onClick={runNow}
+                    disabled={
+                      running ||
+                      !form.isActive ||
+                      form.slug === "portal-automation-guardian"
+                    }
+                    title={
+                      form.slug === "portal-automation-guardian"
+                        ? t("aiPersona.portalGuardianRunNote")
+                        : !form.isActive
+                          ? t("aiPersona.activateFirst")
+                          : ""
+                    }
+                  >
                     <Play className="h-4 w-4 mr-1" /> {running ? t("aiPersona.running") : t("aiPersona.runNow")}
                   </Button>
                 </div>

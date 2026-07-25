@@ -35,7 +35,7 @@ import {
   RotateCcw, XCircle, Loader2, RefreshCw, ExternalLink,
   CheckCircle2, Clock, Play, AlertCircle, MinusCircle, SkipForward,
   PlayCircle, ListStart, Eye, Plus, Inbox, Layers, ArrowRight, Globe, UserCheck,
-  User, GraduationCap, Search, FilterX,
+  User, GraduationCap, Search, FilterX, Sparkles, ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ManualSubmitDialog } from "@/components/admin/ManualSubmitDialog";
@@ -67,6 +67,27 @@ interface SubmissionResultJson {
     programMissing?: boolean;
     /** Human-readable skip/failure detail from the adapter. */
     detail?: string;
+  };
+  aiGuardian?: {
+    status?: "processing" | "proposed" | "error";
+    fingerprint?: string;
+    diagnosedAt?: string;
+    runId?: number;
+    actionId?: number;
+    error?: string;
+    diagnosis?: {
+      classification: string;
+      confidence: number;
+      risk: "low" | "medium" | "high";
+      retrySafe: boolean;
+      requiresCodeChange: boolean;
+      summary: string;
+      evidence: string[];
+      recommendedAction: string;
+      missingDataFields: string[];
+      selectorCandidates: unknown[];
+      proposedSpecPatch: unknown[];
+    };
   };
 }
 
@@ -239,9 +260,11 @@ interface RowProps {
   onRetry: (id: number) => Promise<void>;
   onCancel: (id: number) => void;
   onProcess: (id: number) => void;
+  onDiagnose: (id: number) => Promise<void>;
   retryingId: number | null;
   cancelingId: number | null;
   processingId: number | null;
+  diagnosingId: number | null;
   processingAll: boolean;
   selected: boolean;
   onToggleSelect: (id: number) => void;
@@ -249,8 +272,8 @@ interface RowProps {
 }
 
 function SubmissionRow({
-  sub, onRetry, onCancel, onProcess,
-  retryingId, cancelingId, processingId, processingAll,
+  sub, onRetry, onCancel, onProcess, onDiagnose,
+  retryingId, cancelingId, processingId, diagnosingId, processingAll,
   selected, onToggleSelect, bulkBusy,
 }: RowProps) {
   const { t } = useI18n();
@@ -259,10 +282,13 @@ function SubmissionRow({
   const isRetrying   = retryingId  === sub.id;
   const isCanceling  = cancelingId === sub.id;
   const isProcessing = processingId === sub.id;
+  const isDiagnosing = diagnosingId === sub.id;
 
   const canRetry   = sub.status === "failed" || sub.status === "canceled" || sub.status === "dry_run";
   const canCancel  = sub.status === "queued"  || sub.status === "running";
   const canProcess = sub.status === "queued";
+  const canDiagnose = ["failed", "program_missing", "program_full"].includes(sub.status);
+  const guardian = sub.resultJson?.aiGuardian;
 
   return (
     <Card className={cn("rounded-xl", selected && "ring-1 ring-primary")}>
@@ -483,6 +509,22 @@ function SubmissionRow({
                 {t("portalAutomation.submissions.retryButton")}
               </Button>
             )}
+            {canDiagnose && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 border-indigo-300 text-indigo-700 hover:text-indigo-800 dark:border-indigo-800 dark:text-indigo-300"
+                onClick={() => void onDiagnose(sub.id)}
+                disabled={isDiagnosing || guardian?.status === "processing"}
+              >
+                {isDiagnosing || guardian?.status === "processing"
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Sparkles className="w-3.5 h-3.5" />}
+                {guardian?.status === "proposed"
+                  ? t("portalAutomation.submissions.aiReviewAgain")
+                  : t("portalAutomation.submissions.aiDiagnose")}
+              </Button>
+            )}
             {canCancel && (
               <Button
                 variant="outline"
@@ -499,6 +541,53 @@ function SubmissionRow({
             )}
           </div>
         </div>
+        {guardian && (
+          <div className="mt-3 ml-0 sm:ml-9 rounded-lg border border-indigo-200 bg-indigo-50/50 px-3 py-2 dark:border-indigo-900 dark:bg-indigo-950/20">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <ShieldAlert className="h-4 w-4 text-indigo-600" />
+              <span className="font-semibold">
+                {t("portalAutomation.submissions.aiGuardian")}
+              </span>
+              <Badge variant="outline">{guardian.status}</Badge>
+              {guardian.diagnosis && (
+                <>
+                  <Badge variant="secondary">{guardian.diagnosis.classification}</Badge>
+                  <span className="text-muted-foreground">
+                    {Math.round(guardian.diagnosis.confidence * 100)}%
+                  </span>
+                  <span className="text-muted-foreground">
+                    {t("portalAutomation.submissions.aiRisk")}: {guardian.diagnosis.risk}
+                  </span>
+                </>
+              )}
+              {guardian.actionId && (
+                <a
+                  href={`${BASE_URL}/admin/ai-action-queue`}
+                  className="ml-auto text-primary hover:underline"
+                >
+                  {t("portalAutomation.submissions.aiOpenProposal")}
+                </a>
+              )}
+            </div>
+            {guardian.diagnosis && (
+              <div className="mt-2 space-y-1 text-xs">
+                <p>{guardian.diagnosis.summary}</p>
+                <p className="text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    {t("portalAutomation.submissions.aiRecommendedAction")}:
+                  </span>{" "}
+                  {guardian.diagnosis.recommendedAction}
+                </p>
+                <p className="text-amber-700 dark:text-amber-400">
+                  {t("portalAutomation.submissions.aiReviewOnly")}
+                </p>
+              </div>
+            )}
+            {guardian.error && guardian.status === "error" && (
+              <p className="mt-1 text-xs text-destructive">{guardian.error}</p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -532,6 +621,7 @@ export default function PortalSubmissionsTab() {
   const [retryingId,   setRetryingId]   = useState<number | null>(null);
   const [cancelingId,  setCancelingId]  = useState<number | null>(null);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [diagnosingId, setDiagnosingId] = useState<number | null>(null);
   const [processingAll, setProcessingAll] = useState(false);
   const [resetingStuck, setResetingStuck] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -643,12 +733,39 @@ export default function PortalSubmissionsTab() {
     setRetryingId(id);
     try {
       await customFetch(`/api/portal-submissions/${id}/retry`, { method: "POST" });
-      setSubs((prev) => prev.map((s) => s.id === id ? { ...s, status: "queued", error: null, attempts: 0 } : s));
+      setSubs((prev) => prev.map((s) => s.id === id ? {
+        ...s,
+        status: "queued",
+        error: null,
+        attempts: 0,
+        resultJson: s.resultJson
+          ? { ...s.resultJson, aiGuardian: undefined }
+          : null,
+      } : s));
       toast({ title: t("portalAutomation.submissions.retryQueued") });
     } catch {
       toast({ title: t("portalAutomation.submissions.retryError"), variant: "destructive" });
     } finally {
       setRetryingId(null);
+    }
+  };
+
+  const handleDiagnose = async (id: number) => {
+    setDiagnosingId(id);
+    try {
+      await customFetch(`/api/portal-submissions/${id}/ai-diagnose`, {
+        method: "POST",
+      });
+      toast({ title: t("portalAutomation.submissions.aiDiagnosisReady") });
+      await load();
+    } catch (error) {
+      toast({
+        title: t("portalAutomation.submissions.aiDiagnosisError"),
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setDiagnosingId(null);
     }
   };
 
@@ -1094,9 +1211,11 @@ export default function PortalSubmissionsTab() {
               onRetry={handleRetry}
               onCancel={(id) => setConfirmCancelId(id)}
               onProcess={(id) => setConfirmProcessId(id)}
+              onDiagnose={handleDiagnose}
               retryingId={retryingId}
               cancelingId={cancelingId}
               processingId={processingId}
+              diagnosingId={diagnosingId}
               processingAll={processingAll}
               selected={selectedIds.has(sub.id)}
               onToggleSelect={toggleSelect}

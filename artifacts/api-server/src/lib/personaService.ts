@@ -19,6 +19,11 @@ export type RunPersonaOptions = {
   input?: string;
   triggeredBy: "manual" | "cron" | "event";
   triggerActor?: number | null;
+  /**
+   * Trusted, server-generated metadata attached to queued actions. It is
+   * redacted before persistence and is never interpolated into the prompt.
+   */
+  actionContext?: Record<string, unknown>;
 };
 
 export type RunPersonaResult = {
@@ -26,7 +31,13 @@ export type RunPersonaResult = {
   status: string;
   output?: string;
   warnings: string[];
-  toolResults: { tool: string; queued: boolean; ok: boolean; detail: string }[];
+  toolResults: {
+    tool: string;
+    queued: boolean;
+    ok: boolean;
+    detail: string;
+    actionId?: number;
+  }[];
   error?: string;
 };
 
@@ -92,7 +103,7 @@ function buildMessages(
 }
 
 export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaResult> {
-  const { personaId, input, triggeredBy, triggerActor } = opts;
+  const { personaId, input, triggeredBy, triggerActor, actionContext } = opts;
 
   const [persona] = await db
     .select()
@@ -101,6 +112,18 @@ export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaRes
 
   if (!persona) throw new Error("Persona not found");
   if (!persona.isActive) throw new Error("Persona is not active");
+  if (persona.slug === "portal-automation-guardian") {
+    if (typeof actionContext?.submissionId !== "number") {
+      throw new Error(
+        "Portal Automation Guardian must be run from a specific portal submission",
+      );
+    }
+    if (!asArray(persona.toolsEnabled).includes("portal_fix_proposal")) {
+      throw new Error(
+        "Portal Automation Guardian is misconfigured: portal_fix_proposal tool is required",
+      );
+    }
+  }
 
   // Cost cap
   const cap = persona.monthlyCostCapUsd ? Number(persona.monthlyCostCapUsd) : null;
@@ -248,7 +271,7 @@ export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaRes
   // Dispatch tools
   const adminUserIds = await loadAdminUserIds();
   const enabledTools = asArray(persona.toolsEnabled);
-  const toolResults: { tool: string; queued: boolean; ok: boolean; detail: string }[] = [];
+  const toolResults: RunPersonaResult["toolResults"] = [];
 
   for (const key of enabledTools) {
     const tool = TOOL_REGISTRY[key];
@@ -268,19 +291,26 @@ export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaRes
     }
     if (tool.sideEffect) {
       // queue for approval
-      await db.insert(aiActionQueueTable).values({
-        personaId,
-        runId,
-        actionType: key,
-        payload: { output: outputText },
-        preview: outputText.slice(0, 400),
-        status: "pending_approval",
-      });
+      const [queuedAction] = await db
+        .insert(aiActionQueueTable)
+        .values({
+          personaId,
+          runId,
+          actionType: key,
+          payload: {
+            output: outputText,
+            context: actionContext ? redactPII(actionContext) : undefined,
+          },
+          preview: outputText.slice(0, 400),
+          status: "pending_approval",
+        })
+        .returning({ id: aiActionQueueTable.id });
       toolResults.push({
         tool: key,
         queued: true,
         ok: true,
         detail: "queued for admin approval",
+        actionId: queuedAction?.id,
       });
       continue;
     }

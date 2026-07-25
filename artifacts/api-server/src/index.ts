@@ -1663,10 +1663,44 @@ async function seedClaudeIntegration() {
           '["notification"]'::jsonb,
           'scheduled', '0 9 * * MON', NULL, '[]'::jsonb, false
         )
-      ON CONFLICT (slug) DO UPDATE SET is_active = true
+      ON CONFLICT (slug) DO NOTHING
     `);
   } catch (err) {
     console.error("[migrate] example ai_personas seed:", err);
+  }
+
+  // Step 2b6a: review-only Portal Automation Guardian. It is deliberately
+  // inactive on install; an admin must review its scope, event trigger and cost
+  // cap before activation. Conflict never overwrites admin configuration.
+  try {
+    await pool.query(`
+      INSERT INTO ai_personas
+        (name, slug, persona_type, description, provider, model, system_prompt,
+         guidelines, negative_prompt, allowed_data_scopes, tools_enabled,
+         trigger_mode, schedule_cron, event_subscriptions, output_targets,
+         monthly_cost_cap_usd, is_active)
+      VALUES
+        (
+          'Portal Automation Guardian',
+          'portal-automation-guardian',
+          'operator',
+          'Diagnoses Playwright portal failures from PII-safe evidence and creates review-only fix/spec proposals.',
+          'anthropic', 'claude-sonnet-4-6',
+          E'You are the Portal Automation Guardian for an international education platform. Diagnose deterministic Playwright failures using only supplied evidence. Return exactly one JSON object matching the requested contract. Your output is a proposal for human review, never an executed change.',
+          E'- Be evidence-bound and fail closed when uncertain\n- Prefer reusable adapter/spec fixes over student-specific workarounds\n- Set retrySafe=false when deduplication or remote portal state is unknown\n- Proposed JSON patches must use explicit JSON Pointer paths\n- Never include student PII, credentials, cookies, tokens, or signed URLs',
+          E'Do not operate the browser. Do not retry submissions. Do not claim a submission succeeded. Do not edit code or activate a spec. Do not invent selectors, portal responses, student data, or validation rules.',
+          '["portal_automation"]'::jsonb,
+          '["portal_fix_proposal"]'::jsonb,
+          'event_driven', NULL,
+          '["portal_submission.failed"]'::jsonb,
+          '["portal_diagnosis","approval_queue"]'::jsonb,
+          25.00,
+          false
+        )
+      ON CONFLICT (slug) DO NOTHING
+    `);
+  } catch (err) {
+    console.error("[migrate] portal automation guardian seed:", err);
   }
 
   // Step 2b7: Seed built-in Passport / Transcript extractor (idempotent via ON CONFLICT slug).
@@ -2955,6 +2989,10 @@ async function seedClaudeIntegration() {
     staggerStart("qualityScoringWorker", 37_000, async () => {
       const { startQualityScoringWorker } = await import("./lib/inbox/qualityScoring");
       startQualityScoringWorker();
+    });
+    staggerStart("portalAiGuardian", 40_000, async () => {
+      const { startPortalAiGuardianScanner } = await import("./lib/portalAiGuardian");
+      startPortalAiGuardianScanner();
     });
   }
 

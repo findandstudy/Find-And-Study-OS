@@ -115,12 +115,27 @@ const publishBlogTool: ToolDef = {
   },
 };
 
+const portalFixProposalTool: ToolDef = {
+  key: "portal_fix_proposal",
+  label: "Portal automation fix proposal",
+  description:
+    "Creates a review-only portal diagnosis/spec-patch proposal. Approval never edits code, retries a submission, or mutates a university portal.",
+  sideEffect: true,
+  async run() {
+    return {
+      ok: false,
+      detail: "Portal fix proposals are review-only and must remain in the approval queue",
+    };
+  },
+};
+
 export const TOOL_REGISTRY: Record<string, ToolDef> = {
   notification: notificationTool,
   internal_msg: internalMsgTool,
   blog_draft: blogDraftTool,
   send_email: sendEmailTool,
   publish_blog: publishBlogTool,
+  portal_fix_proposal: portalFixProposalTool,
 };
 
 export function listTools() {

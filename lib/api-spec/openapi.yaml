@@ -2714,6 +2714,51 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /portal-submissions/{id}/ai-diagnose:
+    post:
+      operationId: diagnosePortalSubmissionWithAi
+      tags: [portal-automation]
+      summary: Create a review-only AI diagnosis for a failed portal submission
+      description: >
+        Uses PII-safe failure evidence and creates an approval-queue proposal.
+        This endpoint never retries a submission or mutates a university portal,
+        application code, or an active adapter spec.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Diagnosis created or an identical diagnosis reused
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  guardian:
+                    type: object
+                    additionalProperties: true
+                required: [guardian]
+        "404":
+          description: Submission not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Guardian inactive, diagnosis in progress, or outcome not diagnosable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Daily Guardian run limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /portal-submissions/{id}/cancel:
     post:
       operationId: cancelPortalSubmission
