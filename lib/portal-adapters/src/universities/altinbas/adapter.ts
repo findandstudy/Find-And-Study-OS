@@ -86,6 +86,7 @@ import {
   decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
   parseAltinbasCanaryStage,
   redactAltinbasLog,
@@ -1144,6 +1145,61 @@ function altinbasUiDateCandidates(
   return [`${day}/${month}/${year}`];
 }
 
+async function readAltinbasUiDateProof(
+  page: any,
+  field: string,
+  expectedIso: string,
+) {
+  const currentControls = page.locator(`[name="${field}"]:visible`);
+  if ((await currentControls.count().catch(() => 0)) !== 1) return null;
+  return currentControls.first().evaluate(
+    (element: Element, iso: string) => {
+      const input = element as HTMLInputElement;
+      let node: Element | null = element;
+      let lightningInputValuePresent = false;
+      let lightningInputMatchesExpected = false;
+      let lightningInputValid = false;
+      let datepickerMatchesExpected = false;
+      let flowScreenValuePresent = false;
+      for (let depth = 0; depth < 12 && node; depth++) {
+        const candidateNode = node as Element & {
+          value?: unknown;
+          validity?: { valid?: boolean };
+        };
+        const tag = candidateNode.tagName.toLowerCase();
+        const valuePresent =
+          typeof candidateNode.value === "string" &&
+          candidateNode.value.trim().length > 0;
+        if (tag === "lightning-input") {
+          lightningInputValuePresent = valuePresent;
+          lightningInputMatchesExpected = candidateNode.value === iso;
+          lightningInputValid = candidateNode.validity?.valid === true;
+        }
+        if (tag === "lightning-datepicker") {
+          datepickerMatchesExpected = candidateNode.value === iso;
+        }
+        if (tag === "flowruntime-flow-screen-input") {
+          flowScreenValuePresent = valuePresent;
+        }
+        const root = node.getRootNode() as ShadowRoot | Document;
+        node = node.parentElement || ("host" in root ? root.host : null);
+      }
+      return {
+        ariaInvalid: input.getAttribute("aria-invalid") === "true",
+        valid: input.validity ? input.validity.valid : true,
+        nativeDateInput: (input.type || "").toLowerCase() === "date",
+        nativeValueMatchesExpected: (input.value || "").trim() === iso,
+        lightningInputValuePresent,
+        lightningInputMatchesExpected,
+        lightningInputValid,
+        datepickerMatchesExpected,
+        flowScreenValuePresent,
+      };
+    },
+    expectedIso,
+  ).catch(() => null);
+}
+
 /** Fill a UI date input and prove semantic (ISO) readback, not presentation. */
 async function fillAltinbasUiDateField(
   page: any,
@@ -1155,6 +1211,16 @@ async function fillAltinbasUiDateField(
   if (count !== 1) return { ok: false, field, reason: `control_count_${count}` };
   const control = controls.first();
   try {
+    if (iso) {
+      const existingProof = await readAltinbasUiDateProof(page, field, iso);
+      if (isAltinbasUiDateCommitted(existingProof)) {
+        logger.info(
+          `[altinbas][ui] date control reused exact saved value` +
+          ` (field=${field})`,
+        );
+        return { ok: true, field, reason: "existing_portal_value_proved" };
+      }
+    }
     const metadata = await control.evaluate((element: Element) => {
       const input = element as HTMLInputElement;
       return { type: input.type || "", placeholder: input.placeholder || "" };
@@ -1179,61 +1245,12 @@ async function fillAltinbasUiDateField(
       await control.dispatchEvent("blur").catch(() => {});
       await control.press("Tab").catch(() => {});
       await page.waitForTimeout(300);
-      const proof = await control.evaluate((element: Element, expectedIso: string) => {
-        const input = element as HTMLInputElement;
-        let node: Element | null = element;
-        let lightningInputValuePresent = false;
-        let lightningInputMatchesExpected = false;
-        let lightningInputValid = false;
-        let datepickerMatchesExpected = false;
-        let flowScreenValuePresent = false;
-        for (let depth = 0; depth < 12 && node; depth++) {
-          const candidateNode = node as Element & {
-            value?: unknown;
-            validity?: { valid?: boolean };
-          };
-          const tag = candidateNode.tagName.toLowerCase();
-          const valuePresent =
-            typeof candidateNode.value === "string" &&
-            candidateNode.value.trim().length > 0;
-          if (tag === "lightning-input") {
-            lightningInputValuePresent = valuePresent;
-            lightningInputMatchesExpected =
-              candidateNode.value === expectedIso;
-            lightningInputValid = candidateNode.validity?.valid === true;
-          }
-          if (tag === "lightning-datepicker") {
-            datepickerMatchesExpected =
-              candidateNode.value === expectedIso;
-          }
-          if (tag === "flowruntime-flow-screen-input") {
-            flowScreenValuePresent = valuePresent;
-          }
-          const root = node.getRootNode() as ShadowRoot | Document;
-          node =
-            node.parentElement ||
-            ("host" in root ? root.host : null);
-        }
-        return {
-          value: (input.value || "").trim(),
-          ariaInvalid: input.getAttribute("aria-invalid") === "true",
-          valid: input.validity ? input.validity.valid : true,
-          lightningInputValuePresent,
-          lightningInputMatchesExpected,
-          lightningInputValid,
-          datepickerMatchesExpected,
-          flowScreenValuePresent,
-        };
-      }, iso);
-      if (
-        !proof.ariaInvalid &&
-        proof.valid &&
-        proof.lightningInputValuePresent &&
-        proof.lightningInputMatchesExpected &&
-        proof.lightningInputValid &&
-        proof.datepickerMatchesExpected &&
-        proof.flowScreenValuePresent
-      ) {
+      // Re-resolve after Tab because Lightning may replace the native input
+      // while committing the controlled host value.
+      const proof = iso
+        ? await readAltinbasUiDateProof(page, field, iso)
+        : null;
+      if (isAltinbasUiDateCommitted(proof)) {
         logger.info(
           `[altinbas][ui] date control committed` +
           ` (field=${field}, type=${metadata.type || "text"},` +
@@ -1241,6 +1258,18 @@ async function fillAltinbasUiDateField(
         );
         return { ok: true, field, reason: "ok" };
       }
+      logger.warn(
+        `[altinbas][ui] date control proof failed` +
+        ` (field=${field}, ariaInvalid=${proof?.ariaInvalid ?? "missing"},` +
+        ` nativeValid=${proof?.valid ?? "missing"},` +
+        ` nativeDate=${proof?.nativeDateInput ?? "missing"},` +
+        ` nativeMatch=${proof?.nativeValueMatchesExpected ?? "missing"},` +
+        ` lightningPresent=${proof?.lightningInputValuePresent ?? "missing"},` +
+        ` lightningMatch=${proof?.lightningInputMatchesExpected ?? "missing"},` +
+        ` lightningValid=${proof?.lightningInputValid ?? "missing"},` +
+        ` datepickerMatch=${proof?.datepickerMatchesExpected ?? "missing"},` +
+        ` flowPresent=${proof?.flowScreenValuePresent ?? "missing"})`,
+      );
     }
     return { ok: false, field, reason: "date_readback_mismatch" };
   } catch (error) {
