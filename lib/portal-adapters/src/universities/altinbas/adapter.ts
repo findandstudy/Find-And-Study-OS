@@ -85,6 +85,7 @@ import {
   chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
   decideAltinbasEducationAddCandidate,
+  decideAltinbasUploadRefresh,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
   extractAltinbasFlowUploadedDocumentSlots,
@@ -3048,7 +3049,10 @@ async function completeApplicationUI(
   dryRun: boolean,
   result: SubmitResult,
   screenshots: string[],
-  options: { afterProgramCommit?: boolean } = {},
+  options: {
+    afterProgramCommit?: boolean;
+    uploadRefreshAttempted?: boolean;
+  } = {},
 ): Promise<boolean> {
   // Push captures into submit()'s own screenshots array so its
   // `if (screenshots.length) result.screenshots = screenshots;` picks them up.
@@ -3369,6 +3373,38 @@ async function completeApplicationUI(
     result.missingDocuments = [...(result.missingDocuments ?? []), ...missing];
     result.detail =
       `Altınbaş[ui]: required document upload doğrulanamadı — ${missing.join(",")}`;
+    logger.warn(`[altinbas][ui] ${result.detail}`);
+    result.screenshots = shots;
+    return true;
+  }
+  const refreshDecision = decideAltinbasUploadRefresh({
+    serverUploadedSlots: [...rt.uploadedDocumentSlots],
+    refreshAttempted: options.uploadRefreshAttempted === true,
+  });
+  if (refreshDecision === "reopen_once") {
+    logger.info(
+      `[altinbas][ui] Documents: local upload tamamlandı;` +
+      ` recordsCV sunucu kanıtı için wizard bir kez yeniden açılıyor`,
+    );
+    await page.waitForTimeout(2_500);
+    return completeApplicationUI(
+      page,
+      rt,
+      profile,
+      files,
+      dryRun,
+      result,
+      screenshots,
+      { ...options, uploadRefreshAttempted: true },
+    );
+  }
+  if (refreshDecision === "fail_closed") {
+    const serverMissing = (
+      ["passport", "diploma", "transcript", "photo"] as const
+    ).filter((slot) => !rt.uploadedDocumentSlots.has(slot));
+    result.detail =
+      `Altınbaş[ui]: upload sonrası recordsCV sunucu kanıtı eksik` +
+      ` — ${serverMissing.join(",")}`;
     logger.warn(`[altinbas][ui] ${result.detail}`);
     result.screenshots = shots;
     return true;
