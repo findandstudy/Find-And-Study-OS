@@ -868,6 +868,23 @@ test("AW22: resumed questionnaire reuses only a saved No answer", () => {
     resolveAltinbasVisaResumeAction({ crmValue: "", portalValue: "" }),
     "data_missing",
   );
+  assert.equal(
+    resolveAltinbasVisaResumeAction({
+      crmValue: "",
+      portalValue: "",
+      legacyDefaultNo: true,
+    }),
+    "select_no_from_policy",
+  );
+  assert.equal(
+    resolveAltinbasVisaResumeAction({
+      crmValue: "Yes",
+      portalValue: "",
+      legacyDefaultNo: true,
+    }),
+    "questionnaire_followup_unmapped",
+    "explicit CRM Yes is never overwritten by the historical default",
+  );
 });
 
 test("AW23: country picker ignores its labeled listbox and requires one actionable input", () => {
