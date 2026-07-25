@@ -13,7 +13,9 @@ export interface AdapterSpecVersion {
   enabled: boolean;
   source: AdapterSpecVersionSource;
   jsHookApproved: boolean;
+  privilegedApproved: boolean;
   hasJsHook: boolean;
+  privileged: boolean;
   createdBy: number | null;
   createdAt: Date;
   updatedAt: Date;

@@ -3591,7 +3591,9 @@ export const ListAdapterSpecsResponse = zod.object({
       versionCount: zod.number(),
       source: zod.enum(["builtin", "uploaded"]),
       jsHookApproved: zod.boolean(),
+      privilegedApproved: zod.boolean(),
       hasJsHook: zod.boolean(),
+      privileged: zod.boolean(),
       updatedAt: zod.date(),
     }),
   ),
@@ -3604,6 +3606,7 @@ export const UpsertAdapterSpecBody = zod.object({
   spec: zod.record(zod.string(), zod.unknown()),
   enable: zod.boolean().optional(),
   approveJsHook: zod.boolean().optional(),
+  approvePrivileged: zod.boolean().optional(),
 });
 
 /**
@@ -3618,6 +3621,7 @@ export const ValidateAdapterSpecResponse = zod.object({
   key: zod.string().optional(),
   name: zod.string().optional(),
   hasJsHook: zod.boolean().optional(),
+  privileged: zod.boolean().optional(),
   error: zod.string().optional(),
   message: zod.string().optional(),
   issues: zod
@@ -3646,7 +3650,9 @@ export const ListAdapterSpecVersionsResponse = zod.object({
       enabled: zod.boolean(),
       source: zod.enum(["builtin", "uploaded"]),
       jsHookApproved: zod.boolean(),
+      privilegedApproved: zod.boolean(),
       hasJsHook: zod.boolean(),
+      privileged: zod.boolean(),
       createdBy: zod.number().nullable(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
@@ -3666,12 +3672,14 @@ export const PatchAdapterSpecBody = zod.object({
   disable: zod.boolean().optional(),
   rollbackTo: zod.number().optional(),
   jsHookApproved: zod.boolean().optional(),
+  privilegedApproved: zod.boolean().optional(),
 });
 
 export const PatchAdapterSpecResponse = zod.object({
   key: zod.string(),
   enabledVersion: zod.number().nullable(),
   jsHookApproved: zod.boolean(),
+  privilegedApproved: zod.boolean(),
 });
 
 /**

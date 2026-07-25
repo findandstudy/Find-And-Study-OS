@@ -11,5 +11,6 @@ export interface UpsertAdapterSpecResponse {
   version: number;
   enabled: boolean;
   jsHookApproved: boolean;
+  privilegedApproved: boolean;
   hasJsHook: boolean;
 }

@@ -3295,7 +3295,9 @@ components:
         - versionCount
         - source
         - jsHookApproved
+        - privilegedApproved
         - hasJsHook
+        - privileged
         - updatedAt
       properties:
         key: { type: string }
@@ -3309,7 +3311,9 @@ components:
           type: string
           enum: [builtin, uploaded]
         jsHookApproved: { type: boolean }
+        privilegedApproved: { type: boolean }
         hasJsHook: { type: boolean }
+        privileged: { type: boolean }
         updatedAt: { type: string, format: date-time }
     AdapterSpecListResponse:
       type: object
@@ -3327,7 +3331,9 @@ components:
         - enabled
         - source
         - jsHookApproved
+        - privilegedApproved
         - hasJsHook
+        - privileged
         - createdBy
         - createdAt
         - updatedAt
@@ -3339,7 +3345,9 @@ components:
           type: string
           enum: [builtin, uploaded]
         jsHookApproved: { type: boolean }
+        privilegedApproved: { type: boolean }
         hasJsHook: { type: boolean }
+        privileged: { type: boolean }
         createdBy:
           type: integer
           nullable: true
@@ -3375,6 +3383,7 @@ components:
         key: { type: string }
         name: { type: string }
         hasJsHook: { type: boolean }
+        privileged: { type: boolean }
         error: { type: string }
         message: { type: string }
         issues:
@@ -3390,14 +3399,16 @@ components:
           additionalProperties: true
         enable: { type: boolean }
         approveJsHook: { type: boolean }
+        approvePrivileged: { type: boolean }
     UpsertAdapterSpecResponse:
       type: object
-      required: [key, version, enabled, jsHookApproved, hasJsHook]
+      required: [key, version, enabled, jsHookApproved, privilegedApproved, hasJsHook]
       properties:
         key: { type: string }
         version: { type: integer }
         enabled: { type: boolean }
         jsHookApproved: { type: boolean }
+        privilegedApproved: { type: boolean }
         hasJsHook: { type: boolean }
     PatchAdapterSpecBody:
       type: object
@@ -3406,15 +3417,17 @@ components:
         disable: { type: boolean }
         rollbackTo: { type: integer }
         jsHookApproved: { type: boolean }
+        privilegedApproved: { type: boolean }
     PatchAdapterSpecResponse:
       type: object
-      required: [key, enabledVersion, jsHookApproved]
+      required: [key, enabledVersion, jsHookApproved, privilegedApproved]
       properties:
         key: { type: string }
         enabledVersion:
           type: integer
           nullable: true
         jsHookApproved: { type: boolean }
+        privilegedApproved: { type: boolean }
     HealthStatus:
       type: object
       properties:

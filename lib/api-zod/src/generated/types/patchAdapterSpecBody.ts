@@ -11,4 +11,5 @@ export interface PatchAdapterSpecBody {
   disable?: boolean;
   rollbackTo?: number;
   jsHookApproved?: boolean;
+  privilegedApproved?: boolean;
 }

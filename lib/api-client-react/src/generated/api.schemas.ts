@@ -21,7 +21,9 @@ export interface AdapterSpecSummary {
   versionCount: number;
   source: AdapterSpecSummarySource;
   jsHookApproved: boolean;
+  privilegedApproved: boolean;
   hasJsHook: boolean;
+  privileged: boolean;
   updatedAt: string;
 }
 
@@ -43,7 +45,9 @@ export interface AdapterSpecVersion {
   enabled: boolean;
   source: AdapterSpecVersionSource;
   jsHookApproved: boolean;
+  privilegedApproved: boolean;
   hasJsHook: boolean;
+  privileged: boolean;
   createdBy: number | null;
   createdAt: string;
   updatedAt: string;
@@ -70,6 +74,7 @@ export interface AdapterSpecValidationResponse {
   key?: string;
   name?: string;
   hasJsHook?: boolean;
+  privileged?: boolean;
   error?: string;
   message?: string;
   issues?: AdapterSpecIssue[];
@@ -81,6 +86,7 @@ export interface UpsertAdapterSpecBody {
   spec: UpsertAdapterSpecBodySpec;
   enable?: boolean;
   approveJsHook?: boolean;
+  approvePrivileged?: boolean;
 }
 
 export interface UpsertAdapterSpecResponse {
@@ -88,6 +94,7 @@ export interface UpsertAdapterSpecResponse {
   version: number;
   enabled: boolean;
   jsHookApproved: boolean;
+  privilegedApproved: boolean;
   hasJsHook: boolean;
 }
 
@@ -96,12 +103,14 @@ export interface PatchAdapterSpecBody {
   disable?: boolean;
   rollbackTo?: number;
   jsHookApproved?: boolean;
+  privilegedApproved?: boolean;
 }
 
 export interface PatchAdapterSpecResponse {
   key: string;
   enabledVersion: number | null;
   jsHookApproved: boolean;
+  privilegedApproved: boolean;
 }
 
 export interface HealthStatus {

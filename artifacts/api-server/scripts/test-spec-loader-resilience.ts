@@ -18,6 +18,8 @@ import {
   loadSpecAdaptersFromDb,
   buildSpecAdaptersFromRows,
   __setDbSelectOverrideForTests,
+  resolveOverrideSpecAdapterByKey,
+  resolveOverrideSpecAdapterForUniversity,
 } from "../../../lib/portal-adapters/src/specLoader.js";
 
 // ---------------------------------------------------------------------------
@@ -58,6 +60,7 @@ function makeRow(overrides: Partial<PortalAdapterSpec> = {}): PortalAdapterSpec 
     enabled: true,
     source: "builtin",
     jsHookApproved: false,
+    privilegedApproved: false,
     spec: validRawSpec() as PortalAdapterSpec["spec"],
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -131,4 +134,40 @@ test("SLR5 — after throw, restoring normal override → subsequent call return
   assert.equal(second.length, 1, "should recover and return adapter on next successful call");
 
   __setDbSelectOverrideForTests(null);
+});
+
+test("SLR6 — v2 override resolves only with explicit privileged approval", async () => {
+  const spec = validRawSpec() as Record<string, unknown>;
+  spec.specVersion = 2;
+  spec.meta = {
+    ...(spec.meta as Record<string, unknown>),
+    resolution: "override",
+    dryRunPolicy: "strict",
+  };
+  const approved = makeRow({
+    spec,
+    enabled: true,
+    privilegedApproved: true,
+  });
+  __setDbSelectOverrideForTests(async () => [approved]);
+  try {
+    await loadSpecAdaptersFromDb(true);
+    assert.equal((await resolveOverrideSpecAdapterByKey("test_uni_slr"))?.key, "test_uni_slr");
+    assert.equal(
+      (await resolveOverrideSpecAdapterForUniversity("Test University SLR"))?.key,
+      "test_uni_slr",
+    );
+  } finally {
+    __setDbSelectOverrideForTests(null);
+  }
+
+  __setDbSelectOverrideForTests(async () => [
+    { ...approved, privilegedApproved: false },
+  ]);
+  try {
+    await loadSpecAdaptersFromDb(true);
+    assert.equal(await resolveOverrideSpecAdapterByKey("test_uni_slr"), null);
+  } finally {
+    __setDbSelectOverrideForTests(null);
+  }
 });

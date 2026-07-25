@@ -15,6 +15,8 @@ export interface AdapterSpecSummary {
   versionCount: number;
   source: AdapterSpecSummarySource;
   jsHookApproved: boolean;
+  privilegedApproved: boolean;
   hasJsHook: boolean;
+  privileged: boolean;
   updatedAt: Date;
 }

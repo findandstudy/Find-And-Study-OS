@@ -11,4 +11,5 @@ export interface UpsertAdapterSpecBody {
   spec: UpsertAdapterSpecBodySpec;
   enable?: boolean;
   approveJsHook?: boolean;
+  approvePrivileged?: boolean;
 }

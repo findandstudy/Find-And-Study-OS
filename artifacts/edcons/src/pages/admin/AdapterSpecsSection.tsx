@@ -48,6 +48,8 @@ interface SpecSummary {
   source: "builtin" | "uploaded";
   jsHookApproved: boolean;
   hasJsHook: boolean;
+  privilegedApproved: boolean;
+  privileged: boolean;
   updatedAt: string;
 }
 
@@ -58,6 +60,8 @@ interface SpecVersion {
   source: "builtin" | "uploaded";
   jsHookApproved: boolean;
   hasJsHook: boolean;
+  privilegedApproved: boolean;
+  privileged: boolean;
   createdBy: number | null;
   createdAt: string;
   updatedAt: string;
@@ -73,6 +77,7 @@ interface ValidationResponse {
   key?: string;
   name?: string;
   hasJsHook?: boolean;
+  privileged?: boolean;
   error?: string;
   message?: string;
   issues?: SpecIssue[];
@@ -93,8 +98,11 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
   const { t } = useI18n();
   const { toast } = useToast();
   const [json, setJson] = useState("");
-  const [enable, setEnable] = useState(true);
+  // New versions are inert by default. Validation/canary review must happen
+  // before an operator explicitly enables a runtime spec.
+  const [enable, setEnable] = useState(false);
   const [approveJsHook, setApproveJsHook] = useState(false);
+  const [approvePrivileged, setApprovePrivileged] = useState(false);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ValidationResponse | null>(null);
@@ -103,8 +111,9 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
   useEffect(() => {
     if (open) {
       setJson("");
-      setEnable(true);
+      setEnable(false);
       setApproveJsHook(false);
+      setApprovePrivileged(false);
       setResult(null);
     }
   }, [open]);
@@ -166,14 +175,21 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
       await customFetch("/api/portal-automation/adapter-specs", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ spec, enable, approveJsHook: approveJsHook && isSuperAdmin }),
+        body: JSON.stringify({
+          spec,
+          enable,
+          approveJsHook: approveJsHook && isSuperAdmin,
+          approvePrivileged: approvePrivileged && isSuperAdmin,
+        }),
       });
       toast({ title: t("portalAutomation.adapterSpecs.saveSuccess") });
       onSaved();
       onClose();
     } catch (err: unknown) {
       const body = (err as { body?: { error?: string } })?.body;
-      if (body?.error === "JSHOOK_FORBIDDEN") {
+      if (body?.error === "PRIVILEGED_APPROVAL_REQUIRED") {
+        toast({ title: t("portalAutomation.adapterSpecs.privilegedApprovalRequired"), variant: "destructive" });
+      } else if (body?.error === "JSHOOK_FORBIDDEN") {
         toast({ title: t("portalAutomation.adapterSpecs.jsHookForbidden"), variant: "destructive" });
       } else if (body?.error === "INVALID_SPEC") {
         toast({ title: t("portalAutomation.adapterSpecs.invalidSpec"), variant: "destructive" });
@@ -186,6 +202,7 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
   };
 
   const specHasJsHook = result?.ok === true && result.hasJsHook === true;
+  const specIsPrivileged = result?.ok === true && result.privileged === true;
   const canSave = json.trim().length > 0 && !saving && result?.ok === true;
 
   return (
@@ -247,6 +264,12 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
                     {t("portalAutomation.adapterSpecs.containsJsHook")}
                   </div>
                 )}
+                {result.privileged && (
+                  <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    {t("portalAutomation.adapterSpecs.containsPrivileged")}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-3 space-y-1.5">
@@ -289,6 +312,20 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
               <ShieldAlert className="h-3.5 w-3.5" />
               {t("portalAutomation.adapterSpecs.jsHookSuperAdminOnly")}
             </p>
+          )}
+
+          {specIsPrivileged && isSuperAdmin && (
+            <div className="flex items-center gap-3">
+              <Switch
+                id="spec-privileged"
+                checked={approvePrivileged}
+                onCheckedChange={setApprovePrivileged}
+              />
+              <Label htmlFor="spec-privileged" className="flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-amber-600" />
+                {t("portalAutomation.adapterSpecs.approvePrivileged")}
+              </Label>
+            </div>
           )}
         </div>
 

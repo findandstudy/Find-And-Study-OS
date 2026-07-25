@@ -3930,7 +3930,9 @@ router.get(
         versionCount: number;
         source: string;
         jsHookApproved: boolean;
+        privilegedApproved: boolean;
         hasJsHook: boolean;
+        privileged: boolean;
         updatedAt: Date;
       }
     >();
@@ -3945,7 +3947,9 @@ router.get(
           versionCount: 1,
           source: row.source,
           jsHookApproved: row.jsHookApproved,
+          privilegedApproved: row.privilegedApproved,
           hasJsHook: specHasJsHook(row.spec),
+          privileged: specIsPrivileged(row.spec),
           updatedAt: row.updatedAt,
         });
       } else {
@@ -3975,7 +3979,9 @@ router.get(
         enabled: row.enabled,
         source: row.source,
         jsHookApproved: row.jsHookApproved,
+        privilegedApproved: row.privilegedApproved,
         hasJsHook: specHasJsHook(row.spec),
+        privileged: specIsPrivileged(row.spec),
         createdBy: row.createdBy,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -4002,6 +4008,7 @@ router.post(
       key: parsed.spec.meta.key,
       name: parsed.spec.meta.name,
       hasJsHook: specHasJsHook(spec),
+      privileged: specIsPrivileged(spec),
     });
   },
 );
@@ -4098,6 +4105,7 @@ router.post(
       version: nextVersion,
       enabled: enable === true,
       jsHookApproved,
+      privilegedApproved,
       hasJsHook,
     });
   },
@@ -4189,6 +4197,7 @@ router.patch(
       key,
       enabledVersion: enabled?.version ?? null,
       jsHookApproved: refreshed[0]?.jsHookApproved ?? false,
+      privilegedApproved: refreshed[0]?.privilegedApproved ?? false,
     });
   },
 );

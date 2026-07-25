@@ -12,6 +12,7 @@ export interface AdapterSpecValidationResponse {
   key?: string;
   name?: string;
   hasJsHook?: boolean;
+  privileged?: boolean;
   error?: string;
   message?: string;
   issues?: AdapterSpecIssue[];

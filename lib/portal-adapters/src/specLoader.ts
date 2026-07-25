@@ -33,6 +33,23 @@ export function specRowAllowsJsHook(row: Pick<PortalAdapterSpec, "source" | "jsH
 }
 
 /**
+ * Defense-in-depth for code-adapter replacement. Merely uploading/enabling a
+ * v2 spec is insufficient: the parsed spec must request override resolution
+ * and the stored version must carry explicit super-admin privileged approval.
+ */
+export function specRowAllowsOverride(
+  row: Pick<PortalAdapterSpec, "spec" | "privilegedApproved" | "enabled">,
+): boolean {
+  if (!row.enabled || !row.privilegedApproved) return false;
+  const parsed = parseAdapterSpec(row.spec);
+  return (
+    parsed.ok &&
+    parsed.spec.specVersion === 2 &&
+    parsed.spec.meta.resolution === "override"
+  );
+}
+
+/**
  * Validates + converts a single enabled spec row into a UniversityAdapter.
  * Returns null (with a warning) when the stored spec fails validation.
  */
@@ -71,7 +88,11 @@ const TTL_MS = (() => {
   return Number.isFinite(n) && n >= 0 ? n : 30000;
 })();
 
-let cache: { at: number; list: UniversityAdapter[] } | null = null;
+let cache: {
+  at: number;
+  list: UniversityAdapter[];
+  overrideKeys: ReadonlySet<string>;
+} | null = null;
 let inflight: Promise<UniversityAdapter[]> | null = null;
 
 /** Drops the cached spec adapter list so the next resolution re-reads the DB. */
@@ -118,7 +139,10 @@ export async function loadSpecAdaptersFromDb(force = false): Promise<UniversityA
     try {
       const rows = await fetchEnabledSpecRows();
       const list = buildSpecAdaptersFromRows(rows);
-      cache = { at: Date.now(), list };
+      const overrideKeys = new Set(
+        rows.filter(specRowAllowsOverride).map((row) => row.key),
+      );
+      cache = { at: Date.now(), list, overrideKeys };
       return list;
     } catch (err) {
       logger.warn(`[specLoader] failed to load spec adapters from DB: ${String(err)}`);
@@ -143,6 +167,27 @@ export async function resolveSpecAdapterForUniversity(
 ): Promise<UniversityAdapter | null> {
   const list = await loadSpecAdaptersFromDb();
   return list.find((a) => a.matches(name)) ?? null;
+}
+
+/** Resolves only explicitly-approved v2 specs allowed to replace code. */
+export async function resolveOverrideSpecAdapterByKey(
+  key: string,
+): Promise<UniversityAdapter | null> {
+  const list = await loadSpecAdaptersFromDb();
+  if (!cache?.overrideKeys.has(key)) return null;
+  return list.find((adapter) => adapter.key === key) ?? null;
+}
+
+/** Name-based counterpart of resolveOverrideSpecAdapterByKey(). */
+export async function resolveOverrideSpecAdapterForUniversity(
+  name: string,
+): Promise<UniversityAdapter | null> {
+  const list = await loadSpecAdaptersFromDb();
+  return (
+    list.find(
+      (adapter) => cache?.overrideKeys.has(adapter.key) && adapter.matches(name),
+    ) ?? null
+  );
 }
 
 // ---------------------------------------------------------------------------

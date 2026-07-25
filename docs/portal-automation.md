@@ -170,13 +170,14 @@ curl -s "https://yourdomain.com/api/portal-submissions?applicationId=123" \
 
 ### 1 — Choose adapter type
 
-**Declarative (JSON)** — use when the portal follows a simple form-fill
-pattern that can be described without custom JS logic. Configured entirely
-in the Admin UI.
+**Adapter Spec v2 (JSON)** — preferred for new mappings. Supports guarded
+steps, resumable state machines, program/quota classification, profile
+fallback policy, strict dry-run and version rollback. See
+[`adapter-spec-v2.md`](./adapter-spec-v2.md).
 
-**Code adapter** — use when the portal requires custom navigation, multi-step
-flows, file uploads, or CAPTCHA handling. Requires a TypeScript file in
-`lib/portal-adapters/src/universities/<key>/adapter.ts`.
+**Code/protocol driver** — use only for mechanics the spec runtime cannot yet
+express, such as CAPTCHA or encrypted server-chained flow protocols. Portal
+field mapping and business policy should remain in a spec wherever possible.
 
 ### 2 — Register in Admin UI
 

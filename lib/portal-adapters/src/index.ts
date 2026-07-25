@@ -125,6 +125,11 @@ export {
   type SpecStep,
   type SpecParseResult,
   type SpecIssue,
+  type SpecCondition,
+  type WorkflowState,
+  type SpecWorkflow,
+  type ProfilePolicy,
+  type OutcomeRule,
 } from "./declarative/schema.js";
 
 export {
@@ -132,7 +137,16 @@ export {
   resolveProfileValue,
   applyTransform,
   resolveProgramValue,
+  enumerateProgramOptions,
+  enumerateProgramCatalog,
   classifyResult,
+  evaluateCondition,
+  isMutatingSpecStep,
+  detectStableWorkflowState,
+  runSpecWorkflow,
+  applyProfilePolicy,
+  classifyOutcomeRules,
+  type ProfilePolicyResult,
   type SpecPage,
 } from "./declarative/interpreter.js";
 
@@ -141,9 +155,12 @@ export {
   invalidateSpecAdapterCache,
   resolveSpecAdapterByKey,
   resolveSpecAdapterForUniversity,
+  resolveOverrideSpecAdapterByKey,
+  resolveOverrideSpecAdapterForUniversity,
   buildSpecAdapterFromRow,
   buildSpecAdaptersFromRows,
   specRowAllowsJsHook,
+  specRowAllowsOverride,
   listSpecVersions,
   maxSpecVersion,
   enabledSpecVersion,

@@ -35,12 +35,19 @@ import {
   classifyResult,
   executeSpecStep,
   runSpecSteps,
+  evaluateCondition,
+  isMutatingSpecStep,
+  detectStableWorkflowState,
+  runSpecWorkflow,
+  applyProfilePolicy,
+  classifyOutcomeRules,
   createSpecAdapter,
   type SpecPage,
   type StepContext,
 } from "../src/declarative/interpreter.js";
 import {
   specRowAllowsJsHook,
+  specRowAllowsOverride,
   buildSpecAdapterFromRow,
 } from "../src/specLoader.js";
 import type { SubmitProfile, SubmitFiles, ProgramOption } from "../src/types.js";
@@ -111,7 +118,9 @@ function ctx(over: Partial<StepContext> = {}): StepContext {
   return {
     profile: TEST_PROFILE,
     files: TEST_FILES,
-    documentSlots: { slots: { passport: { fileField: "passport" } } },
+    documentSlots: {
+      slots: { passport: { fileField: "passport", required: true } },
+    },
     allowJsHook: false,
     vars: {},
     captured: {},
@@ -324,9 +333,16 @@ test("STP5: upload resolves slot → file path", async () => {
   assert.deepEqual([calls[0].method, calls[0].args[1]], ["setInputFiles", "/tmp/passport.pdf"]);
 });
 
-test("STP6: upload with no file for slot is skipped (no throw)", async () => {
+test("STP6: upload with no required file fails closed before setInputFiles", async () => {
   const { page, calls } = makeMockPage();
-  await executeSpecStep(page, { action: "upload", selector: "#f", slot: "transcript" }, ctx());
+  await assert.rejects(
+    executeSpecStep(
+      page,
+      { action: "upload", selector: "#f", slot: "transcript" },
+      ctx(),
+    ),
+    /data_missing.*transcript/,
+  );
   assert.equal(calls.length, 0, "no setInputFiles when slot has no file");
 });
 
@@ -911,3 +927,769 @@ test("PRIV1: new UI actions are not in the privileged set (specIsPrivileged)", (
 // ALTINBAS1 / ALTINBAS2 removed: altinbas reverted to imperative adapter;
 // no longer present in declarativeSpecRaws. Coverage now lives in TR11
 // (test-registry.ts) which checks family="altinbas" + name-matching.
+
+// ---------------------------------------------------------------------------
+// SPEC V2 — guarded state machine, strict dry-run and override authorization
+// ---------------------------------------------------------------------------
+
+function validV2Spec(): Record<string, unknown> {
+  const base = validRawSpec() as Record<string, unknown>;
+  base.specVersion = 2;
+  base.meta = {
+    ...(base.meta as Record<string, unknown>),
+    resolution: "override",
+    dryRunPolicy: "strict",
+  };
+  base.steps = [
+    { action: "navigate", url: "https://apply.test-uni.example.com/apply" },
+  ];
+  base.workflow = {
+    stableReads: 2,
+    settleMs: 0,
+    maxTransitions: 5,
+    states: [
+      {
+        id: "Personal Information",
+        detect: {
+          conditions: [
+            {
+              source: "selectorText",
+              selector: ".slds-path__stage-name",
+              operator: "equals",
+              value: "Stage: Personal Information",
+            },
+          ],
+        },
+        steps: [
+          {
+            action: "fill",
+            selector: "#firstName",
+            valueFrom: "profile.firstName",
+            when: {
+              source: "profile",
+              path: "firstName",
+              operator: "notEmpty",
+            },
+          },
+          { action: "click", selector: "button.next" },
+        ],
+        transitions: [
+          {
+            to: "Completed",
+            conditions: [
+              {
+                source: "selectorText",
+                selector: ".slds-path__stage-name",
+                operator: "equals",
+                value: "Stage: Completed",
+              },
+            ],
+          },
+        ],
+        maxRetries: 1,
+      },
+      {
+        id: "Completed",
+        detect: {
+          conditions: [
+            {
+              source: "selectorText",
+              selector: ".slds-path__stage-name",
+              operator: "equals",
+              value: "Stage: Completed",
+            },
+          ],
+        },
+        terminal: true,
+      },
+    ],
+  };
+  return base;
+}
+
+test("V2-SV1: v2 workflow parses and override is privileged", () => {
+  const raw = validV2Spec();
+  const parsed = parseAdapterSpec(raw);
+  assert.equal(parsed.ok, true);
+  assert.equal(specIsPrivileged(raw), true, "code override requires privileged approval");
+});
+
+test("V2-SV2: v1 cannot request code-adapter override", () => {
+  const raw = validRawSpec() as Record<string, unknown>;
+  (raw.meta as Record<string, unknown>).resolution = "override";
+  const parsed = parseAdapterSpec(raw);
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.ok(parsed.issues.some((issue) => issue.path === "meta.resolution"));
+  }
+});
+
+test("V2-SV3: workflow rejects an unknown transition target", () => {
+  const raw = validV2Spec();
+  const workflow = raw.workflow as {
+    states: Array<{ transitions?: Array<{ to: string }> }>;
+  };
+  workflow.states[0].transitions![0].to = "Nonexistent";
+  const parsed = parseAdapterSpec(raw);
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.ok(parsed.issues.some((issue) => /unknown workflow target/.test(issue.message)));
+  }
+});
+
+test("V2-SV4: jsHook and privileged actions are discovered inside workflow states", () => {
+  const raw = validV2Spec();
+  const workflow = raw.workflow as {
+    states: Array<{ steps?: Array<Record<string, unknown>> }>;
+  };
+  workflow.states[0].steps!.push({ action: "jsHook", script: "window.scrollTo(0,0)" });
+  assert.equal(specHasJsHook(raw), true);
+  assert.equal(specIsPrivileged(raw), true);
+});
+
+test("V2-SV5: unreadable or incomplete conditions fail schema validation", () => {
+  const raw = validV2Spec();
+  const workflow = raw.workflow as {
+    states: Array<{
+      detect: { conditions: Array<Record<string, unknown>> };
+    }>;
+  };
+  delete workflow.states[0].detect.conditions[0].selector;
+  const parsed = parseAdapterSpec(raw);
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.ok(
+      parsed.issues.some(
+        (issue) => issue.path.endsWith("detect.conditions.0.selector"),
+      ),
+    );
+  }
+});
+
+test("V2-SV6: static program selection requires an authored option catalog", () => {
+  const raw = validV2Spec();
+  raw.programSelection = { source: "static" };
+  (raw.steps as unknown[]).push({ action: "selectProgram", selector: "#program" });
+  const parsed = parseAdapterSpec(raw);
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.ok(
+      parsed.issues.some((issue) =>
+        issue.path.endsWith("programSelection.options"),
+      ),
+    );
+  }
+});
+
+test("V2-SV7: profile defaults require one source and profile-only conditions", () => {
+  const raw = validV2Spec();
+  raw.profilePolicy = {
+    defaults: [
+      {
+        field: "cityOfBirth",
+        value: "Istanbul",
+        valueFrom: "profile.addressCity",
+        reason: "legacy_policy",
+      },
+      {
+        field: "visaSupport",
+        value: "No",
+        reason: "legacy_policy",
+        when: {
+          source: "selectorExists",
+          selector: ".wizard",
+          operator: "exists",
+        },
+      },
+    ],
+  };
+  const parsed = parseAdapterSpec(raw);
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.ok(parsed.issues.some((issue) => /exactly one/.test(issue.message)));
+    assert.ok(parsed.issues.some((issue) => /source=profile/.test(issue.message)));
+  }
+});
+
+test("V2-SV8: required upload needs portal/server success proof", () => {
+  const raw = validV2Spec();
+  delete raw.workflow;
+  raw.steps = [
+    { action: "upload", selector: "#passport", slot: "passport" },
+  ];
+  const parsed = parseAdapterSpec(raw);
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.ok(
+      parsed.issues.some((issue) =>
+        /requires responseUrlContains or successSelector proof/.test(issue.message),
+      ),
+    );
+  }
+});
+
+test("V2-SV9: upload proof text cannot exist without its proof source", () => {
+  const raw = validV2Spec();
+  delete raw.workflow;
+  raw.steps = [
+    {
+      action: "upload",
+      selector: "#passport",
+      slot: "passport",
+      proof: {
+        responseTextIncludes: '"success":true',
+        successText: "Uploaded",
+      },
+    },
+  ];
+  const parsed = parseAdapterSpec(raw);
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.ok(
+      parsed.issues.some((issue) =>
+        issue.path.endsWith("proof.responseUrlContains"),
+      ),
+    );
+    assert.ok(
+      parsed.issues.some((issue) =>
+        issue.path.endsWith("proof.successSelector"),
+      ),
+    );
+  }
+});
+
+test("V2-COND1: profile condition gates a fill step", async () => {
+  const { page, calls } = makeMockPage();
+  await executeSpecStep(
+    page,
+    {
+      action: "fill",
+      selector: "#city",
+      valueFrom: "profile.cityOfBirth",
+      when: {
+        source: "profile",
+        path: "cityOfBirth",
+        operator: "notEmpty",
+      },
+    },
+    ctx({ profile: { ...TEST_PROFILE, cityOfBirth: undefined } }),
+  );
+  assert.equal(calls.filter((call) => call.method === "fill").length, 0);
+});
+
+test("V2-COND2: selector text and interpolated expected values are read-only", async () => {
+  const { page } = makeMockPage({
+    textContent: async () => "Computer Engineering",
+  });
+  const matched = await evaluateCondition(
+    page,
+    {
+      source: "selectorText",
+      selector: ".program",
+      operator: "equals",
+      value: "{{profile.programName}}",
+    },
+    ctx(),
+  );
+  assert.equal(matched, true);
+});
+
+test("V2-RB1: fill exact readback accepts matching value and rejects mismatch", async () => {
+  const matching = makeMockPage({
+    inputValue: async () => "Ali",
+    getAttribute: async () => "false",
+  });
+  await executeSpecStep(
+    matching.page,
+    {
+      action: "fill",
+      selector: "#name",
+      valueFrom: "profile.firstName",
+      readback: {
+        source: "value",
+        comparison: "exact",
+        rejectAriaInvalid: true,
+      },
+    },
+    ctx(),
+  );
+  const mismatch = makeMockPage({
+    inputValue: async () => "Different",
+    getAttribute: async () => "false",
+  });
+  await assert.rejects(
+    executeSpecStep(
+      mismatch.page,
+      {
+        action: "fill",
+        selector: "#name",
+        valueFrom: "profile.firstName",
+        readback: {
+          source: "value",
+          comparison: "exact",
+          rejectAriaInvalid: true,
+        },
+      },
+      ctx(),
+    ),
+    /readback did not match/,
+  );
+});
+
+test("V2-RB2: readback rejects aria-invalid even when value matches", async () => {
+  const { page } = makeMockPage({
+    inputValue: async () => "Ali",
+    getAttribute: async () => "true",
+  });
+  await assert.rejects(
+    executeSpecStep(
+      page,
+      {
+        action: "fill",
+        selector: "#name",
+        valueFrom: "profile.firstName",
+        readback: {
+          source: "value",
+          comparison: "exact",
+          rejectAriaInvalid: true,
+        },
+      },
+      ctx(),
+    ),
+    /aria-invalid/,
+  );
+});
+
+test("V2-UP1: upload is recorded only after filename and server proofs pass", async () => {
+  const stepCtx = ctx({ uploadedSlots: new Set<string>() });
+  const { page, calls } = makeMockPage({
+    inputValue: async () => "C:\\fakepath\\passport.pdf",
+    waitForResponse: async (predicate) => {
+      const response = {
+        url: () => "https://apply.test-uni.example.com/api/documents/upload",
+        status: () => 201,
+        text: async () => '{"success":true}',
+      };
+      assert.equal(predicate(response), true);
+      return response;
+    },
+  });
+  await executeSpecStep(
+    page,
+    {
+      action: "upload",
+      selector: "#passport",
+      slot: "passport",
+      proof: {
+        localFileName: true,
+        responseUrlContains: "/documents/upload",
+        responseTextIncludes: '"success":true',
+        timeoutMs: 1000,
+      },
+    },
+    stepCtx,
+  );
+  assert.equal(calls.filter((call) => call.method === "setInputFiles").length, 1);
+  assert.deepEqual([...stepCtx.uploadedSlots!], ["passport"]);
+});
+
+test("V2-UP2: non-2xx upload response never records the document slot", async () => {
+  const stepCtx = ctx({ uploadedSlots: new Set<string>() });
+  const { page } = makeMockPage({
+    inputValue: async () => "passport.pdf",
+    waitForResponse: async () => ({
+      url: () => "https://apply.test-uni.example.com/api/documents/upload",
+      status: () => 500,
+      text: async () => "failed",
+    }),
+  });
+  await assert.rejects(
+    executeSpecStep(
+      page,
+      {
+        action: "upload",
+        selector: "#passport",
+        slot: "passport",
+        proof: {
+          localFileName: true,
+          responseUrlContains: "/documents/upload",
+          timeoutMs: 1000,
+        },
+      },
+      stepCtx,
+    ),
+    /upload response failed.*status=500/,
+  );
+  assert.deepEqual([...stepCtx.uploadedSlots!], []);
+});
+
+test("V2-CLICK1: CSS and role clicks fail closed unless the target is unique", async () => {
+  const css = makeMockPage({
+    $$eval: async <T>() => (2 as unknown as T),
+  });
+  await assert.rejects(
+    executeSpecStep(
+      css.page,
+      { action: "click", selector: ".next", requireUnique: true },
+      ctx(),
+    ),
+    /not unique/,
+  );
+
+  const calls: Call[] = [];
+  const role = makeMockPage({
+    getByRole: () => ({
+      count: async () => 1,
+      click: async () => {
+        calls.push({ method: "roleClick", args: [] });
+      },
+    }),
+  });
+  await executeSpecStep(
+    role.page,
+    {
+      action: "clickRole",
+      role: "button",
+      name: "Next",
+      exact: true,
+    },
+    ctx(),
+  );
+  assert.equal(calls.length, 1);
+});
+
+test("V2-POL1: explicit defaults fill only blanks and required runs afterward", () => {
+  const result = applyProfilePolicy(
+    { ...TEST_PROFILE, cityOfBirth: undefined, visaSupport: "Yes" },
+    {
+      defaults: [
+        {
+          field: "cityOfBirth",
+          valueFrom: "profile.address",
+          reason: "approved_legacy_address_policy",
+        },
+        {
+          field: "visaSupport",
+          value: "No",
+          reason: "approved_legacy_no_policy",
+        },
+      ],
+      required: [
+        { field: "cityOfBirth", message: "birth city unavailable" },
+        {
+          field: "eduDegree",
+          message: "graduate education degree unavailable",
+          when: {
+            source: "profile",
+            path: "level",
+            operator: "contains",
+            value: "master",
+            caseInsensitive: true,
+          },
+        },
+      ],
+    },
+  );
+  assert.equal(result.profile.cityOfBirth, "Istanbul");
+  assert.equal(result.profile.visaSupport, "Yes", "nonblank source is never overwritten");
+  assert.equal(result.defaultsApplied.length, 1);
+  assert.equal(result.missing.length, 0, "Bachelor does not trigger Master-only rule");
+});
+
+test("V2-POL2: preflight blocks before the first portal mutation", async () => {
+  const raw = validV2Spec();
+  delete raw.workflow;
+  raw.steps = [{ action: "click", selector: "#mutating-next" }];
+  raw.profilePolicy = {
+    required: [
+      { field: "cityOfBirth", message: "birth city unavailable" },
+    ],
+  };
+  const parsed = parseAdapterSpec(raw);
+  if (!parsed.ok) throw new Error(parsed.error);
+  const adapter = createSpecAdapter(parsed.spec);
+  const { page, calls } = makeMockPage();
+  await assert.rejects(
+    adapter.submit(
+      { page: page as never, close: async () => undefined },
+      { ...TEST_PROFILE, cityOfBirth: undefined },
+      TEST_FILES,
+      true,
+    ),
+    /data_missing.*cityOfBirth/,
+  );
+  assert.equal(calls.filter((call) => call.method === "click").length, 0);
+});
+
+test("V2-DRY1: strict dry-run skips every DOM mutation but keeps read-only steps", async () => {
+  const { page, calls } = makeMockPage({ _hasEl: true });
+  const steps = [
+    { action: "navigate", url: "https://e.com/apply" },
+    { action: "fill", selector: "#name", valueFrom: "profile.firstName" },
+    { action: "upload", selector: "#passport", slot: "passport" },
+    { action: "click", selector: "#next" },
+    {
+      action: "assert",
+      condition: {
+        source: "selectorExists",
+        selector: ".wizard",
+        operator: "exists",
+      },
+      message: "wizard missing",
+    },
+  ] as const;
+  await runSpecSteps(
+    page,
+    [...steps],
+    ctx({ dryRun: true, dryRunPolicy: "strict" }),
+    true,
+  );
+  assert.equal(calls.filter((call) => call.method === "goto").length, 1);
+  assert.equal(calls.filter((call) => call.method === "$").length, 1);
+  assert.equal(calls.filter((call) => call.method === "fill").length, 0);
+  assert.equal(calls.filter((call) => call.method === "setInputFiles").length, 0);
+  assert.equal(calls.filter((call) => call.method === "click").length, 0);
+  assert.equal(isMutatingSpecStep(steps[1]), true);
+  assert.equal(isMutatingSpecStep(steps[4]), false);
+});
+
+test("V2-PROG1: selectProgram uses exact/static option and captures proof", async () => {
+  const { page, calls } = makeMockPage();
+  const stepCtx = ctx({
+    programSelection: {
+      source: "static",
+      options: [
+        { value: "portal-42", label: "Computer Engineering", enabled: true },
+      ],
+    },
+  });
+  await executeSpecStep(
+    page,
+    { action: "selectProgram", selector: "#program" },
+    stepCtx,
+  );
+  const selectCall = calls.find((call) => call.method === "selectOption");
+  assert.deepEqual(selectCall?.args, ["#program", "portal-42"]);
+  assert.equal(stepCtx.captured.selectedProgramValue, "portal-42");
+  assert.equal(stepCtx.captured.selectedProgramConfidence, 1);
+});
+
+test("V2-PROG2: selectProgram enumerates live options and fails closed below threshold", async () => {
+  const { page } = makeMockPage({
+    $$eval: async <T>() =>
+      ([{ value: "x", name: "Unrelated Programme", enabled: true }] as unknown as T),
+  });
+  await assert.rejects(
+    executeSpecStep(
+      page,
+      { action: "selectProgram", selector: "#program" },
+      ctx({
+        programSelection: {
+          source: "ajaxOptions",
+          selector: "#program",
+          fuzzyThreshold: 0.99,
+        },
+      }),
+    ),
+    /program_missing/,
+  );
+});
+
+test("V2-PROG3: adapter returns structured programFull for a disabled exact match", async () => {
+  const raw = validV2Spec();
+  delete raw.workflow;
+  raw.steps = [{ action: "selectProgram", selector: "#program" }];
+  raw.programSelection = {
+    source: "static",
+    options: [
+      {
+        value: "portal-42",
+        label: "Computer Engineering",
+        enabled: false,
+      },
+    ],
+  };
+  const parsed = parseAdapterSpec(raw);
+  if (!parsed.ok) throw new Error(parsed.error);
+  const adapter = createSpecAdapter(parsed.spec);
+  const { page } = makeMockPage();
+  const result = await adapter.submit(
+    { page: page as never, close: async () => undefined },
+    TEST_PROFILE,
+    TEST_FILES,
+    true,
+  );
+  assert.equal(result.programFull, true);
+  assert.equal(result.requestedProgram?.value, "portal-42");
+  assert.equal(result.openPrograms?.[0].enabled, false);
+});
+
+test("V2-PROG4: adapter returns programMissing with catalog proof for no match", async () => {
+  const raw = validV2Spec();
+  delete raw.workflow;
+  raw.steps = [{ action: "selectProgram", selector: "#program" }];
+  raw.programSelection = {
+    source: "static",
+    fuzzyThreshold: 0.99,
+    options: [
+      {
+        value: "other",
+        label: "Unrelated Programme",
+        enabled: true,
+      },
+    ],
+  };
+  const parsed = parseAdapterSpec(raw);
+  if (!parsed.ok) throw new Error(parsed.error);
+  const adapter = createSpecAdapter(parsed.spec);
+  const { page } = makeMockPage();
+  const result = await adapter.submit(
+    { page: page as never, close: async () => undefined },
+    TEST_PROFILE,
+    TEST_FILES,
+    true,
+  );
+  assert.equal(result.programMissing, true);
+  assert.equal(result.resolution, "not_in_dropdown");
+  assert.equal(result.availablePrograms?.[0].name, "Unrelated Programme");
+});
+
+test("V2-OUT1: ordered outcome rules classify submitted/already/full fail-closed", async () => {
+  const raw = validV2Spec();
+  raw.outcomes = [
+    {
+      outcome: "alreadyExists",
+      detail: "portal duplicate proof",
+      detect: {
+        conditions: [
+          {
+            source: "selectorText",
+            selector: ".status",
+            operator: "contains",
+            value: "already registered",
+            caseInsensitive: true,
+          },
+        ],
+      },
+    },
+    {
+      outcome: "programFull",
+      detect: {
+        conditions: [
+          {
+            source: "selectorText",
+            selector: ".status",
+            operator: "contains",
+            value: "full quota",
+            caseInsensitive: true,
+          },
+        ],
+      },
+    },
+    {
+      outcome: "submitted",
+      externalRefFrom: { source: "captured", path: "applicationId" },
+      detect: {
+        conditions: [
+          {
+            source: "captured",
+            path: "status",
+            operator: "equals",
+            value: "Evaluation",
+          },
+        ],
+      },
+    },
+  ];
+  const parsed = parseAdapterSpec(raw);
+  if (!parsed.ok || !parsed.spec.outcomes) throw new Error("outcome fixture invalid");
+
+  const duplicatePage = makeMockPage({
+    textContent: async () => "Student already registered",
+  }).page;
+  const duplicate = await classifyOutcomeRules(
+    duplicatePage,
+    parsed.spec.outcomes,
+    ctx(),
+  );
+  assert.equal(duplicate.alreadyExists, true);
+
+  const submitted = await classifyOutcomeRules(
+    makeMockPage({ textContent: async () => "" }).page,
+    parsed.spec.outcomes,
+    ctx({ captured: { status: "Evaluation", applicationId: "APP-42" } }),
+  );
+  assert.equal(submitted.submitted, true);
+  assert.equal(submitted.externalRef, "APP-42");
+
+  const unknown = await classifyOutcomeRules(
+    makeMockPage({ textContent: async () => "Unknown" }).page,
+    parsed.spec.outcomes,
+    ctx(),
+  );
+  assert.equal(unknown.submitted, false);
+  assert.match(unknown.detail ?? "", /unproved/);
+});
+
+test("V2-WF1: state changes only after stable detection + authored transition", async () => {
+  const parsed = parseAdapterSpec(validV2Spec());
+  if (!parsed.ok || !parsed.spec.workflow) throw new Error("v2 fixture invalid");
+  let stage = "Stage: Personal Information";
+  const { page, calls } = makeMockPage({
+    textContent: async () => stage,
+    click: async (...args) => {
+      calls.push({ method: "click", args });
+      stage = "Stage: Completed";
+    },
+    waitForTimeout: async () => undefined,
+  });
+  const terminal = await runSpecWorkflow(page, parsed.spec.workflow, ctx());
+  assert.equal(terminal, "Completed");
+  assert.equal(calls.filter((call) => call.method === "click").length, 1);
+});
+
+test("V2-WF2: same validated state retries within its bound, then fails closed", async () => {
+  const parsed = parseAdapterSpec(validV2Spec());
+  if (!parsed.ok || !parsed.spec.workflow) throw new Error("v2 fixture invalid");
+  const { page, calls } = makeMockPage({
+    textContent: async () => "Stage: Personal Information",
+    waitForTimeout: async () => undefined,
+  });
+  await assert.rejects(
+    runSpecWorkflow(page, parsed.spec.workflow, ctx()),
+    /did not advance after 2 attempt/,
+  );
+  assert.equal(calls.filter((call) => call.method === "click").length, 2);
+});
+
+test("V2-WF3: strict dry-run proves current state and performs zero workflow mutation", async () => {
+  const parsed = parseAdapterSpec(validV2Spec());
+  if (!parsed.ok || !parsed.spec.workflow) throw new Error("v2 fixture invalid");
+  const { page, calls } = makeMockPage({
+    textContent: async () => "Stage: Personal Information",
+    waitForTimeout: async () => undefined,
+  });
+  const state = await runSpecWorkflow(
+    page,
+    parsed.spec.workflow,
+    ctx({ dryRun: true, dryRunPolicy: "strict" }),
+  );
+  assert.equal(state, "Personal Information");
+  assert.equal(calls.filter((call) => call.method === "fill").length, 0);
+  assert.equal(calls.filter((call) => call.method === "click").length, 0);
+});
+
+test("V2-ROW1: override requires enabled + privilegedApproved + v2 override spec", () => {
+  const row = makeSpecRow({
+    spec: validV2Spec(),
+    enabled: true,
+    privilegedApproved: true,
+  });
+  assert.equal(specRowAllowsOverride(row), true);
+  assert.equal(specRowAllowsOverride({ ...row, privilegedApproved: false }), false);
+  assert.equal(specRowAllowsOverride({ ...row, enabled: false }), false);
+  assert.equal(
+    specRowAllowsOverride({ ...row, spec: validRawSpec() as Record<string, unknown> }),
+    false,
+  );
+});

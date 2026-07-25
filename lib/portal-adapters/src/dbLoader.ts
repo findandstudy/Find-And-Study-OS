@@ -32,6 +32,8 @@ import { PROFILE_FIELDS, FILE_FIELDS, isSafePortalUrl } from "./shared.js";
 import {
   resolveSpecAdapterByKey,
   resolveSpecAdapterForUniversity,
+  resolveOverrideSpecAdapterByKey,
+  resolveOverrideSpecAdapterForUniversity,
 } from "./specLoader.js";
 
 // PROFILE_FIELDS / FILE_FIELDS / isSafePortalUrl moved to ./shared.js (a leaf
@@ -347,16 +349,19 @@ export async function loadDeclarativeAdaptersFromDb(
 }
 
 // ---------------------------------------------------------------------------
-// Merged resolution — code adapters always win
+// Merged resolution — explicitly-approved v2 override, then code, then DB
 // ---------------------------------------------------------------------------
 
 /**
- * Resolves an adapter by key. Code adapters take priority; DB declarative
- * adapters are consulted only when no code adapter matches.
+ * Resolves an adapter by key. An enabled v2 spec may replace a code adapter
+ * only when it requests meta.resolution="override" AND its stored version has
+ * super-admin privileged approval. Otherwise the historical priority remains.
  */
 export async function resolveAdapterByKey(
   key: string,
 ): Promise<UniversityAdapter | null> {
+  const override = await resolveOverrideSpecAdapterByKey(key);
+  if (override) return override;
   const code = adapterByKey(key);
   if (code) return code;
   const dbList = await loadDeclarativeAdaptersFromDb();
@@ -373,6 +378,8 @@ export async function resolveAdapterByKey(
 export async function resolveAdapterForUniversity(
   name: string,
 ): Promise<UniversityAdapter | null> {
+  const override = await resolveOverrideSpecAdapterForUniversity(name);
+  if (override) return override;
   const code = adapterForUniversity(name);
   if (code) return code;
   const dbList = await loadDeclarativeAdaptersFromDb();
