@@ -12,6 +12,7 @@ import {
   chooseAltinbasApplicantGridRow,
   chooseAltinbasApplicationRow,
   chooseAltinbasLabeledCombobox,
+  decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
   missingAltinbasPersonalFields,
@@ -315,6 +316,73 @@ test("AW14c: incomplete historical education inherits real legacy fields without
     currentYear: 2026,
   });
   assert.equal(noSchool.schoolName, null);
+});
+
+test("AW14d: education add control requires a unique nearest composed-tree candidate", () => {
+  assert.deepEqual(
+    decideAltinbasEducationAddCandidate([
+      {
+        id: "calendar",
+        distance: 2,
+        semantic: false,
+        genericIcon: true,
+        excluded: true,
+      },
+      {
+        id: "education-add",
+        distance: 3,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+      },
+      {
+        id: "far-icon",
+        distance: 9,
+        semantic: false,
+        genericIcon: true,
+        excluded: false,
+      },
+    ]),
+    { id: "education-add", proof: "semantic", reason: "ok" },
+  );
+  assert.deepEqual(
+    decideAltinbasEducationAddCandidate([
+      {
+        id: "nearest",
+        distance: 2,
+        semantic: false,
+        genericIcon: true,
+        excluded: false,
+      },
+      {
+        id: "farther",
+        distance: 5,
+        semantic: false,
+        genericIcon: true,
+        excluded: false,
+      },
+    ]),
+    { id: "nearest", proof: "nearest_unique_icon", reason: "ok" },
+  );
+  assert.deepEqual(
+    decideAltinbasEducationAddCandidate([
+      {
+        id: "ambiguous-a",
+        distance: 2,
+        semantic: false,
+        genericIcon: true,
+        excluded: false,
+      },
+      {
+        id: "ambiguous-b",
+        distance: 2,
+        semantic: false,
+        genericIcon: true,
+        excluded: false,
+      },
+    ]),
+    { id: null, proof: null, reason: "ambiguous" },
+  );
 });
 
 test("AW15: rollback accepts only ids proven created in the current run", () => {
