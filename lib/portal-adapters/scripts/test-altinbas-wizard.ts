@@ -488,6 +488,68 @@ test("AW14d: education add control requires a unique nearest composed-tree candi
   assert.deepEqual(
     decideAltinbasEducationAddCandidate([
       {
+        id: "education-outer-host",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        interactive: true,
+        insideDialog: false,
+        top: 366,
+      },
+      {
+        id: "education-inner-host",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        interactive: true,
+        insideDialog: false,
+        top: 369,
+      },
+      {
+        id: "exam-outer-host",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        interactive: true,
+        insideDialog: false,
+        top: 521,
+      },
+    ]),
+    { id: "education-outer-host", proof: "stage_topmost", reason: "ok" },
+    "the unique higher outer host wins over its inner icon duplicate",
+  );
+  assert.deepEqual(
+    decideAltinbasEducationAddCandidate([
+      {
+        id: "same-row-a",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        interactive: true,
+        insideDialog: false,
+        top: 366,
+      },
+      {
+        id: "same-row-b",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        interactive: true,
+        insideDialog: false,
+        top: 366,
+      },
+    ]),
+    { id: null, proof: null, reason: "ambiguous" },
+    "equal-height sibling controls remain fail-closed",
+  );
+  assert.deepEqual(
+    decideAltinbasEducationAddCandidate([
+      {
         id: "nearest",
         distance: 2,
         semantic: false,
