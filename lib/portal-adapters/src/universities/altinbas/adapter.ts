@@ -1142,30 +1142,6 @@ function altinbasUiDateCandidates(
   return [`${day}/${month}/${year}`];
 }
 
-function canonicalAltinbasUiDate(
-  value: string,
-  metadata: { type?: string; placeholder?: string },
-): string | null {
-  const raw = value.trim();
-  let match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (match) return raw;
-  match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!match) return null;
-  const [, firstRaw, secondRaw, year] = match;
-  const placeholder = (metadata.placeholder || "").toLowerCase();
-  const dayFirst =
-    !/m{1,2}[^a-z]*d{1,2}/.test(placeholder);
-  const month = Number(dayFirst ? secondRaw : firstRaw);
-  const day = Number(dayFirst ? firstRaw : secondRaw);
-  const date = new Date(Date.UTC(Number(year), month - 1, day));
-  if (
-    date.getUTCFullYear() !== Number(year) ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) return null;
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 /** Fill a UI date input and prove semantic (ISO) readback, not presentation. */
 async function fillAltinbasUiDateField(
   page: any,
@@ -1202,11 +1178,13 @@ async function fillAltinbasUiDateField(
       await control.dispatchEvent("blur").catch(() => {});
       await control.press("Tab").catch(() => {});
       await page.waitForTimeout(150);
-      const proof = await control.evaluate((element: Element) => {
+      const proof = await control.evaluate((element: Element, expectedIso: string) => {
         const input = element as HTMLInputElement;
         let node: Element | null = element;
         let lightningInputValuePresent = false;
+        let lightningInputMatchesExpected = false;
         let lightningInputValid = false;
+        let datepickerMatchesExpected = false;
         let flowScreenValuePresent = false;
         for (let depth = 0; depth < 12 && node; depth++) {
           const candidateNode = node as Element & {
@@ -1219,7 +1197,13 @@ async function fillAltinbasUiDateField(
             candidateNode.value.trim().length > 0;
           if (tag === "lightning-input") {
             lightningInputValuePresent = valuePresent;
+            lightningInputMatchesExpected =
+              candidateNode.value === expectedIso;
             lightningInputValid = candidateNode.validity?.valid === true;
+          }
+          if (tag === "lightning-datepicker") {
+            datepickerMatchesExpected =
+              candidateNode.value === expectedIso;
           }
           if (tag === "flowruntime-flow-screen-input") {
             flowScreenValuePresent = valuePresent;
@@ -1234,16 +1218,19 @@ async function fillAltinbasUiDateField(
           ariaInvalid: input.getAttribute("aria-invalid") === "true",
           valid: input.validity ? input.validity.valid : true,
           lightningInputValuePresent,
+          lightningInputMatchesExpected,
           lightningInputValid,
+          datepickerMatchesExpected,
           flowScreenValuePresent,
         };
-      });
+      }, iso);
       if (
-        canonicalAltinbasUiDate(proof.value, metadata) === iso &&
         !proof.ariaInvalid &&
         proof.valid &&
         proof.lightningInputValuePresent &&
+        proof.lightningInputMatchesExpected &&
         proof.lightningInputValid &&
+        proof.datepickerMatchesExpected &&
         proof.flowScreenValuePresent
       ) {
         logger.info(
