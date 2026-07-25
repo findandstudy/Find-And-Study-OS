@@ -7,8 +7,13 @@ import {
   aiActionQueueTable,
   usersTable,
   portalSubmissionsTable,
+  portalAdapterSpecsTable,
 } from "@workspace/db";
 import { and, eq, desc, sql } from "drizzle-orm";
+import {
+  invalidateSpecAdapterCache,
+  parseAdapterSpec,
+} from "@workspace/portal-adapters";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { listScopes } from "../lib/scopeRegistry";
@@ -54,6 +59,29 @@ function guardToolsForType(
     if (def?.sideEffect) return { ok: false, offending: t };
   }
   return { ok: true };
+}
+
+function guardianDraftUsesExecutablePrivileges(spec: unknown): boolean {
+  if (!spec || typeof spec !== "object") return false;
+  const row = spec as {
+    steps?: unknown[];
+    auth?: { loginSteps?: unknown[] };
+    workflow?: { states?: Array<{ steps?: unknown[] }> };
+  };
+  const privileged = (steps: unknown[] | undefined) =>
+    (steps ?? []).some(
+      (step) =>
+        Boolean(step) &&
+        typeof step === "object" &&
+        ["http", "graphql", "jsHook"].includes(
+          String((step as { action?: unknown }).action ?? ""),
+        ),
+    );
+  return (
+    privileged(row.steps) ||
+    privileged(row.auth?.loginSteps) ||
+    (row.workflow?.states ?? []).some((state) => privileged(state.steps))
+  );
 }
 
 // Registry endpoints
@@ -362,9 +390,10 @@ const reviewActionSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
 });
 
-// Reviewing a proposal changes queue state only. In particular,
-// portal_fix_proposal approval never executes a retry, edits a spec/code, or
-// touches a university portal.
+// Guardian approval may promote only the already-created, schema-valid,
+// non-privileged disabled selector patch named in the stale-checked proposal.
+// It never retries a student, runs portal mutations, changes code, or approves
+// http/graphql/jsHook capabilities.
 router.post(
   "/ai-personas/queue/actions/:id/review",
   requireAuth,
@@ -402,6 +431,7 @@ router.post(
       const submissionId = Number(context.submissionId);
       const fingerprint =
         typeof context.fingerprint === "string" ? context.fingerprint : "";
+      const draftSpecId = Number(context.draftSpecId);
       const [submission] = Number.isFinite(submissionId)
         ? await db
             .select({ resultJson: portalSubmissionsTable.resultJson })
@@ -429,6 +459,68 @@ router.post(
         });
         return;
       }
+      if (
+        req.user!.role !== "super_admin" ||
+        !Number.isFinite(draftSpecId) ||
+        draftSpecId <= 0
+      ) {
+        res.status(409).json({
+          error: "PORTAL_DRAFT_NOT_PROMOTABLE",
+          message:
+            "This proposal has no promotable disabled spec draft or requires super-admin review",
+        });
+        return;
+      }
+      const [draft] = await db
+        .select()
+        .from(portalAdapterSpecsTable)
+        .where(eq(portalAdapterSpecsTable.id, draftSpecId));
+      const parsedSpec = draft ? parseAdapterSpec(draft.spec) : null;
+      if (
+        !draft ||
+        draft.enabled ||
+        draft.source !== "uploaded" ||
+        !parsedSpec?.ok ||
+        guardianDraftUsesExecutablePrivileges(draft.spec)
+      ) {
+        res.status(409).json({
+          error: "PORTAL_DRAFT_NOT_PROMOTABLE",
+          message:
+            "The draft is missing, stale, already active, invalid, or requests privileged capabilities",
+        });
+        return;
+      }
+      await db.transaction(async (tx) => {
+        await tx
+          .update(portalAdapterSpecsTable)
+          .set({ enabled: false, updatedAt: new Date() })
+          .where(eq(portalAdapterSpecsTable.key, draft.key));
+        await tx
+          .update(portalAdapterSpecsTable)
+          .set({
+            enabled: true,
+            // Human super-admin approval is the explicit override trust gate.
+            privilegedApproved: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(portalAdapterSpecsTable.id, draft.id));
+      });
+      invalidateSpecAdapterCache();
+      await db
+        .update(portalSubmissionsTable)
+        .set({
+          resultJson: sql`coalesce(${portalSubmissionsTable.resultJson}, '{}'::jsonb) || jsonb_build_object(
+            'aiGuardian',
+            coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian', '{}'::jsonb)
+              || jsonb_build_object(
+                'status', 'promoted',
+                'promotedAt', ${new Date().toISOString()},
+                'promotedSpecId', ${draft.id},
+                'promotedSpecVersion', ${draft.version}
+              )
+          )`,
+        })
+        .where(eq(portalSubmissionsTable.id, submissionId));
     }
     const [updated] = await db
       .update(aiActionQueueTable)
@@ -458,16 +550,24 @@ router.post(
       id,
       {
         actionType: updated.actionType,
-        executionMode: "review_only",
+        executionMode:
+          updated.actionType === "portal_fix_proposal" &&
+          parsed.data.decision === "approved"
+            ? "disabled_spec_promotion"
+            : "review_only",
       },
       req.ip,
     );
     res.json({
       action: updated,
-      executed: false,
+      executed:
+        updated.actionType === "portal_fix_proposal" &&
+        parsed.data.decision === "approved",
       message:
         updated.actionType === "portal_fix_proposal"
-          ? "Proposal reviewed; no portal, code, or spec mutation was performed"
+          ? parsed.data.decision === "approved"
+            ? "The reviewed selector-only draft was promoted. No student retry or portal mutation was executed."
+            : "Proposal rejected; its disabled draft was not promoted."
           : "Action reviewed; execution is not enabled in this phase",
     });
   },

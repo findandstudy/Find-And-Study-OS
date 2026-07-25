@@ -176,6 +176,7 @@ export function portalFailureFingerprint(input: {
       missingDataFields: result.missingDataFields,
       validation: result.validation,
       stage: result.stage ?? adapterResult.stage,
+      portalEvidence: result.portalEvidence,
     }),
   };
   return createHash("sha256")

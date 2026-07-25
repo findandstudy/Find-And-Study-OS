@@ -52,7 +52,7 @@ function isUnitedMember(
       .replace(/\b(university|universitesi|universite|univ|istanbul|the|of)\b/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-  const f = strip(name);
+  const f = strip(name ?? "");
   if (!f) return false;
   const fTokens = new Set(f.split(" ").filter((t) => t.length > 1));
   const matches = (list: readonly string[]) =>
@@ -246,6 +246,45 @@ export const unitedAdapter: UniversityAdapter = {
     const dryRun = doSubmit === false || process.env.PORTAL_DRYRUN === "1";
     const result: any = { alreadyExists: false, submitted: false, programMissing: false };
     const wait = (ms: number) => page.waitForTimeout(ms);
+    const missingProfile = [
+      ["firstName", profile.firstName],
+      ["lastName", profile.lastName],
+      ["passportNumber", profile.passportNumber],
+      ["email", profile.email],
+      ["dateOfBirth", profile.dateOfBirth],
+      ["gender", profile.gender],
+      ["fatherName", profile.fatherName],
+      ["motherName", profile.motherName],
+      ["nationality", profile.nationality],
+      ["phone", profile.phone],
+      ["level", profile.level],
+      ["programName", profile.programName],
+      ["universityName", profile.universityName],
+      ["schoolName", profile.schoolName],
+    ]
+      .filter(([, value]) => value == null || String(value).trim() === "")
+      .map(([field]) => String(field));
+    if (missingProfile.length > 0) {
+      throw new Error(
+        `United data_missing: ${missingProfile.join(", ")}`,
+      );
+    }
+    if (
+      !dryRun &&
+      (!_files.passport || !_files.diploma || !_files.transcript)
+    ) {
+      const missingDocuments = (
+        ["passport", "diploma", "transcript"] as const
+      ).filter((slot) => !_files[slot]);
+      return {
+        submitted: false,
+        alreadyExists: false,
+        programMissing: false,
+        missingDocuments,
+        detail:
+          "United: passport, diploma and transcript are required before application creation",
+      };
+    }
 
     // ---- §0 Member gate: never push a non-member university into United ------
     // profile.memberUniversities is the LIVE DB "Members" list (panel-managed,
@@ -408,7 +447,14 @@ export const unitedAdapter: UniversityAdapter = {
         dedupCountBefore = s.count;
         if (s.count > 0) result.alreadyExists = true;
       } catch (e: any) {
-        logger.warn("[united] dedup searchapp failed (continuing): " + (e?.message || e));
+        throw new Error(
+          "United dedup_unknown: searchapp verification failed",
+        );
+      }
+      if (result.alreadyExists) {
+        result.detail =
+          "United: existing student/application detected; duplicate creation was skipped";
+        return result;
       }
 
       // ===== United 6-step wizard (Term → Degree card → Program grid → Personal) =====
@@ -428,8 +474,7 @@ export const unitedAdapter: UniversityAdapter = {
       //   degree radio INPUTs are CSS-hidden, offsetParent=null — input-based
       //   detection always read "no cards"); Step3 = visible div.single-table card
       //   (or visible "Reset Filter"); Step4 = #firstname visible.
-      const wantDegree = (profile.level || "Master");
-      if (!profile.level) logger.warn(`[united] profile.level missing — degree fallback "${wantDegree}" in use`);
+      const wantDegree = profile.level;
       const readStep = async () => {
         await ensureNameShim();
         return (await page.evaluate(() => {
@@ -496,7 +541,7 @@ export const unitedAdapter: UniversityAdapter = {
 
       // --- Step 2: land on Degree, pick via HIDDEN input + clickradio1 + label ---
       await backUntil("degree");
-      const degOk = await page.evaluate((want) => {
+      const degOk = await page.evaluate((want: string) => {
         const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z]/g, "");
         const w = nrm(want);
         const r = [...document.querySelectorAll('input[type=radio]')].find(
@@ -523,7 +568,7 @@ export const unitedAdapter: UniversityAdapter = {
       }
 
       // 3a) university filter + the page's own grid loader (headless change doesn't fire it)
-      const filterRes = await page.evaluate((wantUni) => {
+      const filterRes = await page.evaluate((wantUni: string) => {
         const nrmU = (s: string) => (s || "").toLowerCase()
           .replace(/[ışğüöçİ]/g, m => (({ "ı":"i","ş":"s","ğ":"g","ü":"u","ö":"o","ç":"c","İ":"i" } as any)[m] || m))
           .replace(/\b(university|universitesi|universite|istanbul|the|of)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
@@ -547,7 +592,7 @@ export const unitedAdapter: UniversityAdapter = {
         .replace(/[^a-z0-9]+/g, " ")
         .replace(/\b(university|universitesi|universite|istanbul|the|of)\b/g, " ")
         .trim().split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length)[0] || "";
-      await page.waitForFunction((core) => {
+      await page.waitForFunction((core: string) => {
         const cs = [...document.querySelectorAll("div.single-table")] as HTMLElement[];
         return cs.some(x => !!x.offsetParent
           && (!core || (x.textContent || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").includes(core)));
@@ -555,7 +600,7 @@ export const unitedAdapter: UniversityAdapter = {
       await page.waitForTimeout(1200);
 
       // 3b) pick the program among VISIBLE cards, then cb.checked=true → alert9.
-      const pick = await page.evaluate((wantProg) => {
+      const pick = await page.evaluate((wantProg: string) => {
         // Keep parenthetical tokens (Thesis / Non-Thesis / language) so
         // "(Non-Thesis)" out-scores "(Thesis)" — punctuation→space only.
         const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -617,7 +662,7 @@ export const unitedAdapter: UniversityAdapter = {
       const atPersonal = await page.locator("#firstname, #lastname").first().count().catch(() => 0);
       if (dryRun && !atPersonal) {
         result.dryReachedFinal = false;
-        result.stuckStep = 3; result.stuckBody = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")).replace(/\s+/g, " ").slice(0, 220);
+        result.stuckStep = 3;
         logger.warn("[united] DRY: Personal step NOT reached (atPersonal=0) — stopping; no student created");
         logger.info("[united] netlog summary: " + JSON.stringify(netlog.map((n) => ({ u: n.url, m: n.method, s: n.status }))));
         return result;
@@ -753,9 +798,9 @@ export const unitedAdapter: UniversityAdapter = {
           };
           return {
             firstname: g("firstname"), lastname: g("lastname"), passport: g("passport"),
-            dob: g("dateInput"), kimlik: g("kimlik") ? "SET" : "", father: g("fathername"), mother: g("mothername"),
+            dob: g("dateInput") ? "SET" : "", kimlik: g("kimlik") ? "SET" : "", father: g("fathername") ? "SET" : "", mother: g("mothername") ? "SET" : "",
             gender: g("gender"), cor: g("ContentPlaceHolder1_DropDownList4"), cit: g("ContentPlaceHolder1_DropDownList5"),
-            reg: g("regtype"), schCtry: g("school"), school: g("SecondarySchoolName"),
+            reg: g("regtype"), schCtry: g("school"), school: g("SecondarySchoolName") ? "SET" : "",
             // PII-light: prove filled without logging the full value
             phone: g("phone11") ? String(g("phone11")).slice(0, 4) + "***" : "",
             email: g("emailaddress") ? String(g("emailaddress")).slice(0, 3) + "***" : "",
@@ -827,7 +872,6 @@ export const unitedAdapter: UniversityAdapter = {
           // Fail-closed on writeback: no evidence the create happened — do not
           // report submitted; surface diagnostics instead.
           result.stuckStep = 4;
-          result.stuckBody = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")).replace(/\s+/g, " ").slice(0, 220);
           logger.warn("[united] no evidence of application create after Personal\u2192Continue (popup/appid/recheck all negative) \u2014 NOT marking submitted");
           return result;
         }
@@ -846,8 +890,22 @@ export const unitedAdapter: UniversityAdapter = {
         for (const id of ids) {
           try {
             if (!(await page.locator("#" + id).count())) continue;
+            const responsePromise = page
+              .waitForResponse(
+                (response: any) =>
+                  /\/Manage\/uploadfilesone/i.test(response.url()) &&
+                  response.request().method() === "POST",
+                { timeout: 30000 },
+              )
+              .catch(() => null);
             await page.setInputFiles("#" + id, localPath); // triggers uploadsinglefile
-            await wait(2500); // upload AJAX
+            const uploadResponse = await responsePromise;
+            if (!uploadResponse || !uploadResponse.ok()) {
+              logger.warn(
+                `[united] upload #${id} lacked a proved 2xx response`,
+              );
+              continue;
+            }
             logger.info("[united] uploaded #" + id);
             return true;
           } catch (e: any) { logger.warn("[united] upload #" + id + " failed: " + String(e?.message || e).slice(0, 80)); }
@@ -857,13 +915,22 @@ export const unitedAdapter: UniversityAdapter = {
       };
       // SubmitFiles carries pre-downloaded LOCAL paths (worker doc-fetch) — use
       // them directly; no URL download needed here.
-      await uploadDoc(["face"], _files.photo);
-      await uploadDoc(["pass"], _files.passport);
-      await uploadDoc(["cerb", "cer", "cerp"], _files.diploma);
-      await uploadDoc(["transb", "trans", "transp"], _files.transcript);
+      const uploadedSlots: string[] = [];
+      if (await uploadDoc(["face"], _files.photo)) uploadedSlots.push("photo");
+      if (await uploadDoc(["pass"], _files.passport)) uploadedSlots.push("passport");
+      if (await uploadDoc(["cerb", "cer", "cerp"], _files.diploma)) uploadedSlots.push("diploma");
+      if (await uploadDoc(["transb", "trans", "transp"], _files.transcript)) uploadedSlots.push("transcript");
+      result.uploadedSlots = uploadedSlots;
+      result.missingDocuments = (
+        ["passport", "diploma", "transcript"] as const
+      ).filter((slot) => !uploadedSlots.includes(slot));
       // NationalID slot is optional and SubmitFiles has no national-id source — skipped.
 
       result.submitted = true;
+      if (result.missingDocuments.length > 0) {
+        result.detail =
+          "United application was created, but one or more required document uploads could not be proved";
+      }
       if (appIdText) { result.externalRef = appIdText; logger.info("[united] externalRef (Salesforce app id) = " + appIdText); }
       logger.info("[united] submission complete appId=" + appIdText);
     } catch (e: any) { result.error = e.message; }

@@ -16,6 +16,7 @@ import {
   sanitizePortalEvidence,
   type PortalDiagnosis,
 } from "./portalAiGuardianContract";
+import { applyGuardianSpecPatch } from "./portalAiGuardianPatch";
 
 export {
   isDiagnosablePortalStatus,
@@ -37,6 +38,10 @@ type GuardianState = {
   startedAt?: string;
   runId?: number;
   actionId?: number;
+  draftSpecId?: number;
+  draftSpecVersion?: number;
+  draftStatus?: "created" | "not_created";
+  draftReason?: string;
   diagnosis?: PortalDiagnosis;
   error?: string;
 };
@@ -123,6 +128,7 @@ async function buildFailureEvidence(submissionId: number) {
   const [enabledSpec] = submission.adapterKey
     ? await db
         .select({
+          id: portalAdapterSpecsTable.id,
           key: portalAdapterSpecsTable.key,
           name: portalAdapterSpecsTable.name,
           version: portalAdapterSpecsTable.version,
@@ -171,6 +177,7 @@ async function buildFailureEvidence(submissionId: number) {
       missingDataFields: result.missingDataFields,
       validation: result.validation,
       stage: result.stage ?? adapterResult.stage,
+      portalEvidence: result.portalEvidence,
       filledSlots: result.filledSlots,
       submitted: adapterResult.submitted,
       alreadyExists: adapterResult.alreadyExists,
@@ -191,7 +198,75 @@ async function buildFailureEvidence(submissionId: number) {
       : null,
   });
 
-  return { submission, evidence, fingerprint };
+  return { submission, evidence, fingerprint, enabledSpec };
+}
+
+async function createGuardianSpecDraft(
+  enabledSpec: {
+    id: number;
+    key: string;
+    name: string;
+    version: number;
+    source: "builtin" | "uploaded";
+    spec: unknown;
+  } | undefined,
+  diagnosis: PortalDiagnosis,
+): Promise<{
+  draftStatus: "created" | "not_created";
+  draftSpecId?: number;
+  draftSpecVersion?: number;
+  draftReason?: string;
+}> {
+  if (!enabledSpec) {
+    return {
+      draftStatus: "not_created",
+      draftReason: "NO_ENABLED_SPEC_BASE",
+    };
+  }
+  const decision = applyGuardianSpecPatch(enabledSpec.spec, diagnosis);
+  if (!decision.accepted) {
+    return {
+      draftStatus: "not_created",
+      draftReason: decision.reason,
+    };
+  }
+
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${`portal_adapter_spec:${enabledSpec.key}`}))`,
+    );
+    const [latest] = await tx
+      .select({
+        version: portalAdapterSpecsTable.version,
+      })
+      .from(portalAdapterSpecsTable)
+      .where(eq(portalAdapterSpecsTable.key, enabledSpec.key))
+      .orderBy(desc(portalAdapterSpecsTable.version))
+      .limit(1);
+    const nextVersion = (latest?.version ?? 0) + 1;
+    const [draft] = await tx
+      .insert(portalAdapterSpecsTable)
+      .values({
+        key: enabledSpec.key,
+        name: `${enabledSpec.name} — Guardian draft`,
+        spec: decision.patchedSpec,
+        version: nextVersion,
+        enabled: false,
+        source: "uploaded",
+        jsHookApproved: false,
+        privilegedApproved: false,
+        createdBy: null,
+      })
+      .returning({
+        id: portalAdapterSpecsTable.id,
+        version: portalAdapterSpecsTable.version,
+      });
+    return {
+      draftStatus: "created" as const,
+      draftSpecId: draft.id,
+      draftSpecVersion: draft.version,
+    };
+  });
 }
 
 function guardianPrompt(evidence: unknown): string {
@@ -254,7 +329,7 @@ export async function diagnosePortalSubmission(
   const persona = await getGuardianPersona(false);
   if (!persona) throw new Error("PORTAL_AI_GUARDIAN_INACTIVE");
 
-  const { submission, evidence, fingerprint } =
+  const { submission, evidence, fingerprint, enabledSpec } =
     await buildFailureEvidence(submissionId);
   const current = guardianFromResult(submission.resultJson);
   if (
@@ -311,6 +386,12 @@ export async function diagnosePortalSubmission(
     }
 
     const parsed = parsePortalDiagnosis(run.output);
+    const draft = parsed.parseError
+      ? {
+          draftStatus: "not_created" as const,
+          draftReason: "STRUCTURED_OUTPUT_INVALID",
+        }
+      : await createGuardianSpecDraft(enabledSpec, parsed.diagnosis);
     const queuedProposal = run.toolResults.find(
       (tool) =>
         tool.tool === "portal_fix_proposal" && tool.queued && tool.actionId,
@@ -321,6 +402,7 @@ export async function diagnosePortalSubmission(
       diagnosedAt: new Date().toISOString(),
       runId: run.runId,
       actionId: queuedProposal?.actionId,
+      ...draft,
       diagnosis: parsed.diagnosis,
       ...(parsed.parseError ? { error: "STRUCTURED_OUTPUT_INVALID" } : {}),
     };
@@ -336,9 +418,16 @@ export async function diagnosePortalSubmission(
               adapterKey: submission.adapterKey,
               fingerprint,
               reviewOnly: true,
+              ...(draft.draftSpecId
+                ? {
+                    draftSpecId: draft.draftSpecId,
+                    draftSpecVersion: draft.draftSpecVersion,
+                  }
+                : {}),
             },
             diagnosis: parsed.diagnosis,
             structuredOutputValid: !parsed.parseError,
+            specDraft: draft,
           },
           preview: parsed.diagnosis.summary.slice(0, 400),
         })

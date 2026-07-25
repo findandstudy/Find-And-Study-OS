@@ -17,6 +17,8 @@ import assert from "node:assert/strict";
 import {
   isMulticoNationality,
   MULTICO_NATIONALITIES,
+  mapProgramType,
+  MULTICO_STUDENT_FORM_PATH,
 } from "./adapter.js";
 
 // ---------------------------------------------------------------------------
@@ -60,4 +62,23 @@ describe("isMulticoNationality", () => {
   it("does not match null", () => assert.ok(!isMulticoNationality(null)));
   it("does not match undefined", () => assert.ok(!isMulticoNationality(undefined)));
   it("does not match 'Nigerian'", () => assert.ok(!isMulticoNationality("Nigerian")));
+});
+
+describe("live Multico form contract", () => {
+  it("uses the observed authenticated add-student route", () => {
+    assert.equal(MULTICO_STUDENT_FORM_PATH, "/students/add");
+  });
+
+  it("maps all supported levels and fails closed for unknown levels", () => {
+    assert.equal(mapProgramType("Associate"), "Associate");
+    assert.equal(mapProgramType("Bachelor"), "Bachelor");
+    assert.equal(mapProgramType("Master (Thesis)"), "Master Thesis");
+    assert.equal(
+      mapProgramType("Master (Non-Thesis)"),
+      "Master Non-Thesis",
+    );
+    assert.equal(mapProgramType("PhD"), "Doctorate");
+    assert.equal(mapProgramType(""), null);
+    assert.equal(mapProgramType("Foundation"), null);
+  });
 });

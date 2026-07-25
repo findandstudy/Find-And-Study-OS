@@ -24,6 +24,7 @@ import {
   handleNeedsFallback,
   resolveAdapterKey,
   getNonGraduatedExperimentalAdapterKeys,
+  portalEvidenceFromError,
 } from "@workspace/portal-runner";
 import { isSitFamilyKey } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "./credResolver.js";
@@ -223,7 +224,13 @@ async function tick(): Promise<void> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[portal-worker] Submission #${sub.id} failed: ${msg}`);
-    await writebackResult(sub.id, null, msg);
+    await writebackResult(
+      sub.id,
+      null,
+      msg,
+      undefined,
+      portalEvidenceFromError(err),
+    );
     return;
   }
 

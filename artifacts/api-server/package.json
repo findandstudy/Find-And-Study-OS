@@ -7,6 +7,7 @@
     "dev": "NODE_ENV=development tsx ./src/index.ts",
     "drain-once": "NODE_OPTIONS=--max-old-space-size=512 tsx scripts/drain-once.ts",
     "seed:topkapi-mapping": "tsx scripts/seed-topkapi-mapping.ts",
+    "seed:portal-mapped-specs": "tsx scripts/seed-portal-mapped-specs.ts",
     "build": "tsx ./build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:inbox-create-student-add-doc": "tsx --test ./scripts/test-inbox-create-student-add-doc.ts",

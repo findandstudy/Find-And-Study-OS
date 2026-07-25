@@ -6,6 +6,7 @@ import {
   portalFailureFingerprint,
   sanitizePortalEvidence,
 } from "../src/lib/portalAiGuardianContract";
+import { applyGuardianSpecPatch } from "../src/lib/portalAiGuardianPatch";
 
 const validDiagnosis = {
   classification: "selector_changed",
@@ -123,4 +124,101 @@ test("only reviewable failure outcomes are diagnosable", () => {
   assert.equal(isDiagnosablePortalStatus("submitted"), false);
   assert.equal(isDiagnosablePortalStatus("already_exists"), false);
   assert.equal(isDiagnosablePortalStatus("queued"), false);
+});
+
+const selectorOnlyBaseSpec = {
+  specVersion: 2,
+  meta: {
+    key: "guardian_fixture",
+    name: "Guardian Fixture",
+    baseUrl: "https://portal.example.com",
+    matches: ["guardian fixture"],
+    resolution: "override",
+    dryRunPolicy: "strict",
+  },
+  auth: {
+    loginUrl: "https://portal.example.com/login",
+    loginSteps: [
+      {
+        action: "fill",
+        selector: "#username",
+        value: "credential-resolved-by-engine",
+      },
+    ],
+  },
+  steps: [
+    {
+      action: "fill",
+      selector: "#old-city",
+      valueFrom: "profile.addressCity",
+      readback: {
+        source: "value",
+        comparison: "trimmed",
+        rejectAriaInvalid: true,
+      },
+    },
+  ],
+  success: {
+    successSelector: "[data-status='submitted']",
+  },
+};
+
+test("Guardian drafts a schema-valid selector-only patch", () => {
+  const decision = applyGuardianSpecPatch(
+    selectorOnlyBaseSpec,
+    {
+      ...validDiagnosis,
+      risk: "low",
+    } as Parameters<typeof applyGuardianSpecPatch>[1],
+  );
+  assert.equal(decision.accepted, true);
+  if (!decision.accepted) return;
+  assert.equal(
+    (
+      decision.patchedSpec.steps as Array<Record<string, unknown>>
+    )[0]?.selector,
+    "[data-field='cityOfBirth'] input",
+  );
+  assert.equal(
+    (
+      selectorOnlyBaseSpec.steps as Array<Record<string, unknown>>
+    )[0]?.selector,
+    "#old-city",
+  );
+});
+
+test("Guardian blocks auth, final-submit and executable patch boundaries", () => {
+  for (const path of [
+    "/auth/loginSteps/0/selector",
+    "/meta/baseUrl",
+    "/steps/0/final",
+    "/workflow/states/0/steps/0/script",
+  ]) {
+    const decision = applyGuardianSpecPatch(selectorOnlyBaseSpec, {
+      ...validDiagnosis,
+      risk: "low",
+      proposedSpecPatch: [
+        {
+          op: "replace",
+          path,
+          value: "javascript:alert(1)",
+          rationale: "unsafe fixture",
+          evidence: "unsafe fixture",
+        },
+      ],
+    } as Parameters<typeof applyGuardianSpecPatch>[1]);
+    assert.equal(decision.accepted, false);
+  }
+});
+
+test("Guardian refuses medium-risk or weak-evidence automatic drafts", () => {
+  const decision = applyGuardianSpecPatch(selectorOnlyBaseSpec, {
+    ...validDiagnosis,
+    confidence: 0.84,
+    risk: "medium",
+  } as Parameters<typeof applyGuardianSpecPatch>[1]);
+  assert.deepEqual(decision, {
+    accepted: false,
+    reason: "CONFIDENCE_OR_RISK_GATE",
+  });
 });

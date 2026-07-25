@@ -27,6 +27,7 @@ import {
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import type { RunResult } from "./runner.js";
+import type { PortalRunEvidence } from "./portalEvidence.js";
 import { resolveWritebackTarget } from "./stageWritebackTarget.js";
 
 // ---------------------------------------------------------------------------
@@ -50,6 +51,7 @@ export async function writebackResult(
   runResult: RunResult | null,
   errorMessage?: string,
   workerId?: string,
+  failureEvidence?: PortalRunEvidence | null,
 ): Promise<void> {
   const result = runResult?.result ?? null;
   const { submissionStatus, stageKey } = resolveWritebackTarget(
@@ -80,8 +82,19 @@ export async function writebackResult(
     .set({
       status:         submissionStatus,
       resultJson:     runResult
-                        ? { ...runResult.meta, result: runResult.result }
-                        : { error: errorMessage ?? "unknown error" },
+                        ? {
+                            ...runResult.meta,
+                            result: runResult.result,
+                            ...(runResult.portalEvidence
+                              ? { portalEvidence: runResult.portalEvidence }
+                              : {}),
+                          }
+                        : {
+                            error: errorMessage ?? "unknown error",
+                            ...(failureEvidence
+                              ? { portalEvidence: failureEvidence }
+                              : {}),
+                          },
       screenshotUrls: runResult?.screenshotUrls ?? [],
       // Persist the portal-assigned reference (e.g. Topkapı success-page uuid)
       // only when present so a later non-submitted run never clobbers it.

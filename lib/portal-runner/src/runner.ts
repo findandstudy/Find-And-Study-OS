@@ -45,6 +45,11 @@ import type { ClaimedSubmission } from "./queue.js";
 import { loadProgramMapping } from "./programMappingLoader.js";
 import { resolveNationalityExclusion } from "./exclusions.js";
 import { resolveAdapterKey, loadAggregatorMemberNames } from "./resolveAdapter.js";
+import {
+  capturePortalRunEvidence,
+  PortalRunError,
+  type PortalRunEvidence,
+} from "./portalEvidence.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,6 +63,8 @@ export interface ResolvedCreds {
 export interface RunResult {
   result: SubmitResult;
   screenshotUrls: string[];
+  /** PII-safe structural snapshot captured for an unproved terminal outcome. */
+  portalEvidence?: PortalRunEvidence;
   /** Extra metadata (dryRun flag, adapter key used, etc.) */
   meta: Record<string, unknown>;
 }
@@ -241,6 +248,21 @@ export async function runSubmission(
     };
 
     const result = await adapter.submit(session, enrichedProfile, files, !isDry);
+    const adapterError =
+      typeof (result as SubmitResult & { error?: unknown }).error === "string"
+        ? (result as SubmitResult & { error: string }).error
+        : "";
+    const terminalOutcomeProved =
+      result.submitted ||
+      result.alreadyExists ||
+      result.programMissing ||
+      result.programFull ||
+      result.exclusiveRegion ||
+      result.skippedNotMember;
+    const portalEvidence =
+      adapterError || (!isDry && !terminalOutcomeProved)
+        ? await capturePortalRunEvidence(session.page, adapter.key)
+        : null;
 
     // ----- 4. Upload per-step screenshots to Object Storage ----------------
     // Adapters write screenshots to /tmp and return local paths in
@@ -270,11 +292,19 @@ export async function runSubmission(
     return {
       result,
       screenshotUrls: persistentUrls,
+      ...(portalEvidence ? { portalEvidence } : {}),
       meta: {
         adapterKey: adapter.key,
         ...(isDry ? { dryRun: true } : {}),
       },
     };
+  } catch (error) {
+    const portalEvidence = session
+      ? await capturePortalRunEvidence(session.page, adapter.key)
+      : null;
+    const message =
+      error instanceof Error ? error.message : String(error);
+    throw new PortalRunError(message, portalEvidence);
   } finally {
     if (creds) clearCredsOverride(adapter.key);
     // Close page → context → browser in order (see browser.ts)

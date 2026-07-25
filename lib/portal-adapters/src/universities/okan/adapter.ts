@@ -31,7 +31,41 @@ function degreeValue(level: string): string {
   return "2";
 }
 const genderText = (g: string) => (/fem|kadın|female/i.test(g || "") ? "Female" : "Male");
-const lastWord = (s?: string) => ((s || "").trim().split(/\s+/).pop() || "");
+
+export function resolveOkanRequiredFields(profile: SubmitProfile): {
+  city: string;
+  birthplace: string;
+  secondarySchoolCity: string;
+  missing: string[];
+  policyFallbacks: string[];
+} {
+  const educationCity =
+    profile.educationRecords?.find(
+      (record) =>
+        record.city?.trim() &&
+        (!profile.schoolName ||
+          !record.schoolName ||
+          record.schoolName.trim().toLowerCase() ===
+            profile.schoolName.trim().toLowerCase()),
+    )?.city?.trim() ?? "";
+  const city = profile.addressCity?.trim() ?? "";
+  const birthplace = profile.cityOfBirth?.trim() ?? "";
+  const secondarySchoolCity = educationCity || city;
+  const missing: string[] = [];
+  if (!city) missing.push("addressCity");
+  if (!birthplace) missing.push("cityOfBirth");
+  if (!secondarySchoolCity) missing.push("secondarySchoolCity");
+  return {
+    city,
+    birthplace,
+    secondarySchoolCity,
+    missing,
+    policyFallbacks:
+      !educationCity && city
+        ? ["secondarySchoolCity<-addressCity"]
+        : [],
+  };
+}
 
 export const okanAdapter: UniversityAdapter = {
   key: "okan",
@@ -64,6 +98,34 @@ export const okanAdapter: UniversityAdapter = {
     const result: any = { alreadyExists: false, submitted: false, programMissing: false };
     const wait = (ms: number) => page.waitForTimeout(ms);
     logger.info("[okan] submit v2 — level:", profile.level, "dry:", dryRun);
+    const resolvedFields = resolveOkanRequiredFields(profile);
+    const missingCore = [
+      ["firstName", profile.firstName],
+      ["lastName", profile.lastName],
+      ["passportNumber", profile.passportNumber],
+      ["email", profile.email],
+      ["level", profile.level],
+      ["programName", profile.programName],
+      ["dateOfBirth", profile.dateOfBirth],
+      ["nationality", profile.nationality],
+      ["address", profile.address],
+      ["phone", profile.phone],
+      ["schoolName", profile.schoolName],
+      ["graduationYear", profile.graduationYear],
+    ]
+      .filter(([, value]) => value == null || String(value).trim() === "")
+      .map(([field]) => String(field));
+    const missingData = [...missingCore, ...resolvedFields.missing];
+    if (!dryRun && missingData.length > 0) {
+      throw new Error(
+        `Okan data_missing: ${Array.from(new Set(missingData)).join(", ")}`,
+      );
+    }
+    if (resolvedFields.policyFallbacks.length > 0) {
+      logger.warn(
+        `[okan] audited legacy policy: ${resolvedFields.policyFallbacks.join(",")}`,
+      );
+    }
 
     const clickVisible = async (label: string) => {
       const b = page.locator(`button:has-text("${label}")`);
@@ -127,8 +189,8 @@ export const okanAdapter: UniversityAdapter = {
       await setKendo("countryOfResidenceId", profile.nationality);
       await fill("address", profile.address);
       await fill("mobilePhone", String(profile.phone || "").replace(/^\+?90/, "").replace(/^\+/, ""));
-      await fill("city", lastWord(profile.address));
-      await fill("birthplace", lastWord(profile.address));
+      await fill("city", resolvedFields.city);
+      await fill("birthplace", resolvedFields.birthplace);
       await fill("mothersName", (profile as any).motherName);
       await fill("fathersName", (profile as any).fatherName);
       await fill("familyPhoneNumber", String(profile.phone || "").replace(/^\+?90/, "").replace(/^\+/, ""));
@@ -146,7 +208,10 @@ export const okanAdapter: UniversityAdapter = {
       // 4 Educational Information
       await fill("secondarySchoolName", (profile as any).schoolName);
       await fill("graduationYearOfSecondarySchool", String((profile as any).graduationYear || ""));
-      await fill("cityOfSecondarySchool", lastWord((profile as any).schoolName) || lastWord(profile.address));
+      await fill(
+        "cityOfSecondarySchool",
+        resolvedFields.secondarySchoolCity,
+      );
       await setKendo("countryOfSecondarySchoolId", profile.nationality);
       if ((profile as any).gpa != null) await setNumeric("gpa of secondary", Number((profile as any).gpa));
       await wait(600); await next(); await wait(1800);
@@ -173,9 +238,7 @@ export const okanAdapter: UniversityAdapter = {
       logger.info("[okan] submit " + JSON.stringify(result));
       return result as SubmitResult;
     } catch (e: any) {
-      result.error = e?.message || String(e);
-      logger.info("[okan] submit " + JSON.stringify(result));
-      return result as SubmitResult;
+      throw new Error(`Okan submit failed: ${e?.message || String(e)}`);
     }
   },
 };

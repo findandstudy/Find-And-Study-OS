@@ -60,6 +60,7 @@ const ADAPTER_KEY   = "multico";
 const MULTICO_BASE  = "https://www.multico.com.tr/crm";
 const LOGIN_URL     = `${MULTICO_BASE}/login`;
 const STORAGE_PATH  = "/tmp/multico-portal-state.json";
+export const MULTICO_STUDENT_FORM_PATH = "/students/add";
 
 /** Cache TTL for program catalog (8 hours). */
 const PROGRAM_CACHE_TTL_MS = 8 * 60 * 60 * 1000;
@@ -131,12 +132,15 @@ const PROGRAM_TYPE_MAP: Record<string, string> = {
   "language school":      "Language School",
 };
 
-function mapProgramType(level: string): string {
+export function mapProgramType(level: string): string | null {
   const f = fold(level);
+  // Specific thesis variants must win before the generic "master" key.
+  if (/(?:non thesis|nonthesis)/.test(f)) return "Master Non-Thesis";
+  if (/(?:master|masters).*(?:thesis)/.test(f)) return "Master Thesis";
   for (const [key, value] of Object.entries(PROGRAM_TYPE_MAP)) {
     if (f.includes(fold(key))) return value;
   }
-  return "Bachelor"; // safe default
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +366,9 @@ async function resolveNationalityId(
   page: AdapterSession["page"],
   nationality: string,
 ): Promise<string | null> {
-  const resp = await page.request.get(`${MULTICO_BASE}/students/create`);
+  const resp = await page.request.get(
+    `${MULTICO_BASE}${MULTICO_STUDENT_FORM_PATH}`,
+  );
   const html = await resp.text();
   const opts = parseSelectOptions(html, "nationality_id");
   const natFolded = fold(nationality);
@@ -383,7 +389,9 @@ async function resolvePhoneCode(
   page: AdapterSession["page"],
   nationality: string,
 ): Promise<string | null> {
-  const resp = await page.request.get(`${MULTICO_BASE}/students/create`);
+  const resp = await page.request.get(
+    `${MULTICO_BASE}${MULTICO_STUDENT_FORM_PATH}`,
+  );
   const html = await resp.text();
   const opts = parseSelectOptions(html, "phone_code");
   const natFolded = fold(nationality);
@@ -510,12 +518,35 @@ async function createMulticoStudent(
 ): Promise<string> {
   const school = extractSchoolFields(profile);
 
+  // The live form is POST /students/add and carries an agent_id hidden field.
+  // Resolve it from the authenticated form instead of hardcoding or omitting it.
+  const formResponse = await page.request.get(
+    `${MULTICO_BASE}${MULTICO_STUDENT_FORM_PATH}`,
+  );
+  if (!formResponse.ok()) {
+    throw new Error(
+      `Multico student form unavailable (status=${formResponse.status()})`,
+    );
+  }
+  const formHtml = await formResponse.text();
+  const agentId =
+    /<input[^>]+name=["']agent_id["'][^>]+value=["']([^"']+)["']/i.exec(
+      formHtml,
+    )?.[1] ??
+    /<input[^>]+value=["']([^"']+)["'][^>]+name=["']agent_id["']/i.exec(
+      formHtml,
+    )?.[1];
+  if (!agentId) {
+    throw new Error("Multico student form contract missing agent_id");
+  }
+
   // Resolve nationality_id and phone_code dynamically from the form
   const nationalityId = await resolveNationalityId(page, profile.nationality);
   const phoneCode = await resolvePhoneCode(page, profile.nationality);
 
   // Build multipart form data
   const formData: Record<string, string> = {
+    agent_id:         agentId,
     name:              profile.firstName,
     surname:           profile.lastName,
     status:            "Active",
@@ -529,7 +560,7 @@ async function createMulticoStudent(
     address:           profile.address,
     residence_country: profile.nationality,
     hasBlueCard:       "No",
-    dual_citizenship:  "No",
+    hasMultipleNationality: "No",
     visaStatus:        "Subject To",
     schoolType:        "High School",
     school_name:       school.schoolName,
@@ -558,9 +589,12 @@ async function createMulticoStudent(
     } catch { /* non-fatal in dry mode, will be caught by caller */ }
   }
 
-  const resp = await page.request.post(`${MULTICO_BASE}/students/create`, {
+  const resp = await page.request.post(
+    `${MULTICO_BASE}${MULTICO_STUDENT_FORM_PATH}`,
+    {
     multipart: multipartData,
-  });
+    },
+  );
   const html = await resp.text();
 
   // Check for success indicator
@@ -573,18 +607,29 @@ async function createMulticoStudent(
   ];
   const isSuccess = successPatterns.some((re) => re.test(html));
 
-  if (!isSuccess) {
-    // Check for error messages
-    const errMatch = /<div[^>]+(?:alert|error)[^>]*>([\s\S]{0,200}?)<\/div>/i.exec(html);
+  if (!resp.ok()) {
     throw new Error(
-      `Multico student create failed: ${errMatch?.[1]?.replace(/<[^>]+>/g, "").trim() ?? "unexpected response"}`,
+      `Multico student create failed (status=${resp.status()})`,
     );
   }
 
   // Re-search by passport to get the new student ID
   const studentId = await searchStudentByPassport(page, profile.passportNumber);
   if (!studentId) {
-    throw new Error("Multico student create: success reported but student not found in follow-up passport search");
+    const errMatch =
+      /<div[^>]+(?:alert|error)[^>]*>([\s\S]{0,200}?)<\/div>/i.exec(
+        html,
+      );
+    throw new Error(
+      `Multico student create could not be proved${
+        isSuccess
+          ? ""
+          : `: ${
+              errMatch?.[1]?.replace(/<[^>]+>/g, "").trim() ??
+              "no success marker"
+            }`
+      }`,
+    );
   }
   return studentId;
 }
@@ -658,9 +703,17 @@ async function uploadDocuments(
 
   if (uploadedSlots.length === 0) return uploadedSlots;
 
-  await page.request.post(`${MULTICO_BASE}/students/update/${studentId}`, {
+  const uploadResponse = await page.request.post(
+    `${MULTICO_BASE}/students/update/${studentId}`,
+    {
     multipart: multipartData,
-  });
+    },
+  );
+  if (!uploadResponse.ok()) {
+    throw new Error(
+      `Multico document upload failed (status=${uploadResponse.status()})`,
+    );
+  }
 
   return uploadedSlots;
 }
@@ -716,7 +769,9 @@ async function createApplication(
     if (app2) return app2;
   }
 
-  return { applicationId: "", fee: "", status: "Pending Review" };
+  throw new Error(
+    "Multico application create could not be proved from the response or student page",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -838,11 +893,16 @@ export const multicoAdapter: UniversityAdapter = {
     try {
       existingStudentId = await searchStudentByPassport(page, profile.passportNumber);
     } catch (err) {
-      logger.warn("[multico] passport search failed:", err);
+      throw new Error(
+        "Multico dedup_unknown: passport search could not be verified",
+      );
     }
 
     const alreadyExists = existingStudentId !== null;
-    logger.info(`[multico] duplicate check: passport="${profile.passportNumber}" → alreadyExists=${alreadyExists} studentId=${existingStudentId}`);
+    logger.info(
+      `[multico] duplicate check → alreadyExists=${alreadyExists}` +
+        (existingStudentId ? ` studentId=${existingStudentId}` : ""),
+    );
 
     // ---- Step B: Program catalog + match ---------------------------------
     const catalogStudentId = existingStudentId ?? "1"; // fallback ID for catalog fetch
@@ -869,6 +929,12 @@ export const multicoAdapter: UniversityAdapter = {
     }
 
     logger.info(`[multico] program matched: "${match.name}" (id=${match.id})`);
+    const programType = mapProgramType(profile.level);
+    if (!programType) {
+      throw new Error(
+        "Multico data_missing: unsupported or empty application level",
+      );
+    }
 
     // ---- DRY-RUN exit ----------------------------------------------------
     if (isDry) {
@@ -890,16 +956,33 @@ export const multicoAdapter: UniversityAdapter = {
       };
     }
 
+    // A student already present in Multico may belong to another agency or
+    // already have the requested application. Without ownership/application
+    // proof, creating another application is unsafe; classify as existing.
+    if (alreadyExists) {
+      return {
+        submitted: false,
+        alreadyExists: true,
+        programMissing: false,
+        detail:
+          "Multico: existing student detected; duplicate application was not created",
+      };
+    }
+
     // ---- Step C: Student create (if not duplicate) ----------------------
     let studentId = existingStudentId;
     if (!alreadyExists) {
-      if (!files.passport) {
+      const missingDocuments = (
+        ["passport", "diploma", "transcript"] as const
+      ).filter((slot) => !files[slot]);
+      if (missingDocuments.length > 0) {
         return {
           submitted:      false,
           alreadyExists:  false,
           programMissing: false,
-          missingDocuments: ["passport"],
-          detail: "Multico: passport document required for student creation",
+          missingDocuments,
+          detail:
+            "Multico: passport, diploma and transcript are required for student creation",
         };
       }
       try {
@@ -920,7 +1003,9 @@ export const multicoAdapter: UniversityAdapter = {
       uploadedSlots = await uploadDocuments(page, studentId, files);
       logger.info(`[multico] documents uploaded: ${uploadedSlots.join(", ") || "none"}`);
     } catch (err) {
-      logger.warn("[multico] document upload error (non-fatal):", err);
+      throw new Error(
+        `Multico document upload error: ${(err as Error).message}`,
+      );
     }
 
     // ---- Step E: Resolve university_id (Topkapı in Multico CRM) --------
@@ -930,7 +1015,6 @@ export const multicoAdapter: UniversityAdapter = {
     }
 
     // ---- Step F: Application create ------------------------------------
-    const programType = mapProgramType(profile.level);
     let applicationData: { applicationId: string; fee: string; status: string };
     try {
       applicationData = await createApplication(

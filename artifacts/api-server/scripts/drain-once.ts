@@ -44,6 +44,7 @@ import {
   buildStudentProfile,
   runSubmission,
   writebackResult,
+  portalEvidenceFromError,
   getNonGraduatedExperimentalAdapterKeys,
 } from "@workspace/portal-runner";
 import { resolvePortalCreds } from "../src/lib/portalCreds.js";
@@ -307,7 +308,13 @@ async function drain(): Promise<void> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[drain-once] #${sub.id} failed: ${msg}`);
-      await writebackResult(sub.id, null, msg, WORKER_ID);
+      await writebackResult(
+        sub.id,
+        null,
+        msg,
+        WORKER_ID,
+        portalEvidenceFromError(err),
+      );
       results.push({ id: sub.id, status: "failed", error: msg });
     } finally {
       clearInterval(hbInterval);

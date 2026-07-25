@@ -67,6 +67,50 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
 
       const page: any = session.page;
       const dryRun = doSubmit === false || process.env.PORTAL_DRYRUN === "1" || process.env.SF_DRYRUN === "1";
+      const strictMappedPortal = new Set([
+        "uskudar",
+        "beykent",
+        "isik",
+      ]).has(cfg.key);
+      if (strictMappedPortal) {
+        const missingProfile = [
+          ["firstName", profile.firstName],
+          ["lastName", profile.lastName],
+          ["passportNumber", profile.passportNumber],
+          ["email", profile.email],
+          ["dateOfBirth", profile.dateOfBirth],
+          ["gender", profile.gender],
+          ["nationality", profile.nationality],
+          ["address", profile.address],
+          ["addressCity", profile.addressCity],
+          ["phone", profile.phone],
+          ["level", profile.level],
+          ["programName", profile.programName],
+          ["schoolName", profile.schoolName],
+          ["gpa", profile.gpa],
+        ]
+          .filter(([, value]) => value == null || String(value).trim() === "")
+          .map(([field]) => String(field));
+        if (missingProfile.length > 0) {
+          throw new Error(
+            `Salesforce ${cfg.key} data_missing: ${missingProfile.join(", ")}`,
+          );
+        }
+        if (!dryRun) {
+          const missingDocuments = cfg.requiredDocs.filter(
+            (slot) => !files[slot],
+          );
+          if (missingDocuments.length > 0) {
+            return {
+              submitted: false,
+              alreadyExists: false,
+              programMissing: false,
+              missingDocuments,
+              detail: `${cfg.label}: required documents are missing`,
+            };
+          }
+        }
+      }
 
       // --- Boot-first SPA navigation (Sabancı / 2-phase Experience Cloud fix) ---
       // A cold goto(application-form) is redirected Home by the SPA route-guard,
@@ -108,10 +152,10 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       const heading = async (): Promise<string> => { try { return (await page.evaluate("(() => { var a=[]; document.querySelectorAll('h1,h2,legend,.slds-text-heading_medium').forEach(function(h){ if(h.offsetParent!==null) a.push((h.innerText||'').slice(0,24)); }); return a.join('|'); })()")) as string; } catch (e) { return Math.random().toString(); } };
       const typeInto = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const loc = page.locator(sel); const cnt = await loc.count(); let t: any = null; for (let i = 0; i < cnt; i++) { if (await loc.nth(i).isVisible().catch(() => false)) { t = loc.nth(i); break; } } if (!t) return; await t.fill(String(v)).catch(() => {}); const __cur = await t.inputValue().catch(() => ""); if (__cur !== String(v)) { await t.click().catch(() => {}); await page.waitForTimeout(200); await t.fill("").catch(() => {}); await t.pressSequentially(String(v), { delay: 60 }).catch(() => {}); } await t.press("Tab").catch(() => {}); } catch (e) {} };
       const fill = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const l = page.locator(sel).first(); if ((await l.count()) && (await l.isVisible().catch(() => false))) { await l.fill(String(v)).catch(() => {}); await l.press("Tab").catch(() => {}); } } catch (e) {} };
-      const selByName = async (name: string, label?: string) => { try { const s = page.locator("select[name=\"" + name + "\"]").first(); if (!(await s.count())) return; if (label) { try { await s.selectOption({ label }); } catch (e) { await s.selectOption({ index: 1 }).catch(() => {}); } } else { await s.selectOption({ index: 1 }).catch(() => {}); } } catch (e) {} };
+      const selByName = async (name: string, label?: string) => { try { const s = page.locator("select[name=\"" + name + "\"]").first(); if (!(await s.count())) return false; if (label) { try { await s.selectOption({ label }); return true; } catch (e) { if (!strictMappedPortal) { await s.selectOption({ index: 1 }).catch(() => {}); return true; } return false; } } else if (!strictMappedPortal) { await s.selectOption({ index: 1 }).catch(() => {}); return true; } return false; } catch (e) { return false; } };
       const clickNext = async () => { const n = page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).first(); if (await n.count()) { await n.click({ timeout: 6000 }).catch(() => {}); return true; } const __cna = page.getByRole("button", { name: /create new application|add application|create application/i }).first(); if (await __cna.count()) { await __cna.click({ timeout: 6000 }).catch(() => {}); return true; } return false; };
       const dobm = String(profile.dateOfBirth || "").match(/(\d{4})-(\d{2})-(\d{2})/);
-      const dobStr = dobm ? (dobm[2] + "/" + dobm[3] + "/" + dobm[1]) : "01/01/2000";
+      const dobStr = dobm ? (dobm[2] + "/" + dobm[3] + "/" + dobm[1]) : strictMappedPortal ? "" : "01/01/2000";
       for (let step = 0; step < 12; step++) {
         await page.waitForTimeout(2500);
         const txt = await bodyText();
@@ -134,10 +178,14 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await typeInto("input[placeholder=\"you@example.com\"]", profile.email);
           await typeInto("input[type=email]", profile.email);
           await typeInto("input[placeholder*=\"@\"]:not([type=password])", profile.email);
-          try { const __cb = page.locator("input[role=combobox], input[aria-autocomplete=list], input[aria-autocomplete=both], input[id*=combobox]"); const __cbn = await __cb.count(); for (let __i = 0; __i < __cbn; __i++) { const __e = __cb.nth(__i); if (!(await __e.isVisible().catch(() => false))) continue; if ((await __e.inputValue().catch(() => "x")) !== "") continue; await __e.click().catch(() => {}); await __e.fill(profile.nationality || "Turkey").catch(() => {}); await page.waitForTimeout(1500); const __o = page.locator("[role=option], lightning-base-combobox-item, .slds-listbox__option, li[role=option]").first(); if (await __o.count()) await __o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(600); } } catch (e) {}
-          try { const __cand = page.locator("input[required], input[aria-required=\"true\"]"); const __cn = await __cand.count(); for (let __ci = 0; __ci < __cn; __ci++) { const __el = __cand.nth(__ci); if (!(await __el.isVisible().catch(() => false))) continue; const __ty = (await __el.getAttribute("type").catch(() => "")) || "text"; if (__ty === "radio" || __ty === "checkbox") continue; const __idr = ((await __el.getAttribute("id").catch(() => "")) || "") + ((await __el.getAttribute("role").catch(() => "")) || "") + ((await __el.getAttribute("aria-autocomplete").catch(() => "")) || ""); if (/combobox|list|both/i.test(__idr)) continue; const __cv = await __el.inputValue().catch(() => "x"); if (__cv === "") { await __el.fill(profile.email).catch(() => {}); break; } } } catch (e) {}
-          try { const cz = page.getByLabel(/citizenship|vatanda/i).first(); if ((await cz.count()) && (await cz.isVisible().catch(() => false))) { await cz.click().catch(() => {}); await cz.fill(profile.nationality || "Turkey").catch(() => {}); await page.waitForTimeout(1500); const o = page.locator("[role=option],lightning-base-combobox-item,li").first(); if (await o.count()) await o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(700); } } catch (e) {}
-          try { const eml = page.getByLabel(/applicant email|email address/i).first(); if ((await eml.count()) && (await eml.isVisible().catch(() => false)) && !(await eml.inputValue().catch(() => "x"))) { await eml.click().catch(() => {}); await page.keyboard.type(profile.email || ("fas" + Date.now() + "@example.com"), { delay: 40 }).catch(() => {}); await eml.press("Tab").catch(() => {}); } } catch (e) {}
+          if (!strictMappedPortal) {
+            try { const __cb = page.locator("input[role=combobox], input[aria-autocomplete=list], input[aria-autocomplete=both], input[id*=combobox]"); const __cbn = await __cb.count(); for (let __i = 0; __i < __cbn; __i++) { const __e = __cb.nth(__i); if (!(await __e.isVisible().catch(() => false))) continue; if ((await __e.inputValue().catch(() => "x")) !== "") continue; await __e.click().catch(() => {}); await __e.fill(profile.nationality || "Turkey").catch(() => {}); await page.waitForTimeout(1500); const __o = page.locator("[role=option], lightning-base-combobox-item, .slds-listbox__option, li[role=option]").first(); if (await __o.count()) await __o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(600); } } catch (e) {}
+          }
+          if (!strictMappedPortal) {
+            try { const __cand = page.locator("input[required], input[aria-required=\"true\"]"); const __cn = await __cand.count(); for (let __ci = 0; __ci < __cn; __ci++) { const __el = __cand.nth(__ci); if (!(await __el.isVisible().catch(() => false))) continue; const __ty = (await __el.getAttribute("type").catch(() => "")) || "text"; if (__ty === "radio" || __ty === "checkbox") continue; const __idr = ((await __el.getAttribute("id").catch(() => "")) || "") + ((await __el.getAttribute("role").catch(() => "")) || "") + ((await __el.getAttribute("aria-autocomplete").catch(() => "")) || ""); if (/combobox|list|both/i.test(__idr)) continue; const __cv = await __el.inputValue().catch(() => "x"); if (__cv === "") { await __el.fill(profile.email).catch(() => {}); break; } } } catch (e) {}
+          }
+          try { const cz = page.getByLabel(/citizenship|vatanda/i).first(); if ((await cz.count()) && (await cz.isVisible().catch(() => false))) { await cz.click().catch(() => {}); await cz.fill(profile.nationality || "Turkey").catch(() => {}); await page.waitForTimeout(1500); const o = strictMappedPortal ? page.getByRole("option", { name: new RegExp("^" + profile.nationality.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") }).first() : page.locator("[role=option],lightning-base-combobox-item,li").first(); if (await o.count()) await o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(700); } } catch (e) {}
+          try { const eml = page.getByLabel(/applicant email|email address/i).first(); if ((await eml.count()) && (await eml.isVisible().catch(() => false)) && !(await eml.inputValue().catch(() => "x")) && profile.email) { await eml.click().catch(() => {}); await page.keyboard.type(profile.email, { delay: 40 }).catch(() => {}); await eml.press("Tab").catch(() => {}); } } catch (e) {}
           await clickNext();
         } else if (/available programs/i.test(txt) || (await page.getByPlaceholder(/search program name|keyword/i).count())) {
           const portalProg = profile.programName;
@@ -183,6 +231,12 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           for (let attempt = 1; attempt <= 2 && cartN === "0"; attempt++) {
             cardCount = await matchedCards.count().catch(() => 0);
             if (!cardCount) break;
+            if (strictMappedPortal && cardCount !== 1) {
+              logger.warn(
+                `[salesforce:${cfg.key}] program target ambiguous; count=${cardCount}`,
+              );
+              break;
+            }
             const card = matchedCards.last();
             const stateful = card.locator('button.slds-button_stateful, lightning-button-stateful button').first();
             const target = (await stateful.count().catch(() => 0))
@@ -221,20 +275,59 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await selByName("Country_of_Residence", profile.nationality);
           await selByName("Where_did_you_hear_us", "University Website");
           try { const d = page.locator("input[name*=Date_of_Birth i],input[name*=birth i]").first(); if (await d.count()) { await d.click().catch(() => {}); await d.fill("").catch(() => {}); await d.type(dobStr, { delay: 60 }).catch(() => {}); await d.press("Tab").catch(() => {}); } } catch (e) {}
-          try { const rs = page.locator("input[type=radio]"); const rn = await rs.count(); for (let i = 0; i < rn; i++) { const v = await rs.nth(i).getAttribute("value").catch(() => ""); if (/^No/i.test(v || "")) await rs.nth(i).check({ force: true }).catch(() => {}); } } catch (e) {}
-          try { const cb = page.locator("button[role=combobox],[role=combobox]").first(); if (await cb.count()) { await cb.click({ timeout: 2500 }).catch(() => {}); await page.waitForTimeout(800); const opts = page.locator("[role=option]"); const oc = await opts.count(); for (let i = 0; i < oc; i++) { const ot = (await opts.nth(i).innerText().catch(() => "")) || ""; if (!/none/i.test(ot)) { await opts.nth(i).click({ timeout: 2000 }).catch(() => {}); break; } } } } catch (e) {}
+          try { const rs = page.locator("input[type=radio]"); const rn = await rs.count(); for (let i = 0; i < rn; i++) { const v = await rs.nth(i).getAttribute("value").catch(() => ""); if (/^No/i.test(v || "")) await rs.nth(i).check({ force: true }).catch(() => {}); } if (strictMappedPortal && rn > 0) logger.warn(`[salesforce:${cfg.key}] audited legacy policy: binary eligibility answers=No`); } catch (e) {}
+          if (!strictMappedPortal) {
+            try { const cb = page.locator("button[role=combobox],[role=combobox]").first(); if (await cb.count()) { await cb.click({ timeout: 2500 }).catch(() => {}); await page.waitForTimeout(800); const opts = page.locator("[role=option]"); const oc = await opts.count(); for (let i = 0; i < oc; i++) { const ot = (await opts.nth(i).innerText().catch(() => "")) || ""; if (!/none/i.test(ot)) { await opts.nth(i).click({ timeout: 2000 }).catch(() => {}); break; } } } } catch (e) {}
+          }
           await fill("input[name=\"MobilePhone_Text\"]", profile.phone);
           await fill("input[name=\"Address\"]", profile.address);
-          await fill("input[name=\"City\"]", profile.address);
+          await fill("input[name=\"City\"]", strictMappedPortal ? profile.addressCity : profile.address);
           await clickNext();
         } else if (await has("select[name=\"Country_of_Secondary_School\"]") || /secondary school/i.test(txt)) {
-          await fill("input[name=\"Name_of_Secondary_School\"]", profile.schoolName || "High School");
+          await fill("input[name=\"Name_of_Secondary_School\"]", strictMappedPortal ? profile.schoolName : profile.schoolName || "High School");
           await selByName("Country_of_Secondary_School", profile.nationality);
-          await selByName("Choose_the_education_system_of_the_high_school_you_have_graduated_from");
-          await fill("input[name=\"GPA_of_Secondary_School\"]", String(profile.gpa || "3"));
+          if (strictMappedPortal) {
+            await selByName(
+              "Choose_the_education_system_of_the_high_school_you_have_graduated_from",
+              "Other",
+            );
+          } else {
+            await selByName("Choose_the_education_system_of_the_high_school_you_have_graduated_from");
+          }
+          await fill("input[name=\"GPA_of_Secondary_School\"]", String(strictMappedPortal ? profile.gpa : profile.gpa || "3"));
           await clickNext();
         } else if (await has("input[type=file]")) {
-          try { const fi = page.locator("input[type=file]"); const order = [files.diploma, files.transcript, files.passport, files.photo].filter(Boolean) as string[]; const n = await fi.count(); for (let i = 0; i < Math.min(n, order.length); i++) { await fi.nth(i).setInputFiles(order[i]).catch(() => {}); await page.waitForTimeout(1800); } } catch (e) {}
+          try {
+            const fi = page.locator("input[type=file]");
+            const slotOrder: Array<[string, string]> = [];
+            if (files.diploma) slotOrder.push(["diploma", files.diploma]);
+            if (files.transcript) slotOrder.push(["transcript", files.transcript]);
+            if (files.passport) slotOrder.push(["passport", files.passport]);
+            if (files.photo) slotOrder.push(["photo", files.photo]);
+            const n = await fi.count();
+            const uploadedSlots: string[] = [];
+            for (let i = 0; i < Math.min(n, slotOrder.length); i++) {
+              await fi.nth(i).setInputFiles(slotOrder[i][1]).catch(() => {});
+              await page.waitForTimeout(1800);
+              const value = await fi.nth(i).inputValue().catch(() => "");
+              if (value) uploadedSlots.push(slotOrder[i][0]);
+            }
+            result.uploadedSlots = uploadedSlots;
+            if (
+              strictMappedPortal &&
+              cfg.requiredDocs.some(
+                (slot) => !uploadedSlots.includes(String(slot)),
+              )
+            ) {
+              result.missingDocuments = cfg.requiredDocs.filter(
+                (slot) => !uploadedSlots.includes(String(slot)),
+              );
+              result.detail = `${cfg.label}: required document upload could not be proved`;
+              break;
+            }
+          } catch (e) {
+            if (strictMappedPortal) throw e;
+          }
           await clickNext();
         } else {
           const cna = page.getByRole("button", { name: /create new application|add application/i }).first();
@@ -245,15 +338,66 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             if (dryRun) { result.dryReachedFinal = true; break; }
             await sub.click({ timeout: 8000 }).catch(() => {});
             await page.waitForTimeout(6000);
-            if (DUP.test(await bodyText())) result.alreadyExists = true; else result.submitted = true;
+            const finalText = await bodyText();
+            if (DUP.test(finalText)) {
+              result.alreadyExists = true;
+            } else if (
+              !strictMappedPortal ||
+              APP_NUM.test(finalText) ||
+              /application (?:submitted|received|completed)|success|thank you/i.test(
+                finalText,
+              )
+            ) {
+              result.submitted = true;
+            } else {
+              result.stuckStep = step;
+              result.detail =
+                `${cfg.label}: final submission outcome could not be proved`;
+            }
             break;
           }
-          try { const r = page.locator("input[type=radio]"); if (await r.count()) { const id = await r.first().getAttribute("id").catch(() => null); if (id) { const lb = page.locator("label[for=\"" + id + "\"]").first(); if (await lb.count()) await lb.click({ timeout: 3000 }).catch(() => {}); } await r.first().check({ force: true }).catch(() => {}); } } catch (e) {}
+          try {
+            const r = page.locator("input[type=radio]");
+            const radioCount = await r.count();
+            if (radioCount) {
+              let target = r.first();
+              if (
+                strictMappedPortal &&
+                /degree|education level|program level/i.test(txt)
+              ) {
+                const levelPattern = /associate|önlisans|onlisans/i.test(profile.level)
+                  ? /associate|önlisans|onlisans/i
+                  : /master|yüksek lisans|yuksek lisans/i.test(profile.level)
+                    ? /master|yüksek lisans|yuksek lisans/i
+                    : /phd|doctor|doktora/i.test(profile.level)
+                      ? /phd|doctor|doktora/i
+                      : /bachelor|lisans/i;
+                const labels = page.locator("label").filter({ hasText: levelPattern });
+                if ((await labels.count()) !== 1) {
+                  throw new Error(
+                    `Salesforce ${cfg.key}: degree target was not unique`,
+                  );
+                }
+                await labels.first().click({ timeout: 3000 });
+                target = page.locator("#__never_used__");
+              }
+              if (await target.count()) {
+                const id = await target.getAttribute("id").catch(() => null);
+                if (id) {
+                  const lb = page.locator("label[for=\"" + id + "\"]").first();
+                  if (await lb.count()) await lb.click({ timeout: 3000 }).catch(() => {});
+                }
+                await target.check({ force: true }).catch(() => {});
+              }
+            }
+          } catch (e) {
+            if (strictMappedPortal) throw e;
+          }
           await clickNext();
         }
         let moved = false;
         for (let t = 0; t < 10; t++) { await page.waitForTimeout(1000); if (((await bodyText()).replace(/\s+/g, " ").slice(0, 600)) !== before) { moved = true; break; } }
-        if (!moved) { result.stuckStep = step; result.stuckBody = (await bodyText()).replace(/\s+/g, " ").slice(0, 200); if (step > 0) break; }
+        if (!moved) { result.stuckStep = step; if (!strictMappedPortal) result.stuckBody = (await bodyText()).replace(/\s+/g, " ").slice(0, 200); if (step > 0) break; }
       }
       logger.info("[salesforce:" + cfg.key + "] submit " + JSON.stringify(result));
       return result;
