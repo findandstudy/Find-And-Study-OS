@@ -656,9 +656,9 @@ export type AltinbasEducationAddDecision =
   | { id: null; proof: null; reason: "missing" | "ambiguous" };
 
 /**
- * Select the one education-add control proved by composed-tree proximity.
- * A semantic Add/New/Create label wins. An unlabeled icon is accepted only
- * when it is the unique nearest icon to the exact EDUCATION heading.
+ * Select the one education-add control proved by its direct semantic signal
+ * or composed-tree proximity. Multiple semantic Add controls fail closed.
+ * An unlabeled icon is accepted only when it is uniquely nearest to a heading.
  */
 export function decideAltinbasEducationAddCandidate(
   candidates: AltinbasEducationAddCandidate[],
@@ -684,11 +684,12 @@ export function decideAltinbasEducationAddCandidate(
       : { id: null, proof: null, reason: "ambiguous" };
   };
 
-  const semantic = decideNearest(
-    eligible.filter((candidate) => candidate.semantic),
-    "semantic",
-  );
-  if (semantic) return semantic;
+  const semanticPool = eligible.filter((candidate) => candidate.semantic);
+  if (semanticPool.length) {
+    return semanticPool.length === 1
+      ? { id: semanticPool[0].id, proof: "semantic", reason: "ok" }
+      : { id: null, proof: null, reason: "ambiguous" };
+  }
 
   const generic = decideNearest(
     eligible.filter((candidate) => candidate.genericIcon),

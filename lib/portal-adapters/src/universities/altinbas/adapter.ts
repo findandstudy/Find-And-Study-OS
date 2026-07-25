@@ -1877,8 +1877,9 @@ async function ensureEducationRecordUI(
       reason: `data_missing:${primary.level}.${missingForCreate.join(`,${primary.level}.`)}`,
     };
   }
-  // Open the EDUCATION add (+) modal.
-  // The + is an icon button next to the "EDUCATION" heading; click by proximity.
+  // Open the education add (+) modal. The live portal does not consistently
+  // render a literal "EDUCATION" leaf heading, so an exact Add/utility:add
+  // signal may prove the target without that optional proximity anchor.
   const addScan = await page.evaluate(() => {
     const roots: Array<Document | ShadowRoot> = [document];
     const els: Element[] = [];
@@ -1906,13 +1907,13 @@ async function ensureEducationRecordUI(
     };
     const headings = els.filter(
       (element) =>
-        /^\s*EDUCATION\s*$/i.test((element.textContent || "").trim()) &&
+        /^\s*EDUCATION(?:AL)?(?:\s+INFORMATION(?:S)?)?\s*$/i.test(
+          (element.textContent || "").trim(),
+        ) &&
         element.children.length === 0,
     );
-    if (headings.length !== 1) {
-      return { headingCount: headings.length, candidates: [] };
-    }
-    const headingChain = composedChain(headings[0]);
+    const headingChain =
+      headings.length === 1 ? composedChain(headings[0]) : [];
     const rawActions = els.filter((element) =>
       element.matches(
         "button,lightning-button,lightning-button-icon,[role='button']",
@@ -1928,13 +1929,13 @@ async function ensureEducationRecordUI(
         style.visibility === "hidden"
       ) return [];
       const actionChain = composedChain(element);
-      const actionCommonIndex = actionChain.findIndex((candidate) =>
-        headingChain.includes(candidate)
-      );
-      if (actionCommonIndex < 0) return [];
-      const headingCommonIndex = headingChain.indexOf(
-        actionChain[actionCommonIndex],
-      );
+      const actionCommonIndex = headingChain.length
+        ? actionChain.findIndex((candidate) => headingChain.includes(candidate))
+        : -1;
+      const headingCommonIndex =
+        actionCommonIndex >= 0
+          ? headingChain.indexOf(actionChain[actionCommonIndex])
+          : -1;
       const tag = element.tagName.toLowerCase();
       // A custom lightning-button host and its native shadow button represent
       // one action. Prefer the native button so the click follows the exact
@@ -1947,6 +1948,19 @@ async function ensureEducationRecordUI(
           composedChain(other).includes(element)
         )
       ) return [];
+      const directDescriptor = [
+        element.getAttribute("title"),
+        element.getAttribute("aria-label"),
+        element.getAttribute("name"),
+        element.getAttribute("icon-name"),
+        element.getAttribute("data-element-id"),
+        String((element as Element & { iconName?: unknown }).iconName || ""),
+        element.textContent,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .toLowerCase();
       const descriptor = actionChain
         .slice(0, 4)
         .flatMap((candidate) => [
@@ -1968,11 +1982,13 @@ async function ensureEducationRecordUI(
         /select a date|calendar|slds-input__icon|flow-button|(?:^|\s)(?:back|next|previous|logout)(?:\s|$)|slds-path/.test(
           descriptor,
         );
-      const hasAddVerb = /(?:^|\s)(?:add|new|create|\+)(?:\s|$)/.test(
-        descriptor,
-      );
+      const exactAddIcon =
+        /(?:^|\s)utility\s*[:_-]\s*add(?:\s|$)/.test(directDescriptor) ||
+        /(?:^|\s)(?:add|new|create|\+)(?:\s|$)/.test(directDescriptor);
       const hasEducationNoun =
-        /(?:^|\s)(?:education|school|record)(?:\s|$)/.test(descriptor);
+        /(?:^|\s)(?:education(?:al)?|school|record)(?:\s|$)/.test(
+          descriptor,
+        );
       const genericIcon =
         tag === "lightning-button-icon" ||
         /slds-button_icon/.test(descriptor);
@@ -1980,13 +1996,24 @@ async function ensureEducationRecordUI(
       element.setAttribute("data-fas-edu-add-candidate", id);
       return [{
         id,
-        distance: actionCommonIndex + headingCommonIndex,
-        semantic: hasAddVerb && hasEducationNoun,
+        // A direct Add signal is sufficient because this function is invoked
+        // only after the verified Educational Information stage is active.
+        // Generic icons remain eligible only when related to one heading.
+        distance:
+          exactAddIcon
+            ? 0
+            : actionCommonIndex >= 0 && headingCommonIndex >= 0
+              ? actionCommonIndex + headingCommonIndex
+              : 99,
+        semantic: exactAddIcon || (
+          hasEducationNoun &&
+          /(?:^|\s)(?:add|new|create|\+)(?:\s|$)/.test(descriptor)
+        ),
         genericIcon,
         excluded,
       }];
     });
-    return { headingCount: 1, candidates };
+    return { headingCount: headings.length, candidates };
   }).catch(() => ({ headingCount: 0, candidates: [] }));
   const addDecision = decideAltinbasEducationAddCandidate(addScan.candidates);
   const opened = addDecision.id
