@@ -1546,6 +1546,52 @@ async function uniqueEducationModalControl(
   };
 }
 
+async function educationModalControlContract(page: any) {
+  const controls = page.locator(
+    "input:visible,textarea:visible,select:visible,[role='combobox']:visible",
+  );
+  const count = Math.min(await controls.count().catch(() => 0), 20);
+  const contract: Array<Record<string, unknown>> = [];
+  for (let index = 0; index < count; index++) {
+    const control = controls.nth(index);
+    const [visible, enabled, editable, metadata] = await Promise.all([
+      control.isVisible().catch(() => false),
+      control.isEnabled().catch(() => false),
+      control.isEditable().catch(() => false),
+      control.evaluate((element: Element) => {
+        const chain: Array<Record<string, string>> = [];
+        let node: Element | null = element;
+        for (let depth = 0; depth < 12 && node; depth++) {
+          chain.push({
+            tag: node.tagName.toLowerCase(),
+            role: node.getAttribute("role") || "",
+            name: node.getAttribute("name") || "",
+            ariaLabel: node.getAttribute("aria-label") || "",
+            ariaLabelledby: node.getAttribute("aria-labelledby") || "",
+            className: (node.getAttribute("class") || "").slice(0, 120),
+          });
+          const root = node.getRootNode() as ShadowRoot | Document;
+          node = node.parentElement || ("host" in root ? root.host : null);
+        }
+        const input = element as HTMLInputElement;
+        return {
+          tag: element.tagName.toLowerCase(),
+          type: (element.getAttribute("type") || "").toLowerCase(),
+          name: element.getAttribute("name") || "",
+          role: element.getAttribute("role") || "",
+          ariaLabel: element.getAttribute("aria-label") || "",
+          ariaLabelledby: element.getAttribute("aria-labelledby") || "",
+          readOnly: Boolean(input.readOnly),
+          disabled: Boolean(input.disabled),
+          chain,
+        };
+      }).catch(() => null),
+    ]);
+    contract.push({ index, visible, enabled, editable, metadata });
+  }
+  return contract;
+}
+
 /** Select an exact native option and prove selected text/value after change. */
 async function selectNative(
   page: any,
@@ -2425,6 +2471,9 @@ async function ensureEducationRecordUI(
     ` (proof=${addDecision.proof}, controls=${afterModalControls},` +
     ` dialogs=${visibleDialogs})`,
   );
+  // Salesforce animates the modal and may briefly expose controls before
+  // their editable state/labels are connected.
+  await page.waitForTimeout(700);
   // Modal fields.
   const degreeLabel =
     primary.level === "bachelor" ? "Bachelor" :
@@ -2434,23 +2483,35 @@ async function ensureEducationRecordUI(
   if (!gpaTypeLabel) {
     return { ok: false, reason: "data_missing:education.gpaType" };
   }
-  let schoolMatch = await uniqueVisibleEditableControl(
-    page.getByLabel(/^\s*Name of School\s*\*?\s*$/i),
-    ["input", "textarea"],
-  );
-  if (!schoolMatch.control) {
-    schoolMatch = await uniqueEducationModalControl(
-      page,
-      "input:visible,textarea:visible",
-      /name[\s_-]*of[\s_-]*school|school[\s_-]*name|school__c|institution/i,
-      /search|filter|gpa|city|field[\s_-]*of[\s_-]*study/i,
+  let schoolMatch = {
+    control: null as any,
+    total: 0,
+    eligible: 0,
+  };
+  for (let attempt = 0; attempt < 4 && !schoolMatch.control; attempt++) {
+    schoolMatch = await uniqueVisibleEditableControl(
+      page.getByLabel(/^\s*Name of School\s*\*?\s*$/i),
       ["input", "textarea"],
     );
+    if (!schoolMatch.control) {
+      schoolMatch = await uniqueEducationModalControl(
+        page,
+        "input:visible,textarea:visible",
+        /name[\s_-]*of[\s_-]*school|school[\s_-]*name|school__c|institution/i,
+        /search|filter|gpa|city|field[\s_-]*of[\s_-]*study/i,
+        ["input", "textarea"],
+      );
+    }
+    if (!schoolMatch.control && attempt < 3) {
+      await page.waitForTimeout(350);
+    }
   }
   if (!schoolMatch.control) {
+    const contract = await educationModalControlContract(page);
     logger.warn(
       `[altinbas][ui] Educational: school control tekil görünür değil` +
-      ` (total=${schoolMatch.total}, eligible=${schoolMatch.eligible})`,
+      ` (total=${schoolMatch.total}, eligible=${schoolMatch.eligible},` +
+      ` contract=${redactAltinbasLog(JSON.stringify(contract)).slice(0, 5000)})`,
     );
     return { ok: false, reason: "school_control_not_unique" };
   }
