@@ -1054,6 +1054,8 @@ function pickProgramRecord(
 
 const UI_COMPLETE = process.env.ALTINBAS_UI_COMPLETE === "1";
 const MUTATION_CANARY = process.env.ALTINBAS_MUTATION_CANARY === "1";
+const DOCUMENTS_CAPTURE_PROBE =
+  process.env.ALTINBAS_DOCUMENTS_CAPTURE_PROBE === "1";
 const MUTATION_CANARY_STAGE = parseAltinbasCanaryStage(
   process.env.ALTINBAS_MUTATION_CANARY_STAGE,
 );
@@ -3322,6 +3324,18 @@ async function completeApplicationUI(
     result.detail = wizardFailure ||
       "Altınbaş[ui]: Documents ekranına ulaşılamadı (wizard adımları beklenenden farklı)";
     logger.warn(`[altinbas][ui] ${result.detail}`);
+    result.screenshots = shots;
+    return true;
+  }
+  // Targeted diagnostics boundary: exercise the already-approved resume path
+  // only through Questionnaire → Documents so ALTINBAS_CAPTURE can record the
+  // server-provided file-upload component state. Never select a local file,
+  // click Done, advance Documents, or submit while this flag is active.
+  if (DOCUMENTS_CAPTURE_PROBE) {
+    result.detail = CAPTURE
+      ? "Altınbaş[ui]: documents_capture_probe_complete — upload/submit yapılmadı"
+      : "Altınbaş[ui]: documents_capture_probe_blocked — ALTINBAS_CAPTURE=1 gerekli";
+    logger.info(`[altinbas][ui] ${result.detail}`);
     result.screenshots = shots;
     return true;
   }
