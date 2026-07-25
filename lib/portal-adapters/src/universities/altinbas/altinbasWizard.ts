@@ -58,6 +58,27 @@ export interface AltinbasUiDateProof {
 }
 
 /**
+ * The live Lightning datepicker keeps its Flow value only when text dates
+ * preserve two-digit day/month components. Removing leading zeroes leaves a
+ * plausible native input value while the host Flow state remains empty.
+ */
+export function altinbasUiDateEntryCandidates(
+  iso: string | undefined,
+  metadata: { type?: string; placeholder?: string },
+): string[] {
+  const match = (iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return [];
+  const [, year, month, day] = match;
+  if ((metadata.type || "").toLowerCase() === "date") return [iso!];
+
+  const placeholder = (metadata.placeholder || "").toLowerCase();
+  if (/m{1,2}[^a-z]*d{1,2}/.test(placeholder)) {
+    return [`${month}/${day}/${year}`];
+  }
+  return [`${day}/${month}/${year}`];
+}
+
+/**
  * A resumed application may already contain the exact CRM date from an
  * earlier successful Personal save. Accept that value without retyping it,
  * but only when the complete native/Lightning state proves the same ISO date.
