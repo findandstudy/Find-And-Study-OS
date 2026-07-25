@@ -2169,7 +2169,7 @@ async function ensureEducationRecordUI(
         .toLowerCase();
       const descriptor = actionChain
         .slice(0, 4)
-        .flatMap((candidate) => [
+        .flatMap((candidate, chainDepth) => [
           candidate.tagName,
           candidate.getAttribute("class"),
           candidate.getAttribute("title"),
@@ -2178,7 +2178,11 @@ async function ensureEducationRecordUI(
           candidate.getAttribute("icon-name"),
           candidate.getAttribute("data-element-id"),
           String((candidate as Element & { iconName?: unknown }).iconName || ""),
-          candidate.textContent,
+          // Never use broad ancestor text (especially BODY): it contains the
+          // whole wizard and turned Salesforce's skip link into a false
+          // "education + add" candidate. Visible text is trusted only on the
+          // activation itself and its immediate wrapper.
+          chainDepth <= 1 ? candidate.textContent : "",
         ])
         .filter(Boolean)
         .join(" ")
