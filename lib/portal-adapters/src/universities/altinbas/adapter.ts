@@ -2011,11 +2011,13 @@ async function ensureEducationRecordUI(
         .toLowerCase();
       const excluded =
         /select a date|calendar|slds-input__icon|flow-button|(?:^|\s)(?:back|next|previous|logout)(?:\s|$)|slds-path/.test(
-          descriptor,
+          directDescriptor,
         );
       const exactAddIcon =
         /(?:^|\s)utility\s*[:_-]\s*add(?:\s|$)/.test(directDescriptor) ||
         /(?:^|\s)(?:add|new|create|\+)(?:\s|$)/.test(directDescriptor);
+      const hasAddVerb =
+        /(?:^|\s)(?:add|new|create|\+)(?:\s|$)/.test(descriptor);
       const hasEducationNoun =
         /(?:^|\s)(?:education(?:al)?|school|record)(?:\s|$)/.test(
           descriptor,
@@ -2024,6 +2026,15 @@ async function ensureEducationRecordUI(
         /(?:^|\s)(?:exam|proficiency|language\s+test|test\s+score)(?:\s|$)/.test(
           descriptor,
         );
+      const targetContext =
+        (
+          /educationalinformationlist|educational_information/.test(
+            descriptor,
+          ) ||
+          hasEducationNoun
+        ) &&
+        !hasExamNoun;
+      const contextualAdd = targetContext && hasAddVerb;
       const genericIcon =
         signals.some((signal) =>
           ["lightning-icon", "lightning-button-icon"].includes(
@@ -2040,25 +2051,15 @@ async function ensureEducationRecordUI(
         // only after the verified Educational Information stage is active.
         // Generic icons remain eligible only when related to one heading.
         distance:
-          exactAddIcon
+          exactAddIcon || contextualAdd
             ? 0
             : actionCommonIndex >= 0 && headingCommonIndex >= 0
               ? actionCommonIndex + headingCommonIndex
               : 99,
-        semantic: exactAddIcon || (
-          hasEducationNoun &&
-          /(?:^|\s)(?:add|new|create|\+)(?:\s|$)/.test(descriptor)
-        ),
+        semantic: exactAddIcon || contextualAdd,
         genericIcon,
         excluded,
-        targetContext:
-          (
-            /educationalinformationlist|educational_information/.test(
-              descriptor,
-            ) ||
-            hasEducationNoun
-          ) &&
-          !hasExamNoun,
+        targetContext,
         insideDialog: actionChain.some((candidate) =>
           candidate.matches(
             "[role='dialog'],[aria-modal='true'],.slds-modal",
@@ -2139,8 +2140,10 @@ async function ensureEducationRecordUI(
       ` candidates=${addScan.candidates.length},` +
       ` semantic=${addScan.candidates.filter((candidate) => candidate.semantic).length},` +
       ` targeted=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.targetContext).length},` +
+      ` targetedExcluded=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.targetContext && candidate.excluded).length},` +
       ` dialog=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.insideDialog).length},` +
       ` tops=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.insideDialog).map((candidate) => candidate.top).sort((a, b) => a - b).join(":") || "none"},` +
+      ` semanticTops=${addScan.candidates.filter((candidate) => candidate.semantic && !candidate.excluded).map((candidate) => candidate.top).sort((a, b) => a - b).join(":") || "none"},` +
       ` icons=${addScan.candidates.filter((candidate) => candidate.genericIcon && !candidate.excluded).length},` +
       ` decision=${addDecision.reason},` +
       ` scanError=${redactAltinbasLog(
