@@ -1891,19 +1891,21 @@ async function ensureEducationRecordUI(
         }
       });
     }
-    const composedParent = (element: Element): Element | null => {
-      if (element.parentElement) return element.parentElement;
-      const root = element.getRootNode() as ShadowRoot | Document;
-      return "host" in root ? root.host : null;
-    };
-    const composedChain = (element: Element): Element[] => {
-      const result: Element[] = [];
-      let current: Element | null = element;
-      for (let depth = 0; depth < 20 && current; depth++) {
-        result.push(current);
-        current = composedParent(current);
-      }
-      return result;
+    const composed = {
+      parent(element: Element): Element | null {
+        if (element.parentElement) return element.parentElement;
+        const root = element.getRootNode() as ShadowRoot | Document;
+        return "host" in root ? root.host : null;
+      },
+      chain(element: Element): Element[] {
+        const result: Element[] = [];
+        let current: Element | null = element;
+        for (let depth = 0; depth < 20 && current; depth++) {
+          result.push(current);
+          current = composed.parent(current);
+        }
+        return result;
+      },
     };
     const headings = els.filter(
       (element) =>
@@ -1913,7 +1915,7 @@ async function ensureEducationRecordUI(
         element.children.length === 0,
     );
     const headingChain =
-      headings.length === 1 ? composedChain(headings[0]) : [];
+      headings.length === 1 ? composed.chain(headings[0]) : [];
     const rawSignals = els.filter((element) =>
       element.matches(
         "button,a,lightning-button,lightning-button-icon,lightning-icon," +
@@ -1924,7 +1926,7 @@ async function ensureEducationRecordUI(
     );
     const activationGroups = new Map<Element, Element[]>();
     rawSignals.forEach((signal) => {
-      const signalChain = composedChain(signal);
+      const signalChain = composed.chain(signal);
       const clickable = signalChain.find((candidate) =>
           candidate.matches(
             "button,a,lightning-button,lightning-button-icon,[role='button']," +
@@ -1955,7 +1957,7 @@ async function ensureEducationRecordUI(
         style.display === "none" ||
         style.visibility === "hidden"
       ) return [];
-      const actionChain = composedChain(activation);
+      const actionChain = composed.chain(activation);
       const actionCommonIndex = headingChain.length
         ? actionChain.findIndex((candidate) => headingChain.includes(candidate))
         : -1;
