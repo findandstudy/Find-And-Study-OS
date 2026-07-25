@@ -85,6 +85,7 @@ import {
   chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
   decideAltinbasApplicationRow,
+  decideAltinbasExistingApplication,
   decideAltinbasEducationAddCandidate,
   decideAltinbasUploadRefresh,
   classifyAltinbasHiddenFlowValidation,
@@ -109,7 +110,10 @@ import {
   type AltinbasWizardSnapshot,
   type AltinbasWizardState,
 } from "./altinbasWizard.js";
-import { selectAltinbasProgram } from "./altinbasProgram.js";
+import {
+  isAltinbasKnownLiveBachelorProgram,
+  selectAltinbasProgram,
+} from "./altinbasProgram.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -3053,6 +3057,40 @@ async function uploadDocumentsUI(
 // ---------------------------------------------------------------------------
 // Orchestrator
 // ---------------------------------------------------------------------------
+async function readAltinbasApplicationRows(page: any): Promise<string[]> {
+  const rowHosts = page.locator("c-application-table-row-component");
+  return rowHosts.evaluateAll((hosts: Element[]) =>
+    hosts.map((host) => {
+      const parts: string[] = [];
+      const seen = new Set<Node>();
+      const stack: Node[] = [host];
+      while (stack.length > 0) {
+        const current = stack.pop();
+        if (!current || seen.has(current)) continue;
+        seen.add(current);
+        if (current.nodeType === 3) {
+          const text = (current.textContent || "").replace(/\s+/g, " ").trim();
+          if (text) parts.push(text);
+          continue;
+        }
+        if (current.nodeType === 1) {
+          const shadowRoot = (current as Element).shadowRoot;
+          if (shadowRoot) stack.push(shadowRoot);
+        }
+        for (
+          let childIndex = current.childNodes.length - 1;
+          childIndex >= 0;
+          childIndex--
+        ) {
+          const child = current.childNodes.item(childIndex);
+          if (child) stack.push(child);
+        }
+      }
+      return parts.join(" ").replace(/\s+/g, " ").trim();
+    }),
+  ).catch(() => [] as string[]);
+}
+
 // Returns TRUE if it found an existing Signed-Up (half-finished) application and
 // handled it (completed / uploaded / already-done / attempted). Returns FALSE if
 // NO existing application row was found — the caller should then fall through to
@@ -3089,10 +3127,23 @@ async function completeApplicationUI(
   // should continue. After a commit, refresh and re-filter a bounded number of
   // times; only an absent row is retried, never an ambiguous visible row.
   const maxLookupAttempts = options.afterProgramCommit ? 4 : 1;
+  const expectedNames = [
+    fold(`${profile.firstName} ${profile.lastName}`),
+    fold(`${profile.lastName} ${profile.firstName}`),
+  ];
+  const expectedPrograms = [coreProg, progFold];
+  const expectedTrack = parseTrack(targetProgramName);
   let completeBtns: any = null;
   let nBtns = 0;
   let chosenIdx = -1;
   let rowTexts: string[] = [];
+  let allApplicationRows: string[] = [];
+  let existingApplication = decideAltinbasExistingApplication(
+    [],
+    expectedNames,
+    expectedPrograms,
+    expectedTrack,
+  );
   let lookupDecision: ReturnType<typeof decideAltinbasSignedUpLookup> = "missing";
   for (let attempt = 0; attempt < maxLookupAttempts; attempt++) {
     await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
@@ -3106,6 +3157,33 @@ async function completeApplicationUI(
         await page.waitForTimeout(3500);
       }
     } catch {/* tolerate */}
+
+    allApplicationRows = await readAltinbasApplicationRows(page);
+    existingApplication = decideAltinbasExistingApplication(
+      allApplicationRows.map(fold),
+      expectedNames,
+      expectedPrograms,
+      expectedTrack,
+    );
+    if (existingApplication.outcome === "submitted") {
+      result.submitted = true;
+      result.detail =
+        "Altınbaş[ui]: hedef başvuru portalda Evaluation durumunda doğrulandı";
+      logger.info(`[altinbas][ui] ${result.detail}`);
+      result.screenshots = shots;
+      return true;
+    }
+    if (
+      existingApplication.outcome === "ambiguous" ||
+      existingApplication.outcome === "unknown_status"
+    ) {
+      result.detail =
+        `Altınbaş[ui]: hedef program satırı var fakat durumu güvenle sınıflandırılamadı` +
+        ` (decision=${existingApplication.outcome}, applicationRowCount=${allApplicationRows.length})`;
+      logger.warn(`[altinbas][ui] ${result.detail}`);
+      result.screenshots = shots;
+      return true;
+    }
 
     // Playwright getByRole pierces Salesforce shadow DOM; raw row text remains
     // in memory and is never logged.
@@ -3174,12 +3252,9 @@ async function completeApplicationUI(
     }
     const rowDecision = decideAltinbasApplicationRow(
       rowTexts.map(fold),
-      [
-        fold(`${profile.firstName} ${profile.lastName}`),
-        fold(`${profile.lastName} ${profile.firstName}`),
-      ],
-      [coreProg, progFold],
-      parseTrack(targetProgramName),
+      expectedNames,
+      expectedPrograms,
+      expectedTrack,
     );
     chosenIdx = rowDecision.index;
     if (
@@ -3217,6 +3292,13 @@ async function completeApplicationUI(
   }
 
   if (lookupDecision === "missing") {
+    if (existingApplication.outcome === "draft") {
+      result.detail =
+        "Altınbaş[ui]: hedef Signed-Up satırı doğrulandı fakat Complete Application eylemi bulunamadı";
+      logger.warn(`[altinbas][ui] ${result.detail}`);
+      result.screenshots = shots;
+      return true;
+    }
     result.detail = options.afterProgramCommit
       ? "Altınbaş[ui]: Program commit sonrası Signed-Up satırı bounded refresh ile görünmedi"
       : `Altınbaş[ui]: My Applications'ta hedef 'Complete Application' (Signed Up) başvuru yok`;
@@ -3510,37 +3592,7 @@ async function completeApplicationUI(
     await search.fill(profile.lastName || profile.firstName || "").catch(() => {});
     await page.waitForTimeout(3_500);
   }
-  const rowHosts = page.locator("c-application-table-row-component");
-  const rows: string[] = await rowHosts.evaluateAll((hosts: Element[]) =>
-    hosts.map((host) => {
-      const parts: string[] = [];
-      const seen = new Set<Node>();
-      const stack: Node[] = [host];
-      while (stack.length > 0) {
-        const current = stack.pop();
-        if (!current || seen.has(current)) continue;
-        seen.add(current);
-        if (current.nodeType === 3) {
-          const text = (current.textContent || "").replace(/\s+/g, " ").trim();
-          if (text) parts.push(text);
-          continue;
-        }
-        if (current.nodeType === 1) {
-          const shadowRoot = (current as Element).shadowRoot;
-          if (shadowRoot) stack.push(shadowRoot);
-        }
-        for (
-          let childIndex = current.childNodes.length - 1;
-          childIndex >= 0;
-          childIndex--
-        ) {
-          const child = current.childNodes.item(childIndex);
-          if (child) stack.push(child);
-        }
-      }
-      return parts.join(" ").replace(/\s+/g, " ").trim();
-    }),
-  ).catch(() => [] as string[]);
+  const rows = await readAltinbasApplicationRows(page);
   const movedIdx = chooseAltinbasApplicationRow(
     rows.map(fold),
     [
@@ -3549,6 +3601,7 @@ async function completeApplicationUI(
     ],
     [coreProg, progFold],
     parseTrack(targetProgramName),
+    false,
   );
   const moved =
     movedIdx >= 0 &&
@@ -3734,6 +3787,16 @@ async function runFlowReplay(
   if (curRank <= 2) {
     const { record: prog, selected, candidates } = pickProgramRecord(rt, profile);
     if (!prog || !selected) {
+      if (
+        classifyProfileLevel(profile.level || "") === "bachelor" &&
+        isAltinbasKnownLiveBachelorProgram(profile.programName || "")
+      ) {
+        result.alreadyExists = true;
+        result.detail =
+          "Altınbaş: SKIPPED_DUPLICATE — güncel Bachelor programı bu öğrenciye özel eligible listeden çıkarılmış";
+        logger.info(`[altinbas] ${result.detail}`);
+        return;
+      }
       result.programMissing = true;
       result.detail = `Altınbaş: program eligible listede bulunamadı: "${profile.programName}"`;
       if (candidates.length) {

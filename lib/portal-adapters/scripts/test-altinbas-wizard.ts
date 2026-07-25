@@ -15,6 +15,7 @@ import {
   chooseAltinbasLabeledCombobox,
   decideAltinbasEducationAddCandidate,
   decideAltinbasApplicationRow,
+  decideAltinbasExistingApplication,
   decideAltinbasUploadRefresh,
   classifyAltinbasHiddenFlowValidation,
   classifyAltinbasWizardTransition,
@@ -39,6 +40,7 @@ import {
 import {
   altinbasProgramName,
   isAltinbasQuotaFull,
+  isAltinbasKnownLiveBachelorProgram,
   selectAltinbasProgram,
 } from "../src/universities/altinbas/altinbasProgram.js";
 
@@ -284,6 +286,43 @@ test("AW10c: unrelated Signed-Up rows are missing, duplicate targets ambiguous",
       "en",
     ),
     { index: -1, reason: "ambiguous", matchCount: 2 },
+  );
+});
+
+test("AW10d: a matching Evaluation row is an existing submitted application", () => {
+  const rows = [
+    "student name economics in english signed up fall 2026 complete application",
+    "student name international relations in english evaluation fall 2026 view application",
+  ];
+  assert.deepEqual(
+    decideAltinbasExistingApplication(
+      rows,
+      ["student name"],
+      ["international relations"],
+      "en",
+    ),
+    { outcome: "submitted", index: 1 },
+  );
+});
+
+test("AW10e: non-draft status proof never trusts a sole unrelated row", () => {
+  assert.deepEqual(
+    decideAltinbasExistingApplication(
+      ["student name economics in english evaluation view application"],
+      ["student name"],
+      ["international relations"],
+      "en",
+    ),
+    { outcome: "missing", index: -1 },
+  );
+  assert.deepEqual(
+    decideAltinbasExistingApplication(
+      ["student name international relations in english rejected view application"],
+      ["student name"],
+      ["international relations"],
+      "en",
+    ),
+    { outcome: "unknown_status", index: 0 },
   );
 });
 
@@ -1100,6 +1139,33 @@ test("AW20c: legacy title refuses ambiguous current programme labels", () => {
   );
   assert.equal(selection.option, null);
   assert.equal(selection.record, null);
+});
+
+test("AW20d: live Bachelor catalog separates applicant dedup from a removed legacy program", () => {
+  assert.equal(
+    isAltinbasKnownLiveBachelorProgram(
+      "Bachelor of Software Engineering (English)",
+    ),
+    true,
+  );
+  assert.equal(
+    isAltinbasKnownLiveBachelorProgram(
+      "Bachelor of International Relations (English)",
+    ),
+    true,
+  );
+  assert.equal(
+    isAltinbasKnownLiveBachelorProgram(
+      "Bachelor of Artificial Intelligence Engineering (English)",
+    ),
+    false,
+  );
+  assert.equal(
+    isAltinbasKnownLiveBachelorProgram(
+      "Master of Software Engineering (English)",
+    ),
+    false,
+  );
 });
 
 test("AW21: resumed fields prefer CRM, otherwise require a valid saved portal value", () => {

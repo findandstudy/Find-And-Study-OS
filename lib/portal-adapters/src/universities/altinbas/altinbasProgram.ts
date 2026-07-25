@@ -76,6 +76,61 @@ function legacyDegreeScopedProgramKey(value: string): string | null {
 }
 
 /**
+ * Union of the Bachelor options observed live for Fall 2026-2027 across
+ * independent applicants. Salesforce removes a programme from one
+ * applicant's availability list after that applicant has already applied,
+ * while the same programme remains visible for another applicant. Therefore
+ * a requested programme in this catalog but absent from the verified
+ * applicant-scoped availability is dedup evidence, not a renamed/removed
+ * programme eligible for fallback.
+ */
+const ALTINBAS_FALL_2026_BACHELOR_CATALOG = [
+  "Business Administration (in English)",
+  "Economics (in English)",
+  "Gastronomy",
+  "International Logistics Management (in English)",
+  "International Relations (in English)",
+  "International Trade (in English)",
+  "Jewelry Design",
+  "Law",
+  "Radio, Television and Cinema",
+  "Sociology",
+  "Computer Engineering (in English)",
+  "Dentistry",
+  "Electrical and Electronics Engineering (in English)",
+  "Health Management",
+  "Industrial Engineering (in English)",
+  "Interior Architecture and Environmental Design",
+  "Interior Architecture and Environmental Design (in English)",
+  "Management Information Systems",
+  "Mechanical Engineering (in English)",
+  "Pharmacy (in English)",
+  "Psychology (in English)",
+  "Public Relations and Advertising",
+  "Turkish – German Law (Altinbas University & University of Cologne)",
+  "Marketing",
+  "Political Science and Public Administration",
+  "Architecture",
+  "Civil Engineering",
+  "Software Engineering",
+  "Medicine",
+] as const;
+
+const ALTINBAS_FALL_2026_BACHELOR_KEYS = new Set(
+  ALTINBAS_FALL_2026_BACHELOR_CATALOG
+    .map((name) => legacyDegreeScopedProgramKey(`Bachelor of ${name}`))
+    .filter((key): key is string => Boolean(key)),
+);
+
+export function isAltinbasKnownLiveBachelorProgram(
+  requestedName: string,
+): boolean {
+  if (!/^bachelor of\b/.test(fold(requestedName))) return false;
+  const key = legacyDegreeScopedProgramKey(requestedName);
+  return Boolean(key && ALTINBAS_FALL_2026_BACHELOR_KEYS.has(key));
+}
+
+/**
  * Select the requested programme from the current Term+Degree availability
  * records. Availability rows take precedence over base Program (`a0B`) rows
  * because only the former carry the live quota flag.

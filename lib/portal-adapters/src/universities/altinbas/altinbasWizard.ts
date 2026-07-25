@@ -614,8 +614,9 @@ export function decideAltinbasApplicationRow(
   expectedFoldedNames: string[],
   expectedFoldedPrograms: string[],
   expectedTrack: "en" | "tr" | null = null,
+  allowSingleCandidate = true,
 ): AltinbasApplicationRowDecision {
-  if (foldedRows.length === 1) {
+  if (foldedRows.length === 1 && allowSingleCandidate) {
     return { index: 0, reason: "open", matchCount: 1 };
   }
   if (foldedRows.length === 0) {
@@ -689,17 +690,70 @@ export function decideAltinbasApplicationRow(
   };
 }
 
+export type AltinbasExistingApplicationDecision =
+  | { outcome: "submitted"; index: number }
+  | { outcome: "draft"; index: number }
+  | { outcome: "missing"; index: -1 }
+  | { outcome: "ambiguous"; index: -1 }
+  | { outcome: "unknown_status"; index: number };
+
+/**
+ * Classify an already-visible application only with exact applicant,
+ * programme and language-track proof. Unlike the Complete Application button
+ * path, one readable row is not accepted merely because it is the sole search
+ * result: a non-draft row can change the internal application stage, so its
+ * identity and live status must both be explicit.
+ */
+export function decideAltinbasExistingApplication(
+  foldedRows: string[],
+  expectedFoldedNames: string[],
+  expectedFoldedPrograms: string[],
+  expectedTrack: "en" | "tr" | null = null,
+): AltinbasExistingApplicationDecision {
+  const target = decideAltinbasApplicationRow(
+    foldedRows,
+    expectedFoldedNames,
+    expectedFoldedPrograms,
+    expectedTrack,
+    false,
+  );
+  if (target.reason === "missing") {
+    return { outcome: "missing", index: -1 };
+  }
+  if (target.reason === "ambiguous") {
+    return { outcome: "ambiguous", index: -1 };
+  }
+
+  const row = foldedRows[target.index] || "";
+  const draft =
+    /\bsigned up\b/.test(row) &&
+    /\bcomplete application\b/.test(row);
+  if (draft) return { outcome: "draft", index: target.index };
+
+  // Live Altınbaş contract observed on My Applications: a successfully
+  // submitted application moves to Evaluation and exposes View Application.
+  const submitted =
+    /\bevaluation\b/.test(row) &&
+    /\bview application\b/.test(row) &&
+    !/\bsigned up\b|\bcomplete application\b/.test(row);
+  if (submitted) return { outcome: "submitted", index: target.index };
+
+  return { outcome: "unknown_status", index: target.index };
+}
+
 export function chooseAltinbasApplicationRow(
   foldedRows: string[],
   expectedFoldedNames: string[],
   expectedFoldedPrograms: string[],
   expectedTrack: "en" | "tr" | null = null,
+  allowSingleCandidate = true,
 ): number {
   return decideAltinbasApplicationRow(
     foldedRows,
     expectedFoldedNames,
     expectedFoldedPrograms,
     expectedTrack,
+    allowSingleCandidate,
   ).index;
 }
 
