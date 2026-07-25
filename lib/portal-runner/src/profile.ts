@@ -31,6 +31,10 @@ import {
 import { eq, and, isNull, desc } from "drizzle-orm";
 import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl, validateIdentityFields, formatIdentityErrors } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
+import {
+  resolveAltinbasPassportDates,
+  selectFirstDocumentPerMappedSlot,
+} from "./altinbasLegacyPolicy.js";
 
 const execFileP = promisify(execFile);
 
@@ -447,6 +451,7 @@ async function downloadStudentDocuments(
   studentId: number,
   tempPrefix: string,
   logLabel: string,
+  options: { deduplicateMappedSlots?: boolean } = {},
 ): Promise<DownloadedDocs> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `${tempPrefix}-`));
 
@@ -484,9 +489,15 @@ async function downloadStudentDocuments(
   const downloadErrors: Record<string, string> = {};
   const docKeyStatus: Record<string, "ok" | "no-content" | "docKey-null" | "err"> = {};
   const hasContentBearingDocs = docs.some(hasContent);
+  const docsToProcess = options.deduplicateMappedSlots
+    ? selectFirstDocumentPerMappedSlot(
+        sortedDocs,
+        (doc) => doc.type ? mapDocType(doc.type) : null,
+      )
+    : sortedDocs;
 
   await Promise.all(
-    sortedDocs.map(async (doc) => {
+    docsToProcess.map(async (doc) => {
       if (!doc.type) return;
 
       const docKey = mapDocType(doc.type);
@@ -676,6 +687,22 @@ export async function buildStudentProfile(
 
   // ----- 4. Build profile + download documents -----------------------------
   const profile = buildSubmitProfileFromRecords(student, app);
+  const isAltinbas = /altinbas/i.test(sub.universityKey);
+  if (isAltinbas) {
+    const passportDates = resolveAltinbasPassportDates({
+      dateOfBirth: student.dateOfBirth,
+      passportIssueDate: student.passportIssueDate,
+      passportExpiryDate: student.passportExpiry,
+    });
+    profile.passportIssueDate = passportDates.issueDate;
+    profile.passportExpiryDate = passportDates.expiryDate;
+    if (passportDates.fallbackFields.length > 0) {
+      console.warn(
+        `[portal-profile] #${submissionId} Altınbaş legacy passport-date fallback` +
+        ` (fields=${passportDates.fallbackFields.join(",")})`,
+      );
+    }
+  }
 
   // ----- 4a. SON SAVUNMA HATTI: kimlik alanı doğrulaması (real mode) --------
   // Pasaport numarası, ad/soyad ve tarihler portal formuna yazılmadan HEMEN
@@ -690,8 +717,8 @@ export async function buildStudentProfile(
       firstName:          student.firstName,
       lastName:           student.lastName,
       dateOfBirth:        student.dateOfBirth,
-      passportIssueDate:  student.passportIssueDate,
-      passportExpiryDate: student.passportExpiry,
+      passportIssueDate:  profile.passportIssueDate,
+      passportExpiryDate: profile.passportExpiryDate,
     });
     if (identityErrors.length > 0) {
       throw new Error(
@@ -729,6 +756,7 @@ export async function buildStudentProfile(
     sub.studentId,
     `portal-sub-${submissionId}`,
     `#${submissionId}`,
+    { deduplicateMappedSlots: isAltinbas },
   );
 
   // Carry document/photo URLs on the profile for URL-fetching create webhooks.

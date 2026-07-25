@@ -84,6 +84,7 @@ import {
   chooseAltinbasApplicantGridRow,
   chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
+  decideAltinbasApplicationRow,
   decideAltinbasEducationAddCandidate,
   decideAltinbasUploadRefresh,
   classifyAltinbasHiddenFlowValidation,
@@ -3069,16 +3070,19 @@ async function completeApplicationUI(
   options: {
     afterProgramCommit?: boolean;
     uploadRefreshAttempted?: boolean;
+    portalProgramName?: string;
   } = {},
 ): Promise<boolean> {
   // Push captures into submit()'s own screenshots array so its
   // `if (screenshots.length) result.screenshots = screenshots;` picks them up.
   const shots: string[] = screenshots;
-  const progFold = fold(profile.programName || "");
+  const targetProgramName =
+    options.portalProgramName || profile.programName || "";
+  const progFold = fold(targetProgramName);
   // "Core" program (strip Bachelor/Master/of/in/English…) → robust row match,
   // e.g. profile "Bachelor of Electrical and Electronics Engineering (English)"
   // matches a portal row labelled "Electrical and Electronics Engineering (in English)".
-  const coreProg = altinbasApplicationCoreProgram(profile.programName || "");
+  const coreProg = altinbasApplicationCoreProgram(targetProgramName);
 
   // A brand-new Program commit can take time to surface in My Applications.
   // Before a commit, one probe is enough: no row means the normal create path
@@ -3168,15 +3172,34 @@ async function completeApplicationUI(
         rowTexts.push("");
       }
     }
-    chosenIdx = chooseAltinbasApplicationRow(
+    const rowDecision = decideAltinbasApplicationRow(
       rowTexts.map(fold),
       [
         fold(`${profile.firstName} ${profile.lastName}`),
         fold(`${profile.lastName} ${profile.firstName}`),
       ],
       [coreProg, progFold],
-      parseTrack(profile.programName || ""),
+      parseTrack(targetProgramName),
     );
+    chosenIdx = rowDecision.index;
+    if (
+      rowDecision.reason === "missing" &&
+      nBtns > 1
+    ) {
+      lookupDecision =
+        options.afterProgramCommit && attempt + 1 < maxLookupAttempts
+          ? "retry"
+          : "missing";
+      logger.info(
+        `[altinbas][ui] Signed-Up lookup` +
+        ` (afterCommit=${options.afterProgramCommit === true}, attempt=${attempt + 1}/${maxLookupAttempts},` +
+        ` completeButtonCount=${nBtns}, readableRows=${rowTexts.filter(Boolean).length},` +
+        ` targetMatches=0, decision=${lookupDecision})`,
+      );
+      if (lookupDecision !== "retry") break;
+      await page.waitForTimeout(4000);
+      continue;
+    }
     lookupDecision = decideAltinbasSignedUpLookup({
       completeButtonCount: nBtns,
       chosenIndex: chosenIdx,
@@ -3196,7 +3219,7 @@ async function completeApplicationUI(
   if (lookupDecision === "missing") {
     result.detail = options.afterProgramCommit
       ? "Altınbaş[ui]: Program commit sonrası Signed-Up satırı bounded refresh ile görünmedi"
-      : `Altınbaş[ui]: My Applications'ta 'Complete Application' (Signed Up) başvuru yok (program="${profile.programName}")`;
+      : `Altınbaş[ui]: My Applications'ta hedef 'Complete Application' (Signed Up) başvuru yok`;
     logger.warn(`[altinbas][ui] ${result.detail}`);
     if (MUTATION_CANARY) {
       result.detail = "Altınbaş[canary]: blocked — hedef Complete Application satırı bulunamadı";
@@ -3525,6 +3548,7 @@ async function completeApplicationUI(
       fold(`${profile.lastName} ${profile.firstName}`),
     ],
     [coreProg, progFold],
+    parseTrack(targetProgramName),
   );
   const moved =
     movedIdx >= 0 &&
@@ -3672,6 +3696,7 @@ async function runFlowReplay(
   };
 
   let raw = rt.lastRaw;
+  let committedPortalProgramName: string | undefined;
 
   // 2) TERM (NEXT) — nf=0 YASAK; captured constant öncelikli (FIX-3).
   if (curRank <= 0) {
@@ -3730,6 +3755,7 @@ async function runFlowReplay(
       logger.info(`[altinbas] ${result.detail}`);
       return;
     }
+    committedPortalProgramName = selected.name;
     raw = await postNavigateFlow(page, rt, "NEXT", buildProgramFields(prog), "program");
     // Gerçek ilk-başvuru duplicate'i: Program NEXT yanıtında AlreadyApplicationError
     // kayıt OLUŞTURULMADAN ÖNCE dolar (öğrenci bu programa gerçekten başvurmuş).
@@ -3828,7 +3854,10 @@ async function runFlowReplay(
       dryRun,
       result,
       screenshots,
-      { afterProgramCommit: true },
+      {
+        afterProgramCommit: true,
+        portalProgramName: committedPortalProgramName,
+      },
     );
     if (!handled) {
       result.detail =

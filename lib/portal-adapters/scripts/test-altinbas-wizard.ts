@@ -14,6 +14,7 @@ import {
   chooseAltinbasApplicationRow,
   chooseAltinbasLabeledCombobox,
   decideAltinbasEducationAddCandidate,
+  decideAltinbasApplicationRow,
   decideAltinbasUploadRefresh,
   classifyAltinbasHiddenFlowValidation,
   classifyAltinbasWizardTransition,
@@ -256,6 +257,33 @@ test("AW10b: duplicate programme rows require the requested language track", () 
     ),
     -1,
     "an explicit opposite-track row is never selected",
+  );
+});
+
+test("AW10c: unrelated Signed-Up rows are missing, duplicate targets ambiguous", () => {
+  assert.deepEqual(
+    decideAltinbasApplicationRow(
+      [
+        "student name economics in english signed up",
+        "student name international trade in english signed up",
+      ],
+      ["student name"],
+      ["international relations"],
+      "en",
+    ),
+    { index: -1, reason: "missing", matchCount: 0 },
+  );
+  assert.deepEqual(
+    decideAltinbasApplicationRow(
+      [
+        "student name international relations in english signed up",
+        "student name international relations in english signed up",
+      ],
+      ["student name"],
+      ["international relations"],
+      "en",
+    ),
+    { index: -1, reason: "ambiguous", matchCount: 2 },
   );
 });
 

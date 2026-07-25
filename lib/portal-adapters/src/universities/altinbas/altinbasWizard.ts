@@ -603,17 +603,29 @@ export function missingAltinbasPersonalFields(
  * One result is unique after applicant search. Multiple results require exactly
  * one row that proves both applicant name and programme.
  */
-export function chooseAltinbasApplicationRow(
+export interface AltinbasApplicationRowDecision {
+  index: number;
+  reason: "open" | "missing" | "ambiguous";
+  matchCount: number;
+}
+
+export function decideAltinbasApplicationRow(
   foldedRows: string[],
   expectedFoldedNames: string[],
   expectedFoldedPrograms: string[],
   expectedTrack: "en" | "tr" | null = null,
-): number {
-  if (foldedRows.length === 1) return 0;
-  if (foldedRows.length === 0) return -1;
+): AltinbasApplicationRowDecision {
+  if (foldedRows.length === 1) {
+    return { index: 0, reason: "open", matchCount: 1 };
+  }
+  if (foldedRows.length === 0) {
+    return { index: -1, reason: "missing", matchCount: 0 };
+  }
   const names = expectedFoldedNames.filter((value) => value.length >= 3);
   const programs = expectedFoldedPrograms.filter((value) => value.length >= 5);
-  if (!names.length || !programs.length) return -1;
+  if (!names.length || !programs.length) {
+    return { index: -1, reason: "ambiguous", matchCount: 0 };
+  }
   const matches = foldedRows
     .map((row, index) => ({
       index,
@@ -623,7 +635,13 @@ export function chooseAltinbasApplicationRow(
     }))
     .filter((candidate) => candidate.name && candidate.program);
   if (!expectedTrack) {
-    return matches.length === 1 ? matches[0].index : -1;
+    return matches.length === 1
+      ? { index: matches[0].index, reason: "open", matchCount: 1 }
+      : {
+          index: -1,
+          reason: matches.length === 0 ? "missing" : "ambiguous",
+          matchCount: matches.length,
+        };
   }
 
   const sameTrack = expectedTrack === "en"
@@ -635,17 +653,54 @@ export function chooseAltinbasApplicationRow(
   const exactTrackMatches = matches.filter((candidate) =>
     sameTrack.test(candidate.row) && !oppositeTrack.test(candidate.row),
   );
-  if (exactTrackMatches.length === 1) return exactTrackMatches[0].index;
-  if (exactTrackMatches.length > 1) return -1;
+  if (exactTrackMatches.length === 1) {
+    return { index: exactTrackMatches[0].index, reason: "open", matchCount: 1 };
+  }
+  if (exactTrackMatches.length > 1) {
+    return {
+      index: -1,
+      reason: "ambiguous",
+      matchCount: exactTrackMatches.length,
+    };
+  }
 
   // A single unlabeled candidate is safe only when no explicit opposite-track
   // row survived the same applicant+programme proof.
   const compatibleUnlabeled = matches.filter((candidate) =>
     !sameTrack.test(candidate.row) && !oppositeTrack.test(candidate.row),
   );
-  return compatibleUnlabeled.length === 1
-    ? compatibleUnlabeled[0].index
-    : -1;
+  if (compatibleUnlabeled.length === 1) {
+    return {
+      index: compatibleUnlabeled[0].index,
+      reason: "open",
+      matchCount: 1,
+    };
+  }
+  const compatibleCount = compatibleUnlabeled.length;
+  return {
+    index: -1,
+    reason:
+      matches.length === 0 || (compatibleCount === 0 && matches.every(
+        (candidate) => oppositeTrack.test(candidate.row),
+      ))
+        ? "missing"
+        : "ambiguous",
+    matchCount: compatibleCount,
+  };
+}
+
+export function chooseAltinbasApplicationRow(
+  foldedRows: string[],
+  expectedFoldedNames: string[],
+  expectedFoldedPrograms: string[],
+  expectedTrack: "en" | "tr" | null = null,
+): number {
+  return decideAltinbasApplicationRow(
+    foldedRows,
+    expectedFoldedNames,
+    expectedFoldedPrograms,
+    expectedTrack,
+  ).index;
 }
 
 /**
