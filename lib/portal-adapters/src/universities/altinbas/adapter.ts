@@ -2162,6 +2162,10 @@ async function ensureEducationRecordUI(
         style.visibility === "hidden"
       ) return [];
       const actionChain = composed.chain(activation);
+      const interactive = activation.matches(
+        "button,a,lightning-button,lightning-button-icon,[role='button']," +
+        "[onclick],[tabindex='0'],.slds-button,.slds-button_icon",
+      );
       const actionCommonIndex = headingChain.length
         ? actionChain.findIndex((candidate) => headingChain.includes(candidate))
         : -1;
@@ -2295,7 +2299,7 @@ async function ensureEducationRecordUI(
         genericIcon,
         excluded,
         targetContext,
-        interactive: Boolean(clickable),
+        interactive,
         targetMeta,
         signalMeta,
         insideDialog: actionChain.some((candidate) =>
