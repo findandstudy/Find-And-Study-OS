@@ -1132,12 +1132,14 @@ function altinbasUiDateCandidates(
   if ((metadata.type || "").toLowerCase() === "date") return [iso];
 
   const placeholder = (metadata.placeholder || "").toLowerCase();
-  if (/d{1,2}[^a-z]*m{1,2}/.test(placeholder)) {
-    return [`${day}/${month}/${year}`];
+  if (/m{1,2}[^a-z]*d{1,2}/.test(placeholder)) {
+    return [`${month}/${day}/${year}`];
   }
-  // Salesforce's en-US lightning-input date placeholder is MM/DD/YYYY.  A
-  // numeric value is also locale-stable where the control exposes no hint.
-  return [`${month}/${day}/${year}`];
+  // Live Altınbaş's lightning-datepicker exposes an empty placeholder but its
+  // Flow parser is day-first. Real-profile read-only probing proved that MDY
+  // stays only in the native input while DMY reaches lightning-input and
+  // flowruntime-flow-screen-input for all three required date fields.
+  return [`${day}/${month}/${year}`];
 }
 
 function canonicalAltinbasUiDate(
@@ -1150,9 +1152,9 @@ function canonicalAltinbasUiDate(
   match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!match) return null;
   const [, firstRaw, secondRaw, year] = match;
-  const dayFirst = /d{1,2}[^a-z]*m{1,2}/.test(
-    (metadata.placeholder || "").toLowerCase(),
-  );
+  const placeholder = (metadata.placeholder || "").toLowerCase();
+  const dayFirst =
+    !/m{1,2}[^a-z]*d{1,2}/.test(placeholder);
   const month = Number(dayFirst ? secondRaw : firstRaw);
   const day = Number(dayFirst ? firstRaw : secondRaw);
   const date = new Date(Date.UTC(Number(year), month - 1, day));
