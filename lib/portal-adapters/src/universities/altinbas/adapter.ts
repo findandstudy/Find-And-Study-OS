@@ -1359,6 +1359,45 @@ async function selectNamedField(
   }
 }
 
+async function uniqueVisibleEditableControl(
+  locator: any,
+  expectedTags: string[],
+): Promise<{
+  control: any | null;
+  total: number;
+  eligible: number;
+}> {
+  const total = await locator.count().catch(() => 0);
+  const eligibleIndexes: number[] = [];
+  for (let index = 0; index < total; index++) {
+    const candidate = locator.nth(index);
+    const [visible, enabled, editable, tag] = await Promise.all([
+      candidate.isVisible().catch(() => false),
+      candidate.isEnabled().catch(() => false),
+      candidate.isEditable().catch(() => false),
+      candidate
+        .evaluate((element: Element) => element.tagName.toLowerCase())
+        .catch(() => ""),
+    ]);
+    if (
+      visible &&
+      enabled &&
+      editable &&
+      expectedTags.includes(String(tag).toLowerCase())
+    ) {
+      eligibleIndexes.push(index);
+    }
+  }
+  return {
+    control:
+      eligibleIndexes.length === 1
+        ? locator.nth(eligibleIndexes[0])
+        : null,
+    total,
+    eligible: eligibleIndexes.length,
+  };
+}
+
 /** Select an exact native option and prove selected text/value after change. */
 async function selectNative(
   page: any,
@@ -1368,8 +1407,15 @@ async function selectNative(
   if (!value) return false;
   try {
     const controls = page.getByLabel(labelRe);
-    if ((await controls.count().catch(() => 0)) !== 1) return false;
-    const sel = controls.first();
+    const selected = await uniqueVisibleEditableControl(controls, ["select"]);
+    if (!selected.control) {
+      logger.warn(
+        `[altinbas][ui] native select tekil görünür değil` +
+        ` (label=${labelRe.source}, total=${selected.total}, eligible=${selected.eligible})`,
+      );
+      return false;
+    }
+    const sel = selected.control;
     await sel.selectOption({ label: value }).catch(async () => {
       await sel.selectOption(value);
     });
@@ -2166,10 +2212,18 @@ async function ensureEducationRecordUI(
   if (!gpaTypeLabel) {
     return { ok: false, reason: "data_missing:education.gpaType" };
   }
-  const schoolControl = page.getByLabel(/Name of School/i);
-  if ((await schoolControl.count().catch(() => 0)) !== 1) {
+  const schoolMatch = await uniqueVisibleEditableControl(
+    page.getByLabel(/^\s*Name of School\s*\*?\s*$/i),
+    ["input", "textarea"],
+  );
+  if (!schoolMatch.control) {
+    logger.warn(
+      `[altinbas][ui] Educational: school control tekil görünür değil` +
+      ` (total=${schoolMatch.total}, eligible=${schoolMatch.eligible})`,
+    );
     return { ok: false, reason: "school_control_not_unique" };
   }
+  const schoolControl = schoolMatch.control;
   await schoolControl.fill(primary.schoolName!.trim());
   const schoolReadback =
     ((await schoolControl.inputValue().catch(() => "")) || "").trim() ===
@@ -2180,10 +2234,18 @@ async function ensureEducationRecordUI(
     selectNative(page, /Graduation Year/i, String(primary.endYear)),
     selectNative(page, /GPA Type/i, gpaTypeLabel),
   ]);
-  const gpaControl = page.getByLabel(/^\s*GPA\s*$/i);
-  if ((await gpaControl.count().catch(() => 0)) !== 1) {
+  const gpaMatch = await uniqueVisibleEditableControl(
+    page.getByLabel(/^\s*GPA\s*\*?\s*$/i),
+    ["input"],
+  );
+  if (!gpaMatch.control) {
+    logger.warn(
+      `[altinbas][ui] Educational: GPA control tekil görünür değil` +
+      ` (total=${gpaMatch.total}, eligible=${gpaMatch.eligible})`,
+    );
     return { ok: false, reason: "gpa_control_not_unique" };
   }
+  const gpaControl = gpaMatch.control;
   await gpaControl.fill(primary.gpa!.trim());
   const gpaReadback =
     ((await gpaControl.inputValue().catch(() => "")) || "").trim() ===
