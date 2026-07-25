@@ -1176,11 +1176,10 @@ async function fillAltinbasUiDateField(
           delay: 35,
           timeout: 6_000,
         });
-        // lightning-input/date-picker keeps a draft value until it receives a
-        // committing keyboard/change sequence after typing.
+        // Keep the commit path fully trusted. Synthetic change/blur events can
+        // make Lightning consume a draft before the real keyboard blur, leaving
+        // the native input populated while the Flow/datepicker hosts stay stale.
         await control.press("Enter").catch(() => {});
-        await control.dispatchEvent("change").catch(() => {});
-        await control.dispatchEvent("blur").catch(() => {});
         await control.press("Tab").catch(() => {});
         await page.waitForTimeout(180 * attempt);
         let lastProof: any = null;
