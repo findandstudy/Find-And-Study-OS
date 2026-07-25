@@ -1784,6 +1784,31 @@ async function fileInputAttachmentProof(
       for (const attribute of node.getAttributeNames()) {
         inspect(node.getAttribute(attribute), 1);
       }
+      // Lightning's Flow file-upload wrappers keep their committed upload
+      // result behind prototype getters/non-enumerable host properties. A
+      // generic Object.keys() walk therefore misses the very state that proves
+      // a resumed slot already owns ContentVersion/ContentDocument records.
+      // Read only the known upload-state contract on this input's composed
+      // ancestor chain; never scan sibling slots or the whole page.
+      const uploadStateHost = node as Element & Record<string, unknown>;
+      for (const property of [
+        "contentVersionIds",
+        "contentDocumentIds",
+        "uploadedFiles",
+        "uploadedFileNames",
+        "fileNames",
+        "fileList",
+        "files",
+        "fileName",
+        "filename",
+        "outputValue",
+        "value",
+        "recordId",
+      ]) {
+        try {
+          inspect(uploadStateHost[property], 3);
+        } catch {/* inaccessible Lightning getter */}
+      }
       inspect(node, 3);
       const root = node.getRootNode() as ShadowRoot | Document;
       node = node.parentElement || ("host" in root ? root.host : null);
