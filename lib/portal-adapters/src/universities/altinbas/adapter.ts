@@ -1183,11 +1183,18 @@ async function fillAltinbasUiDateField(
     if (!candidates.length) return { ok: false, field, reason: "data_missing" };
     for (const candidate of candidates) {
       await control.click({ timeout: 6_000 });
-      await control.fill(candidate, { timeout: 6_000 });
+      // LWC's datepicker is a controlled text input. A Playwright fill can
+      // leave the native DOM value looking correct while the Flow component's
+      // internal value remains empty. Use real keyboard events so the same
+      // controller path as a human entry runs.
+      await control.press("ControlOrMeta+A").catch(async () => {
+        await control.press("Control+A").catch(() => {});
+      });
+      await control.press("Backspace").catch(() => {});
+      await control.type(candidate, { delay: 35, timeout: 6_000 });
       // lightning-input/date-picker keeps a draft value until it receives a
-      // committing keyboard/change sequence. Playwright's fill updates the
-      // visible native input, but that alone does not update Salesforce Flow's
-      // required-field model (observed in the live Personal Information step).
+      // committing keyboard/change sequence after typing (observed in the live
+      // Personal Information step).
       await control.press("Enter").catch(() => {});
       await control.dispatchEvent("change").catch(() => {});
       await control.dispatchEvent("blur").catch(() => {});
