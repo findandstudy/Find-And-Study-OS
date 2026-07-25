@@ -187,6 +187,16 @@ export async function buildStudentProfile(
     gpaType:       r.gpaType       ?? null,
     languageScore: r.languageScore ?? null,
   }));
+  // Historical applications stored prior-education values directly on the
+  // student row, before education_records existed. Keep those values in an
+  // additive compatibility payload so Altınbaş can complete a partial record
+  // without changing Topkapı or writing fabricated values back to the CRM.
+  profile.legacyEducation = {
+    highSchool:      student.highSchool?.trim()         || undefined,
+    bachelorSchool: student.universityBachelor?.trim() || undefined,
+    masterSchool:   student.universityMaster?.trim()   || undefined,
+    rawGpa:          student.gpa?.trim()                || undefined,
+  };
 
   // ----- 5. Download documents to temp dir ---------------------------------
   const tempDir = await fs.mkdtemp(
