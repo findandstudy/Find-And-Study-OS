@@ -1397,16 +1397,146 @@ async function uniqueVisibleEditableControl(
   };
 }
 
+/**
+ * Salesforce's custom education modal does not consistently wire visible
+ * labels through `for`/`aria-labelledby`, so getByLabel can return zero even
+ * though one editable field is present. Resolve only inside the active modal,
+ * using exact field-contract aliases from the control and its nearest labels.
+ */
+async function uniqueEducationModalControl(
+  page: any,
+  selector: string,
+  targetRe: RegExp,
+  excludeRe: RegExp,
+  expectedTags: string[],
+): Promise<{
+  control: any | null;
+  total: number;
+  eligible: number;
+}> {
+  const locator = page.locator(selector);
+  const total = await locator.count().catch(() => 0);
+  const eligibleIndexes: number[] = [];
+  for (let index = 0; index < total; index++) {
+    const candidate = locator.nth(index);
+    const [visible, enabled, editable, metadata] = await Promise.all([
+      candidate.isVisible().catch(() => false),
+      candidate.isEnabled().catch(() => false),
+      candidate.isEditable().catch(() => false),
+      candidate.evaluate(
+        (
+          element: Element,
+          patterns: { target: string; exclude: string },
+        ) => {
+          const parts: string[] = [];
+          let insideDialog = false;
+          let node: Element | null = element;
+          for (let depth = 0; depth < 20 && node; depth++) {
+            if (
+              node.matches(
+                "[role='dialog'],[aria-modal='true'],.slds-modal,.modal-container",
+              )
+            ) {
+              insideDialog = true;
+            }
+            for (const attribute of [
+              "name",
+              "id",
+              "aria-label",
+              "aria-labelledby",
+              "placeholder",
+              "data-field",
+              "data-field-name",
+              "data-name",
+              "data-id",
+            ]) {
+              const value = node.getAttribute(attribute);
+              if (value) parts.push(value);
+            }
+            if (depth < 4) {
+              const labels = node.querySelectorAll(
+                ":scope > label,:scope > .slds-form-element__label," +
+                ":scope > [part='label']",
+              );
+              for (const label of labels) {
+                const text = (label.textContent || "").trim();
+                if (text) parts.push(text);
+              }
+            }
+            const labelledBy = node.getAttribute("aria-labelledby");
+            if (labelledBy) {
+              const root = node.getRootNode() as Document | ShadowRoot;
+              for (const id of labelledBy.split(/\s+/)) {
+                const label =
+                  "getElementById" in root ? root.getElementById(id) : null;
+                const text = (label?.textContent || "").trim();
+                if (text) parts.push(text);
+              }
+            }
+            const root = node.getRootNode() as Document | ShadowRoot;
+            node = node.parentElement || ("host" in root ? root.host : null);
+          }
+          const descriptor = parts.join(" ").replace(/\s+/g, " ").toLowerCase();
+          return {
+            tag: element.tagName.toLowerCase(),
+            type: (element.getAttribute("type") || "").toLowerCase(),
+            insideDialog,
+            target: new RegExp(patterns.target, "i").test(descriptor),
+            excluded: new RegExp(patterns.exclude, "i").test(descriptor),
+          };
+        },
+        { target: targetRe.source, exclude: excludeRe.source },
+      ).catch(() => ({
+        tag: "",
+        type: "",
+        insideDialog: false,
+        target: false,
+        excluded: true,
+      })),
+    ]);
+    if (
+      visible &&
+      enabled &&
+      editable &&
+      metadata.insideDialog &&
+      metadata.target &&
+      !metadata.excluded &&
+      metadata.type !== "hidden" &&
+      expectedTags.includes(metadata.tag)
+    ) {
+      eligibleIndexes.push(index);
+    }
+  }
+  return {
+    control:
+      eligibleIndexes.length === 1
+        ? locator.nth(eligibleIndexes[0])
+        : null,
+    total,
+    eligible: eligibleIndexes.length,
+  };
+}
+
 /** Select an exact native option and prove selected text/value after change. */
 async function selectNative(
   page: any,
   labelRe: RegExp,
   value: string,
+  descriptorRe: RegExp,
 ): Promise<boolean> {
   if (!value) return false;
   try {
     const controls = page.getByLabel(labelRe);
-    const selected = await uniqueVisibleEditableControl(controls, ["select"]);
+    let selected = await uniqueVisibleEditableControl(controls, ["select"]);
+    if (!selected.control) {
+      selected = await uniqueEducationModalControl(
+        page,
+        "select:visible",
+        descriptorRe,
+        /search|filter|programme|program|term|application/i,
+        ["select"],
+      );
+    }
     if (!selected.control) {
       logger.warn(
         `[altinbas][ui] native select tekil görünür değil` +
@@ -2211,10 +2341,19 @@ async function ensureEducationRecordUI(
   if (!gpaTypeLabel) {
     return { ok: false, reason: "data_missing:education.gpaType" };
   }
-  const schoolMatch = await uniqueVisibleEditableControl(
+  let schoolMatch = await uniqueVisibleEditableControl(
     page.getByLabel(/^\s*Name of School\s*\*?\s*$/i),
     ["input", "textarea"],
   );
+  if (!schoolMatch.control) {
+    schoolMatch = await uniqueEducationModalControl(
+      page,
+      "input:visible,textarea:visible",
+      /name[\s_-]*of[\s_-]*school|school[\s_-]*name|school__c|institution/i,
+      /search|filter|gpa|city|field[\s_-]*of[\s_-]*study/i,
+      ["input", "textarea"],
+    );
+  }
   if (!schoolMatch.control) {
     logger.warn(
       `[altinbas][ui] Educational: school control tekil görünür değil` +
@@ -2228,15 +2367,44 @@ async function ensureEducationRecordUI(
     ((await schoolControl.inputValue().catch(() => "")) || "").trim() ===
     primary.schoolName!.trim();
   const selectProofs = await Promise.all([
-    selectNative(page, /^\s*Country/i, primary.country!.trim()),
-    selectNative(page, /^\s*Degree/i, degreeLabel),
-    selectNative(page, /Graduation Year/i, String(primary.endYear)),
-    selectNative(page, /GPA Type/i, gpaTypeLabel),
+    selectNative(
+      page,
+      /^\s*Country/i,
+      primary.country!.trim(),
+      /country__c|country/i,
+    ),
+    selectNative(
+      page,
+      /^\s*Degree/i,
+      degreeLabel,
+      /degree__c|degree/i,
+    ),
+    selectNative(
+      page,
+      /Graduation Year/i,
+      String(primary.endYear),
+      /end[\s_-]*year__c|graduation[\s_-]*year|end[\s_-]*year/i,
+    ),
+    selectNative(
+      page,
+      /GPA Type/i,
+      gpaTypeLabel,
+      /gpa[\s_-]*type__c|gpa[\s_-]*type/i,
+    ),
   ]);
-  const gpaMatch = await uniqueVisibleEditableControl(
+  let gpaMatch = await uniqueVisibleEditableControl(
     page.getByLabel(/^\s*GPA\s*\*?\s*$/i),
     ["input"],
   );
+  if (!gpaMatch.control) {
+    gpaMatch = await uniqueEducationModalControl(
+      page,
+      "input:visible",
+      /(?:^|[\s_-])gpa(?:__c)?(?:$|[\s_-])/i,
+      /gpa[\s_-]*type|search|filter/i,
+      ["input"],
+    );
+  }
   if (!gpaMatch.control) {
     logger.warn(
       `[altinbas][ui] Educational: GPA control tekil görünür değil` +
