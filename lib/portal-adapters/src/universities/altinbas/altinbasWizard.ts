@@ -284,6 +284,7 @@ export function resolveAltinbasResumeFieldAction(input: {
 
 export type AltinbasVisaResumeAction =
   | "select_no_from_crm"
+  | "select_no_from_policy"
   | "accept_existing_no"
   | "questionnaire_followup_unmapped"
   | "data_missing";
@@ -296,6 +297,7 @@ export type AltinbasVisaResumeAction =
 export function resolveAltinbasVisaResumeAction(input: {
   crmValue: unknown;
   portalValue: unknown;
+  legacyDefaultNo?: boolean;
 }): AltinbasVisaResumeAction {
   const crm = typeof input.crmValue === "string"
     ? input.crmValue.trim().toLowerCase()
@@ -307,6 +309,7 @@ export function resolveAltinbasVisaResumeAction(input: {
   if (crm === "no") return "select_no_from_crm";
   if (portal === "yes") return "questionnaire_followup_unmapped";
   if (portal === "no") return "accept_existing_no";
+  if (input.legacyDefaultNo) return "select_no_from_policy";
   return "data_missing";
 }
 
