@@ -93,6 +93,7 @@ import {
   isAltinbasLightningUploadProved,
   isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
+  normalizeAltinbasPassportNumber,
   parseAltinbasCanaryStage,
   redactAltinbasLog,
   resolveAltinbasLegacyEducation,
@@ -4332,6 +4333,24 @@ async function fillStep1(page: any, profile: SubmitProfile): Promise<boolean> {
   );
   if (!clicked) return false;
   await page.waitForTimeout(3000);
+  const passportAfterNext = page
+    .getByLabel(altinbasBasicFieldLabel("passport"))
+    .filter({ visible: true });
+  if ((await passportAfterNext.count().catch(() => 0)) === 1) {
+    const proof = await passportAfterNext.first().evaluate((element: Element) => {
+      const control = element as HTMLInputElement;
+      return {
+        ariaInvalid: control.getAttribute("aria-invalid") === "true",
+        valid: control.validity ? control.validity.valid : true,
+      };
+    }).catch(() => null);
+    if (!proof || proof.ariaInvalid || !proof.valid) {
+      logger.warn(
+        "[altinbas] Step 1: Passport Number portal validation failed after Next",
+      );
+      return false;
+    }
+  }
   return true;
 }
 
@@ -4644,6 +4663,25 @@ export const altinbasAdapter: UniversityAdapter = {
       };
     }
 
+    const normalizedPassport =
+      normalizeAltinbasPassportNumber(profile.passportNumber);
+    if (!normalizedPassport) {
+      const msg =
+        "Altınbaş: passportNumber portal formatına çevrilemedi " +
+        "(1-20 uppercase Latin alphanumeric gerekli)";
+      logger.warn(`[altinbas] ${msg}`);
+      return {
+        alreadyExists: false,
+        submitted: false,
+        programMissing: false,
+        detail: msg,
+      };
+    }
+    const portalProfile: SubmitProfile =
+      normalizedPassport === profile.passportNumber
+        ? profile
+        : { ...profile, passportNumber: normalizedPassport };
+
     // ── Pre-flight: önceki run dangling SF kaydı bırakmış mı? (FIX-14) ──────
     // Aynı CRM applicationId için mode=real, status=failed satırları varsa
     // WARN logu yaz — önceki run(lar) Salesforce'ta taslak Application__c
@@ -4715,7 +4753,7 @@ export const altinbasAdapter: UniversityAdapter = {
       const uiHandled = await completeApplicationUI(
         page,
         rt,
-        profile,
+        portalProfile,
         files,
         dryRun,
         result,
@@ -4749,7 +4787,7 @@ export const altinbasAdapter: UniversityAdapter = {
     if (initShot) screenshots.push(initShot);
 
     // ── Step 1: Basic Information (DOM) ───────────────────────────────────
-    const step1Ready = await fillStep1(page, profile);
+    const step1Ready = await fillStep1(page, portalProfile);
     if (!step1Ready) {
       result.detail =
         "Altınbaş: Basic Information alanları tekil hedef + exact readback ile doğrulanamadı";
@@ -4768,7 +4806,7 @@ export const altinbasAdapter: UniversityAdapter = {
     const createdApp = await clickCreateNewApplication(
       page,
       rt,
-      profile,
+      portalProfile,
       step1Ready,
     );
     if (!createdApp) {
@@ -4782,7 +4820,15 @@ export const altinbasAdapter: UniversityAdapter = {
     // ── Screen Flow REPLAY: Term → Degree → Program → commit → Personal →
     //    Educational → Questionnaire → Documents → FINISH ───────────────────
     try {
-      await runFlowReplay(page, rt, profile, files, dryRun, result, screenshots);
+      await runFlowReplay(
+        page,
+        rt,
+        portalProfile,
+        files,
+        dryRun,
+        result,
+        screenshots,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       logger.warn(`[altinbas] flow replay hatası: ${msg}`);

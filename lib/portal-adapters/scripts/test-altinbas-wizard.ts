@@ -22,6 +22,7 @@ import {
   isAltinbasLightningUploadProved,
   isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
+  normalizeAltinbasPassportNumber,
   parseAltinbasCanaryStage,
   redactAltinbasLog,
   resolveAltinbasLegacyEducation,
@@ -1382,4 +1383,16 @@ test("AW27: application-row core program normalizes English and Turkish legacy t
     0,
     "the Turkish legacy suffix no longer hides a unique name+program row",
   );
+});
+
+test("AW28: passport values are normalized only within Altınbaş's proven format", () => {
+  assert.equal(normalizeAltinbasPassportNumber("ab1234567"), "AB1234567");
+  assert.equal(
+    normalizeAltinbasPassportNumber(" ab-12 34 "),
+    "AB1234",
+    "case and harmless human formatting are normalized",
+  );
+  assert.equal(normalizeAltinbasPassportNumber("AB/1234"), null);
+  assert.equal(normalizeAltinbasPassportNumber("A".repeat(21)), null);
+  assert.equal(normalizeAltinbasPassportNumber("  "), null);
 });

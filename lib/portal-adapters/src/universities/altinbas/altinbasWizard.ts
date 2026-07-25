@@ -296,6 +296,23 @@ export function altinbasBasicFieldLabel(
 }
 
 /**
+ * Altınbaş accepts passport identifiers as 1–20 uppercase Latin
+ * alphanumeric characters. CRM values may preserve harmless human formatting
+ * (case, spaces or hyphens); normalize only those differences and reject
+ * every other character instead of inventing or truncating an identifier.
+ */
+export function normalizeAltinbasPassportNumber(
+  value: unknown,
+): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "");
+  return /^[A-Z0-9]{1,20}$/.test(normalized) ? normalized : null;
+}
+
+/**
  * Salesforce labels both the interactive country input and its owned listbox.
  * Select only one visible, writable input combobox; duplicate/ambiguous inputs
  * fail closed instead of relying on DOM order.
