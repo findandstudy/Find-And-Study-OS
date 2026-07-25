@@ -651,6 +651,7 @@ export interface AltinbasEducationAddCandidate {
   excluded: boolean;
   targetContext?: boolean;
   insideDialog?: boolean;
+  interactive?: boolean;
   top?: number;
 }
 
@@ -660,6 +661,7 @@ export type AltinbasEducationAddDecision =
       proof:
         | "education_context"
         | "dialog_topmost"
+        | "stage_topmost"
         | "semantic"
         | "nearest_unique_icon";
       reason: "ok";
@@ -738,6 +740,44 @@ export function decideAltinbasEducationAddCandidate(
       };
     }
     return { id: null, proof: null, reason: "ambiguous" };
+  }
+  const positionedSemantic = semanticPool
+    .filter((candidate) => Number.isFinite(candidate.top))
+    .sort((a, b) => Number(a.top) - Number(b.top));
+  if (
+    positionedSemantic.length === semanticPool.length &&
+    positionedSemantic.length > 0
+  ) {
+    const firstTop = Number(positionedSemantic[0].top);
+    const topCluster = positionedSemantic.filter(
+      (candidate) => Number(candidate.top) <= firstTop + 4,
+    );
+    const laterCluster = positionedSemantic.filter(
+      (candidate) => Number(candidate.top) > firstTop + 4,
+    );
+    if (
+      laterCluster.length === 0 ||
+      Number(laterCluster[0].top) > firstTop + 4
+    ) {
+      const interactive = topCluster.filter(
+        (candidate) => candidate.interactive === true,
+      );
+      if (interactive.length === 1) {
+        return {
+          id: interactive[0].id,
+          proof: "stage_topmost",
+          reason: "ok",
+        };
+      }
+      if (topCluster.length === 1) {
+        return {
+          id: topCluster[0].id,
+          proof: "stage_topmost",
+          reason: "ok",
+        };
+      }
+      return { id: null, proof: null, reason: "ambiguous" };
+    }
   }
   if (semanticPool.length) {
     return semanticPool.length === 1
