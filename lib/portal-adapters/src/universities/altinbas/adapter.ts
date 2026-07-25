@@ -75,6 +75,7 @@ import {
 } from "./flow-fields.js";
 import {
   altinbasBasicFieldLabel,
+  altinbasUiDateEntryCandidates,
   altinbasApplicationCoreProgram,
   altinbasMutationCanaryGate,
   altinbasPhoneDigits,
@@ -1150,28 +1151,6 @@ async function fillNamedField(
  * feed the replay representation into this control: Salesforce clears it and
  * only reports the problem after Next is pressed.
  */
-function altinbasUiDateCandidates(
-  iso: string | undefined,
-  metadata: { type?: string; placeholder?: string },
-): string[] {
-  const match = (iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return [];
-  const [, year, monthRaw, dayRaw] = match;
-  const month = String(Number(monthRaw));
-  const day = String(Number(dayRaw));
-  if ((metadata.type || "").toLowerCase() === "date") return [iso];
-
-  const placeholder = (metadata.placeholder || "").toLowerCase();
-  if (/m{1,2}[^a-z]*d{1,2}/.test(placeholder)) {
-    return [`${month}/${day}/${year}`];
-  }
-  // Live Altınbaş's lightning-datepicker exposes an empty placeholder but its
-  // Flow parser is day-first. Real-profile read-only probing proved that MDY
-  // stays only in the native input while DMY reaches lightning-input and
-  // flowruntime-flow-screen-input for all three required date fields.
-  return [`${day}/${month}/${year}`];
-}
-
 async function readAltinbasUiDateProof(
   page: any,
   field: string,
@@ -1252,7 +1231,7 @@ async function fillAltinbasUiDateField(
       const input = element as HTMLInputElement;
       return { type: input.type || "", placeholder: input.placeholder || "" };
     });
-    const candidates = altinbasUiDateCandidates(iso, metadata);
+    const candidates = altinbasUiDateEntryCandidates(iso, metadata);
     if (!candidates.length) return { ok: false, field, reason: "data_missing" };
     for (const candidate of candidates) {
       await control.click({ timeout: 6_000 });
