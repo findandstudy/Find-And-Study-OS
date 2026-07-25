@@ -1162,85 +1162,108 @@ async function fillAltinbasUiDateField(
     const candidates = altinbasUiDateCandidates(iso, metadata);
     if (!candidates.length) return { ok: false, field, reason: "data_missing" };
     for (const candidate of candidates) {
-      await control.click({ timeout: 6_000 });
-      // LWC's datepicker is a controlled text input. A Playwright fill can
-      // leave the native DOM value looking correct while the Flow component's
-      // internal value remains empty. Use real keyboard events so the same
-      // controller path as a human entry runs.
-      await control.press("ControlOrMeta+A").catch(async () => {
-        await control.press("Control+A").catch(() => {});
-      });
-      await control.press("Backspace").catch(() => {});
-      await control.pressSequentially(candidate, { delay: 35, timeout: 6_000 });
-      // lightning-input/date-picker keeps a draft value until it receives a
-      // committing keyboard/change sequence after typing (observed in the live
-      // Personal Information step).
-      await control.press("Enter").catch(() => {});
-      await control.dispatchEvent("change").catch(() => {});
-      await control.dispatchEvent("blur").catch(() => {});
-      await control.press("Tab").catch(() => {});
-      await page.waitForTimeout(150);
-      const proof = await control.evaluate((element: Element, expectedIso: string) => {
-        const input = element as HTMLInputElement;
-        let node: Element | null = element;
-        let lightningInputValuePresent = false;
-        let lightningInputMatchesExpected = false;
-        let lightningInputValid = false;
-        let datepickerMatchesExpected = false;
-        let flowScreenValuePresent = false;
-        for (let depth = 0; depth < 12 && node; depth++) {
-          const candidateNode = node as Element & {
-            value?: unknown;
-            validity?: { valid?: boolean };
-          };
-          const tag = candidateNode.tagName.toLowerCase();
-          const valuePresent =
-            typeof candidateNode.value === "string" &&
-            candidateNode.value.trim().length > 0;
-          if (tag === "lightning-input") {
-            lightningInputValuePresent = valuePresent;
-            lightningInputMatchesExpected =
-              candidateNode.value === expectedIso;
-            lightningInputValid = candidateNode.validity?.valid === true;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        await control.click({ timeout: 6_000 });
+        // LWC's datepicker is a controlled text input. A Playwright fill can
+        // leave the native DOM value looking correct while the Flow component's
+        // internal value remains empty. Use real keyboard events so the same
+        // controller path as a human entry runs.
+        await control.press("ControlOrMeta+A").catch(async () => {
+          await control.press("Control+A").catch(() => {});
+        });
+        await control.press("Backspace").catch(() => {});
+        await control.pressSequentially(candidate, {
+          delay: 35,
+          timeout: 6_000,
+        });
+        // lightning-input/date-picker keeps a draft value until it receives a
+        // committing keyboard/change sequence after typing.
+        await control.dispatchEvent("input").catch(() => {});
+        await control.press("Enter").catch(() => {});
+        await control.dispatchEvent("change").catch(() => {});
+        await control.dispatchEvent("blur").catch(() => {});
+        await control.press("Tab").catch(() => {});
+        await page.waitForTimeout(180 * attempt);
+        let lastProof: any = null;
+        for (let poll = 0; poll < 3; poll++) {
+          const proof = await control.evaluate((element: Element, expectedIso: string) => {
+            const input = element as HTMLInputElement;
+            let node: Element | null = element;
+            let lightningInputValuePresent = false;
+            let lightningInputMatchesExpected = false;
+            let lightningInputValid = false;
+            let datepickerMatchesExpected = false;
+            let flowScreenValuePresent = false;
+            for (let depth = 0; depth < 12 && node; depth++) {
+              const candidateNode = node as Element & {
+                value?: unknown;
+                validity?: { valid?: boolean };
+              };
+              const tag = candidateNode.tagName.toLowerCase();
+              const valuePresent =
+                typeof candidateNode.value === "string" &&
+                candidateNode.value.trim().length > 0;
+              if (tag === "lightning-input") {
+                lightningInputValuePresent = valuePresent;
+                lightningInputMatchesExpected =
+                  candidateNode.value === expectedIso;
+                lightningInputValid = candidateNode.validity?.valid === true;
+              }
+              if (tag === "lightning-datepicker") {
+                datepickerMatchesExpected =
+                  candidateNode.value === expectedIso;
+              }
+              if (tag === "flowruntime-flow-screen-input") {
+                flowScreenValuePresent = valuePresent;
+              }
+              const root = node.getRootNode() as ShadowRoot | Document;
+              node =
+                node.parentElement ||
+                ("host" in root ? root.host : null);
+            }
+            return {
+              value: (input.value || "").trim(),
+              ariaInvalid: input.getAttribute("aria-invalid") === "true",
+              valid: input.validity ? input.validity.valid : true,
+              lightningInputValuePresent,
+              lightningInputMatchesExpected,
+              lightningInputValid,
+              datepickerMatchesExpected,
+              flowScreenValuePresent,
+            };
+          }, iso);
+          lastProof = proof;
+          if (
+            !proof.ariaInvalid &&
+            proof.valid &&
+            proof.lightningInputValuePresent &&
+            proof.lightningInputMatchesExpected &&
+            proof.lightningInputValid &&
+            proof.datepickerMatchesExpected &&
+            proof.flowScreenValuePresent
+          ) {
+            logger.info(
+              `[altinbas][ui] date control committed` +
+              ` (field=${field}, attempt=${attempt},` +
+              ` type=${metadata.type || "text"},` +
+              ` placeholder=${JSON.stringify(metadata.placeholder || "")})`,
+            );
+            return { ok: true, field, reason: "ok" };
           }
-          if (tag === "lightning-datepicker") {
-            datepickerMatchesExpected =
-              candidateNode.value === expectedIso;
-          }
-          if (tag === "flowruntime-flow-screen-input") {
-            flowScreenValuePresent = valuePresent;
-          }
-          const root = node.getRootNode() as ShadowRoot | Document;
-          node =
-            node.parentElement ||
-            ("host" in root ? root.host : null);
+          if (poll < 2) await page.waitForTimeout(180);
         }
-        return {
-          value: (input.value || "").trim(),
-          ariaInvalid: input.getAttribute("aria-invalid") === "true",
-          valid: input.validity ? input.validity.valid : true,
-          lightningInputValuePresent,
-          lightningInputMatchesExpected,
-          lightningInputValid,
-          datepickerMatchesExpected,
-          flowScreenValuePresent,
-        };
-      }, iso);
-      if (
-        !proof.ariaInvalid &&
-        proof.valid &&
-        proof.lightningInputValuePresent &&
-        proof.lightningInputMatchesExpected &&
-        proof.lightningInputValid &&
-        proof.datepickerMatchesExpected &&
-        proof.flowScreenValuePresent
-      ) {
-        logger.info(
-          `[altinbas][ui] date control committed` +
-          ` (field=${field}, type=${metadata.type || "text"},` +
-          ` placeholder=${JSON.stringify(metadata.placeholder || "")})`,
-        );
-        return { ok: true, field, reason: "ok" };
+        if (attempt === 3 && lastProof) {
+          logger.warn(
+            `[altinbas][ui] date control proof failed` +
+            ` (field=${field}, ariaInvalid=${lastProof.ariaInvalid},` +
+            ` nativeValid=${lastProof.valid},` +
+            ` lightningPresent=${lastProof.lightningInputValuePresent},` +
+            ` lightningMatch=${lastProof.lightningInputMatchesExpected},` +
+            ` lightningValid=${lastProof.lightningInputValid},` +
+            ` datepickerMatch=${lastProof.datepickerMatchesExpected},` +
+            ` flowPresent=${lastProof.flowScreenValuePresent})`,
+          );
+        }
       }
     }
     return { ok: false, field, reason: "date_readback_mismatch" };
