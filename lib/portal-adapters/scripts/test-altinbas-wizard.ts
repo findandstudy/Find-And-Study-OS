@@ -14,6 +14,7 @@ import {
   chooseAltinbasApplicationRow,
   chooseAltinbasLabeledCombobox,
   decideAltinbasEducationAddCandidate,
+  decideAltinbasUploadRefresh,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
   extractAltinbasFlowUploadedDocumentSlots,
@@ -842,6 +843,35 @@ test("AW14j: duplicate document names and ambiguous components fail closed", () 
   assert.deepEqual(
     extractAltinbasFlowUploadedDocumentSlots({ name: "Other" }),
     { componentFound: false, slots: [] },
+  );
+});
+
+test("AW14k: new uploads reopen once for authoritative recordsCV proof", () => {
+  assert.equal(
+    decideAltinbasUploadRefresh({
+      serverUploadedSlots: [
+        "passport",
+        "diploma",
+        "transcript",
+        "photo",
+      ],
+      refreshAttempted: false,
+    }),
+    "submit",
+  );
+  assert.equal(
+    decideAltinbasUploadRefresh({
+      serverUploadedSlots: ["passport", "diploma"],
+      refreshAttempted: false,
+    }),
+    "reopen_once",
+  );
+  assert.equal(
+    decideAltinbasUploadRefresh({
+      serverUploadedSlots: [],
+      refreshAttempted: true,
+    }),
+    "fail_closed",
   );
 });
 
