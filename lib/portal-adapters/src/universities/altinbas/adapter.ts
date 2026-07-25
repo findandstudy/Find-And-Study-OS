@@ -2269,44 +2269,40 @@ async function ensureEducationRecordUI(
         : String(error || "evaluate_error"),
   }));
   const addDecision = decideAltinbasEducationAddCandidate(addScan.candidates);
-  const opened = addDecision.id
-    ? await page.evaluate((candidateId: string) => {
-        const roots: Array<Document | ShadowRoot> = [document];
-        const matches: Element[] = [];
-        for (let rootIndex = 0; rootIndex < roots.length; rootIndex++) {
-          roots[rootIndex].querySelectorAll("*").forEach((element: Element) => {
-            if ((element as HTMLElement).shadowRoot) {
-              roots.push((element as HTMLElement).shadowRoot!);
-            }
-            if (
-              element.getAttribute("data-fas-edu-add-candidate") === candidateId
-            ) {
-              matches.push(element);
-            }
-          });
+  const modalControls = page.locator(
+    "input:visible,textarea:visible,select:visible,[role='combobox']:visible",
+  );
+  const beforeModalControls = await modalControls.count().catch(() => 0);
+  let addClicked = false;
+  if (addDecision.id) {
+    const markedTarget = page.locator(
+      `[data-fas-edu-add-candidate="${addDecision.id}"]`,
+    );
+    const markedCount = await markedTarget.count().catch(() => 0);
+    if (markedCount === 1) {
+      try {
+        await markedTarget.click({ timeout: 8_000 });
+        addClicked = true;
+      } catch {
+        try {
+          await markedTarget.click({ force: true, timeout: 5_000 });
+          addClicked = true;
+        } catch {/* fail closed below */}
+      }
+    }
+  }
+  await page.evaluate(() => {
+    const roots: Array<Document | ShadowRoot> = [document];
+    for (let rootIndex = 0; rootIndex < roots.length; rootIndex++) {
+      roots[rootIndex].querySelectorAll("*").forEach((element: Element) => {
+        if ((element as HTMLElement).shadowRoot) {
+          roots.push((element as HTMLElement).shadowRoot!);
         }
-        roots.forEach((root) => {
-          root.querySelectorAll("[data-fas-edu-add-candidate]").forEach(
-            (element) => element.removeAttribute("data-fas-edu-add-candidate"),
-          );
-        });
-        if (matches.length !== 1) return false;
-        const target = matches[0] as Element & { click?: () => void };
-        if (typeof target.click === "function") {
-          target.click();
-        } else {
-          target.dispatchEvent(
-            new MouseEvent("click", {
-              bubbles: true,
-              cancelable: true,
-              composed: true,
-            }),
-          );
-        }
-        return true;
-      }, addDecision.id).catch(() => false)
-    : false;
-  if (!opened) {
+        element.removeAttribute("data-fas-edu-add-candidate");
+      });
+    }
+  }).catch(() => {});
+  if (!addClicked) {
     logger.warn(
       `[altinbas][ui] Educational: + (add) butonu bulunamadı` +
       ` (headingCount=${addScan.headingCount},` +
@@ -2327,11 +2323,34 @@ async function ensureEducationRecordUI(
     );
     return { ok: false, reason: "add_button_missing" };
   }
+  let afterModalControls = beforeModalControls;
+  let visibleDialogs = 0;
+  for (let poll = 0; poll < 12; poll++) {
+    afterModalControls = await modalControls.count().catch(() => 0);
+    visibleDialogs = await page.locator(
+      "[role='dialog']:visible,[aria-modal='true']:visible,.slds-modal:visible",
+    ).count().catch(() => 0);
+    if (afterModalControls > beforeModalControls && afterModalControls > 0) {
+      break;
+    }
+    await page.waitForTimeout(500);
+  }
+  if (
+    afterModalControls <= beforeModalControls ||
+    afterModalControls === 0
+  ) {
+    logger.warn(
+      `[altinbas][ui] Educational: Add tıklandı fakat modal doğrulanamadı` +
+      ` (beforeControls=${beforeModalControls}, afterControls=${afterModalControls},` +
+      ` visibleDialogs=${visibleDialogs}, proof=${addDecision.proof})`,
+    );
+    return { ok: false, reason: "add_modal_not_opened" };
+  }
   logger.info(
     `[altinbas][ui] Educational: add control opened` +
-    ` (proof=${addDecision.proof})`,
+    ` (proof=${addDecision.proof}, controls=${afterModalControls},` +
+    ` dialogs=${visibleDialogs})`,
   );
-  await page.waitForTimeout(2500);
   // Modal fields.
   const degreeLabel =
     primary.level === "bachelor" ? "Bachelor" :
