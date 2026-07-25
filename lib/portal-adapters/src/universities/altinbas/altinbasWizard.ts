@@ -76,6 +76,23 @@ export function isAltinbasUiDateCommitted(
   );
 }
 
+export function isAltinbasLightningUploadProved(input: {
+  exactLocalFile: boolean;
+  doneClicked: boolean;
+  doneDismissed: boolean;
+  documentsStage: boolean;
+  portalFilenameSeen: boolean;
+}): boolean {
+  return (
+    input.exactLocalFile &&
+    input.doneClicked &&
+    input.documentsStage &&
+    // The exact portal filename is strongest. Salesforce's standard upload
+    // dialog may hide it after its unique successful Done action closes.
+    (input.portalFilenameSeen || input.doneDismissed)
+  );
+}
+
 export type AltinbasBasicField =
   | "firstName"
   | "lastName"
