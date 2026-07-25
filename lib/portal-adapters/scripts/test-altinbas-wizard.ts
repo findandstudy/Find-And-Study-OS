@@ -15,6 +15,7 @@ import {
   decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
   parseAltinbasCanaryStage,
   redactAltinbasLog,
@@ -521,6 +522,51 @@ test("AW14d: education add control requires a unique nearest composed-tree candi
       },
     ]),
     { id: null, proof: null, reason: "ambiguous" },
+  );
+});
+
+test("AW14e: exact saved date state is resume-safe and partial drafts fail closed", () => {
+  const lightningProof = {
+    ariaInvalid: false,
+    valid: true,
+    nativeDateInput: false,
+    nativeValueMatchesExpected: false,
+    lightningInputValuePresent: true,
+    lightningInputMatchesExpected: true,
+    lightningInputValid: true,
+    datepickerMatchesExpected: true,
+    flowScreenValuePresent: true,
+  };
+  assert.equal(isAltinbasUiDateCommitted(lightningProof), true);
+  assert.equal(
+    isAltinbasUiDateCommitted({
+      ...lightningProof,
+      flowScreenValuePresent: false,
+    }),
+    false,
+    "a native-looking draft without Flow state is never reused",
+  );
+  assert.equal(
+    isAltinbasUiDateCommitted({
+      ...lightningProof,
+      lightningInputMatchesExpected: false,
+    }),
+    false,
+    "a saved but different date must be rewritten from CRM",
+  );
+  assert.equal(
+    isAltinbasUiDateCommitted({
+      ...lightningProof,
+      nativeDateInput: true,
+      nativeValueMatchesExpected: true,
+      lightningInputValuePresent: false,
+      lightningInputMatchesExpected: false,
+      lightningInputValid: false,
+      datepickerMatchesExpected: false,
+      flowScreenValuePresent: false,
+    }),
+    true,
+    "a native date input uses exact ISO readback without Lightning hosts",
   );
 });
 
