@@ -17,6 +17,8 @@ import {
   missingAltinbasPersonalFields,
   parseAltinbasCanaryStage,
   redactAltinbasLog,
+  resolveAltinbasLegacyEducation,
+  resolveAltinbasLegacyGpa,
   resolveAltinbasResumeFieldAction,
   resolveAltinbasVisaResumeAction,
   resolveAltinbasWizardState,
@@ -254,6 +256,65 @@ test("AW14: GPA system maps only known CRM scales to exact portal labels", () =>
     "GRADING SYSTEM OUT OF 5",
   );
   assert.equal(altinbasGpaTypeLabel("letter"), null);
+});
+
+test("AW14b: legacy letter GPA is deterministically converted to the 4-point scale", () => {
+  assert.deepEqual(
+    resolveAltinbasLegacyGpa({
+      recordGpa: null,
+      recordGpaType: null,
+      legacyGpa: "A- (MINUS)",
+    }),
+    { gpa: "3.7", gpaType: "4", provenance: "legacy_letter" },
+  );
+  assert.deepEqual(
+    resolveAltinbasLegacyGpa({
+      recordGpa: null,
+      recordGpaType: null,
+      legacyGpa: null,
+    }),
+    { gpa: "3", gpaType: "4", provenance: "policy_default" },
+  );
+});
+
+test("AW14c: incomplete historical education inherits real legacy fields without inventing a school", () => {
+  const resolved = resolveAltinbasLegacyEducation({
+    record: {
+      schoolName: "MULOT SECONDARY SCHOOL",
+      country: null,
+      endYear: null,
+      gpa: null,
+      gpaType: null,
+    },
+    level: "high_school",
+    applicationLevel: "associate",
+    legacySchoolName: "MULOT SECONDARY SCHOOL",
+    fallbackCountry: "Kenya",
+    legacyGraduationYear: 2021,
+    legacyGpa: "A- (MINUS)",
+    dateOfBirth: "2003-01-01",
+    currentYear: 2026,
+  });
+  assert.equal(resolved.schoolName, "MULOT SECONDARY SCHOOL");
+  assert.equal(resolved.country, "Kenya");
+  assert.equal(resolved.endYear, 2021);
+  assert.equal(resolved.gpa, "3.7");
+  assert.equal(resolved.gpaType, "4");
+  assert.equal(resolved.gpaProvenance, "legacy_letter");
+  assert.deepEqual(
+    resolved.fallbackFields,
+    ["country", "graduationYear", "gpa", "gpaType"],
+  );
+
+  const noSchool = resolveAltinbasLegacyEducation({
+    level: "bachelor",
+    applicationLevel: "master",
+    fallbackCountry: "Kenya",
+    legacyGraduationYear: 2024,
+    legacyGpa: null,
+    currentYear: 2026,
+  });
+  assert.equal(noSchool.schoolName, null);
 });
 
 test("AW15: rollback accepts only ids proven created in the current run", () => {
