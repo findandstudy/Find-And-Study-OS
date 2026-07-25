@@ -43,6 +43,31 @@ export interface AltinbasLabeledControlCandidate {
   readOnly: boolean;
 }
 
+export type AltinbasBasicField =
+  | "firstName"
+  | "lastName"
+  | "passport"
+  | "email";
+
+const ALTINBAS_BASIC_FIELD_LABELS: Record<AltinbasBasicField, string> = {
+  firstName: "first name",
+  lastName: "last name",
+  passport: "passport number",
+  email: "applicant email",
+};
+
+/**
+ * Required Lightning labels expose their visual asterisk as part of the
+ * accessible name (for example `* First Name`). Match that live contract
+ * exactly while also accepting the same label without the required marker.
+ */
+export function altinbasBasicFieldLabel(
+  field: AltinbasBasicField,
+): RegExp {
+  const label = ALTINBAS_BASIC_FIELD_LABELS[field];
+  return new RegExp(`^\\s*\\*?\\s*${label}\\s*\\*?\\s*$`, "i");
+}
+
 /**
  * Salesforce labels both the interactive country input and its owned listbox.
  * Select only one visible, writable input combobox; duplicate/ambiguous inputs

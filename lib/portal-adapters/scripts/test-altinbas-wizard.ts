@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  altinbasBasicFieldLabel,
   altinbasMutationCanaryGate,
   altinbasPhoneDigits,
   altinbasGpaTypeLabel,
@@ -525,4 +526,21 @@ test("AW23: country picker ignores its labeled listbox and requires one actionab
     0,
     "a readonly selected input remains a valid readback target",
   );
+});
+
+test("AW24: Basic Information labels accept the live required marker without becoming broad", () => {
+  const firstName = altinbasBasicFieldLabel("firstName");
+  const lastName = altinbasBasicFieldLabel("lastName");
+  const passport = altinbasBasicFieldLabel("passport");
+  const email = altinbasBasicFieldLabel("email");
+
+  assert.match("* First Name", firstName);
+  assert.match("*First Name", firstName);
+  assert.match("First Name", firstName);
+  assert.match("First Name *", firstName);
+  assert.doesNotMatch("Guardian First Name", firstName);
+
+  assert.match("* Last Name", lastName);
+  assert.match("* Passport Number", passport);
+  assert.match("* Applicant Email", email);
 });

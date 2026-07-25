@@ -74,6 +74,7 @@ import {
   mapCountry,
 } from "./flow-fields.js";
 import {
+  altinbasBasicFieldLabel,
   altinbasMutationCanaryGate,
   altinbasPhoneDigits,
   altinbasGpaTypeLabel,
@@ -3114,14 +3115,14 @@ async function fillStep1(page: any, profile: SubmitProfile): Promise<boolean> {
   await page.waitForTimeout(1000);
 
   const fields: Array<[RegExp, string, string]> = [
-    [/^first name/i, profile.firstName, "firstName"],
-    [/^last name/i, profile.lastName, "lastName"],
-    [/passport number/i, profile.passportNumber, "passport"],
-    [/applicant email/i, profile.email, "email"],
+    [altinbasBasicFieldLabel("firstName"), profile.firstName, "firstName"],
+    [altinbasBasicFieldLabel("lastName"), profile.lastName, "lastName"],
+    [altinbasBasicFieldLabel("passport"), profile.passportNumber, "passport"],
+    [altinbasBasicFieldLabel("email"), profile.email, "email"],
   ];
   const fieldProofs: Record<string, boolean> = {};
   for (const [label, value, key] of fields) {
-    const controls = page.getByLabel(label);
+    const controls = page.getByLabel(label).filter({ visible: true });
     if ((await controls.count().catch(() => 0)) !== 1 || !value.trim()) {
       fieldProofs[key] = false;
       continue;
