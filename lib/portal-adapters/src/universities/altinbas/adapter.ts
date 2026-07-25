@@ -2266,6 +2266,7 @@ async function ensureEducationRecordUI(
         genericIcon,
         excluded,
         targetContext,
+        interactive: Boolean(clickable),
         targetMeta,
         signalMeta,
         insideDialog: actionChain.some((candidate) =>
