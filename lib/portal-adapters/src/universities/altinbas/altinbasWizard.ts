@@ -142,6 +142,28 @@ export interface AltinbasFlowDocumentProof {
   slots: AltinbasDocumentSlot[];
 }
 
+export type AltinbasUploadRefreshDecision =
+  | "submit"
+  | "reopen_once"
+  | "fail_closed";
+
+/**
+ * Newly uploaded files are not reflected in the current Flow interview's
+ * recordsCV value. Reopen the wizard at most once so Salesforce reloads the
+ * authoritative records before allowing Submit.
+ */
+export function decideAltinbasUploadRefresh(input: {
+  serverUploadedSlots: readonly AltinbasDocumentSlot[];
+  refreshAttempted: boolean;
+}): AltinbasUploadRefreshDecision {
+  const uploaded = new Set(input.serverUploadedSlots);
+  const complete = ALTINBAS_REQUIRED_DOCUMENT_SLOTS.every(
+    (slot) => uploaded.has(slot),
+  );
+  if (complete) return "submit";
+  return input.refreshAttempted ? "fail_closed" : "reopen_once";
+}
+
 const ALTINBAS_FLOW_DOCUMENT_NAMES: Record<
   AltinbasDocumentSlot,
   string
