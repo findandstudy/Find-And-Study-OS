@@ -86,6 +86,7 @@ import {
   decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  isAltinbasLightningUploadProved,
   isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
   parseAltinbasCanaryStage,
@@ -1672,6 +1673,56 @@ async function readComposedPageText(page: any): Promise<string> {
   }).catch(() => "");
 }
 
+async function composedPageHasExactFileName(
+  page: any,
+  expectedFileName: string,
+): Promise<boolean> {
+  return page.evaluate((expected: string) => {
+    const normalize = (value: unknown) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+    const target = normalize(expected);
+    if (!target) return false;
+    const roots: Array<Document | ShadowRoot> = [document];
+    for (let rootIndex = 0; rootIndex < roots.length; rootIndex++) {
+      const elements = roots[rootIndex].querySelectorAll("*");
+      for (const element of elements) {
+        if ((element as HTMLElement).shadowRoot) {
+          roots.push((element as HTMLElement).shadowRoot!);
+        }
+        const values: unknown[] = [];
+        if (element.children.length === 0) values.push(element.textContent);
+        for (const attribute of [
+          "title",
+          "aria-label",
+          "data-file-name",
+          "data-filename",
+          "data-name",
+          "href",
+        ]) {
+          values.push(element.getAttribute(attribute));
+        }
+        const fileElement = element as Element & {
+          fileName?: unknown;
+          filename?: unknown;
+          files?: FileList | null;
+        };
+        values.push(fileElement.fileName, fileElement.filename);
+        if (fileElement.files) {
+          for (let index = 0; index < fileElement.files.length; index++) {
+            values.push(fileElement.files.item(index)?.name);
+          }
+        }
+        if (values.some((value) => normalize(value).includes(target))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, expectedFileName).catch(() => false);
+}
+
 /** Fill a Lightning typeahead (country pickers) only when empty. */
 async function pickTypeaheadIfEmpty(
   page: any,
@@ -2759,8 +2810,7 @@ async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[
       continue;
     }
     const fileName = basename(path);
-    const beforeText = await readComposedPageText(page);
-    if (fold(beforeText).includes(fold(fileName))) {
+    if (await composedPageHasExactFileName(page, fileName)) {
       uploaded.push(tag);
       logger.info(`[altinbas][ui] Documents: ${tag} exact filename zaten mevcut`);
       continue;
@@ -2800,21 +2850,44 @@ async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[
       logger.warn(`[altinbas][ui] Documents: ${tag} Done doğrulanamadı`);
       continue;
     }
-    await page.waitForTimeout(1500);
-    const after = await readWizardState(page);
-    if (after.step !== "Documents" || after.reason !== "ok") {
-      logger.warn(`[altinbas][ui] Documents: ${tag} sonrası stage doğrulanamadı`);
-      continue;
+    let doneDismissed = false;
+    for (let poll = 0; poll < 12; poll++) {
+      const remainingDone = await page.getByRole("button", {
+        name: /^\s*Done\s*$/i,
+      }).count().catch(() => 0);
+      if (remainingDone === 0) {
+        doneDismissed = true;
+        break;
+      }
+      await page.waitForTimeout(250);
     }
-    const afterText = await readComposedPageText(page);
-    if (!fold(afterText).includes(fold(fileName))) {
+    await page.waitForTimeout(500);
+    const after = await readWizardState(page);
+    const documentsStage =
+      after.step === "Documents" && after.reason === "ok";
+    const portalFilenameSeen = await composedPageHasExactFileName(
+      page,
+      fileName,
+    );
+    if (!isAltinbasLightningUploadProved({
+      exactLocalFile: localReadback === fileName,
+      doneClicked,
+      doneDismissed,
+      documentsStage,
+      portalFilenameSeen,
+    })) {
       logger.warn(
-        `[altinbas][ui] Documents: ${tag} portal filename readback doğrulanamadı`,
+        `[altinbas][ui] Documents: ${tag} upload proof başarısız` +
+        ` (doneDismissed=${doneDismissed}, documentsStage=${documentsStage},` +
+        ` portalFilenameSeen=${portalFilenameSeen})`,
       );
       continue;
     }
     uploaded.push(tag);
-    logger.info(`[altinbas][ui] Documents: ${tag} upload tamamlandı`);
+    logger.info(
+      `[altinbas][ui] Documents: ${tag} upload tamamlandı` +
+      ` (proof=${portalFilenameSeen ? "exact_filename" : "lightning_done_stage"})`,
+    );
   }
   return uploaded;
 }
