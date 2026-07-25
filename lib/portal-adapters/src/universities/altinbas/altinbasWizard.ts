@@ -607,6 +607,7 @@ export function chooseAltinbasApplicationRow(
   foldedRows: string[],
   expectedFoldedNames: string[],
   expectedFoldedPrograms: string[],
+  expectedTrack: "en" | "tr" | null = null,
 ): number {
   if (foldedRows.length === 1) return 0;
   if (foldedRows.length === 0) return -1;
@@ -618,9 +619,33 @@ export function chooseAltinbasApplicationRow(
       index,
       name: names.some((name) => row.includes(name)),
       program: programs.some((program) => row.includes(program)),
+      row,
     }))
     .filter((candidate) => candidate.name && candidate.program);
-  return matches.length === 1 ? matches[0].index : -1;
+  if (!expectedTrack) {
+    return matches.length === 1 ? matches[0].index : -1;
+  }
+
+  const sameTrack = expectedTrack === "en"
+    ? /\benglish\b/
+    : /\b(?:turkish|turkce)\b/;
+  const oppositeTrack = expectedTrack === "en"
+    ? /\b(?:turkish|turkce)\b/
+    : /\benglish\b/;
+  const exactTrackMatches = matches.filter((candidate) =>
+    sameTrack.test(candidate.row) && !oppositeTrack.test(candidate.row),
+  );
+  if (exactTrackMatches.length === 1) return exactTrackMatches[0].index;
+  if (exactTrackMatches.length > 1) return -1;
+
+  // A single unlabeled candidate is safe only when no explicit opposite-track
+  // row survived the same applicant+programme proof.
+  const compatibleUnlabeled = matches.filter((candidate) =>
+    !sameTrack.test(candidate.row) && !oppositeTrack.test(candidate.row),
+  );
+  return compatibleUnlabeled.length === 1
+    ? compatibleUnlabeled[0].index
+    : -1;
 }
 
 /**

@@ -56,7 +56,7 @@ import type {
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
-import { fold } from "../../programMatch.js";
+import { fold, parseTrack } from "../../programMatch.js";
 import {
   type FlowField,
   type FlowIds,
@@ -3175,6 +3175,7 @@ async function completeApplicationUI(
         fold(`${profile.lastName} ${profile.firstName}`),
       ],
       [coreProg, progFold],
+      parseTrack(profile.programName || ""),
     );
     lookupDecision = decideAltinbasSignedUpLookup({
       completeButtonCount: nBtns,

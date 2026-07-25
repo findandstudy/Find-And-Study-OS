@@ -216,6 +216,49 @@ test("AW10: multiple application rows require unique name+programme proof", () =
   );
 });
 
+test("AW10b: duplicate programme rows require the requested language track", () => {
+  const rows = [
+    "student name electrical and computer engineering thesis fall 2026 signed up",
+    "student name electrical and computer engineering english thesis fall 2026 signed up",
+    "student name architecture english thesis fall 2026 signed up",
+  ];
+  assert.equal(
+    chooseAltinbasApplicationRow(
+      rows,
+      ["student name"],
+      ["electrical and computer engineering"],
+      "en",
+    ),
+    1,
+  );
+  assert.equal(
+    chooseAltinbasApplicationRow(
+      [
+        rows[1],
+        "student name electrical and computer engineering english fall 2027 signed up",
+      ],
+      ["student name"],
+      ["electrical and computer engineering"],
+      "en",
+    ),
+    -1,
+    "two same-track drafts remain ambiguous",
+  );
+  assert.equal(
+    chooseAltinbasApplicationRow(
+      [
+        "student name electrical and computer engineering turkish signed up",
+        "student name architecture english signed up",
+      ],
+      ["student name"],
+      ["electrical and computer engineering"],
+      "en",
+    ),
+    -1,
+    "an explicit opposite-track row is never selected",
+  );
+});
+
 test("AW11: mutation canary requires UI completion and dry runner mode", () => {
   assert.equal(
     altinbasMutationCanaryGate({ requested: false, uiComplete: false, dryRun: false }),
