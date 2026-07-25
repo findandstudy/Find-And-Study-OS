@@ -170,6 +170,13 @@ export function explicitCityOfBirth(value: unknown): string | null {
   return clean && clean !== "-" ? clean : null;
 }
 
+/** Altınbaş Mobile accepts international digits only (no +, spaces or dashes). */
+export function altinbasPhoneDigits(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 7 && digits.length <= 15 ? digits : null;
+}
+
 export interface AltinbasPersonalSource {
   email?: string;
   firstName?: string;

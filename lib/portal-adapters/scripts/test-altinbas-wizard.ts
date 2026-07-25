@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   altinbasMutationCanaryGate,
+  altinbasPhoneDigits,
   altinbasGpaTypeLabel,
   canonicalAltinbasWizardStep,
   chooseAltinbasApplicationRow,
@@ -141,6 +142,14 @@ test("AW8: City of Birth accepts only a dedicated non-placeholder value", () => 
   assert.equal(explicitCityOfBirth(""), null);
   assert.equal(explicitCityOfBirth(" - "), null);
   assert.equal(explicitCityOfBirth(undefined), null);
+});
+
+test("AW8b: Mobile is normalized to the portal's digits-only contract", () => {
+  assert.equal(altinbasPhoneDigits("+90 (555) 111-22-33"), "905551112233");
+  assert.equal(altinbasPhoneDigits("00992 92 123 4567"), "00992921234567");
+  assert.equal(altinbasPhoneDigits("123"), null);
+  assert.equal(altinbasPhoneDigits("1234567890123456"), null);
+  assert.equal(altinbasPhoneDigits(undefined), null);
 });
 
 test("AW9: live Personal contract treats City of Birth optional and structured address required", () => {

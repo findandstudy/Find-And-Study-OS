@@ -75,6 +75,7 @@ import {
 } from "./flow-fields.js";
 import {
   altinbasMutationCanaryGate,
+  altinbasPhoneDigits,
   altinbasGpaTypeLabel,
   chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
@@ -1535,9 +1536,13 @@ async function fillPersonalUI(
   if (profile.motherName?.trim() && profile.motherName.trim() !== "-") {
     results.push(await fillNamedField(page, "Mother_Name", profile.motherName));
   }
-  if (profile.phone?.trim()) {
-    results.push(await fillNamedField(page, "phone", profile.phone));
-  }
+  results.push(
+    await fillOrProveNamedField(
+      page,
+      "phone",
+      altinbasPhoneDigits(profile.phone) || undefined,
+    ),
+  );
 
   const country = mapCountry(profile.nationality);
   if (!country) {
