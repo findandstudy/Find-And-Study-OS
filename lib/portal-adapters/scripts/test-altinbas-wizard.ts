@@ -386,6 +386,62 @@ test("AW14d: education add control requires a unique nearest composed-tree candi
   assert.deepEqual(
     decideAltinbasEducationAddCandidate([
       {
+        id: "background-add",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        insideDialog: false,
+        top: 20,
+      },
+      {
+        id: "education-add",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        targetContext: true,
+        insideDialog: true,
+        top: 240,
+      },
+      {
+        id: "exam-add",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        insideDialog: true,
+        top: 440,
+      },
+    ]),
+    { id: "education-add", proof: "education_context", reason: "ok" },
+  );
+  assert.deepEqual(
+    decideAltinbasEducationAddCandidate([
+      {
+        id: "dialog-first",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        insideDialog: true,
+        top: 240,
+      },
+      {
+        id: "dialog-second",
+        distance: 0,
+        semantic: true,
+        genericIcon: true,
+        excluded: false,
+        insideDialog: true,
+        top: 440,
+      },
+    ]),
+    { id: "dialog-first", proof: "dialog_topmost", reason: "ok" },
+  );
+  assert.deepEqual(
+    decideAltinbasEducationAddCandidate([
+      {
         id: "nearest",
         distance: 2,
         semantic: false,
