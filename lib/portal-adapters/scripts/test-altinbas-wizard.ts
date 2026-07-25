@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   altinbasBasicFieldLabel,
+  altinbasApplicationCoreProgram,
   altinbasMutationCanaryGate,
   altinbasPhoneDigits,
   altinbasGpaTypeLabel,
@@ -716,5 +717,33 @@ test("AW26: Signed-Up lookup retries only an absent row after program commit", (
       maxAttempts: 4,
     }),
     "open",
+  );
+});
+
+test("AW27: application-row core program normalizes English and Turkish legacy titles", () => {
+  assert.equal(
+    altinbasApplicationCoreProgram(
+      "Associate of Oral and Dental Health (Turkish)",
+    ),
+    "oral and dental health",
+  );
+  assert.equal(
+    altinbasApplicationCoreProgram(
+      "Bachelor of Software Engineering (English)",
+    ),
+    "software engineering",
+  );
+  assert.equal(
+    chooseAltinbasApplicationRow(
+      [
+        "victor maina oral and dental health",
+        "another applicant oral and dental health",
+        "victor maina operating room services",
+      ],
+      ["victor maina"],
+      [altinbasApplicationCoreProgram("Associate of Oral and Dental Health (Turkish)")],
+    ),
+    0,
+    "the Turkish legacy suffix no longer hides a unique name+program row",
   );
 });

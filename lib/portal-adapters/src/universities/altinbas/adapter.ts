@@ -75,6 +75,7 @@ import {
 } from "./flow-fields.js";
 import {
   altinbasBasicFieldLabel,
+  altinbasApplicationCoreProgram,
   altinbasMutationCanaryGate,
   altinbasPhoneDigits,
   altinbasGpaTypeLabel,
@@ -1986,9 +1987,7 @@ async function completeApplicationUI(
   // "Core" program (strip Bachelor/Master/of/in/English…) → robust row match,
   // e.g. profile "Bachelor of Electrical and Electronics Engineering (English)"
   // matches a portal row labelled "Electrical and Electronics Engineering (in English)".
-  const coreProg = fold(
-    (profile.programName || "").replace(/\b(bachelor|master|associate|phd|doctorate|of|in|the|english|degree|program|programme)\b/gi, " "),
-  );
+  const coreProg = altinbasApplicationCoreProgram(profile.programName || "");
 
   // A brand-new Program commit can take time to surface in My Applications.
   // Before a commit, one probe is enough: no row means the normal create path
@@ -3330,7 +3329,30 @@ async function clickCreateNewApplication(
 
   const createBtn = page.getByRole("button", { name: /create new application/i }).first();
   if (!(await createBtn.count().catch(() => 0))) {
-    logger.warn("[altinbas] Create New Application button not found on student summary screen");
+    const actionCounts = await page.getByRole("button").evaluateAll((buttons: Element[]) => {
+      const actions = {
+        createNewApplication: 0,
+        newApplication: 0,
+        startApplication: 0,
+        goToApplicantDetail: 0,
+      };
+      for (const button of buttons) {
+        const labels = [
+          button.getAttribute("aria-label") || "",
+          button.getAttribute("title") || "",
+          button.textContent || "",
+        ].map((label) => label.replace(/\s+/g, " ").trim()).filter(Boolean);
+        if (labels.some((label) => /^create new application$/i.test(label))) actions.createNewApplication++;
+        if (labels.some((label) => /^new application$/i.test(label))) actions.newApplication++;
+        if (labels.some((label) => /^start application$/i.test(label))) actions.startApplication++;
+        if (labels.some((label) => /go to applicant detail page/i.test(label))) actions.goToApplicantDetail++;
+      }
+      return actions;
+    }).catch(() => null);
+    logger.warn(
+      "[altinbas] Create New Application button not found on student summary screen" +
+      ` (knownActionCounts=${JSON.stringify(actionCounts)})`,
+    );
     return false;
   }
   await createBtn.scrollIntoViewIfNeeded().catch(() => {});

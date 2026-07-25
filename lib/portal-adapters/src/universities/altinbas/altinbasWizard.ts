@@ -1,3 +1,5 @@
+import { fold } from "../../programMatch.js";
+
 export const ALTINBAS_WIZARD_STEPS = [
   "Personal Information",
   "Educational Information",
@@ -340,6 +342,22 @@ export function chooseAltinbasApplicationRow(
     }))
     .filter((candidate) => candidate.name && candidate.program);
   return matches.length === 1 ? matches[0].index : -1;
+}
+
+/**
+ * Salesforce list rows sometimes omit the medium that the CRM's legacy title
+ * carries, e.g. `Associate of Oral and Dental Health (Turkish)` versus
+ * `Oral and Dental Health`. Remove only degree/title boilerplate and explicit
+ * EN/TR medium tokens. If both language variants remain as separate rows, the
+ * caller still sees multiple equal candidates and fails closed.
+ */
+export function altinbasApplicationCoreProgram(value: string): string {
+  return fold(
+    value.replace(
+      /\b(bachelor|master|associate|phd|doctorate|of|in|the|english|turkish|turkce|türkçe|degree|program|programme)\b/gi,
+      " ",
+    ),
+  );
 }
 
 export type AltinbasSignedUpLookupDecision =
