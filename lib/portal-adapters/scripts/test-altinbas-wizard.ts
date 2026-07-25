@@ -15,6 +15,7 @@ import {
   decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  isAltinbasExistingUploadProved,
   isAltinbasLightningUploadProved,
   isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
@@ -670,6 +671,37 @@ test("AW14f: Lightning upload needs exact local file plus completed Done contrac
     }),
     true,
     "an exact portal filename is sufficient even before the modal disappears",
+  );
+});
+
+test("AW14g: resumed upload needs an exact filename or scoped Salesforce content id", () => {
+  assert.equal(
+    isAltinbasExistingUploadProved({
+      exactFilenameSeen: true,
+      contentReferenceCount: 0,
+    }),
+    true,
+  );
+  assert.equal(
+    isAltinbasExistingUploadProved({
+      exactFilenameSeen: false,
+      contentReferenceCount: 1,
+    }),
+    true,
+  );
+  assert.equal(
+    isAltinbasExistingUploadProved({
+      exactFilenameSeen: false,
+      contentReferenceCount: 0,
+    }),
+    false,
+  );
+  assert.equal(
+    isAltinbasExistingUploadProved({
+      exactFilenameSeen: false,
+      contentReferenceCount: -1,
+    }),
+    false,
   );
 });
 
