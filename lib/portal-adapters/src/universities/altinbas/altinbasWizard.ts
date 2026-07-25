@@ -93,6 +93,19 @@ export function isAltinbasLightningUploadProved(input: {
   );
 }
 
+export function isAltinbasExistingUploadProved(input: {
+  exactFilenameSeen: boolean;
+  contentReferenceCount: number;
+}): boolean {
+  return (
+    input.exactFilenameSeen ||
+    (
+      Number.isInteger(input.contentReferenceCount) &&
+      input.contentReferenceCount > 0
+    )
+  );
+}
+
 export type AltinbasBasicField =
   | "firstName"
   | "lastName"
