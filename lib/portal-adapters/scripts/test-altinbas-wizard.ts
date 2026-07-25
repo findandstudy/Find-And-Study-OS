@@ -15,6 +15,7 @@ import {
   decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  extractAltinbasFlowUploadedDocumentSlots,
   isAltinbasExistingUploadProved,
   isAltinbasLightningUploadProved,
   isAltinbasUiDateCommitted,
@@ -702,6 +703,116 @@ test("AW14g: resumed upload needs an exact filename or scoped Salesforce content
       contentReferenceCount: -1,
     }),
     false,
+  );
+});
+
+test("AW14h: live recordsCV proves all four exact uploaded document slots", () => {
+  const sfId = (prefix: "068" | "069", suffix: string) =>
+    `${prefix}Q300000${suffix.padStart(5, "0")}`;
+  const record = (
+    name: string,
+    suffix: string,
+  ): Record<string, unknown> => ({
+    Name: `CV-${suffix}`,
+    eduhub__Description__c: name,
+    eduhub__Document_Name__c: name,
+    eduhub__Status__c: "Uploaded",
+    eduhub__Completed__c: "Yes",
+    eduhub__Required__c: true,
+    eduhub__Content_Document_Id__c: sfId("069", suffix),
+    eduhub__Latest_Content_Id__c: sfId("068", suffix),
+  });
+  const proof = extractAltinbasFlowUploadedDocumentSlots({
+    response: {
+      fields: [
+        { name: "Unrelated" },
+        {
+          extensionName: "eduhub:eduhubMultipleFileUpload",
+          name: "Upload",
+          inputs: [{
+            name: "recordsCV",
+            value: [
+              record("Passport", "1"),
+              record("High School Diploma", "2"),
+              record("High School Transcript", "3"),
+              record("Personal Picture", "4"),
+            ],
+          }],
+        },
+      ],
+    },
+  });
+  assert.equal(proof.componentFound, true);
+  assert.deepEqual(
+    proof.slots,
+    ["passport", "diploma", "transcript", "photo"],
+  );
+});
+
+test("AW14i: recordsCV rejects incomplete status and invalid content ids", () => {
+  const proof = extractAltinbasFlowUploadedDocumentSlots({
+    extensionName: "eduhub:eduhubMultipleFileUpload",
+    name: "Upload",
+    inputs: [{
+      name: "recordsCV",
+      value: [
+        {
+          Name: "CV-1",
+          eduhub__Description__c: "Passport",
+          eduhub__Document_Name__c: "Passport",
+          eduhub__Status__c: "Pending",
+          eduhub__Completed__c: "Yes",
+          eduhub__Required__c: true,
+          eduhub__Content_Document_Id__c: "069Q30000000001",
+          eduhub__Latest_Content_Id__c: "068Q30000000001",
+        },
+        {
+          Name: "CV-2",
+          eduhub__Description__c: "High School Diploma",
+          eduhub__Document_Name__c: "High School Diploma",
+          eduhub__Status__c: "Uploaded",
+          eduhub__Completed__c: "Yes",
+          eduhub__Required__c: true,
+          eduhub__Content_Document_Id__c: "not-a-salesforce-id",
+          eduhub__Latest_Content_Id__c: "068Q30000000002",
+        },
+      ],
+    }],
+  });
+  assert.equal(proof.componentFound, true);
+  assert.deepEqual(proof.slots, []);
+});
+
+test("AW14j: duplicate document names and ambiguous components fail closed", () => {
+  const validPassport = {
+    Name: "CV-1",
+    eduhub__Description__c: "Passport",
+    eduhub__Document_Name__c: "Passport",
+    eduhub__Status__c: "Uploaded",
+    eduhub__Completed__c: "Yes",
+    eduhub__Required__c: true,
+    eduhub__Content_Document_Id__c: "069Q30000000001",
+    eduhub__Latest_Content_Id__c: "068Q30000000001",
+  };
+  const component = {
+    extensionName: "eduhub:eduhubMultipleFileUpload",
+    name: "Upload",
+    inputs: [{
+      name: "recordsCV",
+      value: [validPassport, { ...validPassport }],
+    }],
+  };
+  assert.deepEqual(
+    extractAltinbasFlowUploadedDocumentSlots(component),
+    { componentFound: true, slots: [] },
+  );
+  assert.deepEqual(
+    extractAltinbasFlowUploadedDocumentSlots([component, component]),
+    { componentFound: true, slots: [] },
+  );
+  assert.deepEqual(
+    extractAltinbasFlowUploadedDocumentSlots({ name: "Other" }),
+    { componentFound: false, slots: [] },
   );
 });
 
