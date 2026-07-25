@@ -106,6 +106,127 @@ export function isAltinbasExistingUploadProved(input: {
   );
 }
 
+export const ALTINBAS_REQUIRED_DOCUMENT_SLOTS = [
+  "passport",
+  "diploma",
+  "transcript",
+  "photo",
+] as const;
+
+export type AltinbasDocumentSlot =
+  (typeof ALTINBAS_REQUIRED_DOCUMENT_SLOTS)[number];
+
+export interface AltinbasFlowDocumentProof {
+  componentFound: boolean;
+  slots: AltinbasDocumentSlot[];
+}
+
+const ALTINBAS_FLOW_DOCUMENT_NAMES: Record<
+  AltinbasDocumentSlot,
+  string
+> = {
+  passport: "Passport",
+  diploma: "High School Diploma",
+  transcript: "High School Transcript",
+  photo: "Personal Picture",
+};
+
+function isSalesforceContentId(
+  value: unknown,
+  allowedPrefixes: readonly string[],
+): boolean {
+  return (
+    typeof value === "string" &&
+    /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/.test(value) &&
+    allowedPrefixes.some((prefix) => value.startsWith(prefix))
+  );
+}
+
+/**
+ * Read the authoritative server-side upload state returned by Altınbaş's
+ * `eduhubMultipleFileUpload` Flow component. A slot is accepted only when its
+ * exact document name occurs once and both Salesforce content references,
+ * status, completion and required flags all agree. IDs never leave this pure
+ * proof function and therefore cannot leak into logs.
+ */
+export function extractAltinbasFlowUploadedDocumentSlots(
+  root: unknown,
+): AltinbasFlowDocumentProof {
+  const components: Array<Record<string, unknown>> = [];
+  const walk = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    if (
+      record.extensionName === "eduhub:eduhubMultipleFileUpload" &&
+      record.name === "Upload"
+    ) {
+      components.push(record);
+    }
+    for (const child of Object.values(record)) walk(child);
+  };
+  walk(root);
+
+  // Multiple matching components would make the source screen ambiguous.
+  if (components.length !== 1) {
+    return {
+      componentFound: components.length > 0,
+      slots: [],
+    };
+  }
+
+  const inputs = components[0].inputs;
+  if (!Array.isArray(inputs)) {
+    return { componentFound: true, slots: [] };
+  }
+  const recordsInputs = inputs.filter(
+    (input): input is Record<string, unknown> =>
+      !!input &&
+      typeof input === "object" &&
+      (input as Record<string, unknown>).name === "recordsCV",
+  );
+  if (recordsInputs.length !== 1 || !Array.isArray(recordsInputs[0].value)) {
+    return { componentFound: true, slots: [] };
+  }
+
+  const records = recordsInputs[0].value as unknown[];
+  const slots: AltinbasDocumentSlot[] = [];
+  for (const slot of ALTINBAS_REQUIRED_DOCUMENT_SLOTS) {
+    const exactName = ALTINBAS_FLOW_DOCUMENT_NAMES[slot];
+    const matching = records.filter(
+      (candidate) =>
+        !!candidate &&
+        typeof candidate === "object" &&
+        (candidate as Record<string, unknown>).eduhub__Description__c ===
+          exactName &&
+        (candidate as Record<string, unknown>).eduhub__Document_Name__c ===
+          exactName,
+    );
+    // Duplicate names are ambiguous even when one happens to look valid.
+    if (matching.length !== 1) continue;
+    const record = matching[0] as Record<string, unknown>;
+    if (
+      record.eduhub__Status__c === "Uploaded" &&
+      record.eduhub__Completed__c === "Yes" &&
+      record.eduhub__Required__c === true &&
+      isSalesforceContentId(
+        record.eduhub__Content_Document_Id__c,
+        ["069"],
+      ) &&
+      isSalesforceContentId(
+        record.eduhub__Latest_Content_Id__c,
+        ["068", "069"],
+      )
+    ) {
+      slots.push(slot);
+    }
+  }
+  return { componentFound: true, slots };
+}
+
 export type AltinbasBasicField =
   | "firstName"
   | "lastName"
