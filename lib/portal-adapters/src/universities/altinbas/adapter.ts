@@ -1184,6 +1184,13 @@ async function fillAltinbasUiDateField(
     for (const candidate of candidates) {
       await control.click({ timeout: 6_000 });
       await control.fill(candidate, { timeout: 6_000 });
+      // lightning-input/date-picker keeps a draft value until it receives a
+      // committing keyboard/change sequence. Playwright's fill updates the
+      // visible native input, but that alone does not update Salesforce Flow's
+      // required-field model (observed in the live Personal Information step).
+      await control.press("Enter").catch(() => {});
+      await control.dispatchEvent("change").catch(() => {});
+      await control.dispatchEvent("blur").catch(() => {});
       await control.press("Tab").catch(() => {});
       await page.waitForTimeout(150);
       const proof = await control.evaluate((element: Element) => {
@@ -1198,7 +1205,14 @@ async function fillAltinbasUiDateField(
         canonicalAltinbasUiDate(proof.value, metadata) === iso &&
         !proof.ariaInvalid &&
         proof.valid
-      ) return { ok: true, field, reason: "ok" };
+      ) {
+        logger.info(
+          `[altinbas][ui] date control committed` +
+          ` (field=${field}, type=${metadata.type || "text"},` +
+          ` placeholder=${JSON.stringify(metadata.placeholder || "")})`,
+        );
+        return { ok: true, field, reason: "ok" };
+      }
     }
     return { ok: false, field, reason: "date_readback_mismatch" };
   } catch (error) {
