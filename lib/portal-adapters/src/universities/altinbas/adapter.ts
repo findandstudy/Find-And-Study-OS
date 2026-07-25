@@ -1917,18 +1917,27 @@ async function ensureEducationRecordUI(
     const rawSignals = els.filter((element) =>
       element.matches(
         "button,a,lightning-button,lightning-button-icon,lightning-icon," +
-        "[role='button'],[onclick],[tabindex='0'],.slds-button,.slds-button_icon",
+        "lightning-primitive-icon,lightning-base-icon,svg,use,[icon-name]," +
+        "[data-key],[role='button'],[onclick],[tabindex='0'],.slds-button," +
+        ".slds-button_icon,.slds-icon,.slds-icon_container",
       ),
     );
     const activationGroups = new Map<Element, Element[]>();
     rawSignals.forEach((signal) => {
-      const activation =
-        composedChain(signal).find((candidate) =>
+      const signalChain = composedChain(signal);
+      const clickable = signalChain.find((candidate) =>
           candidate.matches(
             "button,a,lightning-button,lightning-button-icon,[role='button']," +
             "[onclick],[tabindex='0'],.slds-button,.slds-button_icon",
           ),
-        ) || signal;
+        );
+      const iconHost = signalChain.find((candidate) =>
+        candidate.matches(
+          "lightning-icon,lightning-primitive-icon,lightning-base-icon," +
+          "[icon-name],.slds-icon_container",
+        ),
+      );
+      const activation = clickable || iconHost || signal;
       const signals = activationGroups.get(activation) || [];
       signals.push(signal);
       activationGroups.set(activation, signals);
@@ -1962,6 +1971,10 @@ async function ensureEducationRecordUI(
           signal.getAttribute("name"),
           signal.getAttribute("icon-name"),
           signal.getAttribute("data-element-id"),
+          signal.getAttribute("data-key"),
+          signal.getAttribute("href"),
+          signal.getAttribute("xlink:href"),
+          signal.getAttribute("class"),
           String((signal as Element & { iconName?: unknown }).iconName || ""),
           signal.textContent,
         ]),
@@ -2034,13 +2047,23 @@ async function ensureEducationRecordUI(
         excluded,
       }];
     });
-    return { headingCount: headings.length, candidates };
-  }).catch(() => ({ headingCount: 0, candidates: [] }));
+    return {
+      headingCount: headings.length,
+      rawSignalCount: rawSignals.length,
+      activationCount: activationGroups.size,
+      candidates,
+    };
+  }).catch(() => ({
+    headingCount: 0,
+    rawSignalCount: 0,
+    activationCount: 0,
+    candidates: [],
+  }));
   const addDecision = decideAltinbasEducationAddCandidate(addScan.candidates);
   const opened = addDecision.id
     ? await page.evaluate((candidateId: string) => {
         const roots: Array<Document | ShadowRoot> = [document];
-        const matches: HTMLElement[] = [];
+        const matches: Element[] = [];
         for (let rootIndex = 0; rootIndex < roots.length; rootIndex++) {
           roots[rootIndex].querySelectorAll("*").forEach((element: Element) => {
             if ((element as HTMLElement).shadowRoot) {
@@ -2049,7 +2072,7 @@ async function ensureEducationRecordUI(
             if (
               element.getAttribute("data-fas-edu-add-candidate") === candidateId
             ) {
-              matches.push(element as HTMLElement);
+              matches.push(element);
             }
           });
         }
@@ -2059,7 +2082,18 @@ async function ensureEducationRecordUI(
           );
         });
         if (matches.length !== 1) return false;
-        matches[0].click();
+        const target = matches[0] as Element & { click?: () => void };
+        if (typeof target.click === "function") {
+          target.click();
+        } else {
+          target.dispatchEvent(
+            new MouseEvent("click", {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+            }),
+          );
+        }
         return true;
       }, addDecision.id).catch(() => false)
     : false;
@@ -2067,6 +2101,8 @@ async function ensureEducationRecordUI(
     logger.warn(
       `[altinbas][ui] Educational: + (add) butonu bulunamadı` +
       ` (headingCount=${addScan.headingCount},` +
+      ` rawSignals=${addScan.rawSignalCount},` +
+      ` activations=${addScan.activationCount},` +
       ` candidates=${addScan.candidates.length},` +
       ` semantic=${addScan.candidates.filter((candidate) => candidate.semantic).length},` +
       ` icons=${addScan.candidates.filter((candidate) => candidate.genericIcon && !candidate.excluded).length},` +
