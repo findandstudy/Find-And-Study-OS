@@ -78,6 +78,7 @@ import {
   altinbasMutationCanaryGate,
   altinbasPhoneDigits,
   altinbasGpaTypeLabel,
+  chooseAltinbasApplicantGridRow,
   chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
   classifyAltinbasWizardTransition,
@@ -3201,9 +3202,9 @@ async function clickCreateNewApplication(
   if (await gotoDetail.count().catch(() => 0)) {
     const radios = page.locator('input[type="radio"]');
     const radioCount = await radios.count().catch(() => 0);
-    const matches: number[] = [];
     const expectedEmail = fold(profile.email);
     const expectedPassport = fold(profile.passportNumber);
+    const foldedRows: string[] = [];
     for (let index = 0; index < radioCount; index++) {
       const rowText = await radios.nth(index).evaluate((radio: Element) => {
         let node: Element | null = radio;
@@ -3244,25 +3245,41 @@ async function clickCreateNewApplication(
         }
         return parts.join(" ").replace(/\s+/g, " ").trim();
       }).catch(() => "");
-      const folded = fold(rowText);
-      if (
+      foldedRows.push(fold(rowText));
+    }
+    const foldedPageText = radioCount === 1
+      ? fold(await readComposedPageText(page))
+      : "";
+    const selectedIndex = chooseAltinbasApplicantGridRow({
+      foldedRows,
+      foldedPageText,
+      expectedFoldedEmail: expectedEmail,
+      expectedFoldedPassport: expectedPassport,
+    });
+    if (selectedIndex < 0) {
+      const readableRows = foldedRows.filter(Boolean).length;
+      const pageIdentityProof = Boolean(
         expectedEmail &&
         expectedPassport &&
-        folded.includes(expectedEmail) &&
-        folded.includes(expectedPassport)
-      ) {
-        matches.push(index);
-      }
-    }
-    if (matches.length !== 1) {
+        foldedPageText.includes(expectedEmail) &&
+        foldedPageText.includes(expectedPassport)
+      );
       logger.warn(
         `[altinbas] applicant grid target proof failed` +
-        ` (radioCount=${radioCount}, exactIdentityMatches=${matches.length})`,
+        ` (radioCount=${radioCount}, readableRows=${readableRows},` +
+        ` pageIdentityProof=${pageIdentityProof})`,
       );
       return false;
     }
-    const checked = await forceCheckRadio(page, radios.nth(matches[0]));
-    logger.info(`[altinbas] applicant grid exact target selected=${checked}`);
+    const proofSource = foldedRows[selectedIndex]?.includes(expectedEmail) &&
+        foldedRows[selectedIndex]?.includes(expectedPassport)
+      ? "row"
+      : "single_candidate_page";
+    const checked = await forceCheckRadio(page, radios.nth(selectedIndex));
+    logger.info(
+      `[altinbas] applicant grid exact target selected=${checked}` +
+      ` (proof=${proofSource})`,
+    );
     if (!checked) return false;
     await page.waitForTimeout(800);
     // FIX-9: seçim yapıldı — bundan sonraki aura trafiği seçilen öğrencinin

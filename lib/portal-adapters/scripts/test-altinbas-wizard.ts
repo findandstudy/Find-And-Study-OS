@@ -7,6 +7,7 @@ import {
   altinbasPhoneDigits,
   altinbasGpaTypeLabel,
   canonicalAltinbasWizardStep,
+  chooseAltinbasApplicantGridRow,
   chooseAltinbasApplicationRow,
   chooseAltinbasLabeledCombobox,
   classifyAltinbasWizardTransition,
@@ -543,4 +544,67 @@ test("AW24: Basic Information labels accept the live required marker without bec
   assert.match("* Last Name", lastName);
   assert.match("* Passport Number", passport);
   assert.match("* Applicant Email", email);
+});
+
+test("AW25: applicant grid requires email + passport and falls back only for one radio", () => {
+  const expectedFoldedEmail = "student@example.com";
+  const expectedFoldedPassport = "p1234567";
+
+  assert.equal(
+    chooseAltinbasApplicantGridRow({
+      foldedRows: [
+        "other@example.com p7654321",
+        "student@example.com p1234567",
+      ],
+      foldedPageText: "",
+      expectedFoldedEmail,
+      expectedFoldedPassport,
+    }),
+    1,
+    "a unique row-scoped identity proof wins",
+  );
+
+  assert.equal(
+    chooseAltinbasApplicantGridRow({
+      foldedRows: [""],
+      foldedPageText: "student@example.com p1234567",
+      expectedFoldedEmail,
+      expectedFoldedPassport,
+    }),
+    0,
+    "one radio may use composed-page identity proof",
+  );
+
+  assert.equal(
+    chooseAltinbasApplicantGridRow({
+      foldedRows: [""],
+      foldedPageText: "student@example.com",
+      expectedFoldedEmail,
+      expectedFoldedPassport,
+    }),
+    -1,
+    "email alone is insufficient",
+  );
+
+  assert.equal(
+    chooseAltinbasApplicantGridRow({
+      foldedRows: [""],
+      foldedPageText: "p1234567",
+      expectedFoldedEmail,
+      expectedFoldedPassport,
+    }),
+    -1,
+    "passport alone is insufficient",
+  );
+
+  assert.equal(
+    chooseAltinbasApplicantGridRow({
+      foldedRows: ["", ""],
+      foldedPageText: "student@example.com p1234567",
+      expectedFoldedEmail,
+      expectedFoldedPassport,
+    }),
+    -1,
+    "page-wide proof cannot choose between multiple radio candidates",
+  );
 });
