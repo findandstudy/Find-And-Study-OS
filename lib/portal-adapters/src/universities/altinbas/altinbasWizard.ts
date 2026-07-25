@@ -342,6 +342,29 @@ export function chooseAltinbasApplicationRow(
   return matches.length === 1 ? matches[0].index : -1;
 }
 
+export type AltinbasSignedUpLookupDecision =
+  | "open"
+  | "retry"
+  | "missing"
+  | "ambiguous";
+
+/**
+ * A Program commit can take time to surface its Signed-Up row in Salesforce's
+ * My Applications list. Retrying is safe only while no actionable row exists;
+ * a visible but ambiguous row must never be retried into a different target.
+ */
+export function decideAltinbasSignedUpLookup(input: {
+  completeButtonCount: number;
+  chosenIndex: number;
+  attempt: number;
+  maxAttempts: number;
+}): AltinbasSignedUpLookupDecision {
+  if (input.completeButtonCount > 0) {
+    return input.chosenIndex >= 0 ? "open" : "ambiguous";
+  }
+  return input.attempt + 1 < input.maxAttempts ? "retry" : "missing";
+}
+
 /**
  * Select the applicant-search grid row only when email + passport prove the
  * identity. Prefer a row-scoped proof. Some Altınbaş Lightning builds render

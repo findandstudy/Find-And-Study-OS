@@ -78,6 +78,7 @@ import {
   altinbasMutationCanaryGate,
   altinbasPhoneDigits,
   altinbasGpaTypeLabel,
+  decideAltinbasSignedUpLookup,
   chooseAltinbasApplicantGridRow,
   chooseAltinbasLabeledCombobox,
   chooseAltinbasApplicationRow,
@@ -1976,6 +1977,7 @@ async function completeApplicationUI(
   dryRun: boolean,
   result: SubmitResult,
   screenshots: string[],
+  options: { afterProgramCommit?: boolean } = {},
 ): Promise<boolean> {
   // Push captures into submit()'s own screenshots array so its
   // `if (screenshots.length) result.screenshots = screenshots;` picks them up.
@@ -1988,48 +1990,43 @@ async function completeApplicationUI(
     (profile.programName || "").replace(/\b(bachelor|master|associate|phd|doctorate|of|in|the|english|degree|program|programme)\b/gi, " "),
   );
 
-  // 1) My Applications → search the student → open the target app.
-  await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
-  await page.waitForTimeout(SF_HYDRATION_MS);
-  try {
-    const search = page.getByPlaceholder(/search by applicant/i).first();
-    if (await search.count().catch(() => 0)) {
-      await search.click().catch(() => {});
-      await search.fill("").catch(() => {});
-      await search.pressSequentially(profile.lastName || profile.firstName || "", { delay: 50 }).catch(() => {});
-      await page.waitForTimeout(3500);
-    }
-  } catch {/* tolerate */}
-
-  // 2) Find the "Complete Application" action buttons. Playwright getByRole
-  //    PIERCES Salesforce's shadow DOM (querySelectorAll('tr') did NOT — that
-  //    was the bug that made every existing Signed-Up app look "not found").
-  const completeBtns = page.getByRole("button", { name: /^\s*Complete Application\s*$/i });
-  let nBtns = await completeBtns.count().catch(() => 0);
-  if (!nBtns) {
-    // Lightning datatable can render late — wait once more and recount.
+  // A brand-new Program commit can take time to surface in My Applications.
+  // Before a commit, one probe is enough: no row means the normal create path
+  // should continue. After a commit, refresh and re-filter a bounded number of
+  // times; only an absent row is retried, never an ambiguous visible row.
+  const maxLookupAttempts = options.afterProgramCommit ? 4 : 1;
+  let completeBtns: any = null;
+  let nBtns = 0;
+  let chosenIdx = -1;
+  let rowTexts: string[] = [];
+  let lookupDecision: ReturnType<typeof decideAltinbasSignedUpLookup> = "missing";
+  for (let attempt = 0; attempt < maxLookupAttempts; attempt++) {
+    await page.goto(MY_APPS_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
     await page.waitForTimeout(SF_HYDRATION_MS);
-    nBtns = await completeBtns.count().catch(() => 0);
-  }
-  if (!nBtns) {
-    result.detail = `Altınbaş[ui]: My Applications'ta 'Complete Application' (Signed Up) başvuru yok (program="${profile.programName}")`;
-    logger.warn(`[altinbas][ui] ${result.detail}`);
-    if (MUTATION_CANARY) {
-      result.detail = "Altınbaş[canary]: blocked — hedef Complete Application satırı bulunamadı";
-      result.screenshots = shots;
-      return true;
-    }
-    const s = await captureScreen(page, "ui-no-complete-btn"); if (s) shots.push(s);
-    // NO existing row → tell caller to fall through to the normal create path.
-    return false;
-  }
-
-  // Resolve the composed Salesforce row across shadow-root boundaries. Raw row
-  // text is used only in memory and never logged.
-  const rowTexts: string[] = [];
-  for (let i = 0; i < nBtns; i++) {
     try {
-      rowTexts.push(await completeBtns.nth(i).evaluate((button: Element) => {
+      const search = page.getByPlaceholder(/search by applicant/i).first();
+      if (await search.count().catch(() => 0)) {
+        await search.click().catch(() => {});
+        await search.fill("").catch(() => {});
+        await search.pressSequentially(profile.lastName || profile.firstName || "", { delay: 50 }).catch(() => {});
+        await page.waitForTimeout(3500);
+      }
+    } catch {/* tolerate */}
+
+    // Playwright getByRole pierces Salesforce shadow DOM; raw row text remains
+    // in memory and is never logged.
+    completeBtns = page.getByRole("button", { name: /^\s*Complete Application\s*$/i });
+    nBtns = await completeBtns.count().catch(() => 0);
+    // Preserve the pre-existing resume-path hydration allowance. Post-commit
+    // lookup instead uses a full reload + re-filter on each bounded attempt.
+    if (!nBtns && !options.afterProgramCommit) {
+      await page.waitForTimeout(SF_HYDRATION_MS);
+      nBtns = await completeBtns.count().catch(() => 0);
+    }
+    rowTexts = [];
+    for (let i = 0; i < nBtns; i++) {
+      try {
+        rowTexts.push(await completeBtns.nth(i).evaluate((button: Element) => {
         let node: Element | null = button;
         let boundary: Element | null = null;
         for (let depth = 0; depth < 20 && node; depth++) {
@@ -2076,20 +2073,49 @@ async function completeApplicationUI(
           }
         }
         return parts.join(" ").replace(/\s+/g, " ").trim();
-      }));
-    } catch {
-      rowTexts.push("");
+        }));
+      } catch {
+        rowTexts.push("");
+      }
     }
+    chosenIdx = chooseAltinbasApplicationRow(
+      rowTexts.map(fold),
+      [
+        fold(`${profile.firstName} ${profile.lastName}`),
+        fold(`${profile.lastName} ${profile.firstName}`),
+      ],
+      [coreProg, progFold],
+    );
+    lookupDecision = decideAltinbasSignedUpLookup({
+      completeButtonCount: nBtns,
+      chosenIndex: chosenIdx,
+      attempt,
+      maxAttempts: maxLookupAttempts,
+    });
+    logger.info(
+      `[altinbas][ui] Signed-Up lookup` +
+      ` (afterCommit=${options.afterProgramCommit === true}, attempt=${attempt + 1}/${maxLookupAttempts},` +
+      ` completeButtonCount=${nBtns}, readableRows=${rowTexts.filter(Boolean).length},` +
+      ` decision=${lookupDecision})`,
+    );
+    if (lookupDecision !== "retry") break;
+    await page.waitForTimeout(4000);
   }
-  const chosenIdx = chooseAltinbasApplicationRow(
-    rowTexts.map(fold),
-    [
-      fold(`${profile.firstName} ${profile.lastName}`),
-      fold(`${profile.lastName} ${profile.firstName}`),
-    ],
-    [coreProg, progFold],
-  );
-  if (chosenIdx < 0) {
+
+  if (lookupDecision === "missing") {
+    result.detail = options.afterProgramCommit
+      ? "Altınbaş[ui]: Program commit sonrası Signed-Up satırı bounded refresh ile görünmedi"
+      : `Altınbaş[ui]: My Applications'ta 'Complete Application' (Signed Up) başvuru yok (program="${profile.programName}")`;
+    logger.warn(`[altinbas][ui] ${result.detail}`);
+    if (MUTATION_CANARY) {
+      result.detail = "Altınbaş[canary]: blocked — hedef Complete Application satırı bulunamadı";
+      result.screenshots = shots;
+      return true;
+    }
+    const s = await captureScreen(page, "ui-no-complete-btn"); if (s) shots.push(s);
+    return false;
+  }
+  if (lookupDecision === "ambiguous") {
     result.detail =
       `Altınbaş[ui]: hedef başvuru tekil ad+program kanıtıyla seçilemedi` +
       ` (completeButtonCount=${nBtns}, readableRows=${rowTexts.filter(Boolean).length})`;
@@ -2640,6 +2666,7 @@ async function runFlowReplay(
       dryRun,
       result,
       screenshots,
+      { afterProgramCommit: true },
     );
     if (!handled) {
       result.detail =

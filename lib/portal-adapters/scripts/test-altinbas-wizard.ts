@@ -7,6 +7,7 @@ import {
   altinbasPhoneDigits,
   altinbasGpaTypeLabel,
   canonicalAltinbasWizardStep,
+  decideAltinbasSignedUpLookup,
   chooseAltinbasApplicantGridRow,
   chooseAltinbasApplicationRow,
   chooseAltinbasLabeledCombobox,
@@ -676,5 +677,44 @@ test("AW25: applicant grid requires email + passport and falls back only for one
     }),
     -1,
     "one candidate without either identity proof remains fail-closed",
+  );
+});
+
+test("AW26: Signed-Up lookup retries only an absent row after program commit", () => {
+  assert.equal(
+    decideAltinbasSignedUpLookup({
+      completeButtonCount: 0,
+      chosenIndex: -1,
+      attempt: 0,
+      maxAttempts: 4,
+    }),
+    "retry",
+  );
+  assert.equal(
+    decideAltinbasSignedUpLookup({
+      completeButtonCount: 0,
+      chosenIndex: -1,
+      attempt: 3,
+      maxAttempts: 4,
+    }),
+    "missing",
+  );
+  assert.equal(
+    decideAltinbasSignedUpLookup({
+      completeButtonCount: 2,
+      chosenIndex: -1,
+      attempt: 0,
+      maxAttempts: 4,
+    }),
+    "ambiguous",
+  );
+  assert.equal(
+    decideAltinbasSignedUpLookup({
+      completeButtonCount: 1,
+      chosenIndex: 0,
+      attempt: 0,
+      maxAttempts: 4,
+    }),
+    "open",
   );
 });
