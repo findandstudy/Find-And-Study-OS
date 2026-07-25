@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   altinbasBasicFieldLabel,
+  altinbasUiDateEntryCandidates,
   altinbasApplicationCoreProgram,
   altinbasMutationCanaryGate,
   altinbasPhoneDigits,
@@ -632,6 +633,34 @@ test("AW14e: exact saved date state is resume-safe and partial drafts fail close
     }),
     true,
     "a native date input uses exact ISO readback without Lightning hosts",
+  );
+});
+
+test("AW14e2: blank Lightning dates preserve zero-padded day/month", () => {
+  assert.deepEqual(
+    altinbasUiDateEntryCandidates(
+      "2004-09-05",
+      { type: "text", placeholder: "" },
+    ),
+    ["05/09/2004"],
+  );
+  assert.deepEqual(
+    altinbasUiDateEntryCandidates(
+      "2004-09-05",
+      { type: "text", placeholder: "MM/DD/YYYY" },
+    ),
+    ["09/05/2004"],
+  );
+  assert.deepEqual(
+    altinbasUiDateEntryCandidates(
+      "2004-09-05",
+      { type: "date" },
+    ),
+    ["2004-09-05"],
+  );
+  assert.deepEqual(
+    altinbasUiDateEntryCandidates("not-a-date", { type: "text" }),
+    [],
   );
 });
 
