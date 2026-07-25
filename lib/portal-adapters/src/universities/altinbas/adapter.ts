@@ -86,6 +86,7 @@ import {
   decideAltinbasEducationAddCandidate,
   classifyAltinbasWizardTransition,
   explicitCityOfBirth,
+  isAltinbasExistingUploadProved,
   isAltinbasLightningUploadProved,
   isAltinbasUiDateCommitted,
   missingAltinbasPersonalFields,
@@ -1723,6 +1724,80 @@ async function composedPageHasExactFileName(
   }, expectedFileName).catch(() => false);
 }
 
+async function fileInputAttachmentProof(
+  fileInput: any,
+  expectedFileName: string,
+): Promise<{
+  exactFilenameSeen: boolean;
+  contentReferenceCount: number;
+}> {
+  return fileInput.evaluate((element: Element, expected: string) => {
+    const normalize = (value: unknown) =>
+      String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+    const target = normalize(expected);
+    let exactFilenameSeen = false;
+    const contentReferences = new Set<string>();
+    const seen = new WeakSet<object>();
+    let inspected = 0;
+    const inspect = (value: unknown, depth: number) => {
+      if (inspected++ > 600 || value == null) return;
+      if (typeof value === "string") {
+        if (target && normalize(value).includes(target)) {
+          exactFilenameSeen = true;
+        }
+        for (const match of value.matchAll(
+          /\b(?:069|068|05T)[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?\b/g,
+        )) {
+          contentReferences.add(match[0]);
+        }
+        return;
+      }
+      if (depth <= 0 || typeof value !== "object" || seen.has(value)) return;
+      seen.add(value);
+      if (value instanceof FileList) {
+        for (let index = 0; index < value.length; index++) {
+          inspect(value.item(index)?.name, depth - 1);
+        }
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.slice(0, 30).forEach((item) => inspect(item, depth - 1));
+        return;
+      }
+      for (const key of Object.keys(value).slice(0, 80)) {
+        if (
+          /file|document|content|upload|record|version|id|name|href|url/i.test(
+            key,
+          )
+        ) {
+          try {
+            inspect((value as Record<string, unknown>)[key], depth - 1);
+          } catch {/* inaccessible LWC property */}
+        }
+      }
+    };
+
+    let node: Element | null = element;
+    for (let depth = 0; depth < 18 && node; depth++) {
+      for (const attribute of node.getAttributeNames()) {
+        inspect(node.getAttribute(attribute), 1);
+      }
+      inspect(node, 3);
+      const root = node.getRootNode() as ShadowRoot | Document;
+      node = node.parentElement || ("host" in root ? root.host : null);
+    }
+    return {
+      exactFilenameSeen,
+      contentReferenceCount: contentReferences.size,
+    };
+  }, expectedFileName).catch(() => ({
+    exactFilenameSeen: false,
+    contentReferenceCount: 0,
+  }));
+}
+
 /** Fill a Lightning typeahead (country pickers) only when empty. */
 async function pickTypeaheadIfEmpty(
   page: any,
@@ -2810,18 +2885,29 @@ async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[
       continue;
     }
     const fileName = basename(path);
-    if (await composedPageHasExactFileName(page, fileName)) {
+    const fileInput = fileInputs.nth(indices[0]);
+    const existingSlotProof = await fileInputAttachmentProof(
+      fileInput,
+      fileName,
+    );
+    if (
+      isAltinbasExistingUploadProved(existingSlotProof) ||
+      await composedPageHasExactFileName(page, fileName)
+    ) {
       uploaded.push(tag);
-      logger.info(`[altinbas][ui] Documents: ${tag} exact filename zaten mevcut`);
+      logger.info(
+        `[altinbas][ui] Documents: ${tag} zaten mevcut` +
+        ` (proof=${existingSlotProof.contentReferenceCount > 0 ? "content_reference" : "exact_filename"})`,
+      );
       continue;
     }
     try {
-      await fileInputs.nth(indices[0]).setInputFiles(path);
+      await fileInput.setInputFiles(path);
     } catch (e) {
       logger.warn(`[altinbas][ui] Documents: ${tag} setInputFiles hatası: ${(e as Error).message?.slice(0, 120)}`);
       continue;
     }
-    const localReadback = await fileInputs.nth(indices[0]).evaluate(
+    const localReadback = await fileInput.evaluate(
       (input: Element) => {
         const fileInput = input as HTMLInputElement;
         return fileInput.files?.item(0)?.name || "";
@@ -2869,24 +2955,37 @@ async function uploadDocumentsUI(page: any, files: SubmitFiles): Promise<string[
       page,
       fileName,
     );
+    const uploadedSlotProof = await fileInputAttachmentProof(
+      fileInput,
+      fileName,
+    );
     if (!isAltinbasLightningUploadProved({
       exactLocalFile: localReadback === fileName,
       doneClicked,
       doneDismissed,
       documentsStage,
-      portalFilenameSeen,
+      portalFilenameSeen:
+        portalFilenameSeen ||
+        isAltinbasExistingUploadProved(uploadedSlotProof),
     })) {
       logger.warn(
         `[altinbas][ui] Documents: ${tag} upload proof başarısız` +
         ` (doneDismissed=${doneDismissed}, documentsStage=${documentsStage},` +
-        ` portalFilenameSeen=${portalFilenameSeen})`,
+        ` portalFilenameSeen=${portalFilenameSeen},` +
+        ` contentReferences=${uploadedSlotProof.contentReferenceCount})`,
       );
       continue;
     }
     uploaded.push(tag);
     logger.info(
       `[altinbas][ui] Documents: ${tag} upload tamamlandı` +
-      ` (proof=${portalFilenameSeen ? "exact_filename" : "lightning_done_stage"})`,
+      ` (proof=${
+        uploadedSlotProof.contentReferenceCount > 0
+          ? "content_reference"
+          : portalFilenameSeen
+            ? "exact_filename"
+            : "lightning_done_stage"
+      })`,
     );
   }
   return uploaded;
