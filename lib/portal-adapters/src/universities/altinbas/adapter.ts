@@ -1598,11 +1598,20 @@ async function selectNative(
   labelRe: RegExp,
   value: string,
   descriptorRe: RegExp,
+  exactName: string,
 ): Promise<boolean> {
   if (!value) return false;
   try {
-    const controls = page.getByLabel(labelRe);
-    let selected = await uniqueVisibleEditableControl(controls, ["select"]);
+    let selected = await uniqueVisibleEditableControl(
+      page.locator(`select[name="${exactName}" i]:visible`),
+      ["select"],
+    );
+    if (!selected.control) {
+      selected = await uniqueVisibleEditableControl(
+        page.getByLabel(labelRe),
+        ["select"],
+      );
+    }
     if (!selected.control) {
       selected = await uniqueEducationModalControl(
         page,
@@ -2490,14 +2499,22 @@ async function ensureEducationRecordUI(
   };
   for (let attempt = 0; attempt < 4 && !schoolMatch.control; attempt++) {
     schoolMatch = await uniqueVisibleEditableControl(
-      page.getByLabel(/^\s*Name of School\s*\*?\s*$/i),
+      page.locator(
+        'input[name="school" i]:visible,textarea[name="school" i]:visible',
+      ),
       ["input", "textarea"],
     );
+    if (!schoolMatch.control) {
+      schoolMatch = await uniqueVisibleEditableControl(
+        page.getByLabel(/^\s*Name of School\s*\*?\s*$/i),
+        ["input", "textarea"],
+      );
+    }
     if (!schoolMatch.control) {
       schoolMatch = await uniqueEducationModalControl(
         page,
         "input:visible,textarea:visible",
-        /name[\s_-]*of[\s_-]*school|school[\s_-]*name|school__c|institution/i,
+        /(?:^|[\s_-])school(?:$|[\s_-])|name[\s_-]*of[\s_-]*school|school[\s_-]*name|school__c|institution/i,
         /search|filter|gpa|city|field[\s_-]*of[\s_-]*study/i,
         ["input", "textarea"],
       );
@@ -2526,38 +2543,58 @@ async function ensureEducationRecordUI(
       /^\s*Country/i,
       primary.country!.trim(),
       /country__c|country/i,
+      "country",
     ),
     selectNative(
       page,
       /^\s*Degree/i,
       degreeLabel,
       /degree__c|degree/i,
+      "degree",
     ),
     selectNative(
       page,
       /Graduation Year/i,
       String(primary.endYear),
       /end[\s_-]*year__c|graduation[\s_-]*year|end[\s_-]*year/i,
+      "endyear",
     ),
     selectNative(
       page,
       /GPA Type/i,
       gpaTypeLabel,
       /gpa[\s_-]*type__c|gpa[\s_-]*type/i,
+      "gpatype",
     ),
   ]);
-  let gpaMatch = await uniqueVisibleEditableControl(
-    page.getByLabel(/^\s*GPA\s*\*?\s*$/i),
-    ["input"],
-  );
-  if (!gpaMatch.control) {
-    gpaMatch = await uniqueEducationModalControl(
-      page,
-      "input:visible",
-      /(?:^|[\s_-])gpa(?:__c)?(?:$|[\s_-])/i,
-      /gpa[\s_-]*type|search|filter/i,
+  let gpaMatch = {
+    control: null as any,
+    total: 0,
+    eligible: 0,
+  };
+  for (let attempt = 0; attempt < 4 && !gpaMatch.control; attempt++) {
+    gpaMatch = await uniqueVisibleEditableControl(
+      page.locator('input[name="gpa" i]:visible'),
       ["input"],
     );
+    if (!gpaMatch.control) {
+      gpaMatch = await uniqueVisibleEditableControl(
+        page.getByLabel(/^\s*GPA\s*\*?\s*$/i),
+        ["input"],
+      );
+    }
+    if (!gpaMatch.control) {
+      gpaMatch = await uniqueEducationModalControl(
+        page,
+        "input:visible",
+        /(?:^|[\s_-])gpa(?:__c)?(?:$|[\s_-])/i,
+        /gpa[\s_-]*type|search|filter/i,
+        ["input"],
+      );
+    }
+    if (!gpaMatch.control && attempt < 3) {
+      await page.waitForTimeout(350);
+    }
   }
   if (!gpaMatch.control) {
     logger.warn(
