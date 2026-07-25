@@ -97,6 +97,7 @@
     "test:ai-extract-compat": "tsx --test ./scripts/test-ai-extract-compat.ts",
     "test:portal-readiness": "tsx --test ./scripts/test-portal-readiness.ts",
     "test:portal-ai-guardian": "tsx --test ./scripts/test-portal-ai-guardian.ts",
+    "test:json-canonical": "tsx --test ./scripts/test-json-canonical.ts",
     "test:altinbas-flow-fields": "tsx --test ./scripts/test-altinbas-flow-fields.ts",
     "backfill:education-extract": "tsx scripts/backfill-education-extract.ts"
   },

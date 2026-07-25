@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { desc, eq, sql } from "drizzle-orm";
 import { db, pool, portalAdapterSpecsTable } from "@workspace/db";
 import { parseAdapterSpec } from "@workspace/portal-adapters";
+import { canonicalJson } from "../src/lib/jsonCanonical.js";
 
 const specDir = fileURLToPath(
   new URL("../../../docs/portal-specs/", import.meta.url),
@@ -64,7 +65,7 @@ async function main(): Promise<void> {
         .limit(1);
       if (
         latest &&
-        JSON.stringify(latest.spec) === JSON.stringify(spec)
+        canonicalJson(latest.spec) === canonicalJson(spec)
       ) {
         return {
           status: "unchanged" as const,
