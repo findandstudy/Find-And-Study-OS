@@ -195,6 +195,17 @@ export interface SubmitProfile {
     gpaType?: string | null;
     languageScore?: string | null;
   }>;
+  /**
+   * Legacy student-table education values that predate education_records.
+   * Altınbaş uses these only to complete missing fields in historical rows;
+   * other adapters may ignore this additive compatibility payload.
+   */
+  legacyEducation?: {
+    highSchool?: string;
+    bachelorSchool?: string;
+    masterSchool?: string;
+    rawGpa?: string;
+  };
   // ---------------------------------------------------------------------------
   // Panel-managed mapping data (sourced from portal_program_mapping by the
   // runner, keyed by universityKey). All optional — when absent the adapter
