@@ -83,8 +83,15 @@ export function isOwnedSalesforceApplicant(input: {
     fold(`${input.firstName} ${input.lastName}`),
     fold(`${input.lastName} ${input.firstName}`),
   ]);
+  const rowName = fold(input.rowName);
+  const rowEmail = input.rowEmail.trim().toLowerCase();
+  const email = input.email.trim().toLowerCase();
   return (
-    expectedNames.has(fold(input.rowName)) &&
-    input.rowEmail.trim().toLowerCase() === input.email.trim().toLowerCase()
+    [...expectedNames].some(
+      (name) => rowName === name || rowName.includes(name),
+    ) &&
+    (rowEmail === email ||
+      rowEmail === `mailto:${email}` ||
+      rowEmail.includes(email))
   );
 }

@@ -91,8 +91,8 @@ test("owned applicant requires exact name variant and exact email", () => {
       firstName: "Waleed",
       lastName: "Example",
       email: "waleed@example.com",
-      rowName: "EXAMPLE WALEED",
-      rowEmail: "Waleed@Example.com",
+      rowName: "Applicant — EXAMPLE WALEED",
+      rowEmail: "mailto:Waleed@Example.com",
     }),
     true,
   );

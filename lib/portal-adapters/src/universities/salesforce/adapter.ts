@@ -185,12 +185,18 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         };
         const rowName = await cellText("Name");
         const rowEmail = await cellText("Email");
+        const mailtoHref =
+          (await row
+            .locator('a[href^="mailto:"]')
+            .first()
+            .getAttribute("href")
+            .catch(() => "")) || "";
         const owned = isOwnedSalesforceApplicant({
           firstName: profile.firstName,
           lastName: profile.lastName,
           email: profile.email,
           rowName,
-          rowEmail,
+          rowEmail: mailtoHref || rowEmail,
         });
         if (!owned) return empty;
         return {
