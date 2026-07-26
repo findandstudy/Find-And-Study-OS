@@ -360,6 +360,15 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             const r = page.locator("input[type=radio]");
             const radioCount = await r.count();
             if (radioCount) {
+              if (
+                strictMappedPortal &&
+                /term|intake|semester|fall|spring|academic year/i.test(txt) &&
+                radioCount !== 1
+              ) {
+                throw new Error(
+                  `Salesforce ${cfg.key}: term target was not unique`,
+                );
+              }
               let target = r.first();
               if (
                 strictMappedPortal &&

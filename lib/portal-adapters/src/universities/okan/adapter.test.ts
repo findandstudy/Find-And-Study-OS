@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SubmitProfile } from "../../types.js";
-import { resolveOkanRequiredFields } from "./adapter.js";
+import {
+  chooseOkanProgramIndex,
+  resolveOkanDegreeValue,
+  resolveOkanRequiredFields,
+} from "./adapter.js";
 
 const baseProfile = {
   addressCity: "Istanbul",
@@ -52,4 +56,29 @@ test("Okan legacy policy may reuse explicit residence city for school city", () 
   assert.deepEqual(resolved.policyFallbacks, [
     "secondarySchoolCity<-addressCity",
   ]);
+});
+
+test("Okan degree mapping fails closed for unknown levels", () => {
+  assert.equal(resolveOkanDegreeValue("Associate"), "1");
+  assert.equal(resolveOkanDegreeValue("Bachelor"), "2");
+  assert.equal(resolveOkanDegreeValue("Master"), "3");
+  assert.equal(resolveOkanDegreeValue("PhD"), "4");
+  assert.equal(resolveOkanDegreeValue("Something New"), null);
+});
+
+test("Okan program selection chooses a proven match and refuses ambiguity", () => {
+  assert.equal(
+    chooseOkanProgramIndex(
+      ["Software Engineering (English)", "Civil Engineering (English)"],
+      "Software Engineering (English)",
+    ),
+    0,
+  );
+  assert.equal(
+    chooseOkanProgramIndex(
+      ["Business Administration (Thesis)", "Business Administration (Non-Thesis)"],
+      "Business Administration",
+    ),
+    null,
+  );
 });

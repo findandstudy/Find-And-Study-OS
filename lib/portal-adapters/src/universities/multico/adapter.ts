@@ -143,6 +143,24 @@ export function mapProgramType(level: string): string | null {
   return null;
 }
 
+const MULTICO_GPA_SYSTEMS = new Set([
+  "4",
+  "5",
+  "10",
+  "20",
+  "30",
+  "100",
+  "250",
+  "500",
+  "1000",
+]);
+
+/** Normalize CRM GPA-scale labels to the exact values accepted by Multico. */
+export function normalizeMulticoGpaSystem(value: string | null | undefined): string | null {
+  const normalized = String(value ?? "").trim().replace(/\.0+$/, "");
+  return MULTICO_GPA_SYSTEMS.has(normalized) ? normalized : null;
+}
+
 // ---------------------------------------------------------------------------
 // HTML parsing helpers
 // ---------------------------------------------------------------------------
@@ -493,7 +511,7 @@ function extractSchoolFields(profile: SubmitProfile): {
     return {
       schoolName:   rec?.schoolName ?? profile.schoolName ?? "",
       gpa:          rec?.gpa?.toString() ?? (profile.gpa != null ? String(profile.gpa) : ""),
-      gpaSystem:    rec?.gpaType ?? "4.0",
+      gpaSystem:    normalizeMulticoGpaSystem(rec?.gpaType) ?? "4",
       graduateYear: rec?.endYear?.toString() ?? (profile.graduationYear != null ? String(profile.graduationYear) : ""),
     };
   }
@@ -501,7 +519,7 @@ function extractSchoolFields(profile: SubmitProfile): {
   return {
     schoolName:   profile.schoolName ?? "",
     gpa:          profile.gpa != null ? String(profile.gpa) : "",
-    gpaSystem:    "4.0",
+    gpaSystem:    "4",
     graduateYear: profile.graduationYear != null ? String(profile.graduationYear) : "",
   };
 }
@@ -543,13 +561,18 @@ async function createMulticoStudent(
   // Resolve nationality_id and phone_code dynamically from the form
   const nationalityId = await resolveNationalityId(page, profile.nationality);
   const phoneCode = await resolvePhoneCode(page, profile.nationality);
+  if (!nationalityId) {
+    throw new Error(
+      `Multico nationality could not be mapped exactly: ${profile.nationality}`,
+    );
+  }
 
   // Build multipart form data
   const formData: Record<string, string> = {
     agent_id:         agentId,
     name:              profile.firstName,
     surname:           profile.lastName,
-    status:            "Active",
+    status:            "1",
     passport_number:   profile.passportNumber,
     phone:             profile.phone,
     email:             profile.email,
@@ -558,9 +581,9 @@ async function createMulticoStudent(
     dob:               toMulticoDate(profile.dateOfBirth),
     gender:            profile.gender,
     address:           profile.address,
-    residence_country: profile.nationality,
-    hasBlueCard:       "No",
-    hasMultipleNationality: "No",
+    residence_country: nationalityId,
+    hasBlueCard:       "0",
+    hasMultipleNationality: "0",
     visaStatus:        "Subject To",
     schoolType:        "High School",
     school_name:       school.schoolName,

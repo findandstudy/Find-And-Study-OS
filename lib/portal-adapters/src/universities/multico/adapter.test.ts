@@ -19,6 +19,7 @@ import {
   MULTICO_NATIONALITIES,
   mapProgramType,
   MULTICO_STUDENT_FORM_PATH,
+  normalizeMulticoGpaSystem,
 } from "./adapter.js";
 
 // ---------------------------------------------------------------------------
@@ -80,5 +81,12 @@ describe("live Multico form contract", () => {
     assert.equal(mapProgramType("PhD"), "Doctorate");
     assert.equal(mapProgramType(""), null);
     assert.equal(mapProgramType("Foundation"), null);
+  });
+
+  it("normalizes GPA scales to exact live select values", () => {
+    assert.equal(normalizeMulticoGpaSystem("4.0"), "4");
+    assert.equal(normalizeMulticoGpaSystem("100"), "100");
+    assert.equal(normalizeMulticoGpaSystem("6"), null);
+    assert.equal(normalizeMulticoGpaSystem(""), null);
   });
 });

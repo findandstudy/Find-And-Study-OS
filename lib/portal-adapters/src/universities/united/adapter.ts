@@ -181,6 +181,16 @@ function looseMatchIndex(optTexts: string[], want: string): number {
 // select with exactly one real option is still auto-selected (forced, unambiguous).
 const CRITICAL_SELECT_IDS = new Set(["selectuniversity", "selectprogram", "selectdegree", "selectlang"]);
 
+/** Map CRM levels to the exact degree-card values observed in United. */
+export function resolveUnitedDegreeLabel(level: string): string | null {
+  const value = fold(level);
+  if (/\b(associate|onlisans|vocational)\b/.test(value)) return "Vocational School";
+  if (/\b(bachelor|lisans|undergraduate)\b/.test(value)) return "Bachelor";
+  if (/\b(master|masters|yukseklisans|graduate)\b/.test(value)) return "Master";
+  if (/\b(phd|doctorate|doctoral|doktora)\b/.test(value)) return "PhD";
+  return null;
+}
+
 export const unitedAdapter: UniversityAdapter = {
   key:       "united",
   label:     "United Portal",
@@ -264,6 +274,8 @@ export const unitedAdapter: UniversityAdapter = {
     ]
       .filter(([, value]) => value == null || String(value).trim() === "")
       .map(([field]) => String(field));
+    const resolvedDegree = resolveUnitedDegreeLabel(profile.level);
+    if (!resolvedDegree) missingProfile.push("level(unmapped)");
     if (missingProfile.length > 0) {
       throw new Error(
         `United data_missing: ${missingProfile.join(", ")}`,
@@ -474,7 +486,7 @@ export const unitedAdapter: UniversityAdapter = {
       //   degree radio INPUTs are CSS-hidden, offsetParent=null — input-based
       //   detection always read "no cards"); Step3 = visible div.single-table card
       //   (or visible "Reset Filter"); Step4 = #firstname visible.
-      const wantDegree = profile.level;
+      const wantDegree = resolvedDegree!;
       const readStep = async () => {
         await ensureNameShim();
         return (await page.evaluate(() => {
@@ -530,13 +542,17 @@ export const unitedAdapter: UniversityAdapter = {
       // --- Step 1: pick term + Continue (may overshoot; backUntil corrects) ---
       await page.waitForSelector('input[name="radio_buttons_2"]', { timeout: 20000 }).catch(() => {});
       const termOk = await page.evaluate(() => {
-        const r = document.querySelector('input[name="radio_buttons_2"]') as HTMLInputElement | null;
-        if (!r) return false;
+        const radios = Array.from(
+          document.querySelectorAll<HTMLInputElement>('input[name="radio_buttons_2"]'),
+        );
+        if (radios.length !== 1) return false;
+        const r = radios[0];
         r.checked = true; r.click(); r.dispatchEvent(new Event("change", { bubbles: true }));
         try { (window as any).clickradio && (window as any).clickradio(); } catch {}
-        return true;
+        return r.checked;
       });
       logger.info(`[united] step1 term selected=${termOk}`);
+      if (!termOk) throw new Error("United term target was not unique or could not be verified");
       await clickCont();
 
       // --- Step 2: land on Degree, pick via HIDDEN input + clickradio1 + label ---
@@ -555,6 +571,9 @@ export const unitedAdapter: UniversityAdapter = {
         return r.value;
       }, wantDegree);
       logger.info(`[united] step2 degree want="${wantDegree}" selected=${JSON.stringify(degOk)}`);
+      if (degOk !== wantDegree) {
+        throw new Error(`United degree target could not be verified: ${wantDegree}`);
+      }
       await clickCont();
 
       // --- Step 3: land on Program step; if uni list still empty → one retry via Degree ---

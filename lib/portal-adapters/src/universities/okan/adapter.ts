@@ -16,19 +16,39 @@
 
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
+import { fold, matchProgram } from "../../programMatch.js";
 import type {
   UniversityAdapter, LoginOpts, AdapterSession,
   SubmitProfile, SubmitFiles, SubmitResult,
 } from "../../types.js";
 
 const BASE = "https://apply.okan.edu.tr";
-function degreeValue(level: string): string {
+export function resolveOkanDegreeValue(level: string): string | null {
   const l = (level || "").toLowerCase();
   if (/(önlisans|onlisans|associate)/.test(l)) return "1";
+  if (/(bachelor|lisans|undergraduate)/.test(l)) return "2";
   if (/(yüksek|yuksek|master|graduate)/.test(l)) return "3";
   if (/(phd|doktora|doctorate)/.test(l)) return "4";
   if (/(tömer|tomer|language|dil)/.test(l)) return "5";
-  return "2";
+  return null;
+}
+
+export function chooseOkanProgramIndex(labels: string[], wanted: string): number | null {
+  const withoutTrack = (value: string) =>
+    fold(value)
+      .replace(/\b(non thesis|thesis|tezli|tezsiz|english|turkish|ingilizce|turkce)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const wantedBase = withoutTrack(wanted);
+  const sameBase = labels.filter((label) => withoutTrack(label) === wantedBase);
+  if (sameBase.length > 1 && !/\b(non thesis|thesis|tezli|tezsiz)\b/.test(fold(wanted))) {
+    return null;
+  }
+  const candidates = labels.map((name, index) => ({ id: String(index), name }));
+  const matched = matchProgram(wanted, candidates);
+  if (!matched || matched.conf < 0.6) return null;
+  const index = Number(matched.match.id);
+  return Number.isInteger(index) && index >= 0 ? index : null;
 }
 const genderText = (g: string) => (/fem|kadın|female/i.test(g || "") ? "Female" : "Male");
 
@@ -115,6 +135,8 @@ export const okanAdapter: UniversityAdapter = {
     ]
       .filter(([, value]) => value == null || String(value).trim() === "")
       .map(([field]) => String(field));
+    const degree = resolveOkanDegreeValue(profile.level);
+    if (!degree) missingCore.push("level(unmapped)");
     const missingData = [...missingCore, ...resolvedFields.missing];
     if (!dryRun && missingData.length > 0) {
       throw new Error(
@@ -139,7 +161,7 @@ export const okanAdapter: UniversityAdapter = {
     }, [id, text]).catch(() => {}) : Promise.resolve();
     const setNumeric = (labelRe: string, val: number) => page.evaluate(([re, v]: any) => {
       const $ = (window as any).jQuery, kendo = (window as any).kendo;
-      const lab = [...document.querySelectorAll('label')].find(l => new RegExp(re, 'i').test(l.innerText));
+      const lab = Array.from(document.querySelectorAll('label')).find(l => new RegExp(re, 'i').test(l.innerText));
       const grp = lab && lab.closest('.form-group,.col,div');
       const wrap = grp && grp.querySelector('.k-numerictextbox');
       let w: any = null; if (wrap) { try { w = kendo.widgetInstance($(wrap)); } catch (e) {} }
@@ -154,7 +176,11 @@ export const okanAdapter: UniversityAdapter = {
       await wait(2500);
       await page.locator(".image-container[data-value]").first().click({ timeout: 8000 }).catch(() => {});
       await wait(800); await next(); await wait(1500);
-      await page.locator(`.image-container[data-value="${degreeValue(profile.level)}"]`).first().click({ timeout: 8000 }).catch(() => {});
+      const degreeTarget = page.locator(`.image-container[data-value="${degree}"]`);
+      if ((await degreeTarget.count()) !== 1) {
+        throw new Error(`Okan degree target was not unique: ${profile.level}`);
+      }
+      await degreeTarget.click({ timeout: 8000 });
       await wait(800); await next(); await wait(1500);
       await fill("firstName", profile.firstName);
       await fill("lastName", profile.lastName);
@@ -199,11 +225,28 @@ export const okanAdapter: UniversityAdapter = {
       if (profile.programName) {
         await fill("programKeyword", profile.programName.replace(/\(.*\)/, "").trim());
         await wait(2000);
-        const ok = await page.locator('button:has-text("Select")').first().isVisible().catch(() => false);
-        if (ok) await page.locator('button:has-text("Select")').first().click({ timeout: 6000 }).catch(() => {});
-        else result.programMissing = true;
+        const selectButtons = page.locator('button:has-text("Select")');
+        const labels: string[] = [];
+        const visibleIndexes: number[] = [];
+        for (let i = 0; i < await selectButtons.count(); i++) {
+          const button = selectButtons.nth(i);
+          if (!(await button.isVisible().catch(() => false))) continue;
+          const text = await button.evaluate((el: HTMLElement) => {
+            const root = el.closest("tr,.single-table,.card,.program-card,.row") ?? el.parentElement;
+            return String(root?.textContent ?? "").replace(/\s+/g, " ").replace(/\bSelect\b/gi, "").trim();
+          }).catch(() => "");
+          labels.push(text);
+          visibleIndexes.push(i);
+        }
+        const selectedIndex = chooseOkanProgramIndex(labels, profile.programName);
+        if (selectedIndex == null) {
+          result.programMissing = true;
+        } else {
+          await selectButtons.nth(visibleIndexes[selectedIndex]).click({ timeout: 6000 });
+        }
         await wait(1000);
       }
+      if (result.programMissing) return result as SubmitResult;
       await next(); await wait(1800);
       // 4 Educational Information
       await fill("secondarySchoolName", (profile as any).schoolName);
