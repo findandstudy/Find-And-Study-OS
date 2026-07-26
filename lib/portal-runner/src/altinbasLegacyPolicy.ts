@@ -105,3 +105,26 @@ export function selectFirstDocumentPerMappedSlot<T>(
   }
   return selected;
 }
+
+const DUPLICATE_SAFE_PORTAL_KEYS = new Set([
+  "beykent_university",
+  "isik_university",
+  "multico",
+  "okan_university",
+  "united_education",
+  "uskudar_university",
+]);
+
+/**
+ * Limits concurrent document normalization to one writer per logical slot for
+ * the six newly live portals. Historical CRM imports can contain duplicate
+ * rows for the same file; processing those duplicates in parallel writes to
+ * the same temp path and can crash native PDF/image tooling with SIGBUS.
+ *
+ * Altınbaş keeps its existing policy. SIT and Topkapı are intentionally
+ * excluded so this rollout does not alter their proven document behavior.
+ */
+export function shouldDeduplicateDocumentSlots(universityKey: string): boolean {
+  return /altinbas/i.test(universityKey) ||
+    DUPLICATE_SAFE_PORTAL_KEYS.has(universityKey);
+}

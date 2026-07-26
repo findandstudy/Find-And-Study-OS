@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   resolveAltinbasPassportDates,
   selectFirstDocumentPerMappedSlot,
+  shouldDeduplicateDocumentSlots,
 } from "../src/altinbasLegacyPolicy.js";
 
 test("ALP1: valid passport dates are preserved", () => {
@@ -66,4 +67,21 @@ test("ALP4: Altınbaş document normalization selects one writer per slot", () =
     ).map((doc) => doc.id),
     [20, 18],
   );
+});
+
+test("ALP5: duplicate-slot protection is scoped to the six new portals", () => {
+  for (const key of [
+    "beykent_university",
+    "isik_university",
+    "multico",
+    "okan_university",
+    "united_education",
+    "uskudar_university",
+  ]) {
+    assert.equal(shouldDeduplicateDocumentSlots(key), true, key);
+  }
+  assert.equal(shouldDeduplicateDocumentSlots("altinbas_univeristy"), true);
+  assert.equal(shouldDeduplicateDocumentSlots("sit"), false);
+  assert.equal(shouldDeduplicateDocumentSlots("study_in_turkey"), false);
+  assert.equal(shouldDeduplicateDocumentSlots("topkapi_university"), false);
 });

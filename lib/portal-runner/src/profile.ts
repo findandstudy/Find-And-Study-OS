@@ -34,6 +34,7 @@ import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/
 import {
   resolveAltinbasPassportDates,
   selectFirstDocumentPerMappedSlot,
+  shouldDeduplicateDocumentSlots,
 } from "./altinbasLegacyPolicy.js";
 
 const execFileP = promisify(execFile);
@@ -688,6 +689,8 @@ export async function buildStudentProfile(
   // ----- 4. Build profile + download documents -----------------------------
   const profile = buildSubmitProfileFromRecords(student, app);
   const isAltinbas = /altinbas/i.test(sub.universityKey);
+  const deduplicateDocumentSlots =
+    shouldDeduplicateDocumentSlots(sub.universityKey);
   if (isAltinbas) {
     const passportDates = resolveAltinbasPassportDates({
       dateOfBirth: student.dateOfBirth,
@@ -756,7 +759,7 @@ export async function buildStudentProfile(
     sub.studentId,
     `portal-sub-${submissionId}`,
     `#${submissionId}`,
-    { deduplicateMappedSlots: isAltinbas },
+    { deduplicateMappedSlots: deduplicateDocumentSlots },
   );
 
   // Carry document/photo URLs on the profile for URL-fetching create webhooks.
