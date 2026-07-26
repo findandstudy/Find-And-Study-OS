@@ -8,3 +8,4 @@ export * from "./programMappingLoader.js";
 export * from "./fallback.js";
 export * from "./exclusions.js";
 export * from "./graduation.js";
+export * from "./altinbasLegacyPolicy.js";

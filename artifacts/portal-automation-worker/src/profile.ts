@@ -14,6 +14,7 @@ import { db, portalSubmissionsTable, applicationsTable, studentsTable, documents
 import { eq, and, isNull, desc } from "drizzle-orm";
 import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
+import { resolveLegacyAddressCity } from "@workspace/portal-runner";
 
 // ---------------------------------------------------------------------------
 // Result shape
@@ -171,6 +172,19 @@ export async function buildStudentProfile(
     // intakeTerm: application intake period first, season as fallback open-term
     intakeTerm: app.intake ?? app.season ?? undefined,
   });
+  const legacyAddressCity = resolveLegacyAddressCity({
+    universityKey: sub.universityKey,
+    addressCity: student.addressCity,
+    address: student.address,
+    nationality: student.nationality,
+  });
+  if (!profile.addressCity && legacyAddressCity) {
+    profile.addressCity = legacyAddressCity;
+    console.warn(
+      `[portal-profile] #${submissionId} audited legacy address fallback` +
+      ` (field=addressCity, source=comma_prefix)`,
+    );
+  }
 
   // FIX-15D: attach education_records after buildProfile (buildProfile ignores unknown fields).
   profile.educationRecords = eduRows.map((r) => ({
