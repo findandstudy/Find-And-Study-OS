@@ -343,9 +343,25 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               continue;
             }
             if (!activeStage) {
+              const beforeResume = (await bodyText()).replace(/\s+/g, " ");
+              const clicked = await clickNext();
+              if (clicked) {
+                await page.waitForTimeout(5000);
+                const afterResume = (await bodyText()).replace(/\s+/g, " ");
+                const resumedStage = await readActiveStage();
+                if (
+                  resumedStage ||
+                  beforeResume !== afterResume ||
+                  (await page
+                    .getByPlaceholder(/search program name|keyword/i)
+                    .count()) > 0
+                ) {
+                  continue;
+                }
+              }
               result.stuckStep = step;
               result.detail =
-                `${cfg.label}: owned applicant exists but application continuation control was not found`;
+                `${cfg.label}: owned applicant exists but application continuation did not advance`;
               break;
             }
           } else {
