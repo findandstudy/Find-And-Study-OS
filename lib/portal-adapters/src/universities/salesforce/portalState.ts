@@ -1,0 +1,73 @@
+import { fold } from "../../programMatch.js";
+
+const PROGRAM_LEVEL_PREFIXES = [
+  /^(?:bachelor(?:'s)?(?:\s+degree)?|undergraduate)\s+(?:of|in)\s+/i,
+  /^(?:associate(?:'s)?(?:\s+degree)?)\s+(?:of|in)\s+/i,
+  /^(?:master(?:'s)?(?:\s+degree)?|graduate)\s+(?:of|in)\s+/i,
+  /^(?:ph\.?d\.?|doctorate|doctoral)\s+(?:of|in)\s+/i,
+];
+
+/**
+ * Üsküdar and the related Salesforce portals show the degree level outside
+ * the programme label. CRM names commonly include it as a prefix.
+ */
+export function salesforcePortalProgramName(crmProgramName: string): string {
+  let value = crmProgramName.replace(/\s+/g, " ").trim();
+  for (const prefix of PROGRAM_LEVEL_PREFIXES) {
+    value = value.replace(prefix, "");
+  }
+  return value.trim();
+}
+
+export type SalesforceStage =
+  | "Program Selection"
+  | "Personal Information"
+  | "Educational Information"
+  | "Documents"
+  | "Review and Submit"
+  | "Completed"
+  | null;
+
+export function normalizeSalesforceStage(
+  value: string | null | undefined,
+): SalesforceStage {
+  const normalized = fold(value ?? "");
+  if (!normalized) return null;
+  if (normalized === "program selection") return "Program Selection";
+  if (normalized === "personal information") return "Personal Information";
+  if (normalized === "educational information") {
+    return "Educational Information";
+  }
+  if (normalized === "documents") return "Documents";
+  if (normalized === "review and submit") return "Review and Submit";
+  if (normalized === "completed") return "Completed";
+  return null;
+}
+
+export interface SalesforceCompletionEvidence {
+  activeStage?: string | null;
+  applicationStatus?: string | null;
+  trackStage?: string | null;
+  externalRef?: string | null;
+}
+
+/**
+ * A future step label in the wizard is never success. Success is either the
+ * active Completed step, or a durable Track Applications row with an external
+ * reference and an explicit submitted/completed status.
+ */
+export function hasSalesforceCompletionProof(
+  evidence: SalesforceCompletionEvidence,
+): boolean {
+  if (normalizeSalesforceStage(evidence.activeStage) === "Completed") {
+    return true;
+  }
+
+  const externalRef = (evidence.externalRef ?? "").trim();
+  if (!externalRef) return false;
+
+  const durableState = fold(
+    `${evidence.applicationStatus ?? ""} ${evidence.trackStage ?? ""}`,
+  );
+  return /\b(submitted|completed|received)\b/.test(durableState);
+}

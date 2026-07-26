@@ -10,6 +10,12 @@ import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
 import { fold } from "../../programMatch.js";
 import { SALESFORCE_SCHOOLS, type SalesforceSchoolConfig } from "./config.js";
+import {
+  hasSalesforceCompletionProof,
+  normalizeSalesforceStage,
+  salesforcePortalProgramName,
+  type SalesforceStage,
+} from "./portalState.js";
 
 // ---------------------------------------------------------------------------
 // Factory — one UniversityAdapter per SALESFORCE_SCHOOLS entry
@@ -149,26 +155,134 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       const result: any = { alreadyExists: false, submitted: false, programMissing: false };
       const bodyText = async (): Promise<string> => { try { return (await page.evaluate("(() => document.body ? document.body.innerText : '')()")) as string; } catch (e) { return ""; } };
       const has = async (sel: string): Promise<boolean> => { try { return (await page.locator(sel).count()) > 0; } catch (e) { return false; } };
+      const hasVisible = async (sel: string): Promise<boolean> => {
+        try {
+          const controls = page.locator(sel);
+          const count = await controls.count();
+          for (let i = 0; i < count; i++) {
+            if (await controls.nth(i).isVisible().catch(() => false)) return true;
+          }
+          return false;
+        } catch {
+          return false;
+        }
+      };
       const heading = async (): Promise<string> => { try { return (await page.evaluate("(() => { var a=[]; document.querySelectorAll('h1,h2,legend,.slds-text-heading_medium').forEach(function(h){ if(h.offsetParent!==null) a.push((h.innerText||'').slice(0,24)); }); return a.join('|'); })()")) as string; } catch (e) { return Math.random().toString(); } };
       const typeInto = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const loc = page.locator(sel); const cnt = await loc.count(); let t: any = null; for (let i = 0; i < cnt; i++) { if (await loc.nth(i).isVisible().catch(() => false)) { t = loc.nth(i); break; } } if (!t) return; await t.fill(String(v)).catch(() => {}); const __cur = await t.inputValue().catch(() => ""); if (__cur !== String(v)) { await t.click().catch(() => {}); await page.waitForTimeout(200); await t.fill("").catch(() => {}); await t.pressSequentially(String(v), { delay: 60 }).catch(() => {}); } await t.press("Tab").catch(() => {}); } catch (e) {} };
       const fill = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const l = page.locator(sel).first(); if ((await l.count()) && (await l.isVisible().catch(() => false))) { await l.fill(String(v)).catch(() => {}); await l.press("Tab").catch(() => {}); } } catch (e) {} };
       const selByName = async (name: string, label?: string) => { try { const s = page.locator("select[name=\"" + name + "\"]").first(); if (!(await s.count())) return false; if (label) { try { await s.selectOption({ label }); return true; } catch (e) { if (!strictMappedPortal) { await s.selectOption({ index: 1 }).catch(() => {}); return true; } return false; } } else if (!strictMappedPortal) { await s.selectOption({ index: 1 }).catch(() => {}); return true; } return false; } catch (e) { return false; } };
       const clickNext = async () => { const n = page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).first(); if (await n.count()) { await n.click({ timeout: 6000 }).catch(() => {}); return true; } const __cna = page.getByRole("button", { name: /create new application|add application|create application/i }).first(); if (await __cna.count()) { await __cna.click({ timeout: 6000 }).catch(() => {}); return true; } return false; };
+      const readActiveStage = async (): Promise<SalesforceStage> => {
+        const current = page.locator(
+          [
+            ".slds-path__item.slds-is-current",
+            ".slds-progress__item.slds-is-active",
+            ".slds-progress__item.slds-is-current",
+            '[aria-current="step"]',
+          ].join(","),
+        );
+        const count = await current.count().catch(() => 0);
+        for (let i = 0; i < count; i++) {
+          const item = current.nth(i);
+          if (!(await item.isVisible().catch(() => false))) continue;
+          const text = ((await item.innerText().catch(() => "")) || "").trim();
+          for (const line of text.split(/\r?\n/)) {
+            const stage = normalizeSalesforceStage(line.trim());
+            if (stage) return stage;
+          }
+          const stage = normalizeSalesforceStage(text);
+          if (stage) return stage;
+        }
+
+        // Control-based inference is used only when the path component exposes
+        // no active marker. Future step labels in body text are never evidence.
+        if (
+          await hasVisible(
+            'input[placeholder*="search program" i],input[placeholder*="keyword" i]',
+          )
+        ) return "Program Selection";
+        if (await hasVisible('select[name="Gender"]')) {
+          return "Personal Information";
+        }
+        if (
+          await hasVisible(
+            'select[name="Country_of_Secondary_School"],input[name="Name_of_Secondary_School"]',
+          )
+        ) return "Educational Information";
+        if (await hasVisible("input[type=file]")) return "Documents";
+        const submit = page
+          .getByRole("button", {
+            name: /^\s*(submit|complete|tamamla|gönder|finish|onayla)\s*$/i,
+          })
+          .first();
+        if (
+          (await submit.count()) &&
+          (await submit.isVisible().catch(() => false))
+        ) return "Review and Submit";
+        return null;
+      };
+      const verifyTrackCompletion = async (): Promise<{
+        verified: boolean;
+        externalRef?: string;
+        applicationStatus?: string;
+        trackStage?: string;
+      }> => {
+        const trackUrl = agencyUrl + "track-application";
+        await page.goto(trackUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        }).catch(() => {});
+        await page.waitForTimeout(8000);
+        const displayName = `${profile.firstName} ${profile.lastName}`.trim();
+        const search = page.getByPlaceholder(/search this list/i).first();
+        if (displayName && (await search.count())) {
+          await search.fill(displayName).catch(() => {});
+          await search.press("Enter").catch(() => {});
+          await page.waitForTimeout(4000);
+        }
+        const namePattern = new RegExp(
+          displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          "i",
+        );
+        const rows = page.locator("tr").filter({ hasText: namePattern });
+        if ((await rows.count().catch(() => 0)) !== 1) {
+          return { verified: false };
+        }
+        const row = rows.first();
+        const cellText = async (label: string): Promise<string> => {
+          const cell = row.locator(`[data-label="${label}"]`).first();
+          return ((await cell.innerText().catch(() => "")) || "")
+            .replace(/\s+/g, " ")
+            .trim();
+        };
+        const externalRef = await cellText("Application Name");
+        const applicationStatus = await cellText("Application Status");
+        const trackStage = await cellText("Stage");
+        return {
+          verified: hasSalesforceCompletionProof({
+            externalRef,
+            applicationStatus,
+            trackStage,
+          }),
+          ...(externalRef ? { externalRef } : {}),
+          applicationStatus,
+          trackStage,
+        };
+      };
       const dobm = String(profile.dateOfBirth || "").match(/(\d{4})-(\d{2})-(\d{2})/);
       const dobStr = dobm ? (dobm[2] + "/" + dobm[3] + "/" + dobm[1]) : strictMappedPortal ? "" : "01/01/2000";
       for (let step = 0; step < 12; step++) {
         await page.waitForTimeout(2500);
         const txt = await bodyText();
-        if (DUP.test(txt) || (/application\s*number/i.test(txt) && APP_NUM.test(txt))) { result.alreadyExists = true; break; }
+        const activeStage = await readActiveStage();
+        if (
+          DUP.test(txt) ||
+          (!activeStage &&
+            /application\s*number/i.test(txt) &&
+            APP_NUM.test(txt))
+        ) { result.alreadyExists = true; break; }
         const before = (await bodyText()).replace(/\s+/g, " ").slice(0, 600);
-        if (/review and submit|not submitted yet|please review/i.test(txt)) {
-          if (dryRun) { result.dryReachedFinal = true; break; }
-          await clickNext();
-          await page.waitForTimeout(6000);
-          const aft = await bodyText();
-          if (DUP.test(aft)) result.alreadyExists = true; else result.submitted = true;
-          break;
-        } else if ((await has("input[name=\"Student_First_Name\"]")) || ((await has("input[name=\"First_Name\"]")) && !(await has("select[name=\"Gender\"]")))) {
+        if ((await has("input[name=\"Student_First_Name\"]")) || ((await has("input[name=\"First_Name\"]")) && !(await has("select[name=\"Gender\"]")))) {
           await typeInto("input[name=\"Student_First_Name\"]", profile.firstName);
           await typeInto("input[name=\"First_Name\"]", profile.firstName);
           await typeInto("input[name=\"Student_Last_Name\"]", profile.lastName);
@@ -188,7 +302,9 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           try { const eml = page.getByLabel(/applicant email|email address/i).first(); if ((await eml.count()) && (await eml.isVisible().catch(() => false)) && !(await eml.inputValue().catch(() => "x")) && profile.email) { await eml.click().catch(() => {}); await page.keyboard.type(profile.email, { delay: 40 }).catch(() => {}); await eml.press("Tab").catch(() => {}); } } catch (e) {}
           await clickNext();
         } else if (/available programs/i.test(txt) || (await page.getByPlaceholder(/search program name|keyword/i).count())) {
-          const portalProg = profile.programName;
+          const portalProg = strictMappedPortal
+            ? salesforcePortalProgramName(profile.programName)
+            : profile.programName;
           // Boş program adı match-all regex üretir (yanlış program seçer) → güvenli çıkış.
           if (!portalProg || !portalProg.trim()) {
             result.programMissing = true;
@@ -219,17 +335,25 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           } catch (e) {}
           // KÖK NEDEN: kartlar KAPALI shadow root'ta; page.evaluate manuel walk giremez (cards:0).
           // Playwright locator'ları kapalı shadow'u deler → seçimi tamamen Playwright ile yap.
-          const progRe = new RegExp(portalProg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-          const cardSel = 'lightning-card, [class*="card" i], [class*="tile" i], article, li';
-          const matchedCards = page.locator(cardSel)
-            .filter({ hasText: progRe })
-            .filter({ has: page.locator('button.slds-button_stateful, lightning-button-stateful, button:has-text("Select")') });
+          const escapedPortalProgram = portalProg.replace(
+            /[.*+?^${}()|[\]\\]/g,
+            "\\$&",
+          );
+          const exactProgramLabel = page.getByText(
+            new RegExp(`^\\s*${escapedPortalProgram}\\s*$`, "i"),
+          );
+          const visibleExactLabels: any[] = [];
+          const exactLabelCount = await exactProgramLabel.count().catch(() => 0);
+          for (let i = 0; i < exactLabelCount; i++) {
+            if (await exactProgramLabel.nth(i).isVisible().catch(() => false)) {
+              visibleExactLabels.push(exactProgramLabel.nth(i));
+            }
+          }
           const cartBtn = page.getByRole("button", { name: /selected programs/i }).first();
           const readCartN = async () => { const t = (await cartBtn.count()) ? (((await cartBtn.innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim()) : ""; return ((t.match(/\((\d+)\)/) || [])[1]) || "0"; };
           let cartN = "0";
-          let cardCount = 0;
+          const cardCount = visibleExactLabels.length;
           for (let attempt = 1; attempt <= 2 && cartN === "0"; attempt++) {
-            cardCount = await matchedCards.count().catch(() => 0);
             if (!cardCount) break;
             if (strictMappedPortal && cardCount !== 1) {
               logger.warn(
@@ -237,11 +361,21 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               );
               break;
             }
-            const card = matchedCards.last();
-            const stateful = card.locator('button.slds-button_stateful, lightning-button-stateful button').first();
-            const target = (await stateful.count().catch(() => 0))
-              ? stateful
-              : card.locator("button").filter({ hasText: /select/i }).first();
+            const label = visibleExactLabels[0];
+            let row = label.locator("xpath=ancestor::tr[1]");
+            if (!(await row.count().catch(() => 0))) {
+              row = page
+                .locator(
+                  'li,article,lightning-card,[class*="card" i],[class*="tile" i]',
+                )
+                .filter({ has: label })
+                .filter({ hasText: /select/i })
+                .last();
+            }
+            const target = row
+              .getByRole("button", { name: /^\s*select\s*$/i })
+              .first();
+            if (!(await target.count().catch(() => 0))) break;
             await target.scrollIntoViewIfNeeded().catch(() => {});
             await target.click({ timeout: 6000 }).catch(() => {});
             await page.waitForTimeout(2400);
@@ -262,10 +396,32 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           if ((await cartBtn.count())) {
             await cartBtn.click({ timeout: 4000 }).catch(() => {});
             await page.waitForTimeout(1500);
+            const selectedProgramLabelCount = await page
+              .getByText(
+                new RegExp(`^\\s*${escapedPortalProgram}\\s*$`, "i"),
+              )
+              .count()
+              .catch(() => 0);
+            if (strictMappedPortal && selectedProgramLabelCount < 1) {
+              result.programMissing = true;
+              result.detail =
+                `${cfg.label}: selected programme readback could not be proved`;
+              break;
+            }
             const modalSave = page.getByRole("button", { name: /save and next|save & next/i }).first();
-            if (await modalSave.count()) { await modalSave.click({ timeout: 6000 }).catch(() => {}); await page.waitForTimeout(3500); advanced = true; }
+            if (await modalSave.count()) {
+              await modalSave.click({ timeout: 6000 }).catch(() => {});
+              await page.waitForTimeout(3500);
+              advanced = (await readActiveStage()) !== "Program Selection";
+            }
           }
           logger.info("[salesforce:" + cfg.key + "] program seçildi (Save and Next)", { portalProg, cartN, advanced });
+          if (strictMappedPortal && !advanced) {
+            result.stuckStep = step;
+            result.detail =
+              `${cfg.label}: programme selection did not advance`;
+            break;
+          }
           continue;
         } else if (await has("select[name=\"Gender\"]")) {
           await fill("input[name=\"First_Name\"]", profile.firstName);
@@ -341,18 +497,29 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             const finalText = await bodyText();
             if (DUP.test(finalText)) {
               result.alreadyExists = true;
-            } else if (
-              !strictMappedPortal ||
-              APP_NUM.test(finalText) ||
-              /application (?:submitted|received|completed)|success|thank you/i.test(
-                finalText,
-              )
-            ) {
+            } else if (!strictMappedPortal) {
               result.submitted = true;
             } else {
-              result.stuckStep = step;
-              result.detail =
-                `${cfg.label}: final submission outcome could not be proved`;
+              const completionStage = await readActiveStage();
+              if (
+                hasSalesforceCompletionProof({
+                  activeStage: completionStage,
+                })
+              ) {
+                result.submitted = true;
+              } else {
+                const trackProof = await verifyTrackCompletion();
+                if (trackProof.verified) {
+                  result.submitted = true;
+                  if (trackProof.externalRef) {
+                    result.externalRef = trackProof.externalRef;
+                  }
+                } else {
+                  result.stuckStep = step;
+                  result.detail =
+                    `${cfg.label}: final submission outcome could not be proved`;
+                }
+              }
             }
             break;
           }
