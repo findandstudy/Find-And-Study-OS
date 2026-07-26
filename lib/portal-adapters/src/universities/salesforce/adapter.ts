@@ -12,6 +12,7 @@ import { fold } from "../../programMatch.js";
 import { SALESFORCE_SCHOOLS, type SalesforceSchoolConfig } from "./config.js";
 import {
   hasSalesforceCompletionProof,
+  isOwnedSalesforceApplicant,
   normalizeSalesforceStage,
   salesforcePortalProgramName,
   type SalesforceStage,
@@ -144,6 +145,80 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         // Poll for ANY visible wizard field (don't waitFor .first(), which may be hidden).
         for (let i = 0; i < 30 && !(await onWizard()); i++) await page.waitForTimeout(1000);
       };
+      const inspectOwnedApplicant = async (): Promise<{
+        owned: boolean;
+        externalRef: string;
+        applicationStatus: string;
+        trackStage: string;
+      }> => {
+        const empty = {
+          owned: false,
+          externalRef: "",
+          applicationStatus: "",
+          trackStage: "",
+        };
+        if (!strictMappedPortal) return empty;
+        await page.goto(agencyUrl + "track-application", {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        }).catch(() => {});
+        await page.waitForTimeout(8000);
+        const displayName = `${profile.firstName} ${profile.lastName}`.trim();
+        const search = page.getByPlaceholder(/search this list/i).first();
+        if (displayName && (await search.count())) {
+          await search.fill(displayName).catch(() => {});
+          await search.press("Enter").catch(() => {});
+          await page.waitForTimeout(4000);
+        }
+        const namePattern = new RegExp(
+          displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          "i",
+        );
+        const rows = page.locator("tr").filter({ hasText: namePattern });
+        if ((await rows.count().catch(() => 0)) !== 1) return empty;
+        const row = rows.first();
+        const cellText = async (label: string): Promise<string> => {
+          const cell = row.locator(`[data-label="${label}"]`).first();
+          return ((await cell.innerText().catch(() => "")) || "")
+            .replace(/\s+/g, " ")
+            .trim();
+        };
+        const rowName = await cellText("Name");
+        const rowEmail = await cellText("Email");
+        const owned = isOwnedSalesforceApplicant({
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          email: profile.email,
+          rowName,
+          rowEmail,
+        });
+        if (!owned) return empty;
+        return {
+          owned,
+          externalRef: await cellText("Application Name"),
+          applicationStatus: await cellText("Application Status"),
+          trackStage: await cellText("Stage"),
+        };
+      };
+      const applicantPreflight = await inspectOwnedApplicant();
+      logger.info(`[salesforce:${cfg.key}] applicant preflight`, {
+        owned: applicantPreflight.owned,
+        hasApplicationRef: Boolean(applicantPreflight.externalRef),
+        hasApplicationStatus: Boolean(applicantPreflight.applicationStatus),
+        hasTrackStage: Boolean(applicantPreflight.trackStage),
+      });
+      if (
+        applicantPreflight.owned &&
+        hasSalesforceCompletionProof(applicantPreflight)
+      ) {
+        return {
+          alreadyExists: true,
+          submitted: false,
+          programMissing: false,
+          externalRef: applicantPreflight.externalRef,
+          detail: `${cfg.label}: application already completed in portal`,
+        };
+      }
       for (let attempt = 0; attempt < 3 && !(await onWizard()); attempt++) await gotoAppForm();
       await page.waitForTimeout(2000);
 
@@ -227,46 +302,17 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         applicationStatus?: string;
         trackStage?: string;
       }> => {
-        const trackUrl = agencyUrl + "track-application";
-        await page.goto(trackUrl, {
-          waitUntil: "domcontentloaded",
-          timeout: 60000,
-        }).catch(() => {});
-        await page.waitForTimeout(8000);
-        const displayName = `${profile.firstName} ${profile.lastName}`.trim();
-        const search = page.getByPlaceholder(/search this list/i).first();
-        if (displayName && (await search.count())) {
-          await search.fill(displayName).catch(() => {});
-          await search.press("Enter").catch(() => {});
-          await page.waitForTimeout(4000);
-        }
-        const namePattern = new RegExp(
-          displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-          "i",
-        );
-        const rows = page.locator("tr").filter({ hasText: namePattern });
-        if ((await rows.count().catch(() => 0)) !== 1) {
+        const trackApplicant = await inspectOwnedApplicant();
+        if (!trackApplicant.owned) {
           return { verified: false };
         }
-        const row = rows.first();
-        const cellText = async (label: string): Promise<string> => {
-          const cell = row.locator(`[data-label="${label}"]`).first();
-          return ((await cell.innerText().catch(() => "")) || "")
-            .replace(/\s+/g, " ")
-            .trim();
-        };
-        const externalRef = await cellText("Application Name");
-        const applicationStatus = await cellText("Application Status");
-        const trackStage = await cellText("Stage");
         return {
-          verified: hasSalesforceCompletionProof({
-            externalRef,
-            applicationStatus,
-            trackStage,
-          }),
-          ...(externalRef ? { externalRef } : {}),
-          applicationStatus,
-          trackStage,
+          verified: hasSalesforceCompletionProof(trackApplicant),
+          ...(trackApplicant.externalRef
+            ? { externalRef: trackApplicant.externalRef }
+            : {}),
+          applicationStatus: trackApplicant.applicationStatus,
+          trackStage: trackApplicant.trackStage,
         };
       };
       const dobm = String(profile.dateOfBirth || "").match(/(\d{4})-(\d{2})-(\d{2})/);
@@ -275,11 +321,36 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         await page.waitForTimeout(2500);
         const txt = await bodyText();
         const activeStage = await readActiveStage();
+        if (DUP.test(txt)) {
+          if (
+            applicantPreflight.owned &&
+            !hasSalesforceCompletionProof(applicantPreflight)
+          ) {
+            const resume = page
+              .getByRole("button", {
+                name: /create new application|add application|continue application|complete application/i,
+              })
+              .first();
+            if (await resume.count()) {
+              await resume.click({ timeout: 6000 }).catch(() => {});
+              await page.waitForTimeout(4000);
+              continue;
+            }
+            if (!activeStage) {
+              result.stuckStep = step;
+              result.detail =
+                `${cfg.label}: owned applicant exists but application continuation control was not found`;
+              break;
+            }
+          } else {
+            result.alreadyExists = true;
+            break;
+          }
+        }
         if (
-          DUP.test(txt) ||
-          (!activeStage &&
-            /application\s*number/i.test(txt) &&
-            APP_NUM.test(txt))
+          !activeStage &&
+          /application\s*number/i.test(txt) &&
+          APP_NUM.test(txt)
         ) { result.alreadyExists = true; break; }
         const before = (await bodyText()).replace(/\s+/g, " ").slice(0, 600);
         if ((await has("input[name=\"Student_First_Name\"]")) || ((await has("input[name=\"First_Name\"]")) && !(await has("select[name=\"Gender\"]")))) {

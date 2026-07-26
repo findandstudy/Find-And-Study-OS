@@ -71,3 +71,20 @@ export function hasSalesforceCompletionProof(
   );
   return /\b(submitted|completed|received)\b/.test(durableState);
 }
+
+export function isOwnedSalesforceApplicant(input: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  rowName: string;
+  rowEmail: string;
+}): boolean {
+  const expectedNames = new Set([
+    fold(`${input.firstName} ${input.lastName}`),
+    fold(`${input.lastName} ${input.firstName}`),
+  ]);
+  return (
+    expectedNames.has(fold(input.rowName)) &&
+    input.rowEmail.trim().toLowerCase() === input.email.trim().toLowerCase()
+  );
+}
