@@ -33,6 +33,7 @@ import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, se
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 import {
   resolveAltinbasPassportDates,
+  resolveLegacyAddressCity,
   selectFirstDocumentPerMappedSlot,
   shouldDeduplicateDocumentSlots,
 } from "./altinbasLegacyPolicy.js";
@@ -688,6 +689,19 @@ export async function buildStudentProfile(
 
   // ----- 4. Build profile + download documents -----------------------------
   const profile = buildSubmitProfileFromRecords(student, app);
+  const legacyAddressCity = resolveLegacyAddressCity({
+    universityKey: sub.universityKey,
+    addressCity: student.addressCity,
+    address: student.address,
+    nationality: student.nationality,
+  });
+  if (!profile.addressCity && legacyAddressCity) {
+    profile.addressCity = legacyAddressCity;
+    console.warn(
+      `[portal-profile] #${submissionId} audited legacy address fallback` +
+      ` (field=addressCity, source=comma_prefix)`,
+    );
+  }
   const isAltinbas = /altinbas/i.test(sub.universityKey);
   const deduplicateDocumentSlots =
     shouldDeduplicateDocumentSlots(sub.universityKey);

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   resolveAltinbasPassportDates,
+  resolveLegacyAddressCity,
   selectFirstDocumentPerMappedSlot,
   shouldDeduplicateDocumentSlots,
 } from "../src/altinbasLegacyPolicy.js";
@@ -84,4 +85,44 @@ test("ALP5: duplicate-slot protection is scoped to the six new portals", () => {
   assert.equal(shouldDeduplicateDocumentSlots("sit"), false);
   assert.equal(shouldDeduplicateDocumentSlots("study_in_turkey"), false);
   assert.equal(shouldDeduplicateDocumentSlots("topkapi_university"), false);
+});
+
+test("ALP6: legacy city uses only a validated comma prefix", () => {
+  assert.equal(
+    resolveLegacyAddressCity({
+      universityKey: "uskudar_university",
+      address: "Dushanbe, Rudaki Street 12",
+      nationality: "Tajikistan",
+    }),
+    "Dushanbe",
+  );
+  assert.equal(
+    resolveLegacyAddressCity({
+      universityKey: "uskudar_university",
+      address: "Rudaki Street 12",
+      nationality: "Tajikistan",
+    }),
+    undefined,
+  );
+  assert.equal(
+    resolveLegacyAddressCity({
+      universityKey: "uskudar_university",
+      address: "Tajikistan, Rudaki Street 12",
+      nationality: "Tajikistan",
+    }),
+    undefined,
+  );
+});
+
+test("ALP7: legacy city does not change SIT or Topkapı", () => {
+  for (const key of ["sit", "study_in_turkey", "topkapi_university"]) {
+    assert.equal(
+      resolveLegacyAddressCity({
+        universityKey: key,
+        address: "Dushanbe, Rudaki Street 12",
+        nationality: "Tajikistan",
+      }),
+      undefined,
+    );
+  }
 });

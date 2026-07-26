@@ -128,3 +128,35 @@ export function shouldDeduplicateDocumentSlots(universityKey: string): boolean {
   return /altinbas/i.test(universityKey) ||
     DUPLICATE_SAFE_PORTAL_KEYS.has(universityKey);
 }
+
+/**
+ * Controlled compatibility rule for legacy rows stored as "City, street".
+ * It is intentionally scoped to the six new portals and requires an explicit
+ * comma boundary. A comma-less address is never reused as a city, and a value
+ * equal to nationality is rejected.
+ */
+export function resolveLegacyAddressCity(input: {
+  universityKey: string;
+  addressCity?: string | null;
+  address?: string | null;
+  nationality?: string | null;
+}): string | undefined {
+  const explicit = input.addressCity?.trim();
+  if (explicit) return explicit;
+  if (!DUPLICATE_SAFE_PORTAL_KEYS.has(input.universityKey)) return undefined;
+
+  const raw = input.address?.trim() ?? "";
+  const comma = raw.indexOf(",");
+  if (comma <= 0) return undefined;
+
+  const candidate = raw.slice(0, comma).trim();
+  if (candidate.length < 2 || !/\p{L}/u.test(candidate)) return undefined;
+  const nationality = input.nationality?.trim() ?? "";
+  if (
+    nationality &&
+    candidate.localeCompare(nationality, undefined, { sensitivity: "base" }) === 0
+  ) {
+    return undefined;
+  }
+  return candidate;
+}
