@@ -11,7 +11,7 @@ import {
   getExtractorUsageStats,
   recordExtractorRun,
 } from "../lib/aiExtractorService";
-import { normalizeGpaTo100 } from "../lib/gpaNormalize";
+import { normalizeGpaEvidenceTo100 } from "../lib/gpaNormalize";
 
 const router: IRouter = Router();
 const jsonBody = json({ limit: "20mb" });
@@ -284,7 +284,7 @@ router.post(
       // apply normalize rules
       for (const f of ext.fields as any[]) {
         if (f.normalize === "gpa100" && extracted[f.key] != null && extracted[f.key] !== "") {
-          const pct = normalizeGpaTo100(String(extracted[f.key]));
+          const pct = normalizeGpaEvidenceTo100(String(extracted[f.key]));
           if (!isNaN(pct)) {
             extracted[`${f.key}Raw`] = extracted[f.key];
             extracted[f.key] = (Math.round(pct * 10) / 10).toString();

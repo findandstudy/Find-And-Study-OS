@@ -14,7 +14,7 @@ import { getRateLimitIp } from "../lib/clientIp";
 import { createApplicationForStudent } from "./public-apply";
 import { checkMandatoryDocs, checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
-import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
+import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { maybeTriggerAutoEducationExtractForStudent } from "../lib/educationAutoExtract";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import { generateSecureToken } from "../lib/email";
@@ -1602,6 +1602,28 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         }
       }
     }
+
+    if (resultStudentId && resultAppId && embedMissingDocTypes.length === 0) {
+      const [appForPortal] = await db
+        .select({
+          stage: applicationsTable.stage,
+          universityName: applicationsTable.universityName,
+          universityId: applicationsTable.universityId,
+        })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.id, resultAppId))
+        .limit(1);
+      if (appForPortal) {
+        void maybeEnqueuePortalSubmission({
+          applicationId: resultAppId,
+          studentId: resultStudentId,
+          newStage: String(appForPortal.stage),
+          universityName: appForPortal.universityName ?? null,
+          universityId: appForPortal.universityId ?? null,
+          actorUserId: null,
+        });
+      }
+    }
   } catch (postErr) {
     console.error("[EMBED-APPLY] Post-processing (student/app/auto-convert) failed:", postErr);
   }
@@ -2114,6 +2136,7 @@ function addToken(u){if(!TOKEN)return u;var sep=u.indexOf('?')>=0?'&':'?';return
 var config=null, filters=null, programs=[], meta={}, currentPage=1;
 var formOpen=false, formProgram=null, formSubmitted=false, formLoading=false;
 var programDocs=null;
+var programDocsLoadError=false;
 // Tracks which program ID the current programDocs cache belongs to.
 // loadProgramDocs skips the fetch when the same pid is requested again
 // (e.g. the user closes and re-opens the same program's apply modal).
@@ -2133,12 +2156,13 @@ function loadProgramDocs(pid,cb){
   // count on the same pid within a single page session.
   if(pid&&pid===programDocsPid&&Array.isArray(programDocs)){if(cb)cb();return;}
   programDocs=null;
+  programDocsLoadError=false;
   programDocsPid=pid||null;
-  if(!pid){if(cb)cb();return;}
+  if(!pid){programDocs=[];if(cb)cb();return;}
   var apiBase=API.replace('/public/embed/'+SLUG,'');
   var url=apiBase+'/public/programs/'+pid+'/document-requirements';
   function applyRows(rows){
-    if(Array.isArray(rows)&&rows.length>0){
+    if(Array.isArray(rows)){
       programDocs=rows.slice().sort(function(a,b){return (a.sortOrder||0)-(b.sortOrder||0);}).map(function(r){
         var rawKey=String(r.documentType||'other');
         // Whitelist key shape and reject reserved property names so a
@@ -2152,11 +2176,8 @@ function loadProgramDocs(pid,cb){
       });
     }
   }
-  // Retry once on transient failure so a blip doesn't silently downgrade the
-  // required-docs gate to the generic fallback set. On persistent failure we
-  // fall back (gate still requires the default docs) and rely on the backend
-  // safety net, which always parks incomplete applications in missing_docs --
-  // we never hard-block here, to avoid dropping the lead entirely.
+  // Retry once on transient failure. Persistent failure is fail-closed:
+  // unknown requirements must never be replaced by a weaker invented list.
   function attempt(retriesLeft){
     fetch(url).then(function(r){
       if(!r.ok)throw new Error('http '+r.status);
@@ -2166,6 +2187,7 @@ function loadProgramDocs(pid,cb){
       if(cb)cb();
     }).catch(function(){
       if(retriesLeft>0){setTimeout(function(){attempt(retriesLeft-1);},600);return;}
+      programDocsLoadError=true;
       if(cb)cb();
     });
   }
@@ -2179,16 +2201,11 @@ var uploadedDocs={};
 // without uploading every document marked Required. {docs} is replaced with
 // the comma-separated list of missing required document labels.
 var REQUIRED_DOCS_MSG='Please upload all required documents to continue: {docs}';
-// The document-type list shown in the Documents step: per-program
-// requirements when available, otherwise a sensible default set. Used by both
-// the renderer and the required-docs gate so they never diverge.
+// The document-type list shown in the Documents step is returned by the
+// server's effective program+degree requirements endpoint. An intentionally
+// empty configured list stays empty; it is never replaced by invented rules.
 function getDocTypes(){
-  return (programDocs&&programDocs.length>0)?programDocs:[
-    {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
-    {key:'diploma',label:'Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:false},
-    {key:'transcript',label:'Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:false},
-    {key:'photo',label:'Photo',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:false}
-  ];
+  return Array.isArray(programDocs)?programDocs:[];
 }
 // Required documents not yet uploaded. Returns an array of doc-type objects.
 function missingRequiredDocs(){
@@ -2199,6 +2216,12 @@ function missingRequiredDocs(){
 // Defense-in-depth gate: refuse to advance/submit and bounce back to the
 // Documents step when any required document is missing. Returns true when OK.
 function enforceDocGate(){
+  if(programDocsLoadError||!Array.isArray(programDocs)){
+    alert('Document requirements could not be loaded. Please retry before submitting.');
+    formStep='documents';
+    render();
+    return false;
+  }
   var miss=missingRequiredDocs();
   if(miss.length>0){
     alert(REQUIRED_DOCS_MSG.replace('{docs}',miss.map(function(d){return d.label;}).join(', ')));

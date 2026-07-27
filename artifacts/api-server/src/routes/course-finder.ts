@@ -6,11 +6,11 @@ import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles
 import { usersTable } from "@workspace/db";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { getCurrentSeason } from "../lib/season";
-import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
-import { dispatchNotification } from "../lib/notificationDispatcher.js";
+import { checkMandatoryDocsForStudent } from "../lib/mandatoryDocs.js";
 import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { getVisibleBranchIds } from "../lib/branchScope";
+import { getDocLabel } from "../lib/docNaming";
 
 const router: IRouter = Router();
 
@@ -476,6 +476,22 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
 
   if (!program) { res.status(404).json({ error: "Program not found" }); return; }
 
+  const docStatus = await checkMandatoryDocsForStudent(
+    program.id,
+    student.id,
+    program.degree,
+  );
+  if (docStatus.missing.length > 0) {
+    const missingDocLabels = docStatus.missing.map(getDocLabel);
+    res.status(422).json({
+      error: `Mandatory student documents are missing: ${missingDocLabels.join(", ")}`,
+      code: "STUDENT_DOCS_REQUIRED",
+      missingDocTypes: docStatus.missing,
+      missingDocLabels,
+    });
+    return;
+  }
+
   const effectiveFee = program.discountedFee ?? program.tuitionFee;
   const currentYear = await getCurrentSeason();
   const studentName = `${student.firstName || ""} ${student.lastName || ""}`.trim();
@@ -599,52 +615,11 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
       { studentName, source: "course_finder_apply" }, req.ip);
   }
 
-  // ─── Mandatory document gate ─────────────────────────────────────────
-  // Check whether the program requires documents not yet in the student's
-  // library. Park the application in "missing_docs" when any are absent.
-  let missingDocTypes: string[] = [];
-  try {
-    const { missing } = await checkMandatoryDocsForStudent(program.id, student.id);
-    if (missing.length > 0) {
-      await parkApplicationInMissingDocsStage(application.id);
-      missingDocTypes = missing;
-      const missingStr = missing.join(", ");
-      void (async () => {
-        try {
-          if (application.assignedToId) {
-            await dispatchNotification({
-              event: "mandatory_docs_missing",
-              title: "Eksik Belgeler",
-              body: `Başvuru eksik belgeler nedeniyle park edildi: ${missingStr}`,
-              recipientUserIds: [application.assignedToId],
-              data: { applicationId: application.id, missing },
-            });
-          }
-          const [studentRow] = await db.select({ userId: studentsTable.userId })
-            .from(studentsTable).where(eq(studentsTable.id, student.id));
-          if (studentRow?.userId) {
-            await dispatchNotification({
-              event: "mandatory_docs_missing_student",
-              title: "Eksik Belgeler",
-              body: `Başvurunuz için gerekli belgeler eksik: ${missingStr}`,
-              recipientUserIds: [studentRow.userId],
-              data: { applicationId: application.id, missing },
-            });
-          }
-        } catch (notifErr) {
-          console.error("[COURSE-FINDER] Mandatory docs notification error:", notifErr);
-        }
-      })();
-    }
-  } catch (gateErr) {
-    console.error("[COURSE-FINDER] Mandatory doc gate error:", gateErr);
-  }
-
   res.status(201).json({
-    application: { ...application, ...(missingDocTypes.length > 0 ? { stage: "missing_docs" } : {}) },
+    application,
     commission,
     serviceFee,
-    ...(missingDocTypes.length > 0 ? { status: "missing_documents", missing: missingDocTypes } : { status: "inquiry" }),
+    status: "inquiry",
   });
 });
 

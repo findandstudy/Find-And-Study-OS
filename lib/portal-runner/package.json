@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
+    "@workspace/doc-equivalence": "workspace:*",
     "@workspace/object-storage": "workspace:*",
     "@workspace/portal-adapters": "workspace:*",
     "drizzle-orm": "catalog:",

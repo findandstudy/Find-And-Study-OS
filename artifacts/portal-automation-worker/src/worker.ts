@@ -25,6 +25,7 @@ import {
   resolveAdapterKey,
   getNonGraduatedExperimentalAdapterKeys,
   portalEvidenceFromError,
+  getApplicationMandatoryDocumentStatus,
 } from "@workspace/portal-runner";
 import { isSitFamilyKey } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "./credResolver.js";
@@ -166,6 +167,16 @@ async function tick(): Promise<void> {
   let runResult = null;
 
   try {
+    const mandatoryDocs = await getApplicationMandatoryDocumentStatus(sub.applicationId);
+    if (!mandatoryDocs || mandatoryDocs.missing.length > 0) {
+      const reason = mandatoryDocs
+        ? `MISSING_MANDATORY_DOCUMENTS: ${mandatoryDocs.missing.join(", ")}`
+        : `MISSING_MANDATORY_DOCUMENTS: application ${sub.applicationId} not found`;
+      console.error(`[portal-worker] Submission #${sub.id} blocked before portal access: ${reason}`);
+      await writebackResult(sub.id, null, reason, WORKER_ID);
+      return;
+    }
+
     const profileResult = await buildStudentProfile(sub.id);
 
     // Resolve credentials (DB-first, env fallback) — worker-specific resolver.

@@ -5,7 +5,7 @@ import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from 
 import { STAFF_ROLES } from "../lib/roles";
 import { validate, getValidated } from "../middlewares/validate";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
-import { normalizeGpaTo100 } from "../lib/gpaNormalize";
+import { normalizeGpaEvidenceTo100 } from "../lib/gpaNormalize";
 import { canonicalCountry, cleanCity } from "@workspace/db";
 import {
   buildExtractionPrompt,
@@ -48,7 +48,7 @@ const aiJson = json({ limit: "20mb" });
 function normalizeExtractedGpa(extracted: Record<string, any>): void {
   if (extracted.gpa == null || extracted.gpa === "") return;
   const raw = String(extracted.gpa);
-  const pct = normalizeGpaTo100(raw);
+  const pct = normalizeGpaEvidenceTo100(raw);
   if (!isNaN(pct)) {
     extracted.gpaRaw = raw;
     // Portal compatibility: SIT/Zoho rejects decimal GPA — integer 0–100.
@@ -60,7 +60,7 @@ function normalizeExtractedGpa(extracted: Record<string, any>): void {
 function applyExtractorNormalize(extractor: { fields: any[] }, extracted: Record<string, any>): void {
   for (const f of (extractor.fields as any[]) || []) {
     if (f.normalize === "gpa100" && extracted[f.key] != null && extracted[f.key] !== "") {
-      const pct = normalizeGpaTo100(String(extracted[f.key]));
+      const pct = normalizeGpaEvidenceTo100(String(extracted[f.key]));
       if (!isNaN(pct)) {
         extracted[`${f.key}Raw`] = extracted[f.key];
         // Portal compatibility: integer 0–100 (SIT/Zoho rejects decimals).

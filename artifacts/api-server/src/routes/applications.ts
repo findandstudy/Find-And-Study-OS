@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, programDocumentRequirementsTable, documentsTable, settingsTable, softDelete } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, softDelete } from "@workspace/db";
 import { eq, sql, and, inArray, desc, isNull, isNotNull, ne } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -18,14 +18,12 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromAgentId, inferOriginFromUser, type OriginMeta } from "../lib/originHelper";
 import { findActiveCampaign, applyCampaignToFees } from "../lib/campaigns";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
-import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 import { getCurrentSeason } from "../lib/season";
 import { maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { maybeFanOutSitStudentForApplication } from "./portalAutomation.js";
 import { enqueuePortalSubmissions } from "../lib/portalManualEnqueue.js";
-import { adoptLeadDocsForStudent } from "../lib/leadDocAdoption";
-import { getEffectiveDocRequirements, mandatoryDocTypes } from "../lib/effectiveDocRequirements";
 import { getDocLabel } from "../lib/docNaming";
+import { checkMandatoryDocsForStudent } from "../lib/mandatoryDocs";
 
 const router: IRouter = Router();
 
@@ -387,51 +385,20 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   // specific program is selected yet.
   if (programId || level) {
     const studentIdNum = parseInt(String(studentId), 10);
-
-    // Single source of truth: the same merged program+degree requirement set
-    // that GET /document-requirements/effective serves to the UI.
-    const [studentDocs, effectiveReqs] = await Promise.all([
-      db.select({ type: documentsTable.type })
-        .from(documentsTable)
-        .where(and(
-          eq(documentsTable.studentId, studentIdNum),
-          isNull(documentsTable.deletedAt),
-        )),
-      getEffectiveDocRequirements({
-        programId: programId ? parseInt(String(programId), 10) : null,
-        level: level ? String(level) : null,
-      }),
-    ]);
-    const allMandatoryTypes = mandatoryDocTypes(effectiveReqs);
-
-    if (allMandatoryTypes.length > 0) {
-      const uploadedTypes = new Set<string>(studentDocs.map((d: { type: string | null }) => (d.type || "").toLowerCase()));
-      let missingDocTypes = findMissingMandatoryTypes(allMandatoryTypes, uploadedTypes);
-      if (missingDocTypes.length > 0) {
-        // Docs may still be staged on a linked lead (inbox flows). Adopt them
-        // onto the student, then re-check before rejecting.
-        const adopted = await adoptLeadDocsForStudent(studentIdNum);
-        if (adopted > 0) {
-          const refreshedDocs = await db.select({ type: documentsTable.type })
-            .from(documentsTable)
-            .where(and(
-              eq(documentsTable.studentId, studentIdNum),
-              isNull(documentsTable.deletedAt),
-            ));
-          const refreshedTypes = new Set<string>(refreshedDocs.map((d) => (d.type || "").toLowerCase()));
-          missingDocTypes = findMissingMandatoryTypes(allMandatoryTypes, refreshedTypes);
-        }
-      }
-      if (missingDocTypes.length > 0) {
-        const missingDocLabels = missingDocTypes.map((t) => getDocLabel(t));
-        res.status(422).json({
-          error: `Mandatory student documents are missing for this application: ${missingDocLabels.join(", ")}`,
-          code: "STUDENT_DOCS_REQUIRED",
-          missingDocTypes,
-          missingDocLabels,
-        });
-        return;
-      }
+    const docStatus = await checkMandatoryDocsForStudent(
+      programId ? parseInt(String(programId), 10) : null,
+      studentIdNum,
+      level ? String(level) : null,
+    );
+    if (docStatus.missing.length > 0) {
+      const missingDocLabels = docStatus.missing.map((type) => getDocLabel(type));
+      res.status(422).json({
+        error: `Mandatory student documents are missing for this application: ${missingDocLabels.join(", ")}`,
+        code: "STUDENT_DOCS_REQUIRED",
+        missingDocTypes: docStatus.missing,
+        missingDocLabels,
+      });
+      return;
     }
   }
 
@@ -964,53 +931,16 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   if (updates.stage === "documents_collected") {
     const [currentApp] = await db.select({
       programId: applicationsTable.programId,
+      level: applicationsTable.level,
       studentId: applicationsTable.studentId,
     }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
 
-    if (currentApp?.programId && currentApp?.studentId) {
-      const [mandatoryReqs, studentDocs] = await Promise.all([
-        db.select({ documentType: programDocumentRequirementsTable.documentType })
-          .from(programDocumentRequirementsTable)
-          .where(and(
-            eq(programDocumentRequirementsTable.programId, currentApp.programId),
-            eq(programDocumentRequirementsTable.mandatory, true),
-          )),
-        db.select({ type: documentsTable.type })
-          .from(documentsTable)
-          .where(and(
-            eq(documentsTable.studentId, currentApp.studentId),
-            isNull(documentsTable.deletedAt),
-          )),
-      ]);
-
-      const uploadedTypes = new Set<string>(studentDocs.map((d: { type: string | null }) => (d.type || "").toLowerCase()));
-      // Use the doc-type equivalence map so a document uploaded under any
-      // equivalent name (e.g. "hs_diploma" apply key OR
-      // "class_12th_hsc_certificate" canonical type) satisfies the
-      // mandatory canonical requirement.
-      let missingDocTypes = findMissingMandatoryTypes(
-        mandatoryReqs.map(r => r.documentType),
-        uploadedTypes,
+    if (currentApp?.studentId) {
+      const { missing: missingDocTypes } = await checkMandatoryDocsForStudent(
+        currentApp.programId,
+        currentApp.studentId,
+        currentApp.level,
       );
-
-      if (missingDocTypes.length > 0) {
-        // Docs may still be staged on a linked lead (inbox flows). Adopt them
-        // onto the student, then re-check before rejecting.
-        const adopted = await adoptLeadDocsForStudent(currentApp.studentId);
-        if (adopted > 0) {
-          const refreshedDocs = await db.select({ type: documentsTable.type })
-            .from(documentsTable)
-            .where(and(
-              eq(documentsTable.studentId, currentApp.studentId),
-              isNull(documentsTable.deletedAt),
-            ));
-          const refreshedTypes = new Set<string>(refreshedDocs.map((d) => (d.type || "").toLowerCase()));
-          missingDocTypes = findMissingMandatoryTypes(
-            mandatoryReqs.map(r => r.documentType),
-            refreshedTypes,
-          );
-        }
-      }
 
       if (missingDocTypes.length > 0) {
         const missingDocLabels = missingDocTypes.map((t) => getDocLabel(t));

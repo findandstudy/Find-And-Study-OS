@@ -78,6 +78,7 @@ import {
 import { ObjectStorageService } from "../lib/objectStorage";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
+import { normalizeInboxStudentExtraction } from "../lib/inboxStudentExtraction";
 import { writeAudit } from "../lib/auditLog";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { loadDocCatalogKeySet } from "../lib/docCatalog";
@@ -3554,16 +3555,18 @@ Extract ALL of the following fields if visible in the document. Return a JSON ob
   "firstName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
   "lastName": "string or null - EXACTLY as printed on the document, preserving original spelling and capitalization",
   "dateOfBirth": "YYYY-MM-DD format or null",
+  "gender": "male|female or null",
   "nationality": "country name string (e.g. 'Afghanistan' not 'Afghan', 'Turkey' not 'Turkish', 'Iran' not 'Iranian', 'Pakistan' not 'Pakistani', 'Uzbekistan' not 'Uzbek', 'India' not 'Indian') or null",
   "passportNumber": "string or null",
+  "passportIssueDate": "YYYY-MM-DD format or null",
   "passportExpiry": "YYYY-MM-DD format or null",
   "motherName": "string or null - EXACTLY as printed on the document",
   "fatherName": "string or null - EXACTLY as printed on the document",
   "email": "string or null",
   "phone": "string or null",
   "highSchool": "string or null",
-  "graduationYear": "number or null",
-  "gpa": "string or null",
+  "graduationYear": "number or null - year the final secondary-school/degree examination was completed",
+  "gpa": "string or null - overall marks exactly as numerator/denominator printed, e.g. '955/1200'; use a percentage only if the document itself prints a percentage",
   "documentType": "passport|diploma|transcript|photo|other",
   "confidence": "high|medium|low"
 }
@@ -3571,6 +3574,10 @@ Rules:
 - Extract names EXACTLY as they appear on the document. Do NOT modify, translate, or reformat names.
 - Always normalize dates to YYYY-MM-DD format
 - For nationality: always return the full country name (e.g. "Turkey" not "Turkish")
+- For a passport, read Sex/Gender and Date of Issue explicitly. Convert M to male and F to female.
+- For a final diploma/certificate/transcript, graduationYear is the final examination or completion year. Do not use an attestation/legalization date.
+- For marks/GPA, read BOTH "Marks obtained" and "Total marks"/"out of". Never return a numerator such as "955" without its printed denominator. Do not invent a 4-point scale.
+- If multiple totals are visible, use the overall/final grand total, not one subject or one part.
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find`;
 
@@ -3736,7 +3743,7 @@ router.post(
         return;
       }
 
-      res.json({ extracted });
+      res.json({ extracted: normalizeInboxStudentExtraction(extracted) });
     } catch (err: any) {
       console.warn("[INBOX extract-for-student] AI extraction error:", err?.message ?? err);
       res.json({ extracted: {} });

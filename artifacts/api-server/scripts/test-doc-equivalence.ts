@@ -114,6 +114,16 @@ function testEquivalenceUnits(): Section {
     "hs_transcript ≡ class_12th_hsc_marks_sheet",
     details,
   ) && ok;
+  ok = assert(
+    areEquivalentDocTypes("hs_diploma", "diploma_certificate"),
+    "public hs_diploma ≡ catalog diploma_certificate",
+    details,
+  ) && ok;
+  ok = assert(
+    areEquivalentDocTypes("hs_transcript", "diploma_transcript"),
+    "public hs_transcript ≡ catalog diploma_transcript",
+    details,
+  ) && ok;
 
   // Bachelor's
   ok = assert(
@@ -211,8 +221,9 @@ function testEquivalenceUnits(): Section {
   const canonHs = getEquivalentCanonicalTypes("hs_diploma");
   ok = assert(
     canonHs.includes("class_12th_hsc_certificate") &&
-      canonHs.includes("high_school_diploma_translation"),
-    `getEquivalentCanonicalTypes('hs_diploma') includes both hs canonicals (got [${canonHs.join(",")}])`,
+      canonHs.includes("high_school_diploma_translation") &&
+      canonHs.includes("diploma_certificate"),
+    `getEquivalentCanonicalTypes('hs_diploma') includes all hs canonicals (got [${canonHs.join(",")}])`,
     details,
   ) && ok;
 

@@ -39,6 +39,7 @@ import {
 import { logAudit } from "./auth.js";
 import { checkHasPortalCredentials } from "./portalCreds.js";
 import { isMulticoNationality, validateIdentityFields, formatIdentityErrors } from "@workspace/portal-adapters";
+import { checkMandatoryDocsForApplication } from "./mandatoryDocs.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,6 +67,7 @@ export type SkipReason =
   | "no_credentials"
   | "duplicate"
   | "max_failures"
+  | "missing_mandatory_documents"
   /** mode=real submission blocked due to invalid/placeholder identity fields. */
   | "invalid_identity_fields";
 
@@ -305,7 +307,21 @@ export async function enqueueIfEligible(
     return { status: "skipped", reason: "stage_not_trigger" };
   }
 
-  // ----- Gate 2: resolve routing (membership → aggregator wins) ---------
+  // ----- Gate 2: mandatory documents -----------------------------------
+  // This is deliberately repeated at the final queue boundary. UI gates can
+  // be bypassed by stale clients and creation flows can race with document
+  // persistence; portal automation must never claim an incomplete record.
+  const docStatus = await checkMandatoryDocsForApplication(applicationId);
+  if (!docStatus || docStatus.missing.length > 0) {
+    if (docStatus?.missing.length) {
+      console.warn(
+        `[portal-enqueue] mandatory documents missing for app=${applicationId}: ${docStatus.missing.join(",")}`,
+      );
+    }
+    return { status: "skipped", reason: "missing_mandatory_documents" };
+  }
+
+  // ----- Gate 3: resolve routing (membership → aggregator wins) ---------
   const routing = await resolvePortalRouting({ universityId, universityName });
   if (!routing) {
     return { status: "skipped", reason: "no_active_portal_university" };
@@ -350,7 +366,7 @@ export async function enqueueIfEligible(
     }
   }
 
-  // ----- Gate 3: scope filter -------------------------------------------
+  // ----- Gate 4: scope filter -------------------------------------------
   if (settings.scope === "selected") {
     const selectedKeys = Array.isArray(settings.selectedUniversityKeys)
       ? (settings.selectedUniversityKeys as string[])
@@ -361,12 +377,12 @@ export async function enqueueIfEligible(
   }
   // scope='only_applied' and scope='all' both pass when a portal_uni row exists
 
-  // ----- Gate 4: credentials check (DB-first + env fallback) -----------
+  // ----- Gate 5: credentials check (DB-first + env fallback) -----------
   if (!await checkHasPortalCredentials(portalUni.universityKey, portalUni.adapterKey)) {
     return { status: "skipped", reason: "no_credentials" };
   }
 
-  // ----- Gate 5: identity field validation (mode=real only) ----------------
+  // ----- Gate 6: identity field validation (mode=real only) ----------------
   // We never enqueue a real submission when critical identity fields are
   // missing, placeholder, or logically inconsistent — a wrong passport number
   // or garbled name is worse than no submission at all (it can block the
@@ -403,7 +419,7 @@ export async function enqueueIfEligible(
     }
   }
 
-  // ----- Gate 6: dedup + enqueue (atomic) -------------------------------
+  // ----- Gate 7: dedup + enqueue (atomic) -------------------------------
   // A plain SELECT-then-INSERT is racy: multiple callers (creation hook, PATCH
   // hook, Run Now scan, or multiple server instances) can fire for the same
   // application concurrently, all pass the read, and all insert duplicate

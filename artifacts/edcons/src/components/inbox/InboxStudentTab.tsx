@@ -35,6 +35,10 @@ import {
   X as XIcon,
 } from "lucide-react";
 import { inboxDocumentLabel } from "./documentPresentation";
+import {
+  normalizeInboxGender,
+  normalizeInboxGpaForForm,
+} from "./inboxExtractionNormalization";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -213,6 +217,10 @@ export interface SubmitReadyData {
   staging: Record<string, ChatAttachment>;
   aiFields: Set<string>;
   selectedLevel: string;
+  leadId: number | null;
+  mandatoryDocumentTypes: string[];
+  providedDocumentTypes: string[];
+  persistedDocumentTypes: string[];
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -338,7 +346,11 @@ export function InboxStudentTab({
   // ── Effective doc requirements (merged program + degree — the SAME set the
   // POST /applications mandatory-doc gate enforces). Falls back to level-only
   // when no program is selected yet.
-  const { data: effReqs, isLoading: docReqsLoading } = useQuery<EffectiveDocReqsResponse>({
+  const {
+    data: effReqs,
+    isLoading: docReqsLoading,
+    isError: docReqsError,
+  } = useQuery<EffectiveDocReqsResponse>({
     queryKey: ["effective-doc-reqs", programId ?? null, selectedLevel],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -346,9 +358,10 @@ export function InboxStudentTab({
       if (selectedLevel) params.set("level", selectedLevel);
       return fetch(`${BASE_URL}/api/document-requirements/effective?${params.toString()}`, {
         credentials: "include",
-      }).then((r) =>
-        r.ok ? r.json() : { programId: null, level: null, programSpecific: false, requirements: [] }
-      );
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Document requirements request failed (${r.status})`);
+        return r.json();
+      });
     },
     enabled: !!selectedLevel || !!programId,
     staleTime: 30_000,
@@ -367,6 +380,21 @@ export function InboxStudentTab({
   );
 
   const stagedCount = Object.keys(staging).length;
+  const mandatoryDocumentTypes = useMemo(
+    () => sortedDocReqs.filter((req) => req.mandatory).map((req) => req.documentType),
+    [sortedDocReqs],
+  );
+  const providedDocumentTypes = useMemo(
+    () => Array.from(new Set([...backendDocTypes, ...Object.keys(staging)])),
+    [backendDocTypes, staging],
+  );
+  const missingMandatoryDocumentTypes = useMemo(
+    () => findMissingMandatoryTypes(
+      mandatoryDocumentTypes,
+      new Set(providedDocumentTypes),
+    ),
+    [mandatoryDocumentTypes, providedDocumentTypes],
+  );
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -417,6 +445,24 @@ export function InboxStudentTab({
   }
 
   async function handleAnalyzeAndCreate() {
+    if (docReqsLoading || docReqsError) {
+      toast({
+        title: t("inbox.studentTab.requiredDocs"),
+        description: docReqsError
+          ? "Document requirements could not be verified."
+          : "Document requirements are still loading.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (missingMandatoryDocumentTypes.length > 0) {
+      toast({
+        title: t("inbox.studentTab.fillRequired"),
+        description: missingMandatoryDocumentTypes.map(docLabel).join(", "),
+        variant: "destructive",
+      });
+      return;
+    }
     if (stagedCount === 0) {
       toast({
         title: t("inbox.studentTab.noDocsToAnalyze"),
@@ -426,7 +472,7 @@ export function InboxStudentTab({
     }
     setExtracting(true);
 
-    const extracted: Record<string, string> = {};
+    const extracted: Record<string, any> = {};
     const extractedFieldsSet = new Set<string>();
 
     for (const [docType, att] of Object.entries(staging)) {
@@ -445,14 +491,20 @@ export function InboxStudentTab({
           "lastName",
           "email",
           "phone",
+          "gender",
           "nationality",
           "dateOfBirth",
+          "address",
           "passportNumber",
+          "passportIssueDate",
           "passportExpiry",
           "motherName",
           "fatherName",
           "highSchool",
+          "graduationYear",
           "gpa",
+          "gpaScale",
+          "languageScore",
         ];
         for (const fk of FIELDS) {
           const val = data[fk];
@@ -471,9 +523,10 @@ export function InboxStudentTab({
     const displayName = (ext?.displayName || conv?.title || "").trim();
     const parts = displayName.split(/\s+/).filter(Boolean);
 
-    const gpaRaw = extracted.gpa ?? "";
-    const gpaMatch = gpaRaw.match(/^([\d.]+)\s*\/\s*\d+$/);
-    const gpaNorm = gpaMatch ? gpaMatch[1] : gpaRaw;
+    const normalizedGpa = normalizeInboxGpaForForm(
+      extracted.gpa,
+      extracted.gpaScale,
+    );
 
     setExtracting(false);
     onReadyToSubmit?.({
@@ -482,7 +535,7 @@ export function InboxStudentTab({
         lastName: toLatinUpper(extracted.lastName || parts.slice(1).join(" ") || ""),
         email: extracted.email || String(ext?.email ?? ""),
         phone: extracted.phone || String(ext?.phone ?? ""),
-        gender: "",
+        gender: normalizeInboxGender(extracted.gender),
         motherName: toLatinUpper(extracted.motherName || ""),
         fatherName: toLatinUpper(extracted.fatherName || ""),
         nationality: extracted.nationality || "",
@@ -496,14 +549,18 @@ export function InboxStudentTab({
         graduationYear: (extracted as any).graduationYear != null
           ? String((extracted as any).graduationYear)
           : "",
-        gpa: gpaNorm,
-        gradingSystem: "4",
-        languageScore: "",
+        gpa: normalizedGpa.gpa,
+        gradingSystem: normalizedGpa.gradingSystem,
+        languageScore: extracted.languageScore || "",
         notes: "",
       },
       staging,
       aiFields: extractedFieldsSet,
       selectedLevel,
+      leadId: leadId ?? null,
+      mandatoryDocumentTypes,
+      providedDocumentTypes,
+      persistedDocumentTypes: Array.from(backendDocTypes),
     });
   }
 
@@ -717,7 +774,13 @@ export function InboxStudentTab({
           onClick={() => {
             void handleAnalyzeAndCreate();
           }}
-          disabled={stagedCount === 0 || extracting}
+          disabled={
+            stagedCount === 0 ||
+            extracting ||
+            docReqsLoading ||
+            docReqsError ||
+            missingMandatoryDocumentTypes.length > 0
+          }
         >
           {extracting ? (
             <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
@@ -731,6 +794,16 @@ export function InboxStudentTab({
         {stagedCount === 0 && !extracting && (
           <p className="text-center text-[10px] text-muted-foreground mt-1">
             {t("inbox.studentTab.noDocsToAnalyze")}
+          </p>
+        )}
+        {stagedCount > 0 && missingMandatoryDocumentTypes.length > 0 && !extracting && (
+          <p className="text-center text-[10px] text-rose-600 mt-1">
+            {missingMandatoryDocumentTypes.map(docLabel).join(", ")}
+          </p>
+        )}
+        {docReqsError && !extracting && (
+          <p className="text-center text-[10px] text-rose-600 mt-1">
+            Document requirements could not be verified.
           </p>
         )}
       </div>

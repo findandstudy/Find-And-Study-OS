@@ -1,7 +1,22 @@
-import { db, programDocumentRequirementsTable, applicationsTable, documentsTable } from "@workspace/db";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import {
+  db,
+  applicationsTable,
+  documentsTable,
+  programsTable,
+} from "@workspace/db";
+import { eq, and, isNull, ne, or } from "drizzle-orm";
 import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 import { adoptLeadDocsForStudent } from "./leadDocAdoption";
+import {
+  getEffectiveDocRequirements,
+  mandatoryDocTypes,
+} from "./effectiveDocRequirements";
+
+export interface MandatoryDocCheckResult {
+  missing: string[];
+  mandatory: string[];
+  level: string | null;
+}
 
 /**
  * Returns mandatory document types for a program that the given upload set
@@ -17,26 +32,38 @@ import { adoptLeadDocsForStudent } from "./leadDocAdoption";
 export async function checkMandatoryDocs(
   programId: number | null,
   uploadedDocTypes: string[],
-): Promise<{ missing: string[] }> {
-  if (!programId) return { missing: [] };
+  level?: string | null,
+): Promise<MandatoryDocCheckResult> {
+  let resolvedLevel = (level || "").trim() || null;
+  if (!resolvedLevel && programId) {
+    const [program] = await db
+      .select({ degree: programsTable.degree })
+      .from(programsTable)
+      .where(eq(programsTable.id, programId))
+      .limit(1);
+    resolvedLevel = (program?.degree || "").trim() || null;
+  }
 
-  const requirements = await db
-    .select({ documentType: programDocumentRequirementsTable.documentType })
-    .from(programDocumentRequirementsTable)
-    .where(
-      and(
-        eq(programDocumentRequirementsTable.programId, programId),
-        eq(programDocumentRequirementsTable.mandatory, true),
-      ),
-    );
+  if (!programId && !resolvedLevel) {
+    return { missing: [], mandatory: [], level: null };
+  }
 
-  if (requirements.length === 0) return { missing: [] };
+  const requirements = await getEffectiveDocRequirements({
+    programId,
+    level: resolvedLevel,
+  });
+  const effectiveMandatoryTypes = mandatoryDocTypes(requirements);
+  if (effectiveMandatoryTypes.length === 0) {
+    return { missing: [], mandatory: [], level: resolvedLevel };
+  }
 
-  const mandatoryTypes = requirements.map((r) => r.documentType);
   const uploadedSet = new Set(uploadedDocTypes.map((t) => t.toLowerCase()));
-  const missing = findMissingMandatoryTypes(mandatoryTypes, uploadedSet);
+  const missing = findMissingMandatoryTypes(
+    effectiveMandatoryTypes,
+    uploadedSet,
+  );
 
-  return { missing };
+  return { missing, mandatory: effectiveMandatoryTypes, level: resolvedLevel };
 }
 
 /**
@@ -47,31 +74,65 @@ export async function checkMandatoryDocs(
 export async function checkMandatoryDocsForStudent(
   programId: number | null,
   studentId: number,
-): Promise<{ missing: string[] }> {
+  level?: string | null,
+): Promise<MandatoryDocCheckResult> {
   const fetchTypes = async () => {
     const rows = await db
       .select({ type: documentsTable.type })
       .from(documentsTable)
-      .where(and(
-        eq(documentsTable.studentId, studentId),
-        isNull(documentsTable.deletedAt),
-        // Rejected documents do not satisfy mandatory requirements — the student
-        // must upload a replacement before the application can advance.
-        sql`${documentsTable.status} != 'rejected'`,
-      ));
+      .where(
+        and(
+          eq(documentsTable.studentId, studentId),
+          isNull(documentsTable.deletedAt),
+          // Rejected documents do not satisfy mandatory requirements — the student
+          // must upload a replacement before the application can advance.
+          or(
+            isNull(documentsTable.status),
+            ne(documentsTable.status, "rejected"),
+          ),
+        ),
+      );
     return rows.map((r) => String(r.type || "")).filter(Boolean);
   };
 
-  let result = await checkMandatoryDocs(programId, await fetchTypes());
+  let result = await checkMandatoryDocs(programId, await fetchTypes(), level);
   if (result.missing.length > 0) {
     // Docs may still be staged on a linked lead (inbox flows). Adopt them
     // onto the student, then re-check before reporting them missing.
     const adopted = await adoptLeadDocsForStudent(studentId);
     if (adopted > 0) {
-      result = await checkMandatoryDocs(programId, await fetchTypes());
+      result = await checkMandatoryDocs(programId, await fetchTypes(), level);
     }
   }
   return result;
+}
+
+/**
+ * Defense-in-depth gate for portal automation and other application-centric
+ * flows. It derives program, level and student from the persisted application,
+ * then applies the exact same effective program+degree requirements used by
+ * the creation forms.
+ */
+export async function checkMandatoryDocsForApplication(
+  applicationId: number,
+): Promise<MandatoryDocCheckResult | null> {
+  const [app] = await db
+    .select({
+      programId: applicationsTable.programId,
+      level: applicationsTable.level,
+      studentId: applicationsTable.studentId,
+    })
+    .from(applicationsTable)
+    .where(
+      and(
+        eq(applicationsTable.id, applicationId),
+        isNull(applicationsTable.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (!app) return null;
+  return checkMandatoryDocsForStudent(app.programId, app.studentId, app.level);
 }
 
 /**
@@ -79,7 +140,9 @@ export async function checkMandatoryDocsForStudent(
  * stage so it sits in a visible, actionable state rather than polluting the
  * inquiry queue.
  */
-export async function parkApplicationInMissingDocsStage(applicationId: number): Promise<void> {
+export async function parkApplicationInMissingDocsStage(
+  applicationId: number,
+): Promise<void> {
   await db
     .update(applicationsTable)
     .set({ stage: "missing_docs", updatedAt: new Date() })
@@ -94,12 +157,15 @@ export async function parkApplicationInMissingDocsStage(applicationId: number): 
  * Returns `true` when the application was advanced, `false` otherwise.
  * No-op (returns false) when the application is not in the "missing_docs" stage.
  */
-export async function reEvaluateMandatoryDocs(applicationId: number): Promise<boolean> {
+export async function reEvaluateMandatoryDocs(
+  applicationId: number,
+): Promise<boolean> {
   const [app] = await db
     .select({
       id: applicationsTable.id,
       stage: applicationsTable.stage,
       programId: applicationsTable.programId,
+      level: applicationsTable.level,
       studentId: applicationsTable.studentId,
     })
     .from(applicationsTable)
@@ -107,7 +173,11 @@ export async function reEvaluateMandatoryDocs(applicationId: number): Promise<bo
 
   if (!app || app.stage !== "missing_docs") return false;
 
-  const { missing } = await checkMandatoryDocsForStudent(app.programId, app.studentId);
+  const { missing } = await checkMandatoryDocsForStudent(
+    app.programId,
+    app.studentId,
+    app.level,
+  );
   if (missing.length > 0) return false;
 
   await db

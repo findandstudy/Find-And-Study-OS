@@ -39,12 +39,16 @@ export const DOC_EQUIVALENCE_GROUPS: DocEquivalenceGroup[] = [
   {
     id: "hs_certificate",
     applyKeys: ["hs_diploma"],
-    canonicalTypes: ["class_12th_hsc_certificate", "high_school_diploma_translation"],
+    canonicalTypes: [
+      "class_12th_hsc_certificate",
+      "high_school_diploma_translation",
+      "diploma_certificate",
+    ],
   },
   {
     id: "hs_transcript",
     applyKeys: ["hs_transcript"],
-    canonicalTypes: ["class_12th_hsc_marks_sheet"],
+    canonicalTypes: ["class_12th_hsc_marks_sheet", "diploma_transcript"],
   },
   {
     id: "ssc_marks_sheet",
@@ -54,12 +58,18 @@ export const DOC_EQUIVALENCE_GROUPS: DocEquivalenceGroup[] = [
   {
     id: "bachelors_certificate",
     applyKeys: ["bachelor_diploma"],
-    canonicalTypes: ["bachelors_certificate", "bachelors_provisional_certificate"],
+    canonicalTypes: [
+      "bachelors_certificate",
+      "bachelors_provisional_certificate",
+    ],
   },
   {
     id: "bachelors_transcript",
     applyKeys: ["bachelor_transcript"],
-    canonicalTypes: ["bachelors_transcript", "bachelors_transcript_all_semesters"],
+    canonicalTypes: [
+      "bachelors_transcript",
+      "bachelors_transcript_all_semesters",
+    ],
   },
   {
     id: "masters_certificate",
@@ -90,16 +100,6 @@ export const DOC_EQUIVALENCE_GROUPS: DocEquivalenceGroup[] = [
     id: "equivalency_letter",
     applyKeys: ["equivalency_letter"],
     canonicalTypes: ["diploma_recognition"],
-  },
-  {
-    id: "diploma_certificate",
-    applyKeys: [],
-    canonicalTypes: ["diploma_certificate"],
-  },
-  {
-    id: "diploma_transcript",
-    applyKeys: [],
-    canonicalTypes: ["diploma_transcript"],
   },
   {
     id: "lor",
@@ -138,7 +138,9 @@ const TYPE_TO_GROUP: Map<string, DocEquivalenceGroupId> = (() => {
  *
  * Comparison is case-insensitive.
  */
-export function getDocEquivalenceGroup(type: string | null | undefined): DocEquivalenceGroupId | null {
+export function getDocEquivalenceGroup(
+  type: string | null | undefined,
+): DocEquivalenceGroupId | null {
   if (!type) return null;
   return TYPE_TO_GROUP.get(String(type).toLowerCase()) ?? null;
 }
@@ -147,7 +149,10 @@ export function getDocEquivalenceGroup(type: string | null | undefined): DocEqui
  * True iff the two document type strings refer to the same logical document.
  * E.g. "hs_diploma" (apply key) ≡ "class_12th_hsc_certificate" (canonical).
  */
-export function areEquivalentDocTypes(a: string | null | undefined, b: string | null | undefined): boolean {
+export function areEquivalentDocTypes(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
   const ga = getDocEquivalenceGroup(a);
   if (!ga) return false;
   return ga === getDocEquivalenceGroup(b);
@@ -162,7 +167,7 @@ export function areEquivalentDocTypes(a: string | null | undefined, b: string | 
 export function getEquivalentCanonicalTypes(type: string): string[] {
   const g = getDocEquivalenceGroup(type);
   if (!g) return [type.toLowerCase()];
-  const group = DOC_EQUIVALENCE_GROUPS.find(x => x.id === g)!;
+  const group = DOC_EQUIVALENCE_GROUPS.find((x) => x.id === g)!;
   return [...group.canonicalTypes];
 }
 
@@ -173,8 +178,12 @@ export function getEquivalentCanonicalTypes(type: string): string[] {
 export function getAllEquivalentTypes(type: string): string[] {
   const g = getDocEquivalenceGroup(type);
   if (!g) return [type.toLowerCase()];
-  const group = DOC_EQUIVALENCE_GROUPS.find(x => x.id === g)!;
-  return Array.from(new Set([...group.applyKeys, ...group.canonicalTypes].map(s => s.toLowerCase())));
+  const group = DOC_EQUIVALENCE_GROUPS.find((x) => x.id === g)!;
+  return Array.from(
+    new Set(
+      [...group.applyKeys, ...group.canonicalTypes].map((s) => s.toLowerCase()),
+    ),
+  );
 }
 
 export interface ExistingDocLike {
@@ -217,19 +226,53 @@ export function findEquivalentDoc<T extends ExistingDocLike>(
  * Keep this in sync with `DEGREE_DOC_MAP` in
  * `artifacts/edcons/src/pages/public/Programs.tsx`.
  */
-export const APPLY_FORM_GROUPS_BY_LEVEL: Record<string, DocEquivalenceGroupId[]> = {
-  pre_bachelors: ["passport", "photo", "hs_certificate", "hs_transcript", "language_proof"],
-  bachelors: ["passport", "photo", "hs_certificate", "hs_transcript", "language_proof"],
+export const APPLY_FORM_GROUPS_BY_LEVEL: Record<
+  string,
+  DocEquivalenceGroupId[]
+> = {
+  pre_bachelors: [
+    "passport",
+    "photo",
+    "hs_certificate",
+    "hs_transcript",
+    "language_proof",
+  ],
+  bachelors: [
+    "passport",
+    "photo",
+    "hs_certificate",
+    "hs_transcript",
+    "language_proof",
+  ],
   masters: [
-    "passport", "photo", "bachelors_certificate", "bachelors_transcript",
-    "equivalency_letter", "cv", "sop", "language_proof",
+    "passport",
+    "photo",
+    "bachelors_certificate",
+    "bachelors_transcript",
+    "equivalency_letter",
+    "cv",
+    "sop",
+    "language_proof",
   ],
   phd: [
-    "passport", "photo", "bachelors_certificate", "bachelors_transcript",
-    "masters_certificate", "masters_transcript",
-    "equivalency_letter", "cv", "sop", "language_proof",
+    "passport",
+    "photo",
+    "bachelors_certificate",
+    "bachelors_transcript",
+    "masters_certificate",
+    "masters_transcript",
+    "equivalency_letter",
+    "cv",
+    "sop",
+    "language_proof",
   ],
-  others: ["passport", "photo", "hs_certificate", "hs_transcript", "language_proof"],
+  others: [
+    "passport",
+    "photo",
+    "hs_certificate",
+    "hs_transcript",
+    "language_proof",
+  ],
 };
 
 /**

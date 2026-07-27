@@ -17,11 +17,14 @@ import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { normalizeAndValidateNames } from "../lib/textNormalize";
 import { getActiveExtractor, buildExtractionPrompt, isFallbackExtractor, recordExtractorRun } from "../lib/aiExtractorService";
 import { getCurrentSeason } from "../lib/season";
-import { checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
+import { checkMandatoryDocs, checkMandatoryDocsForStudent, parkApplicationInMissingDocsStage } from "../lib/mandatoryDocs.js";
 import { dispatchNotification } from "../lib/notificationDispatcher.js";
 import { maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { isPassportExpired } from "../lib/passportValidity";
 import { studentEducationRecordsTable } from "@workspace/db";
+import { findOrUpsertPublicLead } from "../lib/leadDedup";
+import { directOrigin } from "../lib/originHelper";
+import { getDocLabel } from "../lib/docNaming";
 
 const router: IRouter = Router();
 
@@ -256,19 +259,6 @@ export async function createApplicationForStudent(studentId: number, programId: 
       currency: snapshotCurrency,
     }).returning();
 
-    // Portal automation auto-trigger (fire-and-forget — never blocks response).
-    // Unauthenticated embed/public intake → no actor user.
-    maybeEnqueuePortalSubmission({
-      applicationId:  app.id,
-      studentId:      app.studentId,
-      newStage:       String(app.stage),
-      universityName: app.universityName ?? null,
-      universityId:   app.universityId ?? null,
-      actorUserId:    null,
-    }).catch((err) =>
-      console.error("[portal-auto] Trigger failed for new app", app.id, ":", err),
-    );
-
     const commissionBaseFee = (snapshotDiscountedFee != null && !isNaN(snapshotDiscountedFee))
       ? snapshotDiscountedFee
       : snapshotTuitionFee;
@@ -475,6 +465,94 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
     if (precheck?.quotaError) {
       res.status(422).json({ error: precheck.quotaError, code: "QUOTA_FULL" });
       return;
+    }
+
+    // Strict pre-creation gate: only files that the persistence loop below
+    // would accept can satisfy a Mandatory slot. If anything is missing we
+    // make sure the website Lead exists, then stop before creating a user,
+    // student or application.
+    if (programIdNum) {
+      const MAX_DOCS = 10;
+      const MAX_DOC_SIZE = 5 * 1024 * 1024;
+      const ALLOWED_MIME = new Set([
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+      ]);
+      const submittedDocTypes: string[] = [];
+      if (Array.isArray(documents)) {
+        for (const doc of documents.slice(0, MAX_DOCS)) {
+          if (!doc?.base64 || !doc?.name) continue;
+          let rawBase64 = String(doc.base64 || "");
+          let mime = String(doc.mediaType || "").toLowerCase();
+          if (/^data:/i.test(rawBase64) && rawBase64.includes(",")) {
+            const commaIdx = rawBase64.indexOf(",");
+            if (!mime) {
+              const match = /^data:([^;,]+)/i.exec(rawBase64.slice(0, commaIdx));
+              if (match?.[1]) mime = match[1].trim().toLowerCase();
+            }
+            rawBase64 = rawBase64.slice(commaIdx + 1);
+          }
+          rawBase64 = rawBase64.replace(/\s/g, "");
+          if (!ALLOWED_MIME.has(mime) || rawBase64.length > MAX_DOC_SIZE * 1.4) continue;
+
+          const buffer = Buffer.from(rawBase64, "base64");
+          if (buffer.length === 0 || buffer.length > MAX_DOC_SIZE) continue;
+          const validationError = await validateUploadedFileBuffer(
+            String(doc.name),
+            mime,
+            buffer,
+          );
+          if (validationError) continue;
+
+          // Reuse the exact normalized bytes/mime in the persistence loop so
+          // the pre-creation proof and the stored document cannot diverge.
+          doc.base64 = rawBase64;
+          doc.mediaType = mime;
+          doc.sizeBytes = buffer.length;
+          const docType = String(doc.key || doc.label || "").trim();
+          if (docType) submittedDocTypes.push(docType);
+        }
+      }
+      const docStatus = await checkMandatoryDocs(programIdNum, submittedDocTypes);
+      if (docStatus.missing.length > 0) {
+        if (!leadId) {
+          const origin = directOrigin();
+          const { lead } = await findOrUpsertPublicLead({
+            source: "website",
+            uniqueKey: { kind: "emailSource" },
+            fields: {
+              firstName: s(firstName, 100)!,
+              lastName: s(lastName, 100)!,
+              email: normalizedEmail,
+              phone: phone ? `${phoneCode || ""}${phone}`.slice(0, 50) : null,
+              nationality: s(nationality, 100),
+              interestedProgram: s(programName, 255),
+              interestedUniversity: s(universityName, 255),
+              notes: s(notes, 400),
+            },
+            extras: {
+              originType: origin.originType,
+              originEntityType: origin.originEntityType,
+              originEntityId: origin.originEntityId,
+              originDisplayName: origin.originDisplayName,
+            },
+            ip: req.ip,
+          });
+          leadId = lead.id;
+        }
+        const missingDocLabels = docStatus.missing.map(getDocLabel);
+        res.status(422).json({
+          error: "Please upload all mandatory documents before submitting your application.",
+          code: "MANDATORY_DOCUMENTS_REQUIRED",
+          missingDocTypes: docStatus.missing,
+          missingDocLabels,
+          status: "lead",
+        });
+        return;
+      }
     }
 
     let resultStudentId: number | null = null;
@@ -1032,6 +1110,31 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         }
       } catch (gateErr) {
         console.error("[PUBLIC-APPLY] Mandatory doc gate error:", gateErr);
+      }
+    }
+
+    // Documents have now been persisted and re-read successfully. Only at
+    // this point may portal automation see the new application; this removes
+    // the former create-before-document-save race.
+    if (resultStudentId && resultAppId && missingDocTypes.length === 0) {
+      const [appForPortal] = await db
+        .select({
+          stage: applicationsTable.stage,
+          universityName: applicationsTable.universityName,
+          universityId: applicationsTable.universityId,
+        })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.id, resultAppId))
+        .limit(1);
+      if (appForPortal) {
+        void maybeEnqueuePortalSubmission({
+          applicationId: resultAppId,
+          studentId: resultStudentId,
+          newStage: String(appForPortal.stage),
+          universityName: appForPortal.universityName ?? null,
+          universityId: appForPortal.universityId ?? null,
+          actorUserId: null,
+        });
       }
     }
 

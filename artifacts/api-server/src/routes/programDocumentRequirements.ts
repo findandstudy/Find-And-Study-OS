@@ -3,6 +3,7 @@ import { db, programDocumentRequirementsTable, programsTable } from "@workspace/
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
+import { getEffectiveDocRequirements } from "../lib/effectiveDocRequirements";
 
 const router: IRouter = Router();
 
@@ -15,23 +16,24 @@ router.get("/programs/:id/document-requirements", requireAuth, async (req, res):
   res.json(rows);
 });
 
-// Public mirror of the read endpoint above. Used by the public-apply form
-// (non-logged-in applicants) and the embeddable widget so each program's
-// document checklist matches what staff configured in the panel — no more
-// degree-level static fallbacks for dynamic, program-specific lists.
+// Public effective read endpoint. Program-specific requirements are merged
+// with the Required Documents rules configured for the program's degree.
+// This is the same source used by the server-side creation and portal gates,
+// so the applicant never sees a weaker checklist than the backend enforces.
 router.get("/public/programs/:id/document-requirements", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [prog] = await db.select({ id: programsTable.id, isActive: programsTable.isActive })
+  const [prog] = await db.select({
+    id: programsTable.id,
+    isActive: programsTable.isActive,
+    degree: programsTable.degree,
+  })
     .from(programsTable).where(eq(programsTable.id, id));
   if (!prog || !prog.isActive) { res.status(404).json({ error: "Program not found" }); return; }
-  const rows = await db.select({
-    documentType: programDocumentRequirementsTable.documentType,
-    mandatory: programDocumentRequirementsTable.mandatory,
-    sortOrder: programDocumentRequirementsTable.sortOrder,
-  }).from(programDocumentRequirementsTable)
-    .where(eq(programDocumentRequirementsTable.programId, id))
-    .orderBy(programDocumentRequirementsTable.sortOrder);
+  const rows = await getEffectiveDocRequirements({
+    programId: id,
+    level: prog.degree,
+  });
   res.json(rows);
 });
 

@@ -7,7 +7,7 @@
  * Run with:
  *   pnpm --filter @workspace/api-server exec tsx ./scripts/test-gpa-normalize.ts
  */
-import { normalizeGpaTo100 } from "../src/lib/gpaNormalize";
+import { normalizeGpaEvidenceTo100, normalizeGpaTo100 } from "../src/lib/gpaNormalize";
 
 let pass = 0;
 let fail = 0;
@@ -46,6 +46,23 @@ check("undefined -> NaN", undefined, NaN);
 check("non-numeric -> NaN", "n/a", NaN);
 check("0/4", "0/4", 0);
 check("110 (over 100, returned as-is)", "110", 110);
+
+const strictPakistan = normalizeGpaEvidenceTo100("955/1200");
+if (approx(strictPakistan, (955 / 1200) * 100)) {
+  pass++;
+  console.log(`  ok   strict 955/1200 -> ${strictPakistan.toFixed(2)}`);
+} else {
+  fail++;
+  console.error(`  FAIL strict 955/1200: got ${strictPakistan}`);
+}
+
+if (Number.isNaN(normalizeGpaEvidenceTo100("955"))) {
+  pass++;
+  console.log("  ok   strict bare 955 -> NaN");
+} else {
+  fail++;
+  console.error("  FAIL strict bare 955 must be rejected");
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

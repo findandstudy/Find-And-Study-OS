@@ -186,25 +186,20 @@ export function useProgramDocRequirements(programId: number | null | undefined) 
     queryKey: ["program-document-requirements", programId],
     queryFn: async () => {
       if (!programId) return [];
-      try {
-        // Use the public endpoint so this hook also resolves doc
-        // requirements for non-logged-in visitors on the public-apply form.
-        // The authed `/api/programs/:id/document-requirements` returns the
-        // same shape but requires staff auth — visitors hit it as 401 and
-        // silently fell back to the static degree-level list before.
-        const res = await customFetch(`${BASE_URL}/api/public/programs/${programId}/document-requirements`) as unknown;
-        if (!Array.isArray(res)) return [];
-        return res
-          .filter((r): r is { documentType: unknown; mandatory: unknown; sortOrder?: unknown } =>
-            !!r && typeof r === "object" && typeof (r as any).documentType === "string")
-          .map(r => ({
-            documentType: r.documentType as string,
-            mandatory: !!r.mandatory,
-            sortOrder: typeof (r as any).sortOrder === "number" ? (r as any).sortOrder : undefined,
-          }));
-      } catch {
-        return [];
-      }
+      // Use the public endpoint so this hook also resolves doc requirements
+      // for non-logged-in visitors. Errors deliberately propagate to the
+      // caller: an unknown requirement set must fail closed, not become an
+      // empty/fallback checklist.
+      const res = await customFetch(`${BASE_URL}/api/public/programs/${programId}/document-requirements`) as unknown;
+      if (!Array.isArray(res)) throw new Error("Invalid document requirements response");
+      return res
+        .filter((r): r is { documentType: unknown; mandatory: unknown; sortOrder?: unknown } =>
+          !!r && typeof r === "object" && typeof (r as any).documentType === "string")
+        .map(r => ({
+          documentType: r.documentType as string,
+          mandatory: !!r.mandatory,
+          sortOrder: typeof (r as any).sortOrder === "number" ? (r as any).sortOrder : undefined,
+        }));
     },
     enabled: !!programId,
     staleTime: 60_000,

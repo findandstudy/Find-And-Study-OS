@@ -25,6 +25,8 @@ import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isP
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { callerOwnsObject } from "../lib/objectAuthz";
+import { checkMandatoryDocs, checkMandatoryDocsForStudent } from "../lib/mandatoryDocs";
+import { getDocLabel } from "../lib/docNaming";
 
 const router: IRouter = Router();
 
@@ -1107,6 +1109,36 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const submission = embedSubmissions.length > 0 ? embedSubmissions[0] : null;
   const aiData: Record<string, any> = (submission?.aiExtractedData as Record<string, any>) || {};
 
+  // A lead is not converted into a student/application until every Mandatory
+  // document configured for the selected program + degree is present. The
+  // document rows already belong to the lead at this point, so a failed gate
+  // leaves the funnel exactly where staff can continue collecting files.
+  if (submission?.programId) {
+    const leadDocs = await db
+      .select({ type: documentsTable.type })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.leadId, lead.id),
+        isNull(documentsTable.deletedAt),
+        or(isNull(documentsTable.status), ne(documentsTable.status, "rejected")),
+      ));
+    const docStatus = await checkMandatoryDocs(
+      submission.programId,
+      leadDocs.map((d) => String(d.type || "")).filter(Boolean),
+    );
+    if (docStatus.missing.length > 0) {
+      const missingDocLabels = docStatus.missing.map(getDocLabel);
+      res.status(422).json({
+        error: `Mandatory documents are missing: ${missingDocLabels.join(", ")}`,
+        code: "LEAD_MANDATORY_DOCS_REQUIRED",
+        missingDocTypes: docStatus.missing,
+        missingDocLabels,
+        leadId: lead.id,
+      });
+      return;
+    }
+  }
+
   const s = (v: any) => (v && v !== "null" && v !== "N/A") ? String(v) : null;
 
   const studentValues: any = {
@@ -1232,6 +1264,14 @@ async function createApplicationFromSubmission(studentId: number, submission: an
     const [existingApp] = await db.select().from(applicationsTable)
       .where(and(eq(applicationsTable.studentId, studentId), eq(applicationsTable.programId, programId)));
     if (existingApp) return;
+
+    const docStatus = await checkMandatoryDocsForStudent(program.id, studentId, program.degree);
+    if (docStatus.missing.length > 0) {
+      console.warn(
+        `[LEAD-CONVERT] Application creation blocked for student #${studentId}; missing mandatory docs: ${docStatus.missing.join(",")}`,
+      );
+      return;
+    }
 
     const [studentRec] = await db.select({
       assignedToId: studentsTable.assignedToId, agentId: studentsTable.agentId,

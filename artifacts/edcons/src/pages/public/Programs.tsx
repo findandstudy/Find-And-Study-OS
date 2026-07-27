@@ -447,14 +447,18 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
     return () => { cancelled = true; };
   }, [open, isLoggedInStudent, user?.id]);
 
-  // Pull program-specific document requirements from the catalog. Falls
-  // back to the legacy degree-level list only when the program has no
-  // requirements configured (so unconfigured programs still show
-  // something instead of an empty list).
-  const { data: programReqs = [], isFetched: programReqsFetched } = useProgramDocRequirements(program?.id);
+  // Pull the effective program+degree document policy from the catalog.
+  // A configured empty list stays empty; a failed request is fail-closed.
+  const {
+    data: programReqs = [],
+    isFetched: programReqsFetched,
+    isLoading: programReqsLoading,
+    isError: programReqsError,
+  } = useProgramDocRequirements(program?.id);
   const resolveDocMeta = useResolveDocMeta();
   const docTypes: DocType[] = useMemo(() => {
-    if (programReqsFetched && programReqs.length > 0) {
+    if (programReqsError) return [];
+    if (program?.id && programReqsFetched) {
       return [...programReqs]
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
         .map(req => {
@@ -469,8 +473,8 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
           } as DocType;
         });
     }
-    return getDocTypesForDegree(program?.degree);
-  }, [programReqs, programReqsFetched, program?.degree, resolveDocMeta]);
+    return program?.id ? [] : getDocTypesForDegree(program?.degree);
+  }, [programReqs, programReqsFetched, programReqsError, program?.id, program?.degree, resolveDocMeta]);
   const requiredDocs = docTypes.filter(d => d.required);
   const reusableForProgram: Record<string, ExistingDocInfo> = {};
   for (const dt of docTypes) {
@@ -695,6 +699,13 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   }
 
   function handleSkipToReview() {
+    if (programReqsLoading || programReqsError) {
+      toast({
+        title: "Document requirements could not be verified. Please retry.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (missingRequired.length > 0) {
       toast({ title: t("apply.uploadRequired", { docs: missingRequired.map(d => t(d.labelKey)).join(", ") }), variant: "destructive" });
       return;
@@ -704,6 +715,14 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
   async function handleSubmit() {
     setEmailError(null);
+
+    if (programReqsLoading || programReqsError) {
+      toast({
+        title: "Document requirements could not be verified. Please retry.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.phoneCode || !form.motherName || !form.fatherName || !form.nationality || !form.gender) {
       toast({ title: t("apply.fillRequiredFields"), variant: "destructive" });
@@ -931,6 +950,11 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
             </div>
 
             <p className="text-[11px] text-muted-foreground">{FILE_UPLOAD_HELP_TEXT}</p>
+            {programReqsError && (
+              <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-xs text-rose-700 dark:text-rose-300">
+                Document requirements could not be verified. Please retry.
+              </div>
+            )}
             {isLoggedInStudent && reusedCount > 0 && (
               <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
@@ -987,7 +1011,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
             <div className="flex gap-3">
               {newUploadsCount > 0 && (
-                <Button onClick={analyzeDocuments} className="flex-1 rounded-xl gap-2" disabled={missingRequired.length > 0}>
+                <Button onClick={analyzeDocuments} className="flex-1 rounded-xl gap-2" disabled={missingRequired.length > 0 || programReqsLoading || programReqsError}>
                   <Sparkles className="w-4 h-4" /> {t("apply.analyzeWithAi")}
                 </Button>
               )}
@@ -995,7 +1019,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                 variant={newUploadsCount > 0 ? "ghost" : "default"}
                 onClick={handleSkipToReview}
                 className={newUploadsCount > 0 ? "rounded-xl" : "flex-1 rounded-xl gap-2"}
-                disabled={missingRequired.length > 0}
+                disabled={missingRequired.length > 0 || programReqsLoading || programReqsError}
               >
                 {newUploadsCount > 0 ? t("apply.skipFillManually") : (<>{t("apply.continueToReview")} <ChevronRight className="w-4 h-4" /></>)}
               </Button>

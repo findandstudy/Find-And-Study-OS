@@ -19,7 +19,7 @@ import {
   academicFieldsForLevel,
   type EducationLevel,
 } from "@workspace/db";
-import { normalizeGpaTo100 } from "./gpaNormalize";
+import { normalizeGpaEvidenceTo100 } from "./gpaNormalize";
 
 export const EDUCATION_LEVEL_VALUES = ["high_school", "bachelor", "master"] as const;
 
@@ -100,7 +100,7 @@ function normalizeRecord(rec: AiEducationRecord): EducationRecordOutput {
   let gpaScale: number | null = null;
   if (rec.gpa != null && String(rec.gpa).trim() !== "") {
     const raw = String(rec.gpa).trim();
-    const pct = normalizeGpaTo100(raw);
+    const pct = normalizeGpaEvidenceTo100(raw);
     if (!isNaN(pct)) {
       // Portal compatibility (SIT/Zoho rejects decimal GPA): always an
       // INTEGER percentage 0–100. Original kept in gpaRaw.

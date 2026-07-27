@@ -1890,12 +1890,23 @@ export default function ApplicationsPage() {
       const skippedArr: any[] = Array.isArray(d.skipped) ? d.skipped : [];
       const noAdapterN = skippedArr.filter((s) => s.reason === "NO_PORTAL").length;
       const alreadyQueuedN = skippedArr.filter((s) => s.reason === "ALREADY_QUEUED").length;
+      const missingDocs = skippedArr.filter((s) => s.reason === "MISSING_MANDATORY_DOCUMENTS");
       const descParts: string[] = [];
       if (noAdapterN > 0) descParts.push(t("portalAutomation.bulkRun.noAdapterNote", { count: noAdapterN }));
       if (alreadyQueuedN > 0) descParts.push(t("portalAutomation.bulkRun.alreadyQueuedNote", { count: alreadyQueuedN }));
+      if (missingDocs.length > 0) {
+        const labels = Array.from(new Set(
+          missingDocs.flatMap((s: any) => Array.isArray(s.missingDocLabels) ? s.missingDocLabels : []),
+        ));
+        descParts.push(
+          `${missingDocs.length} application(s) stayed out of the queue because mandatory documents are missing` +
+          (labels.length > 0 ? `: ${labels.join(", ")}` : ""),
+        );
+      }
       toast({
         title: t("portalAutomation.bulkRun.queuedToast", { count: queuedN }),
         description: descParts.length > 0 ? descParts.join(" · ") : undefined,
+        variant: queuedN === 0 && missingDocs.length > 0 ? "destructive" : undefined,
       });
     } catch {
       toast({ title: t("portalAutomation.bulkRun.submitError"), variant: "destructive" });

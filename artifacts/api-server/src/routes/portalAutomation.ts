@@ -53,6 +53,8 @@ import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import { transliterateToLatin } from "../lib/textNormalize";
+import { checkMandatoryDocsForApplication, checkMandatoryDocsForStudent } from "../lib/mandatoryDocs.js";
+import { getDocLabel } from "../lib/docNaming.js";
 import { getValidated, validate } from "../middlewares/validate";
 import {
   claimById,
@@ -67,6 +69,7 @@ import {
   resolveNationalityExclusion,
   getExperimentalExcludedUniversityKeys,
   type ClaimedSubmission,
+  getApplicationMandatoryDocumentStatus,
 } from "@workspace/portal-runner";
 import { batchPortalCredentialKeys, resolvePortalCreds, checkHasPortalCredentials } from "../lib/portalCreds.js";
 import { reconcilePortalUniversityCrmLinks } from "../lib/portalUniversityLinker.js";
@@ -121,6 +124,17 @@ router.post(
 
     if (!app) {
       res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+
+    const docStatus = await checkMandatoryDocsForApplication(app.id);
+    if (docStatus && docStatus.missing.length > 0) {
+      res.status(422).json({
+        error: "MISSING_MANDATORY_DOCUMENTS",
+        message: "Mandatory documents must be uploaded before portal automation can run.",
+        missingDocTypes: docStatus.missing,
+        missingDocLabels: docStatus.missing.map(getDocLabel),
+      });
       return;
     }
 
@@ -234,6 +248,15 @@ router.post(
         res.status(400).json({
           error: "NO_PORTAL",
           message: "No active portal university matches this application",
+        });
+        return;
+      }
+      if (only?.reason === "MISSING_MANDATORY_DOCUMENTS") {
+        res.status(422).json({
+          error: "MISSING_MANDATORY_DOCUMENTS",
+          message: "Mandatory documents must be uploaded before portal automation can run.",
+          missingDocTypes: only.missingDocTypes ?? [],
+          missingDocLabels: only.missingDocLabels ?? [],
         });
         return;
       }
@@ -714,6 +737,24 @@ router.post(
       return;
     }
 
+    const [retryTarget] = await db
+      .select({ applicationId: portalSubmissionsTable.applicationId })
+      .from(portalSubmissionsTable)
+      .where(eq(portalSubmissionsTable.id, id))
+      .limit(1);
+    const docStatus = retryTarget
+      ? await checkMandatoryDocsForApplication(retryTarget.applicationId)
+      : null;
+    if (docStatus && docStatus.missing.length > 0) {
+      res.status(422).json({
+        error: "MISSING_MANDATORY_DOCUMENTS",
+        message: "Mandatory documents must be uploaded before retrying portal automation.",
+        missingDocTypes: docStatus.missing,
+        missingDocLabels: docStatus.missing.map(getDocLabel),
+      });
+      return;
+    }
+
     await db
       .update(portalSubmissionsTable)
       .set({
@@ -811,6 +852,15 @@ async function runWithTimeout(
   workerId: string,
   timeoutMs = INLINE_TIMEOUT_MS,
 ): Promise<ProcessSingleResult> {
+  const mandatoryDocs = await getApplicationMandatoryDocumentStatus(sub.applicationId);
+  if (!mandatoryDocs || mandatoryDocs.missing.length > 0) {
+    const reason = mandatoryDocs
+      ? `MISSING_MANDATORY_DOCUMENTS: ${mandatoryDocs.missing.join(", ")}`
+      : `MISSING_MANDATORY_DOCUMENTS: application ${sub.applicationId} not found`;
+    await writebackResult(sub.id, null, reason, workerId);
+    return { id: sub.id, status: "failed", error: reason };
+  }
+
   const hbInterval = setInterval(() => {
     heartbeat(sub.id, workerId).catch(() => {});
   }, 20_000);
@@ -1239,7 +1289,10 @@ router.post(
     const { ids } = getValidated<BulkIdsSchemas>(req).body;
 
     const eligible = await db
-      .select({ id: portalSubmissionsTable.id })
+      .select({
+        id: portalSubmissionsTable.id,
+        applicationId: portalSubmissionsTable.applicationId,
+      })
       .from(portalSubmissionsTable)
       .where(and(
         inArray(portalSubmissionsTable.id, ids),
@@ -1250,7 +1303,22 @@ router.post(
           eq(portalSubmissionsTable.status, "dry_run"),
         ),
       ));
-    const eligibleIds = eligible.map((r) => r.id);
+    const docChecks = await Promise.all(
+      eligible.map(async (row) => ({
+        row,
+        status: await checkMandatoryDocsForApplication(row.applicationId),
+      })),
+    );
+    const eligibleIds = docChecks
+      .filter(({ status }) => status !== null && status.missing.length === 0)
+      .map(({ row }) => row.id);
+    const missingMandatory = docChecks
+      .filter(({ status }) => status !== null && status.missing.length > 0)
+      .map(({ row, status }) => ({
+        id: row.id,
+        missingDocTypes: status!.missing,
+        missingDocLabels: status!.missing.map(getDocLabel),
+      }));
 
     if (eligibleIds.length > 0) {
       await db
@@ -1279,6 +1347,7 @@ router.post(
       retried: eligibleIds.length,
       ids: eligibleIds,
       skipped: ids.filter((id) => !eligibleIds.includes(id)),
+      missingMandatory,
     });
   },
 );
@@ -1414,7 +1483,13 @@ const applyToAllBodySchema = z.object({
 });
 type ApplyToAllSchemas = { body: typeof applyToAllBodySchema };
 
-type ApplyToAllOutcome = "queued" | "excluded" | "no-program" | "duplicate" | "failed";
+type ApplyToAllOutcome =
+  | "queued"
+  | "excluded"
+  | "no-program"
+  | "missing-docs"
+  | "duplicate"
+  | "failed";
 
 interface ApplyToAllItem {
   universityKey: string;
@@ -1612,6 +1687,21 @@ async function fanOutApplicationToUniversities(
         continue;
       }
       const program = candidatePrograms.find((p) => String(p.id) === matched.match.id)!;
+
+      const docStatus = await checkMandatoryDocsForStudent(
+        program.id,
+        srcApp.studentId,
+        program.degree,
+      );
+      if (docStatus.missing.length > 0) {
+        results.push({
+          universityKey: uni.universityKey,
+          universityName: uni.universityName,
+          outcome: "missing-docs",
+          message: docStatus.missing.map(getDocLabel).join(", "),
+        });
+        continue;
+      }
 
       // --- Dedup + reuse/create application, then dedup + enqueue submission.
       // Serialize both with transaction-scoped Postgres advisory locks

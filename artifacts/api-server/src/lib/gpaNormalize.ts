@@ -15,10 +15,14 @@
  */
 export function normalizeGpaTo100(raw: string | null | undefined): number {
   if (raw == null) return NaN;
-  const cleaned = String(raw).replace(/\([^)]*\)/g, "").trim();
+  const cleaned = String(raw)
+    .replace(/\([^)]*\)/g, "")
+    .trim();
   if (!cleaned) return NaN;
 
-  const fraction = cleaned.match(/(-?\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)/);
+  const fraction = cleaned.match(
+    /(-?\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)/,
+  );
   if (fraction) {
     const num = parseFloat(fraction[1].replace(",", "."));
     const den = parseFloat(fraction[2].replace(",", "."));
@@ -37,4 +41,38 @@ export function normalizeGpaTo100(raw: string | null | undefined): number {
   if (value <= 10) return (value / 10) * 100;
   if (value <= 20) return (value / 20) * 100;
   return value;
+}
+
+/**
+ * Strict variant for document evidence. A score above 100 is only meaningful
+ * when the source includes its denominator (for example 955/1200). This avoids
+ * turning an OCR-extracted numerator into a fake 100%.
+ */
+export function normalizeGpaEvidenceTo100(
+  raw: string | null | undefined,
+): number {
+  if (raw == null) return NaN;
+  const cleaned = String(raw)
+    .replace(/\([^)]*\)/g, "")
+    .trim();
+  if (!cleaned) return NaN;
+
+  const hasExplicitScale = /-?\d+(?:[.,]\d+)?\s*\/\s*\d+(?:[.,]\d+)?/.test(
+    cleaned,
+  );
+  const percentageMarked = cleaned.includes("%");
+  const result = normalizeGpaTo100(cleaned);
+  if (!Number.isFinite(result) || result < 0 || result > 100) return NaN;
+
+  const single = cleaned.match(/-?\d+(?:[.,]\d+)?/);
+  const rawValue = single ? Number(single[0].replace(",", ".")) : NaN;
+  if (
+    !hasExplicitScale &&
+    !percentageMarked &&
+    Number.isFinite(rawValue) &&
+    rawValue > 100
+  ) {
+    return NaN;
+  }
+  return result;
 }

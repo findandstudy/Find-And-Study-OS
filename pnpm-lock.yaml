@@ -907,6 +907,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../db
+      '@workspace/doc-equivalence':
+        specifier: workspace:*
+        version: link:../doc-equivalence
       '@workspace/object-storage':
         specifier: workspace:*
         version: link:../object-storage

@@ -11,8 +11,14 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, applicationsTable, portalSubmissionsTable } from "@workspace/db";
 import { resolvePortalRouting } from "./portalAutoTrigger.js";
+import { checkMandatoryDocsForApplication } from "./mandatoryDocs.js";
+import { getDocLabel } from "./docNaming.js";
 
-export type PortalEnqueueSkipReason = "NOT_FOUND" | "NO_PORTAL" | "ALREADY_QUEUED";
+export type PortalEnqueueSkipReason =
+  | "NOT_FOUND"
+  | "NO_PORTAL"
+  | "ALREADY_QUEUED"
+  | "MISSING_MANDATORY_DOCUMENTS";
 
 export interface PortalEnqueueQueuedRow {
   applicationId: number;
@@ -24,6 +30,8 @@ export interface PortalEnqueueSkippedRow {
   applicationId: number;
   reason: PortalEnqueueSkipReason;
   submissionId?: number;
+  missingDocTypes?: string[];
+  missingDocLabels?: string[];
 }
 
 export interface PortalEnqueueResult {
@@ -71,6 +79,17 @@ export async function enqueuePortalSubmissions(opts: {
     const app = appMap.get(appId);
     if (!app) {
       skipped.push({ applicationId: appId, reason: "NOT_FOUND" });
+      continue;
+    }
+
+    const docStatus = await checkMandatoryDocsForApplication(appId);
+    if (docStatus && docStatus.missing.length > 0) {
+      skipped.push({
+        applicationId: appId,
+        reason: "MISSING_MANDATORY_DOCUMENTS",
+        missingDocTypes: docStatus.missing,
+        missingDocLabels: docStatus.missing.map(getDocLabel),
+      });
       continue;
     }
 

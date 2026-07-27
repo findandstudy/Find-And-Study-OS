@@ -10,6 +10,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { Loader2, Sparkles } from "lucide-react";
 import { toLatinUpper } from "@/lib/latin-utils";
 import type { SubmitReadyData } from "./InboxStudentTab";
+import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 
 interface InboxSubmitTabProps {
   conversationId: number;
@@ -64,12 +65,69 @@ export function InboxSubmitTab({
   }
 
   async function handleCreate() {
+    const missingMandatoryDocuments = findMissingMandatoryTypes(
+      data.mandatoryDocumentTypes,
+      new Set(data.providedDocumentTypes),
+    );
+    if (missingMandatoryDocuments.length > 0) {
+      toast({
+        title: t("inbox.studentTab.fillRequired"),
+        description: missingMandatoryDocuments.join(", "),
+        variant: "destructive",
+      });
+      return;
+    }
     if (!form.firstName.trim() || !form.lastName.trim()) {
       toast({ title: t("inbox.studentTab.fillRequired"), variant: "destructive" });
       return;
     }
+    if (!data.leadId) {
+      toast({
+        title: t("inbox.studentTab.createFailed"),
+        description: "A linked lead is required before student creation.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
     try {
+      // Persist chat attachments on the lead BEFORE creating the student. This
+      // keeps the workflow at Lead when a mandatory file cannot be saved and
+      // lets the existing lead→student match adopt the verified documents.
+      const persistedBeforeCreate = new Set(data.persistedDocumentTypes);
+      for (const [docType, att] of Object.entries(data.staging)) {
+        try {
+          await customFetch(
+            `/api/inbox/conversations/${conversationId}/messages/${att.msgId}/attachments/${att.attachIdx}/save-as-document`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ownerType: "lead",
+                ownerId: data.leadId,
+                documentType: docType,
+              }),
+            },
+          );
+          persistedBeforeCreate.add(docType);
+        } catch (docErr: any) {
+          const body = docErr?.data ?? docErr?.body;
+          if (docErr?.status === 409 && body?.alreadySaved) {
+            persistedBeforeCreate.add(docType);
+          }
+        }
+      }
+
+      const missingAfterPersistence = findMissingMandatoryTypes(
+        data.mandatoryDocumentTypes,
+        persistedBeforeCreate,
+      );
+      if (missingAfterPersistence.length > 0) {
+        throw new Error(
+          `Mandatory documents could not be saved: ${missingAfterPersistence.join(", ")}`,
+        );
+      }
+
       const s1 = form.school1.trim();
       const s2 = form.school2.trim();
       const schoolInfo = isPhd && s2 ? [s1, s2].filter(Boolean).join(" | ") : s1 || null;
