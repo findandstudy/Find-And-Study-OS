@@ -1630,7 +1630,7 @@ router.post(
     const id = parseInt(String(req.params.id), 10);
     const { content, attachments: bodyAttachments, replyToMessageId } = req.body as {
       content: string;
-      attachments?: Array<{ url: string; type?: string; name?: string }>;
+      attachments?: Array<{ url: string; type?: string; name?: string; voiceNote?: boolean }>;
       replyToMessageId?: number;
     };
     const replyToId: number | null = (typeof replyToMessageId === "number" && replyToMessageId > 0) ? replyToMessageId : null;
@@ -2505,6 +2505,7 @@ router.delete(
   async (req, res): Promise<void> => {
     const templateName = String(req.params.templateName || "").trim();
     const channelAccountId = req.query.channelAccountId ? parseInt(String(req.query.channelAccountId), 10) : undefined;
+    const localTemplateId = req.query.localTemplateId ? parseInt(String(req.query.localTemplateId), 10) : undefined;
     if (!templateName) {
       res.status(400).json({ error: "templateName is required" });
       return;
@@ -2519,12 +2520,30 @@ router.delete(
       res.status(502).json({ error: outcome.error || "Failed to delete WhatsApp template from Zernio" });
       return;
     }
-    // Also remove the local message_templates record so it disappears from selectors.
-    await db
-      .delete(messageTemplatesTable)
-      .where(eq(messageTemplatesTable.externalTemplateName, templateName));
-    logAudit(req.user!.id, "delete_whatsapp_template", "message_template", undefined, { name: templateName }, req.ip);
-    res.json({ ok: true });
+    // Also remove the exact local cache record. A Zernio 404 is treated as a
+    // successful stale-cache cleanup, while all other remote failures remain
+    // fail-closed and never hide a template that may still exist remotely.
+    if (Number.isInteger(localTemplateId) && (localTemplateId as number) > 0) {
+      await db
+        .delete(messageTemplatesTable)
+        .where(and(
+          eq(messageTemplatesTable.id, localTemplateId as number),
+          eq(messageTemplatesTable.externalTemplateName, templateName),
+        ));
+    } else {
+      await db
+        .delete(messageTemplatesTable)
+        .where(eq(messageTemplatesTable.externalTemplateName, templateName));
+    }
+    await logAudit(
+      req.user!.id,
+      "delete_whatsapp_template",
+      "message_template",
+      Number.isInteger(localTemplateId) ? localTemplateId : undefined,
+      { name: templateName, remoteNotFound: outcome.notFound === true },
+      req.ip,
+    );
+    res.json({ ok: true, remoteNotFound: outcome.notFound === true });
   },
 );
 

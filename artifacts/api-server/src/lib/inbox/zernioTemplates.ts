@@ -45,9 +45,13 @@ function countVariables(text: string): number {
 }
 
 function normalizeStatus(raw: string | undefined | null): string {
-  const s = String(raw || "").toLowerCase();
+  const s = String(raw || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (s === "pending_deletion" || s.includes("pending_delet")) return "pending_deletion";
+  if (s === "in_appeal" || s === "appeal") return "in_appeal";
   if (s.includes("approve")) return "approved";
   if (s.includes("reject")) return "rejected";
+  if (s.includes("pause")) return "paused";
+  if (s.includes("disable")) return "disabled";
   if (s.includes("pending") || s.includes("review") || s.includes("submitted")) return "pending";
   return s || "unknown";
 }
@@ -186,6 +190,8 @@ export async function createZernioWhatsAppTemplate(
 
 export interface ZernioTemplateDeleteOutcome {
   ok: boolean;
+  /** True when Zernio no longer has the template and the local cache is stale. */
+  notFound?: boolean;
   error?: string;
 }
 
@@ -208,6 +214,15 @@ export async function deleteZernioWhatsAppTemplate(
       let data: any = {};
       try { data = JSON.parse(bodyText); } catch { /* non-JSON */ }
       console.error(`[ZERNIO] delete template failed (${resp.status}):`, bodyText.slice(0, 600));
+      const remoteMessage = String(data?.error || data?.message || bodyText).toLowerCase();
+      const isMissingRemote =
+        resp.status === 404 ||
+        remoteMessage.includes("not found") ||
+        remoteMessage.includes("does not exist") ||
+        remoteMessage.includes("unknown template");
+      if (isMissingRemote) {
+        return { ok: true, notFound: true };
+      }
       return { ok: false, error: data?.error || data?.message || `Zernio template delete failed (${resp.status}): ${bodyText.slice(0, 200)}` };
     }
     return { ok: true };

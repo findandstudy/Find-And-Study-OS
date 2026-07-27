@@ -33,6 +33,18 @@ const objectStorageService = new ObjectStorageService();
 const UPLOAD_LIMIT = 30;
 const UPLOAD_WINDOW_MS = 15 * 60 * 1000;
 
+const INBOX_MEDIA_RULES: Record<string, { extensions: Set<string>; maxBytes: number }> = {
+  "image/jpeg": { extensions: new Set(["jpg", "jpeg"]), maxBytes: 5 * 1024 * 1024 },
+  "image/png": { extensions: new Set(["png"]), maxBytes: 5 * 1024 * 1024 },
+  "video/mp4": { extensions: new Set(["mp4"]), maxBytes: 16 * 1024 * 1024 },
+  "video/3gpp": { extensions: new Set(["3gp", "3gpp"]), maxBytes: 16 * 1024 * 1024 },
+  "audio/mpeg": { extensions: new Set(["mp3"]), maxBytes: 16 * 1024 * 1024 },
+  "audio/ogg": { extensions: new Set(["ogg", "opus"]), maxBytes: 16 * 1024 * 1024 },
+  "audio/amr": { extensions: new Set(["amr"]), maxBytes: 16 * 1024 * 1024 },
+  "audio/aac": { extensions: new Set(["aac"]), maxBytes: 16 * 1024 * 1024 },
+  "audio/mp4": { extensions: new Set(["m4a"]), maxBytes: 16 * 1024 * 1024 },
+};
+
 router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
   const userId = req.user!.id;
   const allowed = await checkAndIncrementRateLimit(`upload:${userId}`, UPLOAD_LIMIT, UPLOAD_WINDOW_MS);
@@ -54,6 +66,7 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
     // to 25MB) — admin-only, gated by prefix `staff-documents/{userId}/`.
     // Generic uploads still go through the global validateUploadedFile policy.
     const isStaffDoc = !!prefix && /^staff-documents\/\d+\/?$/.test(prefix);
+    const isInboxUpload = prefix === "inbox" || prefix?.startsWith("inbox/");
     if (isStaffDoc) {
       const role = (req.user as { role?: string } | undefined)?.role;
       if (role !== "super_admin" && role !== "admin") {
@@ -74,6 +87,20 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
       }
       if (size > STAFF_DOC_MAX) {
         res.status(413).json({ error: "Dosya boyutu 25MB sınırını aşıyor." });
+        return;
+      }
+    } else if (isInboxUpload && INBOX_MEDIA_RULES[contentType.toLowerCase()]) {
+      const normalizedContentType = contentType.toLowerCase();
+      const rule = INBOX_MEDIA_RULES[normalizedContentType];
+      const extension = nodePath.extname(name).slice(1).toLowerCase();
+      if (!extension || !rule.extensions.has(extension)) {
+        res.status(400).json({ error: "File extension does not match the selected inbox media type" });
+        return;
+      }
+      if (size <= 0 || size > rule.maxBytes) {
+        res.status(413).json({
+          error: `Inbox media exceeds the ${Math.round(rule.maxBytes / (1024 * 1024))}MB limit`,
+        });
         return;
       }
     } else {
@@ -160,16 +187,34 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
     // (portal adapters, /api/documents/:id/file) sees an already-small file.
     let body: Buffer = rawBody;
     let finalContentType = contentType;
-    try {
-      const processed = await processUpload(rawBody, nodePath.basename(relPath), contentType);
-      body = Buffer.from(processed.buffer);
-      finalContentType = processed.mime;
-    } catch (err) {
-      if (err instanceof UploadTooLargeError) {
-        res.status(413).json({ error: err.message });
-        return;
+    const localInboxMediaRule = INBOX_MEDIA_RULES[contentType.toLowerCase()];
+    const isAudioOrVideo = contentType.startsWith("audio/") || contentType.startsWith("video/");
+    if (isAudioOrVideo && !localInboxMediaRule) {
+      res.status(400).json({ error: "Unsupported inbox media type" });
+      return;
+    }
+    if (localInboxMediaRule && rawBody.length > localInboxMediaRule.maxBytes) {
+      res.status(413).json({
+        error: `Inbox media exceeds the ${Math.round(localInboxMediaRule.maxBytes / (1024 * 1024))}MB limit`,
+      });
+      return;
+    }
+
+    // Inbox audio/video is already constrained by the exact MIME allowlist
+    // above. Passing it through the document compressor would apply the
+    // unrelated 15MB document cap and reject otherwise valid WhatsApp media.
+    if (!isAudioOrVideo) {
+      try {
+        const processed = await processUpload(rawBody, nodePath.basename(relPath), contentType);
+        body = Buffer.from(processed.buffer);
+        finalContentType = processed.mime;
+      } catch (err) {
+        if (err instanceof UploadTooLargeError) {
+          res.status(413).json({ error: err.message });
+          return;
+        }
+        console.error("[local-upload] processUpload failed, storing original:", err);
       }
-      console.error("[local-upload] processUpload failed, storing original:", err);
     }
 
     await fsPromises.writeFile(localPath, body);

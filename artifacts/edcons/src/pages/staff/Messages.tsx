@@ -35,13 +35,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useOggVoiceRecorder } from "@/hooks/use-ogg-voice-recorder";
 import {
   Search, Send, MessageCircle, Plus, Users, Megaphone, Mail,
   MessageSquare, Smartphone, Hash, ArrowLeft, Paperclip, ChevronDown, Star, Bell,
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
   Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical,
-  UserPlus, FilePlus2, SmilePlus, CornerUpLeft, Pin, Forward,
+  UserPlus, FilePlus2, SmilePlus, CornerUpLeft, Pin, Forward, Mic, Square,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -96,6 +97,51 @@ interface UserResult {
   email: string;
   role: string;
   avatarUrl: string | null;
+}
+
+interface ComposerTemplate {
+  id: number;
+  name: string;
+  category: string;
+  content: string;
+  channel: string;
+  language: string;
+  isActive: boolean;
+  externalTemplateName?: string | null;
+  approvalStatus?: string | null;
+}
+
+const INBOX_MEDIA_ACCEPT = [
+  "image/jpeg", "image/png",
+  "video/mp4", "video/3gpp",
+  "audio/mpeg", "audio/ogg", "audio/amr", "audio/aac", "audio/mp4",
+  ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+].join(",");
+
+const INBOX_MEDIA_LIMITS: Record<string, number> = {
+  "image/jpeg": 5 * 1024 * 1024,
+  "image/png": 5 * 1024 * 1024,
+  "video/mp4": 16 * 1024 * 1024,
+  "video/3gpp": 16 * 1024 * 1024,
+  "audio/mpeg": 16 * 1024 * 1024,
+  "audio/ogg": 16 * 1024 * 1024,
+  "audio/amr": 16 * 1024 * 1024,
+  "audio/aac": 16 * 1024 * 1024,
+  "audio/mp4": 16 * 1024 * 1024,
+};
+
+function inboxMediaValidationError(file: File): string | null {
+  const mediaLimit = INBOX_MEDIA_LIMITS[file.type.toLowerCase()];
+  if (mediaLimit != null) {
+    if (file.size <= 0) return `${file.name}: empty file`;
+    if (file.size > mediaLimit) {
+      return `${file.name}: maximum ${Math.round(mediaLimit / (1024 * 1024))}MB`;
+    }
+    return null;
+  }
+  // The API remains the final authority for document extensions/MIME pairs.
+  if (/\.(pdf|doc|docx|xls|xlsx|ppt|pptx)$/i.test(file.name)) return null;
+  return `${file.name}: unsupported file type`;
 }
 
 const channelIcon: Record<string, any> = {
@@ -346,6 +392,9 @@ function InboxTab() {
   const [studentLinking, setStudentLinking] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const [tplSending, setTplSending] = useState(false);
+  const [tplInitialId, setTplInitialId] = useState<number | null>(null);
+  const [composerTemplates, setComposerTemplates] = useState<ComposerTemplate[]>([]);
+  const [slashActiveIndex, setSlashActiveIndex] = useState(0);
   const [newWaConvOpen, setNewWaConvOpen] = useState(false);
   const [newWaConvSearch, setNewWaConvSearch] = useState("");
   const [newWaConvResults, setNewWaConvResults] = useState<{ entityType: string; entityId: number; name: string; phone: string }[]>([]);
@@ -368,6 +417,65 @@ function InboxTab() {
   const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
   const emojiPaletteRef = useRef<HTMLDivElement>(null);
 
+  const addPendingFiles = useCallback((incoming: File[]) => {
+    const accepted: File[] = [];
+    const errors: string[] = [];
+    for (const file of incoming) {
+      const error = inboxMediaValidationError(file);
+      if (error) errors.push(error);
+      else accepted.push(file);
+    }
+    if (accepted.length > 0) {
+      setPendingFiles((prev) => [...prev, ...accepted].slice(0, 10));
+    }
+    if (errors.length > 0) {
+      toast({
+        title: "Some files could not be added",
+        description: errors.slice(0, 3).join("\n"),
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  const voiceRecorder = useOggVoiceRecorder(
+    useCallback((file: File) => addPendingFiles([file]), [addPendingFiles]),
+    useCallback((message: string) => {
+      toast({ title: "Voice message unavailable", description: message, variant: "destructive" });
+    }, [toast]),
+  );
+
+  const slashQuery = /^\/([^\n]*)$/.exec(reply)?.[1]?.trim().toLowerCase() ?? null;
+  const freeFormWindowOpen = !detail || !(
+    (detail.conversation.channel === "whatsapp" ||
+      detail.conversation.channel === "messenger" ||
+      detail.conversation.channel === "instagram") &&
+    !detail.withinWindow
+  );
+  const slashTemplates = useMemo(() => {
+    if (slashQuery === null) return [];
+    return composerTemplates
+      .filter((template) => {
+        const isApprovedExternal =
+          Boolean(template.externalTemplateName) &&
+          String(template.approvalStatus || "").toLowerCase() === "approved";
+        const isLocal = !template.externalTemplateName;
+        if (!template.isActive || (!isLocal && !isApprovedExternal)) return false;
+        if (isLocal && !freeFormWindowOpen) return false;
+        if (!slashQuery) return true;
+        return [
+          template.name,
+          template.externalTemplateName || "",
+          template.category,
+          template.content,
+        ].some((value) => value.toLowerCase().includes(slashQuery));
+      })
+      .slice(0, 8);
+  }, [composerTemplates, freeFormWindowOpen, slashQuery]);
+
+  useEffect(() => {
+    setSlashActiveIndex(0);
+  }, [slashQuery]);
+
   function handleChatDragEnter(e: React.DragEvent) {
     e.preventDefault();
     dragCounterRef.current++;
@@ -385,7 +493,7 @@ function InboxTab() {
     dragCounterRef.current = 0;
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files).filter((f) => f.size > 0);
-    if (files.length > 0) setPendingFiles((prev) => [...prev, ...files]);
+    if (files.length > 0) addPendingFiles(files);
   }
   // Sort order for the conversation list — persisted per user preference.
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">(() => {
@@ -523,6 +631,8 @@ function InboxTab() {
     setReply("");
     setNoteDraft("");
     setTaskDraft({ title: "", scheduledAt: "", notes: "" });
+    setPendingFiles([]);
+    voiceRecorder.cancel();
     // Reset thread pagination + scroll bookkeeping for the new conversation.
     setOlderMsgs([]);
     setHasMoreOlder(false);
@@ -530,6 +640,24 @@ function InboxTab() {
     atBottomRef.current = true;
     prevLastMsgIdRef.current = null;
   }, [selectedId, fetchDetail]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setComposerTemplates([]);
+      return;
+    }
+    let cancelled = false;
+    void customFetch("/api/message-templates?channel=whatsapp&activeOnly=true")
+      .then((response: any) => {
+        if (!cancelled) setComposerTemplates(response?.data || []);
+      })
+      .catch(() => {
+        if (!cancelled) setComposerTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
 
   // Live updates via Server-Sent Events. Refs let the long-lived EventSource
   // see the freshest selection / fetchers without churning the connection
@@ -837,7 +965,7 @@ function InboxTab() {
     }
   }
 
-  async function uploadFileForInbox(file: File): Promise<{ url: string; type: string; name: string } | null> {
+  async function uploadFileForInbox(file: File): Promise<{ url: string; type: string; name: string; voiceNote?: boolean } | null> {
     try {
       const urlRes = await customFetch("/api/storage/uploads/request-url", {
         method: "POST",
@@ -852,7 +980,8 @@ function InboxTab() {
         : file.type.startsWith("video/") ? "video"
         : file.type.startsWith("audio/") ? "audio"
         : "file";
-      return { url: publicUrl, type, name: file.name };
+      const isVoiceNote = type === "audio" && file.type === "audio/ogg" && file.name.startsWith("voice-note-");
+      return { url: publicUrl, type, name: file.name, ...(isVoiceNote ? { voiceNote: true } : {}) };
     } catch (err: any) {
       toast({ title: t("inbox.error.sendMediaFailed"), description: err?.message, variant: "destructive" });
       return null;
@@ -907,7 +1036,7 @@ function InboxTab() {
     setSending(true);
     setUploading(true);
     try {
-      const attachments: Array<{ url: string; type: string; name: string }> = [];
+      const attachments: Array<{ url: string; type: string; name: string; voiceNote?: boolean }> = [];
       for (const file of pendingFiles) {
         const r = await uploadFileForInbox(file);
         if (!r) { setSending(false); setUploading(false); return; }
@@ -1045,7 +1174,19 @@ function InboxTab() {
   };
 
   function openTemplateDialog() {
+    setTplInitialId(null);
     setTplOpen(true);
+  }
+
+  function chooseComposerTemplate(template: ComposerTemplate) {
+    if (template.externalTemplateName) {
+      setReply("");
+      setTplInitialId(template.id);
+      setTplOpen(true);
+    } else {
+      setReply(template.content);
+    }
+    setSlashActiveIndex(0);
   }
 
   async function sendTemplate(templateId: number, parameters: string[]) {
@@ -1060,6 +1201,7 @@ function InboxTab() {
       if (res?.simulated) toast({ title: t("messagesPage.templateSentSimulated") });
       else toast({ title: t("messagesPage.templateSent") });
       setTplOpen(false);
+      setTplInitialId(null);
       fetchDetail(selectedId);
     } finally {
       setTplSending(false);
@@ -1361,6 +1503,11 @@ function InboxTab() {
 
   // Safe non-null assertion: `conv` is only read inside the `!detail ? loader : (...)` JSX branch below.
   const conv = detail?.conversation!;
+  const metaReplyWindowClosed = Boolean(
+    detail &&
+    (conv?.channel === "whatsapp" || conv?.channel === "messenger" || conv?.channel === "instagram") &&
+    !detail.withinWindow
+  );
   const ext = detail?.externalContact;
   const linked = ext && (ext.leadId || ext.studentId || ext.agentId);
   // Student wins over lead (converted leads have both leadId and studentId set).
@@ -2234,27 +2381,98 @@ function InboxTab() {
                       type="file"
                       className="hidden"
                       multiple
+                      accept={INBOX_MEDIA_ACCEPT}
                       onChange={(e) => {
                         const files = Array.from(e.target.files ?? []);
-                        if (files.length > 0) setPendingFiles(prev => [...prev, ...files]);
+                        if (files.length > 0) addPendingFiles(files);
                         e.target.value = "";
                       }}
                     />
                     <div className="flex items-end gap-2">
-                      <Textarea
-                        value={reply}
-                        onChange={(e) => setReply(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            sendReply();
-                          }
-                        }}
-                        placeholder={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow ? (conv.channel === "whatsapp" ? t("messagesPage.outside24hUseTemplate") : t("messagesPage.outside24hReplyWindowMeta")) : t("messagesPage.replyPlaceholder")}
-                        rows={2}
-                        className="flex-1 rounded-lg text-sm"
-                        disabled={(conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow && pendingFiles.length === 0}
-                      />
+                      <div className="relative flex-1 min-w-0">
+                        {slashQuery !== null && (
+                          <div className="absolute bottom-[calc(100%+0.4rem)] left-0 right-0 z-30 max-h-72 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl">
+                            {slashTemplates.length === 0 ? (
+                              <p className="px-3 py-2 text-xs text-muted-foreground">
+                                No matching active template
+                              </p>
+                            ) : (
+                              slashTemplates.map((template, index) => (
+                                <button
+                                  key={template.id}
+                                  type="button"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => chooseComposerTemplate(template)}
+                                  className={cn(
+                                    "flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors",
+                                    index === slashActiveIndex ? "bg-primary/10" : "hover:bg-muted",
+                                  )}
+                                >
+                                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="flex items-center gap-2">
+                                      <span className="truncate text-sm font-medium">
+                                        /{template.externalTemplateName || template.name}
+                                      </span>
+                                      <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-[9px]">
+                                        {template.externalTemplateName ? "Approved" : "Quick reply"}
+                                      </Badge>
+                                    </span>
+                                    <span className="block truncate text-xs text-muted-foreground">
+                                      {template.content}
+                                    </span>
+                                  </span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                        <Textarea
+                          value={reply}
+                          onChange={(e) => setReply(e.target.value)}
+                          onPaste={(e) => {
+                            const pastedFiles = Array.from(e.clipboardData.items)
+                              .filter((item) => item.kind === "file")
+                              .map((item) => item.getAsFile())
+                              .filter((file): file is File => file !== null);
+                            if (pastedFiles.length > 0) {
+                              e.preventDefault();
+                              addPendingFiles(pastedFiles);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (slashQuery !== null && slashTemplates.length > 0) {
+                              if (e.key === "ArrowDown") {
+                                e.preventDefault();
+                                setSlashActiveIndex((prev) => (prev + 1) % slashTemplates.length);
+                                return;
+                              }
+                              if (e.key === "ArrowUp") {
+                                e.preventDefault();
+                                setSlashActiveIndex((prev) => (prev - 1 + slashTemplates.length) % slashTemplates.length);
+                                return;
+                              }
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                setReply("");
+                                return;
+                              }
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                chooseComposerTemplate(slashTemplates[slashActiveIndex] || slashTemplates[0]);
+                                return;
+                              }
+                            }
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              if (!metaReplyWindowClosed) sendReply();
+                            }
+                          }}
+                          placeholder={metaReplyWindowClosed ? (conv.channel === "whatsapp" ? t("messagesPage.outside24hUseTemplate") : t("messagesPage.outside24hReplyWindowMeta")) : t("messagesPage.replyPlaceholder")}
+                          rows={2}
+                          className="w-full rounded-lg text-sm"
+                        />
+                      </div>
                       <div className="flex flex-col gap-1">
                         <Button
                           size="icon"
@@ -2262,9 +2480,24 @@ function InboxTab() {
                           className="h-8 w-8 shrink-0"
                           title={t("inbox.compose.attach")}
                           onClick={() => fileInputRef.current?.click()}
+                          disabled={metaReplyWindowClosed || voiceRecorder.isRecording}
                         >
                           <Paperclip className="w-4 h-4" />
                         </Button>
+                        {conv.channel === "whatsapp" && voiceRecorder.isSupported && (
+                          <Button
+                            size="icon"
+                            variant={voiceRecorder.isRecording ? "destructive" : "ghost"}
+                            className="h-8 w-8 shrink-0"
+                            onClick={voiceRecorder.isRecording ? voiceRecorder.stop : voiceRecorder.start}
+                            disabled={metaReplyWindowClosed || sending || uploading}
+                            title={voiceRecorder.isRecording ? "Stop voice recording" : "Record voice message"}
+                          >
+                            {voiceRecorder.isRecording
+                              ? <Square className="w-3.5 h-3.5 fill-current" />
+                              : <Mic className="w-4 h-4" />}
+                          </Button>
+                        )}
                         {conv.channel === "whatsapp" && (
                           <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={openTemplateDialog} title={t("messagesPage.template")}>
                             <FileText className="w-4 h-4" />
@@ -2274,14 +2507,32 @@ function InboxTab() {
                       <Button
                         size="sm"
                         onClick={sendReply}
-                        disabled={sending || uploading || (reply.trim() === "" && pendingFiles.length === 0) || ((conv.channel === "whatsapp" || conv.channel === "messenger" || conv.channel === "instagram") && !detail.withinWindow && pendingFiles.length === 0)}
+                        disabled={sending || uploading || voiceRecorder.isRecording || (reply.trim() === "" && pendingFiles.length === 0) || metaReplyWindowClosed}
                         className="h-9 gap-1"
                       >
                         {(sending || uploading) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                         {t("inbox.send") || "Send"}
                       </Button>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">{t("inbox.compose.enterToSend")}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] text-muted-foreground">
+                        {t("inbox.compose.enterToSend")} · Type / for templates · Paste files with Ctrl/Cmd+V
+                      </p>
+                      {voiceRecorder.isRecording && (
+                        <div className="flex items-center gap-2 text-xs font-medium text-red-600">
+                          <span className="h-2 w-2 animate-pulse rounded-full bg-red-600" />
+                          {String(Math.floor(voiceRecorder.seconds / 60)).padStart(2, "0")}:
+                          {String(voiceRecorder.seconds % 60).padStart(2, "0")}
+                          <button
+                            type="button"
+                            onClick={voiceRecorder.cancel}
+                            className="underline underline-offset-2"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 }
                 noteDraft={noteDraft}
@@ -2683,7 +2934,11 @@ function InboxTab() {
 
       <WhatsAppTemplatePicker
         open={tplOpen}
-        onClose={() => setTplOpen(false)}
+        initialTemplateId={tplInitialId}
+        onClose={() => {
+          setTplOpen(false);
+          setTplInitialId(null);
+        }}
         onSend={sendTemplate}
         sending={tplSending}
       />
@@ -3702,7 +3957,7 @@ function TemplatesTab() {
   async function deleteWaTemplate(id: number, externalName: string) {
     setWaDeleting(true);
     try {
-      await customFetch(`/api/inbox/whatsapp-templates/${encodeURIComponent(externalName)}`, {
+      await customFetch(`/api/inbox/whatsapp-templates/${encodeURIComponent(externalName)}?localTemplateId=${id}`, {
         method: "DELETE",
       });
       setTemplates(prev => prev.filter(t => t.id !== id));
@@ -3754,11 +4009,15 @@ function TemplatesTab() {
   }
 
   function waStatusBadge(status?: string | null) {
-    const s = status || "unknown";
+    const s = String(status || "unknown").trim().toLowerCase().replace(/[\s-]+/g, "_");
     const styles: Record<string, string> = {
       approved: "bg-green-500/10 text-green-700",
       pending: "bg-amber-500/10 text-amber-700",
       rejected: "bg-red-500/10 text-red-700",
+      pending_deletion: "bg-orange-500/10 text-orange-700",
+      in_appeal: "bg-blue-500/10 text-blue-700",
+      paused: "bg-amber-500/10 text-amber-700",
+      disabled: "bg-red-500/10 text-red-700",
       unknown: "bg-gray-500/10 text-gray-600",
     };
     const labels: Record<string, string> = {
@@ -3767,9 +4026,12 @@ function TemplatesTab() {
       rejected: tx("messagesPage.waStatusRejected"),
       unknown: tx("messagesPage.waStatusUnknown"),
     };
+    const readableFallback = s.split("_").map((part) =>
+      part ? `${part[0].toUpperCase()}${part.slice(1)}` : ""
+    ).join(" ");
     return (
       <Badge variant="secondary" className={`text-[10px] h-5 ${styles[s] || styles.unknown}`}>
-        {labels[s] || labels.unknown}
+        {labels[s] || readableFallback || labels.unknown}
       </Badge>
     );
   }
@@ -4111,21 +4373,28 @@ function TemplatesTab() {
                     </button>
                     {waDeleteConfirm === t.id ? (
                       <div className="flex items-center gap-1">
-                        <button
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
                           onClick={() => t.externalTemplateName && deleteWaTemplate(t.id, t.externalTemplateName)}
                           disabled={waDeleting}
-                          className="p-1.5 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                          className="h-7 gap-1 px-2 text-xs"
                           title={tx("messagesPage.confirmDelete")}
                         >
                           {waDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                        </button>
-                        <button
+                          {tx("messagesPage.delete")}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
                           onClick={() => setWaDeleteConfirm(null)}
-                          className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground"
+                          className="h-7 px-2 text-xs"
                           title={tx("messagesPage.cancel")}
                         >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                          {tx("messagesPage.cancel")}
+                        </Button>
                       </div>
                     ) : (
                       <button

@@ -13,6 +13,8 @@ import { Search, FileText, Send, Loader2 } from "lucide-react";
 interface WhatsAppTemplatePickerProps {
   open: boolean;
   onClose: () => void;
+  /** Optional approved template to preselect (used by the composer slash menu). */
+  initialTemplateId?: number | null;
   /**
    * Called when the user clicks Send. The component handles loading state via
    * the `sending` prop — the caller should set it to true while the API call
@@ -22,7 +24,13 @@ interface WhatsAppTemplatePickerProps {
   sending?: boolean;
 }
 
-export function WhatsAppTemplatePicker({ open, onClose, onSend, sending }: WhatsAppTemplatePickerProps) {
+export function WhatsAppTemplatePicker({
+  open,
+  onClose,
+  initialTemplateId,
+  onSend,
+  sending,
+}: WhatsAppTemplatePickerProps) {
   const { t } = useI18n();
   const { toast } = useToast();
 
@@ -40,8 +48,24 @@ export function WhatsAppTemplatePicker({ open, onClose, onSend, sending }: Whats
     try {
       // Use /api/message-templates (DB) instead of /api/inbox/whatsapp-templates
       // (which calls Zernio API and fails with 400/502 outside of Templates tab context).
-      const r = await customFetch(`/api/message-templates?channel=whatsapp`);
-      setTemplates((r as any)?.data || []);
+      const r = await customFetch(`/api/message-templates?channel=whatsapp&activeOnly=true`);
+      const loaded = (r as any)?.data || [];
+      setTemplates(loaded);
+      if (initialTemplateId != null) {
+        const initial = loaded.find((tpl: any) =>
+          tpl.id === initialTemplateId &&
+          tpl.externalTemplateName &&
+          String(tpl.approvalStatus ?? tpl.status ?? "").toLowerCase() === "approved"
+        );
+        if (initial) {
+          const body = initial.content ?? initial.bodyText ?? "";
+          const count = Array.isArray(initial.variables)
+            ? initial.variables.length
+            : (initial.variableCount ?? (body.match(/\{\{\d+\}\}/g) || []).length);
+          setTplId(String(initial.id));
+          setTplVars(Array.from({ length: count }, () => ""));
+        }
+      }
     } catch {
       toast({ title: t("messagesPage.failedToLoadTemplates"), variant: "destructive" });
     } finally {
@@ -61,7 +85,7 @@ export function WhatsAppTemplatePicker({ open, onClose, onSend, sending }: Whats
       setTemplateQuery("");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, initialTemplateId]);
 
   function handleOpenChange(isOpen: boolean) {
     // Only reached via Dialog's own close gestures (Escape / overlay click).

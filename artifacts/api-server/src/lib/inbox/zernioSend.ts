@@ -17,6 +17,8 @@ export interface ZernioAttachment {
   url: string;
   type?: string;
   name?: string;
+  /** Render an OGG/Opus audio attachment as a WhatsApp push-to-talk bubble. */
+  voiceNote?: boolean;
 }
 
 export interface ZernioSendParams {
@@ -569,16 +571,24 @@ async function sendZernioAttachment(
 
   // ── Step 2: send-inbox-message via JSON ──────────────────────────────────
   const attachmentType = mimeToZernioAttachmentType(uploadData?.contentType || bytes.contentType);
-  const sendBody: Record<string, string> = {
+  const sendBody: Record<string, string | boolean> = {
     accountId: externalAccountId,
     attachmentUrl: publicUrl,
     attachmentType,
   };
+  if (attachmentType === "file" && name) {
+    sendBody.attachmentName = name;
+  }
+  if (attachmentType === "audio" && att.voiceNote) {
+    sendBody.voiceNote = true;
+  }
 
   console.log("[ZERNIO] send-attachment request:", JSON.stringify({
     messagesUrl,
     attachmentUrl: publicUrl,
     attachmentType,
+    attachmentName: sendBody.attachmentName,
+    voiceNote: sendBody.voiceNote,
     auth: `Bearer ${maskApiKey(apiKey)}`,
   }));
 
