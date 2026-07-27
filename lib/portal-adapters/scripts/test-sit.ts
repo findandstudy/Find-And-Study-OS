@@ -28,6 +28,7 @@ import {
   isAllowedUniversity,
   isSitMember,
   isLanguageCompatible,
+  isSitDocumentsStep,
 } from "../src/universities/sit/helpers.js";
 import {
   SIT_URLS,
@@ -79,6 +80,14 @@ test("GPA3 — number input rounds; empty/garbage → undefined", () => {
   assert.equal(normalizeGpa(undefined), undefined);
   assert.equal(normalizeGpa(null), undefined);
   assert.equal(normalizeGpa("not-a-grade"), undefined);
+});
+
+test("DOCSTEP — uploads require both Documents heading and upload affordance", () => {
+  assert.equal(isSitDocumentsStep("Documents", 1), true);
+  assert.equal(isSitDocumentsStep("Belgeler", 2), true);
+  assert.equal(isSitDocumentsStep("Personal Information", 3), false);
+  assert.equal(isSitDocumentsStep("Documents", 0), false);
+  assert.equal(isSitDocumentsStep("", 4), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -140,7 +149,8 @@ test("EDU1 — mapEducationLevel maps TR/EN to canonical labels", () => {
   assert.equal(mapEducationLevel("Ön Lisans"), "Associate");
   assert.equal(mapEducationLevel("Doktora"), "PhD");
   assert.equal(mapEducationLevel("PhD"), "PhD");
-  assert.equal(mapEducationLevel(""), "Bachelor");
+  assert.equal(mapEducationLevel(""), null);
+  assert.equal(mapEducationLevel("unknown"), null);
 });
 
 // ---------------------------------------------------------------------------

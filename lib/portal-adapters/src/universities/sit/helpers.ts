@@ -86,12 +86,24 @@ export function normalizeGpa(
 // CRM degree level → canonical SIT degree label.
 // The combobox matcher fuzzy-matches this against the live option text.
 // ---------------------------------------------------------------------------
-export function mapEducationLevel(level: string | undefined | null): string {
+export function mapEducationLevel(level: string | undefined | null): string | null {
   const f = fold(level ?? "");
   if (/doktora|phd|doctora|doctoral/.test(f)) return "PhD";
   if (/yukseklisans|yuksek lisans|master|graduate/.test(f)) return "Master";
   if (/onlisans|on lisans|associate/.test(f)) return "Associate";
-  return "Bachelor";
+  if (/lisans|bachelor|undergraduate/.test(f)) return "Bachelor";
+  return null;
+}
+
+export function isSitDocumentsStep(
+  heading: string | undefined | null,
+  uploadAffordanceCount: number,
+): boolean {
+  return (
+    /\b(documents?|uploads?|belgeler?|dosyalar?)\b/i.test(heading ?? "") &&
+    Number.isFinite(uploadAffordanceCount) &&
+    uploadAffordanceCount > 0
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -78,6 +78,7 @@ import {
   diagnosePortalSubmission,
   isDiagnosablePortalStatus,
 } from "../lib/portalAiGuardian.js";
+import { queuePortalLifecycleReview } from "../lib/portalLifecycleGuardian.js";
 
 const router: IRouter = Router();
 
@@ -2812,6 +2813,17 @@ export async function runPortalStatusSync(): Promise<{ checked: number; updated:
             `${prevPortalStatus ?? "?"} → ${result.status} (non-terminal, keeping status=submitted)`,
           );
         }
+
+        await queuePortalLifecycleReview({
+          submissionId: row.id,
+          applicationId: row.applicationId,
+          rawStatus: result.status,
+        }).catch((error) => {
+          console.warn(
+            `[portal-lifecycle] submission #${row.id} proposal failed:`,
+            error,
+          );
+        });
 
         updated++;
       } catch (err) {

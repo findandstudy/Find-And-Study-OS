@@ -12,8 +12,10 @@ import { fold } from "../../programMatch.js";
 import { SALESFORCE_SCHOOLS, type SalesforceSchoolConfig } from "./config.js";
 import {
   hasSalesforceCompletionProof,
+  inferSalesforceDocumentSlot,
   isOwnedSalesforceApplicant,
   normalizeSalesforceStage,
+  parseSalesforceStageMarker,
   salesforcePortalProgramName,
   type SalesforceStage,
 } from "./portalState.js";
@@ -225,6 +227,62 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           detail: `${cfg.label}: application already completed in portal`,
         };
       }
+      const tryResumeOwnedApplicant = async (): Promise<boolean> => {
+        if (!strictMappedPortal || !applicantPreflight.owned) return false;
+        await page
+          .goto(agencyUrl + "track-application", {
+            waitUntil: "domcontentloaded",
+            timeout: 60000,
+          })
+          .catch(() => {});
+        await page.waitForTimeout(7000);
+        const displayName = `${profile.firstName} ${profile.lastName}`.trim();
+        const search = page.getByPlaceholder(/search this list/i).first();
+        if (displayName && (await search.count())) {
+          await search.fill(displayName).catch(() => {});
+          await search.press("Enter").catch(() => {});
+          await page.waitForTimeout(3500);
+        }
+        const namePattern = new RegExp(
+          displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          "i",
+        );
+        const rows = page.locator("tr").filter({ hasText: namePattern });
+        if ((await rows.count().catch(() => 0)) !== 1) return false;
+        const row = rows.first();
+        const rowText = await row.innerText().catch(() => "");
+        const mailto =
+          (await row
+            .locator('a[href^="mailto:"]')
+            .first()
+            .getAttribute("href")
+            .catch(() => "")) || "";
+        if (
+          !isOwnedSalesforceApplicant({
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            email: profile.email,
+            rowName: rowText,
+            rowEmail: mailto,
+          })
+        ) {
+          return false;
+        }
+        const selectors = row.locator(
+          'input[type="radio"],input[type="checkbox"]',
+        );
+        if ((await selectors.count().catch(() => 0)) === 1) {
+          await selectors.first().check({ force: true }).catch(() => {});
+        }
+        const actions = page.getByRole("button", {
+          name: /complete application|continue application|edit application/i,
+        });
+        if ((await actions.count().catch(() => 0)) !== 1) return false;
+        await actions.first().click({ timeout: 6000 }).catch(() => {});
+        await page.waitForTimeout(4500);
+        return onWizard();
+      };
+      await tryResumeOwnedApplicant();
       for (let attempt = 0; attempt < 3 && !(await onWizard()); attempt++) await gotoAppForm();
       await page.waitForTimeout(2000);
 
@@ -248,12 +306,99 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           return false;
         }
       };
-      const heading = async (): Promise<string> => { try { return (await page.evaluate("(() => { var a=[]; document.querySelectorAll('h1,h2,legend,.slds-text-heading_medium').forEach(function(h){ if(h.offsetParent!==null) a.push((h.innerText||'').slice(0,24)); }); return a.join('|'); })()")) as string; } catch (e) { return Math.random().toString(); } };
-      const typeInto = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const loc = page.locator(sel); const cnt = await loc.count(); let t: any = null; for (let i = 0; i < cnt; i++) { if (await loc.nth(i).isVisible().catch(() => false)) { t = loc.nth(i); break; } } if (!t) return; await t.fill(String(v)).catch(() => {}); const __cur = await t.inputValue().catch(() => ""); if (__cur !== String(v)) { await t.click().catch(() => {}); await page.waitForTimeout(200); await t.fill("").catch(() => {}); await t.pressSequentially(String(v), { delay: 60 }).catch(() => {}); } await t.press("Tab").catch(() => {}); } catch (e) {} };
-      const fill = async (sel: string, v?: string | number) => { if (v === undefined || v === null || v === "") return; try { const l = page.locator(sel).first(); if ((await l.count()) && (await l.isVisible().catch(() => false))) { await l.fill(String(v)).catch(() => {}); await l.press("Tab").catch(() => {}); } } catch (e) {} };
-      const selByName = async (name: string, label?: string) => { try { const s = page.locator("select[name=\"" + name + "\"]").first(); if (!(await s.count())) return false; if (label) { try { await s.selectOption({ label }); return true; } catch (e) { if (!strictMappedPortal) { await s.selectOption({ index: 1 }).catch(() => {}); return true; } return false; } } else if (!strictMappedPortal) { await s.selectOption({ index: 1 }).catch(() => {}); return true; } return false; } catch (e) { return false; } };
+      const typeInto = async (sel: string, v?: string | number): Promise<boolean> => {
+        if (v === undefined || v === null || v === "") return false;
+        try {
+          const loc = page.locator(sel);
+          const cnt = await loc.count();
+          let target: any = null;
+          for (let i = 0; i < cnt; i++) {
+            if (await loc.nth(i).isVisible().catch(() => false)) {
+              target = loc.nth(i);
+              break;
+            }
+          }
+          if (!target) return false;
+          const expected = String(v);
+          await target.fill(expected);
+          let current = await target.inputValue().catch(() => "");
+          if (current !== expected) {
+            await target.click();
+            await target.fill("");
+            await target.pressSequentially(expected, { delay: 45 });
+            current = await target.inputValue().catch(() => "");
+          }
+          await target.press("Tab").catch(() => {});
+          return (
+            current === expected &&
+            (await target.getAttribute("aria-invalid").catch(() => null)) !==
+              "true"
+          );
+        } catch {
+          return false;
+        }
+      };
+      const fill = typeInto;
+      const selByName = async (name: string, label?: string): Promise<boolean> => {
+        try {
+          const s = page.locator(`select[name="${name}"]`).first();
+          if (!(await s.count())) return false;
+          if (!label) {
+            if (strictMappedPortal) return false;
+            await s.selectOption({ index: 1 });
+            return Boolean(await s.inputValue());
+          }
+          try {
+            await s.selectOption({ label });
+          } catch {
+            if (strictMappedPortal) return false;
+            await s.selectOption({ index: 1 });
+          }
+          const selected = await s
+            .locator("option:checked")
+            .first()
+            .innerText()
+            .catch(() => "");
+          return (
+            Boolean(await s.inputValue().catch(() => "")) &&
+            (!strictMappedPortal ||
+              fold(selected) === fold(label) ||
+              fold(selected).includes(fold(label)))
+          );
+        } catch {
+          return false;
+        }
+      };
       const clickNext = async () => { const n = page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).first(); if (await n.count()) { await n.click({ timeout: 6000 }).catch(() => {}); return true; } const __cna = page.getByRole("button", { name: /create new application|add application|create application/i }).first(); if (await __cna.count()) { await __cna.click({ timeout: 6000 }).catch(() => {}); return true; } return false; };
+      const setBinaryAnswer = async (
+        question: RegExp,
+        answer: "Yes" | "No",
+      ): Promise<boolean> => {
+        const groups = page
+          .locator("fieldset,.slds-form-element,[role=radiogroup]")
+          .filter({ hasText: question });
+        const count = await groups.count().catch(() => 0);
+        if (count !== 1) return false;
+        const target = groups
+          .first()
+          .locator(
+            `input[type="radio"][value="${answer}" i],input[type="radio"][data-value="${answer}" i]`,
+          )
+          .first();
+        if (!(await target.count())) return false;
+        await target.check({ force: true }).catch(() => {});
+        return target.isChecked().catch(() => false);
+      };
       const readActiveStage = async (): Promise<SalesforceStage> => {
+        const stageName = page.locator(".slds-path__stage-name").first();
+        if (
+          (await stageName.count().catch(() => 0)) &&
+          (await stageName.isVisible().catch(() => false))
+        ) {
+          const marker = await stageName.innerText().catch(() => "");
+          const stage = parseSalesforceStageMarker(marker);
+          if (stage) return stage;
+        }
         const current = page.locator(
           [
             ".slds-path__item.slds-is-current",
@@ -517,49 +662,183 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           }
           continue;
         } else if (await has("select[name=\"Gender\"]")) {
-          await fill("input[name=\"First_Name\"]", profile.firstName);
-          await fill("input[name=\"Last_Name\"]", profile.lastName);
-          await selByName("Gender", /female/i.test(profile.gender || "") ? "Female" : "Male");
-          await selByName("Citizenship", profile.nationality);
-          await selByName("Country_of_Residence", profile.nationality);
-          await selByName("Where_did_you_hear_us", "University Website");
-          try { const d = page.locator("input[name*=Date_of_Birth i],input[name*=birth i]").first(); if (await d.count()) { await d.click().catch(() => {}); await d.fill("").catch(() => {}); await d.type(dobStr, { delay: 60 }).catch(() => {}); await d.press("Tab").catch(() => {}); } } catch (e) {}
-          try { const rs = page.locator("input[type=radio]"); const rn = await rs.count(); for (let i = 0; i < rn; i++) { const v = await rs.nth(i).getAttribute("value").catch(() => ""); if (/^No/i.test(v || "")) await rs.nth(i).check({ force: true }).catch(() => {}); } if (strictMappedPortal && rn > 0) logger.warn(`[salesforce:${cfg.key}] audited legacy policy: binary eligibility answers=No`); } catch (e) {}
+          const personalProof: Record<string, boolean> = {};
+          personalProof.firstName = await fill(
+            'input[name="First_Name"]',
+            profile.firstName,
+          );
+          personalProof.lastName = await fill(
+            'input[name="Last_Name"]',
+            profile.lastName,
+          );
+          personalProof.gender = await selByName(
+            "Gender",
+            /female/i.test(profile.gender || "") ? "Female" : "Male",
+          );
+          personalProof.citizenship = await selByName(
+            "Citizenship",
+            profile.nationality,
+          );
+          personalProof.residenceCountry = await selByName(
+            "Country_of_Residence",
+            profile.nationality,
+          );
+          personalProof.source = await selByName(
+            "Where_did_you_hear_us",
+            "University Website",
+          );
+          const dateControl = page
+            .locator('input[name*="Date_of_Birth" i],input[name*="birth" i]')
+            .first();
+          personalProof.dateOfBirth = false;
+          if (await dateControl.count()) {
+            await dateControl.click().catch(() => {});
+            await dateControl.fill("").catch(() => {});
+            await dateControl.pressSequentially(dobStr, { delay: 45 }).catch(() => {});
+            await dateControl.press("Tab").catch(() => {});
+            personalProof.dateOfBirth = Boolean(
+              await dateControl.inputValue().catch(() => ""),
+            );
+          }
+          if (strictMappedPortal) {
+            personalProof.turkishCitizenship = await setBinaryAnswer(
+              /turkish citizenship|türk vatanda/i,
+              profile.hasTcId ? "Yes" : "No",
+            );
+            personalProof.residencePermit = await setBinaryAnswer(
+              /residence permit|ikamet izni/i,
+              "No",
+            );
+            personalProof.blueCard = await setBinaryAnswer(
+              /blue card|mavi kart/i,
+              profile.hasBlueCard ? "Yes" : "No",
+            );
+          }
           if (!strictMappedPortal) {
             try { const cb = page.locator("button[role=combobox],[role=combobox]").first(); if (await cb.count()) { await cb.click({ timeout: 2500 }).catch(() => {}); await page.waitForTimeout(800); const opts = page.locator("[role=option]"); const oc = await opts.count(); for (let i = 0; i < oc; i++) { const ot = (await opts.nth(i).innerText().catch(() => "")) || ""; if (!/none/i.test(ot)) { await opts.nth(i).click({ timeout: 2000 }).catch(() => {}); break; } } } } catch (e) {}
           }
-          await fill("input[name=\"MobilePhone_Text\"]", profile.phone);
-          await fill("input[name=\"Address\"]", profile.address);
-          await fill("input[name=\"City\"]", strictMappedPortal ? profile.addressCity : profile.address);
+          personalProof.phone = await fill(
+            'input[name="MobilePhone_Text"]',
+            profile.phone,
+          );
+          personalProof.address = await fill(
+            'input[name="Address"]',
+            profile.addressStreet || profile.address,
+          );
+          personalProof.city = await fill(
+            'input[name="City"]',
+            strictMappedPortal ? profile.addressCity : profile.address,
+          );
+          if (strictMappedPortal) {
+            const failed = Object.entries(personalProof)
+              .filter(([, ok]) => !ok)
+              .map(([field]) => field);
+            if (failed.length > 0) {
+              result.detail =
+                `${cfg.label}: personal fields could not be verified (${failed.join(", ")})`;
+              result.stuckStep = step;
+              break;
+            }
+          }
           await clickNext();
         } else if (await has("select[name=\"Country_of_Secondary_School\"]") || /secondary school/i.test(txt)) {
-          await fill("input[name=\"Name_of_Secondary_School\"]", strictMappedPortal ? profile.schoolName : profile.schoolName || "High School");
-          await selByName("Country_of_Secondary_School", profile.nationality);
+          const educationProof: Record<string, boolean> = {};
+          educationProof.schoolName = await fill(
+            'input[name="Name_of_Secondary_School"]',
+            strictMappedPortal
+              ? profile.schoolName
+              : profile.schoolName || "High School",
+          );
+          educationProof.country = await selByName(
+            "Country_of_Secondary_School",
+            profile.nationality,
+          );
           if (strictMappedPortal) {
-            await selByName(
+            educationProof.system = await selByName(
               "Choose_the_education_system_of_the_high_school_you_have_graduated_from",
               "Other",
             );
           } else {
             await selByName("Choose_the_education_system_of_the_high_school_you_have_graduated_from");
           }
-          await fill("input[name=\"GPA_of_Secondary_School\"]", String(strictMappedPortal ? profile.gpa : profile.gpa || "3"));
+          educationProof.gpa = await fill(
+            'input[name="GPA_of_Secondary_School"]',
+            String(strictMappedPortal ? profile.gpa : profile.gpa || "3"),
+          );
+          if (strictMappedPortal) {
+            const failed = Object.entries(educationProof)
+              .filter(([, ok]) => !ok)
+              .map(([field]) => field);
+            if (failed.length > 0) {
+              result.detail =
+                `${cfg.label}: education fields could not be verified (${failed.join(", ")})`;
+              result.stuckStep = step;
+              break;
+            }
+          }
           await clickNext();
-        } else if (await has("input[type=file]")) {
+        } else if (
+          activeStage === "Documents" &&
+          (await has("input[type=file]"))
+        ) {
           try {
             const fi = page.locator("input[type=file]");
-            const slotOrder: Array<[string, string]> = [];
-            if (files.diploma) slotOrder.push(["diploma", files.diploma]);
-            if (files.transcript) slotOrder.push(["transcript", files.transcript]);
-            if (files.passport) slotOrder.push(["passport", files.passport]);
-            if (files.photo) slotOrder.push(["photo", files.photo]);
             const n = await fi.count();
             const uploadedSlots: string[] = [];
-            for (let i = 0; i < Math.min(n, slotOrder.length); i++) {
-              await fi.nth(i).setInputFiles(slotOrder[i][1]).catch(() => {});
+            const controlsBySlot = new Map<string, any[]>();
+            for (let i = 0; i < n; i++) {
+              const input = fi.nth(i);
+              const metadata = await input
+                .evaluate((el: HTMLInputElement) => {
+                  const container = el.closest(
+                    "lightning-input,.slds-form-element,[data-name],[class*='upload']",
+                  );
+                  return [
+                    el.name,
+                    el.id,
+                    el.getAttribute("aria-label") || "",
+                    el.getAttribute("title") || "",
+                    container?.textContent || "",
+                  ]
+                    .join(" ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+                })
+                .catch(() => "");
+              const slot = inferSalesforceDocumentSlot(metadata);
+              if (!slot) continue;
+              const group = controlsBySlot.get(slot) ?? [];
+              group.push(input);
+              controlsBySlot.set(slot, group);
+            }
+            const fileBySlot: Record<string, string | undefined> = {
+              diploma: files.diploma,
+              transcript: files.transcript,
+              passport: files.passport,
+              photo: files.photo,
+              english: files.english,
+            };
+            for (const [slot, localPath] of Object.entries(fileBySlot)) {
+              if (!localPath) continue;
+              const controls = controlsBySlot.get(slot) ?? [];
+              if (controls.length !== 1) {
+                logger.warn(
+                  `[salesforce:${cfg.key}] upload target not unique`,
+                  { slot, count: controls.length },
+                );
+                continue;
+              }
+              const input = controls[0];
+              await input.setInputFiles(localPath).catch(() => {});
               await page.waitForTimeout(1800);
-              const value = await fi.nth(i).inputValue().catch(() => "");
-              if (value) uploadedSlots.push(slotOrder[i][0]);
+              const value = await input.inputValue().catch(() => "");
+              if (
+                value &&
+                (await input.getAttribute("aria-invalid").catch(() => null)) !==
+                  "true"
+              ) {
+                uploadedSlots.push(slot);
+              }
             }
             result.uploadedSlots = uploadedSlots;
             if (
@@ -665,8 +944,56 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await clickNext();
         }
         let moved = false;
-        for (let t = 0; t < 10; t++) { await page.waitForTimeout(1000); if (((await bodyText()).replace(/\s+/g, " ").slice(0, 600)) !== before) { moved = true; break; } }
-        if (!moved) { result.stuckStep = step; if (!strictMappedPortal) result.stuckBody = (await bodyText()).replace(/\s+/g, " ").slice(0, 200); if (step > 0) break; }
+        let afterStage: SalesforceStage = activeStage;
+        let bodyChanged = false;
+        for (let t = 0; t < 10; t++) {
+          await page.waitForTimeout(1000);
+          afterStage = await readActiveStage();
+          bodyChanged =
+            (await bodyText()).replace(/\s+/g, " ").slice(0, 600) !== before;
+          if (activeStage && afterStage && afterStage !== activeStage) {
+            moved = true;
+            break;
+          }
+          if (!activeStage && bodyChanged) {
+            moved = true;
+            break;
+          }
+        }
+        if (
+          strictMappedPortal &&
+          activeStage &&
+          afterStage === activeStage &&
+          !(activeStage === "Program Selection" && bodyChanged)
+        ) {
+          const validation = (
+            await page
+              .locator(
+                '[role="alert"],.slds-form-element__help,[aria-invalid="true"]',
+              )
+              .allInnerTexts()
+              .catch(() => [])
+          )
+            .map((text: string) => text.replace(/\s+/g, " ").trim())
+            .filter(Boolean)
+            .slice(0, 8);
+          result.stuckStep = step;
+          result.detail =
+            `${cfg.label}: ${activeStage} did not advance` +
+            (validation.length
+              ? ` — validation: ${validation.join(" | ")}`
+              : "");
+          break;
+        }
+        if (!moved) {
+          result.stuckStep = step;
+          if (!strictMappedPortal) {
+            result.stuckBody = (await bodyText())
+              .replace(/\s+/g, " ")
+              .slice(0, 200);
+          }
+          if (step > 0) break;
+        }
       }
       logger.info("[salesforce:" + cfg.key + "] submit " + JSON.stringify(result));
       return result;

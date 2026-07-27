@@ -559,6 +559,11 @@ export function buildProfile(data: Record<string, unknown>): SubmitProfile {
     nationality,
     address,
     phone,
+    transferStudent:
+      typeof data.transferStudent === "boolean" ? data.transferStudent : undefined,
+    hasTcId: typeof data.hasTcId === "boolean" ? data.hasTcId : undefined,
+    hasBlueCard:
+      typeof data.hasBlueCard === "boolean" ? data.hasBlueCard : undefined,
     level:          str("level"),
     programName:    str("programName"),
     programId:      str("programId"),

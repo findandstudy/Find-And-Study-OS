@@ -109,7 +109,9 @@ app.use((req, res, next) => {
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  // Voice notes are an intentional first-party inbox feature. Keep camera and
+  // geolocation disabled, and grant microphone access only to this origin.
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
   next();
 });
 
@@ -206,7 +208,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   if (
     req.path.startsWith("/api/public/") ||
-    req.path.startsWith("/api/course-finder") ||
     req.path.startsWith("/api/webhooks/") ||
     // The agent onboarding verify-with-link endpoint is hit by users clicking
     // an email button before any session/CSRF cookie has been issued. It is
@@ -221,6 +222,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   if (!req.cookies[CSRF_COOKIE]) {
     const token = crypto.randomBytes(32).toString("hex");
     res.cookie(CSRF_COOKIE, token, getCsrfCookieOptions(req, 7 * 24 * 60 * 60 * 1000));
+    // Express does not add a response cookie back into req.cookies. Mark this
+    // request so the SPA fallback handler does not issue a second, conflicting
+    // csrf_token for the same response.
+    (req as Request & { csrfCookieIssued?: boolean }).csrfCookieIssued = true;
   }
 
   if (!CSRF_SAFE_METHODS.has(req.method)) {

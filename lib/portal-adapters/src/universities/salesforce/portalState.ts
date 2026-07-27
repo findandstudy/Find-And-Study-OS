@@ -28,6 +28,45 @@ export type SalesforceStage =
   | "Completed"
   | null;
 
+export function parseSalesforceStageMarker(
+  value: string | null | undefined,
+): SalesforceStage {
+  return normalizeSalesforceStage(
+    String(value ?? "").replace(/^\s*stage\s*:\s*/i, ""),
+  );
+}
+
+export type SalesforceDocumentSlot =
+  | "diploma"
+  | "transcript"
+  | "passport"
+  | "photo"
+  | "english"
+  | null;
+
+export function inferSalesforceDocumentSlot(
+  metadata: string | null | undefined,
+): SalesforceDocumentSlot {
+  const value = fold(metadata ?? "");
+  if (!value) return null;
+  if (/\b(passport|pasaport)\b/.test(value)) return "passport";
+  if (/\b(transcript|marks sheet|not dokumu|transkript)\b/.test(value)) {
+    return "transcript";
+  }
+  if (
+    /\b(diploma|diploma certificate|graduation certificate|mezuniyet belgesi)\b/.test(
+      value,
+    )
+  ) {
+    return "diploma";
+  }
+  if (/\b(photo|photograph|fotograf)\b/.test(value)) return "photo";
+  if (/\b(english|toefl|ielts|language proficiency)\b/.test(value)) {
+    return "english";
+  }
+  return null;
+}
+
 export function normalizeSalesforceStage(
   value: string | null | undefined,
 ): SalesforceStage {

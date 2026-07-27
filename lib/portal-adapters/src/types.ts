@@ -133,6 +133,9 @@ export interface SubmitProfile {
   nationality: string;
   address: string;
   phone: string;             // local format, no country code where required
+  transferStudent?: boolean;
+  hasTcId?: boolean;
+  hasBlueCard?: boolean;
   level: string;
   programName: string;
   programId: string;

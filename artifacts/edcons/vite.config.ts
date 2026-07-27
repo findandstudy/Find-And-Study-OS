@@ -95,7 +95,10 @@ export default defineConfig({
           if (id.includes("react-phone-number-input") || id.includes("libphonenumber-js")) {
             return "vendor-phone";
           }
-          if (id.includes("/jspdf") || id.includes("/pdf-lib/")) return "vendor-pdf";
+          // Keep PDF libraries inside the lazy feature chunk that imports
+          // them. A named manual chunk made Vite preload ~127 KB gzip of PDF
+          // code from index.html for every visitor, including users who never
+          // open Course Finder / proposal generation.
           if (id.includes("/xlsx/")) return "vendor-excel";
           if (id.includes("/framer-motion/")) return "vendor-motion";
           if (id.includes("@dnd-kit/") || id.includes("@hello-pangea/dnd")) return "vendor-dnd";

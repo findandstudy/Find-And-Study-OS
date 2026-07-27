@@ -191,6 +191,30 @@ export function resolveUnitedDegreeLabel(level: string): string | null {
   return null;
 }
 
+export function resolveUnitedDocumentSlots(level: string): {
+  diploma: string[];
+  transcript: string[];
+} | null {
+  const degree = resolveUnitedDegreeLabel(level);
+  if (degree === "Vocational School" || degree === "Bachelor") {
+    return { diploma: ["cer"], transcript: ["trans"] };
+  }
+  if (degree === "Master") {
+    return { diploma: ["cerb"], transcript: ["transb"] };
+  }
+  if (degree === "PhD") {
+    return { diploma: ["cerp"], transcript: ["transp"] };
+  }
+  return null;
+}
+
+function labelsEquivalent(actual: string, wanted: string): boolean {
+  const a = normLabel(actual);
+  const w = normLabel(wanted);
+  if (!a || !w) return false;
+  return a === w || a.includes(w) || w.includes(a);
+}
+
 export const unitedAdapter: UniversityAdapter = {
   key:       "united",
   label:     "United Portal",
@@ -275,7 +299,9 @@ export const unitedAdapter: UniversityAdapter = {
       .filter(([, value]) => value == null || String(value).trim() === "")
       .map(([field]) => String(field));
     const resolvedDegree = resolveUnitedDegreeLabel(profile.level);
+    const documentSlots = resolveUnitedDocumentSlots(profile.level);
     if (!resolvedDegree) missingProfile.push("level(unmapped)");
+    if (!documentSlots) missingProfile.push("documentSlots(unmapped)");
     if (missingProfile.length > 0) {
       throw new Error(
         `United data_missing: ${missingProfile.join(", ")}`,
@@ -419,6 +445,88 @@ export const unitedAdapter: UniversityAdapter = {
     const ensureNameShim = async () => {
       try { await page.evaluate(() => { (globalThis as any).__name = (globalThis as any).__name || ((f: any) => f); }); } catch {}
     };
+
+    const readDocumentState = async (id: string): Promise<string> => {
+      return page
+        .locator("#" + id)
+        .evaluate((el: Element) => {
+          let cur: HTMLElement | null = el.parentElement;
+          for (let i = 0; i < 8 && cur; i++, cur = cur.parentElement) {
+            const text = (cur.innerText || "").replace(/\s+/g, " ").trim();
+            if (/not uploaded|uploaded/i.test(text)) return text.slice(0, 240);
+          }
+          return "";
+        })
+        .catch(() => "");
+    };
+    const uploadDoc = async (ids: string[], localPath?: string): Promise<boolean> => {
+      if (dryRun) {
+        for (const id of ids) {
+          if (!(await page.locator("#" + id).count())) continue;
+          const state = await readDocumentState(id);
+          return /\buploaded\b/i.test(state) && !/not uploaded/i.test(state);
+        }
+        return false;
+      }
+      if (!localPath) {
+        logger.warn("[united] no local file for required slot [" + ids.join(",") + "]");
+        return false;
+      }
+      for (const id of ids) {
+        try {
+          const input = page.locator("#" + id);
+          if (!(await input.count())) continue;
+          const before = await readDocumentState(id);
+          if (/\buploaded\b/i.test(before) && !/not uploaded/i.test(before)) {
+            logger.info(`[united] document #${id} already uploaded — repair skipped`);
+            return true;
+          }
+          const responsePromise = page
+            .waitForResponse(
+              (response: any) =>
+                /\/Manage\/uploadfilesone/i.test(response.url()) &&
+                response.request().method() === "POST",
+              { timeout: 30000 },
+            )
+            .catch(() => null);
+          await page.setInputFiles("#" + id, localPath);
+          const uploadResponse = await responsePromise;
+          if (!uploadResponse || !uploadResponse.ok()) {
+            logger.warn(`[united] upload #${id} lacked a proved 2xx response`);
+            continue;
+          }
+          await wait(900);
+          const after = await readDocumentState(id);
+          if (/not uploaded/i.test(after)) {
+            logger.warn(`[united] upload #${id} returned 2xx but UI readback is still Not Uploaded`);
+            continue;
+          }
+          logger.info(`[united] uploaded #${id} with network + UI readback proof`);
+          return true;
+        } catch (e: any) {
+          logger.warn(
+            "[united] upload #" +
+              id +
+              " failed: " +
+              String(e?.message || e).slice(0, 100),
+          );
+        }
+      }
+      logger.warn("[united] no verified document slot among [" + ids.join(",") + "]");
+      return false;
+    };
+    const uploadRequiredDocuments = async (): Promise<string[]> => {
+      const uploadedSlots: string[] = [];
+      if (await uploadDoc(["face"], _files.photo)) uploadedSlots.push("photo");
+      if (await uploadDoc(["pass"], _files.passport)) uploadedSlots.push("passport");
+      if (await uploadDoc(documentSlots!.diploma, _files.diploma)) {
+        uploadedSlots.push("diploma");
+      }
+      if (await uploadDoc(documentSlots!.transcript, _files.transcript)) {
+        uploadedSlots.push("transcript");
+      }
+      return uploadedSlots;
+    };
     const clickContinue = async (): Promise<boolean> => {
       let b = page.getByRole("button", { name: /continue|next|ileri|devam/i }).first();
       if (await b.count()) { await b.click({ timeout: 8000 }).catch(() => {}); await wait(2800); await ensureNameShim(); return true; }
@@ -432,14 +540,16 @@ export const unitedAdapter: UniversityAdapter = {
       await wait(5000);
       await ensureNameShim();
       const txt0 = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")) as string;
-      if (/already.*application|zaten.*basvuru/i.test(txt0)) { result.alreadyExists = true; logger.warn("[united] already has application"); return result; }
+      if (/already.*application|zaten.*basvuru/i.test(txt0)) {
+        logger.warn("[united] generic already-application banner observed; target-specific dedup will decide");
+      }
 
       // ---- §3 Dedup: GET /Account/searchapp?word=<email|name> --------------
       // Salesforce-backed search. Log ONLY the count + Id (never PII values).
       const searchWord = (profile.email || `${profile.firstName || ""} ${profile.lastName || ""}`).trim();
       // Reusable: returns {count, id} from /Account/searchapp (logs count+Id only, never PII).
-      const searchApp = async (tag: string): Promise<{ count: number; id: string }> => {
-        if (!searchWord) return { count: 0, id: "" };
+      const searchApp = async (tag: string): Promise<{ count: number; ids: string[] }> => {
+        if (!searchWord) return { count: 0, ids: [] };
         const res = await page.request.get(
           `${PORTAL_URL}/Account/searchapp?word=${encodeURIComponent(searchWord)}`,
           { timeout: 20000 },
@@ -448,25 +558,157 @@ export const unitedAdapter: UniversityAdapter = {
         let json: any = null;
         try { json = await res.json(); } catch {}
         const count = typeof json?.totalSize === "number" ? json.totalSize : (Array.isArray(json?.records) ? json.records.length : 0);
-        const rec0 = Array.isArray(json?.records) ? json.records[0] : null;
-        const id = String(rec0?.ContactId || rec0?.Id || "");
-        logger.info(`[united] ${tag} searchapp -> status=${status} count=${count}` + (id ? ` id=${id}` : ""));
-        return { count, id };
+        const records = Array.isArray(json?.records) ? json.records : [];
+        const ids = [
+          ...new Set(
+            records
+              .map((rec: any) =>
+                String(
+                  rec?.AccountId ||
+                    rec?.Account?.Id ||
+                    rec?.StudentAccountId ||
+                    rec?.Student_Account__c ||
+                    "",
+                ),
+              )
+              .filter((id: string) => /^001[0-9A-Za-z]{12,}$/.test(id)),
+          ),
+        ] as string[];
+        logger.info(
+          `[united] ${tag} searchapp -> status=${status} count=${count} accountIds=${ids.length}`,
+        );
+        return { count, ids };
       };
       let dedupCountBefore = -1; // -1 = search failed/skipped (recheck can't compare)
       try {
         const s = await searchApp("dedup");
         dedupCountBefore = s.count;
-        if (s.count > 0) result.alreadyExists = true;
       } catch (e: any) {
         throw new Error(
           "United dedup_unknown: searchapp verification failed",
         );
       }
-      if (result.alreadyExists) {
-        result.detail =
-          "United: existing student/application detected; duplicate creation was skipped";
-        return result;
+      if (dedupCountBefore > 0) {
+        await page.goto(PORTAL_URL + "/Manage/mystudents", {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
+        await wait(1800);
+        const emailFilter = page
+          .locator('input[placeholder="Email"], input[aria-label="Email"]')
+          .first();
+        if (await emailFilter.count()) {
+          await emailFilter.fill(profile.email);
+          await wait(1800);
+        }
+        const profileHrefs = (await page
+          .$$eval(
+            "a[href*='/Manage/studentprofile/']",
+            (links: HTMLAnchorElement[], email: string) => [
+              ...new Set(
+                links
+                  .filter((a) =>
+                    (a.closest("tr")?.innerText || "")
+                      .toLowerCase()
+                      .includes(email.toLowerCase()),
+                  )
+                  .map((a) => a.getAttribute("href") || "")
+                  .filter(Boolean),
+              ),
+            ],
+            profile.email,
+          )
+          .catch(() => [])) as string[];
+        if (profileHrefs.length === 0) {
+          result.detail =
+            "United dedup_unknown: searchapp found records but no exact-email student profile could be verified";
+          return result;
+        }
+        const matches: Array<{ href: string; externalRef: string }> = [];
+        const createHrefs: string[] = [];
+        for (const href of profileHrefs) {
+          await page.goto(new URL(href, PORTAL_URL).href, {
+            waitUntil: "domcontentloaded",
+            timeout: 60000,
+          });
+          await wait(1000);
+          const createHref = await page
+            .locator("a[href*='/Manage/newapplication?contactid=']")
+            .first()
+            .getAttribute("href")
+            .catch(() => null);
+          if (createHref) createHrefs.push(createHref);
+          const applications = (await page
+            .$$eval(
+              "a[href*='/Manage/applicationdetails/']",
+              (links: HTMLAnchorElement[]) =>
+                links.map((a) => {
+                  const row = a.closest("tr");
+                  const cells = row
+                    ? Array.from(row.querySelectorAll("td")).map((td) =>
+                        (td.textContent || "").replace(/\s+/g, " ").trim(),
+                      )
+                    : [];
+                  return {
+                    href: a.getAttribute("href") || "",
+                    ref: (a.textContent || "").trim(),
+                    program: cells[1] || "",
+                    university: cells[2] || "",
+                  };
+                }),
+            )
+            .catch(() => [])) as Array<{
+            href: string;
+            ref: string;
+            program: string;
+            university: string;
+          }>;
+          for (const app of applications) {
+            if (
+              labelsEquivalent(app.university, profile.universityName || "") &&
+              looseMatchIndex([app.program], profile.programName) === 0
+            ) {
+              matches.push({ href: app.href, externalRef: app.ref });
+            }
+          }
+        }
+        if (matches.length > 1) {
+          result.detail =
+            "United dedup_ambiguous: multiple exact target applications exist; automatic mutation blocked";
+          return result;
+        }
+        if (matches.length === 1) {
+          await page.goto(new URL(matches[0].href, PORTAL_URL).href, {
+            waitUntil: "domcontentloaded",
+            timeout: 60000,
+          });
+          await wait(1200);
+          const uploadedSlots = await uploadRequiredDocuments();
+          result.uploadedSlots = uploadedSlots;
+          result.missingDocuments = (
+            ["passport", "diploma", "transcript"] as const
+          ).filter((slot) => !uploadedSlots.includes(slot));
+          result.submitted =
+            !dryRun && result.missingDocuments.length === 0;
+          result.externalRef = matches[0].externalRef;
+          result.detail = dryRun
+            ? "United DRY: existing target application and document presence inspected; no mutation"
+            : result.submitted
+            ? "United: existing target application verified and required documents repaired"
+            : "United: target application exists, but required document repair is incomplete";
+          return result;
+        }
+        const uniqueCreateHrefs = [...new Set(createHrefs)];
+        if (profileHrefs.length !== 1 || uniqueCreateHrefs.length !== 1) {
+          result.detail =
+            "United dedup_ambiguous: existing student has no target application but a unique profile could not be selected";
+          return result;
+        }
+        await page.goto(new URL(uniqueCreateHrefs[0], PORTAL_URL).href, {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
+        await wait(2500);
       }
 
       // ===== United 6-step wizard (Term → Degree card → Program grid → Personal) =====
@@ -904,48 +1146,16 @@ export const unitedAdapter: UniversityAdapter = {
       // cerb/transb=Bachelor Diploma/Transcript (Master app). Degree-dependent
       // variants: cer/trans (HS), cerp/transp (Master's own docs). A missing
       // document must NOT drop the already-created application.
-      const uploadDoc = async (ids: string[], localPath?: string) => {
-        if (!localPath) { logger.warn("[united] no local file for slot [" + ids.join(",") + "] — skipped"); return false; }
-        for (const id of ids) {
-          try {
-            if (!(await page.locator("#" + id).count())) continue;
-            const responsePromise = page
-              .waitForResponse(
-                (response: any) =>
-                  /\/Manage\/uploadfilesone/i.test(response.url()) &&
-                  response.request().method() === "POST",
-                { timeout: 30000 },
-              )
-              .catch(() => null);
-            await page.setInputFiles("#" + id, localPath); // triggers uploadsinglefile
-            const uploadResponse = await responsePromise;
-            if (!uploadResponse || !uploadResponse.ok()) {
-              logger.warn(
-                `[united] upload #${id} lacked a proved 2xx response`,
-              );
-              continue;
-            }
-            logger.info("[united] uploaded #" + id);
-            return true;
-          } catch (e: any) { logger.warn("[united] upload #" + id + " failed: " + String(e?.message || e).slice(0, 80)); }
-        }
-        logger.warn("[united] no document slot found among [" + ids.join(",") + "] — skipped");
-        return false;
-      };
       // SubmitFiles carries pre-downloaded LOCAL paths (worker doc-fetch) — use
       // them directly; no URL download needed here.
-      const uploadedSlots: string[] = [];
-      if (await uploadDoc(["face"], _files.photo)) uploadedSlots.push("photo");
-      if (await uploadDoc(["pass"], _files.passport)) uploadedSlots.push("passport");
-      if (await uploadDoc(["cerb", "cer", "cerp"], _files.diploma)) uploadedSlots.push("diploma");
-      if (await uploadDoc(["transb", "trans", "transp"], _files.transcript)) uploadedSlots.push("transcript");
+      const uploadedSlots = await uploadRequiredDocuments();
       result.uploadedSlots = uploadedSlots;
       result.missingDocuments = (
         ["passport", "diploma", "transcript"] as const
       ).filter((slot) => !uploadedSlots.includes(slot));
       // NationalID slot is optional and SubmitFiles has no national-id source — skipped.
 
-      result.submitted = true;
+      result.submitted = result.missingDocuments.length === 0;
       if (result.missingDocuments.length > 0) {
         result.detail =
           "United application was created, but one or more required document uploads could not be proved";

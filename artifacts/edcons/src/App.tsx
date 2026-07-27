@@ -682,62 +682,62 @@ function AuthPrefetch() {
   }, [result.data, result.error]);
 
   useEffect(() => {
-    if (!result.data) return;
-    Promise.allSettled([
-      // Staff
-      import("@/pages/staff/Dashboard"),
-      import("@/pages/staff/Leads"),
-      import("@/pages/staff/Students"),
-      import("@/pages/staff/Applications"),
-      import("@/pages/staff/Finance"),
-      import("@/pages/staff/Settings"),
-      import("@/pages/staff/LeadDetail"),
-      import("@/pages/staff/StudentDetail"),
-      import("@/pages/staff/ApplicationDetail"),
-      import("@/pages/staff/CourseFinder"),
-      import("@/pages/staff/Agents"),
-      import("@/pages/staff/AgentDetail"),
-      import("@/pages/staff/Messages"),
-      import("@/pages/staff/Tasks"),
-      // Admin
-      import("@/pages/admin/Dashboard"),
-      import("@/pages/admin/Users"),
-      import("@/pages/admin/Catalog"),
-      import("@/pages/admin/Campaigns"),
-      import("@/pages/admin/Popups"),
-      import("@/pages/admin/AuditLog"),
-      import("@/pages/admin/Activity"),
-      import("@/pages/admin/Embeds"),
-      // Website admin
-      import("@/pages/admin/website/Pages"),
-      import("@/pages/admin/website/GlobalComponents"),
-      import("@/pages/admin/website/Navigation"),
-      import("@/pages/admin/website/Blog"),
-      import("@/pages/admin/website/Collections"),
-      import("@/pages/admin/website/Forms"),
-      import("@/pages/admin/website/SeoOverrides"),
-      import("@/pages/admin/website/ThemeBuilder"),
-      import("@/pages/admin/website/Translations"),
-      import("@/pages/admin/website/PublishHistory"),
-      import("@/pages/admin/website/PageEditor"),
-      // Student
-      import("@/pages/student/Dashboard"),
-      import("@/pages/student/Applications"),
-      import("@/pages/student/Wishlist"),
-      import("@/pages/student/Messages"),
-      import("@/pages/student/Account"),
-      // Agent
-      import("@/pages/agent/Dashboard"),
-      import("@/pages/agent/AgentApps"),
-      import("@/pages/agent/Leads"),
-      import("@/pages/agent/Students"),
-      import("@/pages/agent/Commissions"),
-      import("@/pages/agent/Account"),
-      import("@/pages/agent/SubAgents"),
-      import("@/pages/agent/Messages"),
-      import("@/pages/agent/Team"),
-    ]);
-  }, [!!result.data]);
+    const role = (result.data as { role?: string } | null | undefined)?.role;
+    if (!role) return;
+
+    // Do not eagerly download the whole application after login. The previous
+    // implementation imported every staff, admin, website, student and agent
+    // route at once. That defeated route-level lazy loading and pulled large
+    // PDF/Excel/chart chunks into the network and JS heap even when the user
+    // could never visit those routes.
+    //
+    // Warm only the small, high-frequency routes for the authenticated role,
+    // and do it while the browser is idle. All other routes remain true lazy
+    // imports and are fetched on navigation.
+    const prefetchForRole = async (): Promise<void> => {
+      if (STUDENT_ROLES.includes(role)) {
+        await Promise.allSettled([
+          import("@/pages/student/Dashboard"),
+          import("@/pages/student/Applications"),
+          import("@/pages/student/Messages"),
+        ]);
+        return;
+      }
+      if (AGENT_ROLES.includes(role)) {
+        await Promise.allSettled([
+          import("@/pages/agent/Dashboard"),
+          import("@/pages/agent/AgentApps"),
+          import("@/pages/agent/Messages"),
+        ]);
+        return;
+      }
+      if (STAFF_ROLES.includes(role)) {
+        await Promise.allSettled([
+          import("@/pages/staff/Dashboard"),
+          import("@/pages/staff/Applications"),
+          import("@/pages/staff/Messages"),
+        ]);
+      }
+    };
+
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) void prefetchForRole();
+    };
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const idleHandle = idleWindow.requestIdleCallback?.(run, { timeout: 4000 });
+    const timeoutHandle =
+      idleHandle === undefined ? window.setTimeout(run, 2500) : undefined;
+
+    return () => {
+      cancelled = true;
+      if (idleHandle !== undefined) idleWindow.cancelIdleCallback?.(idleHandle);
+      if (timeoutHandle !== undefined) window.clearTimeout(timeoutHandle);
+    };
+  }, [result.data]);
 
   return null;
 }

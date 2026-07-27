@@ -33,7 +33,6 @@ import { launchPortal, logger } from "../../browser.js";
 import { getAssetSigningSecret } from "../../assetSigningSecret.js";
 import { portalCreds, type ResolvedCreds } from "../../portalCreds.js";
 import { fold, matchProgram, type ProgramCandidate } from "../../programMatch.js";
-import { deriveAddressParts } from "../../profile.js";
 import { db, portalProgramCacheTable } from "@workspace/db";
 import {
   SIT_URLS,
@@ -55,6 +54,7 @@ import {
   matchAllowedUniversity,
   isAllowedUniversity,
   isLanguageCompatible,
+  isSitDocumentsStep,
   distinctiveTokens,
   toEnglishCountryName,
 } from "./helpers.js";
@@ -1818,6 +1818,29 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
+    const academicLevel = mapEducationLevel(profile.level);
+    const missingProfileFields = [
+      !String(profile.addressStreet || profile.address || "").trim()
+        ? "address"
+        : "",
+      !String(profile.addressCity || "").trim() ? "addressCity" : "",
+      !String(profile.schoolName || "").trim() ? "schoolName" : "",
+      normalizeGpa(profile.gpa) === undefined ? "gpa" : "",
+      !academicLevel ? "level" : "",
+    ].filter(Boolean);
+    if (missingProfileFields.length > 0) {
+      return {
+        studentId: null,
+        created: false,
+        alreadyExists: false,
+        createdViaWebhook: false,
+        detail:
+          "öğrenci oluşturulamadı: SIT zorunlu CRM alanları eksik (" +
+          missingProfileFields.join(", ") +
+          ")",
+      };
+    }
+
     // --- Zero-doc guard (real submit only; mirrors the webhook-flow intent) ---
     // SIT's student-detail Documents tab is READ-ONLY, so every file MUST be
     // attached during create via the wizard's file-choosers (the whole reason
@@ -1947,6 +1970,13 @@ export const sitAdapter: SitAdapter = {
           (profile as any).whatsapp ||
           "",
       ),
+      address: true,
+      city: true,
+      residenceCountry: true,
+      schoolName: true,
+      gpa: true,
+      educationLevel: true,
+      uploads: anyLocalFile,
     };
     let reachedDocuments = false;
     // Consecutive same-step validation failures → cap in-step retries (item 5:
@@ -2062,13 +2092,12 @@ export const sitAdapter: SitAdapter = {
               }
             }
           }
-          const hsName =
-            String(
-              (profile as any).highSchoolName ||
-                (profile as any).schoolName ||
-                (profile as any).bachelorSchoolName ||
-                "High School",
-            ).trim() || "High School";
+          const hsName = String(
+            (profile as any).highSchoolName ||
+              (profile as any).schoolName ||
+              (profile as any).bachelorSchoolName ||
+              "",
+          ).trim();
           const gpaRaw =
             (profile as any).highSchoolGpaPercent ??
             (profile as any).highSchoolGpa ??
@@ -2133,10 +2162,12 @@ export const sitAdapter: SitAdapter = {
                 (profile as any).level ||
                 "",
             ).toLowerCase();
-            let label = "Bachelor";
-            if (/phd|doctor|doktora/.test(lvlRaw)) label = "PhD";
-            else if (/master|graduate|yüksek/.test(lvlRaw)) label = "Master";
-            else if (/associate|vocational|önlisans|onlisans/.test(lvlRaw)) label = "Associate";
+            const label = mapEducationLevel(lvlRaw);
+            if (!label) {
+              throw new Error(
+                "SIT: eğitim seviyesi bilinmiyor — sessiz Bachelor varsayımı yapılmadı",
+              );
+            }
             await btn.scrollIntoViewIfNeeded().catch(() => {});
             await btn.click().catch(() => {});
             await page.waitForTimeout(350);
@@ -2161,9 +2192,14 @@ export const sitAdapter: SitAdapter = {
             }
             await page.waitForTimeout(400);
             const after = ((await btn.textContent().catch(() => "")) || "").trim();
+            if (after.toLowerCase().includes(label.toLowerCase())) {
+              everSet.add("educationLevel");
+            }
             logger.info(
               "[sit] APPLYPICK v5 label=" + label + " clicked=" + clicked + " after='" + after + "'",
             );
+          } else if (mapEducationLevel(cur)) {
+            everSet.add("educationLevel");
           }
         }
       } catch (e) {
@@ -2299,15 +2335,21 @@ export const sitAdapter: SitAdapter = {
       } catch (e) {
         logger.info("[sit] CONTACTFIX err " + (e as any)?.message);
       }
-      await fillField(page, SIT_STUDENT_FIELDS.address, profile.address);
-      // City (Contact & Location) — CRM'de ayrı şehir alanı yok; adresin ilk
-      // virgül-öncesi parçasından türet (deriveAddressParts). Adres boş/işe
-      // yaramazsa hiç doldurma (best-effort, adım engellemez).
+      mark(
+        "address",
+        await fillField(
+          page,
+          SIT_STUDENT_FIELDS.address,
+          profile.addressStreet || profile.address,
+        ),
+      );
+      // City must come from the dedicated CRM field. Never parse a street line
+      // into a city — that creates plausible-looking but false data.
       try {
-        const cityVal = deriveAddressParts(profile.address || undefined).city.trim();
-        if (cityVal && cityVal !== "-") {
+        const cityVal = String(profile.addressCity || "").trim();
+        if (cityVal) {
           const cityOk = await fillField(page, SIT_STUDENT_FIELDS.city, cityVal);
-          if (cityOk) everSet.add("city");
+          mark("city", cityOk);
           logger.info(`[sit] CITYFILL city='${cityVal}' ok=${cityOk}`);
         }
       } catch (e) {
@@ -2340,6 +2382,9 @@ export const sitAdapter: SitAdapter = {
                   } catch {}
                 }
               }
+            }
+            if ((await csel.inputValue().catch(() => "")).trim()) {
+              everSet.add("residenceCountry");
             }
           }
         }
@@ -2487,19 +2532,32 @@ export const sitAdapter: SitAdapter = {
           stepLog.push(`${name}=BULUNAMADI`);
         }
       };
-      await setTog("transferStudent", SIT_TOGGLES.transferStudent, "No", [
-        "transfer",
-      ]);
-      await setTog("haveTc", SIT_TOGGLES.haveTc, "No", ["tc"]);
-      await setTog("blueCard", SIT_TOGGLES.blueCard, "No", [
-        "bluecard",
-        "blue-card",
-      ]);
+      await setTog(
+        "transferStudent",
+        SIT_TOGGLES.transferStudent,
+        profile.transferStudent ? "Yes" : "No",
+        ["transfer"],
+      );
+      await setTog(
+        "haveTc",
+        SIT_TOGGLES.haveTc,
+        profile.hasTcId ? "Yes" : "No",
+        ["tc"],
+      );
+      await setTog(
+        "blueCard",
+        SIT_TOGGLES.blueCard,
+        profile.hasBlueCard ? "Yes" : "No",
+        ["bluecard", "blue-card"],
+      );
 
       // Academics
-      await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName);
+      mark(
+        "schoolName",
+        await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName),
+      );
       if (gpa !== undefined) {
-        await fillField(page, SIT_STUDENT_FIELDS.gpa, String(gpa));
+        mark("gpa", await fillField(page, SIT_STUDENT_FIELDS.gpa, String(gpa)));
       }
       if (profile.graduationYear !== undefined) {
         await fillField(
@@ -2519,33 +2577,34 @@ export const sitAdapter: SitAdapter = {
       const wantUploads = !!(
         files.photo || files.passport || files.transcript || files.diploma
       );
+      const uploadAffordanceCount =
+        (await page
+          .getByRole("button", { name: SIT_UPLOAD.photoTrigger })
+          .count()
+          .catch(() => 0)) +
+        (await page
+          .getByRole("button", { name: SIT_UPLOAD.attachmentTrigger })
+          .count()
+          .catch(() => 0)) +
+        (await page
+          .getByRole("button", { name: /add (new )?doc(?:ument)?/i })
+          .count()
+          .catch(() => 0));
+      // A generic file input is not sufficient evidence: browser widgets can
+      // leave hidden inputs mounted on every wizard screen. Require both the
+      // active Documents heading and an upload-specific affordance.
+      const onDocumentsStep = isSitDocumentsStep(
+        heading,
+        uploadAffordanceCount,
+      );
       if (wantUploads && !reachedDocuments) {
-        const trigCount =
-          (await page
-            .getByRole("button", { name: SIT_UPLOAD.photoTrigger })
-            .first()
-            .count()
-            .catch(() => 0)) +
-          (await page
-            .getByRole("button", { name: SIT_UPLOAD.attachmentTrigger })
-            .first()
-            .count()
-            .catch(() => 0)) +
-          // A visible/hidden <input type=file> also counts as an upload step.
-          (await page
-            .locator('input[type="file"]')
-            .count()
-            .catch(() => 0));
-        if (trigCount > 0) {
+        if (onDocumentsStep) {
           reachedDocuments = true;
             try {
               const addBtn = page.getByRole("button", { name: /add (new )?doc/i }).first();
               if (await addBtn.count()) {
                 await addBtn.click().catch(() => {});
                 await page.waitForTimeout(900);
-                await page
-                  .screenshot({ path: "/var/www/apply.findandstudy.com/artifacts/edcons/dist/public/swf.png", fullPage: true })
-                  .catch(() => {});
                 const rowDump = await page.evaluate(() => {
                   const files = document.querySelectorAll('input[type="file"]').length;
                   const selects = Array.from(document.querySelectorAll("select")).map((se) => {
@@ -2565,31 +2624,50 @@ export const sitAdapter: SitAdapter = {
           logger.info(`[sit] wizard adım=${step + 1}: belge yükleme adımına ulaşıldı`);
         }
       }
-      if (files.photo && !photoUploaded) {
-        if (await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo)) {
-          photoUploaded = true;
-          logger.info(`[sit] wizard adım=${step + 1} yükleme: foto=ok`);
+      if (onDocumentsStep) {
+        if (files.photo && !photoUploaded) {
+          if (await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo)) {
+            photoUploaded = true;
+            logger.info(`[sit] wizard adım=${step + 1} yükleme: foto=ok`);
+          }
+        }
+        const docJobs: Array<[string, RegExp, string]> = [];
+        if (files.passport) {
+          docJobs.push(["passport", SIT_UPLOAD.passportTrigger, files.passport]);
+        }
+        if (files.transcript) {
+          docJobs.push(["transcript", SIT_UPLOAD.transcriptTrigger, files.transcript]);
+        }
+        if (files.diploma) {
+          docJobs.push(["diploma", SIT_UPLOAD.diplomaTrigger, files.diploma]);
+        }
+        if (files.english) { docJobs.push(["english", SIT_UPLOAD.attachmentTrigger, files.english]); }
+        if (files.motivation) { docJobs.push(["motivation", SIT_UPLOAD.attachmentTrigger, files.motivation]); }
+        if (files.recommendation) { docJobs.push(["recommendation", SIT_UPLOAD.attachmentTrigger, files.recommendation]); }
+        for (const [key, trig, docPath] of docJobs) {
+          if (uploadedDocs.has(key)) continue;
+          if (await uploadDocRow(page, key, key, docPath)) {
+            uploadedDocs.add(key);
+            logger.info(`[sit] wizard adım=${step + 1} yükleme: ${key}=ok`);
+          }
         }
       }
-      const docJobs: Array<[string, RegExp, string]> = [];
-      if (files.passport) {
-        docJobs.push(["passport", SIT_UPLOAD.passportTrigger, files.passport]);
-      }
-      if (files.transcript) {
-        docJobs.push(["transcript", SIT_UPLOAD.transcriptTrigger, files.transcript]);
-      }
-      if (files.diploma) {
-        docJobs.push(["diploma", SIT_UPLOAD.diplomaTrigger, files.diploma]);
-      }
-      if (files.english) { docJobs.push(["english", SIT_UPLOAD.attachmentTrigger, files.english]); }
-      if (files.motivation) { docJobs.push(["motivation", SIT_UPLOAD.attachmentTrigger, files.motivation]); }
-      if (files.recommendation) { docJobs.push(["recommendation", SIT_UPLOAD.attachmentTrigger, files.recommendation]); }
-      for (const [key, trig, docPath] of docJobs) {
-        if (uploadedDocs.has(key)) continue;
-        if (await uploadDocRow(page, key, key, docPath)) {
-          uploadedDocs.add(key);
-          logger.info(`[sit] wizard adım=${step + 1} yükleme: ${key}=ok`);
-        }
+      const expectedUploads = [
+        files.photo ? "photo" : "",
+        files.passport ? "passport" : "",
+        files.transcript ? "transcript" : "",
+        files.diploma ? "diploma" : "",
+        files.english ? "english" : "",
+        files.motivation ? "motivation" : "",
+        files.recommendation ? "recommendation" : "",
+      ].filter(Boolean);
+      if (
+        expectedUploads.length > 0 &&
+        expectedUploads.every((key) =>
+          key === "photo" ? photoUploaded : uploadedDocs.has(key),
+        )
+      ) {
+        everSet.add("uploads");
       }
 
       // Advance — try Next first; on the last step the Save button appears.
@@ -2729,9 +2807,6 @@ export const sitAdapter: SitAdapter = {
         "[sit] wizard: create formunda dosya-yükleme adımı YOK — belge/foto ayrı gerekiyor",
       );
     }
-    await page
-      .screenshot({ path: "/var/www/apply.findandstudy.com/artifacts/edcons/dist/public/swf.png", fullPage: true })
-      .catch(() => {});
     try {
       const upDump = await page.evaluate(() => {
         const btns = Array.from(document.querySelectorAll("button")).map((b) => (b.textContent || "").trim()).filter(Boolean).slice(0, 25);
@@ -2911,11 +2986,11 @@ export const sitAdapter: SitAdapter = {
       };
     }
 
-    // Fallback: parse the id from the student-detail URL we landed on after save.
-    // Trust any numeric /students/{id} path regardless of save-detection heuristic
-    // — if the page navigated to a student detail, the student was created.
-    // Require at least one digit and reject wizard route words so a stray
-    // /students/new never masquerades as a created id. Left UNVERIFIED → logged.
+    // A student-detail URL is useful diagnostic evidence, but it is not identity
+    // proof. The route can be stale, can belong to another record, or can change
+    // before the GraphQL index catches up. Keep the id only as a redacted
+    // candidate in diagnostics and fail closed unless the identity lookup above
+    // verifies email/passport.
     const urlMatch = page.url().match(/\/students\/([0-9a-z][0-9a-z-]{5,})/i);
     const urlId = urlMatch?.[1];
     if (
@@ -2924,15 +2999,9 @@ export const sitAdapter: SitAdapter = {
       !/^(new|create|add|edit)$/i.test(urlId)
     ) {
       logger.warn(
-        "[sit] öğrenci id GraphQL ile doğrulanamadı — detay URL'den alındı " +
-          `(id=${urlId}, saved=${saved}, DOĞRULANMADI)`,
+        "[sit] öğrenci id GraphQL ile doğrulanamadı — detay URL yalnız aday " +
+          `(candidatePresent=true, saved=${saved}); başarı sayılmadı`,
       );
-      return {
-        studentId: urlId,
-        created: saved,
-        alreadyExists: false,
-        createdViaWebhook: false,
-      };
     }
 
     // Surface the real SIT rejection reason before giving up — previously
@@ -2976,6 +3045,13 @@ export const sitAdapter: SitAdapter = {
       issueDate: "pasaport veriliş tarihi",
       expiryDate: "pasaport bitiş tarihi",
       phone: "telefon",
+      address: "adres",
+      city: "şehir",
+      residenceCountry: "ikamet ülkesi",
+      schoolName: "okul adı",
+      gpa: "GPA",
+      educationLevel: "eğitim seviyesi",
+      uploads: "belgeler",
       transferStudent: "transfer öğrenci seçimi",
       haveTc: "TC seçimi",
       blueCard: "mavi kart seçimi",
@@ -3053,6 +3129,12 @@ export const sitAdapter: SitAdapter = {
     // programs (with degree/language metadata) so program matching happens
     // entirely in code — no UI "Add Application" dialog is involved.
     const level = mapEducationLevel(profile.level);
+    if (!level) {
+      return {
+        ...base,
+        detail: `Başvuru seviyesi eksik veya desteklenmiyor: "${profile.level || "(boş)"}"`,
+      };
+    }
     const catalog = await fetchProgramCatalog(page, allowedUni, level);
 
     // Diagnostic: persist the freshly-fetched live catalog so it can be

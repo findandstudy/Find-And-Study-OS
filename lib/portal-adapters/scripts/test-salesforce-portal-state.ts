@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   hasSalesforceCompletionProof,
+  inferSalesforceDocumentSlot,
   isOwnedSalesforceApplicant,
   normalizeSalesforceStage,
+  parseSalesforceStageMarker,
   salesforcePortalProgramName,
 } from "../src/universities/salesforce/portalState.js";
 
@@ -24,6 +26,29 @@ test("normalizes CRM degree prefixes to the portal programme label", () => {
     salesforcePortalProgramName("PhD in Psychology (English)"),
     "Psychology (English)",
   );
+});
+
+test("parses the live SLDS path stage marker", () => {
+  assert.equal(
+    parseSalesforceStageMarker("Stage: Personal Information"),
+    "Personal Information",
+  );
+  assert.equal(parseSalesforceStageMarker("Stage: Documents"), "Documents");
+  assert.equal(parseSalesforceStageMarker("not a stage"), null);
+});
+
+test("maps upload controls by document semantics, never by position", () => {
+  assert.equal(inferSalesforceDocumentSlot("Passport Upload"), "passport");
+  assert.equal(
+    inferSalesforceDocumentSlot("High School Transcript"),
+    "transcript",
+  );
+  assert.equal(
+    inferSalesforceDocumentSlot("Diploma Certificate"),
+    "diploma",
+  );
+  assert.equal(inferSalesforceDocumentSlot("Photograph"), "photo");
+  assert.equal(inferSalesforceDocumentSlot("Other certificate"), null);
 });
 
 test("recognizes only exact Salesforce wizard stages", () => {

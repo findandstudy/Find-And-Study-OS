@@ -240,6 +240,61 @@ function parseLatestApplication(
   return null;
 }
 
+export function findMatchingMulticoApplication(
+  html: string,
+  programName: string,
+): { applicationId: string; fee: string; status: string } | null {
+  const wanted = fold(programName).replace(/\([^)]*\)/g, " ").trim();
+  if (!wanted) return null;
+  const rows = html.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+  const matches: Array<{ applicationId: string; fee: string; status: string }> = [];
+  for (const row of rows) {
+    const text = row
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;|&#160;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/\s+/g, " ")
+      .trim();
+    const normalized = fold(text).replace(/\([^)]*\)/g, " ").trim();
+    if (
+      !normalized.includes(wanted) &&
+      !wanted.includes(normalized)
+    ) {
+      const wantedTokens = wanted.split(" ").filter((token) => token.length > 2);
+      const rowTokens = new Set(
+        normalized.split(" ").filter((token) => token.length > 2),
+      );
+      if (
+        wantedTokens.length < 2 ||
+        wantedTokens.filter((token) => rowTokens.has(token)).length /
+          wantedTokens.length <
+          0.8
+      ) {
+        continue;
+      }
+    }
+    const id =
+      /student-applications\/(?:edit\/|view\/)?(\d+)/i.exec(row)?.[1] ??
+      /#\s*(\d+)/.exec(text)?.[1] ??
+      /application[_-]?id[^0-9]*(\d+)/i.exec(row)?.[1];
+    if (!id) continue;
+    const status =
+      /(Pending|Accepted|Rejected|Review|Waiting|In Progress|Completed)/i.exec(
+        text,
+      )?.[1] ?? "Pending Review";
+    const fee =
+      /([\d,.]+\s*(?:USD|EUR|TRY|₺|\$|€))/.exec(text)?.[1] ?? "";
+    matches.push({ applicationId: id, fee, status });
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function hasMulticoApplicationTable(html: string): boolean {
+  return /candidate applications|my applications|student-applications/i.test(
+    html,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Program catalog — fetch + cache
 // ---------------------------------------------------------------------------
@@ -959,6 +1014,34 @@ export const multicoAdapter: UniversityAdapter = {
       );
     }
 
+    const missingDocuments = (
+      ["passport", "diploma", "transcript"] as const
+    ).filter((slot) => !files[slot]);
+
+    let existingTarget:
+      | { applicationId: string; fee: string; status: string }
+      | null = null;
+    if (existingStudentId) {
+      const studentResponse = await page.request.get(
+        `${MULTICO_BASE}/students/${existingStudentId}`,
+      );
+      if (!studentResponse.ok()) {
+        throw new Error(
+          `Multico dedup_unknown: existing student application list returned ${studentResponse.status()}`,
+        );
+      }
+      const studentHtml = await studentResponse.text();
+      if (!hasMulticoApplicationTable(studentHtml)) {
+        throw new Error(
+          "Multico dedup_unknown: existing student page has no verifiable application table",
+        );
+      }
+      existingTarget = findMatchingMulticoApplication(
+        studentHtml,
+        match.name,
+      );
+    }
+
     // ---- DRY-RUN exit ----------------------------------------------------
     if (isDry) {
       return {
@@ -968,46 +1051,34 @@ export const multicoAdapter: UniversityAdapter = {
         meta: {
           dryRun:             true,
           wouldCreateStudent: !alreadyExists,
-          // Existing students need manual verification before re-applying.
-          wouldApply:         !alreadyExists,
+          wouldApply:         !existingTarget,
+          existingTargetApplicationId:
+            existingTarget?.applicationId ?? null,
           matchedStudentId:   existingStudentId,
           matchedProgram:     { id: match.id, name: match.name },
         },
-        detail: alreadyExists
-          ? `Dry-run: duplicate found (Multico studentId=${existingStudentId}), program="${match.name}"`
+        detail: existingTarget
+          ? `Dry-run: target application already exists (Multico appId=${existingTarget.applicationId})`
+          : alreadyExists
+          ? `Dry-run: existing student will be reused for program="${match.name}"`
           : `Dry-run: new student, program="${match.name}"`,
       };
     }
 
-    // A student already present in Multico may belong to another agency or
-    // already have the requested application. Without ownership/application
-    // proof, creating another application is unsafe; classify as existing.
-    if (alreadyExists) {
+    if (missingDocuments.length > 0) {
       return {
         submitted: false,
-        alreadyExists: true,
+        alreadyExists,
         programMissing: false,
+        missingDocuments,
         detail:
-          "Multico: existing student detected; duplicate application was not created",
+          "Multico: passport, diploma and transcript are required before application processing",
       };
     }
 
     // ---- Step C: Student create (if not duplicate) ----------------------
     let studentId = existingStudentId;
     if (!alreadyExists) {
-      const missingDocuments = (
-        ["passport", "diploma", "transcript"] as const
-      ).filter((slot) => !files[slot]);
-      if (missingDocuments.length > 0) {
-        return {
-          submitted:      false,
-          alreadyExists:  false,
-          programMissing: false,
-          missingDocuments,
-          detail:
-            "Multico: passport, diploma and transcript are required for student creation",
-        };
-      }
       try {
         studentId = await createMulticoStudent(page, profile, files);
         logger.info(`[multico] student created: studentId=${studentId}`);
@@ -1029,6 +1100,46 @@ export const multicoAdapter: UniversityAdapter = {
       throw new Error(
         `Multico document upload error: ${(err as Error).message}`,
       );
+    }
+    const requiredUploadFields = [
+      "file_passport",
+      "file_diploma",
+      "file_transcript",
+    ];
+    const missingUploads = requiredUploadFields.filter(
+      (slot) => !uploadedSlots.includes(slot),
+    );
+    if (missingUploads.length > 0) {
+      return {
+        submitted: false,
+        alreadyExists,
+        programMissing: false,
+        missingDocuments: missingUploads,
+        uploadedSlots,
+        detail:
+          "Multico: required document upload could not be proved; application creation blocked",
+      };
+    }
+
+    if (existingTarget) {
+      return {
+        submitted: true,
+        alreadyExists,
+        programMissing: false,
+        uploadedSlots,
+        externalRef: `${studentId}:${existingTarget.applicationId}`,
+        meta: {
+          studentId,
+          applicationId: existingTarget.applicationId,
+          fee: existingTarget.fee,
+          status: existingTarget.status,
+          repairedExisting: true,
+          program: { id: match.id, name: match.name },
+        },
+        detail:
+          `Multico existing application verified and documents repaired — ` +
+          `studentId=${studentId} appId=${existingTarget.applicationId}`,
+      };
     }
 
     // ---- Step E: Resolve university_id (Topkapı in Multico CRM) --------
