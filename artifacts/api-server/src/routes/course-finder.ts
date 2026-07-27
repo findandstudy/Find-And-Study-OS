@@ -11,6 +11,7 @@ import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/porta
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { getVisibleBranchIds } from "../lib/branchScope";
 import { getDocLabel } from "../lib/docNaming";
+import { sanitizeCourseFinderProgram } from "../lib/courseFinderVisibility";
 
 const router: IRouter = Router();
 
@@ -157,9 +158,22 @@ router.get("/course-finder", async (req, res): Promise<void> => {
 
   const user = (req as any).user;
   const canSeeContacts = user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role);
-  const sanitizedRows = canSeeContacts
-    ? rows
-    : rows.map(({ universityContactName, universityContactPhone, universityContactEmail, commissionRate, serviceFeeAmount, ...rest }) => rest);
+  let canSeeInternalFees = !!user && ["super_admin", "agent", "sub_agent"].includes(user.role);
+  let canSeeServiceFee = canSeeInternalFees;
+  if (user?.role === "agent_staff") {
+    const [staffUser] = await db
+      .select({ agentStaffPermissions: usersTable.agentStaffPermissions })
+      .from(usersTable)
+      .where(eq(usersTable.id, user.id));
+    const permissions = (staffUser?.agentStaffPermissions as string[] | null) || [];
+    canSeeInternalFees = permissions.includes("view_commission_amount");
+    canSeeServiceFee = permissions.includes("view_service_fee");
+  }
+  const sanitizedRows = rows.map((row) => sanitizeCourseFinderProgram(row, {
+    contacts: !!canSeeContacts,
+    internalFees: canSeeInternalFees,
+    serviceFee: canSeeServiceFee,
+  }));
 
   res.json({
     data: sanitizedRows,

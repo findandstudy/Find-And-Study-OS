@@ -167,6 +167,7 @@ export default function CourseFinder() {
   const [colIntakes, setColIntakes] = useState<string>("");
   const [colStatus, setColStatus] = useState<string>("all");
   const showCommission = user && (SHOW_COMMISSION_ROLES.includes(user.role) || (user.role === "agent_staff" && hasAgentStaffPermission("view_commission_amount")));
+  const canViewServiceFee = user && (SHOW_COMMISSION_ROLES.includes(user.role) || (user.role === "agent_staff" && hasAgentStaffPermission("view_service_fee")));
   const isAgent = user && ["agent", "sub_agent"].includes(user.role);
   // Agency-side roles that should respect the agency's service-fee visibility,
   // including agency staff (agent_staff) — otherwise an agency could bypass a
@@ -329,7 +330,7 @@ export default function CourseFinder() {
     staleTime: 10 * 60_000,
   });
 
-  const { data: agentProfile } = useQuery<{ logoUrl?: string | null; companyName?: string; commissionRate?: number | null; subAgentCommissionRate?: number | null; effectiveCommissionRate?: number | null; hideServiceFees?: boolean; effectiveHideServiceFees?: boolean }>({
+  const { data: agentProfile, isFetched: isAgentProfileFetched } = useQuery<{ logoUrl?: string | null; companyName?: string; commissionRate?: number | null; subAgentCommissionRate?: number | null; effectiveCommissionRate?: number | null; hideServiceFees?: boolean; effectiveHideServiceFees?: boolean }>({
     queryKey: ["agent-me-pdf"],
     queryFn: () => apiFetch(`${BASE_URL}/api/agents/me`),
     enabled: !!isAgentSide,
@@ -342,7 +343,9 @@ export default function CourseFinder() {
   // agency's own staff). When true we suppress every on-screen service-fee
   // figure and force the PDF proposal to omit them, regardless of the manual
   // "Hide Service Fee" toggle.
-  const forceHideServiceFee: boolean = !!isAgentSide && !!agentProfile?.effectiveHideServiceFees;
+  const forceHideServiceFee: boolean = !!isAgentSide && (
+    !isAgentProfileFetched || !!agentProfile?.effectiveHideServiceFees
+  );
   const effectiveForceHideServiceFee: boolean = forceHideServiceFee || (user?.role === "agent_staff" && !hasAgentStaffPermission("view_service_fee"));
 
   // Use the backend-computed effective (cascaded) rate as the single source of
@@ -800,6 +803,7 @@ export default function CourseFinder() {
                 onApply={() => setApplyProgram(prog)}
                 onUniversityClick={() => setSelectedUniversity(prog)}
                 showCommission={!!showCommission}
+                showServiceFee={!!canViewServiceFee && !effectiveForceHideServiceFee}
                 agentShareRate={agentShareRate}
                 showWishlist={!!showWishlist}
                 isSelected={selectedIds.has(prog.id)}
@@ -813,6 +817,7 @@ export default function CourseFinder() {
             wishlistIds={wishlistIds}
             selectedIds={selectedIds}
             showCommission={!!showCommission}
+            showServiceFee={!!canViewServiceFee && !effectiveForceHideServiceFee}
             agentShareRate={agentShareRate}
             showWishlist={!!showWishlist}
             sortField={sortField}
@@ -854,7 +859,8 @@ export default function CourseFinder() {
         onClose={() => setSelectedProgram(null)}
         showCommission={!!showCommission}
         agentShareRate={agentShareRate}
-        hideServiceFee={effectiveForceHideServiceFee}
+        showApplicationFee={!!showCommission}
+        showServiceFee={!!canViewServiceFee && !effectiveForceHideServiceFee}
       />
 
       <UniversityInfoDialog
@@ -905,11 +911,12 @@ function SortHeader({ label, field, sortField, sortDir, onSort }: {
 }
 
 function ProgramListView(props: any) { const { t } = useI18n(); return <ProgramListViewBody {...props} t={t} />; }
-function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommission, agentShareRate, showWishlist = true, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick, filterOptions, filters, setFilters, colIntakes, setColIntakes, colStatus, setColStatus, onResetPage, t }: {
+function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommission, showServiceFee, agentShareRate, showWishlist = true, sortField, sortDir, onSort, onToggleSelect, onToggleWishlist, onInfo, onApply, onUniversityClick, filterOptions, filters, setFilters, colIntakes, setColIntakes, colStatus, setColStatus, onResetPage, t }: {
   programs: Program[];
   wishlistIds: number[];
   selectedIds: Set<number>;
   showCommission: boolean;
+  showServiceFee: boolean;
   agentShareRate?: number | null | undefined;
   showWishlist?: boolean;
   sortField: string;
@@ -1015,8 +1022,8 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
                   label: "Max tuition fee",
                 }}
               />
-              {showCommission && (
-                <th className="p-3 text-right">{t("courseFinderPage.commission")}</th>
+              {(showCommission || showServiceFee) && (
+                <th className="p-3 text-right">Internal Fees</th>
               )}
               <ColumnHeader
                 asTh
@@ -1130,13 +1137,28 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
                       )}
                     </div>
                   </td>
-                  {showCommission && (
-                    <td className="p-3 text-right">
-                      {commissionAmount != null ? (
-                        <span className="text-sm font-semibold text-indigo-600">{formatCurrency(commissionAmount, cur)}</span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                  {(showCommission || showServiceFee) && (
+                    <td className="p-3 min-w-[150px]">
+                      <div className="space-y-1 text-[10px]">
+                        {showCommission && (
+                          <>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-muted-foreground">{t("courseFinderPage.commission")}</span>
+                              <span className="font-semibold text-indigo-600">{formatCurrency(commissionAmount, cur)}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-muted-foreground">{t("courseFinderPage.appFee")}</span>
+                              <span className="font-semibold">{formatCurrency(p.applicationFee, cur)}</span>
+                            </div>
+                          </>
+                        )}
+                        {showServiceFee && (
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">{t("catalogPage.serviceFee")}</span>
+                            <span className="font-semibold text-amber-600 dark:text-amber-400">{formatCurrency(p.serviceFeeAmount, cur)}</span>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   )}
                   <td className="p-3 text-center">
@@ -1204,7 +1226,7 @@ function ProgramListViewBody({ programs, wishlistIds, selectedIds, showCommissio
 }
 
 function ProgramCard(props: any) { const { t } = useI18n(); return <ProgramCardBody {...props} t={t} />; }
-function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission, agentShareRate, showWishlist = true, isSelected, onToggleSelect, t }: {
+function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, onApply, onUniversityClick, showCommission, showServiceFee, agentShareRate, showWishlist = true, isSelected, onToggleSelect, t }: {
   program: Program;
   isWishlisted: boolean;
   onToggleWishlist: () => void;
@@ -1212,6 +1234,7 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
   onApply: () => void;
   onUniversityClick: () => void;
   showCommission: boolean;
+  showServiceFee: boolean;
   agentShareRate?: number | null;
   showWishlist?: boolean;
   isSelected: boolean;
@@ -1361,20 +1384,35 @@ function ProgramCardBody({ program: p, isWishlisted, onToggleWishlist, onInfo, o
               <span className="text-[11px] font-bold truncate">{formatCurrency(p.languageFee, cur)}{p.feeType ? ` (${p.feeType})` : ""}</span>
             </div>
           )}
-          {p.applicationFee != null && p.applicationFee > 0 && (
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
-                <FileText className="w-3 h-3 text-muted-foreground/60 shrink-0" />{t("courseFinderPage.appFee")}
-              </span>
-              <span className="text-[11px] font-bold truncate">{formatCurrency(p.applicationFee, cur)}</span>
-            </div>
-          )}
-          {showCommission && commissionAmount != null && (
-            <div className="flex flex-col gap-0.5 min-w-0 col-span-3 pt-2 mt-0.5 border-t border-dashed border-muted-foreground/20">
-              <span className="flex items-center gap-1 text-[9px] text-indigo-600 dark:text-indigo-400 font-medium">
-                <Award className="w-3 h-3 shrink-0" />{t("courseFinderPage.commission")}
-              </span>
-              <span className="text-[14px] font-extrabold text-indigo-600 dark:text-indigo-400">{formatCurrency(commissionAmount, cur)}</span>
+          {(showCommission || showServiceFee) && (
+            <div className={cn(
+              "grid gap-2 min-w-0 col-span-3 pt-2 mt-0.5 border-t border-dashed border-muted-foreground/20",
+              showCommission ? (showServiceFee ? "grid-cols-3" : "grid-cols-2") : "grid-cols-1",
+            )}>
+              {showCommission && (
+                <>
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="flex items-center gap-1 text-[9px] text-indigo-600 dark:text-indigo-400 font-medium">
+                      <Award className="w-3 h-3 shrink-0" />{t("courseFinderPage.commission")}
+                    </span>
+                    <span className="text-[13px] font-extrabold text-indigo-600 dark:text-indigo-400 truncate">{formatCurrency(commissionAmount, cur)}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium">
+                      <FileText className="w-3 h-3 shrink-0" />{t("courseFinderPage.appFee")}
+                    </span>
+                    <span className="text-[13px] font-extrabold truncate">{formatCurrency(p.applicationFee, cur)}</span>
+                  </div>
+                </>
+              )}
+              {showServiceFee && (
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="flex items-center gap-1 text-[9px] text-amber-600 dark:text-amber-400 font-medium">
+                    <DollarSign className="w-3 h-3 shrink-0" />{t("catalogPage.serviceFee")}
+                  </span>
+                  <span className="text-[13px] font-extrabold text-amber-600 dark:text-amber-400 truncate">{formatCurrency(p.serviceFeeAmount, cur)}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1539,12 +1577,13 @@ function UniversityInfoDialog({ program: p, onClose }: {
   );
 }
 
-function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate, hideServiceFee = false }: {
+function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate, showApplicationFee = false, showServiceFee = false }: {
   program: Program | null;
   onClose: () => void;
   showCommission: boolean;
   agentShareRate?: number | null;
-  hideServiceFee?: boolean;
+  showApplicationFee?: boolean;
+  showServiceFee?: boolean;
 }) {
   if (!p) return null;
   const hasDiscount = p.discountedFee != null && p.tuitionFee != null && p.discountedFee < p.tuitionFee;
@@ -1582,11 +1621,11 @@ function ProgramInfoDialog({ program: p, onClose, showCommission, agentShareRate
         { label: "Tuition Fee", value: formatCurrency(p.tuitionFee, cur) },
         ...(p.feeType ? [{ label: "Fee Type", value: p.feeType }] : []),
         ...(hasDiscount ? [{ label: "Discounted Fee", value: formatCurrency(p.discountedFee, cur), highlight: "amber" }] : []),
-        { label: "Application Fee", value: formatCurrency(p.applicationFee, cur) },
+        ...(showApplicationFee ? [{ label: "Application Fee", value: formatCurrency(p.applicationFee, cur) }] : []),
         { label: "Deposit Fee", value: formatCurrency(p.depositFee, cur) },
         { label: "Advanced Fee", value: formatCurrency(p.advancedFee, cur) },
         { label: "Language Fee", value: formatCurrency(p.languageFee, cur) },
-        ...(hideServiceFee ? [] : [{ label: "Service Fee", value: formatCurrency(p.serviceFeeAmount, cur) }]),
+        ...(showServiceFee ? [{ label: "Service Fee", value: formatCurrency(p.serviceFeeAmount, cur) }] : []),
         ...(p.scholarship != null && p.scholarship > 0 ? [{ label: "Scholarship", value: formatCurrency(p.scholarship, cur), highlight: "green" }] : []),
         ...(showCommission && commissionAmount != null ? [{ label: "Commission", value: formatCurrency(commissionAmount, cur), highlight: "indigo" }] : []),
       ],
