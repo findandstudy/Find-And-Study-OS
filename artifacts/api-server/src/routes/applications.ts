@@ -24,8 +24,44 @@ import { maybeFanOutSitStudentForApplication } from "./portalAutomation.js";
 import { enqueuePortalSubmissions } from "../lib/portalManualEnqueue.js";
 import { getDocLabel } from "../lib/docNaming";
 import { checkMandatoryDocsForStudent } from "../lib/mandatoryDocs";
+import { resolveApplicationIntakeSnapshot } from "../lib/applicationIntake";
 
 const router: IRouter = Router();
+
+/**
+ * Existing applications predate intake snapshotting and many lost program_id
+ * links during catalogue refreshes. Read precedence is:
+ *   1. the immutable application snapshot;
+ *   2. the still-linked programme;
+ *   3. one exact active programme-name + university match.
+ * Ambiguous name matches return null rather than guessing.
+ */
+function resolvedApplicationIntakeSql() {
+  return sql<string | null>`COALESCE(
+    NULLIF(BTRIM(${applicationsTable.intake}), ''),
+    (
+      SELECT NULLIF(BTRIM(p_by_id.intakes), '')
+      FROM programs AS p_by_id
+      WHERE p_by_id.id = ${applicationsTable.programId}
+    ),
+    (
+      SELECT CASE
+        WHEN COUNT(*) = 1 THEN MIN(NULLIF(BTRIM(p_by_name.intakes), ''))
+        ELSE NULL
+      END
+      FROM programs AS p_by_name
+      INNER JOIN universities AS u_by_name
+        ON u_by_name.id = p_by_name.university_id
+      WHERE p_by_name.is_active = true
+        AND NULLIF(BTRIM(p_by_name.intakes), '') IS NOT NULL
+        AND LOWER(BTRIM(p_by_name.name)) = LOWER(BTRIM(${applicationsTable.programName}))
+        AND (
+          p_by_name.university_id = ${applicationsTable.universityId}
+          OR LOWER(BTRIM(u_by_name.name)) = LOWER(BTRIM(${applicationsTable.universityName}))
+        )
+    )
+  )`;
+}
 
 async function isStageFileUploadMandatory(stageKey: string): Promise<boolean> {
   const [row] = await db.select({ isFileUploadMandatory: pipelineStagesTable.isFileUploadMandatory })
@@ -173,7 +209,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       assignedToId: applicationsTable.assignedToId,
       season: applicationsTable.season,
       stage: applicationsTable.stage,
-      intake: applicationsTable.intake,
+      intake: resolvedApplicationIntakeSql().as("intake"),
       level: applicationsTable.level,
       instructionLanguage: applicationsTable.instructionLanguage,
       deadline: applicationsTable.deadline,
@@ -420,6 +456,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   let snapshotCountry = country || null;
   let snapshotLevel: string | null = level || null;
   let snapshotLanguage: string | null = instructionLanguage || null;
+  let snapshotIntake: string | null = resolveApplicationIntakeSnapshot(intake, null);
   let snapshotUniversityId = universityId || null;
   let isStateUniversity = false;
 
@@ -490,6 +527,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       snapshotProgramName = snapshotProgramName || prog.name;
       snapshotLevel = snapshotLevel || prog.degree || null;
       snapshotLanguage = snapshotLanguage || prog.language || null;
+      snapshotIntake = resolveApplicationIntakeSnapshot(snapshotIntake, prog.intakes);
       snapshotUniversityId = snapshotUniversityId || prog.universityId;
 
       if (prog.universityId) {
@@ -580,7 +618,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     universityName: snapshotUniversityName,
     country: snapshotCountry,
     programName: snapshotProgramName,
-    intake: intake || null,
+    intake: snapshotIntake,
     level: snapshotLevel,
     instructionLanguage: snapshotLanguage,
     deadline: deadline || null,
@@ -728,7 +766,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
       assignedToId: applicationsTable.assignedToId,
       season: applicationsTable.season,
       stage: applicationsTable.stage,
-      intake: applicationsTable.intake,
+      intake: resolvedApplicationIntakeSql().as("intake"),
       level: applicationsTable.level,
       instructionLanguage: applicationsTable.instructionLanguage,
       deadline: applicationsTable.deadline,

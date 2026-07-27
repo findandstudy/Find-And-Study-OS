@@ -154,6 +154,13 @@ function generateIntakes(): string[] {
 }
 const INTAKES = generateIntakes();
 
+function intakeOptions(programIntakes?: string | null): string[] {
+  const raw = programIntakes?.trim();
+  if (!raw) return INTAKES;
+  const programmeValues = [raw, ...raw.split(",").map(v => v.trim()).filter(Boolean)];
+  return Array.from(new Set([...programmeValues, ...INTAKES]));
+}
+
 function formatCurrency(value: number | string | null | undefined): string {
   const num = typeof value === "string" ? parseFloat(value) : (value ?? 0);
   if (!num || isNaN(num)) return "";
@@ -780,7 +787,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
   });
   const universities = uniData?.data ?? [];
 
-  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null; tuitionFee?: number | null; discountedFee?: number | null; commissionRate?: number | null }> }>({
+  const { data: progData } = useQuery<{ data: Array<{ id: number; name: string; degree?: string | null; language?: string | null; intakes?: string | null; tuitionFee?: number | null; discountedFee?: number | null; commissionRate?: number | null }> }>({
     queryKey: ["programs-by-university", form.universityId],
     queryFn: () => apiFetch(`${BASE_URL}/api/programs?universityId=${form.universityId}&limit=100`),
     enabled: !!form.universityId,
@@ -840,7 +847,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
     const autoLang = prog.language && INSTRUCTION_LANGUAGES.includes(prog.language) ? prog.language : form.instructionLanguage;
     const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
     const autoFee = effectiveFee != null ? String(effectiveFee) : form.tuitionFee;
-    setForm({ ...form, programId: progId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang, tuitionFee: autoFee });
+    setForm({ ...form, programId: progId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang, intake: prog.intakes || form.intake, tuitionFee: autoFee });
   }
 
   async function handleSave() {
@@ -900,6 +907,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
 
   const selectedProgForFee = programs.find(p => String(p.id) === form.programId);
   const hasDiscountedFee = selectedProgForFee != null && selectedProgForFee.discountedFee != null;
+  const editIntakeOptions = intakeOptions(selectedProgForFee?.intakes || form.intake);
 
   return (
     <>
@@ -972,7 +980,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
             <Label>{t("applicationsPage.intake")}</Label>
             <Select value={form.intake} onValueChange={v => setForm({ ...form, intake: v })}>
               <SelectTrigger><SelectValue placeholder={t("applicationsPage.select")} /></SelectTrigger>
-              <SelectContent>{INTAKES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
+              <SelectContent>{editIntakeOptions.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5 col-span-2">
@@ -1312,7 +1320,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
     const autoLang = prog.language && INSTRUCTION_LANGUAGES.includes(prog.language) ? prog.language : form.instructionLanguage;
     const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
     const autoFee = effectiveFee != null ? String(effectiveFee) : form.tuitionFee;
-    setForm({ ...form, programId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang, tuitionFee: autoFee });
+    setForm({ ...form, programId, programName: prog.name, level: autoLevel || form.level, instructionLanguage: autoLang, intake: prog.intakes || form.intake, tuitionFee: autoFee });
   }
 
   const createApplication = useMutation({
@@ -1355,6 +1363,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
 
   const addSelProgForFee = programs.find(p => String(p.id) === form.programId);
   const addHasDiscountedFee = addSelProgForFee != null && addSelProgForFee.discountedFee != null;
+  const addIntakeOptions = intakeOptions(addSelProgForFee?.intakes || form.intake);
 
   return (
     <>
@@ -1406,7 +1415,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
               <Label className="font-semibold">Intake</Label>
               <Select value={form.intake} onValueChange={v => setForm({ ...form, intake: v })}>
                 <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>{INTAKES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
+                <SelectContent>{addIntakeOptions.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2 col-span-2">
