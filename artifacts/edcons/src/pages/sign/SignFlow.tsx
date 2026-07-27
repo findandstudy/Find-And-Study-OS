@@ -10,7 +10,7 @@ import {
   Loader2, CheckCircle2, AlertCircle, FileSignature, Eraser,
   Mail, ShieldCheck, Pencil, Upload, FileText, PenLine, X,
 } from "lucide-react";
-import { getTranslation, isValidLanguage, type Language, RTL_LANGUAGES } from "@/lib/i18n/index";
+import { getTranslation, isValidLanguage, isLanguageLoaded, loadLanguage, type Language, RTL_LANGUAGES } from "@/lib/i18n/index";
 import { FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import { CITIES_BY_COUNTRY } from "@/lib/city-data";
 
@@ -118,6 +118,16 @@ export default function SignFlow({ token }: { token: string }) {
   }, [session?.template?.language]);
   const t: Tfn = (key, params) => getTranslation(lang, `sign.${key}`, params);
   const isRTL = RTL_LANGUAGES.includes(lang);
+
+  // Translations are lazy-loaded per language; the sign flow's language comes
+  // from the contract template (may differ from the app's active language),
+  // so make sure its dictionary is loaded, then re-render.
+  const [, setLangLoadedTick] = useState(0);
+  useEffect(() => {
+    if (!isLanguageLoaded(lang)) {
+      void loadLanguage(lang).then(() => setLangLoadedTick((n) => n + 1));
+    }
+  }, [lang]);
 
   // Signed PDF is rendered asynchronously by a background worker. The download
   // endpoint returns 202 while it is still being generated, so we fetch it from

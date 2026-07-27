@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import {
   type Language,
   DEFAULT_LANGUAGE,
   LANGUAGE_META,
   getTranslation,
+  isLanguageLoaded,
+  loadLanguage,
   isValidLanguage,
   detectBrowserLanguage,
   getLanguageFromPath,
@@ -89,11 +91,41 @@ function resolveInitialLang(): Language {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Language>(resolveInitialLang);
+  // Translations are lazy-loaded per language (bundle-size optimization).
+  // `ready` gates the FIRST render only: children mount after the active
+  // language's dictionary is in the cache, so t() never shows raw keys.
+  const [ready, setReady] = useState<boolean>(() => isLanguageLoaded(lang));
+
+  useEffect(() => {
+    let cancelled = false;
+    // Gate the first render on BOTH the active language AND the English
+    // fallback dictionary — getTranslation falls back to en for missing
+    // keys, so en must be in the cache before anything renders or partially
+    // translated locales would flash raw keys.
+    const loads: Promise<boolean>[] = [loadLanguage(lang)];
+    if (lang !== DEFAULT_LANGUAGE) loads.push(loadLanguage(DEFAULT_LANGUAGE));
+    void Promise.all(loads).then(() => {
+      if (!cancelled) setReady(true);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Last-write-wins token: rapid successive setLang calls can resolve out of
+  // order (each awaits its own chunk); only the LATEST request may commit.
+  const langSwitchToken = useRef(0);
 
   const setLang = useCallback((newLang: Language) => {
     if (!isValidLanguage(newLang)) return;
-    setLangState(newLang);
-    localStorage.setItem(STORAGE_KEY, newLang);
+    const token = ++langSwitchToken.current;
+    // Keep showing the CURRENT language until the new dictionary is loaded —
+    // switching state first would flash raw keys / English fallbacks.
+    void loadLanguage(newLang).then((loaded) => {
+      if (token !== langSwitchToken.current) return; // superseded by a newer switch
+      if (!loaded) return; // fetch failed → stay on the current language
+      setLangState(newLang);
+      localStorage.setItem(STORAGE_KEY, newLang);
+    });
   }, []);
 
   useEffect(() => {
@@ -119,6 +151,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     () => ({ lang, setLang, t, dir, isRTL, localePath }),
     [lang, setLang, t, dir, isRTL, localePath]
   );
+
+  // Minimal first-render gate: the active language chunk is small (~30-60KB
+  // gzip) so this resolves in tens of milliseconds; App.tsx route-level
+  // Suspense fallbacks take over from here.
+  if (!ready) return null;
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

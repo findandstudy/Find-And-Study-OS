@@ -1,14 +1,3 @@
-import en from "./translations/en.json";
-import tr from "./translations/tr.json";
-import ar from "./translations/ar.json";
-import fr from "./translations/fr.json";
-import ru from "./translations/ru.json";
-import fa from "./translations/fa.json";
-import zh from "./translations/zh.json";
-import hi from "./translations/hi.json";
-import es from "./translations/es.json";
-import id from "./translations/id.json";
-
 export const SUPPORTED_LANGUAGES = [
   "en", "tr", "ar", "fr", "ru", "fa", "zh", "hi", "es", "id",
 ] as const;
@@ -40,28 +29,79 @@ export const LANGUAGE_META: Record<Language, LanguageMeta> = {
   id: { code: "id", name: "Indonesian", nativeName: "Bahasa", dir: "ltr", flag: "🇮🇩" },
 };
 
-type TranslationMap = Record<string, any>;
+type TranslationMap = Record<string, unknown>;
 
-const translationFiles: Record<Language, TranslationMap> = {
-  en, tr, ar, fr, ru, fa, zh, hi, es, id,
+// ─── Lazy translation loading ────────────────────────────────────────────────
+//
+// The 10 language JSONs total ~3MB raw. Importing them statically embedded
+// ALL of them into the main bundle (the 2.9MB index chunk regression). Each
+// language is now a dynamic import → its own Vite chunk, and only the active
+// language (plus English as the fallback dictionary) is fetched at runtime.
+//
+// `getTranslation()` stays SYNCHRONOUS — same signature, same call sites.
+// I18nProvider awaits `loadLanguage(activeLang)` before the first render, so
+// by the time any component calls t(), the active dictionary is in the cache.
+
+const translationLoaders: Record<Language, () => Promise<{ default: TranslationMap }>> = {
+  en: () => import("./translations/en.json"),
+  tr: () => import("./translations/tr.json"),
+  ar: () => import("./translations/ar.json"),
+  fr: () => import("./translations/fr.json"),
+  ru: () => import("./translations/ru.json"),
+  fa: () => import("./translations/fa.json"),
+  zh: () => import("./translations/zh.json"),
+  hi: () => import("./translations/hi.json"),
+  es: () => import("./translations/es.json"),
+  id: () => import("./translations/id.json"),
 };
 
-function flattenObject(obj: Record<string, any>, prefix = ""): Record<string, string> {
+function flattenObject(obj: Record<string, unknown>, prefix = ""): Record<string, string> {
   const result: Record<string, string> = {};
   for (const key of Object.keys(obj)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
-    if (typeof obj[key] === "object" && obj[key] !== null) {
-      Object.assign(result, flattenObject(obj[key], fullKey));
+    const val = obj[key];
+    if (typeof val === "object" && val !== null) {
+      Object.assign(result, flattenObject(val as Record<string, unknown>, fullKey));
     } else {
-      result[fullKey] = String(obj[key]);
+      result[fullKey] = String(val);
     }
   }
   return result;
 }
 
-const flatTranslations: Record<Language, Record<string, string>> = {} as any;
-for (const lang of SUPPORTED_LANGUAGES) {
-  flatTranslations[lang] = flattenObject(translationFiles[lang]);
+const flatTranslations: Partial<Record<Language, Record<string, string>>> = {};
+const inFlight: Partial<Record<Language, Promise<boolean>>> = {};
+
+/** True once a language's dictionary is in the in-memory cache. */
+export function isLanguageLoaded(lang: Language): boolean {
+  return flatTranslations[lang] !== undefined;
+}
+
+/**
+ * Load (and flatten) a language's translation JSON into the cache.
+ * Idempotent and de-duplicated: concurrent calls share one fetch.
+ * Never rejects — on network failure it logs, leaves the cache empty and
+ * resolves `false` so callers can decide not to commit a language switch.
+ */
+export function loadLanguage(lang: Language): Promise<boolean> {
+  if (flatTranslations[lang]) return Promise.resolve(true);
+  const pending = inFlight[lang];
+  if (pending) return pending;
+  const p = translationLoaders[lang]()
+    .then((mod) => {
+      flatTranslations[lang] = flattenObject(mod.default);
+      return true;
+    })
+    .catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error(`[i18n] Failed to load translations for "${lang}"`, err);
+      return false;
+    })
+    .finally(() => {
+      delete inFlight[lang];
+    });
+  inFlight[lang] = p;
+  return p;
 }
 
 const _warnedMissing = new Set<string>();

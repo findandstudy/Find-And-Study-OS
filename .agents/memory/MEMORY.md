@@ -149,3 +149,4 @@
 - [Academic levels dual helpers + applied-level ranking](academic-levels-dual-helpers.md) — edcons src/lib/academicLevels.ts is a browser copy of lib/db helpers (keep in sync); applied level must pick most-demanding group (C>B>A) across applications, never first-truthy.
 - [Portal readiness SOFT gate](portal-readiness-soft-gate.md) — readiness matrix/endpoint is display-only, never blocks submission; countryOfResidence←nationality fallback, city←cleanCity(address), GPA integer everywhere; board fetch is per-row (batch later).
 - [Program import/export round-trip](program-import-roundtrip.md) — bulk importers must accept the system's OWN export headers (alias-normalize before validation); university resolved by name, auto-created only for otherwise-valid rows.
+- [i18n lazy-load per language](i18n-lazy-load.md) — 10 locale JSONs must NEVER be statically imported (was the 2.9MB index chunk); gate first render on active lang + en fallback; last-write-wins on switch.

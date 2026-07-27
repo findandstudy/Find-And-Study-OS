@@ -32,6 +32,17 @@ export default defineConfig({
     injectSiteBaseUrl,
     react(),
     tailwindcss(),
+    // Bundle analysis (opt-in): ANALYZE=1 pnpm --filter @workspace/edcons build
+    // → dist/stats.html treemap. devDependency only, never in prod runtime.
+    ...(isBuild && process.env.ANALYZE
+      ? [
+          (await import("rollup-plugin-visualizer")).visualizer({
+            filename: "dist/stats.html",
+            gzipSize: true,
+            template: "treemap" as const,
+          }),
+        ]
+      : []),
     ...(process.env.NODE_ENV !== "production"
       ? [
           runtimeErrorOverlay({
@@ -89,6 +100,12 @@ export default defineConfig({
           if (id.includes("/framer-motion/")) return "vendor-motion";
           if (id.includes("@dnd-kit/") || id.includes("@hello-pangea/dnd")) return "vendor-dnd";
           if (id.includes("/lucide-react/") || id.includes("/react-icons/")) return "vendor-icons";
+          // recharts + its d3 dependency tree — only reachable from lazy
+          // dashboard pages, so this chunk loads on demand, not at boot.
+          if (id.includes("/recharts/") || id.includes("/d3-") || id.includes("/victory-vendor/")) {
+            return "vendor-charts";
+          }
+          if (id.includes("/wouter/")) return "vendor-router";
           return undefined;
         },
       },
