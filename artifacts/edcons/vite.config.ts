@@ -100,11 +100,12 @@ export default defineConfig({
           if (id.includes("/framer-motion/")) return "vendor-motion";
           if (id.includes("@dnd-kit/") || id.includes("@hello-pangea/dnd")) return "vendor-dnd";
           if (id.includes("/lucide-react/") || id.includes("/react-icons/")) return "vendor-icons";
-          // recharts + its d3 dependency tree — only reachable from lazy
-          // dashboard pages, so this chunk loads on demand, not at boot.
-          if (id.includes("/recharts/") || id.includes("/d3-") || id.includes("/victory-vendor/")) {
-            return "vendor-charts";
-          }
+          // NOTE: recharts/d3/victory-vendor are deliberately NOT manually
+          // chunked. Splitting them into a separate vendor chunk created a
+          // circular chunk (vendor-charts <-> vendor-react) whose ES-module
+          // init order broke production at runtime ("Cannot access 'S' before
+          // initialization" -> blank screen on every page). They stay in the
+          // lazy dashboard route chunks, which loads them on demand anyway.
           if (id.includes("/wouter/")) return "vendor-router";
           return undefined;
         },
