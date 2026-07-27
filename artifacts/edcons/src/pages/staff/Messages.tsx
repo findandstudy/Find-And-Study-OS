@@ -1617,12 +1617,25 @@ function InboxTab() {
               const Icon = channelIcon[c.channel] || MessageCircle;
               const isSel = c.id === selectedId;
               const isChecked = selectedIds.has(c.id);
+              const unreadCount = c.unreadCount ?? 0;
+              const isUnread = unreadCount > 0;
+              const displayName = c.externalContact?.displayName || c.title || "(unknown)";
               return (
                 <div
                   key={c.id}
                   data-testid="inbox-conversation-item"
+                  data-unread={isUnread ? "true" : "false"}
+                  aria-label={isUnread ? `${displayName}, ${unreadCount} ${t("inbox.tabs.unread")}` : displayName}
                   onClick={() => (selectMode ? toggleSelected(c.id) : setSelectedId(c.id))}
-                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-border/30 ${isSel && !selectMode ? "bg-primary/5 border-l-2 border-l-primary" : isChecked ? "bg-primary/10" : "hover:bg-secondary/50"}`}
+                  className={`relative flex items-center gap-3 px-4 py-3 cursor-pointer border-b transition-colors ${
+                    isSel && !selectMode
+                      ? "bg-primary/5 border-b-primary/20 border-l-4 border-l-primary"
+                      : isChecked
+                        ? "bg-primary/10 border-b-primary/20"
+                        : isUnread
+                          ? "bg-emerald-50/90 border-b-emerald-100 border-l-4 border-l-emerald-500 hover:bg-emerald-100/80 dark:bg-emerald-950/25 dark:border-b-emerald-900/60 dark:hover:bg-emerald-950/40"
+                          : "border-border/30 border-l-4 border-l-transparent hover:bg-secondary/50"
+                  }`}
                 >
                   {selectMode && (
                     <input
@@ -1634,19 +1647,28 @@ function InboxTab() {
                       data-testid={`checkbox-conv-${c.id}`}
                     />
                   )}
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center ${channelColor[c.channel] || ""}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                    channelColor[c.channel] || ""
+                  } ${isUnread ? "ring-2 ring-emerald-500 ring-offset-2 ring-offset-background" : ""}`}>
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className={`text-sm truncate ${(c.unreadCount ?? 0) > 0 ? "font-bold" : "font-medium"}`}>
-                        {c.externalContact?.displayName || c.title || "(unknown)"}
-                      </p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className={`text-sm truncate ${isUnread ? "font-extrabold text-foreground" : "font-medium"}`}>
+                          {displayName}
+                        </p>
+                        {isUnread && (
+                          <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-extrabold uppercase leading-none tracking-wide text-white">
+                            {t("inbox.tabs.unread")}
+                          </span>
+                        )}
+                      </div>
                       {c.unmatched && <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-700 px-1">unmatched</Badge>}
                     </div>
-                    <p className={`text-xs truncate ${(c.unreadCount ?? 0) > 0 ? "text-foreground font-semibold" : "text-muted-foreground"}`}>{c.lastMessagePreview || "—"}</p>
+                    <p className={`text-xs truncate ${isUnread ? "text-foreground font-bold" : "text-muted-foreground"}`}>{c.lastMessagePreview || "—"}</p>
                   </div>
-                  {!selectMode && (c.awaitingReply || (c.unreadCount ?? 0) > 0) && (
+                  {!selectMode && (c.awaitingReply || isUnread) && (
                     <div className="flex items-center gap-1.5 shrink-0">
                       {c.awaitingReply && (
                         <span
@@ -1655,12 +1677,12 @@ function InboxTab() {
                           data-testid={`awaiting-dot-${c.id}`}
                         />
                       )}
-                      {(c.unreadCount ?? 0) > 0 && (
+                      {isUnread && (
                         <span
-                          className="min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0"
+                          className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold flex items-center justify-center shrink-0 shadow-sm ring-2 ring-emerald-200 dark:ring-emerald-900"
                           data-testid={`unread-badge-${c.id}`}
                         >
-                          {(c.unreadCount ?? 0) > 99 ? "99+" : c.unreadCount}
+                          {unreadCount > 99 ? "99+" : unreadCount}
                         </span>
                       )}
                     </div>
@@ -2926,12 +2948,25 @@ function ConversationList({
             const avatarUrl = others[0]?.avatarUrl || null;
             const isSelected = conv.id === selectedId;
             const isChecked = selectedIds.has(conv.id);
+            const unreadCount = conv.unreadCount ?? 0;
+            const isUnread = unreadCount > 0;
 
             return (
               <div
                 key={conv.id}
+                data-testid="internal-conversation-item"
+                data-unread={isUnread ? "true" : "false"}
+                aria-label={isUnread ? `${displayName}, ${unreadCount} ${t("inbox.tabs.unread")}` : displayName}
                 onClick={() => (selectMode ? onToggleSelected(conv.id) : onSelect(conv.id))}
-                className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-border/30 transition-colors ${isSelected && !selectMode ? "bg-primary/5 border-l-2 border-l-primary" : isChecked ? "bg-primary/10" : "hover:bg-secondary/50"}`}
+                className={`relative flex items-center gap-3 px-4 py-3 cursor-pointer border-b transition-colors ${
+                  isSelected && !selectMode
+                    ? "bg-primary/5 border-b-primary/20 border-l-4 border-l-primary"
+                    : isChecked
+                      ? "bg-primary/10 border-b-primary/20"
+                      : isUnread
+                        ? "bg-emerald-50/90 border-b-emerald-100 border-l-4 border-l-emerald-500 hover:bg-emerald-100/80 dark:bg-emerald-950/25 dark:border-b-emerald-900/60 dark:hover:bg-emerald-950/40"
+                        : "border-border/30 border-l-4 border-l-transparent hover:bg-secondary/50"
+                }`}
               >
                 {selectMode && (
                   <input
@@ -2944,20 +2979,33 @@ function ConversationList({
                   />
                 )}
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt={displayName} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    className={`w-10 h-10 rounded-full object-cover shrink-0 ${isUnread ? "ring-2 ring-emerald-500 ring-offset-2 ring-offset-background" : ""}`}
+                  />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center font-bold text-xs text-foreground shrink-0">
+                  <div className={`w-10 h-10 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center font-bold text-xs text-foreground shrink-0 ${isUnread ? "ring-2 ring-emerald-500 ring-offset-2 ring-offset-background" : ""}`}>
                     {initials}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm text-foreground truncate">{displayName}</p>
-                    {conv.unreadCount > 0 && (
-                      <Badge className="bg-primary text-white text-[10px] h-5 px-1.5 ml-2">{conv.unreadCount}</Badge>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className={`${isUnread ? "font-extrabold" : "font-medium"} text-sm text-foreground truncate`}>{displayName}</p>
+                      {isUnread && (
+                        <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-extrabold uppercase leading-none tracking-wide text-white">
+                          {t("inbox.tabs.unread")}
+                        </span>
+                      )}
+                    </div>
+                    {isUnread && (
+                      <Badge className="bg-emerald-600 text-white text-[10px] font-extrabold h-[22px] min-w-[22px] px-1.5 ml-2 shadow-sm ring-2 ring-emerald-200 dark:ring-emerald-900">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">{conv.lastMessagePreview || "No messages yet"}</p>
+                  <p className={`text-xs truncate mt-0.5 ${isUnread ? "text-foreground font-bold" : "text-muted-foreground"}`}>{conv.lastMessagePreview || "No messages yet"}</p>
                 </div>
               </div>
             );
