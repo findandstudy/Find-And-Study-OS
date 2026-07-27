@@ -81,6 +81,10 @@ import { buildDocNameFromParts } from "../lib/docNaming";
 import { writeAudit } from "../lib/auditLog";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { loadDocCatalogKeySet } from "../lib/docCatalog";
+import {
+  ensureAttachmentFilenameExtension,
+  readNestedZernioAttachmentMetadata,
+} from "../lib/inboxAttachmentMetadata";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 
@@ -3265,9 +3269,16 @@ router.post(
 
     if (attachIndex < zernioAtts.length) {
       const att = zernioAtts[attachIndex];
+      const nested = readNestedZernioAttachmentMetadata(meta, attachIndex);
       attachUrl = String(att?.url ?? att?.fileUrl ?? "").trim() || null;
-      attachMimeType = String(att?.mimeType ?? att?.mime_type ?? "").trim() || null;
-      attachName = String(att?.name ?? att?.filename ?? "").trim() || null;
+      attachMimeType =
+        String(att?.mimeType ?? att?.mime_type ?? "").trim() ||
+        nested.mimeType ||
+        null;
+      attachName =
+        String(att?.name ?? att?.filename ?? "").trim() ||
+        nested.fileName ||
+        null;
     }
 
     // WhatsApp: media object lives in metadata.raw under the message type key
@@ -3400,7 +3411,10 @@ router.post(
           return;
         }
         fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
-        resolvedFilename = sanitizeFileName(attachName || `attachment.${mimeToExt(resolvedMimeType)}`);
+        resolvedFilename = ensureAttachmentFilenameExtension(
+          attachName || `attachment.${mimeToExt(resolvedMimeType)}`,
+          resolvedMimeType,
+        );
       } else {
         // Zernio or direct URL — add Bearer auth only for zernio.com hosts
         const fetchHeaders: Record<string, string> = {};
@@ -3421,7 +3435,10 @@ router.post(
         const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
         fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
         resolvedMimeType = attachMimeType || contentType.split(";")[0].trim();
-        resolvedFilename = sanitizeFileName(attachName || `attachment.${mimeToExt(resolvedMimeType)}`);
+        resolvedFilename = ensureAttachmentFilenameExtension(
+          attachName || `attachment.${mimeToExt(resolvedMimeType)}`,
+          resolvedMimeType,
+        );
       }
     } catch (err: any) {
       console.error("[INBOX save-as-doc] media fetch error:", err?.message ?? err);

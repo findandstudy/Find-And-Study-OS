@@ -98,6 +98,10 @@ function resolveAttachmentName(
   const rawMeta = meta?.raw;
   const waRawType = rawMeta?.type;
   const waMedia = waRawType ? (rawMeta[waRawType] as any) : null;
+  const nestedZernio = Array.isArray(rawMeta?.message?.attachments)
+    ? rawMeta.message.attachments[i]
+    : null;
+  const nestedPayload = nestedZernio?.payload;
   const waFilename = i === 0 ? (waMedia?.filename ?? waMedia?.file_name ?? null) : null;
   const nameFromUrl = (() => {
     try {
@@ -105,7 +109,16 @@ function resolveAttachmentName(
       return seg.includes(".") ? decodeURIComponent(seg) : null;
     } catch { return null; }
   })();
-  const mm = String(a?.mimeType ?? a?.mime_type ?? a?.fileType ?? "").split(";")[0].trim().toLowerCase();
+  const mm = String(
+    a?.mimeType ??
+    a?.mime_type ??
+    a?.fileType ??
+    nestedZernio?.mimeType ??
+    nestedZernio?.mime_type ??
+    nestedPayload?.mimeType ??
+    nestedPayload?.mime_type ??
+    "",
+  ).split(";")[0].trim().toLowerCase();
   const mimeExt = MIME_EXT_MAP[mm] ?? null;
   const type = a?.type ?? a?.fileType ?? "file";
   const attTypeLabel = type === "image" ? t("inbox.attachment.photo")
@@ -113,8 +126,21 @@ function resolveAttachmentName(
     : type === "audio" ? t("inbox.attachment.audio")
     : t("inbox.attachment.document");
   const typedName = mimeExt ? `${attTypeLabel}.${mimeExt}` : attTypeLabel;
-  const explicitName = [a?.name, a?.fileName, waFilename, nameFromUrl].find(
-    (v) => typeof v === "string" && v.trim() && v.trim().toLowerCase() !== "file",
+  const explicitName = [
+    a?.name,
+    a?.fileName,
+    nestedZernio?.name,
+    nestedZernio?.fileName,
+    nestedZernio?.filename,
+    nestedPayload?.fileName,
+    nestedPayload?.filename,
+    waFilename,
+    nameFromUrl,
+  ].find(
+    (v) =>
+      typeof v === "string" &&
+      v.trim() &&
+      !["file", "image", "document", "video", "audio"].includes(v.trim().toLowerCase()),
   ) as string | undefined;
   return explicitName ?? typedName;
 }
