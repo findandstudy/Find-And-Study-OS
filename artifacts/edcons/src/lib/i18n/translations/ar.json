@@ -4738,7 +4738,8 @@
     "exportSelected": "تصدير المحدد ({n})",
     "bulkDeleteFailed": "تعذّر حذف بعض العناصر",
     "bulkDeleteFailedDesc": "تعذّر حذف {failed} من أصل {total}. قد تكون قيد الاستخدام.",
-    "uniTypePublic": "حكومية"
+    "uniTypePublic": "حكومية",
+    "importCreatedUniversities": "تم إنشاء {n} جامعة جديدة: {names}"
   },
   "appDocsPanel": {
     "documentUploaded": "تم رفع المستند",

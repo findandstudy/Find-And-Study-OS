@@ -6,6 +6,7 @@ import { MANAGER_ROLES } from "../lib/roles";
 import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalog, loadDocCatalogKeySet } from "../lib/docCatalog";
 import { invalidateCurrencyCatalog } from "../lib/currencyCatalog";
 import { normalizeDialCode } from "../lib/dialCodes";
+import { normalizeProgramImportRows, collectUniversitiesToCreate } from "../lib/programImportHeaders";
 import * as XLSX from "xlsx";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
@@ -338,8 +339,38 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   } & Record<string, any>)[] = req.body;
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
 
+  // Round-trip guarantee: the importer must accept the system's own export
+  // headers (`Program`, `University`, `Fee Type`, …). Remap friendly headers
+  // to internal keys before any validation.
+  const normalizedRows = normalizeProgramImportRows(rows) as typeof rows;
+
   const allUnis = await db.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
-  const uniNameMap = Object.fromEntries(allUnis.map(u => [u.name.toLowerCase(), u.id]));
+  const uniNameMap = Object.fromEntries(allUnis.map(u => [u.name.trim().toLowerCase(), u.id]));
+
+  // Auto-create universities that don't exist yet (user-approved decision):
+  // collect unresolved names first (dedup case-insensitive + trim, so 50
+  // programs of one new university create it ONCE), re-check against the DB
+  // map, then insert the truly-new ones and extend the name map.
+  const createdUniversities: string[] = [];
+  {
+    // Only rows that would otherwise be valid program rows (non-empty
+    // program name) contribute — a fully-invalid import must not pollute
+    // the universities catalog with side-effect inserts.
+    const values = collectUniversitiesToCreate(
+      normalizedRows as Record<string, unknown>[],
+      uniNameMap,
+    );
+    const UNI_CHUNK = 500;
+    for (let off = 0; off < values.length; off += UNI_CHUNK) {
+      const inserted = await db.insert(universitiesTable)
+        .values(values.slice(off, off + UNI_CHUNK))
+        .returning({ id: universitiesTable.id, name: universitiesTable.name });
+      for (const u of inserted) {
+        uniNameMap[u.name.trim().toLowerCase()] = u.id;
+        createdUniversities.push(u.name);
+      }
+    }
+  }
 
   // Belge sütun anahtarlarını canlı katalogtan oku (5dk cache, in-flight
   // dedupe, fail→eski cache). Anahtarları sabit bir sıraya (alfabetik)
@@ -373,14 +404,14 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     "duration", "tuitionFee", "currency", "scholarship", "intakes",
     "requirements", "commissionRate", "applicationFee", "advancedFee",
     "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
-    "feeType", "minGpa", "minLanguageScore", "quota", "isActive",
+    "feeType", "minGpa", "minLanguageScore", "quota", "isActive", "country",
   ]);
 
   const docColsByRowIdx = new Map<number, { documentType: string; mandatory: boolean; sortOrder: number }[] | undefined>();
   const rowIdxByParsedIdx: number[] = [];
   let invalidDocCells = 0;
   const skipReasons: { row: number; reason: string }[] = [];
-  const parsed = rows.map((r, rowIdx) => {
+  const parsed = normalizedRows.map((r, rowIdx) => {
     // Excel parsed via XLSX often gives "" for empty cells, which `??` does
     // not treat as missing — coerce blanks to undefined first.
     const rawId = (r.universityId as unknown) === "" || r.universityId === null ? undefined : r.universityId;
@@ -390,8 +421,8 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
       skipReasons.push({
         row: rowIdx + 2,
         reason: rawName
-          ? `unknown universityName "${rawName}" (not found in database)`
-          : "missing universityId / universityName",
+          ? `university not found in system: "${rawName}"`
+          : "missing university (fill the University / universityName column)",
       });
       return null;
     }
@@ -548,13 +579,14 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   const unknownDocColumns = [...unknownDocCols].sort();
   await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, {
     inserted: insertedCount, updated: updatedCount, docsTouched: docsToReplace.size,
-    invalidDocCells, unknownDocColumns,
+    invalidDocCells, unknownDocColumns, createdUniversities,
   }, req.ip);
   res.json({
     inserted: insertedCount, updated: updatedCount,
     skipped: rows.length - parsed.length,
     docsTouched: docsToReplace.size, invalidDocCells,
     unknownDocColumns,
+    createdUniversities,
     ...(unknownDocColumns.length > 0
       ? { unknownDocColumnsMessage: `Tanımsız belge sütunları (katalogda yok, atlandı): ${unknownDocColumns.join(", ")}` }
       : {}),

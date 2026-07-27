@@ -4738,7 +4738,8 @@
     "exportSelected": "Exportar seleccionados ({n})",
     "bulkDeleteFailed": "Algunos elementos no se pudieron eliminar",
     "bulkDeleteFailedDesc": "No se pudieron eliminar {failed} de {total}. Puede que estén en uso.",
-    "uniTypePublic": "Pública"
+    "uniTypePublic": "Pública",
+    "importCreatedUniversities": "Se crearon {n} universidades nuevas: {names}"
   },
   "appDocsPanel": {
     "documentUploaded": "Documento subido",

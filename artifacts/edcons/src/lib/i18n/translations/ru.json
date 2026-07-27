@@ -4738,7 +4738,8 @@
     "exportSelected": "Экспорт выбранного ({n})",
     "bulkDeleteFailed": "Некоторые элементы не удалось удалить",
     "bulkDeleteFailedDesc": "Не удалось удалить {failed} из {total}. Возможно, они используются.",
-    "uniTypePublic": "Государственный"
+    "uniTypePublic": "Государственный",
+    "importCreatedUniversities": "Создано новых университетов: {n} — {names}"
   },
   "appDocsPanel": {
     "documentUploaded": "Документ загружен",

@@ -4738,7 +4738,8 @@
     "exportSelected": "خروجی موارد انتخاب‌شده ({n})",
     "bulkDeleteFailed": "برخی موارد حذف نشدند",
     "bulkDeleteFailedDesc": "{failed} مورد از {total} حذف نشد. ممکن است در حال استفاده باشند.",
-    "uniTypePublic": "دولتی"
+    "uniTypePublic": "دولتی",
+    "importCreatedUniversities": "{n} دانشگاه جدید ایجاد شد: {names}"
   },
   "appDocsPanel": {
     "documentUploaded": "مدرک بارگذاری شد",

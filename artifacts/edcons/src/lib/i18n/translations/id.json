@@ -4738,7 +4738,8 @@
     "exportSelected": "Ekspor Terpilih ({n})",
     "bulkDeleteFailed": "Beberapa item tidak dapat dihapus",
     "bulkDeleteFailedDesc": "{failed} dari {total} tidak dapat dihapus. Mungkin sedang digunakan.",
-    "uniTypePublic": "Negeri"
+    "uniTypePublic": "Negeri",
+    "importCreatedUniversities": "{n} universitas baru dibuat: {names}"
   },
   "appDocsPanel": {
     "documentUploaded": "Dokumen diunggah",

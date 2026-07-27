@@ -4620,7 +4620,8 @@
     "exportSelected": "Seçilenleri Dışa Aktar ({n})",
     "bulkDeleteFailed": "Bazı öğeler silinemedi",
     "bulkDeleteFailedDesc": "{total} öğeden {failed} tanesi silinemedi. Kullanımda olabilirler.",
-    "uniTypePublic": "Devlet"
+    "uniTypePublic": "Devlet",
+    "importCreatedUniversities": "{n} yeni üniversite oluşturuldu: {names}"
   },
   "appDocsPanel": {
     "documentUploaded": "Belge yüklendi",

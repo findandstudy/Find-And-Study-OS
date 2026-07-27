@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "EduConsult OS"
+title = "Find And Study OS"
 version = "1.0.0"
 id = "artifacts/edcons"
 router = "path"

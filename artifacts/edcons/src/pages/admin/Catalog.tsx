@@ -163,6 +163,7 @@ type BulkImportResult = {
   docsTouched?: number;
   unknownDocColumns?: string[];
   unknownDocColumnsMessage?: string;
+  createdUniversities?: string[];
 };
 
 function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImport }: {
@@ -226,6 +227,11 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm space-y-1">
               <p className="font-medium text-green-700">{t("catalogPage.importCompleted")}</p>
               <p className="text-green-600">{t("catalogPage.importAdded", { n: result.inserted })}{result.updated ? ` — ${t("catalogPage.importUpdated", { n: result.updated })}` : null} — {t("catalogPage.importSkipped", { n: result.skipped })}</p>
+              {result.createdUniversities && result.createdUniversities.length > 0 && (
+                <p className="text-green-600 text-xs">
+                  {t("catalogPage.importCreatedUniversities", { n: result.createdUniversities.length, names: result.createdUniversities.join(", ") })}
+                </p>
+              )}
               {(result.docsTouched !== undefined || result.invalidDocCells !== undefined) && (
                 <p className="text-green-600 text-xs">
                   {result.docsTouched !== undefined && t("catalogPage.docReqsUpdated", { n: result.docsTouched })}
