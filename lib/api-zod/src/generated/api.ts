@@ -564,6 +564,14 @@ export const GetStudentPortalReadinessQueryParams = zod.object({
 });
 
 export const GetStudentPortalReadinessResponse = zod.object({
+  applicable: zod
+    .boolean()
+    .describe(
+      "True when at least one current student application dynamically routes through this portal.",
+    ),
+  supported: zod
+    .boolean()
+    .describe("True when the portal has a readiness field specification."),
   ready: zod.boolean(),
   portal: zod.string(),
   level: zod
@@ -582,6 +590,7 @@ export const GetStudentPortalReadinessResponse = zod.object({
     }),
   ),
   skipped: zod.array(zod.string()),
+  applicationIds: zod.array(zod.number()),
 });
 
 /**
@@ -3422,6 +3431,19 @@ export const RetryPortalSubmissionParams = zod.object({
 
 export const RetryPortalSubmissionResponse = zod.object({
   ok: zod.boolean(),
+});
+
+/**
+ * Uses PII-safe failure evidence and creates an approval-queue proposal. This endpoint never retries a submission or mutates a university portal, application code, or an active adapter spec.
+
+ * @summary Create a review-only AI diagnosis for a failed portal submission
+ */
+export const DiagnosePortalSubmissionWithAiParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DiagnosePortalSubmissionWithAiResponse = zod.object({
+  guardian: zod.record(zod.string(), zod.unknown()),
 });
 
 /**

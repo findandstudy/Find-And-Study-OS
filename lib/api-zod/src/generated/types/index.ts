@@ -74,6 +74,8 @@ export * from "./createUniversityBody";
 export * from "./createUniversityContract201";
 export * from "./createUniversityExclusionBody";
 export * from "./createUserBody";
+export * from "./diagnosePortalSubmissionWithAi200";
+export * from "./diagnosePortalSubmissionWithAi200Guardian";
 export * from "./document";
 export * from "./documentExtraction";
 export * from "./documentExtractionExtractedFields";

@@ -525,6 +525,10 @@ export const PortalReadinessLevel = {
 } as const;
 
 export interface PortalReadiness {
+  /** True when at least one current student application dynamically routes through this portal. */
+  applicable: boolean;
+  /** True when the portal has a readiness field specification. */
+  supported: boolean;
   ready: boolean;
   portal: string;
   /** @nullable */
@@ -532,6 +536,7 @@ export interface PortalReadiness {
   missing: string[];
   incompatible: PortalReadinessIncompatibility[];
   skipped: string[];
+  applicationIds: number[];
 }
 
 export interface StudentEducationResponse {
@@ -2677,6 +2682,14 @@ export type GetPortalSubmissions200 = {
 
 export type RetryPortalSubmission200 = {
   ok: boolean;
+};
+
+export type DiagnosePortalSubmissionWithAi200Guardian = {
+  [key: string]: unknown;
+};
+
+export type DiagnosePortalSubmissionWithAi200 = {
+  guardian: DiagnosePortalSubmissionWithAi200Guardian;
 };
 
 export type CancelPortalSubmission200 = {

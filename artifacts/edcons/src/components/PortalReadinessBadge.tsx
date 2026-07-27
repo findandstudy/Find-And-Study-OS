@@ -14,11 +14,17 @@ export function PortalReadinessBadge({ studentId, portal = "sit" }: { studentId:
   const { t, dir } = useI18n() as any;
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useGetStudentPortalReadiness(studentId, { portal }) as {
-    data: { ready: boolean; missing: string[]; incompatible: { field: string; reason: string }[] } | undefined;
+    data: {
+      applicable?: boolean;
+      supported?: boolean;
+      ready: boolean;
+      missing: string[];
+      incompatible: { field: string; reason: string }[];
+    } | undefined;
     isLoading: boolean;
   };
 
-  if (isLoading || !data) return null;
+  if (isLoading || !data || data.applicable === false || data.supported === false) return null;
 
   const fieldLabel = (key: string) => {
     const label = t(`portalReadiness.fields.${key}`);
@@ -79,9 +85,15 @@ export function PortalReadinessBadge({ studentId, portal = "sit" }: { studentId:
 export function PortalReadinessInlineWarning({ studentId, portal = "sit" }: { studentId: number; portal?: string }) {
   const { t } = useI18n() as any;
   const { data } = useGetStudentPortalReadiness(studentId, { portal }) as {
-    data: { ready: boolean; missing: string[]; incompatible: { field: string; reason: string }[] } | undefined;
+    data: {
+      applicable?: boolean;
+      supported?: boolean;
+      ready: boolean;
+      missing: string[];
+      incompatible: { field: string; reason: string }[];
+    } | undefined;
   };
-  if (!data || data.ready) return null;
+  if (!data || data.applicable === false || data.supported === false || data.ready) return null;
   const count = data.missing.length + data.incompatible.length;
   return (
     <span

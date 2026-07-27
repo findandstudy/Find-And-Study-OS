@@ -9,6 +9,10 @@ import type { PortalReadinessIncompatibility } from "./portalReadinessIncompatib
 import type { PortalReadinessLevel } from "./portalReadinessLevel";
 
 export interface PortalReadiness {
+  /** True when at least one current student application dynamically routes through this portal. */
+  applicable: boolean;
+  /** True when the portal has a readiness field specification. */
+  supported: boolean;
   ready: boolean;
   portal: string;
   /** @nullable */
@@ -16,4 +20,5 @@ export interface PortalReadiness {
   missing: string[];
   incompatible: PortalReadinessIncompatibility[];
   skipped: string[];
+  applicationIds: number[];
 }

@@ -22,7 +22,7 @@ import { verifyStudentPhotoSignature } from "@workspace/portal-adapters";
 import bcrypt from "bcryptjs";
 import { deleteSessionsForUser } from "../lib/replitAuth";
 import { getCurrentSeason } from "../lib/season";
-import { enqueueOnStageChange } from "../lib/portalAutoTrigger.js";
+import { enqueueOnStageChange, resolvePortalRouting } from "../lib/portalAutoTrigger.js";
 import { computeReadiness } from "../lib/portalReadiness";
 
 const router: IRouter = Router();
@@ -558,13 +558,73 @@ router.get("/students/:id/portal-readiness", requireAuth, requireRole(...STAFF_R
   const access = await assertCanAccessStudent(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
   const portal = String(req.query.portal || "sit").trim().toLowerCase() || "sit";
+
+  // Readiness badges are application-scoped. A student must not inherit the
+  // historical default SIT badge merely because SIT is the default query
+  // parameter. Resolve each current application through the exact same dynamic
+  // membership/standalone routing used by Portal Automation, so changing an
+  // active portal university or multi-portal membership is reflected here
+  // without a code change or hardcoded university list.
+  const applicationTargets = await db
+    .select({
+      id: applicationsTable.id,
+      universityId: applicationsTable.universityId,
+      universityName: applicationsTable.universityName,
+    })
+    .from(applicationsTable)
+    .where(and(
+      eq(applicationsTable.studentId, id),
+      isNull(applicationsTable.deletedAt),
+    ));
+  const routedTargets = await Promise.all(
+    applicationTargets.map(async (application) => ({
+      applicationId: application.id,
+      routing: await resolvePortalRouting({
+        universityId: application.universityId,
+        universityName: application.universityName,
+      }),
+    })),
+  );
+  const applicableApplicationIds = routedTargets
+    .filter(({ routing }) => {
+      const portalUniversity = routing?.portalUni;
+      if (!portalUniversity) return false;
+      return [
+        portalUniversity.universityKey,
+        portalUniversity.adapterKey,
+        portalUniversity.routesVia,
+      ]
+        .filter(Boolean)
+        .some((key) => String(key).trim().toLowerCase() === portal);
+    })
+    .map(({ applicationId }) => applicationId);
+
+  if (applicableApplicationIds.length === 0) {
+    res.json({
+      applicable: false,
+      supported: true,
+      ready: true,
+      portal,
+      level: null,
+      missing: [],
+      incompatible: [],
+      skipped: [],
+      applicationIds: [],
+    });
+    return;
+  }
+
   const [eduRecords, docs] = await Promise.all([
     db.select().from(educationRecordsTable).where(eq(educationRecordsTable.studentId, id)),
     db.select({ type: documentsTable.type }).from(documentsTable)
       .where(and(eq(documentsTable.studentId, id), isNull(documentsTable.deletedAt))),
   ]);
   const readiness = computeReadiness(access.student, eduRecords, portal, docs.map((d) => d.type));
-  res.json(readiness);
+  res.json({
+    ...readiness,
+    applicable: true,
+    applicationIds: applicableApplicationIds,
+  });
 });
 
 router.put("/students/:id/education", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {

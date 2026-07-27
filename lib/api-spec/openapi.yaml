@@ -4112,6 +4112,12 @@ components:
     PortalReadiness:
       type: object
       properties:
+        applicable:
+          type: boolean
+          description: True when at least one current student application dynamically routes through this portal.
+        supported:
+          type: boolean
+          description: True when the portal has a readiness field specification.
         ready:
           type: boolean
         portal:
@@ -4131,12 +4137,19 @@ components:
           type: array
           items:
             type: string
+        applicationIds:
+          type: array
+          items:
+            type: integer
       required:
+        - applicable
+        - supported
         - ready
         - portal
         - missing
         - incompatible
         - skipped
+        - applicationIds
 
     StudentEducationResponse:
       type: object

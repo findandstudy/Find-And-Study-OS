@@ -51,6 +51,7 @@ test("R2: complete bachelor applicant → ready", () => {
   assert.deepEqual(r.missing, []);
   assert.deepEqual(r.incompatible, []);
   assert.equal(r.ready, true);
+  assert.equal(r.supported, true);
   assert.equal(r.level, "high_school");
 });
 
@@ -89,9 +90,10 @@ test("R7: fatherJob/motherJob skipped, toggles never missing", () => {
   assert.ok(!r.missing.includes("transferStudent"));
 });
 
-test("R8: non-SIT portal (skeleton matrix) → ready", () => {
+test("R8: portal without a readiness matrix is marked unsupported", () => {
   const r = computeReadiness(fullStudent({ nationality: null }), [], "united", []);
   assert.equal(r.ready, true);
+  assert.equal(r.supported, false);
   assert.deepEqual(r.missing, []);
 });
 

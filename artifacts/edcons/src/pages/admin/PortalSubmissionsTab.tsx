@@ -375,7 +375,10 @@ function SubmissionRow({
                   </span>
                 )}
                 {sub.status === "queued" && sub.studentId != null && (
-                  <PortalReadinessInlineWarning studentId={sub.studentId} />
+                  <PortalReadinessInlineWarning
+                    studentId={sub.studentId}
+                    portal={sub.resultJson?.adapterKey ?? sub.universityKey}
+                  />
                 )}
                 {sub.studentName && sub.programName && (
                   <span className="text-muted-foreground">·</span>

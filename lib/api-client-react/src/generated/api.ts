@@ -60,6 +60,7 @@ import type {
   CreateUniversityContract201,
   CreateUniversityExclusionBody,
   CreateUserBody,
+  DiagnosePortalSubmissionWithAi200,
   Document,
   DocumentExtraction,
   EnqueuePortalSubmissionBody,
@@ -9597,6 +9598,96 @@ export const useRetryPortalSubmission = <
   TContext
 > => {
   return useMutation(getRetryPortalSubmissionMutationOptions(options));
+};
+
+/**
+ * Uses PII-safe failure evidence and creates an approval-queue proposal. This endpoint never retries a submission or mutates a university portal, application code, or an active adapter spec.
+
+ * @summary Create a review-only AI diagnosis for a failed portal submission
+ */
+export const getDiagnosePortalSubmissionWithAiUrl = (id: number) => {
+  return `/api/portal-submissions/${id}/ai-diagnose`;
+};
+
+export const diagnosePortalSubmissionWithAi = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DiagnosePortalSubmissionWithAi200> => {
+  return customFetch<DiagnosePortalSubmissionWithAi200>(
+    getDiagnosePortalSubmissionWithAiUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getDiagnosePortalSubmissionWithAiMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof diagnosePortalSubmissionWithAi>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof diagnosePortalSubmissionWithAi>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["diagnosePortalSubmissionWithAi"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof diagnosePortalSubmissionWithAi>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return diagnosePortalSubmissionWithAi(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DiagnosePortalSubmissionWithAiMutationResult = NonNullable<
+  Awaited<ReturnType<typeof diagnosePortalSubmissionWithAi>>
+>;
+
+export type DiagnosePortalSubmissionWithAiMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a review-only AI diagnosis for a failed portal submission
+ */
+export const useDiagnosePortalSubmissionWithAi = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof diagnosePortalSubmissionWithAi>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof diagnosePortalSubmissionWithAi>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDiagnosePortalSubmissionWithAiMutationOptions(options));
 };
 
 /**

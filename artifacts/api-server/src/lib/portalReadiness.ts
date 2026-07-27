@@ -37,6 +37,8 @@ export interface ReadinessIncompatibility {
 
 export interface PortalReadiness {
   ready: boolean;
+  /** False when this portal does not yet have a readiness specification. */
+  supported: boolean;
   portal: string;
   level: EducationLevel | null;
   missing: string[];
@@ -227,6 +229,7 @@ export function computeReadiness(
 
   return {
     ready: missing.length === 0 && incompatible.length === 0,
+    supported: rules.length > 0,
     portal: portalKey,
     level,
     missing,
