@@ -324,13 +324,36 @@ export default function CourseFinder() {
     }
   }
 
-  const { data: settings } = useQuery<{ companyName?: string; companyEmail?: string; companyPhone?: string; companyWebsite?: string; logoUrl?: string | null; pdfAccentColor?: string | null }>({
+  const { data: settings } = useQuery<{
+    companyName?: string;
+    publicBrandName?: string;
+    companyEmail?: string;
+    companyPhone?: string;
+    companyWebsite?: string;
+    logoUrl?: string | null;
+    logoSquareUrl?: string | null;
+    pdfLogoUrl?: string | null;
+    pdfAccentColor?: string | null;
+  }>({
     queryKey: ["settings-for-pdf"],
     queryFn: () => apiFetch(`${BASE_URL}/api/settings`),
     staleTime: 10 * 60_000,
   });
 
-  const { data: agentProfile, isFetched: isAgentProfileFetched } = useQuery<{ logoUrl?: string | null; companyName?: string; commissionRate?: number | null; subAgentCommissionRate?: number | null; effectiveCommissionRate?: number | null; hideServiceFees?: boolean; effectiveHideServiceFees?: boolean }>({
+  const { data: agentProfile, isFetched: isAgentProfileFetched } = useQuery<{
+    logoUrl?: string | null;
+    companyName?: string;
+    businessName?: string;
+    email?: string | null;
+    phone?: string | null;
+    phoneE164?: string | null;
+    website?: string | null;
+    commissionRate?: number | null;
+    subAgentCommissionRate?: number | null;
+    effectiveCommissionRate?: number | null;
+    hideServiceFees?: boolean;
+    effectiveHideServiceFees?: boolean;
+  }>({
     queryKey: ["agent-me-pdf"],
     queryFn: () => apiFetch(`${BASE_URL}/api/agents/me`),
     enabled: !!isAgentSide,
@@ -382,7 +405,12 @@ export default function CourseFinder() {
         selected = allData.data.filter(p => selectedIds.has(p.id));
       }
       let logoDataUrl: string | null = null;
-      const logoSrc = isAgent && agentProfile?.logoUrl ? agentProfile.logoUrl : settings?.logoUrl;
+      // Agency-side PDFs must carry the exact agency/sub-agency identity that
+      // prepared them. Agent staff inherit the managing agency returned by
+      // /agents/me. Tenant users prefer the PDF-specific branding asset.
+      const logoSrc = isAgentSide
+        ? (agentProfile?.logoUrl || settings?.pdfLogoUrl || settings?.logoSquareUrl || settings?.logoUrl)
+        : (settings?.pdfLogoUrl || settings?.logoSquareUrl || settings?.logoUrl);
       if (logoSrc) {
         try {
           const resp = await fetch(logoSrc);
@@ -396,15 +424,26 @@ export default function CourseFinder() {
         } catch {}
       }
 
-      const name = isAgent && agentProfile?.companyName ? agentProfile.companyName : settings?.companyName || "Find And Study";
+      const name = isAgentSide
+        ? (agentProfile?.businessName || agentProfile?.companyName || settings?.publicBrandName || settings?.companyName || "Find And Study")
+        : (settings?.publicBrandName || settings?.companyName || "Find And Study");
+      const email = isAgentSide
+        ? (agentProfile?.email || settings?.companyEmail)
+        : settings?.companyEmail;
+      const phone = isAgentSide
+        ? (agentProfile?.phoneE164 || agentProfile?.phone || settings?.companyPhone)
+        : settings?.companyPhone;
+      const website = isAgentSide
+        ? (agentProfile?.website || settings?.companyWebsite)
+        : settings?.companyWebsite;
 
       await generateProposalPdf({
         programs: selected,
         logoDataUrl,
         companyName: name,
-        companyEmail: settings?.companyEmail || undefined,
-        companyPhone: settings?.companyPhone || undefined,
-        companyWebsite: settings?.companyWebsite || undefined,
+        companyEmail: email || undefined,
+        companyPhone: phone || undefined,
+        companyWebsite: website || undefined,
         showCommission: !!showCommission,
         agentShareRate: agentShareRate ?? null,
         serviceFeeMarkup: pdfMarkup !== 0 ? pdfMarkup : undefined,
@@ -651,7 +690,7 @@ export default function CourseFinder() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex items-center gap-2">
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs text-muted-foreground">
@@ -659,9 +698,12 @@ export default function CourseFinder() {
                 </Button>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               {programs.length > 0 && (
-                <div className="flex items-center gap-2">
+                <div className={cn(
+                  "flex flex-wrap items-center gap-2",
+                  selectedIds.size > 0 && "rounded-xl border border-primary/20 bg-primary/[0.04] px-2 py-1.5",
+                )}>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -694,7 +736,7 @@ export default function CourseFinder() {
                         </Button>
                       )}
                       {!isStudent && !effectiveForceHideServiceFee && (
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                        <label className="flex h-8 items-center gap-1.5 rounded-lg border bg-background px-2.5 text-xs text-muted-foreground cursor-pointer select-none">
                           <input
                             type="checkbox"
                             checked={hideServiceFee}
