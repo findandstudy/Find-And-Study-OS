@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { toLatinUpper, transliterateToLatin } from "@/lib/latin-utils";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +34,7 @@ import {
   Paperclip,
   X as XIcon,
 } from "lucide-react";
+import { inboxDocumentLabel } from "./documentPresentation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -194,6 +196,8 @@ interface InboxStudentTabProps {
   conversationId: number;
   programId?: number | null;
   programName?: string | null;
+  initialLevel?: string | null;
+  onLevelChange?: (level: string) => void;
   onUpdated?: () => void;
   onReadyToSubmit?: (data: SubmitReadyData) => void;
 }
@@ -203,6 +207,8 @@ export function InboxStudentTab({
   conversationId,
   programId,
   programName,
+  initialLevel,
+  onLevelChange,
   onUpdated,
   onReadyToSubmit,
 }: InboxStudentTabProps) {
@@ -211,7 +217,7 @@ export function InboxStudentTab({
   const { levels, isLoading: levelsLoading } = useStudyLevels();
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [selectedLevel, setSelectedLevel] = useState<string>("");
+  const [selectedLevel, setSelectedLevel] = useState<string>(initialLevel ?? "");
   // staging: docType → ChatAttachment
   const [staging, setStaging] = useState<Record<string, ChatAttachment>>({});
   // dialog: pick doc type for an attachment
@@ -283,6 +289,15 @@ export function InboxStudentTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerKey, backendDocs]);
 
+  // Keep the level chosen in the chat attachment modal and the Documents tab
+  // in one shared state. Without this, Add→Master silently reopened Documents
+  // on Bachelor and the saved Master document could never fill its slot.
+  useEffect(() => {
+    if (initialLevel && initialLevel !== selectedLevel) {
+      setSelectedLevel(initialLevel);
+    }
+  }, [initialLevel, selectedLevel]);
+
   // ── Default level to Bachelor when levels load ─────────────────────────────
   useEffect(() => {
     if (levels.length > 0 && !selectedLevel) {
@@ -290,8 +305,9 @@ export function InboxStudentTab({
         levels.find((l) => l.key.toLowerCase().includes("bachelor")) ??
         levels[0];
       setSelectedLevel(bach.key);
+      onLevelChange?.(bach.key);
     }
-  }, [levels, selectedLevel]);
+  }, [levels, selectedLevel, onLevelChange]);
 
   // ── Effective doc requirements (merged program + degree — the SAME set the
   // POST /applications mandatory-doc gate enforces). Falls back to level-only
@@ -473,10 +489,7 @@ export function InboxStudentTab({
     const fromBackend = docReqs.find(
       (r) => r.documentType.toLowerCase() === docType.toLowerCase()
     )?.label;
-    if (fromBackend) return fromBackend;
-    const k = `docTypes.${docType.toLowerCase()}`;
-    const v = t(k);
-    return v !== k ? v : docType;
+    return inboxDocumentLabel(t, docType, fromBackend);
   };
 
   const school1Label = isHigherLevel
@@ -501,7 +514,13 @@ export function InboxStudentTab({
             <span className="text-xs text-muted-foreground">…</span>
           </div>
         ) : (
-          <Select value={selectedLevel} onValueChange={setSelectedLevel}>
+          <Select
+            value={selectedLevel}
+            onValueChange={(nextLevel) => {
+              setSelectedLevel(nextLevel);
+              onLevelChange?.(nextLevel);
+            }}
+          >
             <SelectTrigger className="h-8 text-sm">
               <SelectValue placeholder={t("inbox.studentTab.selectLevel")} />
             </SelectTrigger>
@@ -549,7 +568,9 @@ export function InboxStudentTab({
                 const staged = staging[req.documentType];
                 // isDone: "tamamlandı" — either a chat attachment staged OR already in the
                 // student/lead profile from any upload path (incl. sourceAttachmentId: null)
-                const isDone = !!staged || backendDocTypes.has(req.documentType);
+                const isDone =
+                  !!staged ||
+                  findMissingMandatoryTypes([req.documentType], backendDocTypes).length === 0;
                 return (
                   <div
                     key={req.documentType}

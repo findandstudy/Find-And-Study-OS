@@ -28,8 +28,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { customFetch } from "@workspace/api-client-react";
+import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 import type { AddDocTarget } from "./AddAsDocumentModal";
+import { inboxDocumentLabel } from "./documentPresentation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -86,18 +88,14 @@ export function AssignDocumentFromMessageModal({
 
   const { levels } = useStudyLevels({ onlyEnabled: true });
 
-  const level = owner.interestedLevel ?? localLevel;
+  const level = owner.interestedLevel || localLevel;
 
   function pickLevel(next: string) {
     setLocalLevel(next);
     onLevelChange?.(next);
   }
 
-  const docLabel = (docType: string) => {
-    const k = `docTypes.${docType.toLowerCase()}`;
-    const v = t(k);
-    return v !== k ? v : docType;
-  };
+  const docLabel = (docType: string) => inboxDocumentLabel(t, docType);
 
   const { data: docReqs = [], isLoading } = useQuery<DocReq[]>({
     queryKey: ["degree-doc-reqs-assign-msg", level],
@@ -124,7 +122,11 @@ export function AssignDocumentFromMessageModal({
     staleTime: 10_000,
   });
 
-  const filledTypes = new Set(existingDocs.map((d: any) => d.type));
+  const filledTypes = new Set(
+    existingDocs
+      .map((d: any) => String(d.type || "").toLowerCase())
+      .filter(Boolean),
+  );
 
   const sortedReqs = [...docReqs].sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -160,6 +162,9 @@ export function AssignDocumentFromMessageModal({
       )) as any;
 
       void queryClient.invalidateQueries({ queryKey: existingDocsKey });
+      void queryClient.invalidateQueries({
+        queryKey: ["inbox-staging-docs", `${resolvedOwnerType}:${resolvedOwnerId}`],
+      });
       if (result?.conflict) {
         onSaved();
         return;
@@ -236,7 +241,9 @@ export function AssignDocumentFromMessageModal({
                   const Icon = getDocIcon(req.documentType);
                   const isSaved = saved.has(req.documentType);
                   const isSaving = saving === req.documentType;
-                  const isFilled = !isUnmatched && filledTypes.has(req.documentType);
+                  const isFilled =
+                    !isUnmatched &&
+                    findMissingMandatoryTypes([req.documentType], filledTypes).length === 0;
                   const isDisabled = !!saving || isFilled;
                   return (
                     <button

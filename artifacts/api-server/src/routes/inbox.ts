@@ -80,6 +80,7 @@ import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } fr
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { writeAudit } from "../lib/auditLog";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
+import { loadDocCatalogKeySet } from "../lib/docCatalog";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 
@@ -941,6 +942,7 @@ router.get(
             interestedProgram: leadsTable.interestedProgram,
             interestedUniversity: leadsTable.interestedUniversity,
             interestedCountry: leadsTable.interestedCountry,
+            interestedLevel: leadsTable.interestedLevel,
             estimatedValue: leadsTable.estimatedValue,
             source: leadsTable.source,
             originType: leadsTable.originType,
@@ -3201,21 +3203,30 @@ router.post(
       return;
     }
 
-    const { ownerType, ownerId: ownerIdRaw, documentType, force, setAsPhoto = true } = req.body;
+    const {
+      ownerType,
+      ownerId: ownerIdRaw,
+      documentType: documentTypeRaw,
+      force,
+      setAsPhoto = true,
+    } = req.body;
     const ownerId = Number(ownerIdRaw);
-
-    const VALID_SAVE_AS_DOC_TYPES = [
-      "diploma_certificate", "diploma_transcript", "passport", "photo", "cv", "other_certificates_documents",
-      // Legacy aliases kept for backward compatibility
-      "diploma", "transcript", "photograph",
-    ] as const;
-    if (!documentType || typeof documentType !== "string" || !documentType.trim()) {
+    const documentType =
+      typeof documentTypeRaw === "string" ? documentTypeRaw.trim() : "";
+    if (!documentType) {
       res.status(400).json({ error: "documentType is required" });
       return;
     }
-    if (!(VALID_SAVE_AS_DOC_TYPES as readonly string[]).includes(documentType.trim())) {
+
+    // The Add modal is driven by the admin-managed document catalog, so this
+    // write endpoint must validate against that same source of truth. The old
+    // six-item hardcoded list rendered valid Master/PhD choices but rejected
+    // them on click (bachelors_certificate, lor, diploma_recognition, ...).
+    const activeDocumentTypes = await loadDocCatalogKeySet();
+    const legacyAliases = new Set(["diploma", "transcript", "photograph"]);
+    if (!activeDocumentTypes.has(documentType) && !legacyAliases.has(documentType)) {
       res.status(400).json({
-        error: `documentType must be one of: ${VALID_SAVE_AS_DOC_TYPES.join(", ")}`,
+        error: `documentType is not active in the document catalog: ${documentType}`,
       });
       return;
     }

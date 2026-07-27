@@ -26,6 +26,8 @@ const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 interface LeadDetailSidebarProps {
   detail: InboxConversationDetailResponse;
   conversationId?: number | null;
+  documentLevel?: string | null;
+  onDocumentLevelChange?: (level: string) => void;
   onOpenMatchDialog?: () => void;
   onSummarize: () => void;
   isSummarizing: boolean;
@@ -138,6 +140,8 @@ const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
 export function LeadDetailSidebar({
   detail,
   conversationId,
+  documentLevel,
+  onDocumentLevelChange,
   onOpenMatchDialog,
   onSummarize,
   isSummarizing,
@@ -247,6 +251,13 @@ export function LeadDetailSidebar({
             conversationId={conversationId}
             programId={selectedProgram?.id ?? null}
             programName={selectedProgram?.name ?? null}
+            initialLevel={
+              documentLevel ??
+              detail.student?.interestedLevel ??
+              detail.lead?.interestedLevel ??
+              null
+            }
+            onLevelChange={onDocumentLevelChange}
             onUpdated={onUpdated}
             onReadyToSubmit={(data) => {
               setSubmitData(data);

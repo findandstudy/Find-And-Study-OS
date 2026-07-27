@@ -2441,6 +2441,7 @@ export const GetInboxConversationDetailResponse = zod.object({
         interestedProgram: zod.string().nullish(),
         interestedUniversity: zod.string().nullish(),
         interestedCountry: zod.string().nullish(),
+        interestedLevel: zod.string().nullish(),
         estimatedValue: zod.string().nullish(),
         source: zod.string().nullish(),
         originType: zod.string(),

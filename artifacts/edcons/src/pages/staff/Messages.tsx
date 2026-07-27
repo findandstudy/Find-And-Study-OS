@@ -478,6 +478,35 @@ function InboxTab() {
     }
   }, []);
 
+  const rememberAssignDocLevel = useCallback((level: string) => {
+    if (!selectedId || !level) return;
+    setAssignDocLevels((prev) => ({ ...prev, [selectedId]: level }));
+
+    // Persist the choice on the linked CRM record as well as keeping the fast
+    // per-conversation UI state. A refresh must not send Documents back to
+    // Bachelor after the operator explicitly selected Master in the Add modal.
+    const linkedStudent = (detail as any)?.student;
+    const linkedLead = (detail as any)?.lead;
+    const endpoint = linkedStudent?.id
+      ? `/api/students/${linkedStudent.id}`
+      : linkedLead?.id
+        ? `/api/leads/${linkedLead.id}`
+        : null;
+    const currentLevel = linkedStudent?.interestedLevel ?? linkedLead?.interestedLevel ?? null;
+    if (!endpoint || currentLevel === level) return;
+
+    void customFetch(endpoint, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interestedLevel: level }),
+    })
+      .then(() => fetchDetail(selectedId))
+      .catch(() => {
+        // The in-memory choice still keeps this session consistent. The next
+        // explicit edit can retry persistence without blocking document save.
+      });
+  }, [selectedId, detail, fetchDetail]);
+
   useEffect(() => {
     if (selectedId) {
       setDetail(null);
@@ -2253,6 +2282,13 @@ function InboxTab() {
             <LeadDetailSidebar
               detail={detail}
               conversationId={selectedId}
+              documentLevel={
+                assignDocLevels[selectedId] ??
+                (detail as any)?.student?.interestedLevel ??
+                (detail as any)?.lead?.interestedLevel ??
+                null
+              }
+              onDocumentLevelChange={rememberAssignDocLevel}
               onOpenMatchDialog={loadSuggestions}
               onSummarize={handleSummarize}
               isSummarizing={summarizeMutation.isPending}
@@ -2275,6 +2311,13 @@ function InboxTab() {
               <LeadDetailSidebar
                 detail={detail}
                 conversationId={selectedId}
+                documentLevel={
+                  (selectedId ? assignDocLevels[selectedId] : null) ??
+                  (detail as any)?.student?.interestedLevel ??
+                  (detail as any)?.lead?.interestedLevel ??
+                  null
+                }
+                onDocumentLevelChange={rememberAssignDocLevel}
                 onOpenMatchDialog={() => { setSidebarSheetOpen(false); loadSuggestions(); }}
                 onSummarize={handleSummarize}
                 isSummarizing={summarizeMutation.isPending}
@@ -2580,7 +2623,7 @@ function InboxTab() {
           ownerType="student"
           owner={detail.student}
           rememberedLevel={assignDocLevels[selectedId] ?? null}
-          onLevelChange={(lvl) => setAssignDocLevels((prev) => ({ ...prev, [selectedId]: lvl }))}
+          onLevelChange={rememberAssignDocLevel}
           onClose={() => setAddDocTarget(null)}
           onSaved={() => { if (selectedId) fetchDetail(selectedId); }}
         />
@@ -2591,9 +2634,9 @@ function InboxTab() {
           convId={selectedId}
           target={addDocTarget}
           ownerType="lead"
-          owner={{ id: detail.lead.id, interestedLevel: null }}
+          owner={{ id: detail.lead.id, interestedLevel: detail.lead.interestedLevel ?? null }}
           rememberedLevel={assignDocLevels[selectedId] ?? null}
-          onLevelChange={(lvl) => setAssignDocLevels((prev) => ({ ...prev, [selectedId]: lvl }))}
+          onLevelChange={rememberAssignDocLevel}
           onClose={() => setAddDocTarget(null)}
           onSaved={() => { if (selectedId) fetchDetail(selectedId); }}
         />
@@ -2606,7 +2649,7 @@ function InboxTab() {
           ownerType="unmatched"
           owner={{ id: 0, interestedLevel: null }}
           rememberedLevel={assignDocLevels[selectedId] ?? null}
-          onLevelChange={(lvl) => setAssignDocLevels((prev) => ({ ...prev, [selectedId]: lvl }))}
+          onLevelChange={rememberAssignDocLevel}
           onClose={() => setAddDocTarget(null)}
           onSaved={() => {
             setAddDocTarget(null);

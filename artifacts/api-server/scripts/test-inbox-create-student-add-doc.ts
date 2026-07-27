@@ -38,11 +38,13 @@ import {
   conversationsTable,
   messagesTable,
   documentsTable,
+  catalogOptionsTable,
 } from "@workspace/db";
 import { and, eq, like } from "drizzle-orm";
 
 import inboxRouter from "../src/routes/inbox.js";
 import studentsRouter from "../src/routes/students.js";
+import { invalidateDocCatalog } from "../src/lib/docCatalog.js";
 
 // ---------------------------------------------------------------------------
 // Per-run unique ID so parallel test runs never collide.
@@ -109,6 +111,7 @@ async function api(
 const cleanupStudentIds: number[] = [];
 const cleanupContactIds: number[] = [];
 const cleanupConvIds: number[] = [];
+const cleanupCatalogOptionIds: number[] = [];
 let sharedChannelAccountId = 0;
 let sharedStaffUserId = 0;
 let seedSeq = 0;
@@ -281,6 +284,44 @@ test("save-as-document — 400 for invalid documentType", async () => {
   assert.ok(
     String((res.body as Record<string, unknown>).error).includes("documentType"),
     `Error should mention 'documentType', got: ${JSON.stringify(res.body)}`,
+  );
+});
+
+test("save-as-document — accepts an active admin-catalog documentType", async () => {
+  await ensureStaffUser();
+  const dynamicDocumentType = `cad_master_${RUN_ID}`.slice(0, 64);
+  const [catalogRow] = await db
+    .insert(catalogOptionsTable)
+    .values({
+      category: "documents",
+      value: dynamicDocumentType,
+      sortOrder: 9999,
+      isActive: true,
+      metadata: {
+        label: "Dynamic Master Document",
+        icon: "📎",
+        accept: ".pdf,.jpg,.jpeg,.png",
+      },
+    })
+    .returning({ id: catalogOptionsTable.id });
+  cleanupCatalogOptionIds.push(catalogRow.id);
+  invalidateDocCatalog();
+
+  const { convId, msgId } = await seedUnmatchedConversation();
+  const studentId = await seedStudent();
+  const res = await api(
+    "POST",
+    `/api/inbox/conversations/${convId}/messages/${msgId}/attachments/0/save-as-document`,
+    { ownerType: "student", ownerId: studentId, documentType: dynamicDocumentType },
+  );
+
+  // No attachment metadata means the request should now reach the attachment
+  // lookup (404). The old hardcoded whitelist rejected this valid catalog key
+  // earlier with 400 before it could get this far.
+  assert.equal(
+    res.status,
+    404,
+    `Active catalog documentType should pass validation, got ${res.status}: ${JSON.stringify(res.body)}`,
   );
 });
 
@@ -541,6 +582,10 @@ test("cleanup", async () => {
   if (sharedChannelAccountId) {
     await db.delete(channelAccountsTable).where(eq(channelAccountsTable.id, sharedChannelAccountId));
   }
+  for (const id of cleanupCatalogOptionIds) {
+    await db.delete(catalogOptionsTable).where(eq(catalogOptionsTable.id, id));
+  }
+  invalidateDocCatalog();
 });
 
 after(() => {

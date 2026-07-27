@@ -26,6 +26,8 @@ export interface InboxLeadSummary {
   /** @nullable */
   interestedCountry?: string | null;
   /** @nullable */
+  interestedLevel?: string | null;
+  /** @nullable */
   estimatedValue?: string | null;
   /** @nullable */
   source?: string | null;

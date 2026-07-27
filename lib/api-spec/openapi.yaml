@@ -5756,6 +5756,8 @@ components:
           type: ["string", "null"]
         interestedCountry:
           type: ["string", "null"]
+        interestedLevel:
+          type: ["string", "null"]
         estimatedValue:
           type: ["string", "null"]
         source:
