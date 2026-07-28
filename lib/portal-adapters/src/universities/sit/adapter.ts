@@ -2577,50 +2577,66 @@ export const sitAdapter: SitAdapter = {
       const wantUploads = !!(
         files.photo || files.passport || files.transcript || files.diploma
       );
-      const uploadAffordanceCount =
-        (await page
+      const photoAffordanceCount = await page
           .getByRole("button", { name: SIT_UPLOAD.photoTrigger })
           .count()
-          .catch(() => 0)) +
-        (await page
+          .catch(() => 0);
+      const attachmentAffordanceCount = await page
           .getByRole("button", { name: SIT_UPLOAD.attachmentTrigger })
           .count()
-          .catch(() => 0)) +
-        (await page
+          .catch(() => 0);
+      const addDocumentAffordanceCount = await page
           .getByRole("button", { name: /add (new )?doc(?:ument)?/i })
           .count()
-          .catch(() => 0));
+          .catch(() => 0);
+      const saveStudentActionCount = await page
+        .getByRole("button", { name: SIT_BUTTONS.saveStudent })
+        .count()
+        .catch(() => 0);
+      const uploadAffordanceCount =
+        photoAffordanceCount +
+        attachmentAffordanceCount +
+        addDocumentAffordanceCount;
+      // The current SIT build exposes no heading on the final upload screen.
+      // In that build the unique, stable screen fingerprint is:
+      //   Choose Image + Add New Document + Create Student.
+      // Requiring all three prevents a generic hidden file input or an upload
+      // button elsewhere in the SPA from being mistaken for Documents.
+      const hasHeadinglessDocumentsSignature =
+        photoAffordanceCount > 0 &&
+        addDocumentAffordanceCount > 0 &&
+        saveStudentActionCount === 1;
       // A generic file input is not sufficient evidence: browser widgets can
-      // leave hidden inputs mounted on every wizard screen. Require both the
-      // active Documents heading and an upload-specific affordance.
+      // leave hidden inputs mounted on every wizard screen. Require either the
+      // explicit Documents heading or the headingless final-screen fingerprint,
+      // and in both cases an upload-specific affordance.
       const onDocumentsStep = isSitDocumentsStep(
         heading,
         uploadAffordanceCount,
+        hasHeadinglessDocumentsSignature,
       );
       if (wantUploads && !reachedDocuments) {
         if (onDocumentsStep) {
           reachedDocuments = true;
-            try {
-              const addBtn = page.getByRole("button", { name: /add (new )?doc/i }).first();
-              if (await addBtn.count()) {
-                await addBtn.click().catch(() => {});
-                await page.waitForTimeout(900);
-                const rowDump = await page.evaluate(() => {
-                  const files = document.querySelectorAll('input[type="file"]').length;
-                  const selects = Array.from(document.querySelectorAll("select")).map((se) => {
-                    const fi = (se as HTMLElement).closest('[data-slot="form-item"]');
-                    const lab = fi ? (fi.querySelector("label")?.textContent || "").trim() : "";
-                    return lab + " [" + (se as HTMLSelectElement).options.length + "]";
-                  });
-                  const combos = Array.from(document.querySelectorAll('button[role="combobox"]')).map((b) => (b.textContent || "").trim());
-                  const btns = Array.from(document.querySelectorAll("button")).map((b) => (b.textContent || "").trim()).filter(Boolean).slice(0, 20);
-                  return { files, selects, combos, btns };
-                });
-                logger.info("[sit] DOCROW " + JSON.stringify(rowDump));
-              }
-            } catch (e) {
-              logger.info("[sit] DOCROW err " + (e as any)?.message);
-            }
+          // Diagnostics must be read-only. Clicking Add New Document here used
+          // to create an extra empty row before the real upload loop, which
+          // could make the final Create Student validation fail.
+          try {
+            const rowDump = await page.evaluate(() => {
+              const files = document.querySelectorAll('input[type="file"]').length;
+              const selects = Array.from(document.querySelectorAll("select")).map((se) => {
+                const fi = (se as HTMLElement).closest('[data-slot="form-item"]');
+                const lab = fi ? (fi.querySelector("label")?.textContent || "").trim() : "";
+                return lab + " [" + (se as HTMLSelectElement).options.length + "]";
+              });
+              const combos = Array.from(document.querySelectorAll('button[role="combobox"]')).map((b) => (b.textContent || "").trim());
+              const btns = Array.from(document.querySelectorAll("button")).map((b) => (b.textContent || "").trim()).filter(Boolean).slice(0, 20);
+              return { files, selects, combos, btns };
+            });
+            logger.info("[sit] DOCROW " + JSON.stringify(rowDump));
+          } catch (e) {
+            logger.info("[sit] DOCROW err " + (e as any)?.message);
+          }
           logger.info(`[sit] wizard adım=${step + 1}: belge yükleme adımına ulaşıldı`);
         }
       }

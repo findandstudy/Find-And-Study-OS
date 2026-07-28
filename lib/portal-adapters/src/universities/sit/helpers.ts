@@ -98,11 +98,15 @@ export function mapEducationLevel(level: string | undefined | null): string | nu
 export function isSitDocumentsStep(
   heading: string | undefined | null,
   uploadAffordanceCount: number,
+  hasHeadinglessDocumentsSignature = false,
 ): boolean {
   return (
-    /\b(documents?|uploads?|belgeler?|dosyalar?)\b/i.test(heading ?? "") &&
     Number.isFinite(uploadAffordanceCount) &&
-    uploadAffordanceCount > 0
+    uploadAffordanceCount > 0 &&
+    (
+      /\b(documents?|uploads?|belgeler?|dosyalar?)\b/i.test(heading ?? "") ||
+      hasHeadinglessDocumentsSignature
+    )
   );
 }
 

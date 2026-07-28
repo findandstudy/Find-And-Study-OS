@@ -82,12 +82,17 @@ test("GPA3 — number input rounds; empty/garbage → undefined", () => {
   assert.equal(normalizeGpa("not-a-grade"), undefined);
 });
 
-test("DOCSTEP — uploads require both Documents heading and upload affordance", () => {
+test("DOCSTEP — uploads require a heading or the unique headingless final-screen signature", () => {
   assert.equal(isSitDocumentsStep("Documents", 1), true);
   assert.equal(isSitDocumentsStep("Belgeler", 2), true);
   assert.equal(isSitDocumentsStep("Personal Information", 3), false);
   assert.equal(isSitDocumentsStep("Documents", 0), false);
   assert.equal(isSitDocumentsStep("", 4), false);
+  // Current SIT build: heading is empty, but the caller proved the combined
+  // Choose Image + Add New Document + exactly-one Create Student signature.
+  assert.equal(isSitDocumentsStep("", 3, true), true);
+  // A strong signature without any upload affordance is still insufficient.
+  assert.equal(isSitDocumentsStep("", 0, true), false);
 });
 
 // ---------------------------------------------------------------------------
