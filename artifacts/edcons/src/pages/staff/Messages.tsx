@@ -114,7 +114,7 @@ interface ComposerTemplate {
 const INBOX_MEDIA_ACCEPT = [
   "image/jpeg", "image/png",
   "video/mp4", "video/3gpp",
-  "audio/mpeg", "audio/ogg", "audio/amr", "audio/aac", "audio/mp4",
+  "audio/mpeg", "audio/ogg", "audio/webm", "audio/amr", "audio/aac", "audio/mp4",
   ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
 ].join(",");
 
@@ -125,6 +125,7 @@ const INBOX_MEDIA_LIMITS: Record<string, number> = {
   "video/3gpp": 16 * 1024 * 1024,
   "audio/mpeg": 16 * 1024 * 1024,
   "audio/ogg": 16 * 1024 * 1024,
+  "audio/webm": 16 * 1024 * 1024,
   "audio/amr": 16 * 1024 * 1024,
   "audio/aac": 16 * 1024 * 1024,
   "audio/mp4": 16 * 1024 * 1024,
@@ -980,7 +981,7 @@ function InboxTab() {
         : file.type.startsWith("video/") ? "video"
         : file.type.startsWith("audio/") ? "audio"
         : "file";
-      const isVoiceNote = type === "audio" && file.type === "audio/ogg" && file.name.startsWith("voice-note-");
+      const isVoiceNote = type === "audio" && file.name.startsWith("voice-note-");
       return { url: publicUrl, type, name: file.name, ...(isVoiceNote ? { voiceNote: true } : {}) };
     } catch (err: any) {
       toast({ title: t("inbox.error.sendMediaFailed"), description: err?.message, variant: "destructive" });
@@ -2161,7 +2162,7 @@ function InboxTab() {
                                   const mm = String((a as any).mimeType ?? a.fileType ?? "").split(";")[0].trim().toLowerCase();
                                   const map: Record<string, string> = {
                                     "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png",
-                                    "image/webp": "webp", "video/mp4": "mp4", "audio/ogg": "ogg", "audio/mpeg": "mp3",
+                                    "image/webp": "webp", "video/mp4": "mp4", "audio/ogg": "ogg", "audio/webm": "webm", "audio/mpeg": "mp3",
                                     "application/msword": "doc",
                                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
                                   };

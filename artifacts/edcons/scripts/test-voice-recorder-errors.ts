@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { voiceRecorderStartError } from "../src/hooks/voice-recorder-errors";
+import { selectVoiceRecordingFormat } from "../src/hooks/voice-recorder-format";
 
 test("recognizes permission denial without relying on DOMException identity", () => {
   assert.match(
@@ -39,4 +40,28 @@ test("uses a safe generic message for unknown permission failures", () => {
     voiceRecorderStartError("unexpected failure", "permission"),
     "Microphone could not be started. Check browser and macOS microphone permissions, then try again.",
   );
+});
+
+test("prefers native WebM Opus for Chromium voice recordings", () => {
+  const supported = new Set(["audio/webm;codecs=opus", "audio/webm"]);
+  assert.deepEqual(
+    selectVoiceRecordingFormat((mimeType) => supported.has(mimeType)),
+    {
+      recorderMimeType: "audio/webm;codecs=opus",
+      fileMimeType: "audio/webm",
+      extension: "webm",
+    },
+  );
+});
+
+test("falls back to browser-supported OGG or MP4 formats", () => {
+  assert.equal(
+    selectVoiceRecordingFormat((mimeType) => mimeType === "audio/ogg;codecs=opus")?.extension,
+    "ogg",
+  );
+  assert.equal(
+    selectVoiceRecordingFormat((mimeType) => mimeType === "audio/mp4")?.extension,
+    "m4a",
+  );
+  assert.equal(selectVoiceRecordingFormat(() => false), null);
 });

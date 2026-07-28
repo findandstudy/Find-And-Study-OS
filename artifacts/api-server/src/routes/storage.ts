@@ -40,6 +40,7 @@ const INBOX_MEDIA_RULES: Record<string, { extensions: Set<string>; maxBytes: num
   "video/3gpp": { extensions: new Set(["3gp", "3gpp"]), maxBytes: 16 * 1024 * 1024 },
   "audio/mpeg": { extensions: new Set(["mp3"]), maxBytes: 16 * 1024 * 1024 },
   "audio/ogg": { extensions: new Set(["ogg", "opus"]), maxBytes: 16 * 1024 * 1024 },
+  "audio/webm": { extensions: new Set(["webm"]), maxBytes: 16 * 1024 * 1024 },
   "audio/amr": { extensions: new Set(["amr"]), maxBytes: 16 * 1024 * 1024 },
   "audio/aac": { extensions: new Set(["aac"]), maxBytes: 16 * 1024 * 1024 },
   "audio/mp4": { extensions: new Set(["m4a"]), maxBytes: 16 * 1024 * 1024 },

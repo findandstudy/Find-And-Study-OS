@@ -505,17 +505,16 @@ function mimeToZernioAttachmentType(contentType: string): string {
 }
 
 /**
- * Two-step attachment delivery:
+ * Voice notes use Zernio's official multipart `voiceNote=true` endpoint.
+ * Zernio transcodes browser-native recordings to WhatsApp OGG/Opus.
+ *
+ * Other attachments use two-step delivery:
  *   1. Upload the raw bytes to /v1/media/upload-direct (multipart, field "file")
  *      → Zernio returns { url, filename, contentType, size }; the url is public.
  *   2. POST the conversation messages endpoint as JSON with attachmentUrl + attachmentType.
  *
- * Sending multipart directly to the messages endpoint returned 200 with no
- * messageId (Zernio silently dropped the file). upload-direct is the correct
- * path per Zernio docs.
- *
  * STRICT CONTRACT: only a 2xx messages response that contains a `messageId`
- * counts as delivered.  upload-direct failure → immediate failed, no send attempt.
+ * counts as delivered. upload-direct failure → immediate failed, no send attempt.
  */
 async function sendZernioAttachment(
   messagesUrl: string,
@@ -528,6 +527,55 @@ async function sendZernioAttachment(
 
   if (!bytes) {
     const error = `Zernio attachment bytes unavailable for "${name}" (source url: ${att.url})`;
+    console.error("[ZERNIO] " + error);
+    return { ok: false, error };
+  }
+
+  if (att.voiceNote) {
+    const voiceForm = new FormData();
+    voiceForm.append("accountId", externalAccountId);
+    voiceForm.append(
+      "attachment",
+      new Blob([new Uint8Array(bytes.buf)], { type: bytes.contentType }),
+      name,
+    );
+    voiceForm.append("voiceNote", "true");
+
+    console.log("[ZERNIO] send-voice-note request:", JSON.stringify({
+      messagesUrl,
+      fileName: name,
+      fileSize: bytes.buf.length,
+      contentType: bytes.contentType,
+      voiceNote: true,
+      auth: `Bearer ${maskApiKey(apiKey)}`,
+    }));
+
+    const voiceResp = await fetch(messagesUrl, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: voiceForm,
+    });
+    const voiceBodyText = await voiceResp.text().catch(() => "");
+    console.log(`[ZERNIO] send-voice-note response (${voiceResp.status}):`, voiceBodyText);
+
+    if (!voiceResp.ok) {
+      const error = `Zernio send-voice-note failed (${voiceResp.status}): ${voiceBodyText}`;
+      console.error("[ZERNIO] " + error);
+      return { ok: false, error };
+    }
+
+    let voiceData: any = {};
+    try { voiceData = JSON.parse(voiceBodyText); } catch { /* non-JSON */ }
+    const voiceMessageId = voiceData?.data?.messageId
+      ? String(voiceData.data.messageId)
+      : voiceData?.messageId
+        ? String(voiceData.messageId)
+        : undefined;
+    if (voiceMessageId) {
+      return { ok: true, externalMessageId: voiceMessageId };
+    }
+
+    const error = `Zernio send-voice-note returned ${voiceResp.status} but no messageId in response: ${voiceBodyText}`;
     console.error("[ZERNIO] " + error);
     return { ok: false, error };
   }
@@ -579,16 +627,11 @@ async function sendZernioAttachment(
   if (attachmentType === "file" && name) {
     sendBody.attachmentName = name;
   }
-  if (attachmentType === "audio" && att.voiceNote) {
-    sendBody.voiceNote = true;
-  }
-
   console.log("[ZERNIO] send-attachment request:", JSON.stringify({
     messagesUrl,
     attachmentUrl: publicUrl,
     attachmentType,
     attachmentName: sendBody.attachmentName,
-    voiceNote: sendBody.voiceNote,
     auth: `Bearer ${maskApiKey(apiKey)}`,
   }));
 

@@ -34,27 +34,22 @@ test("voice recordings are delivered as WhatsApp voice notes", async () => {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, init });
-    if (url === "https://files.example/voice.ogg") {
-      return new Response(new Uint8Array([79, 103, 103, 83]), {
+    if (url === "https://files.example/voice.webm") {
+      return new Response(new Uint8Array([26, 69, 223, 163]), {
         status: 200,
-        headers: { "Content-Type": "audio/ogg" },
-      });
-    }
-    if (url.endsWith("/api/v1/media/upload-direct")) {
-      return json(200, {
-        url: "https://zernio.com/media/voice.ogg",
-        contentType: "audio/ogg",
+        headers: { "Content-Type": "audio/webm" },
       });
     }
     if (url.includes("/api/v1/inbox/conversations/conv-1/messages")) {
-      const body = JSON.parse(String(init?.body));
-      assert.deepEqual(body, {
-        accountId: "acct-1",
-        attachmentUrl: "https://zernio.com/media/voice.ogg",
-        attachmentType: "audio",
-        voiceNote: true,
-      });
-      return json(200, { messageId: "msg-voice" });
+      assert.ok(init?.body instanceof FormData);
+      const form = init.body;
+      assert.equal(form.get("accountId"), "acct-1");
+      assert.equal(form.get("voiceNote"), "true");
+      const attachment = form.get("attachment");
+      assert.ok(attachment instanceof File);
+      assert.equal(attachment.name, "voice-note.webm");
+      assert.equal(attachment.type, "audio/webm");
+      return json(200, { data: { messageId: "msg-voice" } });
     }
     throw new Error(`Unexpected fetch: ${url}`);
   }) as typeof fetch;
@@ -63,15 +58,16 @@ test("voice recordings are delivered as WhatsApp voice notes", async () => {
     externalThreadId: "conv-1",
     externalAccountId: "acct-1",
     attachments: [{
-      url: "https://files.example/voice.ogg",
+      url: "https://files.example/voice.webm",
       type: "audio",
-      name: "voice-note.ogg",
+      name: "voice-note.webm",
       voiceNote: true,
     }],
   });
 
   assert.equal(outcome.ok, true);
   assert.equal(outcome.externalMessageId, "msg-voice");
+  assert.equal(calls.some((call) => call.url.endsWith("/api/v1/media/upload-direct")), false);
 });
 
 test("document attachments preserve their visible filename", async () => {

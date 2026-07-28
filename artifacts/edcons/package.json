@@ -61,7 +61,6 @@
     "jspdf": "^4.2.1",
     "lucide-react": "catalog:",
     "next-themes": "^0.4.6",
-    "opus-recorder": "8.0.5",
     "pdfjs-dist": "^6.0.227",
     "react": "catalog:",
     "react-day-picker": "^9.11.1",

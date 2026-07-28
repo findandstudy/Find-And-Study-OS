@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import Recorder from "opus-recorder";
-import encoderPath from "opus-recorder/dist/encoderWorker.min.js?url";
 import { voiceRecorderStartError } from "./voice-recorder-errors";
+import {
+  selectVoiceRecordingFormat,
+  type VoiceRecordingFormat,
+} from "./voice-recorder-format";
 
 const MAX_RECORDING_SECONDS = 5 * 60;
 const MICROPHONE_CONSTRAINTS: MediaTrackConstraints = {
@@ -24,10 +26,9 @@ export function useOggVoiceRecorder(
   onRecorded: (file: File) => void,
   onError: (message: string) => void,
 ): OggVoiceRecorder {
-  const recorderRef = useRef<Recorder | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const cancelledRef = useRef(false);
   const startedAtRef = useRef(0);
@@ -52,43 +53,17 @@ export function useOggVoiceRecorder(
   }, []);
 
   const releaseMicrophone = useCallback(() => {
-    const sourceNode = sourceNodeRef.current;
-    sourceNodeRef.current = null;
-    try {
-      sourceNode?.disconnect();
-    } catch {
-      // The recorder may already have disconnected the source.
-    }
-
     const stream = streamRef.current;
     streamRef.current = null;
     stream?.getTracks().forEach((track) => track.stop());
-
-    const audioContext = audioContextRef.current;
-    audioContextRef.current = null;
-    if (audioContext && audioContext.state !== "closed") {
-      void audioContext.close().catch(() => {
-        // Best-effort cleanup; the browser may already be closing the context.
-      });
-    }
   }, []);
 
   const finish = useCallback(() => {
     clearTimer();
     setIsRecording(false);
     setSeconds(0);
-    const recorder = recorderRef.current;
     recorderRef.current = null;
-    try {
-      const closeResult = recorder?.close();
-      if (closeResult) {
-        void closeResult.catch(() => {
-          // The encoder worker may already be closed after stop().
-        });
-      }
-    } catch {
-      // The encoder worker may already be closed after stop().
-    }
+    chunksRef.current = [];
     releaseMicrophone();
   }, [clearTimer, releaseMicrophone]);
 
@@ -97,10 +72,7 @@ export function useOggVoiceRecorder(
     if (!recorder) return;
     clearTimer();
     try {
-      void recorder.stop().catch(() => {
-        finish();
-        onErrorRef.current("Voice recording could not be finalized.");
-      });
+      if (recorder.state !== "inactive") recorder.stop();
     } catch {
       finish();
       onErrorRef.current("Voice recording could not be finalized.");
@@ -114,32 +86,15 @@ export function useOggVoiceRecorder(
 
   const start = useCallback(async () => {
     if (recorderRef.current) return;
-    if (!Recorder.isRecordingSupported()) {
+    if (
+      typeof MediaRecorder === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
       onErrorRef.current("Voice recording is not supported by this browser.");
       return;
     }
 
     cancelledRef.current = false;
-    let audioContext: AudioContext;
-    try {
-      const webkitAudioContext = (
-        window as typeof window & {
-          webkitAudioContext?: typeof AudioContext;
-        }
-      ).webkitAudioContext;
-      const AudioContextConstructor = window.AudioContext ?? webkitAudioContext;
-      if (!AudioContextConstructor) {
-        throw new Error("AudioContext is not supported");
-      }
-      audioContext = new AudioContextConstructor();
-      audioContextRef.current = audioContext;
-      await audioContext.resume();
-    } catch (error) {
-      releaseMicrophone();
-      onErrorRef.current(voiceRecorderStartError(error, "encoder"));
-      return;
-    }
-
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -152,34 +107,38 @@ export function useOggVoiceRecorder(
       return;
     }
 
-    try {
-      const sourceNode = audioContext.createMediaStreamSource(stream);
-      sourceNodeRef.current = sourceNode;
+    const format = selectVoiceRecordingFormat((mimeType) =>
+      MediaRecorder.isTypeSupported(mimeType)
+    );
+    if (!format) {
+      releaseMicrophone();
+      onErrorRef.current("Voice recording is not supported by this browser.");
+      return;
+    }
 
-      const recorder = new Recorder({
-        encoderPath,
-        numberOfChannels: 1,
-        encoderApplication: 2048,
-        encoderBitRate: 24_000,
-        encoderSampleRate: 48_000,
-        monitorGain: 0,
-        streamPages: false,
-        mediaTrackConstraints: false,
-        sourceNode,
+    try {
+      const recorder = new MediaRecorder(stream, {
+        mimeType: format.recorderMimeType,
+        audioBitsPerSecond: 24_000,
       });
       recorderRef.current = recorder;
-      recorder.ondataavailable = (data) => {
-        if (cancelledRef.current || data.byteLength === 0) return;
-        const file = new File(
-          [data],
-          `voice-note-${new Date().toISOString().replace(/[:.]/g, "-")}.ogg`,
-          { type: "audio/ogg" },
-        );
-        onRecordedRef.current(file);
+      chunksRef.current = [];
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
       };
-      recorder.onstop = finish;
+      recorder.onerror = () => {
+        finish();
+        onErrorRef.current("Voice recording could not be finalized.");
+      };
+      recorder.onstop = () => {
+        const chunks = chunksRef.current;
+        if (!cancelledRef.current && chunks.length > 0) {
+          onRecordedRef.current(buildVoiceNoteFile(chunks, format));
+        }
+        finish();
+      };
 
-      await recorder.start();
+      recorder.start(1_000);
       startedAtRef.current = Date.now();
       setSeconds(0);
       setIsRecording(true);
@@ -200,11 +159,15 @@ export function useOggVoiceRecorder(
       clearTimer();
       const recorder = recorderRef.current;
       recorderRef.current = null;
-      try {
-        const closeResult = recorder?.close();
-        if (closeResult) void closeResult.catch(() => undefined);
-      } catch {
-        // Best-effort cleanup during unmount.
+      if (recorder) {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        recorder.onerror = null;
+        try {
+          if (recorder.state !== "inactive") recorder.stop();
+        } catch {
+          // Best-effort cleanup during unmount.
+        }
       }
       releaseMicrophone();
     },
@@ -215,9 +178,23 @@ export function useOggVoiceRecorder(
     isRecording,
     seconds,
     isSupported:
-      typeof window !== "undefined" && Recorder.isRecordingSupported(),
+      typeof window !== "undefined" &&
+      typeof MediaRecorder !== "undefined" &&
+      !!navigator.mediaDevices?.getUserMedia,
     start,
     stop,
     cancel,
   };
+}
+
+function buildVoiceNoteFile(
+  chunks: Blob[],
+  format: VoiceRecordingFormat,
+): File {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return new File(
+    chunks,
+    `voice-note-${timestamp}.${format.extension}`,
+    { type: format.fileMimeType },
+  );
 }
