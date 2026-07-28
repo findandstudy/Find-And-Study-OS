@@ -195,6 +195,51 @@ export interface ZernioTemplateDeleteOutcome {
   error?: string;
 }
 
+export interface WhatsAppTemplateDeleteDecision {
+  ok: boolean;
+  /** The local cache may be removed even though Zernio could not confirm deletion. */
+  localOnly?: boolean;
+  remoteNotFound?: boolean;
+  error?: string;
+}
+
+/**
+ * An "unknown" row is not authoritative remote state. It is commonly a stale
+ * local cache entry left by an older/renamed Meta template. Allow the exact
+ * local row to be removed when Zernio management is unavailable, while keeping
+ * approved/pending/rejected rows fail-closed.
+ */
+export function decideWhatsAppTemplateDeletion(params: {
+  localApprovalStatus?: string | null;
+  hasExactLocalTemplate: boolean;
+  remoteOutcome: ZernioTemplateDeleteOutcome;
+}): WhatsAppTemplateDeleteDecision {
+  if (params.remoteOutcome.ok) {
+    return {
+      ok: true,
+      localOnly: false,
+      remoteNotFound: params.remoteOutcome.notFound === true,
+    };
+  }
+
+  const normalizedStatus = String(params.localApprovalStatus || "unknown")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (params.hasExactLocalTemplate && normalizedStatus === "unknown") {
+    return {
+      ok: true,
+      localOnly: true,
+      remoteNotFound: false,
+    };
+  }
+
+  return {
+    ok: false,
+    error: params.remoteOutcome.error || "Failed to delete WhatsApp template from Zernio",
+  };
+}
+
 export async function deleteZernioWhatsAppTemplate(
   externalAccountId: string,
   templateName: string,

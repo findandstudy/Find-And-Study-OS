@@ -54,6 +54,7 @@ import {
   listZernioWhatsAppTemplates,
   createZernioWhatsAppTemplate,
   deleteZernioWhatsAppTemplate,
+  decideWhatsAppTemplateDeletion,
   resolveZernioWhatsAppAccount,
 } from "../lib/inbox/zernioTemplates";
 import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
@@ -2495,19 +2496,47 @@ router.delete(
       res.status(400).json({ error: "templateName is required" });
       return;
     }
+
+    // Resolve the exact local row before contacting Zernio. This is the only
+    // proof accepted for a local-only cleanup when the provider status is
+    // "unknown"; callers cannot use a name alone to hide an approved template.
+    const [exactLocalTemplate] = Number.isInteger(localTemplateId) && (localTemplateId as number) > 0
+      ? await db
+          .select({
+            id: messageTemplatesTable.id,
+            approvalStatus: messageTemplatesTable.approvalStatus,
+          })
+          .from(messageTemplatesTable)
+          .where(and(
+            eq(messageTemplatesTable.id, localTemplateId as number),
+            eq(messageTemplatesTable.externalTemplateName, templateName),
+          ))
+          .limit(1)
+      : [];
+
     const account = await resolveZernioWhatsAppAccount(channelAccountId);
-    if (!account) {
-      res.status(400).json({ error: "No Zernio-hosted WhatsApp channel account configured" });
+    const outcome = account
+      ? await deleteZernioWhatsAppTemplate(account.externalAccountId, templateName)
+      : {
+          ok: false,
+          error: "No Zernio-hosted WhatsApp channel account configured",
+        };
+    const decision = decideWhatsAppTemplateDeletion({
+      localApprovalStatus: exactLocalTemplate?.approvalStatus,
+      hasExactLocalTemplate: Boolean(exactLocalTemplate),
+      remoteOutcome: outcome,
+    });
+    if (!decision.ok) {
+      res.status(account ? 502 : 400).json({
+        error: decision.error || "Failed to delete WhatsApp template from Zernio",
+      });
       return;
     }
-    const outcome = await deleteZernioWhatsAppTemplate(account.externalAccountId, templateName);
-    if (!outcome.ok) {
-      res.status(502).json({ error: outcome.error || "Failed to delete WhatsApp template from Zernio" });
-      return;
-    }
+
     // Also remove the exact local cache record. A Zernio 404 is treated as a
-    // successful stale-cache cleanup, while all other remote failures remain
-    // fail-closed and never hide a template that may still exist remotely.
+    // successful stale-cache cleanup. When the exact row itself has Unknown
+    // status, a provider failure is allowed to remove only that local cache
+    // row; all authoritative statuses remain fail-closed.
     if (Number.isInteger(localTemplateId) && (localTemplateId as number) > 0) {
       await db
         .delete(messageTemplatesTable)
@@ -2525,10 +2554,18 @@ router.delete(
       "delete_whatsapp_template",
       "message_template",
       Number.isInteger(localTemplateId) ? localTemplateId : undefined,
-      { name: templateName, remoteNotFound: outcome.notFound === true },
+      {
+        name: templateName,
+        remoteNotFound: decision.remoteNotFound === true,
+        localOnly: decision.localOnly === true,
+      },
       req.ip,
     );
-    res.json({ ok: true, remoteNotFound: outcome.notFound === true });
+    res.json({
+      ok: true,
+      remoteNotFound: decision.remoteNotFound === true,
+      localOnly: decision.localOnly === true,
+    });
   },
 );
 

@@ -4,7 +4,10 @@ import {
   __setZernioApiKeyOverrideForTests,
   sendViaZernio,
 } from "../src/lib/inbox/zernioSend";
-import { deleteZernioWhatsAppTemplate } from "../src/lib/inbox/zernioTemplates";
+import {
+  decideWhatsAppTemplateDeletion,
+  deleteZernioWhatsAppTemplate,
+} from "../src/lib/inbox/zernioTemplates";
 
 type FetchCall = { url: string; init?: RequestInit };
 const realFetch = globalThis.fetch;
@@ -118,4 +121,42 @@ test("a missing remote template is a successful stale-cache cleanup", async () =
   const outcome = await deleteZernioWhatsAppTemplate("acct-1", "old-template");
   assert.equal(outcome.ok, true);
   assert.equal(outcome.notFound, true);
+});
+
+test("an exact Unknown cache row can be removed when Zernio management is unavailable", () => {
+  const decision = decideWhatsAppTemplateDeletion({
+    localApprovalStatus: "unknown",
+    hasExactLocalTemplate: true,
+    remoteOutcome: { ok: false, error: "Zernio template list failed (401)" },
+  });
+
+  assert.deepEqual(decision, {
+    ok: true,
+    localOnly: true,
+    remoteNotFound: false,
+  });
+});
+
+test("authoritative template statuses remain fail-closed on provider failure", () => {
+  for (const localApprovalStatus of ["approved", "pending", "rejected"]) {
+    const decision = decideWhatsAppTemplateDeletion({
+      localApprovalStatus,
+      hasExactLocalTemplate: true,
+      remoteOutcome: { ok: false, error: "provider unavailable" },
+    });
+
+    assert.equal(decision.ok, false);
+    assert.equal(decision.error, "provider unavailable");
+  }
+});
+
+test("a caller cannot request local-only deletion without an exact local row", () => {
+  const decision = decideWhatsAppTemplateDeletion({
+    localApprovalStatus: "unknown",
+    hasExactLocalTemplate: false,
+    remoteOutcome: { ok: false, error: "provider unavailable" },
+  });
+
+  assert.equal(decision.ok, false);
+  assert.equal(decision.error, "provider unavailable");
 });
