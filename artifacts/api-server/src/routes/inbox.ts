@@ -88,6 +88,13 @@ import {
 } from "../lib/inboxAttachmentMetadata";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
+import {
+  inboxAwaitingReplySql,
+  inboxIsStarredSql,
+  inboxIsSubscribedSql,
+  inboxOuterConversationIdSql,
+  inboxUnreadCountSql,
+} from "../lib/inboxConversationIndicators";
 
 const router: IRouter = Router();
 
@@ -678,19 +685,19 @@ router.get(
       where.push(isNotNull(conversationsTable.lastInboundAt));
       where.push(sql`NOT EXISTS (
         SELECT 1 FROM messages m
-        WHERE m.conversation_id = ${conversationsTable.id}
+        WHERE m.conversation_id = ${inboxOuterConversationIdSql}
         AND m.direction IN ('outbound', 'internal')
         AND m.created_at > ${conversationsTable.lastInboundAt}
       )`);
     } else if (tab === "subscribed") {
       where.push(sql`EXISTS (
         SELECT 1 FROM conversation_participants cp
-        WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
+        WHERE cp.conversation_id = ${inboxOuterConversationIdSql} AND cp.user_id = ${userId}
       )`);
     } else if (tab === "starred") {
       where.push(sql`EXISTS (
         SELECT 1 FROM conversation_participants cp
-        WHERE cp.conversation_id = ${conversationsTable.id}
+        WHERE cp.conversation_id = ${inboxOuterConversationIdSql}
         AND cp.user_id = ${userId} AND cp.is_starred = true
       )`);
     } else if (tab === "unread") {
@@ -698,11 +705,11 @@ router.get(
       // hasn't seen (after their participant last_read_at, or ever if none).
       where.push(sql`EXISTS (
         SELECT 1 FROM messages m
-        WHERE m.conversation_id = ${conversationsTable.id}
+        WHERE m.conversation_id = ${inboxOuterConversationIdSql}
         AND m.direction = 'inbound'
         AND m.created_at > COALESCE((
           SELECT cp.last_read_at FROM conversation_participants cp
-          WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
+          WHERE cp.conversation_id = ${inboxOuterConversationIdSql} AND cp.user_id = ${userId}
         ), 'epoch'::timestamptz)
       )`);
     } else if (tab === "awaiting") {
@@ -710,7 +717,7 @@ router.get(
       where.push(isNotNull(conversationsTable.lastInboundAt));
       where.push(sql`NOT EXISTS (
         SELECT 1 FROM messages m
-        WHERE m.conversation_id = ${conversationsTable.id}
+        WHERE m.conversation_id = ${inboxOuterConversationIdSql}
         AND m.direction IN ('outbound', 'internal')
         AND m.created_at > ${conversationsTable.lastInboundAt}
       )`);
@@ -732,38 +739,16 @@ router.get(
         lastMessagePreview: conversationsTable.lastMessagePreview,
         lastInboundAt: conversationsTable.lastInboundAt,
         createdAt: conversationsTable.createdAt,
-        isStarred: sql<boolean>`EXISTS (
-          SELECT 1 FROM conversation_participants cp
-          WHERE cp.conversation_id = ${conversationsTable.id}
-          AND cp.user_id = ${userId} AND cp.is_starred = true
-        )`.as("is_starred"),
-        isSubscribed: sql<boolean>`EXISTS (
-          SELECT 1 FROM conversation_participants cp
-          WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
-        )`.as("is_subscribed"),
+        isStarred: inboxIsStarredSql(userId),
+        isSubscribed: inboxIsSubscribedSql(userId),
         // Per-user unread inbound count (WhatsApp-style badge). Correlated
         // subquery inside the SAME select — no N+1 round trips.
-        unreadCount: sql<number>`(
-          SELECT COUNT(*)::int FROM messages m
-          WHERE m.conversation_id = ${conversationsTable.id}
-          AND m.direction = 'inbound'
-          AND m.created_at > COALESCE((
-            SELECT cp.last_read_at FROM conversation_participants cp
-            WHERE cp.conversation_id = ${conversationsTable.id} AND cp.user_id = ${userId}
-          ), 'epoch'::timestamptz)
-        )`.as("unread_count"),
+        unreadCount: inboxUnreadCountSql(userId),
         // Persistent "awaiting reply" flag derived from the LAST message's
         // direction (not lastInboundAt, which can drift out of sync with the
         // messages table — e.g. backfilled/imported rows). Orange dot shows
         // iff the newest message in the conversation is inbound.
-        awaitingReply: sql<boolean>`(
-          COALESCE((
-            SELECT m.direction FROM messages m
-            WHERE m.conversation_id = ${conversationsTable.id}
-            ORDER BY m.created_at DESC, m.id DESC
-            LIMIT 1
-          ), '') = 'inbound'
-        )`.as("awaiting_reply"),
+        awaitingReply: inboxAwaitingReplySql(),
       })
       .from(conversationsTable)
       .where(and(...where))
