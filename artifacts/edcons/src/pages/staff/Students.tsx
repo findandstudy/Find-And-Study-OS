@@ -723,7 +723,7 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
   );
 }
 
-function DroppableStuColumn({ status, label, variant, students, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canAssign, canReassign, canMoveCards }: { status: string; label: string; variant?: string | null; students: any[]; onView: (id: number) => void; staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean }) {
+function DroppableStuColumn({ status, label, variant, students, totalCount, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canAssign, canReassign, canMoveCards }: { status: string; label: string; variant?: string | null; students: any[]; totalCount?: number; onView: (id: number) => void; staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void; staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const v = variant as StuColVariant;
 
@@ -755,7 +755,7 @@ function DroppableStuColumn({ status, label, variant, students, onView, staffUse
             {icon}
             <h3 className={`font-display font-bold text-sm ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{label}</h3>
           </div>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{students.length}</span>
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{totalCount ?? students.length}</span>
         </div>
       </div>
       <div ref={setNodeRef} className={`p-3 flex-1 overflow-y-auto custom-scrollbar transition-colors duration-150 ${dropBg}`}>
@@ -1171,13 +1171,15 @@ function stuIsDateInRange(dateStr: string, range: string): boolean {
   return true;
 }
 
-function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId, students, canViewOthers, canViewUnassigned }: {
+function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId, students, facetNationalities, facetAgents, canViewOthers, canViewUnassigned }: {
   stages: PipelineStage[];
   filters: StuFilters;
   onChange: (f: StuFilters) => void;
   staffUsers: any[];
   currentUserId?: number;
   students: any[];
+  facetNationalities?: string[];
+  facetAgents?: Array<{ id: number; name: string }>;
   canViewOthers: boolean;
   canViewUnassigned: boolean;
 }) {
@@ -1188,14 +1190,16 @@ function StuFilterPopover({ filters, onChange, stages, staffUsers, currentUserId
   const uniqueNationalities = useMemo(() => {
     const set = new Set<string>();
     students.forEach((s: any) => { if (s.nationality) set.add(s.nationality); });
-    return Array.from(set).sort();
-  }, [students]);
+    return facetNationalities?.length ? facetNationalities : Array.from(set).sort();
+  }, [students, facetNationalities]);
 
   const uniqueAgents = useMemo(() => {
     const map = new Map<number, string>();
     students.forEach((s: any) => { if (s.agentId && s.agentName) map.set(s.agentId, s.agentName); });
-    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [students]);
+    return facetAgents?.length
+      ? facetAgents.map((agent) => [agent.id, agent.name] as [number, string])
+      : Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [students, facetAgents]);
 
   return (
     <>
@@ -1399,14 +1403,43 @@ export default function StudentsPage() {
   }
 
   const { season } = useSeason();
-  const { data, isLoading } = useListStudents({ search, season, limit: 100000 });
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  const studentListParams = useMemo(() => ({
+    search: debouncedSearch || undefined,
+    season,
+    page: viewMode === "list" ? pg.page : 1,
+    limit: viewMode === "list" ? pg.pageSize : 500,
+    status: filters.status !== "all" ? filters.status : undefined,
+    appSource: filters.appSource !== "all" ? filters.appSource : undefined,
+    assignment: filters.assignment !== "all" ? filters.assignment : undefined,
+    nationality: filters.nationality !== "all" ? filters.nationality : undefined,
+    agentId: filters.agent !== "all" ? filters.agent : undefined,
+    originType: filters.originType !== "all" ? filters.originType : undefined,
+    dateRange: filters.dateRange !== "all" ? filters.dateRange : undefined,
+    followupRange: filters.followupRange !== "all" ? filters.followupRange : undefined,
+    name: colFilters.name || undefined,
+    email: colFilters.email || undefined,
+    passport: colFilters.passport || undefined,
+    sortKey: sort.key,
+    sortDir: sort.dir,
+  }), [debouncedSearch, season, viewMode, pg.page, pg.pageSize, filters, colFilters, sort]);
+  const { data, isLoading } = useListStudents(studentListParams as any);
   const allStudents: any[] = data?.data ?? [];
+  const studentFacets = (data as any)?.meta?.facets as
+    | { nationalities?: string[]; agents?: Array<{ id: number; name: string }> }
+    | undefined;
+  const studentStatusCounts = ((data as any)?.meta?.statusCounts || {}) as Record<string, number>;
 
   const uniqueNationalities = useMemo(() => {
+    if (studentFacets?.nationalities?.length) return studentFacets.nationalities;
     const set = new Set<string>();
     allStudents.forEach((s: any) => { if (s.nationality) set.add(s.nationality); });
     return Array.from(set).sort();
-  }, [allStudents]);
+  }, [allStudents, studentFacets]);
 
   const filteredStudents = allStudents.filter((s: any) => {
     if (colFilters.name) {
@@ -1458,7 +1491,8 @@ export default function StudentsPage() {
     return arr;
   }, [filteredStudents, sort]);
 
-  const { paged: pagedStudents, total: totalStudentsCount } = pg.paginate(sortedStudents);
+  const pagedStudents = sortedStudents;
+  const totalStudentsCount = Number((data as any)?.meta?.total ?? sortedStudents.length);
 
   useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, colFilters, sort]);
 
@@ -1583,7 +1617,18 @@ export default function StudentsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder={t("studentsPage.searchStudents")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <StuFilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} staffUsers={staffUsers} currentUserId={user?.id} students={allStudents} canViewOthers={canViewOthers} canViewUnassigned={canViewUnassigned} />
+            <StuFilterPopover
+              filters={filters}
+              onChange={setFilters}
+              stages={pipelineStages}
+              staffUsers={staffUsers}
+              currentUserId={user?.id}
+              students={allStudents}
+              facetNationalities={studentFacets?.nationalities}
+              facetAgents={studentFacets?.agents}
+              canViewOthers={canViewOthers}
+              canViewUnassigned={canViewUnassigned}
+            />
             <div className="flex items-center border rounded-full overflow-hidden">
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>
@@ -1625,7 +1670,7 @@ export default function StudentsPage() {
               >
                 {pipelineStages.map((ps, idx) => {
                   const statusStudents = filteredStudents.filter((s: any) => s.status === ps.key).sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} onView={id => setLocation(`/staff/students/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} canAssign={canAssign} canReassign={canReassign} canMoveCards={canMoveCards} />;
+                  return <DroppableStuColumn key={ps.key} status={ps.key} label={ps.label} variant={ps.variant} students={statusStudents} totalCount={studentStatusCounts[ps.key]} onView={id => setLocation(`/staff/students/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} canAssign={canAssign} canReassign={canReassign} canMoveCards={canMoveCards} />;
                 })}
 
                 <DragOverlay>

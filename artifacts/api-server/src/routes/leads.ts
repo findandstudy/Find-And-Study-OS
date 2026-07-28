@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable } from "@workspace/db";
-import { eq, ilike, or, sql, and, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
+import { eq, ilike, or, sql, and, lt, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -39,6 +39,32 @@ const LEAD_PATCH_FIELDS = [
   "status", "assignedTo", "notes", "estimatedValue", "season", "agentId", "interestedLevel",
   "educationData",
 ];
+
+function addDateRangeCondition(conditions: any[], column: any, range?: string): void {
+  if (!range || range === "all") return;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (range === "today") conditions.push(and(gte(column, today), lt(column, tomorrow))!);
+  else if (range === "yesterday") {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    conditions.push(and(gte(column, yesterday), lt(column, today))!);
+  } else if (range === "last7") {
+    const start = new Date(today);
+    start.setDate(start.getDate() - 7);
+    conditions.push(gte(column, start));
+  } else if (range === "thisMonth") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    conditions.push(and(gte(column, start), lt(column, end))!);
+  } else if (range === "thisYear") {
+    const start = new Date(now.getFullYear(), 0, 1);
+    const end = new Date(now.getFullYear() + 1, 0, 1);
+    conditions.push(and(gte(column, start), lt(column, end))!);
+  }
+}
 
 router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
   const [leadRows, widgetRows] = await Promise.all([
@@ -221,19 +247,19 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
 
 router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { status, search, season, agentId: agentIdFilter, originType: originFilter } = req.query as Record<string, string>;
-  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 100000 });
+  const query = req.query as Record<string, string>;
+  const {
+    status, search, season, agentId: agentIdFilter, originType: originFilter,
+    source, appSource, assignment, nationality, name, email, program, country,
+    minValue, dateRange, followupRange, sortKey = "date", sortDir = "desc",
+  } = query;
+  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 500 });
   const pageNum = pageParams.page;
   const limitNum = pageParams.limit;
   const offset = pageParams.offset;
 
   const conditions = [isNull(leadsTable.deletedAt)];
   if (season) conditions.push(eq(leadsTable.season, season));
-  if (status) conditions.push(eq(leadsTable.status, status));
-  if (agentIdFilter) conditions.push(eq(leadsTable.agentId, parseInt(agentIdFilter, 10)));
-  if (originFilter && ["direct", "agent", "sub_agent"].includes(originFilter)) {
-    conditions.push(eq(leadsTable.originType, originFilter));
-  }
 
   // KURAL 1: non-admin staff cannot see agent-sourced leads
   // unless they have records.view_others (Task #494)
@@ -315,10 +341,113 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     conditions.push(or(...orParts)!);
   }
 
+  if (status && status !== "all") conditions.push(eq(leadsTable.status, status));
+  if (source && source !== "all") conditions.push(eq(leadsTable.source, source));
+  if (agentIdFilter && agentIdFilter !== "all") {
+    if (agentIdFilter === "none") conditions.push(isNull(leadsTable.agentId));
+    else {
+      const parsed = parseInt(agentIdFilter, 10);
+      if (Number.isFinite(parsed)) conditions.push(eq(leadsTable.agentId, parsed));
+    }
+  }
+  if (originFilter && originFilter !== "all" && ["direct", "agent", "sub_agent"].includes(originFilter)) {
+    conditions.push(eq(leadsTable.originType, originFilter));
+  }
+  if (appSource === "agent") conditions.push(isNotNull(leadsTable.agentId));
+  else if (appSource === "staff") conditions.push(isNull(leadsTable.agentId));
+  if (assignment === "mine") conditions.push(eq(leadsTable.assignedToId, user.id));
+  else if (assignment === "unassigned") conditions.push(isNull(leadsTable.assignedToId));
+  else if (assignment === "mine_unassigned") {
+    conditions.push(or(eq(leadsTable.assignedToId, user.id), isNull(leadsTable.assignedToId))!);
+  } else if (assignment && assignment !== "all") {
+    const parsed = parseInt(assignment, 10);
+    if (Number.isFinite(parsed)) conditions.push(eq(leadsTable.assignedToId, parsed));
+  }
+  if (nationality && nationality !== "all") conditions.push(eq(leadsTable.nationality, nationality));
+  if (name) {
+    const term = `%${name.trim()}%`;
+    conditions.push(or(
+      ilike(leadsTable.firstName, term),
+      ilike(leadsTable.lastName, term),
+      sql`(coalesce(${leadsTable.firstName},'') || ' ' || coalesce(${leadsTable.lastName},'')) ILIKE ${term}`,
+    )!);
+  }
+  if (email) conditions.push(ilike(leadsTable.email, `%${email.trim()}%`));
+  if (program) conditions.push(ilike(leadsTable.interestedProgram, `%${program.trim()}%`));
+  if (country) conditions.push(ilike(leadsTable.interestedCountry, `%${country.trim()}%`));
+  if (minValue) {
+    const parsed = Number(minValue);
+    if (Number.isFinite(parsed)) {
+      conditions.push(sql`CASE
+        WHEN COALESCE(${leadsTable.estimatedValue}, '') ~ '^[+-]?[0-9]+([.][0-9]+)?$'
+        THEN ${leadsTable.estimatedValue}::numeric
+        ELSE 0
+      END >= ${parsed}`);
+    }
+  }
+  addDateRangeCondition(conditions, leadsTable.createdAt, dateRange);
+  if (followupRange && followupRange !== "all") {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const openFollowup = sql`EXISTS (
+      SELECT 1 FROM ${followUpsTable}
+      WHERE ${followUpsTable.leadId} = ${leadsTable.id}
+        AND ${followUpsTable.completed} = false
+    )`;
+    if (followupRange === "none") {
+      conditions.push(sql`NOT (${openFollowup})`);
+    } else if (followupRange === "today") {
+      conditions.push(sql`EXISTS (
+        SELECT 1 FROM ${followUpsTable}
+        WHERE ${followUpsTable.leadId} = ${leadsTable.id}
+          AND ${followUpsTable.completed} = false
+          AND ${followUpsTable.scheduledAt} >= ${today}
+          AND ${followUpsTable.scheduledAt} < ${tomorrow}
+      )`);
+    } else if (followupRange === "upcoming7") {
+      conditions.push(sql`EXISTS (
+        SELECT 1 FROM ${followUpsTable}
+        WHERE ${followUpsTable.leadId} = ${leadsTable.id}
+          AND ${followUpsTable.completed} = false
+          AND ${followUpsTable.scheduledAt} >= ${today}
+          AND ${followUpsTable.scheduledAt} <= ${nextWeek}
+      )`);
+    } else if (followupRange === "overdue") {
+      conditions.push(sql`EXISTS (
+        SELECT 1 FROM ${followUpsTable}
+        WHERE ${followUpsTable.leadId} = ${leadsTable.id}
+          AND ${followUpsTable.completed} = false
+          AND ${followUpsTable.scheduledAt} < ${today}
+      )`);
+    }
+  }
+
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(leadsTable).where(whereClause);
-  const rows = await db
+  const sortColumns: Record<string, any> = {
+    name: sql`lower(coalesce(${leadsTable.firstName}, '') || ' ' || coalesce(${leadsTable.lastName}, ''))`,
+    email: leadsTable.email,
+    status: leadsTable.status,
+    source: leadsTable.source,
+    program: leadsTable.interestedProgram,
+    country: leadsTable.interestedCountry,
+    value: sql`CASE
+      WHEN COALESCE(${leadsTable.estimatedValue}, '') ~ '^[+-]?[0-9]+([.][0-9]+)?$'
+      THEN ${leadsTable.estimatedValue}::numeric
+      ELSE 0
+    END`,
+    date: leadsTable.createdAt,
+  };
+  const orderColumn = sortColumns[sortKey] || leadsTable.createdAt;
+  const order = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
+
+  const [countRows, rows, statusRows, nationalityRows, agentRows] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(leadsTable).where(whereClause),
+    db
     .select({
       lead: leadsTable,
       agentName: agentsTable.companyName,
@@ -333,7 +462,16 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(desc(leadsTable.updatedAt), desc(leadsTable.createdAt));
+    .orderBy(order, desc(leadsTable.id)),
+    db.select({ status: leadsTable.status, count: sql<number>`count(*)` })
+      .from(leadsTable).where(whereClause).groupBy(leadsTable.status),
+    db.selectDistinct({ value: leadsTable.nationality })
+      .from(leadsTable).where(and(whereClause, isNotNull(leadsTable.nationality))).orderBy(leadsTable.nationality),
+    db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
+      .from(leadsTable).innerJoin(agentsTable, eq(leadsTable.agentId, agentsTable.id))
+      .where(whereClause).orderBy(agentsTable.companyName),
+  ]);
+  const count = countRows[0]?.count ?? 0;
 
   const leadIds = rows.map(r => r.lead.id);
   let nextFollowupMap = new Map<number, string>();
@@ -359,7 +497,20 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     convertedStudentHasPhoto: r.studentHasPhoto ?? false,
   }));
 
-  res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+  res.json({
+    data,
+    meta: {
+      total: Number(count),
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(Number(count) / limitNum),
+      statusCounts: Object.fromEntries(statusRows.map((row) => [row.status, Number(row.count)])),
+      facets: {
+        nationalities: nationalityRows.map((row) => row.value).filter(Boolean),
+        agents: agentRows.filter((row) => row.id != null && row.name).map((row) => ({ id: row.id, name: row.name })),
+      },
+    },
+  });
 });
 
 router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {

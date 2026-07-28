@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable, educationRecordsTable } from "@workspace/db";
-import { eq, ilike, or, sql, and, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
+import { eq, ilike, or, sql, and, lt, lte, gte, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
@@ -37,6 +37,32 @@ const STUDENT_PATCH_FIELDS = [
   "photoUrl", "nextFollowup", "interestedLevel",
   "transferStudent", "hasTcId", "hasBlueCard",
 ];
+
+function addDateRangeCondition(conditions: any[], column: any, range?: string): void {
+  if (!range || range === "all") return;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (range === "today") conditions.push(and(gte(column, today), lt(column, tomorrow))!);
+  else if (range === "yesterday") {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    conditions.push(and(gte(column, yesterday), lt(column, today))!);
+  } else if (range === "last7") {
+    const start = new Date(today);
+    start.setDate(start.getDate() - 7);
+    conditions.push(gte(column, start));
+  } else if (range === "thisMonth") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    conditions.push(and(gte(column, start), lt(column, end))!);
+  } else if (range === "thisYear") {
+    const start = new Date(now.getFullYear(), 0, 1);
+    const end = new Date(now.getFullYear() + 1, 0, 1);
+    conditions.push(and(gte(column, start), lt(column, end))!);
+  }
+}
 
 router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
@@ -227,8 +253,13 @@ router.get("/students/:id/photo", photoAccessGuard, async (req, res): Promise<vo
 
 router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const user = req.user!;
-  const { agentId, status, search, season, originType: originFilter } = req.query as Record<string, string>;
-  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 100000 });
+  const query = req.query as Record<string, string>;
+  const {
+    agentId, status, search, season, originType: originFilter,
+    appSource, assignment, nationality, name, email, passport,
+    dateRange, followupRange, sortKey = "date", sortDir = "desc",
+  } = query;
+  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 500 });
   const pageNum = pageParams.page;
   const limitNum = pageParams.limit;
   const offset = pageParams.offset;
@@ -236,13 +267,6 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   const conditions = [isNull(studentsTable.deletedAt)];
 
   if (season) conditions.push(eq(studentsTable.season, season));
-  if (status) conditions.push(eq(studentsTable.status, status));
-  if (agentId && STAFF_ROLES.includes(user.role as any)) {
-    conditions.push(eq(studentsTable.agentId, parseInt(agentId, 10)));
-  }
-  if (originFilter && ["direct", "agent", "sub_agent"].includes(originFilter)) {
-    conditions.push(eq(studentsTable.originType, originFilter));
-  }
   if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (visibleIds.length === 0) {
@@ -318,14 +342,68 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     conditions.push(or(...orParts)!);
   }
 
+  if (status && status !== "all") conditions.push(eq(studentsTable.status, status));
+  if (agentId && agentId !== "all" && user.role !== "student") {
+    if (agentId === "none") conditions.push(isNull(studentsTable.agentId));
+    else {
+      const parsed = parseInt(agentId, 10);
+      if (Number.isFinite(parsed)) conditions.push(eq(studentsTable.agentId, parsed));
+    }
+  }
+  if (originFilter && originFilter !== "all" && ["direct", "agent", "sub_agent"].includes(originFilter)) {
+    conditions.push(eq(studentsTable.originType, originFilter));
+  }
+  if (appSource === "agent") conditions.push(isNotNull(studentsTable.agentId));
+  else if (appSource === "staff") conditions.push(isNull(studentsTable.agentId));
+  if (assignment === "mine") conditions.push(eq(studentsTable.assignedToId, user.id));
+  else if (assignment === "unassigned") conditions.push(isNull(studentsTable.assignedToId));
+  else if (assignment === "mine_unassigned") {
+    conditions.push(or(eq(studentsTable.assignedToId, user.id), isNull(studentsTable.assignedToId))!);
+  } else if (assignment && assignment !== "all") {
+    const parsed = parseInt(assignment, 10);
+    if (Number.isFinite(parsed)) conditions.push(eq(studentsTable.assignedToId, parsed));
+  }
+  if (nationality && nationality !== "all") conditions.push(eq(studentsTable.nationality, nationality));
+  if (name) {
+    const term = `%${name.trim()}%`;
+    conditions.push(or(
+      ilike(studentsTable.firstName, term),
+      ilike(studentsTable.lastName, term),
+      sql`(coalesce(${studentsTable.firstName},'') || ' ' || coalesce(${studentsTable.lastName},'')) ILIKE ${term}`,
+    )!);
+  }
+  if (email) conditions.push(ilike(studentsTable.email, `%${email.trim()}%`));
+  if (passport) conditions.push(ilike(studentsTable.passportNumber, `%${passport.trim()}%`));
+  addDateRangeCondition(conditions, studentsTable.createdAt, dateRange);
+  if (followupRange && followupRange !== "all") {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    if (followupRange === "none") conditions.push(isNull(studentsTable.nextFollowup));
+    else if (followupRange === "today") conditions.push(and(gte(studentsTable.nextFollowup, today), lt(studentsTable.nextFollowup, tomorrow))!);
+    else if (followupRange === "upcoming7") conditions.push(and(gte(studentsTable.nextFollowup, today), lte(studentsTable.nextFollowup, nextWeek))!);
+    else if (followupRange === "overdue") conditions.push(lt(studentsTable.nextFollowup, today));
+  }
+
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(studentsTable)
-    .where(whereClause);
+  const sortColumns: Record<string, any> = {
+    name: sql`lower(coalesce(${studentsTable.firstName}, '') || ' ' || coalesce(${studentsTable.lastName}, ''))`,
+    email: studentsTable.email,
+    nationality: studentsTable.nationality,
+    status: studentsTable.status,
+    passport: studentsTable.passportNumber,
+    date: studentsTable.createdAt,
+  };
+  const orderColumn = sortColumns[sortKey] || studentsTable.createdAt;
+  const order = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
 
-  const rows = await db
+  const [countRows, rows, statusRows, nationalityRows, agentRows] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(studentsTable).where(whereClause),
+    db
     .select({
       student: studentsTable,
       agentName: agentsTable.companyName,
@@ -335,7 +413,16 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(desc(studentsTable.updatedAt), desc(studentsTable.createdAt));
+    .orderBy(order, desc(studentsTable.id)),
+    db.select({ status: studentsTable.status, count: sql<number>`count(*)` })
+      .from(studentsTable).where(whereClause).groupBy(studentsTable.status),
+    db.selectDistinct({ value: studentsTable.nationality })
+      .from(studentsTable).where(and(whereClause, isNotNull(studentsTable.nationality))).orderBy(studentsTable.nationality),
+    db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
+      .from(studentsTable).innerJoin(agentsTable, eq(studentsTable.agentId, agentsTable.id))
+      .where(whereClause).orderBy(agentsTable.companyName),
+  ]);
+  const count = countRows[0]?.count ?? 0;
 
   // hasPhoto is denormalized on students.has_photo; document upload/delete
   // handlers keep it in sync, so the listing query no longer needs an
@@ -349,6 +436,11 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
       page: pageNum,
       limit: limitNum,
       totalPages: Math.ceil(Number(count) / limitNum),
+      statusCounts: Object.fromEntries(statusRows.map((row) => [row.status, Number(row.count)])),
+      facets: {
+        nationalities: nationalityRows.map((row) => row.value).filter(Boolean),
+        agents: agentRows.filter((row) => row.id != null && row.name).map((row) => ({ id: row.id, name: row.name })),
+      },
     },
   });
 });

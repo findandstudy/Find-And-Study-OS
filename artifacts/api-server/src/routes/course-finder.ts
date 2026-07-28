@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable } from "@workspace/db";
+import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, isNull, desc, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
@@ -26,6 +26,72 @@ const courseFinderFilterInFlight = new Map<
   string,
   Promise<CourseFinderFilterPayload>
 >();
+
+type PublicCatalogPolicy = {
+  allowedCountries: string[];
+  allowedUniversityTypes: string[];
+};
+
+let publicCatalogPolicyCache:
+  | { expiresAt: number; value: PublicCatalogPolicy }
+  | undefined;
+
+function normaliseStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
+}
+
+async function getPublicCatalogPolicy(): Promise<PublicCatalogPolicy> {
+  if (publicCatalogPolicyCache && publicCatalogPolicyCache.expiresAt > Date.now()) {
+    return publicCatalogPolicyCache.value;
+  }
+  const [row] = await db
+    .select({
+      allowedCountries: settingsTable.publicCatalogAllowedCountries,
+      allowedUniversityTypes: settingsTable.publicCatalogAllowedUniversityTypes,
+    })
+    .from(settingsTable)
+    .limit(1);
+  const value = {
+    allowedCountries: normaliseStringList(row?.allowedCountries),
+    allowedUniversityTypes: normaliseStringList(row?.allowedUniversityTypes),
+  };
+  // Fail closed to the requested public default if an old/malformed settings
+  // row somehow contains no university-type policy.
+  if (value.allowedUniversityTypes.length === 0) {
+    value.allowedUniversityTypes = ["Private"];
+  }
+  publicCatalogPolicyCache = { expiresAt: Date.now() + 30_000, value };
+  return value;
+}
+
+function isInternalCourseFinderRequest(req: any): boolean {
+  const role = req.user?.role;
+  return Boolean(role && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(role));
+}
+
+async function resolveCourseFinderPolicy(req: any): Promise<PublicCatalogPolicy | null> {
+  const explicitlyPublic = String(req.query?.scope || "").toLowerCase() === "public";
+  if (!explicitlyPublic && isInternalCourseFinderRequest(req)) return null;
+  return getPublicCatalogPolicy();
+}
+
+function addPublicCatalogConditions(conditions: any[], policy: PublicCatalogPolicy | null): void {
+  if (!policy) return;
+  conditions.push(eq(universitiesTable.isActive, true));
+  if (policy.allowedCountries.length === 1) {
+    conditions.push(eq(universitiesTable.country, policy.allowedCountries[0]));
+  } else if (policy.allowedCountries.length > 1) {
+    conditions.push(inArray(universitiesTable.country, policy.allowedCountries));
+  }
+  if (policy.allowedUniversityTypes.length === 1) {
+    conditions.push(ilike(universitiesTable.universityType, policy.allowedUniversityTypes[0]));
+  } else {
+    conditions.push(or(...policy.allowedUniversityTypes.map((value) =>
+      ilike(universitiesTable.universityType, value)
+    ))!);
+  }
+}
 
 type CourseFinderFilterPayload = {
   countries: string[];
@@ -88,6 +154,8 @@ router.get("/course-finder", async (req, res): Promise<void> => {
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [eq(programsTable.isActive, true)];
+  const publicPolicy = await resolveCourseFinderPolicy(req);
+  addPublicCatalogConditions(conditions, publicPolicy);
   if (programId) {
     const pid = parseInt(programId, 10);
     if (!isNaN(pid)) conditions.push(eq(programsTable.id, pid));
@@ -240,9 +308,10 @@ export function buildProgramFacetConditions(
   excludeKey?:
     | "country" | "city" | "universityType" | "universityId"
     | "level" | "language" | "field" | "fee" | "search",
-  opts?: { fuzzyField?: boolean },
+  opts?: { fuzzyField?: boolean; publicPolicy?: PublicCatalogPolicy | null },
 ) {
   const conditions = [eq(programsTable.isActive, true)];
+  addPublicCatalogConditions(conditions, opts?.publicPolicy ?? null);
   if (excludeKey !== "country" && params.country) {
     const vals = params.country.split(",").map(s => s.trim()).filter(Boolean);
     if (vals.length === 1) conditions.push(ilike(universitiesTable.country, vals[0]));
@@ -311,7 +380,11 @@ export function buildProgramFacetConditions(
 router.get("/course-finder/filters", async (req, res): Promise<void> => {
   try {
     const params = req.query as Record<string, string | undefined>;
-    const cacheKey = courseFinderFilterCacheKey(params);
+    const publicPolicy = await resolveCourseFinderPolicy(req);
+    const policyKey = publicPolicy
+      ? `public:${publicPolicy.allowedCountries.join("|")}:${publicPolicy.allowedUniversityTypes.join("|")}`
+      : "internal";
+    const cacheKey = `${policyKey}:${courseFinderFilterCacheKey(params)}`;
     const cached = courseFinderFilterCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
@@ -325,14 +398,15 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
     if (!pending) {
       pending = (async (): Promise<CourseFinderFilterPayload> => {
         const join = eq(programsTable.universityId, universitiesTable.id);
-        const wCountry = buildProgramFacetConditions(params, "country");
-        const wCity = buildProgramFacetConditions(params, "city");
-        const wType = buildProgramFacetConditions(params, "universityType");
-        const wUni = buildProgramFacetConditions(params, "universityId");
-        const wLevel = buildProgramFacetConditions(params, "level");
-        const wLang = buildProgramFacetConditions(params, "language");
-        const wField = buildProgramFacetConditions(params, "field");
-        const wFee = buildProgramFacetConditions(params, "fee");
+        const policyOpts = { publicPolicy };
+        const wCountry = buildProgramFacetConditions(params, "country", policyOpts);
+        const wCity = buildProgramFacetConditions(params, "city", policyOpts);
+        const wType = buildProgramFacetConditions(params, "universityType", policyOpts);
+        const wUni = buildProgramFacetConditions(params, "universityId", policyOpts);
+        const wLevel = buildProgramFacetConditions(params, "level", policyOpts);
+        const wLang = buildProgramFacetConditions(params, "language", policyOpts);
+        const wField = buildProgramFacetConditions(params, "field", policyOpts);
+        const wFee = buildProgramFacetConditions(params, "fee", policyOpts);
 
         const [
           countries,
@@ -412,6 +486,85 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
     res.status(500).json({ error: err?.message || "Failed to load filters" });
   }
 });
+
+router.get(
+  "/course-finder/public-settings",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const policy = await getPublicCatalogPolicy();
+    const join = eq(programsTable.universityId, universitiesTable.id);
+    const [countries, universityTypes] = await Promise.all([
+      db
+        .selectDistinct({ value: universitiesTable.country })
+        .from(universitiesTable)
+        .innerJoin(programsTable, join)
+        .where(and(eq(programsTable.isActive, true), sql`${universitiesTable.country} IS NOT NULL`))
+        .orderBy(universitiesTable.country),
+      db
+        .selectDistinct({ value: universitiesTable.universityType })
+        .from(universitiesTable)
+        .innerJoin(programsTable, join)
+        .where(and(eq(programsTable.isActive, true), sql`${universitiesTable.universityType} IS NOT NULL`))
+        .orderBy(universitiesTable.universityType),
+    ]);
+    res.json({
+      ...policy,
+      availableCountries: countries.map((row) => row.value).filter(Boolean),
+      availableUniversityTypes: universityTypes.map((row) => row.value).filter(Boolean),
+    });
+  },
+);
+
+router.patch(
+  "/course-finder/public-settings",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const allowedCountries = normaliseStringList(req.body?.allowedCountries);
+    const allowedUniversityTypes = normaliseStringList(req.body?.allowedUniversityTypes);
+    if (allowedUniversityTypes.length === 0) {
+      res.status(400).json({ error: "At least one university type must be selected" });
+      return;
+    }
+
+    const join = eq(programsTable.universityId, universitiesTable.id);
+    const [countryRows, typeRows] = await Promise.all([
+      db.selectDistinct({ value: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, join)
+        .where(eq(programsTable.isActive, true)),
+      db.selectDistinct({ value: universitiesTable.universityType }).from(universitiesTable).innerJoin(programsTable, join)
+        .where(eq(programsTable.isActive, true)),
+    ]);
+    const availableCountries = new Set(countryRows.map((row) => row.value).filter(Boolean));
+    const availableTypes = new Set(typeRows.map((row) => row.value).filter(Boolean));
+    if (allowedCountries.some((value) => !availableCountries.has(value))) {
+      res.status(400).json({ error: "Invalid public catalogue country" });
+      return;
+    }
+    if (allowedUniversityTypes.some((value) => !availableTypes.has(value))) {
+      res.status(400).json({ error: "Invalid public catalogue university type" });
+      return;
+    }
+
+    const [existing] = await db.select({ id: settingsTable.id }).from(settingsTable).limit(1);
+    const update = {
+      publicCatalogAllowedCountries: allowedCountries,
+      publicCatalogAllowedUniversityTypes: allowedUniversityTypes,
+      updatedAt: new Date(),
+    };
+    if (existing) {
+      await db.update(settingsTable).set(update).where(eq(settingsTable.id, existing.id));
+    } else {
+      await db.insert(settingsTable).values(update);
+    }
+    publicCatalogPolicyCache = undefined;
+    courseFinderFilterCache.clear();
+    courseFinderFilterInFlight.clear();
+    const value = await getPublicCatalogPolicy();
+    logAudit(req.user!.id, "update_public_catalog_settings", "settings", existing?.id, value, req.ip);
+    res.json(value);
+  },
+);
 
 router.get("/course-finder/students", requireAuth, requireAgentStaffPermission("course_finder"), async (req, res): Promise<void> => {
   const user = req.user!;

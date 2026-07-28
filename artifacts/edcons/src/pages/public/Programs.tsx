@@ -1573,6 +1573,7 @@ export default function Programs() {
   // (e.g. picking Country=Turkey narrows the City and University lists).
   const filterParams = useMemo(() => {
     const p = new URLSearchParams();
+    p.set("scope", "public");
     if (debouncedSearch) p.set("search", debouncedSearch);
     if (country.length) p.set("country", country.join(","));
     if (city.length) p.set("city", city.join(","));
@@ -1620,6 +1621,7 @@ export default function Programs() {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: "24" });
+      params.set("scope", "public");
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (country.length) params.set("country", country.join(","));
       if (city.length) params.set("city", city.join(","));

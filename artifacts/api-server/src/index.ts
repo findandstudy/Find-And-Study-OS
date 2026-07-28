@@ -774,6 +774,8 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS stuck_assign_consider_country_match BOOLEAN NOT NULL DEFAULT true`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS stuck_assign_off_hours_behavior TEXT NOT NULL DEFAULT 'assign_anyway'`);
     await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS date_format TEXT NOT NULL DEFAULT 'DD.MM.YYYY'`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS public_catalog_allowed_countries JSONB NOT NULL DEFAULT '[]'::jsonb`);
+    await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS public_catalog_allowed_university_types JSONB NOT NULL DEFAULT '["Private"]'::jsonb`);
     // Zernio omnichannel provider — per-account provider tagging.
     await pool.query(`ALTER TABLE channel_accounts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'direct'`);
     await pool.query(`ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS is_starred BOOLEAN NOT NULL DEFAULT false`);
@@ -1309,6 +1311,9 @@ async function seedClaudeIntegration() {
     await pool.query(`CREATE INDEX IF NOT EXISTS leads_email_trgm_idx ON leads USING GIN (email gin_trgm_ops)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS programs_name_trgm_idx ON programs USING GIN (name gin_trgm_ops)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS universities_name_trgm_idx ON universities USING GIN (name gin_trgm_ops)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS leads_list_scope_idx ON leads (season, assigned_to_id, updated_at DESC) WHERE deleted_at IS NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS students_list_scope_idx ON students (season, assigned_to_id, updated_at DESC) WHERE deleted_at IS NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS follow_ups_open_lead_schedule_idx ON follow_ups (lead_id, scheduled_at) WHERE completed = false`);
 
     // Partial index — every notification fetch reads only is_read=false rows;
     // a partial index is small (only unread rows) and dramatically speeds

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X, FileText, Save, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
+import { Globe, Building2, GraduationCap, BookOpen, Plus, Upload, Download, Search, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle, ImageIcon, Lock, ExternalLink, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Loader2, Check, X, FileText, Save, GripVertical, ArrowUp, ArrowDown, Eye } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -2156,6 +2156,15 @@ const OPTION_CATEGORIES = [
   { key: "currency", labelKey: "catalogPage.optCurrency", descKey: "catalogPage.optCurrencyDesc" },
 ];
 
+const OPTIONS_PANEL_CATEGORIES = [
+  ...OPTION_CATEGORIES,
+  {
+    key: "public_catalog",
+    labelKey: "adminCatalog.publicCatalogTitle",
+    descKey: "adminCatalog.publicCatalogDesc",
+  },
+];
+
 
 const PROGRAM_DOC_TYPE_KEYS = [
   "high_school_diploma_translation", "class_10th_ssc_marks_sheet",
@@ -2341,7 +2350,7 @@ type DeleteBlockedPayload = DeleteBlockedDocPayload | DeleteBlockedDegreePayload
 function OptionsTab() {
   const { t } = useI18n();
   const { toast } = useToast();
-  const [activeCategory, setActiveCategory] = useState(OPTION_CATEGORIES[0].key);
+  const [activeCategory, setActiveCategory] = useState(OPTIONS_PANEL_CATEGORIES[0].key);
   const [editItem, setEditItem] = useState<CatalogOption | null>(null);
   const [newValue, setNewValue] = useState("");
   const [addMode, setAddMode] = useState(false);
@@ -2360,8 +2369,9 @@ function OptionsTab() {
 
   const grouped: Record<string, CatalogOption[]> = (optionsResp as any)?.grouped || {};
   const items = grouped[activeCategory] || [];
-  const catMeta = OPTION_CATEGORIES.find(c => c.key === activeCategory)!;
+  const catMeta = OPTIONS_PANEL_CATEGORIES.find(c => c.key === activeCategory)!;
   const catLabel = t(catMeta.labelKey);
+  const isPublicCatalog = activeCategory === "public_catalog";
 
   async function handleAdd() {
     const trimmed = newValue.trim();
@@ -2440,18 +2450,32 @@ function OptionsTab() {
     <>
     <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-4">
       <div className="space-y-1">
-        {OPTION_CATEGORIES.map(cat => (
+        {OPTIONS_PANEL_CATEGORIES.map(cat => (
           <button
             key={cat.key}
             onClick={() => { setActiveCategory(cat.key); setAddMode(false); setEditItem(null); }}
-            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeCategory === cat.key ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}
+            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${cat.key === "public_catalog" ? "mt-3 border-t pt-4" : ""} ${activeCategory === cat.key ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}
           >
             {t(cat.labelKey)}
-            <span className="ml-2 text-xs opacity-60">({(grouped[cat.key] || []).length})</span>
+            {cat.key !== "public_catalog" && (
+              <span className="ml-2 text-xs opacity-60">({(grouped[cat.key] || []).length})</span>
+            )}
           </button>
         ))}
       </div>
 
+      {isPublicCatalog ? (
+        <div className="rounded-lg border p-4">
+          <div className="mb-4 border-b pb-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <Eye className="h-4 w-4 text-primary" />
+              {catLabel}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">{t(catMeta.descKey)}</p>
+          </div>
+          <PublicCatalogSettingsTab />
+        </div>
+      ) : (
       <div className="border rounded-lg">
         <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
           <div>
@@ -2584,6 +2608,7 @@ function OptionsTab() {
           })}
         </div>
       </div>
+      )}
     </div>
     {docsForOption && (
       <DegreeDocsDialog option={docsForOption} onClose={() => setDocsForOption(null)} />
@@ -3203,6 +3228,137 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
   );
 }
 
+type PublicCatalogSettings = {
+  allowedCountries: string[];
+  allowedUniversityTypes: string[];
+  availableCountries: string[];
+  availableUniversityTypes: string[];
+};
+
+function PublicCatalogSettingsTab() {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [countries, setCountries] = useState<string[]>([]);
+  const [universityTypes, setUniversityTypes] = useState<string[]>([]);
+
+  const settingsQuery = useQuery<PublicCatalogSettings>({
+    queryKey: ["public-catalog-settings"],
+    queryFn: () => api("/api/course-finder/public-settings"),
+  });
+
+  useEffect(() => {
+    if (!settingsQuery.data) return;
+    setCountries(settingsQuery.data.allowedCountries || []);
+    setUniversityTypes(settingsQuery.data.allowedUniversityTypes || []);
+  }, [settingsQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => api("/api/course-finder/public-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        allowedCountries: countries,
+        allowedUniversityTypes: universityTypes,
+      }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["public-catalog-settings"] });
+      toast({ title: t("adminCatalog.publicCatalogSaved") });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: t("adminCatalog.publicCatalogSaveFailed"),
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const toggle = (
+    value: string,
+    selected: string[],
+    setSelected: (next: string[]) => void,
+  ) => {
+    setSelected(
+      selected.includes(value)
+        ? selected.filter((item) => item !== value)
+        : [...selected, value],
+    );
+  };
+
+  if (settingsQuery.isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        {t("adminCatalog.publicCatalogLoading")}
+      </div>
+    );
+  }
+
+  const data = settingsQuery.data;
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+        {t("adminCatalog.publicCatalogPrivateOnlyNote")}
+      </div>
+
+      <section className="space-y-3">
+        <div>
+          <Label className="text-sm font-semibold">{t("adminCatalog.publicCatalogUniversityTypes")}</Label>
+          <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.publicCatalogTypesHelp")}</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {(data?.availableUniversityTypes || []).map((value) => (
+            <label key={value} className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm hover:bg-muted/50">
+              <Checkbox
+                checked={universityTypes.includes(value)}
+                onCheckedChange={() => toggle(value, universityTypes, setUniversityTypes)}
+              />
+              <span>{value}</span>
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <Label className="text-sm font-semibold">{t("adminCatalog.publicCatalogCountries")}</Label>
+          <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.publicCatalogCountriesHelp")}</p>
+        </div>
+        <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed p-3 text-sm font-medium">
+          <Checkbox
+            checked={countries.length === 0}
+            onCheckedChange={() => setCountries([])}
+          />
+          <span>{t("adminCatalog.publicCatalogAllCountries")}</span>
+        </label>
+        <div className="grid max-h-80 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
+          {(data?.availableCountries || []).map((value) => (
+            <label key={value} className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm hover:bg-muted/50">
+              <Checkbox
+                checked={countries.includes(value)}
+                onCheckedChange={() => toggle(value, countries, setCountries)}
+              />
+              <span>{value}</span>
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <div className="flex justify-end border-t pt-4">
+        <Button
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending || universityTypes.length === 0}
+        >
+          {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {t("adminCatalog.publicCatalogSave")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 
 /* ═══════════════════════════════════════════════════════════
    MAIN PAGE
@@ -3282,6 +3438,7 @@ export default function AdminCatalog() {
             <OptionsTab />
           </Card>
         </TabsContent>
+
       </Tabs>
     </>
   );

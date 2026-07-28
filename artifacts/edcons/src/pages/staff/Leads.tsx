@@ -326,8 +326,9 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
 }
 
 /* ── DroppableColumn ──────────────────────────────────────── */
-function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canAssign, canReassign, canMoveCards }: {
+function DroppableColumn({ col, leads, totalCount, showRevenue, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canAssign, canReassign, canMoveCards }: {
   col: ColDef; leads: any[]; showRevenue: boolean; onView: (id: number) => void;
+  totalCount?: number;
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
   staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean;
 }) {
@@ -378,7 +379,7 @@ function DroppableColumn({ col, leads, showRevenue, onView, staffUsersMap, onAss
             }`}>{col.title}</h3>
           </div>
           <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>
-            {leads.length}
+            {totalCount ?? leads.length}
           </span>
         </div>
         {showRevenue && totalRevenue > 0 && (
@@ -428,7 +429,7 @@ function leadIsDateInRange(dateStr: string, range: string): boolean {
 
 function FilterPopoverInner(props: any) { const { t } = useI18n(); return <FilterPopoverBody {...props} t={t} />; }
 const FilterPopover = FilterPopoverInner;
-function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUserId, leads, t }: {
+function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUserId, leads, facetNationalities, facetAgents, t }: {
   filters: LeadFilters;
   onChange: (f: LeadFilters) => void;
   columns: ColDef[];
@@ -436,6 +437,8 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
   t: (k: string) => string;
   currentUserId?: number;
   leads: any[];
+  facetNationalities?: string[];
+  facetAgents?: Array<{ id: number; name: string }>;
 }) {
   const [open, setOpen] = useState(false);
   const hasActive = Object.entries(filters).some(([, v]) => v !== "all");
@@ -443,14 +446,16 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
   const uniqueNationalities = useMemo(() => {
     const set = new Set<string>();
     leads.forEach((l: any) => { if (l.nationality) set.add(l.nationality); });
-    return Array.from(set).sort();
-  }, [leads]);
+    return facetNationalities?.length ? facetNationalities : Array.from(set).sort();
+  }, [leads, facetNationalities]);
 
   const uniqueAgents = useMemo(() => {
     const map = new Map<number, string>();
     leads.forEach((l: any) => { if (l.agentId && l.agentName) map.set(l.agentId, l.agentName); });
-    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [leads]);
+    return facetAgents?.length
+      ? facetAgents.map((agent) => [agent.id, agent.name] as [number, string])
+      : Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [leads, facetAgents]);
 
   return (
     <>
@@ -1318,7 +1323,34 @@ export default function LeadsPage() {
 
   const { season } = useSeason();
   const { levels: studyLevels } = useStudyLevels();
-  const { data, isLoading } = useListLeads({ search, season, limit: 100000 } as any);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  const leadListParams = useMemo(() => ({
+    search: debouncedSearch || undefined,
+    season,
+    page: viewMode === "list" ? pg.page : 1,
+    limit: viewMode === "list" ? pg.pageSize : 500,
+    status: filters.status !== "all" ? filters.status : undefined,
+    source: filters.source !== "all" ? filters.source : undefined,
+    appSource: filters.appSource !== "all" ? filters.appSource : undefined,
+    assignment: filters.assignment !== "all" ? filters.assignment : undefined,
+    nationality: filters.nationality !== "all" ? filters.nationality : undefined,
+    agentId: filters.agent !== "all" ? filters.agent : undefined,
+    originType: filters.originType !== "all" ? filters.originType : undefined,
+    dateRange: filters.dateRange !== "all" ? filters.dateRange : undefined,
+    followupRange: filters.followupRange !== "all" ? filters.followupRange : undefined,
+    name: colFilters.name || undefined,
+    email: colFilters.email || undefined,
+    program: colFilters.program || undefined,
+    country: colFilters.country || undefined,
+    minValue: colFilters.value || undefined,
+    sortKey: sort.key,
+    sortDir: sort.dir,
+  }), [debouncedSearch, season, viewMode, pg.page, pg.pageSize, filters, colFilters, sort]);
+  const { data, isLoading } = useListLeads(leadListParams as any);
 
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
@@ -1432,7 +1464,12 @@ export default function LeadsPage() {
     return arr;
   }, [filteredLeads, sort]);
 
-  const { paged: pagedLeads, total: totalLeadsCount } = pg.paginate(sortedLeads);
+  const pagedLeads = sortedLeads;
+  const totalLeadsCount = Number((data as any)?.meta?.total ?? sortedLeads.length);
+  const leadStatusCounts = ((data as any)?.meta?.statusCounts || {}) as Record<string, number>;
+  const leadFacets = (data as any)?.meta?.facets as
+    | { nationalities?: string[]; agents?: Array<{ id: number; name: string }> }
+    | undefined;
 
   useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, colFilters, sort]);
 
@@ -1656,7 +1693,16 @@ export default function LeadsPage() {
                 className="pl-9 bg-white dark:bg-black/20 border-border rounded-full"
               />
             </div>
-            <FilterPopover filters={filters} onChange={(next: LeadFilters) => { if (next.assignment !== filters.assignment) setPersistedAssignment(next.assignment); setFilters(next); }} columns={columns} staffUsers={staffUsers} currentUserId={user?.id} leads={allLeads} />
+            <FilterPopover
+              filters={filters}
+              onChange={(next: LeadFilters) => { if (next.assignment !== filters.assignment) setPersistedAssignment(next.assignment); setFilters(next); }}
+              columns={columns}
+              staffUsers={staffUsers}
+              currentUserId={user?.id}
+              leads={allLeads}
+              facetNationalities={leadFacets?.nationalities}
+              facetAgents={leadFacets?.agents}
+            />
 
             <div className="flex items-center border rounded-full overflow-hidden">
               <button
@@ -1719,6 +1765,7 @@ export default function LeadsPage() {
                       key={col.id}
                       col={col}
                       leads={columnLeads}
+                      totalCount={leadStatusCounts[col.id]}
                       showRevenue={canSeeRevenue}
                       onView={(id) => setLocation(`/staff/leads/${id}`)}
                       staffUsersMap={staffUsersMap}
