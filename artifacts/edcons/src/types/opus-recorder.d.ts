@@ -11,14 +11,15 @@ declare module "opus-recorder" {
     encoderFrameSize?: number;
     encoderSampleRate?: 8000 | 12000 | 16000 | 24000 | 48000;
     streamPages?: boolean;
+    sourceNode?: MediaStreamAudioSourceNode;
   }
 
   export default class Recorder {
     constructor(config?: RecorderConfig);
     static isRecordingSupported(): boolean;
     start(): Promise<void>;
-    stop(): void;
-    close(): void;
+    stop(): Promise<void>;
+    close(): Promise<void> | void;
     ondataavailable: (data: ArrayBuffer) => void;
     onstart: () => void;
     onstop: () => void;

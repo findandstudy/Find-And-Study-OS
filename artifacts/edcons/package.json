@@ -8,6 +8,7 @@
     "build": "node scripts/check-i18n.mjs && vite build --config vite.config.ts && node generate-sitemap.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
+    "test:voice-recorder": "tsx --test ./scripts/test-voice-recorder-errors.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -91,6 +92,7 @@
     "@vitejs/plugin-react": "catalog:",
     "rollup-plugin-visualizer": "^7.0.1",
     "tailwindcss": "catalog:",
+    "tsx": "catalog:",
     "vite": "catalog:"
   }
 }
