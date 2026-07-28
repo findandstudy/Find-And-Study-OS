@@ -9,8 +9,14 @@ import {
   resolveOkanDegreeValue,
 } from "../src/universities/okan/adapter.js";
 import {
+  findUniqueUnitedTargetApplication,
+  parseUnitedProfileUploadKey,
   resolveUnitedDegreeLabel,
   resolveUnitedDocumentSlots,
+  resolveUnitedProfileDocumentKeys,
+  resolveUnitedProgramOption,
+  resolveUnitedUniversityLabel,
+  resolveUnitedUniversityOption,
 } from "../src/universities/united/adapter.js";
 
 test("United uses exact live degree-card labels", () => {
@@ -39,6 +45,139 @@ test("United uses degree-specific live document slots", () => {
     transcript: ["transp"],
   });
   assert.equal(resolveUnitedDocumentSlots("Foundation"), null);
+});
+
+test("United resolves CRM university aliases to exact live portal labels", () => {
+  assert.equal(
+    resolveUnitedUniversityLabel("Ankara Bilim University"),
+    "Ankara Science University",
+  );
+  assert.equal(
+    resolveUnitedUniversityLabel("Ankara Bilim Üniversitesi"),
+    "Ankara Science University",
+  );
+  assert.equal(
+    resolveUnitedUniversityLabel("Nişantaşı Üniversitesi"),
+    "Nisantasi University",
+  );
+  assert.equal(
+    resolveUnitedUniversityLabel("Biruni Üniversitesi"),
+    "Biruni University",
+  );
+  assert.equal(
+    resolveUnitedUniversityOption(
+      [
+        "Istanbul Kent\u200f\u200f University",
+        "Ankara Science University",
+        "Ankara Medipol University",
+      ],
+      "Ankara Bilim University",
+    ),
+    "Ankara Science University",
+  );
+  assert.equal(
+    resolveUnitedUniversityOption(
+      ["Ankara Science University", "Ankara Science University"],
+      "Ankara Bilim University",
+    ),
+    null,
+  );
+});
+
+test("United resolves programme options exactly and preserves qualifiers", () => {
+  const options = [
+    "Law (Turkish)",
+    "Law (English)",
+    "International Law (English)",
+    "Business Administration (English) (Thesis)",
+    "Business Administration (English) (Non-Thesis)",
+  ];
+  assert.equal(
+    resolveUnitedProgramOption(options, "Bachelor of Law (Turkish)"),
+    "Law (Turkish)",
+  );
+  assert.equal(
+    resolveUnitedProgramOption(
+      options,
+      "Master of Business Administration (English) (Non-Thesis)",
+    ),
+    "Business Administration (English) (Non-Thesis)",
+  );
+  assert.equal(
+    resolveUnitedProgramOption(options, "Bachelor of Law"),
+    null,
+  );
+});
+
+test("United target application proof rejects wrong default portal cards", () => {
+  const rows = [
+    {
+      href: "/Manage/applicationdetails/a0vWRONG",
+      ref: "APP-286080",
+      university: "Istanbul Kent\u200f\u200f University",
+      program: "Dentistry (Turkish)",
+      profileHref: "/Manage/studentprofile/001WRONG",
+    },
+    {
+      href: "/Manage/applicationdetails/a0vRIGHT",
+      ref: "APP-286099",
+      university: "Ankara Science University",
+      program: "Law (Turkish)",
+      profileHref: "/Manage/studentprofile/001RIGHT",
+    },
+  ];
+  assert.deepEqual(
+    findUniqueUnitedTargetApplication(
+      rows,
+      "Ankara Bilim University",
+      "Bachelor of Law (Turkish)",
+    ),
+    rows[1],
+  );
+  assert.equal(
+    findUniqueUnitedTargetApplication(
+      [rows[0]],
+      "Ankara Bilim University",
+      "Bachelor of Law (Turkish)",
+    ),
+    null,
+  );
+  assert.equal(
+    findUniqueUnitedTargetApplication(
+      [rows[1], { ...rows[1], href: "/Manage/applicationdetails/a0vDUP" }],
+      "Ankara Bilim University",
+      "Bachelor of Law (Turkish)",
+    ),
+    null,
+  );
+});
+
+test("United profile repair uses degree-specific document keys", () => {
+  assert.deepEqual(resolveUnitedProfileDocumentKeys("Bachelor"), {
+    diploma: "HighSchoolDiploma",
+    transcript: "HighSchoolTranscript",
+  });
+  assert.deepEqual(resolveUnitedProfileDocumentKeys("Master"), {
+    diploma: "Bachelor'sDiploma",
+    transcript: "Bachelor'sTranscript",
+  });
+  assert.deepEqual(resolveUnitedProfileDocumentKeys("PhD"), {
+    diploma: "Master'sDiploma",
+    transcript: "Master'sTranscript",
+  });
+  assert.equal(resolveUnitedProfileDocumentKeys("Foundation"), null);
+  assert.equal(
+    parseUnitedProfileUploadKey(
+      "uploadfile('003X','001X','1','Bachelor\\'s Diploma','Bachelor\\'sDiploma')",
+    ),
+    "Bachelor'sDiploma",
+  );
+  assert.equal(
+    parseUnitedProfileUploadKey(
+      "uploadfile('003X','001X','1','Passport','Passport')",
+    ),
+    "Passport",
+  );
 });
 
 test("Multico uses exact live GPA select values", () => {

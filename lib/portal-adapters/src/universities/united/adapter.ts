@@ -77,7 +77,7 @@ const PORTAL_URL = "https://partner.unitededucation.com";
 // first real run reveals the exact create contract (field names + Salesforce
 // contactid/programid/appid) for a future Phase-2 HTTP replay.
 const NETLOG_URL_RE =
-  /\/Manage\/(newapplication|uploadfilesone|selectprogram|Degreelist|test1)|\/Account\/searchapp/i;
+  /\/Manage\/(newapplication|uploadfilesone(?:tek)?|selectprogram|Degreelist|test1)|\/Account\/searchapp/i;
 
 /** Redact the ASP.NET MVC anti-forgery token out of a captured request body. */
 function redactToken(body: string): string {
@@ -153,7 +153,11 @@ function sanitizeBody(raw: string): string {
 // (b) token overlap ≥ 60%. It NEVER guesses when nothing clears the bar.
 // ---------------------------------------------------------------------------
 function normLabel(s: string): string {
-  return fold(String(s || "").replace(/\([^)]*\)/g, " "));
+  return fold(
+    String(s || "")
+      .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+      .replace(/\([^)]*\)/g, " "),
+  );
 }
 
 function looseMatchIndex(optTexts: string[], want: string): number {
@@ -208,11 +212,179 @@ export function resolveUnitedDocumentSlots(level: string): {
   return null;
 }
 
-function labelsEquivalent(actual: string, wanted: string): boolean {
-  const a = normLabel(actual);
-  const w = normLabel(wanted);
-  if (!a || !w) return false;
-  return a === w || a.includes(w) || w.includes(a);
+const UNITED_UNIVERSITY_ALIASES: ReadonlyArray<{
+  aliases: readonly string[];
+  portal: string;
+}> = [
+  {
+    aliases: [
+      "Ankara Bilim University",
+      "Ankara Bilim Üniversitesi",
+      "Ankara Science University",
+    ],
+    portal: "Ankara Science University",
+  },
+  {
+    aliases: [
+      "Nişantaşı Üniversitesi",
+      "Nisantasi University",
+      "Istanbul Nisantasi University",
+    ],
+    portal: "Nisantasi University",
+  },
+  {
+    aliases: ["Biruni Üniversitesi", "Biruni University"],
+    portal: "Biruni University",
+  },
+];
+
+function normalizeUnitedUniversity(value: string): string {
+  return fold(
+    String(value || "").replace(
+      /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+      "",
+    ),
+  )
+    .replace(
+      /\b(university|universitesi|universite|istanbul|the|of)\b/g,
+      " ",
+    )
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Resolve CRM university aliases to the exact labels shown by United. */
+export function resolveUnitedUniversityLabel(name: string): string | null {
+  const normalized = normalizeUnitedUniversity(name);
+  if (!normalized) return null;
+  for (const entry of UNITED_UNIVERSITY_ALIASES) {
+    if (
+      entry.aliases.some(
+        (alias) => normalizeUnitedUniversity(alias) === normalized,
+      )
+    ) {
+      return entry.portal;
+    }
+  }
+  return String(name || "").trim() || null;
+}
+
+/** Resolve one and only one live United university option. Never guesses. */
+export function resolveUnitedUniversityOption(
+  optionTexts: readonly string[],
+  requestedUniversity: string,
+): string | null {
+  const requestedPortalLabel = resolveUnitedUniversityLabel(requestedUniversity);
+  if (!requestedPortalLabel) return null;
+  const expected = normalizeUnitedUniversity(requestedPortalLabel);
+  const matches = optionTexts.filter(
+    (option) => normalizeUnitedUniversity(option) === expected,
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function normalizeUnitedProgram(value: string): string {
+  return fold(
+    String(value || "").replace(
+      /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+      "",
+    ),
+  )
+    .replace(
+      /^\s*(associate|bachelor|master|masters|phd|doctorate)\s+(degree\s+)?(of|in)\s+/,
+      "",
+    )
+    .replace(
+      /\s+\b(vocational school|associate|bachelor|master|phd|doctorate)\b\s*$/,
+      "",
+    )
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Resolve the CRM programme to one unique live United option. */
+export function resolveUnitedProgramOption(
+  optionTexts: readonly string[],
+  requestedProgram: string,
+): string | null {
+  const expected = normalizeUnitedProgram(requestedProgram);
+  if (!expected) return null;
+  const matches = optionTexts.filter(
+    (option) => normalizeUnitedProgram(option) === expected,
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export interface UnitedApplicationIdentity {
+  href: string;
+  ref: string;
+  program: string;
+  university: string;
+  profileHref?: string;
+}
+
+/** Exact server-side target proof used for both dedup and post-create checks. */
+export function findUniqueUnitedTargetApplication(
+  applications: readonly UnitedApplicationIdentity[],
+  requestedUniversity: string,
+  requestedProgram: string,
+): UnitedApplicationIdentity | null {
+  const expectedUniversity = normalizeUnitedUniversity(
+    resolveUnitedUniversityLabel(requestedUniversity) || "",
+  );
+  const expectedProgram = normalizeUnitedProgram(requestedProgram);
+  if (!expectedUniversity || !expectedProgram) return null;
+  const matches = applications.filter(
+    (application) =>
+      normalizeUnitedUniversity(
+        resolveUnitedUniversityLabel(application.university) || "",
+      ) === expectedUniversity &&
+      normalizeUnitedProgram(application.program) === expectedProgram,
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export function resolveUnitedProfileDocumentKeys(level: string): {
+  diploma: string;
+  transcript: string;
+} | null {
+  const degree = resolveUnitedDegreeLabel(level);
+  if (degree === "Vocational School" || degree === "Bachelor") {
+    return {
+      diploma: "HighSchoolDiploma",
+      transcript: "HighSchoolTranscript",
+    };
+  }
+  if (degree === "Master") {
+    return {
+      diploma: "Bachelor'sDiploma",
+      transcript: "Bachelor'sTranscript",
+    };
+  }
+  if (degree === "PhD") {
+    return {
+      diploma: "Master'sDiploma",
+      transcript: "Master'sTranscript",
+    };
+  }
+  return null;
+}
+
+/** Extract the final document key from United's uploadfile(...) onclick. */
+export function parseUnitedProfileUploadKey(onclick: string): string | null {
+  const match = String(onclick || "").match(
+    /,\s*'((?:\\'|[^'])*)'\s*\)\s*;?\s*$/,
+  );
+  return match ? match[1].replace(/\\'/g, "'") : null;
+}
+
+function unitedApplicationIdFromHref(href: string): string | null {
+  const match = String(href || "").match(
+    /\/Manage\/applicationdetails\/([0-9A-Za-z_-]+)/i,
+  );
+  return match?.[1] || null;
 }
 
 export const unitedAdapter: UniversityAdapter = {
@@ -300,8 +472,18 @@ export const unitedAdapter: UniversityAdapter = {
       .map(([field]) => String(field));
     const resolvedDegree = resolveUnitedDegreeLabel(profile.level);
     const documentSlots = resolveUnitedDocumentSlots(profile.level);
+    const profileDocumentKeys = resolveUnitedProfileDocumentKeys(profile.level);
+    const resolvedPortalUniversity = resolveUnitedUniversityLabel(
+      profile.universityName || "",
+    );
     if (!resolvedDegree) missingProfile.push("level(unmapped)");
     if (!documentSlots) missingProfile.push("documentSlots(unmapped)");
+    if (!profileDocumentKeys) {
+      missingProfile.push("profileDocumentKeys(unmapped)");
+    }
+    if (!resolvedPortalUniversity) {
+      missingProfile.push("universityName(unmapped)");
+    }
     if (missingProfile.length > 0) {
       throw new Error(
         `United data_missing: ${missingProfile.join(", ")}`,
@@ -446,83 +628,162 @@ export const unitedAdapter: UniversityAdapter = {
       try { await page.evaluate(() => { (globalThis as any).__name = (globalThis as any).__name || ((f: any) => f); }); } catch {}
     };
 
-    const readDocumentState = async (id: string): Promise<string> => {
-      return page
-        .locator("#" + id)
-        .evaluate((el: Element) => {
-          let cur: HTMLElement | null = el.parentElement;
-          for (let i = 0; i < 8 && cur; i++, cur = cur.parentElement) {
-            const text = (cur.innerText || "").replace(/\s+/g, " ").trim();
-            if (/not uploaded|uploaded/i.test(text)) return text.slice(0, 240);
-          }
-          return "";
-        })
-        .catch(() => "");
+    const findProfileDocumentTarget = async (
+      documentKey: string,
+    ): Promise<{ index: number; state: string } | null> => {
+      const targets = (await page
+        .locator('button[onclick*="uploadfile("]')
+        .evaluateAll((buttons: Element[], wantedKey: string) => {
+          const parseKey = (onclick: string) => {
+            const match = String(onclick || "").match(
+              /,\s*'((?:\\'|[^'])*)'\s*\)\s*;?\s*$/,
+            );
+            return match ? match[1].replace(/\\'/g, "'") : null;
+          };
+          return buttons
+            .map((button, index) => ({
+              index,
+              key: parseKey(button.getAttribute("onclick") || ""),
+              state: (button.parentElement?.textContent || "")
+                .replace(/\s+/g, " ")
+                .trim(),
+            }))
+            .filter((entry) => entry.key === wantedKey);
+        }, documentKey)
+        .catch(() => [])) as Array<{
+        index: number;
+        key: string;
+        state: string;
+      }>;
+      return targets.length === 1
+        ? { index: targets[0].index, state: targets[0].state }
+        : null;
     };
-    const uploadDoc = async (ids: string[], localPath?: string): Promise<boolean> => {
-      if (dryRun) {
-        for (const id of ids) {
-          if (!(await page.locator("#" + id).count())) continue;
-          const state = await readDocumentState(id);
-          return /\buploaded\b/i.test(state) && !/not uploaded/i.test(state);
-        }
+    const isUploadedState = (state: string) =>
+      /\buploaded\b/i.test(state) && !/\bnot uploaded\b/i.test(state);
+    const uploadProfileDocument = async (
+      documentKey: string,
+      localPath?: string,
+    ): Promise<boolean> => {
+      let target = await findProfileDocumentTarget(documentKey);
+      if (!target) {
+        logger.warn(
+          `[united] profile document target ${documentKey} is missing or ambiguous`,
+        );
         return false;
       }
+      if (isUploadedState(target.state)) {
+        logger.info(
+          `[united] profile document ${documentKey} already uploaded — repair skipped`,
+        );
+        return true;
+      }
+      if (dryRun) return false;
       if (!localPath) {
-        logger.warn("[united] no local file for required slot [" + ids.join(",") + "]");
+        logger.warn(`[united] no local file for profile slot ${documentKey}`);
         return false;
       }
-      for (const id of ids) {
-        try {
-          const input = page.locator("#" + id);
-          if (!(await input.count())) continue;
-          const before = await readDocumentState(id);
-          if (/\buploaded\b/i.test(before) && !/not uploaded/i.test(before)) {
-            logger.info(`[united] document #${id} already uploaded — repair skipped`);
-            return true;
-          }
-          const responsePromise = page
-            .waitForResponse(
-              (response: any) =>
-                /\/Manage\/uploadfilesone/i.test(response.url()) &&
-                response.request().method() === "POST",
-              { timeout: 30000 },
-            )
-            .catch(() => null);
-          await page.setInputFiles("#" + id, localPath);
-          const uploadResponse = await responsePromise;
-          if (!uploadResponse || !uploadResponse.ok()) {
-            logger.warn(`[united] upload #${id} lacked a proved 2xx response`);
-            continue;
-          }
-          await wait(900);
-          const after = await readDocumentState(id);
-          if (/not uploaded/i.test(after)) {
-            logger.warn(`[united] upload #${id} returned 2xx but UI readback is still Not Uploaded`);
-            continue;
-          }
-          logger.info(`[united] uploaded #${id} with network + UI readback proof`);
-          return true;
-        } catch (e: any) {
+      try {
+        const uploadButtons = page.locator('button[onclick*="uploadfile("]');
+        await uploadButtons.nth(target.index).click({ timeout: 8000 });
+        await page
+          .waitForFunction(
+            (wantedKey: string) =>
+              Array.from(document.querySelectorAll<HTMLInputElement>(
+                'input[type="file"]',
+              )).some((input) => input.id === wantedKey),
+            documentKey,
+            { timeout: 8000 },
+          )
+          .catch(() => {});
+        const fileInputs = page.locator('input[type="file"]');
+        const inputIds = (await fileInputs
+          .evaluateAll((inputs: HTMLInputElement[]) =>
+            inputs.map((input) => input.id),
+          )
+          .catch(() => [])) as string[];
+        const fileInputIndex = inputIds.findIndex(
+          (inputId) => inputId === documentKey,
+        );
+        if (fileInputIndex < 0) {
           logger.warn(
-            "[united] upload #" +
-              id +
-              " failed: " +
-              String(e?.message || e).slice(0, 100),
+            `[united] modal file input ${documentKey} was not uniquely exposed`,
           );
+          return false;
         }
+        const responsePromise = page
+          .waitForResponse(
+            (response: any) =>
+              /\/Manage\/uploadfilesonetek(?:[/?]|$)/i.test(response.url()) &&
+              response.request().method() === "POST",
+            { timeout: 30000 },
+          )
+          .catch(() => null);
+        await fileInputs.nth(fileInputIndex).setInputFiles(localPath);
+        const uploadResponse = await responsePromise;
+        if (!uploadResponse || !uploadResponse.ok()) {
+          logger.warn(
+            `[united] profile upload ${documentKey} lacked a proved 2xx response`,
+          );
+          return false;
+        }
+        let responseOk = false;
+        try {
+          const payload = await uploadResponse.json();
+          responseOk = String(payload?.msg || "").toLowerCase() === "ok";
+        } catch {}
+        if (!responseOk) {
+          logger.warn(
+            `[united] profile upload ${documentKey} returned 2xx without msg=ok`,
+          );
+          return false;
+        }
+        await page
+          .waitForURL(/\/Manage\/studentprofile\//i, { timeout: 12000 })
+          .catch(() => {});
+        await wait(1000);
+        target = await findProfileDocumentTarget(documentKey);
+        if (!target || !isUploadedState(target.state)) {
+          logger.warn(
+            `[united] profile upload ${documentKey} passed network proof but failed exact row readback`,
+          );
+          return false;
+        }
+        logger.info(
+          `[united] uploaded ${documentKey} with msg=ok + exact profile-row readback`,
+        );
+        return true;
+      } catch (e: any) {
+        logger.warn(
+          `[united] profile upload ${documentKey} failed: ${String(
+            e?.message || e,
+          ).slice(0, 140)}`,
+        );
+        return false;
       }
-      logger.warn("[united] no verified document slot among [" + ids.join(",") + "]");
-      return false;
     };
     const uploadRequiredDocuments = async (): Promise<string[]> => {
       const uploadedSlots: string[] = [];
-      if (await uploadDoc(["face"], _files.photo)) uploadedSlots.push("photo");
-      if (await uploadDoc(["pass"], _files.passport)) uploadedSlots.push("passport");
-      if (await uploadDoc(documentSlots!.diploma, _files.diploma)) {
+      if (await uploadProfileDocument("Photograph", _files.photo)) {
+        uploadedSlots.push("photo");
+      }
+      if (await uploadProfileDocument("Passport", _files.passport)) {
+        uploadedSlots.push("passport");
+      }
+      if (
+        await uploadProfileDocument(
+          profileDocumentKeys!.diploma,
+          _files.diploma,
+        )
+      ) {
         uploadedSlots.push("diploma");
       }
-      if (await uploadDoc(documentSlots!.transcript, _files.transcript)) {
+      if (
+        await uploadProfileDocument(
+          profileDocumentKeys!.transcript,
+          _files.transcript,
+        )
+      ) {
         uploadedSlots.push("transcript");
       }
       return uploadedSlots;
@@ -579,21 +840,12 @@ export const unitedAdapter: UniversityAdapter = {
         );
         return { count, ids };
       };
-      let dedupCountBefore = -1; // -1 = search failed/skipped (recheck can't compare)
-      try {
-        const s = await searchApp("dedup");
-        dedupCountBefore = s.count;
-      } catch (e: any) {
-        throw new Error(
-          "United dedup_unknown: searchapp verification failed",
-        );
-      }
-      if (dedupCountBefore > 0) {
+      const getExactEmailProfileHrefs = async (): Promise<string[]> => {
         await page.goto(PORTAL_URL + "/Manage/mystudents", {
           waitUntil: "domcontentloaded",
           timeout: 60000,
         });
-        await wait(1800);
+        await wait(2500);
         const emailFilter = page
           .locator('input[placeholder="Email"], input[aria-label="Email"]')
           .first();
@@ -601,33 +853,35 @@ export const unitedAdapter: UniversityAdapter = {
           await emailFilter.fill(profile.email);
           await wait(1800);
         }
-        const profileHrefs = (await page
+        return (await page
           .$$eval(
             "a[href*='/Manage/studentprofile/']",
             (links: HTMLAnchorElement[], email: string) => [
               ...new Set(
                 links
-                  .filter((a) =>
-                    (a.closest("tr")?.innerText || "")
+                  .filter((anchor) =>
+                    (anchor.closest("tr")?.innerText || "")
                       .toLowerCase()
                       .includes(email.toLowerCase()),
                   )
-                  .map((a) => a.getAttribute("href") || "")
+                  .map((anchor) => anchor.getAttribute("href") || "")
                   .filter(Boolean),
               ),
             ],
             profile.email,
           )
           .catch(() => [])) as string[];
-        if (profileHrefs.length === 0) {
-          result.detail =
-            "United dedup_unknown: searchapp found records but no exact-email student profile could be verified";
-          return result;
-        }
-        const matches: Array<{ href: string; externalRef: string }> = [];
+      };
+      const inspectProfiles = async (
+        profileHrefs: string[],
+      ): Promise<{
+        applications: UnitedApplicationIdentity[];
+        createHrefs: string[];
+      }> => {
+        const applications: UnitedApplicationIdentity[] = [];
         const createHrefs: string[] = [];
-        for (const href of profileHrefs) {
-          await page.goto(new URL(href, PORTAL_URL).href, {
+        for (const profileHref of profileHrefs) {
+          await page.goto(new URL(profileHref, PORTAL_URL).href, {
             waitUntil: "domcontentloaded",
             timeout: 60000,
           });
@@ -638,47 +892,76 @@ export const unitedAdapter: UniversityAdapter = {
             .getAttribute("href")
             .catch(() => null);
           if (createHref) createHrefs.push(createHref);
-          const applications = (await page
+          const rows = (await page
             .$$eval(
               "a[href*='/Manage/applicationdetails/']",
               (links: HTMLAnchorElement[]) =>
-                links.map((a) => {
-                  const row = a.closest("tr");
+                links.map((anchor) => {
+                  const row = anchor.closest("tr");
                   const cells = row
-                    ? Array.from(row.querySelectorAll("td")).map((td) =>
-                        (td.textContent || "").replace(/\s+/g, " ").trim(),
+                    ? Array.from(row.querySelectorAll("td")).map((cell) =>
+                        (cell.textContent || "")
+                          .replace(/\s+/g, " ")
+                          .trim(),
                       )
                     : [];
                   return {
-                    href: a.getAttribute("href") || "",
-                    ref: (a.textContent || "").trim(),
+                    href: anchor.getAttribute("href") || "",
+                    ref: (anchor.textContent || "").trim(),
                     program: cells[1] || "",
                     university: cells[2] || "",
                   };
                 }),
             )
-            .catch(() => [])) as Array<{
-            href: string;
-            ref: string;
-            program: string;
-            university: string;
-          }>;
-          for (const app of applications) {
-            if (
-              labelsEquivalent(app.university, profile.universityName || "") &&
-              looseMatchIndex([app.program], profile.programName) === 0
-            ) {
-              matches.push({ href: app.href, externalRef: app.ref });
-            }
-          }
+            .catch(() => [])) as UnitedApplicationIdentity[];
+          applications.push(
+            ...rows.map((application) => ({
+              ...application,
+              profileHref,
+            })),
+          );
         }
+        return {
+          applications,
+          createHrefs: [...new Set(createHrefs)],
+        };
+      };
+      const exactTargetMatches = (
+        applications: UnitedApplicationIdentity[],
+      ) =>
+        applications.filter(
+          (application) =>
+            findUniqueUnitedTargetApplication(
+              [application],
+              profile.universityName || "",
+              profile.programName,
+            ) !== null,
+        );
+      let dedupCountBefore = -1; // -1 = search failed/skipped (recheck can't compare)
+      try {
+        const s = await searchApp("dedup");
+        dedupCountBefore = s.count;
+      } catch (e: any) {
+        throw new Error(
+          "United dedup_unknown: searchapp verification failed",
+        );
+      }
+      if (dedupCountBefore > 0) {
+        const profileHrefs = await getExactEmailProfileHrefs();
+        if (profileHrefs.length === 0) {
+          result.detail =
+            "United dedup_unknown: searchapp found records but no exact-email student profile could be verified";
+          return result;
+        }
+        const inspected = await inspectProfiles(profileHrefs);
+        const matches = exactTargetMatches(inspected.applications);
         if (matches.length > 1) {
           result.detail =
             "United dedup_ambiguous: multiple exact target applications exist; automatic mutation blocked";
           return result;
         }
         if (matches.length === 1) {
-          await page.goto(new URL(matches[0].href, PORTAL_URL).href, {
+          await page.goto(new URL(matches[0].profileHref!, PORTAL_URL).href, {
             waitUntil: "domcontentloaded",
             timeout: 60000,
           });
@@ -690,7 +973,9 @@ export const unitedAdapter: UniversityAdapter = {
           ).filter((slot) => !uploadedSlots.includes(slot));
           result.submitted =
             !dryRun && result.missingDocuments.length === 0;
-          result.externalRef = matches[0].externalRef;
+          result.externalRef =
+            unitedApplicationIdFromHref(matches[0].href) ||
+            matches[0].ref;
           result.detail = dryRun
             ? "United DRY: existing target application and document presence inspected; no mutation"
             : result.submitted
@@ -698,13 +983,12 @@ export const unitedAdapter: UniversityAdapter = {
             : "United: target application exists, but required document repair is incomplete";
           return result;
         }
-        const uniqueCreateHrefs = [...new Set(createHrefs)];
-        if (profileHrefs.length !== 1 || uniqueCreateHrefs.length !== 1) {
+        if (profileHrefs.length !== 1 || inspected.createHrefs.length !== 1) {
           result.detail =
             "United dedup_ambiguous: existing student has no target application but a unique profile could not be selected";
           return result;
         }
-        await page.goto(new URL(uniqueCreateHrefs[0], PORTAL_URL).href, {
+        await page.goto(new URL(inspected.createHrefs[0], PORTAL_URL).href, {
           waitUntil: "domcontentloaded",
           timeout: 60000,
         });
@@ -828,85 +1112,326 @@ export const unitedAdapter: UniversityAdapter = {
         st = await readStep();
       }
 
-      // 3a) university filter + the page's own grid loader (headless change doesn't fire it)
-      const filterRes = await page.evaluate((wantUni: string) => {
-        const nrmU = (s: string) => (s || "").toLowerCase()
-          .replace(/[ışğüöçİ]/g, m => (({ "ı":"i","ş":"s","ğ":"g","ü":"u","ö":"o","ç":"c","İ":"i" } as any)[m] || m))
-          .replace(/\b(university|universitesi|universite|istanbul|the|of)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
-        const u = document.getElementById("selectuniversity") as HTMLSelectElement | null;
-        if (!u) return null;
-        const w = nrmU(wantUni);
-        const opts = [...u.options];
-        const opt = opts.find(o => o.value && nrmU(o.text) === w)
-          || opts.find(o => o.value && (nrmU(o.text).includes(w) || w.includes(nrmU(o.text))));
-        if (opt) {
-          u.value = opt.value; u.dispatchEvent(new Event("change", { bubbles: true }));
-          try { const jq = (window as any).jQuery; if (jq) jq(u).val(opt.value).trigger("change"); } catch {}
+      const select2Exact = async (
+        id: string,
+        exactLabel: string,
+      ): Promise<boolean> => {
+        const native = page.locator(`#${id}`);
+        const container = page.locator(`#select2-${id}-container`);
+        if ((await native.count()) !== 1 || (await container.count()) !== 1) {
+          return false;
         }
-        try { if (typeof (window as any).filterData === "function") (window as any).filterData(); } catch {}
-        try { if (typeof (window as any).updateProgramsAndCampuses === "function") (window as any).updateProgramsAndCampuses(); } catch {}
-        return opt ? opt.text : null;
-      }, profile.universityName);
-      logger.info(`[united] step3 filter -> ${JSON.stringify(filterRes)}`);
-      // Wait until the university's cards are VISIBLY rendered.
-      const uniCore = fold(String(profile.universityName || ""))
-        .replace(/[^a-z0-9]+/g, " ")
-        .replace(/\b(university|universitesi|universite|istanbul|the|of)\b/g, " ")
-        .trim().split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length)[0] || "";
-      await page.waitForFunction((core: string) => {
-        const cs = [...document.querySelectorAll("div.single-table")] as HTMLElement[];
-        return cs.some(x => !!x.offsetParent
-          && (!core || (x.textContent || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").includes(core)));
-      }, uniCore, { timeout: 15000 }).catch(() => {});
-      await page.waitForTimeout(1200);
+        await container.click({ timeout: 8000 });
+        const search = page
+          .locator(".select2-container--open input.select2-search__field")
+          .last();
+        if (await search.count()) {
+          await search.fill(exactLabel);
+          await wait(500);
+        }
+        const options = page.locator(
+          ".select2-container--open .select2-results__option",
+        );
+        const optionTexts = (await options
+          .allInnerTexts()
+          .catch(() => [])) as string[];
+        const normalizeExact = (value: string) =>
+          fold(
+            String(value || "").replace(
+              /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+              "",
+            ),
+          )
+            .replace(/\s+/g, " ")
+            .trim();
+        const expected = normalizeExact(exactLabel);
+        const indexes = optionTexts
+          .map((text, index) =>
+            normalizeExact(text) === expected ? index : -1,
+          )
+          .filter((index) => index >= 0);
+        if (indexes.length !== 1) {
+          await page.keyboard.press("Escape").catch(() => {});
+          return false;
+        }
+        await options.nth(indexes[0]).click({ timeout: 8000 });
+        await wait(1800);
+        const selectedText = await native.evaluate(
+          (select: HTMLSelectElement) =>
+            select.selectedOptions[0]?.textContent || "",
+        );
+        return normalizeExact(selectedText) === expected;
+      };
 
-      // 3b) pick the program among VISIBLE cards, then cb.checked=true → alert9.
-      const pick = await page.evaluate((wantProg: string) => {
-        // Keep parenthetical tokens (Thesis / Non-Thesis / language) so
-        // "(Non-Thesis)" out-scores "(Thesis)" — punctuation→space only.
-        const nrm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-        const w = nrm(wantProg);
-        const wt = new Set(w.split(" ").filter(x => x.length > 2));
-        const cards = ([...document.querySelectorAll("div.single-table")] as HTMLElement[]).filter(c => !!c.offsetParent);
-        let best: HTMLElement | null = null, bestScore = 0, bestTitle = "";
-        for (const c of cards) {
-          const title = (c.textContent || "").replace(/\s+/g, " ").trim();
-          const t = nrm(title);
-          if (w && t.includes(w)) { best = c; bestScore = 1; bestTitle = title; break; }
-          const ot = t.split(" ").filter(x => x.length > 2);
-          const hit = ot.filter(x => wt.has(x)).length;
-          const sc = hit / Math.max(wt.size, 1);
-          if (sc > bestScore) { bestScore = sc; best = c; bestTitle = title; }
+      // 3a) Resolve the CRM alias to ONE exact live portal option and select it
+      // through Select2's real UI. Native change alone does not reliably render
+      // the filtered cards in this build.
+      const universityOptionTexts = (await readOptions(
+        "selectuniversity",
+      )).map((option) => option.text);
+      const exactUniversityOption = resolveUnitedUniversityOption(
+        universityOptionTexts,
+        profile.universityName || "",
+      );
+      if (!exactUniversityOption) {
+        result.programMissing = true;
+        result.detail =
+          "United program_missing: university alias did not resolve to one exact live portal option";
+        return result;
+      }
+      const universitySelected = await select2Exact(
+        "selectuniversity",
+        exactUniversityOption,
+      );
+      logger.info(
+        `[united] step3 university exact=${JSON.stringify(
+          exactUniversityOption,
+        )} selected=${universitySelected}`,
+      );
+      if (!universitySelected) {
+        result.programMissing = true;
+        result.detail =
+          "United program_missing: exact university Select2 readback failed";
+        return result;
+      }
+      const universityCardsRendered = await page
+        .waitForFunction(
+          (expectedUniversity: string) => {
+            const normalize = (value: string) =>
+              (value || "")
+                .toLowerCase()
+                .replace(
+                  /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+                  "",
+                )
+                .replace(/[^a-z0-9]+/g, " ")
+                .trim();
+            const visible = Array.from(
+              document.querySelectorAll<HTMLElement>("div.single-table"),
+            ).filter((card) => !!card.offsetParent);
+            return (
+              visible.length > 0 &&
+              visible.every(
+                (card) =>
+                  normalize(card.querySelector("h4")?.textContent || "") ===
+                  normalize(expectedUniversity),
+              )
+            );
+          },
+          exactUniversityOption,
+          { timeout: 15000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+      if (!universityCardsRendered) {
+        result.programMissing = true;
+        result.detail =
+          "United program_missing: university filter did not render a pure target-university card set";
+        return result;
+      }
+
+      // 3b) Resolve the programme to ONE exact portal option (degree prefix
+      // removed, but language/thesis qualifiers preserved) and apply the real
+      // Select2 filter so programmes beyond the first pagination page work.
+      const programOptionTexts = (await readOptions("selectprogram")).map(
+        (option) => option.text,
+      );
+      const exactProgramOption = resolveUnitedProgramOption(
+        programOptionTexts,
+        profile.programName,
+      );
+      if (!exactProgramOption) {
+        result.programMissing = true;
+        result.detail =
+          "United program_missing: requested programme did not resolve to one exact live option";
+        result.availablePrograms = programOptionTexts
+          .filter(Boolean)
+          .map((name) => ({ name, value: name, enabled: true }));
+        result.resolution = "not_in_dropdown";
+        return result;
+      }
+      const programFilterSelected = await select2Exact(
+        "selectprogram",
+        exactProgramOption,
+      );
+      if (!programFilterSelected) {
+        result.programMissing = true;
+        result.detail =
+          "United program_missing: exact programme Select2 readback failed";
+        return result;
+      }
+      await wait(1200);
+      const cardProof = (await page.evaluate(
+        ({
+          university,
+          program,
+          degree,
+        }: {
+          university: string;
+          program: string;
+          degree: string;
+        }) => {
+          const normalizeUniversity = (value: string) =>
+            (value || "")
+              .toLowerCase()
+              .replace(
+                /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+                "",
+              )
+              .replace(/[^a-z0-9]+/g, " ")
+              .trim();
+          const normalizeProgram = (value: string) =>
+            (value || "")
+              .toLowerCase()
+              .replace(
+                /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+                "",
+              )
+              .replace(
+                /^\s*(associate|bachelor|master|masters|phd|doctorate)\s+(degree\s+)?(of|in)\s+/,
+                "",
+              )
+              .replace(
+                /\s+\b(vocational school|associate|bachelor|master|phd|doctorate)\b\s*$/,
+                "",
+              )
+              .replace(/[^a-z0-9]+/g, " ")
+              .trim();
+          const cards = Array.from(
+            document.querySelectorAll<HTMLElement>("div.single-table"),
+          )
+            .filter((card) => !!card.offsetParent)
+            .map((card, index) => ({
+              index,
+              university: (
+                card.querySelector("h4")?.textContent || ""
+              ).trim(),
+              program: (card.querySelector("h3")?.textContent || "").trim(),
+              state: (card.textContent || "").replace(/\s+/g, " ").trim(),
+              checked: !!(
+                card.querySelector(
+                  "input.plan-submit-checkbox:checked",
+                ) as HTMLInputElement | null
+              ),
+            }));
+          const matches = cards.filter(
+            (card) =>
+              normalizeUniversity(card.university) ===
+                normalizeUniversity(university) &&
+              normalizeProgram(card.program) === normalizeProgram(program) &&
+              card.program.toLowerCase().includes(degree.toLowerCase()),
+          );
+          return {
+            cards,
+            matches,
+            checkedTotal: cards.filter((card) => card.checked).length,
+          };
+        },
+        {
+          university: exactUniversityOption,
+          program: exactProgramOption,
+          degree:
+            resolvedDegree === "Vocational School"
+              ? "Associate"
+              : resolvedDegree!,
+        },
+      )) as {
+        cards: Array<{
+          index: number;
+          university: string;
+          program: string;
+          state: string;
+          checked: boolean;
+        }>;
+        matches: Array<{
+          index: number;
+          university: string;
+          program: string;
+          state: string;
+          checked: boolean;
+        }>;
+        checkedTotal: number;
+      };
+      logger.info(
+        `[united] step3 exact card proof matches=${cardProof.matches.length} visible=${cardProof.cards.length} checked=${cardProof.checkedTotal}`,
+      );
+      if (cardProof.matches.length !== 1) {
+        result.programMissing = true;
+        result.detail =
+          "United program_missing: exact university+programme+degree card was missing or ambiguous";
+        return result;
+      }
+      if (/quota full/i.test(cardProof.matches[0].state)) {
+        result.programMissing = false;
+        result.programFull = true;
+        result.requestedProgram = {
+          value: exactProgramOption,
+          name: profile.programName,
+        };
+        result.openPrograms = cardProof.cards.map((card) => ({
+          value: card.program,
+          name: card.program,
+          enabled: !/quota full/i.test(card.state),
+        }));
+        result.detail = "United: exact requested programme is quota full";
+        return result;
+      }
+      if (selectedBaseline !== 0 || cardProof.checkedTotal !== 0) {
+        result.programMissing = true;
+        result.detail =
+          "United dedup_unknown: stale Selected Majors state detected; automatic selection blocked";
+        return result;
+      }
+      const pick = await page.evaluate((targetIndex: number) => {
+        const cards = Array.from(
+          document.querySelectorAll<HTMLElement>("div.single-table"),
+        ).filter((card) => !!card.offsetParent);
+        const target = cards[targetIndex];
+        const checkbox = target?.querySelector(
+          "input.plan-submit-checkbox",
+        ) as HTMLInputElement | null;
+        if (!checkbox) return false;
+        checkbox.checked = true;
+        try {
+          if (typeof (window as any).alert9 === "function") {
+            (window as any).alert9(checkbox.value);
+          } else {
+            checkbox.click();
+          }
+        } catch {
+          return false;
         }
-        // Acceptance: exact/near-exact containment (score 1) OR — multi-token
-        // targets only — strong overlap (>=0.67). A lone shared token must
-        // NEVER pick a sibling program.
-        const accept = bestScore >= 1 || (wt.size >= 2 && bestScore >= 0.67);
-        if (!best || !accept) return { matched: false, bestScore, bestTitle: bestTitle.slice(0, 90), visibleCards: cards.length, clicked: false, selectedCount: "0" };
-        let clicked = false;
-        const cb = best.querySelector("input.plan-submit-checkbox") as HTMLInputElement | null;
-        if (cb) {
-          try {
-            // ORDER MATTERS (live-proven): set checked=true BEFORE alert9 —
-            // alert9 reads the checkbox state and treats an unchecked box as a
-            // REMOVAL, so calling it first never adds the program.
-            cb.checked = true;
-            if (typeof (window as any).alert9 === "function") { (window as any).alert9(cb.value); clicked = true; }
-            else { cb.click(); clicked = true; }
-          } catch {}
-        }
-        const cnt = (document.body.innerText.match(/Selected Majors\s*\((\d+)\)/) || [])[1] || "0";
-        return { matched: true, bestScore, bestTitle: bestTitle.slice(0, 90), visibleCards: cards.length, clicked, selectedCount: cnt };
-      }, profile.programName);
-      logger.info(`[united] step3 program pick: ` + JSON.stringify(pick));
-      // Increment-based confirmation: the counter must RISE above the baseline —
-      // an absolute >0 could false-positive on a stale draft.
+        return true;
+      }, cardProof.matches[0].index);
       let programSelected = false;
-      if ((pick as any).matched && (pick as any).clicked) {
+      if (pick) {
         programSelected = await page
           .waitForFunction(
-            (b: number) => Number((document.body.innerText.match(/Selected Majors\s*\((\d+)\)/) || [])[1] || "0") > b,
-            selectedBaseline, { timeout: 8000 })
+            (targetIndex: number) => {
+              const cards = Array.from(
+                document.querySelectorAll<HTMLElement>("div.single-table"),
+              ).filter((card) => !!card.offsetParent);
+              const checked = cards.filter((card) =>
+                card.querySelector(
+                  "input.plan-submit-checkbox:checked",
+                ),
+              );
+              const selectedCount = Number(
+                (
+                  document.body.innerText.match(
+                    /Selected Majors\s*\((\d+)\)/,
+                  ) || []
+                )[1] || "0",
+              );
+              return (
+                selectedCount === 1 &&
+                checked.length === 1 &&
+                checked[0] === cards[targetIndex]
+              );
+            },
+            cardProof.matches[0].index,
+            { timeout: 8000 },
+          )
           .then(() => true)
           .catch(() => false);
       }
@@ -1139,15 +1664,60 @@ export const unitedAdapter: UniversityAdapter = {
         logger.info("[united] create confirmed via searchapp count increase \u2014 continuing to documents");
       }
 
-      // ---- §6 Documents upload (live-mapped slots) --------------------------
-      // Each input[type=file] has onchange="uploadsinglefile('<id>','<label>')" —
-      // setInputFiles fires it, which uploads via AJAX. Visible slots for this
-      // application: face=Photograph, pass=Passport (MANDATORY),
-      // cerb/transb=Bachelor Diploma/Transcript (Master app). Degree-dependent
-      // variants: cer/trans (HS), cerp/transp (Master's own docs). A missing
-      // document must NOT drop the already-created application.
-      // SubmitFiles carries pre-downloaded LOCAL paths (worker doc-fetch) — use
-      // them directly; no URL download needed here.
+      // ---- §6 Server-side identity proof + student-profile document repair --
+      // The create popup/#appid only proves that SOMETHING was created. It does
+      // not prove the selected university/programme. Re-open My Students,
+      // inspect the exact-email profile(s), and require one exact target
+      // application before any success writeback. This is the guard that
+      // prevents Ankara Bilim requests from being reported as Kent Dentistry.
+      await wait(1800);
+      const postCreateProfileHrefs = await getExactEmailProfileHrefs();
+      if (postCreateProfileHrefs.length === 0) {
+        result.detail =
+          "United created_target_unverified: no exact-email profile was visible after create";
+        result.submitted = false;
+        return result;
+      }
+      const postCreateInspection = await inspectProfiles(
+        postCreateProfileHrefs,
+      );
+      const verifiedTargets = exactTargetMatches(
+        postCreateInspection.applications,
+      );
+      if (verifiedTargets.length !== 1) {
+        result.detail =
+          verifiedTargets.length > 1
+            ? "United created_target_ambiguous: multiple exact university+programme applications found"
+            : "United created_target_mismatch: created application did not match the requested university+programme";
+        result.submitted = false;
+        return result;
+      }
+      const verifiedTarget = verifiedTargets[0];
+      const verifiedApplicationId = unitedApplicationIdFromHref(
+        verifiedTarget.href,
+      );
+      if (
+        appIdText &&
+        verifiedApplicationId &&
+        appIdText !== verifiedApplicationId
+      ) {
+        result.detail =
+          "United created_target_mismatch: popup application id and exact server-side target disagree";
+        result.submitted = false;
+        return result;
+      }
+      await page.goto(
+        new URL(verifiedTarget.profileHref!, PORTAL_URL).href,
+        {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        },
+      );
+      await wait(1200);
+
+      // Existing-student uploads use /Manage/uploadfilesonetek from the profile
+      // modal. Each required slot needs msg=ok plus its own profile-row
+      // "Uploaded" readback. HTTP 2xx or a selected filename alone is not proof.
       const uploadedSlots = await uploadRequiredDocuments();
       result.uploadedSlots = uploadedSlots;
       result.missingDocuments = (
@@ -1160,8 +1730,12 @@ export const unitedAdapter: UniversityAdapter = {
         result.detail =
           "United application was created, but one or more required document uploads could not be proved";
       }
-      if (appIdText) { result.externalRef = appIdText; logger.info("[united] externalRef (Salesforce app id) = " + appIdText); }
-      logger.info("[united] submission complete appId=" + appIdText);
+      result.externalRef =
+        verifiedApplicationId || verifiedTarget.ref;
+      logger.info(
+        "[united] submission complete exactTargetId=" +
+          result.externalRef,
+      );
     } catch (e: any) { result.error = e.message; }
     finally {
       try { page.off("requestfinished", onFinished); } catch {}
