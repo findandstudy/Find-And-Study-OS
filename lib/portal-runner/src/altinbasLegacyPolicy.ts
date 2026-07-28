@@ -116,6 +116,20 @@ const DUPLICATE_SAFE_PORTAL_KEYS = new Set([
 ]);
 
 /**
+ * Portals allowed to recover a dedicated city value from historical
+ * "City, street" address rows.
+ *
+ * SIT is intentionally included here without adding it to
+ * DUPLICATE_SAFE_PORTAL_KEYS: its document-normalisation behaviour remains
+ * unchanged, while legacy applications that pre-date `students.address_city`
+ * can still pass SIT's required City / District field.
+ */
+const LEGACY_CITY_PORTAL_KEYS = new Set([
+  ...DUPLICATE_SAFE_PORTAL_KEYS,
+  "study_in_turkey",
+]);
+
+/**
  * Limits concurrent document normalization to one writer per logical slot for
  * the six newly live portals. Historical CRM imports can contain duplicate
  * rows for the same file; processing those duplicates in parallel writes to
@@ -143,7 +157,7 @@ export function resolveLegacyAddressCity(input: {
 }): string | undefined {
   const explicit = input.addressCity?.trim();
   if (explicit) return explicit;
-  if (!DUPLICATE_SAFE_PORTAL_KEYS.has(input.universityKey)) return undefined;
+  if (!LEGACY_CITY_PORTAL_KEYS.has(input.universityKey)) return undefined;
 
   const raw = input.address?.trim() ?? "";
   const comma = raw.indexOf(",");

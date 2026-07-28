@@ -3395,11 +3395,12 @@ export const sitAdapter: SitAdapter = {
     );
 
     const detail = [
-      student.alreadyExists
-        ? "öğrenci mevcut"
-        : student.created
-          ? "öğrenci oluşturuldu"
-          : "öğrenci oluşturulmadı",
+      student.detail ??
+        (student.alreadyExists
+          ? "öğrenci mevcut"
+          : student.created
+            ? "öğrenci oluşturuldu"
+            : "öğrenci oluşturulmadı"),
       app.detail ??
         (app.submitted
           ? "başvuru oluşturuldu"

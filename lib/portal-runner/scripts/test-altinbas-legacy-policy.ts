@@ -114,8 +114,8 @@ test("ALP6: legacy city uses only a validated comma prefix", () => {
   );
 });
 
-test("ALP7: legacy city does not change SIT or Topkapı", () => {
-  for (const key of ["sit", "study_in_turkey", "topkapi_university"]) {
+test("ALP7: legacy city does not change unrelated SIT aliases or Topkapı", () => {
+  for (const key of ["sit", "topkapi_university"]) {
     assert.equal(
       resolveLegacyAddressCity({
         universityKey: key,
@@ -125,4 +125,23 @@ test("ALP7: legacy city does not change SIT or Topkapı", () => {
       undefined,
     );
   }
+});
+
+test("ALP8: SIT recovers City / District from legacy comma-prefixed addresses", () => {
+  assert.equal(
+    resolveLegacyAddressCity({
+      universityKey: "study_in_turkey",
+      address: "Baku, Nizami Street 10",
+      nationality: "Azerbaijan",
+    }),
+    "Baku",
+  );
+  assert.equal(
+    resolveLegacyAddressCity({
+      universityKey: "study_in_turkey",
+      address: "Nizami Street 10 Baku",
+      nationality: "Azerbaijan",
+    }),
+    undefined,
+  );
 });
