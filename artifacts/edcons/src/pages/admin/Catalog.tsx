@@ -3231,6 +3231,7 @@ function DegreeDocsEditor({ option, onSaved, variant = "inline" }: { option: Cat
 type PublicCatalogSettings = {
   allowedCountries: string[];
   allowedUniversityTypes: string[];
+  countryRules: Record<string, string[]>;
   availableCountries: string[];
   availableUniversityTypes: string[];
 };
@@ -3239,8 +3240,9 @@ function PublicCatalogSettingsTab() {
   const { t } = useI18n();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [countries, setCountries] = useState<string[]>([]);
   const [universityTypes, setUniversityTypes] = useState<string[]>([]);
+  const [countryRules, setCountryRules] = useState<Record<string, string[]>>({});
+  const [countrySearch, setCountrySearch] = useState("");
 
   const settingsQuery = useQuery<PublicCatalogSettings>({
     queryKey: ["public-catalog-settings"],
@@ -3249,8 +3251,20 @@ function PublicCatalogSettingsTab() {
 
   useEffect(() => {
     if (!settingsQuery.data) return;
-    setCountries(settingsQuery.data.allowedCountries || []);
     setUniversityTypes(settingsQuery.data.allowedUniversityTypes || []);
+    const nextRules = { ...(settingsQuery.data.countryRules || {}) };
+    // Preserve legacy country allow-lists when an old policy is first opened
+    // in the new matrix UI: excluded countries become explicit hidden rules.
+    if (
+      Object.keys(nextRules).length === 0
+      && (settingsQuery.data.allowedCountries || []).length > 0
+    ) {
+      const legacyAllowed = new Set(settingsQuery.data.allowedCountries);
+      for (const country of settingsQuery.data.availableCountries || []) {
+        if (!legacyAllowed.has(country)) nextRules[country] = [];
+      }
+    }
+    setCountryRules(nextRules);
   }, [settingsQuery.data]);
 
   const saveMutation = useMutation({
@@ -3258,8 +3272,9 @@ function PublicCatalogSettingsTab() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        allowedCountries: countries,
+        allowedCountries: [],
         allowedUniversityTypes: universityTypes,
+        countryRules,
       }),
     }),
     onSuccess: () => {
@@ -3297,6 +3312,29 @@ function PublicCatalogSettingsTab() {
   }
 
   const data = settingsQuery.data;
+  const filteredCountries = (data?.availableCountries || []).filter((country) =>
+    country.toLocaleLowerCase().includes(countrySearch.trim().toLocaleLowerCase())
+  );
+
+  const setCountryRule = (country: string, rule: string[] | undefined) => {
+    setCountryRules((current) => {
+      const next = { ...current };
+      if (rule === undefined) delete next[country];
+      else next[country] = rule;
+      return next;
+    });
+  };
+
+  const toggleCountryType = (country: string, universityType: string) => {
+    const current = Object.prototype.hasOwnProperty.call(countryRules, country)
+      ? countryRules[country]
+      : universityTypes;
+    const next = current.includes(universityType)
+      ? current.filter((value) => value !== universityType)
+      : [...current, universityType];
+    setCountryRule(country, next);
+  };
+
   return (
     <div className="space-y-6">
       <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -3305,8 +3343,8 @@ function PublicCatalogSettingsTab() {
 
       <section className="space-y-3">
         <div>
-          <Label className="text-sm font-semibold">{t("adminCatalog.publicCatalogUniversityTypes")}</Label>
-          <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.publicCatalogTypesHelp")}</p>
+          <Label className="text-sm font-semibold">{t("adminCatalog.publicCatalogDefaultTypes")}</Label>
+          <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.publicCatalogDefaultTypesHelp")}</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {(data?.availableUniversityTypes || []).map((value) => (
@@ -3323,26 +3361,77 @@ function PublicCatalogSettingsTab() {
 
       <section className="space-y-3">
         <div>
-          <Label className="text-sm font-semibold">{t("adminCatalog.publicCatalogCountries")}</Label>
-          <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.publicCatalogCountriesHelp")}</p>
+          <Label className="text-sm font-semibold">{t("adminCatalog.publicCatalogCountryRules")}</Label>
+          <p className="mt-1 text-xs text-muted-foreground">{t("adminCatalog.publicCatalogCountryRulesHelp")}</p>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed p-3 text-sm font-medium">
-          <Checkbox
-            checked={countries.length === 0}
-            onCheckedChange={() => setCountries([])}
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={countrySearch}
+            onChange={(event) => setCountrySearch(event.target.value)}
+            placeholder={t("adminCatalog.publicCatalogCountrySearch")}
+            className="pl-9"
           />
-          <span>{t("adminCatalog.publicCatalogAllCountries")}</span>
-        </label>
-        <div className="grid max-h-80 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
-          {(data?.availableCountries || []).map((value) => (
-            <label key={value} className="flex cursor-pointer items-center gap-2 rounded-md border p-3 text-sm hover:bg-muted/50">
-              <Checkbox
-                checked={countries.includes(value)}
-                onCheckedChange={() => toggle(value, countries, setCountries)}
-              />
-              <span>{value}</span>
-            </label>
-          ))}
+        </div>
+        <div className="max-h-[34rem] space-y-2 overflow-y-auto pr-1">
+          {filteredCountries.map((country) => {
+            const hasRule = Object.prototype.hasOwnProperty.call(countryRules, country);
+            const rule = hasRule ? countryRules[country] : undefined;
+            const effectiveTypes = rule ?? universityTypes;
+            const isHidden = hasRule && effectiveTypes.length === 0;
+            return (
+              <div
+                key={country}
+                className="grid gap-3 rounded-lg border p-3 lg:grid-cols-[minmax(10rem,1fr)_auto_minmax(18rem,2fr)] lg:items-center"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold">{country}</div>
+                  <Badge variant="outline" className="mt-1 text-[10px]">
+                    {!hasRule
+                      ? t("adminCatalog.publicCatalogDefaultBadge")
+                      : isHidden
+                        ? t("adminCatalog.publicCatalogHidden")
+                        : t("adminCatalog.publicCatalogCustom")}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={!hasRule ? "default" : "outline"}
+                    onClick={() => setCountryRule(country, undefined)}
+                  >
+                    {t("adminCatalog.publicCatalogUseDefault")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={isHidden ? "destructive" : "outline"}
+                    onClick={() => setCountryRule(country, [])}
+                  >
+                    {t("adminCatalog.publicCatalogHidden")}
+                  </Button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(data?.availableUniversityTypes || []).map((universityType) => (
+                    <label
+                      key={universityType}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm hover:bg-muted/50",
+                        effectiveTypes.includes(universityType) && "border-primary/40 bg-primary/5",
+                      )}
+                    >
+                      <Checkbox
+                        checked={effectiveTypes.includes(universityType)}
+                        onCheckedChange={() => toggleCountryType(country, universityType)}
+                      />
+                      <span>{universityType}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

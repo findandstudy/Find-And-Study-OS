@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import {
+  isPublicUniversityVisible,
+  normaliseCountryRules,
+  universityTypesForPublicCountry,
+  type PublicCatalogPolicy,
+} from "../src/lib/publicCatalogPolicy";
 
 const read = (relativePath: string) =>
   readFileSync(new URL(relativePath, import.meta.url), "utf8");
@@ -27,8 +33,45 @@ test("anonymous course-finder requests fail closed to a private-only default", (
 test("public visibility is persisted as first-class settings", () => {
   assert.match(settingsSchema, /publicCatalogAllowedCountries/);
   assert.match(settingsSchema, /publicCatalogAllowedUniversityTypes/);
+  assert.match(settingsSchema, /publicCatalogCountryRules/);
   assert.match(courseFinder, /router\.patch\(\s*"\/course-finder\/public-settings"/);
   assert.match(courseFinder, /requireRole\(\.\.\.ADMIN_ROLES\)/);
+});
+
+test("country-specific public policy supports Turkey private and Latvia mixed", () => {
+  const policy: PublicCatalogPolicy = {
+    allowedCountries: [],
+    allowedUniversityTypes: ["Private"],
+    countryRules: {
+      Latvia: ["Private", "Public"],
+      Turkey: ["Private"],
+      Hiddenland: [],
+    },
+  };
+  assert.equal(isPublicUniversityVisible(policy, "Turkey", "Private"), true);
+  assert.equal(isPublicUniversityVisible(policy, "Turkey", "Public"), false);
+  assert.equal(isPublicUniversityVisible(policy, "Latvia", "Private"), true);
+  assert.equal(isPublicUniversityVisible(policy, "Latvia", "Public"), true);
+  assert.equal(isPublicUniversityVisible(policy, "Hiddenland", "Private"), false);
+  assert.deepEqual(universityTypesForPublicCountry(policy, "Germany"), ["Private"]);
+});
+
+test("country rules are canonical and legacy country allow-lists remain fail-closed", () => {
+  assert.deepEqual(
+    normaliseCountryRules({
+      " Latvia ": ["Public", "Private", "Public"],
+      Turkey: [],
+      "": ["Private"],
+    }),
+    { Latvia: ["Public", "Private"], Turkey: [] },
+  );
+  const legacyPolicy: PublicCatalogPolicy = {
+    allowedCountries: ["Turkey"],
+    allowedUniversityTypes: ["Private"],
+    countryRules: {},
+  };
+  assert.equal(isPublicUniversityVisible(legacyPolicy, "Turkey", "Private"), true);
+  assert.equal(isPublicUniversityVisible(legacyPolicy, "Latvia", "Private"), false);
 });
 
 test("lead and student APIs cap list payloads and accept server filters", () => {

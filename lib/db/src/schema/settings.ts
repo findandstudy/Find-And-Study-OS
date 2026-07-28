@@ -154,10 +154,11 @@ export const settingsTable = pgTable("settings", {
   dateFormat: text("date_format").notNull().default("DD.MM.YYYY"),
 
   // Public website catalogue visibility. An empty country list means all
-  // countries; university types default to private-only so anonymous visitors
-  // never inherit the unrestricted internal Course Finder catalogue.
+  // countries; university types are the default for countries without an
+  // explicit rule. A country-rule value of [] hides that country completely.
   publicCatalogAllowedCountries: jsonb("public_catalog_allowed_countries").notNull().default([]).$type<string[]>(),
   publicCatalogAllowedUniversityTypes: jsonb("public_catalog_allowed_university_types").notNull().default(["Private"]).$type<string[]>(),
+  publicCatalogCountryRules: jsonb("public_catalog_country_rules").notNull().default({}).$type<Record<string, string[]>>(),
 
   // Auto-assign stuck (needsHuman=true, unassigned, open) inbox conversations to eligible staff via
   // the periodic assignStuckConversation sweep. Default false = feature is opt-in.

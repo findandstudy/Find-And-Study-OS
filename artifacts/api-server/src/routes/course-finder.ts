@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable } from "@workspace/db";
-import { eq, ilike, sql, and, inArray, isNull, desc, or } from "drizzle-orm";
+import { eq, ilike, sql, and, inArray, isNull, desc, or, notInArray } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { usersTable } from "@workspace/db";
@@ -13,6 +13,12 @@ import { getVisibleBranchIds } from "../lib/branchScope";
 import { getDocLabel } from "../lib/docNaming";
 import { sanitizeCourseFinderProgram } from "../lib/courseFinderVisibility";
 import { courseFinderFilterCacheKey } from "../lib/courseFinderFilterCache";
+import {
+  normaliseCountryRules,
+  normaliseStringList,
+  publicCatalogPolicyCacheKey,
+  type PublicCatalogPolicy,
+} from "../lib/publicCatalogPolicy";
 
 const router: IRouter = Router();
 
@@ -27,19 +33,9 @@ const courseFinderFilterInFlight = new Map<
   Promise<CourseFinderFilterPayload>
 >();
 
-type PublicCatalogPolicy = {
-  allowedCountries: string[];
-  allowedUniversityTypes: string[];
-};
-
 let publicCatalogPolicyCache:
   | { expiresAt: number; value: PublicCatalogPolicy }
   | undefined;
-
-function normaliseStringList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
-}
 
 async function getPublicCatalogPolicy(): Promise<PublicCatalogPolicy> {
   if (publicCatalogPolicyCache && publicCatalogPolicyCache.expiresAt > Date.now()) {
@@ -49,12 +45,14 @@ async function getPublicCatalogPolicy(): Promise<PublicCatalogPolicy> {
     .select({
       allowedCountries: settingsTable.publicCatalogAllowedCountries,
       allowedUniversityTypes: settingsTable.publicCatalogAllowedUniversityTypes,
+      countryRules: settingsTable.publicCatalogCountryRules,
     })
     .from(settingsTable)
     .limit(1);
   const value = {
     allowedCountries: normaliseStringList(row?.allowedCountries),
     allowedUniversityTypes: normaliseStringList(row?.allowedUniversityTypes),
+    countryRules: normaliseCountryRules(row?.countryRules),
   };
   // Fail closed to the requested public default if an old/malformed settings
   // row somehow contains no university-type policy.
@@ -76,21 +74,54 @@ async function resolveCourseFinderPolicy(req: any): Promise<PublicCatalogPolicy 
   return getPublicCatalogPolicy();
 }
 
+function universityTypeCondition(values: string[]): any | undefined {
+  if (values.length === 0) return undefined;
+  if (values.length === 1) {
+    return ilike(universitiesTable.universityType, values[0]);
+  }
+  return or(...values.map((value) =>
+    ilike(universitiesTable.universityType, value)
+  ))!;
+}
+
 function addPublicCatalogConditions(conditions: any[], policy: PublicCatalogPolicy | null): void {
   if (!policy) return;
   conditions.push(eq(universitiesTable.isActive, true));
-  if (policy.allowedCountries.length === 1) {
-    conditions.push(eq(universitiesTable.country, policy.allowedCountries[0]));
-  } else if (policy.allowedCountries.length > 1) {
-    conditions.push(inArray(universitiesTable.country, policy.allowedCountries));
+
+  const countryRuleEntries = Object.entries(policy.countryRules);
+  if (countryRuleEntries.length === 0) {
+    // Backwards-compatible path for policies saved by the original global UI.
+    if (policy.allowedCountries.length === 1) {
+      conditions.push(eq(universitiesTable.country, policy.allowedCountries[0]));
+    } else if (policy.allowedCountries.length > 1) {
+      conditions.push(inArray(universitiesTable.country, policy.allowedCountries));
+    }
+    conditions.push(universityTypeCondition(policy.allowedUniversityTypes) || sql`false`);
+    return;
   }
-  if (policy.allowedUniversityTypes.length === 1) {
-    conditions.push(ilike(universitiesTable.universityType, policy.allowedUniversityTypes[0]));
-  } else {
-    conditions.push(or(...policy.allowedUniversityTypes.map((value) =>
-      ilike(universitiesTable.universityType, value)
-    ))!);
+
+  const explicitCountries = countryRuleEntries.map(([country]) => country);
+  const visibilityClauses: any[] = [];
+  const defaultTypeCondition = universityTypeCondition(policy.allowedUniversityTypes);
+  if (defaultTypeCondition) {
+    const eligibleDefaultCountries = policy.allowedCountries
+      .filter((country) => !explicitCountries.includes(country));
+    if (policy.allowedCountries.length === 0 || eligibleDefaultCountries.length > 0) {
+      const defaultCountryCondition = policy.allowedCountries.length > 0
+        ? inArray(universitiesTable.country, eligibleDefaultCountries)
+        : notInArray(universitiesTable.country, explicitCountries);
+      visibilityClauses.push(and(defaultCountryCondition, defaultTypeCondition));
+    }
   }
+  for (const [country, universityTypes] of countryRuleEntries) {
+    const typeCondition = universityTypeCondition(universityTypes);
+    if (!typeCondition) continue; // [] means the country is hidden.
+    visibilityClauses.push(and(
+      eq(universitiesTable.country, country),
+      typeCondition,
+    ));
+  }
+  conditions.push(visibilityClauses.length > 0 ? or(...visibilityClauses)! : sql`false`);
 }
 
 type CourseFinderFilterPayload = {
@@ -382,7 +413,7 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
     const params = req.query as Record<string, string | undefined>;
     const publicPolicy = await resolveCourseFinderPolicy(req);
     const policyKey = publicPolicy
-      ? `public:${publicPolicy.allowedCountries.join("|")}:${publicPolicy.allowedUniversityTypes.join("|")}`
+      ? `public:${publicCatalogPolicyCacheKey(publicPolicy)}`
       : "internal";
     const cacheKey = `${policyKey}:${courseFinderFilterCacheKey(params)}`;
     const cached = courseFinderFilterCache.get(cacheKey);
@@ -523,6 +554,7 @@ router.patch(
   async (req, res): Promise<void> => {
     const allowedCountries = normaliseStringList(req.body?.allowedCountries);
     const allowedUniversityTypes = normaliseStringList(req.body?.allowedUniversityTypes);
+    const countryRules = normaliseCountryRules(req.body?.countryRules);
     if (allowedUniversityTypes.length === 0) {
       res.status(400).json({ error: "At least one university type must be selected" });
       return;
@@ -545,11 +577,24 @@ router.patch(
       res.status(400).json({ error: "Invalid public catalogue university type" });
       return;
     }
+    if (Object.keys(countryRules).some((country) => !availableCountries.has(country))) {
+      res.status(400).json({ error: "Invalid public catalogue country rule" });
+      return;
+    }
+    if (Object.values(countryRules).some((types) =>
+      types.some((value) => !availableTypes.has(value))
+    )) {
+      res.status(400).json({ error: "Invalid university type in public catalogue country rule" });
+      return;
+    }
 
     const [existing] = await db.select({ id: settingsTable.id }).from(settingsTable).limit(1);
     const update = {
-      publicCatalogAllowedCountries: allowedCountries,
+      // New saves are represented entirely by a default rule plus per-country
+      // overrides. Clearing the legacy allow-list avoids two competing sources.
+      publicCatalogAllowedCountries: Object.keys(countryRules).length > 0 ? [] : allowedCountries,
       publicCatalogAllowedUniversityTypes: allowedUniversityTypes,
+      publicCatalogCountryRules: countryRules,
       updatedAt: new Date(),
     };
     if (existing) {
