@@ -12,8 +12,49 @@ import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { getVisibleBranchIds } from "../lib/branchScope";
 import { getDocLabel } from "../lib/docNaming";
 import { sanitizeCourseFinderProgram } from "../lib/courseFinderVisibility";
+import { courseFinderFilterCacheKey } from "../lib/courseFinderFilterCache";
 
 const router: IRouter = Router();
+
+const COURSE_FINDER_FILTER_CACHE_TTL_MS = 45_000;
+const COURSE_FINDER_FILTER_CACHE_MAX = 100;
+const courseFinderFilterCache = new Map<
+  string,
+  { expiresAt: number; value: CourseFinderFilterPayload }
+>();
+const courseFinderFilterInFlight = new Map<
+  string,
+  Promise<CourseFinderFilterPayload>
+>();
+
+type CourseFinderFilterPayload = {
+  countries: string[];
+  cities: string[];
+  universityTypes: string[];
+  universities: Array<{ id: number; name: string }>;
+  degrees: string[];
+  languages: string[];
+  fields: string[];
+  feeRange: { min: number; max: number };
+};
+
+function cacheCourseFinderFilters(
+  key: string,
+  value: CourseFinderFilterPayload,
+): void {
+  const now = Date.now();
+  for (const [candidate, entry] of courseFinderFilterCache) {
+    if (entry.expiresAt <= now) courseFinderFilterCache.delete(candidate);
+  }
+  if (courseFinderFilterCache.size >= COURSE_FINDER_FILTER_CACHE_MAX) {
+    const oldest = courseFinderFilterCache.keys().next().value;
+    if (oldest !== undefined) courseFinderFilterCache.delete(oldest);
+  }
+  courseFinderFilterCache.set(key, {
+    expiresAt: now + COURSE_FINDER_FILTER_CACHE_TTL_MS,
+    value,
+  });
+}
 
 /**
  * Escape PostgreSQL LIKE/ILIKE pattern metacharacters so user-supplied
@@ -270,49 +311,102 @@ export function buildProgramFacetConditions(
 router.get("/course-finder/filters", async (req, res): Promise<void> => {
   try {
     const params = req.query as Record<string, string | undefined>;
-    const join = eq(programsTable.universityId, universitiesTable.id);
+    const cacheKey = courseFinderFilterCacheKey(params);
+    const cached = courseFinderFilterCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
+      res.setHeader("X-Course-Finder-Filter-Cache", "HIT");
+      res.json(cached.value);
+      return;
+    }
 
-    const wCountry = buildProgramFacetConditions(params, "country");
-    const wCity = buildProgramFacetConditions(params, "city");
-    const wType = buildProgramFacetConditions(params, "universityType");
-    const wUni = buildProgramFacetConditions(params, "universityId");
-    const wLevel = buildProgramFacetConditions(params, "level");
-    const wLang = buildProgramFacetConditions(params, "language");
-    const wField = buildProgramFacetConditions(params, "field");
-    const wFee = buildProgramFacetConditions(params, "fee");
+    let pending = courseFinderFilterInFlight.get(cacheKey);
+    const wasCoalesced = Boolean(pending);
+    if (!pending) {
+      pending = (async (): Promise<CourseFinderFilterPayload> => {
+        const join = eq(programsTable.universityId, universitiesTable.id);
+        const wCountry = buildProgramFacetConditions(params, "country");
+        const wCity = buildProgramFacetConditions(params, "city");
+        const wType = buildProgramFacetConditions(params, "universityType");
+        const wUni = buildProgramFacetConditions(params, "universityId");
+        const wLevel = buildProgramFacetConditions(params, "level");
+        const wLang = buildProgramFacetConditions(params, "language");
+        const wField = buildProgramFacetConditions(params, "field");
+        const wFee = buildProgramFacetConditions(params, "fee");
 
-    const [countries, cities, universityTypes, universities, degrees, languages, fields, feeRange] = await Promise.all([
-      db.selectDistinct({ country: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, join)
-        .where(and(wCountry, sql`${universitiesTable.country} IS NOT NULL`)).orderBy(universitiesTable.country),
-      db.selectDistinct({ city: universitiesTable.city }).from(universitiesTable).innerJoin(programsTable, join)
-        .where(and(wCity, sql`${universitiesTable.city} IS NOT NULL`)).orderBy(universitiesTable.city),
-      db.selectDistinct({ type: universitiesTable.universityType }).from(universitiesTable).innerJoin(programsTable, join)
-        .where(and(wType, sql`${universitiesTable.universityType} IS NOT NULL`)).orderBy(universitiesTable.universityType),
-      db.selectDistinct({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable).innerJoin(programsTable, join)
-        .where(wUni).orderBy(universitiesTable.name),
-      db.selectDistinct({ degree: programsTable.degree }).from(programsTable).innerJoin(universitiesTable, join)
-        .where(and(wLevel, sql`${programsTable.degree} IS NOT NULL`)).orderBy(programsTable.degree),
-      db.selectDistinct({ language: programsTable.language }).from(programsTable).innerJoin(universitiesTable, join)
-        .where(and(wLang, sql`${programsTable.language} IS NOT NULL`)).orderBy(programsTable.language),
-      db.selectDistinct({ field: programsTable.field }).from(programsTable).innerJoin(universitiesTable, join)
-        .where(and(wField, sql`${programsTable.field} IS NOT NULL AND ${programsTable.field} != ''`)).orderBy(programsTable.field),
-      db.select({
-        min: sql<number>`MIN(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
-        max: sql<number>`MAX(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
-      }).from(programsTable).innerJoin(universitiesTable, join)
-        .where(and(wFee, sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) IS NOT NULL`)),
-    ]);
+        const [
+          countries,
+          cities,
+          universityTypes,
+          universities,
+          degrees,
+          languages,
+          fields,
+          feeRange,
+        ] = await Promise.all([
+          db.selectDistinct({ country: universitiesTable.country }).from(universitiesTable).innerJoin(programsTable, join)
+            .where(and(wCountry, sql`${universitiesTable.country} IS NOT NULL`)).orderBy(universitiesTable.country),
+          db.selectDistinct({ city: universitiesTable.city }).from(universitiesTable).innerJoin(programsTable, join)
+            .where(and(wCity, sql`${universitiesTable.city} IS NOT NULL`)).orderBy(universitiesTable.city),
+          db.selectDistinct({ type: universitiesTable.universityType }).from(universitiesTable).innerJoin(programsTable, join)
+            .where(and(wType, sql`${universitiesTable.universityType} IS NOT NULL`)).orderBy(universitiesTable.universityType),
+          db.selectDistinct({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable).innerJoin(programsTable, join)
+            .where(wUni).orderBy(universitiesTable.name),
+          db.selectDistinct({ degree: programsTable.degree }).from(programsTable).innerJoin(universitiesTable, join)
+            .where(and(wLevel, sql`${programsTable.degree} IS NOT NULL`)).orderBy(programsTable.degree),
+          db.selectDistinct({ language: programsTable.language }).from(programsTable).innerJoin(universitiesTable, join)
+            .where(and(wLang, sql`${programsTable.language} IS NOT NULL`)).orderBy(programsTable.language),
+          db.selectDistinct({ field: programsTable.field }).from(programsTable).innerJoin(universitiesTable, join)
+            .where(and(wField, sql`${programsTable.field} IS NOT NULL AND ${programsTable.field} != ''`)).orderBy(programsTable.field),
+          db.select({
+            min: sql<number>`MIN(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
+            max: sql<number>`MAX(COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}))`,
+          }).from(programsTable).innerJoin(universitiesTable, join)
+            .where(and(wFee, sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee}) IS NOT NULL`)),
+        ]);
 
-    res.json({
-      countries: countries.map(r => r.country).filter(Boolean),
-      cities: cities.map(r => r.city).filter(Boolean),
-      universityTypes: universityTypes.map(r => r.type).filter(Boolean),
-      universities: universities.map(r => ({ id: r.id, name: r.name })),
-      degrees: degrees.map(r => r.degree).filter(Boolean),
-      languages: languages.map(r => r.language).filter(Boolean),
-      fields: fields.map(r => r.field).filter(Boolean),
-      feeRange: { min: feeRange[0]?.min ?? 0, max: feeRange[0]?.max ?? 100000 },
-    });
+        const payload: CourseFinderFilterPayload = {
+          countries: countries
+            .map(r => r.country)
+            .filter((value): value is string => Boolean(value)),
+          cities: cities
+            .map(r => r.city)
+            .filter((value): value is string => Boolean(value)),
+          universityTypes: universityTypes
+            .map(r => r.type)
+            .filter((value): value is string => Boolean(value)),
+          universities: universities.map(r => ({ id: r.id, name: r.name })),
+          degrees: degrees
+            .map(r => r.degree)
+            .filter((value): value is string => Boolean(value)),
+          languages: languages
+            .map(r => r.language)
+            .filter((value): value is string => Boolean(value)),
+          fields: fields
+            .map(r => r.field)
+            .filter((value): value is string => Boolean(value)),
+          feeRange: {
+            min: feeRange[0]?.min ?? 0,
+            max: feeRange[0]?.max ?? 100000,
+          },
+        };
+        cacheCourseFinderFilters(cacheKey, payload);
+        return payload;
+      })();
+      courseFinderFilterInFlight.set(cacheKey, pending);
+      void pending.then(
+        () => courseFinderFilterInFlight.delete(cacheKey),
+        () => courseFinderFilterInFlight.delete(cacheKey),
+      );
+    }
+
+    const payload = await pending;
+    res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
+    res.setHeader(
+      "X-Course-Finder-Filter-Cache",
+      wasCoalesced ? "COALESCED" : "MISS",
+    );
+    res.json(payload);
   } catch (err: any) {
     console.error("[course-finder/filters] failed:", err?.message || err);
     res.status(500).json({ error: err?.message || "Failed to load filters" });
