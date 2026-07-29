@@ -317,11 +317,32 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         const actions = row.getByRole("button", {
           name: /complete application|continue application|edit application|view application/i,
         });
-        if ((await actions.count().catch(() => 0)) !== 1) return false;
+        const actionCount = await actions.count().catch(() => 0);
+        if (actionCount !== 1) {
+          logger.warn(
+            `[salesforce:${cfg.key}] owned application resume action is not unique`,
+            { actionCount },
+          );
+          return false;
+        }
+        const actionLabel = (
+          (await actions.first().innerText().catch(() => "")) || ""
+        )
+          .replace(/\s+/g, " ")
+          .trim();
         const popupPromise = page
           .waitForEvent("popup", { timeout: 8000 })
           .catch(() => null);
-        await actions.first().click({ timeout: 6000 }).catch(() => {});
+        let actionClicked = false;
+        try {
+          await actions.first().click({ timeout: 6000 });
+          actionClicked = true;
+        } catch {
+          logger.warn(
+            `[salesforce:${cfg.key}] owned application resume action could not be clicked`,
+            { actionLabel },
+          );
+        }
         const popup = await popupPromise;
         if (popup) {
           await popup
@@ -342,14 +363,41 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await popup.close().catch(() => {});
         }
         await page.waitForTimeout(4500);
-        if (await onWizard()) return true;
+        const wizardAfterAction = await onWizard();
+        if (wizardAfterAction) return true;
 
         // Beykent first opens a read-only detail page from the table. Resume
         // only through one uniquely named edit/complete action.
         const detailAction = page.getByRole("button", {
           name: /complete application|continue application|edit application/i,
         });
-        if ((await detailAction.count().catch(() => 0)) !== 1) return false;
+        const detailActionCount = await detailAction
+          .count()
+          .catch(() => 0);
+        const relevantButtons = (
+          await page
+            .getByRole("button")
+            .allInnerTexts()
+            .catch(() => [])
+        )
+          .map((text: string) => text.replace(/\s+/g, " ").trim())
+          .filter((text: string) =>
+            /application|edit|complete|continue|view/i.test(text),
+          )
+          .slice(0, 12);
+        logger.info(
+          `[salesforce:${cfg.key}] owned application resume state`,
+          {
+            actionLabel,
+            actionClicked,
+            popup: Boolean(popup),
+            path: new URL(page.url()).pathname,
+            wizardAfterAction,
+            detailActionCount,
+            relevantButtons,
+          },
+        );
+        if (detailActionCount !== 1) return false;
         await detailAction.first().click({ timeout: 6000 }).catch(() => {});
         await page.waitForTimeout(4500);
         return onWizard();
