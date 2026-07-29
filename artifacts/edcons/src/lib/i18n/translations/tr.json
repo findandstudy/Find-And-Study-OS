@@ -1089,7 +1089,10 @@
       "star": "Yıldızla",
       "unstar": "Yıldızı kaldır",
       "subscribe": "Abone ol",
-      "unsubscribe": "Aboneliği bırak"
+      "unsubscribe": "Aboneliği bırak",
+      "markRead": "Okundu olarak işaretle",
+      "markUnread": "Okunmadı olarak işaretle",
+      "readStateFailed": "Okunma durumu güncellenemedi"
     },
     "attachment": {
       "download": "İndir",

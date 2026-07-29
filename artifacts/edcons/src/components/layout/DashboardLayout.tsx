@@ -379,9 +379,11 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     };
     es.addEventListener("inbox_message", refresh);
     es.addEventListener("inbox_assigned", refresh);
+    es.addEventListener("inbox_read_state", refresh);
     return () => {
       es.removeEventListener("inbox_message", refresh);
       es.removeEventListener("inbox_assigned", refresh);
+      es.removeEventListener("inbox_read_state", refresh);
       es.close();
     };
   }, [isStaff, queryClient]);

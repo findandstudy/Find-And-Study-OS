@@ -16,6 +16,13 @@ export type InboxBusEvent =
       assignedToId: number | null;
       previousAssignedToId: number | null;
       actorUserId: number | null;
+    }
+  | {
+      type: "read_state";
+      conversationId: number;
+      actorUserId: number;
+      unread: boolean;
+      unreadCount: number;
     };
 
 const CHANNEL = "inbox_events";

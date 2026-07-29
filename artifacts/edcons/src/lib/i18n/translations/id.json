@@ -1089,7 +1089,10 @@
       "star": "Bintangi",
       "unstar": "Hapus bintang",
       "subscribe": "Berlangganan",
-      "unsubscribe": "Berhenti berlangganan"
+      "unsubscribe": "Berhenti berlangganan",
+      "markRead": "Tandai sudah dibaca",
+      "markUnread": "Tandai belum dibaca",
+      "readStateFailed": "Gagal memperbarui status baca"
     },
     "attachment": {
       "download": "Unduh",

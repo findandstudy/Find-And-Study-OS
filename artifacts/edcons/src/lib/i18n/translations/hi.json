@@ -1089,7 +1089,10 @@
       "star": "स्टार",
       "unstar": "स्टार हटाएं",
       "subscribe": "सब्स्क्राइब करें",
-      "unsubscribe": "अनसब्स्क्राइब करें"
+      "unsubscribe": "अनसब्स्क्राइब करें",
+      "markRead": "पढ़ा हुआ चिह्नित करें",
+      "markUnread": "अपठित चिह्नित करें",
+      "readStateFailed": "पठन स्थिति अपडेट नहीं हो सकी"
     },
     "attachment": {
       "download": "डाउनलोड",

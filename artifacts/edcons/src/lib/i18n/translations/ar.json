@@ -1089,7 +1089,10 @@
       "star": "تمييز",
       "unstar": "إزالة التمييز",
       "subscribe": "اشتراك",
-      "unsubscribe": "إلغاء الاشتراك"
+      "unsubscribe": "إلغاء الاشتراك",
+      "markRead": "وضع علامة كمقروء",
+      "markUnread": "وضع علامة كغير مقروء",
+      "readStateFailed": "تعذر تحديث حالة القراءة"
     },
     "attachment": {
       "download": "تحميل",

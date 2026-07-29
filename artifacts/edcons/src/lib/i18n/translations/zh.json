@@ -1089,7 +1089,10 @@
       "star": "收藏",
       "unstar": "取消收藏",
       "subscribe": "订阅",
-      "unsubscribe": "取消订阅"
+      "unsubscribe": "取消订阅",
+      "markRead": "标记为已读",
+      "markUnread": "标记为未读",
+      "readStateFailed": "无法更新阅读状态"
     },
     "attachment": {
       "download": "下载",

@@ -1089,7 +1089,10 @@
       "star": "Star",
       "unstar": "Unstar",
       "subscribe": "Subscribe",
-      "unsubscribe": "Unsubscribe"
+      "unsubscribe": "Unsubscribe",
+      "markRead": "Mark as read",
+      "markUnread": "Mark as unread",
+      "readStateFailed": "Failed to update read status"
     },
     "attachment": {
       "download": "Download",

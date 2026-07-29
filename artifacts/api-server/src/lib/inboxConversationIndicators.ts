@@ -47,3 +47,22 @@ export function inboxAwaitingReplySql() {
     ), '') = 'inbound'
   )`.as("awaiting_reply");
 }
+
+/**
+ * Moves a participant read cursor immediately before the newest inbound
+ * message. This makes exactly the latest inbound message unread in the common
+ * case instead of resetting the cursor to epoch and marking the entire thread
+ * unread.
+ */
+export function manualUnreadLastReadAt(
+  latestInboundAt: Date | string,
+): Date {
+  const parsed = latestInboundAt instanceof Date
+    ? latestInboundAt
+    : new Date(latestInboundAt);
+  const timestamp = parsed.getTime();
+  if (!Number.isFinite(timestamp)) {
+    throw new Error("Invalid latest inbound timestamp");
+  }
+  return new Date(timestamp - 1);
+}

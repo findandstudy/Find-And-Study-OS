@@ -95,6 +95,7 @@ import {
   inboxIsSubscribedSql,
   inboxOuterConversationIdSql,
   inboxUnreadCountSql,
+  manualUnreadLastReadAt,
 } from "../lib/inboxConversationIndicators";
 
 const router: IRouter = Router();
@@ -616,7 +617,11 @@ router.get(
     writeHeartbeat();
 
     const handler = (event: InboxBusEvent) => {
-      const eventName = event.type === "message" ? "inbox_message" : "inbox_assigned";
+      const eventName = event.type === "message"
+        ? "inbox_message"
+        : event.type === "assigned"
+          ? "inbox_assigned"
+          : "inbox_read_state";
       try {
         res.write(`event: ${eventName}\n`);
         res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -1025,6 +1030,82 @@ router.get(
       stage,
       aiSummary,
     });
+  },
+);
+
+router.post(
+  "/inbox/conversations/:id/read-state",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    const parsed = z.object({ unread: z.boolean() }).safeParse(req.body);
+    if (!id || !parsed.success) {
+      res.status(400).json({ error: "Invalid read state request" });
+      return;
+    }
+
+    const [conversation] = await db
+      .select({ id: conversationsTable.id })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, id));
+    if (!conversation) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+
+    let lastReadAt = new Date();
+    if (parsed.data.unread) {
+      const [latestInbound] = await db
+        .select({ createdAt: messagesTable.createdAt })
+        .from(messagesTable)
+        .where(and(
+          eq(messagesTable.conversationId, id),
+          eq(messagesTable.direction, "inbound"),
+        ))
+        .orderBy(desc(messagesTable.createdAt), desc(messagesTable.id))
+        .limit(1);
+      if (!latestInbound?.createdAt) {
+        res.status(409).json({ error: "Conversation has no inbound message to mark unread" });
+        return;
+      }
+      lastReadAt = manualUnreadLastReadAt(latestInbound.createdAt);
+    }
+
+    await db.execute(sql`
+      INSERT INTO conversation_participants (conversation_id, user_id, last_read_at)
+      VALUES (${id}, ${req.user!.id}, ${lastReadAt})
+      ON CONFLICT (conversation_id, user_id)
+      DO UPDATE SET last_read_at = EXCLUDED.last_read_at
+    `);
+
+    const unreadResult = await pool.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count
+       FROM messages
+       WHERE conversation_id = $1
+         AND direction = 'inbound'
+         AND created_at > $2`,
+      [id, lastReadAt],
+    );
+    const unreadCount = Number(unreadResult.rows[0]?.count ?? 0);
+
+    await logAudit(
+      req.user!.id,
+      parsed.data.unread ? "mark_conversation_unread" : "mark_conversation_read",
+      "conversation",
+      id,
+      { unreadCount },
+      req.ip,
+    );
+    inboxBus.publish({
+      type: "read_state",
+      conversationId: id,
+      actorUserId: req.user!.id,
+      unread: parsed.data.unread,
+      unreadCount,
+    });
+
+    res.json({ unread: parsed.data.unread, unreadCount });
   },
 );
 

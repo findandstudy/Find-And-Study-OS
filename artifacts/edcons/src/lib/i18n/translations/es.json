@@ -1089,7 +1089,10 @@
       "star": "Destacar",
       "unstar": "Quitar destacado",
       "subscribe": "Suscribirse",
-      "unsubscribe": "Cancelar suscripción"
+      "unsubscribe": "Cancelar suscripción",
+      "markRead": "Marcar como leído",
+      "markUnread": "Marcar como no leído",
+      "readStateFailed": "No se pudo actualizar el estado de lectura"
     },
     "attachment": {
       "download": "Descargar",

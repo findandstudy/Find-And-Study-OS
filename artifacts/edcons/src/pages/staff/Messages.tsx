@@ -664,9 +664,11 @@ function InboxTab() {
   // see the freshest selection / fetchers without churning the connection
   // every time the user switches tabs or opens a conversation.
   const selectedIdRef = useRef<number | null>(selectedId);
+  const actorUserIdRef = useRef<number | null>(user?.id ?? null);
   const fetchInboxRef = useRef(fetchInbox);
   const fetchDetailRef = useRef(fetchDetail);
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  useEffect(() => { actorUserIdRef.current = user?.id ?? null; }, [user?.id]);
   useEffect(() => { fetchInboxRef.current = fetchInbox; }, [fetchInbox]);
   useEffect(() => { fetchDetailRef.current = fetchDetail; }, [fetchDetail]);
 
@@ -699,6 +701,21 @@ function InboxTab() {
       fetchInboxRef.current();
       if (convId !== null && selectedIdRef.current === convId) {
         fetchDetailRef.current(convId);
+      }
+    };
+
+    const refreshReadState = (raw: MessageEvent) => {
+      setLastEventAt(Date.now());
+      try {
+        const payload = JSON.parse(raw.data || "{}");
+        // Read cursors are user-specific. Refresh only the actor's other tabs
+        // and never refetch the open detail here: GET detail itself marks the
+        // thread read and would undo a just-requested "mark as unread".
+        if (payload.actorUserId === actorUserIdRef.current) {
+          fetchInboxRef.current();
+        }
+      } catch {
+        // A malformed read-state event cannot safely identify its owner.
       }
     };
 
@@ -735,11 +752,13 @@ function InboxTab() {
 
     es.addEventListener("inbox_message", refresh);
     es.addEventListener("inbox_assigned", refresh);
+    es.addEventListener("inbox_read_state", refreshReadState);
     es.addEventListener("heartbeat", onHeartbeat);
 
     return () => {
       es.removeEventListener("inbox_message", refresh);
       es.removeEventListener("inbox_assigned", refresh);
+      es.removeEventListener("inbox_read_state", refreshReadState);
       es.removeEventListener("heartbeat", onHeartbeat);
       es.close();
     };
@@ -1099,6 +1118,54 @@ function InboxTab() {
       toast({ title: res.subscribed ? t("inbox.action.subscribe") : t("inbox.action.unsubscribe") });
     } catch {
       toast({ title: "Failed to update", variant: "destructive" });
+    }
+  }
+
+  async function setConversationReadState(
+    convId: number,
+    unread: boolean,
+    event?: React.MouseEvent,
+  ) {
+    event?.stopPropagation();
+    const previousCount = convs.find((c) => c.id === convId)?.unreadCount ?? 0;
+    setConvs((prev) => prev.map((c) =>
+      c.id === convId ? { ...c, unreadCount: unread ? Math.max(1, previousCount) : 0 } : c
+    ));
+    try {
+      const response = await customFetch(
+        `/api/inbox/conversations/${convId}/read-state`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ unread }),
+        },
+      ) as { unreadCount?: number };
+      const unreadCount = Number(response?.unreadCount ?? (unread ? 1 : 0));
+      setConvs((prev) => prev.map((c) =>
+        c.id === convId ? { ...c, unreadCount } : c
+      ));
+      toast({
+        title: unread
+          ? t("inbox.action.markUnread")
+          : t("inbox.action.markRead"),
+      });
+
+      // Detail GET marks a thread read. Close an open thread after explicitly
+      // marking it unread so a live-event detail refetch cannot immediately
+      // undo the operator's choice.
+      if (unread && selectedId === convId) {
+        setSelectedId(null);
+        setDetail(null);
+      }
+      void fetchInbox();
+    } catch {
+      setConvs((prev) => prev.map((c) =>
+        c.id === convId ? { ...c, unreadCount: previousCount } : c
+      ));
+      toast({
+        title: t("inbox.action.readStateFailed"),
+        variant: "destructive",
+      });
     }
   }
 
@@ -1838,6 +1905,20 @@ function InboxTab() {
                   {!selectMode && (
                     <button
                       type="button"
+                      className="p-1 rounded hover:bg-muted shrink-0 text-muted-foreground/60 hover:text-foreground"
+                      onClick={(e) => setConversationReadState(c.id, !isUnread, e)}
+                      title={isUnread ? t("inbox.action.markRead") : t("inbox.action.markUnread")}
+                      aria-label={isUnread ? t("inbox.action.markRead") : t("inbox.action.markUnread")}
+                      data-testid={`button-read-state-${c.id}`}
+                    >
+                      {isUnread
+                        ? <CheckCheck className="w-3.5 h-3.5" />
+                        : <Mail className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
+                  {!selectMode && (
+                    <button
+                      type="button"
                       className="p-1 rounded hover:bg-muted shrink-0"
                       onClick={(e) => toggleStar(c.id, e)}
                       title={c.isStarred ? t("inbox.action.unstar") : t("inbox.action.star")}
@@ -1956,6 +2037,17 @@ function InboxTab() {
                   >
                     <Bell className="w-3 h-3" />
                     <span className="hidden lg:inline">{(conv as any).isSubscribed ? t("inbox.action.unsubscribe") : t("inbox.action.subscribe")}</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setConversationReadState(conv.id, true)}
+                    className="h-7 text-xs gap-1"
+                    title={t("inbox.action.markUnread")}
+                    data-testid="button-mark-conversation-unread"
+                  >
+                    <Mail className="w-3 h-3" />
+                    <span className="hidden xl:inline">{t("inbox.action.markUnread")}</span>
                   </Button>
                   <Button
                     size="icon"
