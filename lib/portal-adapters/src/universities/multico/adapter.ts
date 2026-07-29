@@ -1531,13 +1531,27 @@ export const multicoAdapter: UniversityAdapter = {
     }
 
     // ---- Step D: Document upload ----------------------------------------
-    let uploadedSlots: string[] = [...inlineUploadedSlots];
+    const requestedUploadFields = [
+      "file_passport",
+      "file_diploma",
+      "file_transcript",
+      ...(files.photo ? ["profile_photo"] : []),
+      ...(files.english ? ["file_toefl_ibt"] : []),
+    ];
+    const presentBeforeUpload = await verifyStudentDocuments(
+      page,
+      studentId,
+      requestedUploadFields,
+    );
+    let uploadedSlots: string[] = [
+      ...new Set([...inlineUploadedSlots, ...presentBeforeUpload]),
+    ];
     try {
       const patchedSlots = await uploadDocuments(
         page,
         studentId,
         files,
-        inlineUploadedSlots,
+        uploadedSlots,
       );
       uploadedSlots = [...new Set([...uploadedSlots, ...patchedSlots])];
       logger.info(
