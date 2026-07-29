@@ -297,13 +297,22 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             .first()
             .getAttribute("href")
             .catch(() => "")) || "";
+        const rowEmail = (
+          (await row
+            .locator('[data-label="Email"]')
+            .first()
+            .innerText()
+            .catch(() => "")) || ""
+        )
+          .replace(/\s+/g, " ")
+          .trim();
         if (
           !isOwnedSalesforceApplicant({
             firstName: profile.firstName,
             lastName: profile.lastName,
             email: profile.email,
             rowName: rowText,
-            rowEmail: mailto,
+            rowEmail: mailto || rowEmail,
           })
         ) {
           return false;
