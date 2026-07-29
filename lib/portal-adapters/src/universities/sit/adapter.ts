@@ -59,6 +59,7 @@ import {
   toEnglishCountryName,
   sitAcademicHistoryLevelFromCountryLabel,
   resolveSitAcademicHistory,
+  isSitContactStepLabels,
 } from "./helpers.js";
 import {
   findStudent,
@@ -2225,11 +2226,17 @@ export const sitAdapter: SitAdapter = {
           }
           return -1;
         });
+        const visibleLabels = await page
+          .locator('label[data-slot="form-label"]')
+          .allTextContents()
+          .catch(() => [] as string[]);
+        const isContactStep =
+          selIdx >= 0 || isSitContactStepLabels(visibleLabels);
         const cval2 = toEnglishCountryName(profile.nationality) || profile.nationality || "";
         let cOk = false;
         let telOk = false;
         let telDbg = "not-contact";
-        if (selIdx >= 0) {
+        if (isContactStep && selIdx >= 0) {
           // Country of Residence — nameless <select>; must dispatch change manually
           // because React controlled selects ignore value assignments without events.
           if (cval2) {
@@ -2256,7 +2263,7 @@ export const sitAdapter: SitAdapter = {
         }
         // Deep fallback: the residence select may live in a shadow root /
         // frame (selIdx=-1 historically) — match it by label text instead.
-        if (!cOk && cval2) {
+        if (isContactStep && !cOk && cval2) {
           for (const frame of page.frames()) {
             const r = (await frame
               .evaluate(DEEP_SELECT_JS, {
@@ -2271,11 +2278,10 @@ export const sitAdapter: SitAdapter = {
             }
           }
         }
-        // Mobile — student's number. Runs unconditionally (not gated by selIdx)
-        // so the phone is filled even when the residence-country select is absent
-        // or its label doesn't include "residence" (selIdx=-1 historically
-        // caused this entire block to be skipped → studentId never resolved).
-        {
+        // Mobile — student's number. The Family step also contains unnamed
+        // input[type=tel] controls for parents, so this MUST run only on the
+        // proven Contact & Location screen.
+        if (isContactStep) {
           const phoneVal = cleanPhone(
             (profile as any).phoneE164 ||
               (profile as any).phone_e164 ||
@@ -2338,7 +2344,9 @@ export const sitAdapter: SitAdapter = {
           }
         }
         logger.info(
-          "[sit] CONTACTFIX2 telOk=" + telOk + " telDbg=" + telDbg + " cval='" + cval2 + "' selIdx=" + selIdx + " cOk=" + cOk,
+          "[sit] CONTACTFIX2 contact=" + isContactStep + " telOk=" + telOk +
+            " telDbg=" + telDbg + " cval='" + cval2 + "' selIdx=" + selIdx +
+            " cOk=" + cOk,
         );
       } catch (e) {
         logger.info("[sit] CONTACTFIX err " + (e as any)?.message);

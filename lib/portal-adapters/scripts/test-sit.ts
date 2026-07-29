@@ -31,6 +31,7 @@ import {
   isSitDocumentsStep,
   sitAcademicHistoryLevelFromCountryLabel,
   resolveSitAcademicHistory,
+  isSitContactStepLabels,
 } from "../src/universities/sit/helpers.js";
 import {
   SIT_URLS,
@@ -220,6 +221,27 @@ test("EDU4 — historical rows use controlled legacy and nationality fallbacks",
     schoolName: "HISTORICAL BACHELOR SCHOOL",
     gpa: "73",
   });
+});
+
+test("CONTACT1 — family mobile controls are never classified as the contact step", () => {
+  assert.equal(
+    isSitContactStepLabels([
+      "Father_Name *",
+      "Father Mobile",
+      "Mother Name *",
+      "Mother Mobile",
+    ]),
+    false,
+  );
+  assert.equal(
+    isSitContactStepLabels([
+      "Email *",
+      "Country of Residence *",
+      "Address Line 1",
+      "City / District",
+    ]),
+    true,
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -189,6 +189,24 @@ export function resolveSitAcademicHistory(
   };
 }
 
+/**
+ * Identify SIT's Contact & Location screen from its visible labels. A bare
+ * phone input is insufficient because the Family screen also has father/mother
+ * mobile controls. This guard prevents the student's phone from being written
+ * into a parent's mobile field when the wizard refills every step.
+ */
+export function isSitContactStepLabels(
+  labels: Array<string | undefined | null>,
+): boolean {
+  const folded = labels.map((label) => fold(label ?? ""));
+  if (folded.some((label) => /\bcountry of residence\b/.test(label))) return true;
+  const hasEmail = folded.some((label) => /\be-?mail\b/.test(label));
+  const hasLocation = folded.some((label) =>
+    /\b(address|city|district|residence)\b/.test(label),
+  );
+  return hasEmail && hasLocation;
+}
+
 export function isSitDocumentsStep(
   heading: string | undefined | null,
   uploadAffordanceCount: number,
