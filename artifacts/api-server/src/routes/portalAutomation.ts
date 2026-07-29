@@ -61,7 +61,6 @@ import {
   claimNext,
   releaseStale,
   heartbeat,
-  requeueStuck,
   buildStudentProfile,
   runSubmission,
   writebackResult,
@@ -872,12 +871,12 @@ let _processMutex = false;
 /** Submissions running longer than this are candidates for stuck-reset. */
 const STUCK_THRESHOLD_MS = 10 * 60_000; // 10 minutes
 
-/** Inline process timeout: responds early and requeues if work exceeds this. */
+/** Inline process timeout: responds early while the claimed work continues. */
 const INLINE_TIMEOUT_MS = 50_000; // 50 seconds
 
 interface ProcessSingleResult {
   id: number;
-  status: "submitted" | "already_exists" | "program_missing" | "program_full" | "exclusive_region" | "failed" | "dry_run" | "skipped" | "requeued";
+  status: "submitted" | "already_exists" | "program_missing" | "program_full" | "exclusive_region" | "failed" | "dry_run" | "skipped" | "requeued" | "running";
   error?: string;
   message?: string;
 }
@@ -888,12 +887,11 @@ interface ProcessSingleResult {
  * Heartbeat (every 20s): keeps locked_at fresh so the periodic stuck-reset
  * job never fires while work is in flight.
  *
- * Timeout (INLINE_TIMEOUT_MS): if the run takes longer than the inline limit
- * the row is atomically requeued (locked_by guard prevents clobbering if
- * drain-once reclaims the row before we write back) and the caller receives
- * { status: "requeued" }.  The background browser process continues; when it
- * eventually calls writebackResult the locked_by guard makes the write a
- * no-op on a re-claimed row.
+ * Timeout (INLINE_TIMEOUT_MS): if the run takes longer than the HTTP-friendly
+ * inline limit, the caller receives { status: "running" } while the original
+ * browser process keeps its lock + heartbeat and finishes normally. NEVER
+ * requeue live browser work: doing so can launch overlapping portal mutations
+ * for the same student and exhaust Chromium memory on long SIT/United wizards.
  */
 async function runWithTimeout(
   sub: ClaimedSubmission,
@@ -916,7 +914,7 @@ async function runWithTimeout(
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
 
-  const workPromise = (async (): Promise<ProcessSingleResult> => {
+  const rawWorkPromise = (async (): Promise<ProcessSingleResult> => {
     const profileResult = await buildStudentProfile(sub.id);
     // Multi-portal routing: if this university routes_via a multi-portal company,
     // resolveAdapterKey returns the company's adapterKey + the routedVia key.
@@ -981,26 +979,29 @@ async function runWithTimeout(
 
     return { id: sub.id, status };
   })();
-
-  // Attach a no-op catch so that if the timeout fires first and the background
-  // work eventually rejects, we don't get an UnhandledPromiseRejection.
-  workPromise.catch(() => {});
+  // Own error writeback inside the work promise so it remains correct even
+  // after the HTTP timeout has returned. Keep the heartbeat alive until this
+  // exact browser run settles; the timeout race must not release its lock.
+  const workPromise = rawWorkPromise
+    .catch(async (err): Promise<ProcessSingleResult> => {
+      const msg = err instanceof Error ? err.message : String(err);
+      await writebackResult(sub.id, null, msg, workerId);
+      return { id: sub.id, status: "failed", error: msg };
+    })
+    .finally(() => {
+      clearInterval(hbInterval);
+    });
 
   const timeoutPromise = new Promise<ProcessSingleResult>((resolve) => {
-    timeoutHandle = setTimeout(async () => {
+    timeoutHandle = setTimeout(() => {
       timedOut = true;
-      try {
-        const requeued = await requeueStuck(sub.id, workerId);
-        if (requeued) {
-          console.log(
-            `[portal-process] #${sub.id} timed out after ${timeoutMs}ms — requeued for drain-once`,
-          );
-        }
-      } catch { /* best-effort */ }
+      console.log(
+        `[portal-process] #${sub.id} still running after ${timeoutMs}ms — original lock retained`,
+      );
       resolve({
         id: sub.id,
-        status: "requeued",
-        message: `İşlem ${Math.round(timeoutMs / 1000)}sn'yi aştı, drain-once tarafından tamamlanacak`,
+        status: "running",
+        message: `İşlem arka planda aynı kilitle devam ediyor`,
       });
     }, timeoutMs);
   });
@@ -1012,15 +1013,11 @@ async function runWithTimeout(
   } catch (err) {
     clearTimeout(timeoutHandle);
     if (timedOut) {
-      // Timeout already resolved; background work threw after the race settled.
-      // writebackResult's locked_by guard prevents any DB clobbering.
-      return { id: sub.id, status: "requeued" };
+      return { id: sub.id, status: "running" };
     }
     const msg = err instanceof Error ? err.message : String(err);
     await writebackResult(sub.id, null, msg, workerId);
     return { id: sub.id, status: "failed", error: msg };
-  } finally {
-    clearInterval(hbInterval);
   }
 }
 
@@ -1073,7 +1070,11 @@ async function drainQueue(
     console.log(
       `[portal-process] Processing #${sub.id} uni=${sub.universityKey} mode=${sub.mode} attempt=${sub.attempts}/${sub.maxAttempts}`,
     );
-    results.push(await runWithTimeout(sub, workerId));
+    const result = await runWithTimeout(sub, workerId);
+    results.push(result);
+    // A timed-out inline run still owns a live browser and heartbeat. Do not
+    // claim another row in this API process while it continues in background.
+    if (result.status === "running") break;
   }
 
   return results;
@@ -1509,7 +1510,9 @@ router.post(
     const results: ProcessSingleResult[] = [];
     try {
       for (const id of ids) {
-        results.push(await processSingle(id, workerId));
+        const result = await processSingle(id, workerId);
+        results.push(result);
+        if (result.status === "running") break;
       }
     } finally {
       _processMutex = false;
@@ -2014,33 +2017,21 @@ function computeApplyToAllCounts(results: ApplyToAllItem[]) {
 }
 
 /**
- * Fire a NON-BLOCKING background drain (guarded by the shared _processMutex).
- * Reuses the exact manual drain path; not awaited so the caller returns
- * immediately. If a run is already in flight the rows are picked up by it (or
- * the always-on worker).
+ * Notify that work is queued for the dedicated portal worker.
  *
  * When `triggerStages` is provided (auto-enqueue immediate drain), only
  * submissions whose application is currently in one of those stages are
  * claimed — same stage-gating convention as Run Now. When omitted (fan-out /
  * manual call sites), all queued submissions are drained regardless of stage.
  *
- * Exported so the auto-enqueue flow (lib/portalAutoTrigger.ts) can fire an
- * immediate drain after a successful enqueue via dynamic import (same
- * circular-dependency-breaking pattern as maybeFanOutStudentForApplication).
+ * Portal browsers must never run fire-and-forget inside the API process. Long
+ * SIT/United wizards exceed the API's inline response window; the historical
+ * requeue path then launched overlapping Chromium sessions for one submission.
+ * The always-on worker polls every five seconds and is the single owner.
  */
 export function triggerBackgroundDrain(label: string, triggerStages?: string[]): void {
-  if (_processMutex) return;
-  const workerId = `api-${label}-${Date.now()}`;
-  _processMutex = true;
-  void (async () => {
-    try {
-      await drainQueue(workerId, triggerStages);
-    } catch (err) {
-      console.error(`[${label}] background drain failed:`, err);
-    } finally {
-      _processMutex = false;
-    }
-  })();
+  void triggerStages;
+  console.log(`[${label}] queued for dedicated portal worker`);
 }
 
 // ---------------------------------------------------------------------------
