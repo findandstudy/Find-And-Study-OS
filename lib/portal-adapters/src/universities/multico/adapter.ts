@@ -1138,37 +1138,140 @@ async function createApplication(
   departmentId: string,
   universityId: string,
   programType: string,
+  programName: string,
   note = "",
 ): Promise<{ applicationId: string; fee: string; status: string }> {
-  const formData = {
-    academic_year: currentAcademicYear(),
-    university_id: universityId,
-    program_type:  programType,
-    department_id: departmentId,
-    note,
-  };
-
-  const resp = await page.request.post(
-    `${MULTICO_BASE}/student-applications/add/${studentId}`,
-    { form: formData },
-  );
-  const html = await resp.text();
-
-  // Parse the application row from the student edit page response or redirect.
-  const app = parseLatestApplication(html);
-  if (app) return app;
-
-  // If response was a redirect to the student page, fetch it.
-  const finalUrl = resp.url();
-  if (finalUrl && finalUrl.includes("/students/")) {
-    const studentPage = await page.request.get(finalUrl);
-    const studentHtml = await studentPage.text();
-    const app2 = parseLatestApplication(studentHtml);
-    if (app2) return app2;
+  const formUrl = `${MULTICO_BASE}/student-applications/add/${studentId}`;
+  const formResponse = await page.goto(formUrl, {
+    waitUntil: "networkidle",
+  });
+  if (
+    !formResponse?.ok() ||
+    !isExpectedMulticoApplicationFormUrl(page.url(), studentId)
+  ) {
+    throw new Error(
+      "Multico application form could not be opened exactly",
+    );
   }
 
+  const academicYearSelect = page.locator('select[name="academic_year"]');
+  const universitySelect = page.locator('select[name="university_id"]');
+  const programTypeSelect = page.locator('select[name="program_type"]');
+  const departmentSelect = page.locator('select[name="department_id"]');
+  const noteInput = page.locator('textarea[name="student_note"]');
+  const submitButton = page.locator('button[name="submit"][type="submit"]');
+  for (const control of [
+    academicYearSelect,
+    universitySelect,
+    programTypeSelect,
+    departmentSelect,
+    noteInput,
+    submitButton,
+  ]) {
+    if ((await control.count()) !== 1) {
+      throw new Error(
+        "Multico application form controls are not unique",
+      );
+    }
+  }
+
+  const resolveOptionValue = async (
+    select: typeof academicYearSelect,
+    text: string,
+  ): Promise<string> => {
+    const wanted = fold(text);
+    const options = await select.locator("option").evaluateAll((elements) =>
+      elements.map((option) => ({
+        value: option.getAttribute("value") ?? "",
+        text: option.textContent?.trim() ?? "",
+      })),
+    );
+    const matches = options.filter(
+      (option) => option.value && fold(option.text) === wanted,
+    );
+    if (matches.length !== 1) {
+      throw new Error(
+        `Multico application option is not unique (count=${matches.length})`,
+      );
+    }
+    return matches[0].value;
+  };
+  const academicYearId = await resolveOptionValue(
+    academicYearSelect,
+    currentAcademicYear(),
+  );
+  const programTypeId = await resolveOptionValue(
+    programTypeSelect,
+    programType,
+  );
+
+  const waitForDepartmentAjax = () =>
+    page.waitForResponse(
+      (candidate) =>
+        candidate.request().method() === "POST" &&
+        candidate.url().includes(
+          "/crm/ajax/get-departments-by-university.php",
+        ),
+      { timeout: 10_000 },
+    );
+  const universityAjax = waitForDepartmentAjax();
+  await universitySelect.selectOption(universityId);
+  if (!(await universityAjax).ok()) {
+    throw new Error("Multico application university filter failed");
+  }
+  const programTypeAjax = waitForDepartmentAjax();
+  await programTypeSelect.selectOption(programTypeId);
+  if (!(await programTypeAjax).ok()) {
+    throw new Error("Multico application program-type filter failed");
+  }
+  await academicYearSelect.selectOption(academicYearId);
+  const departmentMatches = await departmentSelect
+    .locator(`option[value="${departmentId}"]`)
+    .count();
+  if (departmentMatches !== 1) {
+    throw new Error(
+      "Multico matched department is absent after exact filters",
+    );
+  }
+  await departmentSelect.selectOption(departmentId);
+  await noteInput.fill(note);
+
+  const submitResponsePromise = page.waitForResponse(
+    (candidate) =>
+      candidate.request().method() === "POST" &&
+      candidate.url() === formUrl,
+    { timeout: 15_000 },
+  );
+  await submitButton.click();
+  const submitResponse = await submitResponsePromise;
+  if (!submitResponse.ok()) {
+    throw new Error(
+      `Multico application create failed (status=${submitResponse.status()})`,
+    );
+  }
+
+  const studentPage = await page.request.get(
+    `${MULTICO_BASE}/students/edit/${studentId}`,
+  );
+  if (!studentPage.ok()) {
+    throw new Error(
+      `Multico application verification failed ` +
+        `(status=${studentPage.status()})`,
+    );
+  }
+  const studentHtml = await studentPage.text();
+  const application = findMatchingMulticoApplication(
+    studentHtml,
+    programName,
+  );
+  if (application) return application;
+
+  const responseHtml = await submitResponse.text().catch(() => "");
+  const diagnostics = extractMulticoResponseDiagnostics(responseHtml);
   throw new Error(
-    "Multico application create could not be proved from the response or student page",
+    `Multico application create could not be proved ` +
+      `(path=${new URL(submitResponse.url()).pathname}, ` +
+      `validation=${diagnostics.join(" | ") || "none"})`,
   );
 }
 
@@ -1507,6 +1610,7 @@ export const multicoAdapter: UniversityAdapter = {
         match.id,
         universityId,
         programType,
+        match.name,
       );
     } catch (err) {
       throw new Error(`Multico application create error: ${(err as Error).message}`);
