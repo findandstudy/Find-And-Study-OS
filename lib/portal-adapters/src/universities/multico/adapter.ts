@@ -908,6 +908,7 @@ async function createMulticoStudent(
     schoolGPA:         school.gpa,
     graduate_year:     school.graduateYear,
     student_note:      "",
+    submit:            "Save",
   };
 
   if (nationalityId) formData["nationality_id"] = nationalityId;
