@@ -318,7 +318,29 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           name: /complete application|continue application|edit application|view application/i,
         });
         if ((await actions.count().catch(() => 0)) !== 1) return false;
+        const popupPromise = page
+          .waitForEvent("popup", { timeout: 8000 })
+          .catch(() => null);
         await actions.first().click({ timeout: 6000 }).catch(() => {});
+        const popup = await popupPromise;
+        if (popup) {
+          await popup
+            .waitForLoadState("domcontentloaded", { timeout: 15_000 })
+            .catch(() => {});
+          const popupUrl = popup.url();
+          if (
+            popupUrl &&
+            new URL(popupUrl).origin === new URL(agencyUrl).origin
+          ) {
+            await page
+              .goto(popupUrl, {
+                waitUntil: "domcontentloaded",
+                timeout: 60_000,
+              })
+              .catch(() => {});
+          }
+          await popup.close().catch(() => {});
+        }
         await page.waitForTimeout(4500);
         if (await onWizard()) return true;
 
