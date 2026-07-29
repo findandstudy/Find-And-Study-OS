@@ -289,6 +289,15 @@ export async function buildApplicationPreflightSnapshot(
     allowIncompleteProfile: true,
   });
   applyEducationFallbacks(profile, merged);
+  const legacyAddressCity = resolveLegacyAddressCity({
+    universityKey: options.adapterKey ?? "",
+    addressCity: student.addressCity,
+    address: student.address,
+    nationality: student.nationality,
+  });
+  if (!profile.addressCity && legacyAddressCity) {
+    profile.addressCity = legacyAddressCity;
+  }
   if (merged.length > 0) profile.educationRecords = merged as any;
   if (student.photoUrl?.trim()) profile.photoUrl = student.photoUrl.trim();
 

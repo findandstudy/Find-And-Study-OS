@@ -4,6 +4,7 @@ import {
 } from "@workspace/portal-adapters";
 import { buildApplicationPreflightSnapshot } from "@workspace/portal-runner";
 import { runEducationExtraction } from "./educationAutoExtract.js";
+import { autoFillMissingAddressCity } from "./portalAddressAutoExtract.js";
 import { autoFillMissingProfileFromPassport } from "./portalProfileAutoExtract.js";
 import { logAudit } from "./auth.js";
 
@@ -52,6 +53,23 @@ export async function prepareApplicationPortalPreflight(opts: {
       identity.status === "ai_unavailable"
     ) {
       enrichmentWarnings.push(`identity:${identity.status}`);
+    }
+
+    if (result.missingFields.includes("addressCity")) {
+      const addressCity = await autoFillMissingAddressCity({
+        studentId: snapshot.studentId,
+        actorUserId: opts.actorUserId,
+        ip: opts.ip,
+        requiredFields: result.missingFields,
+      });
+      autoFilledFields.push(...addressCity.fields);
+      if (
+        addressCity.status === "low_confidence" ||
+        addressCity.status === "unreadable" ||
+        addressCity.status === "ai_unavailable"
+      ) {
+        enrichmentWarnings.push(`addressCity:${addressCity.status}`);
+      }
     }
 
     if (result.missingFields.some((field) => ACADEMIC_FIELDS.has(field))) {

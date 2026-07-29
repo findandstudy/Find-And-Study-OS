@@ -127,7 +127,34 @@ const DUPLICATE_SAFE_PORTAL_KEYS = new Set([
 const LEGACY_CITY_PORTAL_KEYS = new Set([
   ...DUPLICATE_SAFE_PORTAL_KEYS,
   "study_in_turkey",
+  // API preflight works with adapter keys while the worker has university
+  // routing keys. Accept both representations so the same compatibility rule
+  // is evaluated before enqueue and before portal login.
+  "sit",
+  "beykent",
+  "isik",
+  "okan",
+  "united",
+  "uskudar",
 ]);
+
+const ADDRESS_LIKE_TOKEN_RE =
+  /\b(?:street|st\.?|road|rd\.?|avenue|ave\.?|house|plot|apartment|building|floor|block|village|district|province|region|state|mahallesi|mahalle|sokak|cadde|caddesi)\b/iu;
+
+function conservativeLegacyCityCandidate(value: string): string | undefined {
+  const candidate = value.trim();
+  if (
+    candidate.length < 2 ||
+    candidate.length > 80 ||
+    /\d/u.test(candidate) ||
+    !/\p{L}/u.test(candidate) ||
+    ADDRESS_LIKE_TOKEN_RE.test(candidate) ||
+    candidate.split(/\s+/).length > 5
+  ) {
+    return undefined;
+  }
+  return candidate;
+}
 
 /**
  * Limits concurrent document normalization to one writer per logical slot for
@@ -163,8 +190,8 @@ export function resolveLegacyAddressCity(input: {
   const comma = raw.indexOf(",");
   if (comma <= 0) return undefined;
 
-  const candidate = raw.slice(0, comma).trim();
-  if (candidate.length < 2 || !/\p{L}/u.test(candidate)) return undefined;
+  const candidate = conservativeLegacyCityCandidate(raw.slice(0, comma));
+  if (!candidate) return undefined;
   const nationality = input.nationality?.trim() ?? "";
   if (
     nationality &&
