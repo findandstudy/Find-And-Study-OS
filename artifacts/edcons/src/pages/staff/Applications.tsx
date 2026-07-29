@@ -2072,7 +2072,7 @@ export default function ApplicationsPage() {
                           key={id}
                           label="University"
                           sort={{ sortKey: "university", current: sort, onSort: handleSort }}
-                          filter={{ type: "select", value: filters.university, onChange: v => setFilters(f => ({ ...f, university: v })), options: uniqueAppUniversities.map(([uid, name]) => ({ value: String(uid), label: name || `#${uid}` })), label: "University" }}
+                          filter={{ type: "searchable-select", value: filters.university, onChange: v => setFilters(f => ({ ...f, university: v })), options: uniqueAppUniversities.map(([uid, name]) => ({ value: String(uid), label: name || `#${uid}` })), label: "University", placeholder: "Search universities…" }}
                         />
                       );
                     case "program":
