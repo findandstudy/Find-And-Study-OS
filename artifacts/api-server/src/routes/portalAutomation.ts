@@ -29,6 +29,7 @@ import { ImportValidationError } from "../lib/exportImport";
 import {
   findActivePortalUniversity,
   resolvePortalRouting,
+  resolveStudentPortalRouting,
   scanAndEnqueueTriggerStageApplications,
   MAX_AUTO_FAILED_SUBMISSIONS,
 } from "../lib/portalAutoTrigger.js";
@@ -140,11 +141,50 @@ router.post(
     }
 
     const meta = adapterMetadata();
-    const universityName = meta.find((m) => m.key === universityKey)?.label ?? universityKey;
+    let finalUniversityKey = universityKey;
+    let finalUniversityName =
+      meta.find((m) => m.key === universityKey)?.label ?? universityKey;
 
     // Stamp the adapter this row will run on (multi-portal routing aware) —
     // feeds the per-adapter auto-graduation success count.
-    const { adapterKey: routedAdapterKey } = await resolveAdapterKey(universityKey);
+    let { adapterKey: routedAdapterKey } = await resolveAdapterKey(universityKey);
+    let routingMeta:
+      | {
+          exclusiveNationalityRoute: "multico";
+          routedFromUniversityKey: string;
+        }
+      | undefined;
+    const [selectedPortalUni] = await db
+      .select()
+      .from(portalUniversitiesTable)
+      .where(
+        and(
+          eq(portalUniversitiesTable.universityKey, universityKey),
+          eq(portalUniversitiesTable.isActive, true),
+          isNull(portalUniversitiesTable.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (selectedPortalUni) {
+      const studentRouting = await resolveStudentPortalRouting({
+        routing: { portalUni: selectedPortalUni, target: null },
+        studentId: app.studentId,
+        applicationId: app.id,
+      });
+      if (!studentRouting) {
+        res.status(409).json({
+          error: "PORTAL_ROUTE_UNAVAILABLE",
+          message: "The required exclusive portal route is not available.",
+        });
+        return;
+      }
+      finalUniversityKey = studentRouting.portalUni.universityKey;
+      finalUniversityName =
+        studentRouting.submissionUniversityName ??
+        studentRouting.portalUni.universityName;
+      routedAdapterKey = studentRouting.portalUni.adapterKey;
+      routingMeta = studentRouting.routingMeta;
+    }
     const preflight = await prepareApplicationPortalPreflight({
       applicationId: app.id,
       adapterKey: routedAdapterKey,
@@ -165,13 +205,13 @@ router.post(
       .values({
         applicationId: app.id,
         studentId: app.studentId,
-        universityKey,
-        universityName,
+        universityKey: finalUniversityKey,
+        universityName: finalUniversityName,
         adapterKey: routedAdapterKey,
         mode,
         status: "queued",
         enqueuedBy: user.id,
-        meta: { preflight },
+        meta: { manual: true, preflight, ...(routingMeta ?? {}) },
       })
       .returning();
 
@@ -180,7 +220,11 @@ router.post(
       "enqueue_portal_submission",
       "portal_submission",
       row.id,
-      { universityKey, mode },
+      {
+        requestedUniversityKey: universityKey,
+        universityKey: finalUniversityKey,
+        mode,
+      },
       req.ip,
     );
 
@@ -810,6 +854,7 @@ router.post(
         lockedBy: null,
         error: null,
         attempts: 0,
+        meta: sql`coalesce(${portalSubmissionsTable.meta}, '{}'::jsonb) || '{"manual":true}'::jsonb`,
         resultJson: sql`coalesce(${portalSubmissionsTable.resultJson}, '{}'::jsonb) - 'aiGuardian'`,
       })
       .where(eq(portalSubmissionsTable.id, id));
@@ -1410,6 +1455,7 @@ router.post(
           lockedBy: null,
           error: null,
           attempts: 0,
+          meta: sql`coalesce(${portalSubmissionsTable.meta}, '{}'::jsonb) || '{"manual":true}'::jsonb`,
           resultJson: sql`coalesce(${portalSubmissionsTable.resultJson}, '{}'::jsonb) - 'aiGuardian'`,
         })
         .where(inArray(portalSubmissionsTable.id, eligibleIds));

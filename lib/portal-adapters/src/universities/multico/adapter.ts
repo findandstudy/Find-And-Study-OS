@@ -93,21 +93,38 @@ export const MULTICO_NATIONALITIES = [
 export type MulticoNationality = (typeof MULTICO_NATIONALITIES)[number];
 
 /**
+ * Accepted country and demonym spellings after `fold()` normalization.
+ * CRM records are not language-normalized, so both English and Turkish values
+ * occur. Exact matching prevents short substrings routing unrelated countries.
+ */
+const MULTICO_NATIONALITY_ALIASES = new Set([
+  "azerbaijan", "azerbaijani", "azeri", "azerbaycan", "azerbaycanli",
+  "kazakhstan", "kazakh", "kazakhstani", "kazakistan", "kazak",
+  "uzbekistan", "uzbek", "uzbekistani", "ozbekistan", "ozbek",
+  "kyrgyzstan", "kyrgyz", "kyrgyzstani", "kirgizistan", "kirgiz",
+  "tajikistan", "tajik", "tajikistani", "tacikistan", "tacik",
+  "turkmenistan", "turkmen", "turkmenistani",
+  "mongolia", "mongolian", "mongol", "mogolistan", "mogol",
+]);
+
+/**
  * Returns true when the given student.nationality value belongs to one of the
  * 7 Central Asian nationalities handled exclusively by Multico.
- * Matching is case-insensitive substring (handles adjective forms like "Uzbek",
- * "Azerbaijani", "Mongolian" as well as raw country names).
+ * Matching is diacritic/case-insensitive but exact after normalization.
  */
 export function isMulticoNationality(
   nationality: string | null | undefined,
 ): boolean {
   if (!nationality) return false;
-  const lower = nationality.toLowerCase();
-  // Bidirectional substring: handles both country name ("Kazakhstan") and
-  // adjective/demonym forms ("Kazakh", "Azerbaijani", "Mongolian", "Turkmen").
-  // lower.includes(n)  → "Kazakhstan" contains "kazakhstan" ✓
-  // n.includes(lower)  → "turkmenistan" contains "turkmen" ✓
-  return MULTICO_NATIONALITIES.some((n) => lower.includes(n) || n.includes(lower));
+  return MULTICO_NATIONALITY_ALIASES.has(fold(nationality));
+}
+
+/** Stable routing predicate: portal row keys may change; adapter keys do not. */
+export function shouldRouteTopkapiToMultico(
+  adapterKey: string | null | undefined,
+  nationality: string | null | undefined,
+): boolean {
+  return adapterKey === "topkapi" && isMulticoNationality(nationality);
 }
 
 // ---------------------------------------------------------------------------

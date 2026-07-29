@@ -38,7 +38,11 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./auth.js";
 import { checkHasPortalCredentials } from "./portalCreds.js";
-import { isMulticoNationality, validateIdentityFields, formatIdentityErrors } from "@workspace/portal-adapters";
+import {
+  shouldRouteTopkapiToMultico,
+  validateIdentityFields,
+  formatIdentityErrors,
+} from "@workspace/portal-adapters";
 import { checkMandatoryDocsForApplication } from "./mandatoryDocs.js";
 import { prepareApplicationPortalPreflight } from "./portalApplicationPreflight.js";
 
@@ -214,6 +218,16 @@ export interface PortalRoutingResolution {
   target: { catalogUniversityId: number; universityName: string } | null;
 }
 
+export interface StudentPortalRoutingResolution extends PortalRoutingResolution {
+  /** Preserve the catalog university label when an exclusive route is used. */
+  submissionUniversityName?: string;
+  /** Non-sensitive routing proof persisted in portal_submissions.meta. */
+  routingMeta?: {
+    exclusiveNationalityRoute: "multico";
+    routedFromUniversityKey: string;
+  };
+}
+
 export async function resolvePortalRouting(args: {
   universityId: number | null;
   universityName: string | null;
@@ -285,6 +299,64 @@ export async function resolvePortalRouting(args: {
   return standalone ? { portalUni: standalone, target: null } : null;
 }
 
+/**
+ * Applies student-specific policy after normal university/membership routing.
+ * Adapter identity is stable; universityKey is admin data (the live Topkapı
+ * key is `topkapi_university`, not `topkapi`). Exclusive routes fail closed.
+ */
+export async function resolveStudentPortalRouting(args: {
+  routing: PortalRoutingResolution;
+  studentId: number;
+  applicationId?: number;
+}): Promise<StudentPortalRoutingResolution | null> {
+  const { routing, studentId, applicationId } = args;
+  if (routing.portalUni.adapterKey !== "topkapi") return { ...routing };
+
+  const [studentRow] = await db
+    .select({ nationality: studentsTable.nationality })
+    .from(studentsTable)
+    .where(eq(studentsTable.id, studentId))
+    .limit(1);
+  const nationality = studentRow?.nationality ?? null;
+  if (!shouldRouteTopkapiToMultico(routing.portalUni.adapterKey, nationality)) {
+    return { ...routing };
+  }
+
+  const [multicoRow] = await db
+    .select()
+    .from(portalUniversitiesTable)
+    .where(
+      and(
+        eq(portalUniversitiesTable.universityKey, "multico"),
+        eq(portalUniversitiesTable.isActive, true),
+        isNull(portalUniversitiesTable.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!multicoRow) {
+    console.warn(
+      `[portal-routing] exclusive Multico target unavailable` +
+      ` app=${applicationId ?? "?"} student=${studentId}`,
+    );
+    return null;
+  }
+
+  console.log(
+    `[portal-routing] Multico redirect app=${applicationId ?? "?"}` +
+    ` student=${studentId} from=${routing.portalUni.universityKey}`,
+  );
+  return {
+    portalUni: multicoRow,
+    target: routing.target,
+    submissionUniversityName:
+      routing.target?.universityName ?? routing.portalUni.universityName,
+    routingMeta: {
+      exclusiveNationalityRoute: "multico",
+      routedFromUniversityKey: routing.portalUni.universityKey,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // enqueueIfEligible — the shared eligibility gate (single source of truth)
 // ---------------------------------------------------------------------------
@@ -328,45 +400,15 @@ export async function enqueueIfEligible(
   if (!routing) {
     return { status: "skipped", reason: "no_active_portal_university" };
   }
-  // Use `let` so the Multico redirect below can substitute the portal row.
-  let { portalUni, target } = routing;
-  // Preserve the original university name for the submission row when the
-  // redirect fires (we want "Topkapı University" in the UI, not "Multico").
-  let submissionUniversityName: string | undefined;
-
-  // ----- Multico nationality redirect: Central Asian Topkapı → Multico ----
-  // When the resolved portal is topkapi AND the student's nationality is one
-  // of the 7 Central Asian / Mongolian countries served exclusively by
-  // Multico, we re-route the submission to the `multico` portal row.  The
-  // original Topkapı name is preserved as the display university name.
-  if (portalUni.universityKey === "topkapi") {
-    const [studentRow] = await db
-      .select({ nationality: studentsTable.nationality })
-      .from(studentsTable)
-      .where(eq(studentsTable.id, studentId))
-      .limit(1);
-    const nat = studentRow?.nationality ?? null;
-    if (isMulticoNationality(nat)) {
-      const [multicoRow] = await db
-        .select()
-        .from(portalUniversitiesTable)
-        .where(
-          and(
-            eq(portalUniversitiesTable.universityKey, "multico"),
-            eq(portalUniversitiesTable.isActive, true),
-            isNull(portalUniversitiesTable.deletedAt),
-          ),
-        )
-        .limit(1);
-      if (multicoRow) {
-        submissionUniversityName = portalUni.universityName; // keep Topkapı name
-        portalUni = multicoRow;
-        console.log(
-          `[portal-enqueue] multico redirect: app=${applicationId} nat="${nat}" → key=multico`,
-        );
-      }
-    }
+  const studentRouting = await resolveStudentPortalRouting({
+    routing,
+    studentId,
+    applicationId,
+  });
+  if (!studentRouting) {
+    return { status: "skipped", reason: "no_active_portal_university" };
   }
+  const { portalUni, target, submissionUniversityName, routingMeta } = studentRouting;
 
   // ----- Gate 4: scope filter -------------------------------------------
   if (settings.scope === "selected") {
@@ -509,6 +551,7 @@ export async function enqueueIfEligible(
         enqueuedBy:     actorUserId,
         meta: {
           preflight,
+          ...(routingMeta ?? {}),
           ...(target
             ? {
                 targetCatalogUniversityId: target.catalogUniversityId,

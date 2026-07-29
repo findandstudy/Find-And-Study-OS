@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import {
   isMulticoNationality,
   MULTICO_NATIONALITIES,
+  shouldRouteTopkapiToMultico,
   mapProgramType,
   MULTICO_STUDENT_FORM_PATH,
   normalizeMulticoGpaSystem,
@@ -50,6 +51,15 @@ describe("isMulticoNationality", () => {
   it("matches 'Mongolian'", () => assert.ok(isMulticoNationality("Mongolian")));
   it("matches mixed case 'AZERbaijani'", () => assert.ok(isMulticoNationality("AZERbaijani")));
 
+  // --- Positive cases (Turkish country names used by CRM/catalog records) ---
+  it("matches 'Azerbaycan'", () => assert.ok(isMulticoNationality("Azerbaycan")));
+  it("matches 'Kazakistan'", () => assert.ok(isMulticoNationality("Kazakistan")));
+  it("matches 'Özbekistan'", () => assert.ok(isMulticoNationality("Özbekistan")));
+  it("matches 'Kırgızistan'", () => assert.ok(isMulticoNationality("Kırgızistan")));
+  it("matches 'Tacikistan'", () => assert.ok(isMulticoNationality("Tacikistan")));
+  it("matches 'Türkmenistan'", () => assert.ok(isMulticoNationality("Türkmenistan")));
+  it("matches 'Moğolistan'", () => assert.ok(isMulticoNationality("Moğolistan")));
+
   // --- Negative cases (non-Central-Asian nationalities) ---
   it("does not match 'Turkish'", () => assert.ok(!isMulticoNationality("Turkish")));
   it("does not match 'Turkish Republic of Azerbaijan' ... no wait Turkish is not azeri", () => {
@@ -63,9 +73,20 @@ describe("isMulticoNationality", () => {
   it("does not match null", () => assert.ok(!isMulticoNationality(null)));
   it("does not match undefined", () => assert.ok(!isMulticoNationality(undefined)));
   it("does not match 'Nigerian'", () => assert.ok(!isMulticoNationality("Nigerian")));
+  it("does not route arbitrary text that only contains a known demonym", () => {
+    assert.ok(!isMulticoNationality("Mongolian-German dual national"));
+  });
 });
 
 describe("live Multico form contract", () => {
+  it("routes by stable Topkapı adapter key, not the mutable portal row key", () => {
+    assert.ok(shouldRouteTopkapiToMultico("topkapi", "Kazakhstan"));
+    assert.ok(shouldRouteTopkapiToMultico("topkapi", "Türkmenistan"));
+    assert.ok(!shouldRouteTopkapiToMultico("topkapi_university", "Kazakhstan"));
+    assert.ok(!shouldRouteTopkapiToMultico("sit", "Kazakhstan"));
+    assert.ok(!shouldRouteTopkapiToMultico("topkapi", "Pakistan"));
+  });
+
   it("uses the observed authenticated add-student route", () => {
     assert.equal(MULTICO_STUDENT_FORM_PATH, "/students/add");
   });

@@ -68,6 +68,7 @@ export { isSitMember } from "./universities/sit/helpers.js";
 export {
   MULTICO_NATIONALITIES,
   isMulticoNationality,
+  shouldRouteTopkapiToMultico,
   type MulticoNationality,
 } from "./universities/multico/adapter.js";
 

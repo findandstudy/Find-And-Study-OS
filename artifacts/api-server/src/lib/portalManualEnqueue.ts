@@ -10,7 +10,10 @@
  */
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, applicationsTable, portalSubmissionsTable } from "@workspace/db";
-import { resolvePortalRouting } from "./portalAutoTrigger.js";
+import {
+  resolvePortalRouting,
+  resolveStudentPortalRouting,
+} from "./portalAutoTrigger.js";
 import { checkMandatoryDocsForApplication } from "./mandatoryDocs.js";
 import { getDocLabel } from "./docNaming.js";
 import {
@@ -101,15 +104,24 @@ export async function enqueuePortalSubmissions(opts: {
       continue;
     }
 
-    const routing = await resolvePortalRouting({
+    const baseRouting = await resolvePortalRouting({
       universityId: app.universityId,
       universityName: app.universityName,
+    });
+    if (!baseRouting) {
+      skipped.push({ applicationId: appId, reason: "NO_PORTAL" });
+      continue;
+    }
+    const routing = await resolveStudentPortalRouting({
+      routing: baseRouting,
+      studentId: app.studentId,
+      applicationId: appId,
     });
     if (!routing) {
       skipped.push({ applicationId: appId, reason: "NO_PORTAL" });
       continue;
     }
-    const { portalUni, target } = routing;
+    const { portalUni, target, submissionUniversityName, routingMeta } = routing;
     const preflight = await prepareApplicationPortalPreflight({
       applicationId: appId,
       adapterKey: portalUni.adapterKey,
@@ -163,7 +175,9 @@ export async function enqueuePortalSubmissions(opts: {
           applicationId: appId,
           studentId: app.studentId,
           universityKey: portalUni.universityKey,
-          universityName: target ? target.universityName : portalUni.universityName,
+          universityName:
+            submissionUniversityName ??
+            (target ? target.universityName : portalUni.universityName),
           adapterKey: portalUni.adapterKey,
           mode: opts.mode,
           status: "queued",
@@ -176,6 +190,7 @@ export async function enqueuePortalSubmissions(opts: {
           meta: {
             manual: true,
             preflight: preflight as PreparedPortalPreflight,
+            ...(routingMeta ?? {}),
             ...(target
               ? {
                   targetCatalogUniversityId: target.catalogUniversityId,
