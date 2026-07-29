@@ -6,6 +6,8 @@ import {
   isOwnedSalesforceApplicant,
   normalizeSalesforceStage,
   parseSalesforceStageMarker,
+  resolveSalesforceProgramTarget,
+  salesforceApplicantReadbackFailures,
   salesforcePortalProgramName,
 } from "../src/universities/salesforce/portalState.js";
 
@@ -25,6 +27,69 @@ test("normalizes CRM degree prefixes to the portal programme label", () => {
   assert.equal(
     salesforcePortalProgramName("PhD in Psychology (English)"),
     "Psychology (English)",
+  );
+});
+
+test("university Salesforce programme mapping wins without using catalogue ids", () => {
+  assert.deepEqual(
+    resolveSalesforceProgramTarget(
+      "Bachelor of Software Engineering (English)",
+      {
+        "Software Engineering (English)": "Bachelor of Software Engineering (English)",
+      },
+      {
+        "Yazılım Mühendisliği (Türkçe)": "Bachelor of Software Engineering (English)",
+      },
+    ),
+    {
+      label: "Software Engineering (English)",
+      source: "university",
+      ambiguous: false,
+    },
+  );
+});
+
+test("ambiguous Salesforce programme mappings fail closed", () => {
+  assert.deepEqual(
+    resolveSalesforceProgramTarget("Bachelor of Law (Turkish)", {
+      "Law (Turkish)": "Bachelor of Law (Turkish)",
+      "Hukuk (Türkçe)": "Bachelor of Law (Turkish)",
+    }),
+    {
+      label: "",
+      source: "university",
+      ambiguous: true,
+    },
+  );
+});
+
+test("Salesforce applicant proof requires exact native readback for all four fields", () => {
+  const expected = {
+    firstName: "Muhammad",
+    lastName: "Example",
+    passportNumber: "P123456",
+    email: "student@example.com",
+  };
+  assert.deepEqual(
+    salesforceApplicantReadbackFailures(expected, {
+      ...expected,
+      email: "STUDENT@EXAMPLE.COM",
+    }),
+    [],
+  );
+  assert.deepEqual(
+    salesforceApplicantReadbackFailures(expected, {
+      ...expected,
+      email: "",
+    }),
+    ["email"],
+  );
+  assert.deepEqual(
+    salesforceApplicantReadbackFailures(expected, {
+      ...expected,
+      invalidFields: ["passportNumber"],
+    }),
+    ["passportNumber"],
   );
 });
 

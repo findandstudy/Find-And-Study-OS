@@ -42,10 +42,10 @@
         "id": "applicant",
         "detect": {"conditions": [{"source": "selectorVisible", "selector": "input[name=Student_First_Name], input[name=First_Name]", "operator": "exists"}]},
         "steps": [
-          {"action": "fill", "selector": "input[name=Student_First_Name], input[name=First_Name]", "valueFrom": "profile.firstName"},
-          {"action": "fill", "selector": "input[name=Student_Last_Name], input[name=Last_Name]", "valueFrom": "profile.lastName"},
-          {"action": "fill", "selector": "input[name=Student_Passport_Number], input[name*=Passport i]", "valueFrom": "profile.passportNumber"},
-          {"action": "fill", "selector": "input[type=email], input[placeholder='you@example.com']", "valueFrom": "profile.email"},
+          {"action": "fill", "selector": "input[name=Student_First_Name], input[name=First_Name]", "valueFrom": "profile.firstName", "readback": {"source": "value", "comparison": "exact", "rejectAriaInvalid": true}},
+          {"action": "fill", "selector": "input[name=Student_Last_Name], input[name=Last_Name]", "valueFrom": "profile.lastName", "readback": {"source": "value", "comparison": "exact", "rejectAriaInvalid": true}},
+          {"action": "fill", "selector": "input[name=Student_Passport_Number], input[name*=Passport i]", "valueFrom": "profile.passportNumber", "readback": {"source": "value", "comparison": "exact", "rejectAriaInvalid": true}},
+          {"action": "fill", "selector": "lightning-input:has-text('Email') input, input[type=email], input[name*=email i], input[placeholder='you@example.com']", "valueFrom": "profile.email", "readback": {"source": "value", "comparison": "exact", "rejectAriaInvalid": true}},
           {"action": "lookup", "ariaLabel": "Citizenship", "valueFrom": "profile.nationality"},
           {"action": "clickRole", "role": "button", "name": "Next", "exact": true}
         ],

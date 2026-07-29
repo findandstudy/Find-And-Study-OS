@@ -16,7 +16,8 @@ import {
   isOwnedSalesforceApplicant,
   normalizeSalesforceStage,
   parseSalesforceStageMarker,
-  salesforcePortalProgramName,
+  resolveSalesforceProgramTarget,
+  salesforceApplicantReadbackFailures,
   type SalesforceStage,
 } from "./portalState.js";
 
@@ -339,6 +340,65 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         }
       };
       const fill = typeInto;
+      const visibleControls = async (locator: any): Promise<any[]> => {
+        const visible: any[] = [];
+        const count = await locator.count().catch(() => 0);
+        for (let i = 0; i < count; i++) {
+          if (await locator.nth(i).isVisible().catch(() => false)) {
+            visible.push(locator.nth(i));
+          }
+        }
+        return visible;
+      };
+      const fillAndReadUnique = async (
+        locator: any,
+        value?: string | number,
+      ): Promise<{ value: string; invalid: boolean; found: boolean }> => {
+        if (value === undefined || value === null || String(value) === "") {
+          return { value: "", invalid: false, found: false };
+        }
+        const controls = await visibleControls(locator);
+        if (controls.length !== 1) {
+          return { value: "", invalid: false, found: false };
+        }
+        const control = controls[0];
+        const expected = String(value);
+        try {
+          await control.fill(expected);
+          let current = await control.inputValue().catch(() => "");
+          if (current !== expected) {
+            await control.click();
+            await control.fill("");
+            await control.pressSequentially(expected, { delay: 45 });
+            current = await control.inputValue().catch(() => "");
+          }
+          await control.press("Tab").catch(() => {});
+          await page.waitForTimeout(180);
+          current = await control.inputValue().catch(() => "");
+          return {
+            value: current,
+            invalid:
+              (await control
+                .getAttribute("aria-invalid")
+                .catch(() => null)) === "true",
+            found: true,
+          };
+        } catch {
+          return { value: "", invalid: false, found: true };
+        }
+      };
+      const readValidationMessages = async (): Promise<string[]> =>
+        (
+          await page
+            .locator(
+              '[role="alert"],.slds-form-element__help,[aria-invalid="true"]',
+            )
+            .allInnerTexts()
+            .catch(() => [])
+        )
+          .map((text: string) => text.replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+          .slice(0, 8);
       const selByName = async (name: string, label?: string): Promise<boolean> => {
         try {
           const s = page.locator(`select[name="${name}"]`).first();
@@ -521,15 +581,88 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         ) { result.alreadyExists = true; break; }
         const before = (await bodyText()).replace(/\s+/g, " ").slice(0, 600);
         if ((await has("input[name=\"Student_First_Name\"]")) || ((await has("input[name=\"First_Name\"]")) && !(await has("select[name=\"Gender\"]")))) {
-          await typeInto("input[name=\"Student_First_Name\"]", profile.firstName);
-          await typeInto("input[name=\"First_Name\"]", profile.firstName);
-          await typeInto("input[name=\"Student_Last_Name\"]", profile.lastName);
-          await typeInto("input[name=\"Last_Name\"]", profile.lastName);
-          await typeInto("input[name=\"Student_Passport_Number\"]", profile.passportNumber);
-          await typeInto("input[name*=Passport i]", profile.passportNumber);
-          await typeInto("input[placeholder=\"you@example.com\"]", profile.email);
-          await typeInto("input[type=email]", profile.email);
-          await typeInto("input[placeholder*=\"@\"]:not([type=password])", profile.email);
+          if (strictMappedPortal) {
+            const firstNameProof = await fillAndReadUnique(
+              page.locator(
+                'input[name="Student_First_Name"],input[name="First_Name"]',
+              ),
+              profile.firstName,
+            );
+            const lastNameProof = await fillAndReadUnique(
+              page.locator(
+                'input[name="Student_Last_Name"],input[name="Last_Name"]',
+              ),
+              profile.lastName,
+            );
+            const passportProof = await fillAndReadUnique(
+              page.locator(
+                'input[name="Student_Passport_Number"],input[name="Passport_Number"]',
+              ),
+              profile.passportNumber,
+            );
+
+            // Beykent exposes this as type=text with a dynamic
+            // "<student name>'s Email" label and no stable name/placeholder.
+            // Accessible-label lookup is therefore the primary selector.
+            let emailLocator = page.getByLabel(/email/i);
+            if ((await visibleControls(emailLocator)).length !== 1) {
+              emailLocator = page.locator(
+                [
+                  'input[type="email"]',
+                  'input[name*="email" i]',
+                  'input[name*="mail" i]',
+                  'input[placeholder*="@"]:not([type="password"])',
+                ].join(","),
+              );
+            }
+            const emailProof = await fillAndReadUnique(
+              emailLocator,
+              profile.email,
+            );
+            const invalidFields = [
+              ...(firstNameProof.invalid ? ["firstName"] : []),
+              ...(lastNameProof.invalid ? ["lastName"] : []),
+              ...(passportProof.invalid ? ["passportNumber"] : []),
+              ...(emailProof.invalid ? ["email"] : []),
+            ];
+            const applicantFailures = salesforceApplicantReadbackFailures(
+              {
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                passportNumber: profile.passportNumber,
+                email: profile.email,
+              },
+              {
+                firstName: firstNameProof.value,
+                lastName: lastNameProof.value,
+                passportNumber: passportProof.value,
+                email: emailProof.value,
+                invalidFields,
+              },
+            );
+            logger.info(`[salesforce:${cfg.key}] applicant readback`, {
+              firstName: !applicantFailures.includes("firstName"),
+              lastName: !applicantFailures.includes("lastName"),
+              passportNumber: !applicantFailures.includes("passportNumber"),
+              email: !applicantFailures.includes("email"),
+            });
+            if (applicantFailures.length > 0) {
+              result.stuckStep = step;
+              result.detail =
+                `${cfg.label}: applicant fields could not be verified (${applicantFailures.join(", ")})`;
+              break;
+            }
+          } else {
+            await typeInto("input[name=\"Student_First_Name\"]", profile.firstName);
+            await typeInto("input[name=\"First_Name\"]", profile.firstName);
+            await typeInto("input[name=\"Student_Last_Name\"]", profile.lastName);
+            await typeInto("input[name=\"Last_Name\"]", profile.lastName);
+            await typeInto("input[name=\"Student_Passport_Number\"]", profile.passportNumber);
+            await typeInto("input[name*=Passport i]", profile.passportNumber);
+            await typeInto("input[placeholder=\"you@example.com\"]", profile.email);
+            await typeInto("input[type=email]", profile.email);
+            await typeInto("input[placeholder*=\"@\"]:not([type=password])", profile.email);
+          }
           if (!strictMappedPortal) {
             try { const __cb = page.locator("input[role=combobox], input[aria-autocomplete=list], input[aria-autocomplete=both], input[id*=combobox]"); const __cbn = await __cb.count(); for (let __i = 0; __i < __cbn; __i++) { const __e = __cb.nth(__i); if (!(await __e.isVisible().catch(() => false))) continue; if ((await __e.inputValue().catch(() => "x")) !== "") continue; await __e.click().catch(() => {}); await __e.fill(profile.nationality || "Turkey").catch(() => {}); await page.waitForTimeout(1500); const __o = page.locator("[role=option], lightning-base-combobox-item, .slds-listbox__option, li[role=option]").first(); if (await __o.count()) await __o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(600); } } catch (e) {}
           }
@@ -537,12 +670,62 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             try { const __cand = page.locator("input[required], input[aria-required=\"true\"]"); const __cn = await __cand.count(); for (let __ci = 0; __ci < __cn; __ci++) { const __el = __cand.nth(__ci); if (!(await __el.isVisible().catch(() => false))) continue; const __ty = (await __el.getAttribute("type").catch(() => "")) || "text"; if (__ty === "radio" || __ty === "checkbox") continue; const __idr = ((await __el.getAttribute("id").catch(() => "")) || "") + ((await __el.getAttribute("role").catch(() => "")) || "") + ((await __el.getAttribute("aria-autocomplete").catch(() => "")) || ""); if (/combobox|list|both/i.test(__idr)) continue; const __cv = await __el.inputValue().catch(() => "x"); if (__cv === "") { await __el.fill(profile.email).catch(() => {}); break; } } } catch (e) {}
           }
           try { const cz = page.getByLabel(/citizenship|vatanda/i).first(); if ((await cz.count()) && (await cz.isVisible().catch(() => false))) { await cz.click().catch(() => {}); await cz.fill(profile.nationality || "Turkey").catch(() => {}); await page.waitForTimeout(1500); const o = strictMappedPortal ? page.getByRole("option", { name: new RegExp("^" + profile.nationality.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") }).first() : page.locator("[role=option],lightning-base-combobox-item,li").first(); if (await o.count()) await o.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(700); } } catch (e) {}
-          try { const eml = page.getByLabel(/applicant email|email address/i).first(); if ((await eml.count()) && (await eml.isVisible().catch(() => false)) && !(await eml.inputValue().catch(() => "x")) && profile.email) { await eml.click().catch(() => {}); await page.keyboard.type(profile.email, { delay: 40 }).catch(() => {}); await eml.press("Tab").catch(() => {}); } } catch (e) {}
-          await clickNext();
+          if (!strictMappedPortal) {
+            try { const eml = page.getByLabel(/applicant email|email address/i).first(); if ((await eml.count()) && (await eml.isVisible().catch(() => false)) && !(await eml.inputValue().catch(() => "x")) && profile.email) { await eml.click().catch(() => {}); await page.keyboard.type(profile.email, { delay: 40 }).catch(() => {}); await eml.press("Tab").catch(() => {}); } } catch (e) {}
+          }
+          if (!(await clickNext())) {
+            result.stuckStep = step;
+            result.detail = `${cfg.label}: applicant Next control was not found`;
+            break;
+          }
+          let applicantMoved = false;
+          for (let t = 0; t < 12; t++) {
+            await page.waitForTimeout(750);
+            const applicantStillVisible =
+              (await hasVisible('input[name="Student_First_Name"]')) ||
+              ((await hasVisible('input[name="First_Name"]')) &&
+                !(await hasVisible('select[name="Gender"]')));
+            if (
+              DUP.test(await bodyText()) ||
+              (await hasVisible(
+                'input[placeholder*="search program" i],input[placeholder*="keyword" i]',
+              )) ||
+              !applicantStillVisible
+            ) {
+              applicantMoved = true;
+              break;
+            }
+          }
+          if (!applicantMoved) {
+            const validation = await readValidationMessages();
+            result.stuckStep = step;
+            result.detail =
+              `${cfg.label}: applicant screen did not advance` +
+              (validation.length
+                ? ` — validation: ${validation.join(" | ")}`
+                : "");
+            break;
+          }
+          continue;
         } else if (/available programs/i.test(txt) || (await page.getByPlaceholder(/search program name|keyword/i).count())) {
-          const portalProg = strictMappedPortal
-            ? salesforcePortalProgramName(profile.programName)
-            : profile.programName;
+          const programTarget = strictMappedPortal
+            ? resolveSalesforceProgramTarget(
+                profile.programName,
+                profile.programNameMap,
+                profile.programNameMapGeneral,
+              )
+            : {
+                label: profile.programName,
+                source: "normalized" as const,
+                ambiguous: false,
+              };
+          if (programTarget.ambiguous) {
+            result.stuckStep = step;
+            result.detail =
+              `${cfg.label}: programme mapping is ambiguous for the requested CRM programme`;
+            break;
+          }
+          const portalProg = programTarget.label;
           // Boş program adı match-all regex üretir (yanlış program seçer) → güvenli çıkış.
           if (!portalProg || !portalProg.trim()) {
             result.programMissing = true;
@@ -569,7 +752,12 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               const t = ((await cards.nth(i).innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
               if (t && /select/i.test(t) && t.length < 160) labels.push(t.slice(0, 120));
             }
-            logger.info("[salesforce:" + cfg.key + "] Available Programs kartları", { portalProg, count: labels.length, sample: labels.slice(0, 15) });
+            logger.info("[salesforce:" + cfg.key + "] Available Programs kartları", {
+              portalProg,
+              mappingSource: programTarget.source,
+              count: labels.length,
+              sample: labels.slice(0, 15),
+            });
           } catch (e) {}
           // KÖK NEDEN: kartlar KAPALI shadow root'ta; page.evaluate manuel walk giremez (cards:0).
           // Playwright locator'ları kapalı shadow'u deler → seçimi tamamen Playwright ile yap.
@@ -966,17 +1154,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           afterStage === activeStage &&
           !(activeStage === "Program Selection" && bodyChanged)
         ) {
-          const validation = (
-            await page
-              .locator(
-                '[role="alert"],.slds-form-element__help,[aria-invalid="true"]',
-              )
-              .allInnerTexts()
-              .catch(() => [])
-          )
-            .map((text: string) => text.replace(/\s+/g, " ").trim())
-            .filter(Boolean)
-            .slice(0, 8);
+          const validation = await readValidationMessages();
           result.stuckStep = step;
           result.detail =
             `${cfg.label}: ${activeStage} did not advance` +

@@ -19,6 +19,101 @@ export function salesforcePortalProgramName(crmProgramName: string): string {
   return value.trim();
 }
 
+export interface SalesforceProgramTarget {
+  label: string;
+  source: "university" | "general" | "normalized";
+  ambiguous: boolean;
+}
+
+/**
+ * Resolve the live portal label without relying on the CRM catalogue id.
+ *
+ * Portal mappings are stored as { portal label -> CRM programme name }. A
+ * university-specific mapping wins over the general tier. More than one label
+ * mapped to the same CRM programme is ambiguous and must never be guessed.
+ */
+export function resolveSalesforceProgramTarget(
+  crmProgramName: string,
+  universityMap?: Record<string, string>,
+  generalMap?: Record<string, string>,
+): SalesforceProgramTarget {
+  const requested = fold(crmProgramName);
+  const mappedLabels = (mapping?: Record<string, string>): string[] => {
+    if (!requested || !mapping) return [];
+    return [
+      ...new Set(
+        Object.entries(mapping)
+          .filter(([, crmName]) => fold(crmName) === requested)
+          .map(([portalLabel]) => portalLabel.replace(/\s+/g, " ").trim())
+          .filter(Boolean),
+      ),
+    ];
+  };
+
+  const universityLabels = mappedLabels(universityMap);
+  if (universityLabels.length > 0) {
+    return {
+      label: universityLabels.length === 1 ? universityLabels[0] : "",
+      source: "university",
+      ambiguous: universityLabels.length !== 1,
+    };
+  }
+
+  const generalLabels = mappedLabels(generalMap);
+  if (generalLabels.length > 0) {
+    return {
+      label: generalLabels.length === 1 ? generalLabels[0] : "",
+      source: "general",
+      ambiguous: generalLabels.length !== 1,
+    };
+  }
+
+  return {
+    label: salesforcePortalProgramName(crmProgramName),
+    source: "normalized",
+    ambiguous: false,
+  };
+}
+
+export interface SalesforceApplicantReadback {
+  firstName: string;
+  lastName: string;
+  passportNumber: string;
+  email: string;
+  invalidFields?: string[];
+}
+
+/**
+ * Fail-closed proof for the Salesforce "create student" screen. The portal's
+ * email control is often type=text with a dynamic "<name>'s Email" label, so
+ * the adapter verifies the native values instead of trusting selector/fill
+ * success alone.
+ */
+export function salesforceApplicantReadbackFailures(
+  expected: SalesforceApplicantReadback,
+  actual: SalesforceApplicantReadback,
+): string[] {
+  const invalid = new Set(actual.invalidFields ?? []);
+  const failures: string[] = [];
+  const exact = (
+    field: keyof Omit<SalesforceApplicantReadback, "invalidFields">,
+    caseInsensitive = false,
+  ): void => {
+    const expectedValue = String(expected[field] ?? "").trim();
+    const actualValue = String(actual[field] ?? "").trim();
+    const matches = caseInsensitive
+      ? actualValue.toLowerCase() === expectedValue.toLowerCase()
+      : actualValue === expectedValue;
+    if (!expectedValue || !matches || invalid.has(field)) failures.push(field);
+  };
+
+  exact("firstName");
+  exact("lastName");
+  exact("passportNumber");
+  exact("email", true);
+  return failures;
+}
+
 export type SalesforceStage =
   | "Program Selection"
   | "Personal Information"
