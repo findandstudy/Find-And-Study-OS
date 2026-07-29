@@ -203,6 +203,8 @@ const EMPTY_STUDENT_FORM = {
   passportExpiry: "",
   school1: "",
   school2: "",
+  educationProgram: "",
+  educationCountry: "",
   graduationYear: "",
   gpa: "",
   gradingSystem: "4",
@@ -501,6 +503,10 @@ export function InboxStudentTab({
           "motherName",
           "fatherName",
           "highSchool",
+          "institutionName",
+          "schoolName",
+          "fieldOfStudy",
+          "educationCountry",
           "graduationYear",
           "gpa",
           "gpaScale",
@@ -527,6 +533,11 @@ export function InboxStudentTab({
       extracted.gpa,
       extracted.gpaScale,
     );
+    if (extracted.institutionName || extracted.schoolName || extracted.highSchool) {
+      extractedFieldsSet.add("school1");
+    }
+    if (extracted.fieldOfStudy) extractedFieldsSet.add("educationProgram");
+    if (extracted.educationCountry) extractedFieldsSet.add("educationCountry");
 
     setExtracting(false);
     onReadyToSubmit?.({
@@ -544,8 +555,12 @@ export function InboxStudentTab({
         passportNumber: extracted.passportNumber || "",
         passportIssueDate: (extracted as any).passportIssueDate || "",
         passportExpiry: extracted.passportExpiry || "",
-        school1: transliterateToLatin(extracted.highSchool || "").toUpperCase(),
+        school1: transliterateToLatin(
+          extracted.institutionName || extracted.schoolName || extracted.highSchool || "",
+        ).toUpperCase(),
         school2: "",
+        educationProgram: transliterateToLatin(extracted.fieldOfStudy || "").toUpperCase(),
+        educationCountry: extracted.educationCountry || "",
         graduationYear: (extracted as any).graduationYear != null
           ? String((extracted as any).graduationYear)
           : "",

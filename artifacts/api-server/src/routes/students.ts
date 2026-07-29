@@ -24,6 +24,10 @@ import { deleteSessionsForUser } from "../lib/replitAuth";
 import { getCurrentSeason } from "../lib/season";
 import { enqueueOnStageChange, resolvePortalRouting } from "../lib/portalAutoTrigger.js";
 import { computeReadiness } from "../lib/portalReadiness";
+import {
+  cleanStudentEducationRecords,
+  toLegacyEducationRecord,
+} from "../lib/studentEducationInput";
 
 const router: IRouter = Router();
 
@@ -454,6 +458,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     agentId, userId, notes,
     highSchool, graduationYear, gpa, languageScore, season,
     interestedLevel,
+    educationRecords: rawEducationRecords,
   } = req.body;
 
   if (!firstName || !lastName) {
@@ -474,6 +479,14 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     EXTENDED_NAME_FIELDS,
   );
   if (nameErr) { res.status(400).json({ error: nameErr }); return; }
+
+  const educationInput = rawEducationRecords === undefined
+    ? { ok: true as const, records: [] }
+    : cleanStudentEducationRecords(rawEducationRecords);
+  if (!educationInput.ok) {
+    res.status(400).json({ error: educationInput.error });
+    return;
+  }
 
   if (passportNumber && passportNumber.trim()) {
     const [dupPassport] = await db.select({ id: studentsTable.id }).from(studentsTable)
@@ -518,38 +531,56 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     res.status(403).json({ error: "No accessible branch — cannot create student" });
     return;
   }
-  const [student] = await db.insert(studentsTable).values({
-    branchId: inheritedBranchId,
-    firstName: normBody.firstName as string, lastName: normBody.lastName as string, status,
-    email: email ? email.toLowerCase().trim() : null,
-    phone: phone ? normalizePhoneField(phone) : null,
-    phoneE164: toE164(phone ? normalizePhoneField(phone) : null),
-    nationality: nationality || null,
-    dateOfBirth: dateOfBirth || null,
-    gender: gender || null,
-    passportNumber: passportNumber ? passportNumber.trim() : null,
-    passportIssueDate: passportIssueDate || null,
-    passportExpiry: passportExpiry || null,
-    motherName: normBody.motherName ? (normBody.motherName as string) : null,
-    fatherName: normBody.fatherName ? (normBody.fatherName as string) : null,
-    address: normBody.address ? (normBody.address as string) : null,
-    cityOfBirth: typeof cityOfBirth === "string" && cityOfBirth.trim() ? cityOfBirth.trim() : null,
-    addressCity: typeof addressCity === "string" && addressCity.trim() ? addressCity.trim() : null,
-    postalCode: typeof postalCode === "string" && postalCode.trim() ? postalCode.trim() : null,
-    needsVisaSupport: typeof needsVisaSupport === "boolean" ? needsVisaSupport : null,
-    agentId: resolvedAgentId,
-    userId: userId || null,
-    notes: notes || null,
-    highSchool: normBody.highSchool ? (normBody.highSchool as string) : null,
-    universityBachelor: normBody.universityBachelor ? (normBody.universityBachelor as string) : null,
-    universityMaster: normBody.universityMaster ? (normBody.universityMaster as string) : null,
-    graduationYear: graduationYear ? parseInt(String(graduationYear), 10) : null,
-    gpa: gpa || null,
-    languageScore: languageScore || null,
-    interestedLevel: interestedLevel || null,
-    season: season || (await getCurrentSeason()),
-    ...origin,
-  }).returning();
+  const resolvedSeason = season || (await getCurrentSeason());
+  const student = await db.transaction(async (tx) => {
+    const [insertedStudent] = await tx.insert(studentsTable).values({
+      branchId: inheritedBranchId,
+      firstName: normBody.firstName as string, lastName: normBody.lastName as string, status,
+      email: email ? email.toLowerCase().trim() : null,
+      phone: phone ? normalizePhoneField(phone) : null,
+      phoneE164: toE164(phone ? normalizePhoneField(phone) : null),
+      nationality: nationality || null,
+      dateOfBirth: dateOfBirth || null,
+      gender: gender || null,
+      passportNumber: passportNumber ? passportNumber.trim() : null,
+      passportIssueDate: passportIssueDate || null,
+      passportExpiry: passportExpiry || null,
+      motherName: normBody.motherName ? (normBody.motherName as string) : null,
+      fatherName: normBody.fatherName ? (normBody.fatherName as string) : null,
+      address: normBody.address ? (normBody.address as string) : null,
+      cityOfBirth: typeof cityOfBirth === "string" && cityOfBirth.trim() ? cityOfBirth.trim() : null,
+      addressCity: typeof addressCity === "string" && addressCity.trim() ? addressCity.trim() : null,
+      postalCode: typeof postalCode === "string" && postalCode.trim() ? postalCode.trim() : null,
+      needsVisaSupport: typeof needsVisaSupport === "boolean" ? needsVisaSupport : null,
+      agentId: resolvedAgentId,
+      userId: userId || null,
+      notes: notes || null,
+      highSchool: normBody.highSchool ? (normBody.highSchool as string) : null,
+      universityBachelor: normBody.universityBachelor ? (normBody.universityBachelor as string) : null,
+      universityMaster: normBody.universityMaster ? (normBody.universityMaster as string) : null,
+      graduationYear: graduationYear ? parseInt(String(graduationYear), 10) : null,
+      gpa: gpa || null,
+      languageScore: languageScore || null,
+      interestedLevel: interestedLevel || null,
+      season: resolvedSeason,
+      ...origin,
+    }).returning();
+
+    if (educationInput.records.length > 0) {
+      await tx.insert(studentEducationRecordsTable).values(
+        educationInput.records.map(({ country: _country, ...record }) => ({
+          ...record,
+          studentId: insertedStudent.id,
+        })),
+      );
+      await tx.insert(educationRecordsTable).values(
+        educationInput.records.map((record) =>
+          toLegacyEducationRecord(insertedStudent.id, record),
+        ),
+      );
+    }
+    return insertedStudent;
+  });
 
   await logAudit(req.user!.id, "create_student", "student", student.id, { firstName, lastName }, req.ip);
 

@@ -8,6 +8,7 @@
     "build": "node scripts/check-i18n.mjs && vite build --config vite.config.ts && node generate-sitemap.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
+    "test:inbox-education-payload": "tsx --test ./scripts/test-inbox-education-payload.ts",
     "test:voice-recorder": "tsx --test ./scripts/test-voice-recorder-errors.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

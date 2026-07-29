@@ -11,6 +11,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import { toLatinUpper } from "@/lib/latin-utils";
 import type { SubmitReadyData } from "./InboxStudentTab";
 import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
+import { buildInboxEducationPayload } from "./inboxEducationPayload";
 
 interface InboxSubmitTabProps {
   conversationId: number;
@@ -128,12 +129,17 @@ export function InboxSubmitTab({
         );
       }
 
-      const s1 = form.school1.trim();
-      const s2 = form.school2.trim();
-      const schoolInfo = isPhd && s2 ? [s1, s2].filter(Boolean).join(" | ") : s1 || null;
-      const gpaStr = form.gpa.trim()
-        ? `${form.gpa.trim()} / ${form.gradingSystem}`
-        : null;
+      const education = buildInboxEducationPayload({
+        selectedLevel: data.selectedLevel,
+        school1: form.school1,
+        school2: form.school2,
+        educationProgram: form.educationProgram,
+        educationCountry: form.educationCountry,
+        graduationYear: form.graduationYear,
+        gpa: form.gpa,
+        gradingSystem: form.gradingSystem,
+        languageScore: form.languageScore,
+      });
 
       const created = (await createStudent.mutateAsync({
         data: {
@@ -150,12 +156,13 @@ export function InboxSubmitTab({
           passportNumber: form.passportNumber.trim() || null,
           passportIssueDate: form.passportIssueDate.trim() || null,
           passportExpiry: form.passportExpiry.trim() || null,
-          highSchool: schoolInfo,
-          graduationYear: form.graduationYear.trim()
-            ? parseInt(form.graduationYear.trim(), 10)
-            : null,
-          gpa: gpaStr,
-          languageScore: form.languageScore.trim() || null,
+          highSchool: education.highSchool,
+          universityBachelor: education.universityBachelor,
+          universityMaster: education.universityMaster,
+          graduationYear: education.graduationYear,
+          gpa: education.gpa,
+          languageScore: education.languageScore,
+          educationRecords: education.educationRecords,
           notes: form.notes.trim() || null,
           interestedLevel: data.selectedLevel || null,
           status: "active",
@@ -408,6 +415,31 @@ export function InboxSubmitTab({
               />
             </div>
           )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs flex items-center">
+                {t("studentDetailPage.eduFieldOfStudy")}
+                <AiTag field="educationProgram" aiFields={data.aiFields} />
+              </Label>
+              <Input
+                className="h-7 text-sm"
+                value={form.educationProgram}
+                onChange={(e) => field("educationProgram")(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs flex items-center">
+                {t("studentDetailPage.eduCountry")}
+                <AiTag field="educationCountry" aiFields={data.aiFields} />
+              </Label>
+              <Input
+                className="h-7 text-sm"
+                value={form.educationCountry}
+                onChange={(e) => field("educationCountry")(e.target.value)}
+              />
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
